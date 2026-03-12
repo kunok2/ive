@@ -1,0 +1,57 @@
+import jwt from 'jsonwebtoken'
+import bcrypt from 'bcryptjs'
+import { cookies } from 'next/headers'
+import { getUserById } from './db'
+import { User } from '@/types'
+
+const JWT_SECRET = process.env.JWT_SECRET || 'spring-ive-dev-secret-change-in-production'
+const COOKIE_NAME = 'ive-token'
+const TOKEN_MAX_AGE = 60 * 60 * 24 * 7 // 7일
+
+export async function hashPassword(password: string) {
+  return bcrypt.hash(password, 10)
+}
+
+export async function verifyPassword(password: string, hash: string) {
+  return bcrypt.compare(password, hash)
+}
+
+export function signToken(userId: string) {
+  return jwt.sign({ userId }, JWT_SECRET, { expiresIn: '7d' })
+}
+
+export function verifyToken(token: string): { userId: string } | null {
+  try {
+    return jwt.verify(token, JWT_SECRET) as { userId: string }
+  } catch {
+    return null
+  }
+}
+
+export async function setAuthCookie(userId: string) {
+  const token = signToken(userId)
+  const cookieStore = await cookies()
+  cookieStore.set(COOKIE_NAME, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: TOKEN_MAX_AGE,
+    path: '/',
+  })
+}
+
+export async function clearAuthCookie() {
+  const cookieStore = await cookies()
+  cookieStore.delete(COOKIE_NAME)
+}
+
+export async function getCurrentUser(): Promise<User | null> {
+  const cookieStore = await cookies()
+  const token = cookieStore.get(COOKIE_NAME)?.value
+  if (!token) return null
+
+  const payload = verifyToken(token)
+  if (!payload) return null
+
+  return getUserById(payload.userId)
+}

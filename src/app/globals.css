@@ -1,26 +1,43 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --color-ive-bg-deep: #060c06;
+  --color-ive-bg: #0e160e;
+  --color-ive-bg-card: #121e14;
+  --color-ive-bg-input: #0a120a;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-ive-green: #4ade80;
+  --color-ive-green-light: #86efac;
+  --color-ive-green-dark: #16a34a;
+  --color-ive-green-pale: #dcfce7;
+
+  --color-ive-amber: #fbbf24;
+  --color-ive-lime: #a3e635;
+  --color-ive-red: #ef4444;
+  --color-ive-cyan: #22d3ee;
+
+  --color-ive-text: #e0e0e0;
+  --color-ive-text-secondary: #b0c8b4;
+  --color-ive-text-muted: #618068;
+  --color-ive-text-dim: #455048;
+
+  --color-ive-border: #1a3a1e;
+  --color-ive-border-dark: #152a18;
+  --color-ive-border-subtle: #1a2e1c;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-ive-bg-deep);
+  color: var(--color-ive-text);
+  font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+@keyframes slide-up {
+  from { transform: translateY(100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.25s ease-out;
 }
