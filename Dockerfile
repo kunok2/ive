@@ -18,7 +18,7 @@ RUN npm run build
 FROM node:22-slim
 
 RUN apt-get update && apt-get install -y \
-    python3 make g++ \
+    python3 make g++ git \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -35,6 +35,9 @@ COPY server.ts ./
 COPY src ./src
 COPY tsconfig.json ./
 COPY next.config.ts ./
+
+# Claude Code CLI 설치
+RUN npm install -g @anthropic-ai/claude-code
 
 # 데이터 디렉토리 생성
 RUN mkdir -p data/logs workspaces
