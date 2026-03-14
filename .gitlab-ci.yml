@@ -1,0 +1,26 @@
+stages:
+  - build
+
+variables:
+  IMAGE_NAME: $DOCKERHUB_USERNAME/spring-ive
+  DOCKER_TLS_CERTDIR: "/certs"
+
+docker-build:
+  stage: build
+  image: docker:26
+  services:
+    - docker:26-dind
+  before_script:
+    - docker login -u $DOCKERHUB_USERNAME -p $DOCKERHUB_TOKEN
+  script:
+    - |
+      docker build \
+        --cache-from $IMAGE_NAME:latest \
+        --build-arg BUILDKIT_INLINE_CACHE=1 \
+        -t $IMAGE_NAME:latest \
+        -t $IMAGE_NAME:$CI_COMMIT_SHORT_SHA \
+        .
+    - docker push $IMAGE_NAME:latest
+    - docker push $IMAGE_NAME:$CI_COMMIT_SHORT_SHA
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
