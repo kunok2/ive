@@ -2,7 +2,7 @@ stages:
   - build
 
 variables:
-  IMAGE_NAME: $DOCKERHUB_USERNAME/spring-ive
+  IMAGE_NAME: kunok3/spring-ive
   DOCKER_TLS_CERTDIR: "/certs"
 
 docker-build:
@@ -11,7 +11,7 @@ docker-build:
   services:
     - docker:26-dind
   before_script:
-    - docker login -u $DOCKERHUB_USERNAME -p $DOCKERHUB_TOKEN
+    - docker login -u kunok3 -p $DOCKERHUB_TOKEN
   script:
     - |
       docker build \

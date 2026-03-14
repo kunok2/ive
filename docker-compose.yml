@@ -1,6 +1,6 @@
 services:
   ive:
-    build: .
+    image: kunok3/spring-ive:latest
     ports:
       - "3000:3000"
     volumes:
