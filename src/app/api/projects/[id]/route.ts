@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
-import { getProject, updateProject, deleteProject, getSlotsByProject } from '@/lib/db'
+import { getProject, updateProject, deleteProject, getRolesByProject, getRoleAssignments } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
+import { encrypt } from '@/lib/crypto'
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser()
@@ -11,7 +12,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!project || project.userId !== user.id) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
-  return NextResponse.json({ ...project, slots: getSlotsByProject(id) })
+
+  const roles = getRolesByProject(id).map(r => ({
+    ...r,
+    assignedAgents: getRoleAssignments(r.id)
+  }))
+
+  return NextResponse.json({ ...project, roles })
 }
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -20,8 +27,16 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
   const { id } = await params
   const body = await req.json()
-  updateProject({ ...body, id, userId: user.id })
-  return NextResponse.json({ ...body, id })
+  
+  const updatedProject = {
+    ...body,
+    id,
+    userId: user.id,
+    accessToken: encrypt(body.accessToken || '')
+  }
+  
+  updateProject(updatedProject)
+  return NextResponse.json({ ...updatedProject })
 }
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {

@@ -17,11 +17,19 @@ export function encrypt(text: string): string {
 }
 
 export function decrypt(data: string): string {
-  const [ivHex, tagHex, encryptedHex] = data.split(':')
-  const iv = Buffer.from(ivHex, 'hex')
-  const tag = Buffer.from(tagHex, 'hex')
-  const encrypted = Buffer.from(encryptedHex, 'hex')
-  const decipher = crypto.createDecipheriv(ALGORITHM, KEY, iv)
-  decipher.setAuthTag(tag)
-  return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8')
+  try {
+    if (!data || !data.includes(':')) return data // 암호화되지 않은 기존 데이터 처리
+    const [ivHex, tagHex, encryptedHex] = data.split(':')
+    if (!ivHex || !tagHex || !encryptedHex) return data
+    
+    const iv = Buffer.from(ivHex, 'hex')
+    const tag = Buffer.from(tagHex, 'hex')
+    const encrypted = Buffer.from(encryptedHex, 'hex')
+    const decipher = crypto.createDecipheriv(ALGORITHM, KEY, iv)
+    decipher.setAuthTag(tag)
+    return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8')
+  } catch (err) {
+    console.error('[Crypto] Decrypt failed, returning raw data:', err)
+    return data
+  }
 }

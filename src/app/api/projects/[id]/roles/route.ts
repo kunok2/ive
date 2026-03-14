@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getSlotsByProject, createSlot, getProject } from '@/lib/db'
+import { getRolesByProject, createRole, getProject } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { encrypt, decrypt } from '@/lib/crypto'
 
@@ -13,10 +13,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
-  const slots = getSlotsByProject(id)
-  const decrypted = slots.map(s => ({
-    ...s,
-    accessToken: safeDecrypt(s.accessToken),
+  const roles = getRolesByProject(id)
+  const decrypted = roles.map(r => ({
+    ...r,
+    accessToken: safeDecrypt(r.accessToken || ''),
   }))
   return NextResponse.json(decrypted)
 }
@@ -33,19 +33,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const body = await req.json()
   if (!body.name?.trim()) {
-    return NextResponse.json({ error: '슬롯 이름을 입력해주세요' }, { status: 400 })
-  }
-  if (!body.accessToken?.trim()) {
-    return NextResponse.json({ error: '액세스 토큰을 입력해주세요' }, { status: 400 })
+    return NextResponse.json({ error: '역할 이름을 입력해주세요' }, { status: 400 })
   }
 
-  const slot = {
+  const role = {
     ...body,
     projectId: id,
-    accessToken: encrypt(body.accessToken.trim()),
+    accessToken: body.accessToken?.trim() ? encrypt(body.accessToken.trim()) : undefined,
   }
-  createSlot(slot)
-  return NextResponse.json({ ...slot, accessToken: body.accessToken.trim() }, { status: 201 })
+  createRole(role)
+  return NextResponse.json({ ...role, accessToken: body.accessToken?.trim() || undefined }, { status: 201 })
 }
 
 function safeDecrypt(token: string): string {

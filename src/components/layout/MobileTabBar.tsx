@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 
 const tabs = [
   { href: '/', icon: 'fa-solid fa-folder-open', label: '프로젝트' },
-  { href: '/dashboard', icon: 'fa-solid fa-chart-line', label: '대시보드' },
+  { href: '/agents', icon: 'fa-solid fa-robot', label: 'Agent' },
   { href: '/review', icon: 'fa-solid fa-clipboard-check', label: '검수' },
   { href: '/alerts', icon: 'fa-solid fa-bell', label: '알림' },
 ]

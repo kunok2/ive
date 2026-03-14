@@ -68,7 +68,7 @@ export default function HomePage() {
               <ProjectCard
                 key={project.id}
                 project={project}
-                slots={project.slots}
+                roles={project.roles}
               />
             ))}
           </div>

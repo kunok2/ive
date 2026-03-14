@@ -21,7 +21,7 @@ export async function POST(req: Request) {
   const id = `user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   const passwordHash = await hashPassword(password)
 
-  createUser(id, email, name, passwordHash)
+  createUser({ id, email, name, password: passwordHash })
   await setAuthCookie(id)
 
   return NextResponse.json({ id, email, name }, { status: 201 })

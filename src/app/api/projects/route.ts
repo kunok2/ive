@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
-import { getProjectsByUser, createProject, getSlotsByProject } from '@/lib/db'
+import { getProjectsByUser, createProject, getRolesByProject, getRoleAssignments } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
-import { decrypt } from '@/lib/crypto'
+import { decrypt, encrypt } from '@/lib/crypto'
 
 export async function GET() {
   const user = await getCurrentUser()
@@ -10,9 +10,11 @@ export async function GET() {
   const projects = getProjectsByUser(user.id)
   const data = projects.map(p => ({
     ...p,
-    slots: getSlotsByProject(p.id).map(s => ({
-      ...s,
-      accessToken: safeDecrypt(s.accessToken),
+    accessToken: safeDecrypt(p.accessToken),
+    roles: getRolesByProject(p.id).map(r => ({
+      ...r,
+      accessToken: safeDecrypt(r.accessToken || ''),
+      assignedAgents: getRoleAssignments(r.id),
     })),
   }))
   return NextResponse.json(data)
@@ -31,7 +33,11 @@ export async function POST(req: Request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json()
-  const project = { ...body, userId: user.id }
+  const project = {
+    ...body,
+    userId: user.id,
+    accessToken: encrypt(body.accessToken || '')
+  }
   createProject(project)
   return NextResponse.json(project, { status: 201 })
 }
