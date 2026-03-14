@@ -28,7 +28,8 @@ RUN npm ci --omit=dev
 
 # Next.js 빌드 결과물 복사
 COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public 2>/dev/null || true
+RUN --mount=type=bind,from=builder,source=/app/public,target=/builder-public \
+    cp -r /builder-public ./public 2>/dev/null || mkdir -p public
 
 # 소스 파일 (server.ts, src/) 복사 — tsx가 런타임에 트랜스파일
 COPY server.ts ./
