@@ -46,14 +46,24 @@ async function main() {
       return
     }
 
+    console.log('[Terminal] WebSocket upgrade request')
+
     // 쿠키에서 JWT 검증
     const cookies = parseCookies(req.headers.cookie || '')
     const token = cookies['ive-token']
-    if (!token || !verifyToken(token)) {
+    if (!token) {
+      console.log('[Terminal] Auth failed: no ive-token cookie')
       socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n')
       socket.destroy()
       return
     }
+    if (!verifyToken(token)) {
+      console.log('[Terminal] Auth failed: invalid token')
+      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n')
+      socket.destroy()
+      return
+    }
+    console.log('[Terminal] Auth OK, upgrading...')
 
     wss.handleUpgrade(req, socket, head, (ws) => {
       wss.emit('connection', ws, req)

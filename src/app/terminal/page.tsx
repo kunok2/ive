@@ -68,6 +68,24 @@ export default function TerminalPage() {
         }
       })
 
+      // 텍스트 선택 시 자동으로 클립보드에 복사
+      term.onSelectionChange(() => {
+        const sel = term.getSelection()
+        if (sel && navigator.clipboard) {
+          navigator.clipboard.writeText(sel).catch(() => {})
+        }
+      })
+
+      // 우클릭 시 클립보드에서 붙여넣기
+      containerRef.current!.addEventListener('contextmenu', (e) => {
+        e.preventDefault()
+        navigator.clipboard.readText().then(text => {
+          if (text && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'input', data: text }))
+          }
+        }).catch(() => {})
+      })
+
       const handleResize = () => {
         fitAddon.fit()
         if (ws.readyState === WebSocket.OPEN) {
