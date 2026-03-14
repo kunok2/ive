@@ -112,14 +112,7 @@ export default function TerminalPage() {
 
   return (
     <>
-      <div className="flex flex-col h-[calc(100vh-3.5rem)] bg-[#0d1117]">
-        <div className="flex items-center gap-2 px-4 py-2 border-b border-ive-border bg-ive-bg-card">
-          <i className="fa-solid fa-terminal text-ive-green text-sm" />
-          <span className="text-sm font-semibold text-ive-text">서버 터미널</span>
-          <span className="ml-auto text-xs text-ive-text-dim">WebSocket PTY</span>
-        </div>
-        <div ref={containerRef} className="flex-1 p-2 overflow-hidden" />
-      </div>
+      <div ref={containerRef} className="bg-[#0d1117]" style={{ height: 'calc(100vh - 3.5rem)' }} />
       <MobileTabBar />
     </>
   )
