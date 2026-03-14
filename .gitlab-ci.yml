@@ -1,26 +1,20 @@
 stages:
-  - build
+  - deploy
 
 variables:
+  DOCKER_BUILDKIT: "1"
   IMAGE_NAME: kunok3/spring-ive
-  DOCKER_TLS_CERTDIR: "/certs"
 
-docker-build:
-  stage: build
-  image: docker:26
-  services:
-    - docker:26-dind
+deploy:
+  stage: deploy
+  tags:
+    - deploy
+  image: docker:latest
   before_script:
-    - docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
+    - apk add --no-cache nodejs npm make python3 g++
+    - docker login -u "$DOCKER_USERNAME" -p "$DOCKER_PASSWORD"
   script:
-    - |
-      docker build \
-        --cache-from $IMAGE_NAME:latest \
-        --build-arg BUILDKIT_INLINE_CACHE=1 \
-        -t $IMAGE_NAME:latest \
-        -t $IMAGE_NAME:$CI_COMMIT_SHORT_SHA \
-        .
-    - docker push $IMAGE_NAME:latest
-    - docker push $IMAGE_NAME:$CI_COMMIT_SHORT_SHA
-  rules:
-    - if: $CI_COMMIT_BRANCH == "main"
+    - npm ci
+    - npm run deploy
+  only:
+    - main
