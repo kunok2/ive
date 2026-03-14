@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import '@xterm/xterm/css/xterm.css'
 import MobileTabBar from '@/components/layout/MobileTabBar'
 
 export default function TerminalPage() {
@@ -8,6 +9,7 @@ export default function TerminalPage() {
   const termRef = useRef<any>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const fitAddonRef = useRef<any>(null)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let destroyed = false
@@ -55,11 +57,15 @@ export default function TerminalPage() {
       }
 
       ws.onerror = () => {
-        term.writeln('\x1b[31mWebSocket error. Check server logs.\x1b[0m')
+        if (!destroyed) setError('WebSocket 연결 실패. 서버가 실행 중인지, 로그인 상태인지 확인하세요.')
+        term.writeln('\x1b[31mConnection failed.\x1b[0m')
       }
 
-      ws.onclose = () => {
-        if (!destroyed) term.writeln('\x1b[33m\r\nConnection closed.\x1b[0m')
+      ws.onclose = (e) => {
+        if (!destroyed) {
+          if (e.code === 1006) setError('서버에 연결할 수 없습니다 (코드 1006). 서버를 재시작하세요.')
+          term.writeln(`\x1b[33m\r\nConnection closed (code ${e.code}).\x1b[0m`)
+        }
       }
 
       term.onData((data) => {
@@ -112,6 +118,12 @@ export default function TerminalPage() {
 
   return (
     <>
+      {error && (
+        <div className="fixed top-0 left-0 right-0 z-40 bg-red-900/90 text-red-200 text-xs px-4 py-2 flex items-center gap-2">
+          <i className="fa-solid fa-triangle-exclamation" />
+          {error}
+        </div>
+      )}
       <div ref={containerRef} className="bg-[#0d1117]" style={{ height: 'calc(100vh - 3.5rem)' }} />
       <MobileTabBar />
     </>
