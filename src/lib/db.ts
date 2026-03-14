@@ -151,6 +151,38 @@ function initSchema(db: Database.Database) {
     }
   } catch (e) { console.error("Migration failed for users table:", e) }
 
+  try {
+    const tableInfo = db.prepare("PRAGMA table_info(task_executions)").all() as any[]
+    if (!tableInfo.some(col => col.name === 'role_id')) {
+      db.exec("ALTER TABLE task_executions ADD COLUMN role_id TEXT NOT NULL DEFAULT ''")
+    }
+    if (!tableInfo.some(col => col.name === 'pid')) {
+      db.exec("ALTER TABLE task_executions ADD COLUMN pid INTEGER")
+    }
+  } catch (e) { console.error("Migration failed for task_executions:", e) }
+
+  // Migration: role_assignments의 UNIQUE(role_id, agent_id) 제약 제거 (멀티슬롯 지원)
+  try {
+    const tableDef = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='role_assignments'").get() as { sql: string } | undefined
+    if (tableDef?.sql?.includes('UNIQUE')) {
+      db.exec(`
+        CREATE TABLE role_assignments_new (
+          id TEXT PRIMARY KEY,
+          role_id TEXT NOT NULL,
+          agent_id TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'paused')),
+          assigned_at TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
+          FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE
+        );
+        INSERT INTO role_assignments_new SELECT * FROM role_assignments;
+        DROP TABLE role_assignments;
+        ALTER TABLE role_assignments_new RENAME TO role_assignments;
+      `)
+      console.log('[DB] Migrated role_assignments: removed UNIQUE constraint for multi-slot support')
+    }
+  } catch (e) { console.error("Migration failed for role_assignments unique constraint:", e) }
+
   seedAdmin(db)
 }
 
@@ -417,7 +449,17 @@ export function assignAgentToRole(ra: RoleAssignment) {
 }
 
 export function unassignAgentFromRole(roleId: string, agentId: string) {
-  getDb().prepare('DELETE FROM role_assignments WHERE role_id = ? AND agent_id = ?').run(roleId, agentId)
+  // 한 번에 하나의 슬롯만 제거 (멀티슬롯 지원)
+  getDb().prepare(
+    'DELETE FROM role_assignments WHERE id = (SELECT id FROM role_assignments WHERE role_id = ? AND agent_id = ? LIMIT 1)'
+  ).run(roleId, agentId)
+}
+
+export function countActiveExecutionsByAgent(agentId: string): number {
+  const r = getDb().prepare(
+    "SELECT COUNT(*) as cnt FROM task_executions WHERE agent_id = ? AND status = 'running'"
+  ).get(agentId) as { cnt: number }
+  return r.cnt
 }
 
 export function countRoleAgents(roleId: string): number {
@@ -429,8 +471,8 @@ export function countRoleAgents(roleId: string): number {
 
 export function createExecution(ex: TaskExecution) {
   getDb().prepare(
-    'INSERT INTO task_executions (id, project_id, agent_id, issue_iid, status, started_at, log_path) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).run(ex.id, ex.projectId, ex.agentId, ex.issueIid, ex.status, ex.startedAt, ex.logPath)
+    'INSERT INTO task_executions (id, project_id, role_id, agent_id, issue_iid, status, started_at, log_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(ex.id, ex.projectId, ex.roleId, ex.agentId, ex.issueIid, ex.status, ex.startedAt, ex.logPath)
 }
 
 export function updateExecutionStatus(id: string, status: TaskStatus, endedAt?: string) {
@@ -445,24 +487,55 @@ export function getExecution(id: string): TaskExecution | null {
   const r = getDb().prepare('SELECT * FROM task_executions WHERE id = ?').get(id) as any
   if (!r) return null
   return {
-    id: r.id, projectId: r.project_id, agentId: r.agent_id, issueIid: r.issue_iid,
-    status: r.status, startedAt: r.started_at, endedAt: r.ended_at, logPath: r.log_path
+    id: r.id, projectId: r.project_id, roleId: r.role_id ?? '', agentId: r.agent_id,
+    issueIid: r.issue_iid, status: r.status, startedAt: r.started_at, endedAt: r.ended_at, logPath: r.log_path
   }
 }
 
-/** 서버 재시작 시 고착된 'running' 실행을 'failed'로 리셋하고 해당 에이전트를 'available'로 복귀 */
+export function updateExecutionPid(id: string, pid: number) {
+  getDb().prepare('UPDATE task_executions SET pid = ? WHERE id = ?').run(pid, id)
+}
+
+/** 실행 프로세스를 강제 종료하고 DB를 failed로 업데이트 */
+export function killExecution(id: string): boolean {
+  const r = getDb().prepare('SELECT * FROM task_executions WHERE id = ?').get(id) as any
+  if (!r) return false
+
+  // 프로세스 그룹 kill (pid가 있는 경우)
+  if (r.pid) {
+    try {
+      process.kill(-r.pid, 'SIGKILL')
+      console.log(`[DB] Killed process group -${r.pid} for execution ${id}`)
+    } catch (e: any) {
+      if (e.code !== 'ESRCH') console.warn(`[DB] Kill failed for pid ${r.pid}:`, e.message)
+    }
+  }
+
+  getDb().prepare(
+    "UPDATE task_executions SET status = 'failed', ended_at = ? WHERE id = ?"
+  ).run(new Date().toISOString(), id)
+  return true
+}
+
+/** 서버 재시작 시 고착된 'running' 실행을 프로세스 kill 후 'failed'로 리셋 */
 export function resetStuckExecutions() {
   const stuckRows = getDb().prepare(
     "SELECT * FROM task_executions WHERE status = 'running'"
   ).all() as any[]
 
   for (const r of stuckRows) {
+    // 저장된 PID로 프로세스 그룹 강제 종료
+    if (r.pid) {
+      try {
+        process.kill(-r.pid, 'SIGKILL')
+        console.log(`[DB] Killed orphan process group -${r.pid} (execution: ${r.id})`)
+      } catch (e: any) {
+        if (e.code !== 'ESRCH') console.warn(`[DB] Kill failed for pid ${r.pid}:`, e.message)
+      }
+    }
     getDb().prepare(
       "UPDATE task_executions SET status = 'failed', ended_at = ? WHERE id = ?"
     ).run(new Date().toISOString(), r.id)
-    getDb().prepare(
-      "UPDATE agents SET status = 'available' WHERE id = ?"
-    ).run(r.agent_id)
     console.log(`[DB] Reset stuck execution ${r.id} (agent: ${r.agent_id})`)
   }
 
@@ -479,9 +552,20 @@ export function hasActiveExecution(projectId: string, issueIid: number): boolean
 }
 
 export function getLatestExecutionsByProject(projectId: string, limit: number = 20): TaskExecution[] {
-  const rows = getDb().prepare('SELECT * FROM task_executions WHERE project_id = ? ORDER BY started_at DESC LIMIT ?').all(projectId, limit) as any[]
+  const rows = getDb().prepare(`
+    SELECT te.*,
+           a.name  AS agent_name,
+           ro.name AS role_name
+    FROM task_executions te
+    LEFT JOIN agents a  ON a.id  = te.agent_id
+    LEFT JOIN roles  ro ON ro.id = te.role_id
+    WHERE te.project_id = ?
+    ORDER BY te.started_at DESC
+    LIMIT ?
+  `).all(projectId, limit) as any[]
   return rows.map(r => ({
-    id: r.id, projectId: r.project_id, agentId: r.agent_id, issueIid: r.issue_iid,
-    status: r.status, startedAt: r.started_at, endedAt: r.ended_at, logPath: r.log_path
+    id: r.id, projectId: r.project_id, roleId: r.role_id ?? '', agentId: r.agent_id,
+    issueIid: r.issue_iid, status: r.status, startedAt: r.started_at, endedAt: r.ended_at,
+    logPath: r.log_path, agentName: r.agent_name ?? undefined, roleName: r.role_name ?? undefined
   }))
 }

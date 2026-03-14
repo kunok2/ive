@@ -3,11 +3,12 @@ import {
   updateProjectLastChecked,
   getRolesByProject,
   getRoleAssignments,
-  updateAgentStatus,
   createExecution,
   updateExecutionStatus,
+  updateExecutionPid,
   resetStuckExecutions,
-  hasActiveExecution
+  hasActiveExecution,
+  countActiveExecutionsByAgent
 } from "./db";
 import { decrypt } from "./crypto";
 import { 
@@ -145,8 +146,12 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
   const targetRoles = roles.filter(r => r.category === targetCategory);
 
   for (const issue of issues) {
-    // 개발 큐: 이미 IVE(D) 또는 IVE(V) 레이블이 있으면 스킵
-    if (isDevelop && (issue.labels.includes(project.labelInProgress) || issue.labels.includes(project.labelValidation))) {
+    // 개발 큐: 이미 IVE(D) 또는 IVE(V) 레이블이 있거나 실행 중이면 스킵
+    if (isDevelop && (
+      issue.labels.includes(project.labelInProgress) ||
+      issue.labels.includes(project.labelValidation) ||
+      hasActiveExecution(project.id, issue.iid)
+    )) {
       continue;
     }
     // 검증 큐: 이미 실행 중인 execution이 있으면 스킵 (중복 배정 방지)
@@ -158,15 +163,32 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
 
     for (const role of targetRoles) {
       const assignments = getRoleAssignments(role.id);
-      const availableAgent = assignments.find(a => a.agent.status === 'available');
 
-      if (availableAgent) {
-        console.log(`[Scanner] [ASSIGN] Project: ${project.name}, Issue: #${issue.iid}, Agent: ${availableAgent.agent.name} (${targetCategory})`);
+      // 에이전트별 슬롯 수 집계 (멀티슬롯: 같은 에이전트를 여러 번 배정 가능)
+      const agentSlots = new Map<string, { assignment: typeof assignments[0], slots: number }>();
+      for (const a of assignments) {
+        const existing = agentSlots.get(a.agentId);
+        if (existing) {
+          existing.slots++;
+        } else {
+          agentSlots.set(a.agentId, { assignment: a, slots: 1 });
+        }
+      }
 
-        // 1. 에이전트 바쁨 상태로 전환
-        updateAgentStatus(availableAgent.agentId, 'busy');
+      // 실행 중인 작업 수가 슬롯보다 적은 에이전트 탐색
+      let availableAssignment: typeof assignments[0] | null = null;
+      for (const [agentId, { assignment, slots }] of agentSlots) {
+        const running = countActiveExecutionsByAgent(agentId);
+        if (running < slots) {
+          availableAssignment = assignment;
+          break;
+        }
+      }
 
-        // 2. 레이블 변경
+      if (availableAssignment) {
+        console.log(`[Scanner] [ASSIGN] Project: ${project.name}, Issue: #${issue.iid}, Agent: ${availableAssignment.agent.name} (${targetCategory})`);
+
+        // 레이블 변경
         //    개발: IVE → IVE(D)
         //    검증: IVE(V) 그대로 유지 (이미 검증 큐 레이블이 붙어 있음)
         const currentLabel = isDevelop ? project.labelTarget : project.labelValidation;
@@ -175,16 +197,13 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
           await updateGitLabIssueLabels(project, issue.iid, decryptedToken, [inProgressLabel], [currentLabel]);
         }
 
-        // 3. 비동기로 태스크 실행
-        executeTask(project, issue, availableAgent.agent, decryptedToken, inProgressLabel, isDevelop)
+        // 비동기로 태스크 실행
+        executeTask(project, issue, availableAssignment.agent, decryptedToken, inProgressLabel, isDevelop, role.id)
           .then(() => {
             console.log(`[Scanner] [DONE] Issue #${issue.iid} processed.`);
           })
           .catch(err => {
             console.error(`[Scanner] [FAILED] Issue #${issue.iid} error:`, err);
-          })
-          .finally(() => {
-            updateAgentStatus(availableAgent.agentId, 'available');
           });
 
         assigned = true;
@@ -202,25 +221,27 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
  * 에이전트를 사용하여 실제 작업을 수행합니다. (Git 클론, 브랜칭, CLI 실행, MR 생성 등)
  */
 async function executeTask(
-  project: Project, 
-  issue: any, 
-  agent: Agent, 
-  token: string, 
-  currentLabel: string, 
-  isDevelop: boolean
+  project: Project,
+  issue: any,
+  agent: Agent,
+  token: string,
+  currentLabel: string,
+  isDevelop: boolean,
+  roleId: string
 ) {
   const iid = issue.iid;
   const executionId = `ex-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
   const workspacePath = path.join(process.cwd(), 'workspaces', project.id, `issue-${iid}`);
   const logDir = path.join(process.cwd(), 'data', 'logs');
   const logPath = path.join(logDir, `${executionId}.log`);
-  
+
   if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
 
   // 0. DB에 실행 시작 기록
   createExecution({
     id: executionId,
     projectId: project.id,
+    roleId: roleId,
     agentId: agent.id,
     issueIid: iid,
     status: 'running',
@@ -311,8 +332,15 @@ ${iterationContext}
       const child = spawn(mainCmd, args, {
         cwd: workspacePath,
         stdio: ['ignore', 'pipe', 'pipe'],
-        env: { ...process.env, GITLAB_API_TOKEN: token }
+        env: { ...process.env, GITLAB_API_TOKEN: token },
+        detached: true,  // 새 프로세스 그룹 생성 → kill -pgid로 전체 종료 가능
       });
+
+      // PID를 DB에 저장 (강제 종료 및 좀비 프로세스 정리용)
+      if (child.pid) {
+        updateExecutionPid(executionId, child.pid);
+        log(`PID: ${child.pid} (PGID: -${child.pid})`, 'system');
+      }
 
       child.stdout.on('data', (data) => logStream.write(data));
       child.stderr.on('data', (data) => logStream.write(data));

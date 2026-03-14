@@ -48,22 +48,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     )
   }
 
-  try {
-    const assignment = {
-      id: `ra-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      roleId,
-      agentId,
-      status: 'active' as const,
-      assignedAt: new Date().toISOString(),
-    }
-    assignAgentToRole(assignment)
-    return NextResponse.json(assignment, { status: 201 })
-  } catch (err: unknown) {
-    if (err instanceof Error && err.message.includes('UNIQUE')) {
-      return NextResponse.json({ error: '이미 배정된 Agent입니다' }, { status: 409 })
-    }
-    throw err
+  const assignment = {
+    id: `ra-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    roleId,
+    agentId,
+    status: 'active' as const,
+    assignedAt: new Date().toISOString(),
   }
+  assignAgentToRole(assignment)
+  return NextResponse.json(assignment, { status: 201 })
 }
 
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string; roleId: string }> }) {

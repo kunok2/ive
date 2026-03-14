@@ -68,10 +68,15 @@ export type TaskStatus = 'running' | 'success' | 'failed'
 export interface TaskExecution {
   id: string
   projectId: string
+  roleId: string
   agentId: string
   issueIid: number
   status: TaskStatus
   startedAt: string
   endedAt?: string
   logPath: string
+  pid?: number        // 에이전트 프로세스 그룹 ID (강제 종료용)
+  // joined fields (API 응답에만 포함)
+  agentName?: string
+  roleName?: string
 }

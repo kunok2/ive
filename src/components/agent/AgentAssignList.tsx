@@ -13,8 +13,14 @@ interface Props {
 }
 
 export default function AgentAssignList({ agents, assignedAgentIds, onAssign, onUnassign, maxAgents, currentCount }: Props) {
-  const assignedAgents = agents.filter(a => assignedAgentIds.includes(a.id))
-  const availableAgents = agents.filter(a => !assignedAgentIds.includes(a.id))
+  // 에이전트별 슬롯 수 집계
+  const slotCounts = new Map<string, number>()
+  for (const id of assignedAgentIds) {
+    slotCounts.set(id, (slotCounts.get(id) || 0) + 1)
+  }
+
+  const assignedAgents = agents.filter(a => (slotCounts.get(a.id) || 0) > 0)
+  const availableAgents = agents.filter(a => (slotCounts.get(a.id) || 0) === 0)
   const isFull = currentCount >= maxAgents
 
   return (
@@ -40,6 +46,7 @@ export default function AgentAssignList({ agents, assignedAgentIds, onAssign, on
             {assignedAgents.map(agent => {
               const cli = cliConfig[agent.cliName]
               const status = statusConfig[agent.status]
+              const slots = slotCounts.get(agent.id) || 0
               return (
                 <div key={agent.id} className="flex items-center gap-3 bg-ive-green/5 rounded-lg p-3 border border-ive-green/20">
                   <div className="w-8 h-8 rounded-lg bg-ive-bg flex items-center justify-center shrink-0">
@@ -49,15 +56,26 @@ export default function AgentAssignList({ agents, assignedAgentIds, onAssign, on
                     <div className="text-sm font-bold text-ive-green-pale truncate">{agent.name}</div>
                     <div className="text-[10px] text-ive-text-muted truncate">{cli.label}</div>
                   </div>
-                  <div className="flex items-center gap-1.5 mr-2">
+                  <div className="flex items-center gap-1.5 mr-1">
                     <div className={`w-1.5 h-1.5 rounded-full ${status.dot}`} />
                   </div>
-                  <button
-                    onClick={() => onUnassign(agent.id)}
-                    className="text-[10px] font-bold text-ive-red/60 px-4 py-1.5 rounded-lg border border-ive-red/20 active:bg-ive-red/10 transition-colors shrink-0"
-                  >
-                    <i className="fa-solid fa-xmark mr-1" />해제
-                  </button>
+                  {/* 슬롯 수 표시 및 +/- 컨트롤 */}
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={() => onUnassign(agent.id)}
+                      className="w-7 h-7 flex items-center justify-center rounded-lg border border-ive-red/20 text-ive-red/60 active:bg-ive-red/10 transition-colors text-xs font-bold"
+                    >
+                      <i className="fa-solid fa-minus" />
+                    </button>
+                    <span className="w-8 text-center text-xs font-black text-ive-green">{slots}개</span>
+                    <button
+                      onClick={() => onAssign(agent.id)}
+                      disabled={isFull}
+                      className="w-7 h-7 flex items-center justify-center rounded-lg border border-ive-green/30 text-ive-green active:bg-ive-green/10 transition-colors text-xs font-bold disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      <i className="fa-solid fa-plus" />
+                    </button>
+                  </div>
                 </div>
               )
             })}

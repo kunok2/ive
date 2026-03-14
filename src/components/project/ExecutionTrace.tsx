@@ -6,10 +6,29 @@ import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import { TaskExecution } from '@/types'
 
+function formatDuration(startedAt: string, endedAt?: string): string {
+  const start = new Date(startedAt).getTime()
+  const end = endedAt ? new Date(endedAt).getTime() : Date.now()
+  const s = Math.floor((end - start) / 1000)
+  if (s < 60) return `${s}s`
+  if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`
+  return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`
+}
+
 export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { projectId: string; className?: string }) {
   const [executions, setExecutions] = useState<TaskExecution[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [killing, setKilling] = useState<string | null>(null)
+  const [tick, setTick] = useState(0)
+
+  // 진행중인 실행이 있으면 1초마다 경과시간 갱신
+  useEffect(() => {
+    const hasRunning = executions.some(e => e.status === 'running')
+    if (!hasRunning) return
+    const timer = setInterval(() => setTick(t => t + 1), 1000)
+    return () => clearInterval(timer)
+  }, [executions])
   const terminalRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<Terminal | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
@@ -116,26 +135,68 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
             </div>
           ) : (
             executions.map(ex => (
-              <button
-                key={ex.id}
-                onClick={() => setSelectedId(ex.id)}
-                className="w-full text-left bg-ive-bg-card border border-ive-border-subtle p-4 rounded-xl hover:border-ive-green/50 hover:bg-ive-green/5 transition-all group"
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-black text-ive-green-pale">Issue #{ex.issueIid}</span>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-tighter ${
-                    ex.status === 'running' ? 'bg-ive-amber/20 text-ive-amber animate-pulse' :
-                    ex.status === 'success' ? 'bg-ive-green/20 text-ive-green' :
-                    'bg-ive-red/20 text-ive-red'
-                  }`}>
-                    {ex.status}
-                  </span>
-                </div>
-                <div className="text-[10px] text-ive-text-muted group-hover:text-ive-text-dim">
-                  <i className="fa-solid fa-calendar-day mr-1" />
-                  {new Date(ex.startedAt).toLocaleString()}
-                </div>
-              </button>
+              <div key={ex.id} className="relative">
+                <button
+                  onClick={() => setSelectedId(ex.id)}
+                  className="w-full text-left bg-ive-bg-card border border-ive-border-subtle p-4 rounded-xl hover:border-ive-green/50 hover:bg-ive-green/5 transition-all group"
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs font-black text-ive-green-pale">Issue #{ex.issueIid}</span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-tighter ${
+                      ex.status === 'running' ? 'bg-ive-amber/20 text-ive-amber animate-pulse' :
+                      ex.status === 'success' ? 'bg-ive-green/20 text-ive-green' :
+                      'bg-ive-red/20 text-ive-red'
+                    }`}>
+                      {ex.status}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                    {ex.roleName && (
+                      <span className="text-[10px] font-bold text-ive-cyan/80 bg-ive-cyan/10 border border-ive-cyan/20 px-1.5 py-0.5 rounded">
+                        <i className="fa-solid fa-id-badge mr-1 text-[8px]" />{ex.roleName}
+                      </span>
+                    )}
+                    {ex.agentName && (
+                      <span className="text-[10px] font-bold text-ive-green/70 bg-ive-green/10 border border-ive-green/20 px-1.5 py-0.5 rounded">
+                        <i className="fa-solid fa-robot mr-1 text-[8px]" />{ex.agentName}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] text-ive-text-muted group-hover:text-ive-text-dim">
+                    <span>
+                      <i className="fa-solid fa-calendar-day mr-1" />
+                      {new Date(ex.startedAt).toLocaleString()}
+                    </span>
+                    <span className={`font-mono font-bold ${ex.status === 'running' ? 'text-ive-amber' : 'text-ive-text-dim'}`}>
+                      {ex.status === 'running' && <i className="fa-solid fa-stopwatch mr-1 text-[9px]" />}
+                      {formatDuration(ex.startedAt, ex.endedAt)}
+                      {/* tick을 참조해 running 실행 시 리렌더 유발 */}
+                      {ex.status === 'running' && tick >= 0 ? '' : ''}
+                    </span>
+                  </div>
+                </button>
+                {ex.status === 'running' && (
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation()
+                      setKilling(ex.id)
+                      try {
+                        await fetch(`/api/executions/${ex.id}/kill`, { method: 'POST' })
+                        await fetchExecutions()
+                      } finally {
+                        setKilling(null)
+                      }
+                    }}
+                    disabled={killing === ex.id}
+                    className="absolute top-3 right-12 text-[10px] font-bold text-ive-red/70 border border-ive-red/30 px-2 py-1 rounded-lg bg-ive-bg-deep hover:bg-ive-red/10 transition-colors disabled:opacity-40"
+                  >
+                    {killing === ex.id
+                      ? <i className="fa-solid fa-circle-notch fa-spin" />
+                      : <><i className="fa-solid fa-skull-crossbones mr-1" />강제종료</>
+                    }
+                  </button>
+                )}
+              </div>
             ))
           )}
         </div>

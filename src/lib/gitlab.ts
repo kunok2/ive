@@ -265,3 +265,29 @@ export async function addGitLabMRNote(project: Project, decryptedToken: string, 
     console.error(`[GitLab] Error adding note to MR #${mrIid}:`, err);
   }
 }
+
+/**
+ * 이슈를 생성합니다.
+ */
+export async function createGitLabIssue(
+  project: Project,
+  decryptedToken: string,
+  title: string,
+  description: string,
+  labels: string[]
+) {
+  const projectPath = getProjectPath(project.repoUrl);
+  if (!projectPath) throw new Error('Invalid repo URL');
+
+  const res = await fetch(`https://gitlab.com/api/v4/projects/${projectPath}/issues`, {
+    method: 'POST',
+    headers: {
+      'PRIVATE-TOKEN': decryptedToken,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ title, description, labels: labels.join(',') }),
+  });
+
+  if (!res.ok) throw new Error(`이슈 생성 실패: ${res.statusText}`);
+  return await res.json();
+}

@@ -6,7 +6,7 @@ import { Project, ProjectRole, RoleAssignment, Agent } from '@/types'
 interface RoleWithAgents extends ProjectRole {
   assignedAgents: (RoleAssignment & { agent: Agent })[]
 }
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useStore } from '@/lib/store'
 import ExecutionTrace from '@/components/project/ExecutionTrace'
 
@@ -19,9 +19,31 @@ export default function ProjectCard({ project, roles }: Props) {
   const { updateProject, scanProjectNow } = useStore()
   const [scanning, setScanning] = useState(false)
   const [showTrace, setShowTrace] = useState(false)
-  const busyAgents = roles.reduce((sum, r) =>
-    sum + (r.assignedAgents?.filter(a => a.agent.status === 'busy').length ?? 0), 0
-  )
+  const [showIssueModal, setShowIssueModal] = useState(false)
+  const [issueTitle, setIssueTitle] = useState('')
+  const [issueDesc, setIssueDesc] = useState('')
+  const [issueAsDev, setIssueAsDev] = useState(true)
+  const [issueSubmitting, setIssueSubmitting] = useState(false)
+  const [issueError, setIssueError] = useState('')
+  const titleRef = useRef<HTMLInputElement>(null)
+  const descRef = useRef<HTMLTextAreaElement>(null)
+  const [runningCount, setRunningCount] = useState(0)
+
+  useEffect(() => {
+    let cancelled = false
+    const fetchRunning = async () => {
+      try {
+        const res = await fetch(`/api/projects/${project.id}/executions`)
+        if (res.ok && !cancelled) {
+          const data = await res.json()
+          setRunningCount(data.filter((e: any) => e.status === 'running').length)
+        }
+      } catch { /* ignore */ }
+    }
+    fetchRunning()
+    const timer = setInterval(fetchRunning, 10000)
+    return () => { cancelled = true; clearInterval(timer) }
+  }, [project.id])
   const [timeLeft, setTimeLeft] = useState<{ text: string; percent: number; displayValue: string; unit: string }>({
     text: '대기 중', percent: 0, displayValue: '-', unit: ''
   })
@@ -101,6 +123,41 @@ export default function ProjectCard({ project, roles }: Props) {
       alert(err instanceof Error ? err.message : '스캔 실행 중 오류가 발생했습니다.')
     } finally {
       setScanning(false)
+    }
+  }
+
+  const openIssueModal = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIssueTitle('')
+    setIssueDesc('')
+    setIssueAsDev(true)
+    setIssueError('')
+    setShowIssueModal(true)
+    setTimeout(() => titleRef.current?.focus(), 50)
+  }
+
+  const handleIssueSubmit = async (e: React.SyntheticEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    // IME 조합 중인 마지막 글자까지 포함하기 위해 DOM 값을 직접 읽음
+    const currentTitle = titleRef.current?.value ?? issueTitle
+    const currentDesc = descRef.current?.value ?? issueDesc
+    if (!currentTitle.trim() || issueSubmitting) return
+    setIssueSubmitting(true)
+    setIssueError('')
+    try {
+      const res = await fetch(`/api/projects/${project.id}/issues`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: currentTitle, description: currentDesc, asDev: issueAsDev }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || '이슈 생성 실패')
+      setShowIssueModal(false)
+    } catch (err) {
+      setIssueError(err instanceof Error ? err.message : '이슈 생성 중 오류가 발생했습니다.')
+    } finally {
+      setIssueSubmitting(false)
     }
   }
 
@@ -209,8 +266,12 @@ export default function ProjectCard({ project, roles }: Props) {
             <div className="text-[8px] text-ive-text-muted uppercase tracking-tighter mt-1 font-bold">역할</div>
           </div>
           <div className="text-center">
-            <div className={`text-base font-black leading-none ${busyAgents > 0 ? 'text-ive-amber animate-pulse' : 'text-ive-text-dim'}`}>{busyAgents}</div>
+            <div className={`text-base font-black leading-none ${runningCount > 0 ? 'text-ive-amber animate-pulse' : 'text-ive-text-dim'}`}>{runningCount}</div>
             <div className="text-[8px] text-ive-text-muted uppercase tracking-tighter mt-1 font-bold">작업중</div>
+          </div>
+          <div className="text-center">
+            <div className={`text-base font-black leading-none ${(project.lastScannedIssueCount ?? 0) > 0 ? 'text-ive-cyan' : 'text-ive-text-dim'}`}>{project.lastScannedIssueCount ?? 0}</div>
+            <div className="text-[8px] text-ive-text-muted uppercase tracking-tighter mt-1 font-bold">대기</div>
           </div>
           <div className="ml-auto flex items-center gap-1.5 self-end pb-0.5">
             <div className="flex gap-0.5">
@@ -222,6 +283,15 @@ export default function ProjectCard({ project, roles }: Props) {
           </div>
         </div>
       </Link>
+
+      {/* 이슈 등록 버튼 */}
+      <button
+        onClick={openIssueModal}
+        className="w-full flex items-center justify-center gap-1.5 px-4 py-2.5 border-t border-ive-border-dark bg-ive-bg-deep/70 text-[10px] font-bold uppercase tracking-widest text-ive-text-dim hover:text-ive-green hover:bg-ive-green/5 transition-all"
+      >
+        <i className="fa-solid fa-plus text-[9px]" />
+        이슈 등록
+      </button>
 
       {/* 실행 기록 토글 */}
       <button
@@ -242,6 +312,75 @@ export default function ProjectCard({ project, roles }: Props) {
       {showTrace && (
         <div className="border-t border-ive-cyan/20">
           <ExecutionTrace projectId={project.id} className="h-[400px]" />
+        </div>
+      )}
+
+      {/* 이슈 등록 모달 */}
+      {showIssueModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => setShowIssueModal(false)}
+        >
+          <div
+            className="w-full h-full bg-ive-bg-card shadow-2xl pt-6 px-6 pb-[calc(1.5rem+56px)] flex flex-col"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-base font-black text-ive-green-pale flex items-center gap-2">
+                <i className="fa-solid fa-circle-plus text-ive-green" />
+                이슈 등록 — {project.name}
+              </h3>
+              <button onClick={() => setShowIssueModal(false)} className="w-8 h-8 flex items-center justify-center rounded-full text-ive-text-muted hover:text-ive-text hover:bg-white/5 transition-colors">
+                <i className="fa-solid fa-xmark" />
+              </button>
+            </div>
+
+            <form onSubmit={handleIssueSubmit} className="flex flex-col gap-4 flex-1 min-h-0">
+              <input
+                ref={titleRef}
+                type="text"
+                value={issueTitle}
+                onChange={e => setIssueTitle(e.target.value)}
+                placeholder="이슈 제목"
+                className="w-full bg-ive-bg-input border border-ive-border rounded-xl px-4 py-4 text-base text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green"
+              />
+              <textarea
+                ref={descRef}
+                value={issueDesc}
+                onChange={e => setIssueDesc(e.target.value)}
+                placeholder="설명 (선택)"
+                className="flex-1 min-h-0 w-full bg-ive-bg-input border border-ive-border rounded-xl px-4 py-4 text-sm text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green resize-none"
+              />
+              <label className="flex items-center gap-3 cursor-pointer select-none py-1">
+                <div
+                  onClick={() => setIssueAsDev(v => !v)}
+                  className={`w-10 h-5 rounded-full relative transition-colors shrink-0 ${issueAsDev ? 'bg-ive-green' : 'bg-ive-border'}`}
+                >
+                  <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${issueAsDev ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                </div>
+                <span className="text-sm text-ive-text-muted">
+                  바로 개발 의뢰로 처리
+                  <span className="ml-1.5 text-ive-green/60 font-mono text-xs">({project.labelTarget})</span>
+                </span>
+              </label>
+
+              {issueError && (
+                <div className="text-sm text-ive-red bg-ive-red/10 border border-ive-red/20 rounded-xl px-4 py-3">
+                  <i className="fa-solid fa-circle-exclamation mr-1.5" />{issueError}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={!issueTitle.trim() || issueSubmitting}
+                className="w-full bg-ive-green-dark text-white font-black py-4 rounded-xl text-base transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {issueSubmitting
+                  ? <><i className="fa-solid fa-circle-notch fa-spin mr-2" />등록 중...</>
+                  : <><i className="fa-solid fa-plus mr-2" />이슈 등록</>}
+              </button>
+            </form>
+          </div>
         </div>
       )}
     </div>
