@@ -3,7 +3,7 @@ stages:
 
 variables:
   DOCKER_BUILDKIT: "1"
-  IMAGE_NAME: kunok3/spring-ive
+  IMAGE_NAME: dazzlepf/spring-ive
 
 deploy:
   stage: deploy
