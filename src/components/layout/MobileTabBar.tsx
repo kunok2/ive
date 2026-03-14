@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 const tabs = [
   { href: '/', icon: 'fa-solid fa-folder-open', label: '프로젝트' },
   { href: '/agents', icon: 'fa-solid fa-robot', label: 'Agent' },
+  { href: '/terminal', icon: 'fa-solid fa-terminal', label: 'CLI' },
 ]
 
 export default function MobileTabBar() {
