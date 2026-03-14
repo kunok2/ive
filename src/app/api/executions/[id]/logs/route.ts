@@ -1,64 +1,75 @@
 import { NextRequest } from 'next/server';
 import fs from 'fs';
-import path from 'path';
 import { getExecution } from '@/lib/db';
+
+function toSSE(text: string): string {
+  if (!text) return ''
+  const lines = text.split('\n')
+  if (lines[lines.length - 1] === '') lines.pop()
+  if (lines.length === 0) return ''
+  return lines.map(line => `data: ${line}`).join('\n') + '\n\n'
+}
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const executionId = params.id;
+  const { id: executionId } = await params;
   const execution = getExecution(executionId);
 
   if (!execution || !fs.existsSync(execution.logPath)) {
-    return new Response('Log not found', { status: 404 });
+    return new Response('data: [SYSTEM] Log file not found.\n\n', {
+      status: 200,
+      headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
+    });
   }
 
   const logPath = execution.logPath;
 
   const stream = new ReadableStream({
     start(controller) {
-      const stats = fs.statSync(logPath);
       let position = 0;
 
-      // 먼저 기존 내용을 다 보냄
-      const initialContent = fs.readFileSync(logPath);
-      controller.enqueue(new TextEncoder().encode(initialContent.toString()));
-      position = stats.size;
+      // 기존 내용 전송
+      const initialContent = fs.readFileSync(logPath, 'utf-8');
+      if (initialContent) {
+        controller.enqueue(new TextEncoder().encode(toSSE(initialContent)));
+      }
+      position = fs.statSync(logPath).size;
 
-      // 파일 변화 감시
-      const watcher = fs.watch(logPath, (eventType) => {
-        if (eventType === 'change') {
-          const currentStats = fs.statSync(logPath);
-          if (currentStats.size > position) {
+      // 완료된 실행은 즉시 종료
+      if (execution.status !== 'running') {
+        controller.close();
+        return;
+      }
+
+      // 실행 중: 500ms 폴링으로 새 내용 감시 (fs.watch는 macOS에서 불안정)
+      const poll = setInterval(() => {
+        try {
+          const currentSize = fs.statSync(logPath).size;
+          if (currentSize > position) {
             const fd = fs.openSync(logPath, 'r');
-            const buffer = Buffer.alloc(currentStats.size - position);
+            const buffer = Buffer.alloc(currentSize - position);
             fs.readSync(fd, buffer, 0, buffer.length, position);
             fs.closeSync(fd);
-            
-            controller.enqueue(new TextEncoder().encode(buffer.toString()));
-            position = currentStats.size;
+            position = currentSize;
+            controller.enqueue(new TextEncoder().encode(toSSE(buffer.toString('utf-8'))));
           }
-        }
-      });
 
-      // 만약 작업이 종료되었다면 (status가 running이 아니라면) 일정 시간 후 종료
-      const checkStatus = setInterval(() => {
-        const currentExecution = getExecution(executionId);
-        if (currentExecution && currentExecution.status !== 'running') {
-          // 마지막으로 기록된 내용이 있을 수 있으니 조금 대기 후 닫음
-          setTimeout(() => {
-            watcher.close();
-            clearInterval(checkStatus);
-            controller.close();
-          }, 2000);
-        }
-      }, 5000);
+          // 실행 완료 확인
+          const cur = getExecution(executionId);
+          if (cur && cur.status !== 'running') {
+            setTimeout(() => {
+              clearInterval(poll);
+              try { controller.close(); } catch { /* ignore */ }
+            }, 2000);
+          }
+        } catch { /* ignore */ }
+      }, 500);
 
       req.signal.addEventListener('abort', () => {
-        watcher.close();
-        clearInterval(checkStatus);
-        controller.close();
+        clearInterval(poll);
+        try { controller.close(); } catch { /* ignore */ }
       });
     }
   });

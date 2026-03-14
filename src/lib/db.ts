@@ -14,12 +14,12 @@ export function getDb() {
     const db = new Database(dbPath)
     db.pragma('foreign_keys = ON')
     initSchema(db)
-    
+    global.db = db  // startScanner 전에 먼저 설정 (순환 참조 방지)
+
     // 백그라운드 스캐너 시작
     if (process.env.NODE_ENV !== 'test') {
       startScanner();
     }
-    global.db = db
   }
   return global.db
 }
@@ -79,6 +79,14 @@ function initSchema(db: Database.Database) {
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS role_assignments (
+      id TEXT PRIMARY KEY,
+      role_id TEXT NOT NULL,
+      agent_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'paused')),
+      assigned_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
+      FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE,
       UNIQUE(role_id, agent_id)
     );
 
@@ -440,6 +448,34 @@ export function getExecution(id: string): TaskExecution | null {
     id: r.id, projectId: r.project_id, agentId: r.agent_id, issueIid: r.issue_iid,
     status: r.status, startedAt: r.started_at, endedAt: r.ended_at, logPath: r.log_path
   }
+}
+
+/** 서버 재시작 시 고착된 'running' 실행을 'failed'로 리셋하고 해당 에이전트를 'available'로 복귀 */
+export function resetStuckExecutions() {
+  const stuckRows = getDb().prepare(
+    "SELECT * FROM task_executions WHERE status = 'running'"
+  ).all() as any[]
+
+  for (const r of stuckRows) {
+    getDb().prepare(
+      "UPDATE task_executions SET status = 'failed', ended_at = ? WHERE id = ?"
+    ).run(new Date().toISOString(), r.id)
+    getDb().prepare(
+      "UPDATE agents SET status = 'available' WHERE id = ?"
+    ).run(r.agent_id)
+    console.log(`[DB] Reset stuck execution ${r.id} (agent: ${r.agent_id})`)
+  }
+
+  if (stuckRows.length > 0) {
+    console.log(`[DB] Reset ${stuckRows.length} stuck execution(s).`)
+  }
+}
+
+export function hasActiveExecution(projectId: string, issueIid: number): boolean {
+  const r = getDb().prepare(
+    "SELECT id FROM task_executions WHERE project_id = ? AND issue_iid = ? AND status = 'running' LIMIT 1"
+  ).get(projectId, issueIid)
+  return !!r
 }
 
 export function getLatestExecutionsByProject(projectId: string, limit: number = 20): TaskExecution[] {

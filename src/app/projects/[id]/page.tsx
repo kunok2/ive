@@ -11,7 +11,6 @@ import AgentAssignList from '@/components/agent/AgentAssignList'
 import MobileTabBar from '@/components/layout/MobileTabBar'
 import Modal from '@/components/ui/Modal'
 import ConfirmModal from '@/components/ui/ConfirmModal'
-import ExecutionTrace from '@/components/project/ExecutionTrace'
 
 export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -21,7 +20,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [showNewRole, setShowNewRole] = useState(false)
   const [showEditProject, setShowEditProject] = useState(false)
   const [showDeleteProject, setShowDeleteProject] = useState(false)
-  const [showTrace, setShowTrace] = useState(false)
+
   const [deleteRoleId, setDeleteRoleId] = useState<string | null>(null)
   const [editRole, setEditRole] = useState<any | null>(null)
   const [manageAgentsRoleId, setManageAgentsRoleId] = useState<string | null>(null)
@@ -107,39 +106,35 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             </div>
           </div>
 
-          <div className="flex items-center gap-6 mt-4 pt-4 border-t border-ive-border-dark relative z-10">
-            <div className="text-center">
-              <div className="text-xl font-black text-ive-green-light leading-none">{roles.length}</div>
-              <div className="text-[9px] text-ive-text-muted mt-1 uppercase tracking-wider font-bold">역할</div>
-            </div>
-            <div className="text-center">
-              <div className="text-xl font-black text-ive-amber leading-none">
-                {roles.filter(r => r.status === 'active').length}
+          <div className="flex items-center justify-between mt-4 pt-4 border-t border-ive-border-dark relative z-10 gap-2">
+            <div className="flex items-center gap-4">
+              <div className="text-center">
+                <div className="text-xl font-black text-ive-green-light leading-none">{roles.length}</div>
+                <div className="text-[9px] text-ive-text-muted mt-1 uppercase tracking-wider font-bold">역할</div>
               </div>
-              <div className="text-[9px] text-ive-text-muted mt-1 uppercase tracking-wider font-bold">활성</div>
-            </div>
-            <div className="text-center">
-              <div className="text-xl font-black text-ive-cyan leading-none">
-                {roles.reduce((sum, r) => sum + (r.assignedAgents?.length || 0), 0)}
+              <div className="text-center">
+                <div className="text-xl font-black text-ive-amber leading-none">
+                  {roles.filter(r => r.status === 'active').length}
+                </div>
+                <div className="text-[9px] text-ive-text-muted mt-1 uppercase tracking-wider font-bold">활성</div>
               </div>
-              <div className="text-[9px] text-ive-text-muted mt-1 uppercase tracking-wider font-bold">AI Agent</div>
+              <div className="text-center">
+                <div className="text-xl font-black text-ive-cyan leading-none">
+                  {roles.reduce((sum, r) => sum + (r.assignedAgents?.length || 0), 0)}
+                </div>
+                <div className="text-[9px] text-ive-text-muted mt-1 uppercase tracking-wider font-bold">Agent</div>
+              </div>
             </div>
-            <div className="ml-auto flex gap-2">
-              <button
-                onClick={() => setShowTrace(true)}
-                className="text-xs font-black text-ive-green border border-ive-green/30 px-6 py-2.5 rounded-xl hover:bg-ive-green/5 transition-all bg-ive-bg/50"
-              >
-                <i className="fa-solid fa-terminal mr-1.5" />실행 기록
-              </button>
+            <div className="flex gap-2 shrink-0">
               <button
                 onClick={() => setShowEditProject(true)}
-                className="text-xs font-black text-ive-text-muted border border-ive-border px-6 py-2.5 rounded-xl hover:border-ive-green/30 hover:text-ive-green transition-all bg-ive-bg/50"
+                className="text-xs font-black text-ive-text-muted border border-ive-border px-3 py-2 rounded-xl hover:border-ive-green/30 hover:text-ive-green transition-all bg-ive-bg/50"
               >
-                <i className="fa-solid fa-pen-to-square mr-1.5" />수정
+                <i className="fa-solid fa-pen-to-square mr-1" />수정
               </button>
               <button
                 onClick={() => setShowDeleteProject(true)}
-                className="text-xs font-black text-ive-red/60 border border-ive-red/20 px-4 py-2.5 rounded-xl hover:bg-ive-red/10 transition-all"
+                className="text-xs font-black text-ive-red/60 border border-ive-red/20 px-3 py-2 rounded-xl hover:bg-ive-red/10 transition-all"
               >
                 <i className="fa-solid fa-trash-can" />
               </button>
@@ -253,11 +248,8 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         danger
       />
 
-      <Modal open={showTrace} onClose={() => setShowTrace(false)} title="에이전트 작업 트레이스" dark>
-        <ExecutionTrace projectId={id} />
-      </Modal>
 
-      <MobileTabBar />
+<MobileTabBar />
     </div>
   )
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useReducer, useEffect, useCallback, ReactNode } from 'react'
+import { createContext, useContext, useReducer, useEffect, useCallback, useRef, ReactNode } from 'react'
 import { User, Project, ProjectRole, Agent, RoleAssignment } from '@/types'
 
 interface RoleWithAgents extends ProjectRole {
@@ -60,6 +60,7 @@ const StoreContext = createContext<{
   deleteAgent: (id: string) => Promise<void>
   assignAgent: (projectId: string, roleId: string, agentId: string) => Promise<void>
   unassignAgent: (projectId: string, roleId: string, agentId: string) => Promise<void>
+  scanProjectNow: (id: string) => Promise<void>
 }>({
   state: { user: null, projects: [], agents: [], loading: true, authChecked: false },
   refreshUser: async () => {},
@@ -77,6 +78,7 @@ const StoreContext = createContext<{
   deleteAgent: async () => {},
   assignAgent: async () => {},
   unassignAgent: async () => {},
+  scanProjectNow: async () => {},
 })
 
 export function StoreProvider({ children }: { children: ReactNode }) {
@@ -125,6 +127,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'SET_AGENTS', agents: [] })
   }, [])
 
+  const userRef = useRef(state.user)
+  useEffect(() => {
+    userRef.current = state.user
+  }, [state.user])
+
   useEffect(() => {
     refreshUser().then(() => {
       refresh()
@@ -133,14 +140,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     // 10초마다 데이터 자동 갱신 (스캐너 상태 등 반영)
     const interval = setInterval(() => {
-      if (state.user) {
+      if (userRef.current) {
         refresh()
         refreshAgents()
       }
     }, 10000)
 
     return () => clearInterval(interval)
-  }, [refreshUser, refresh, refreshAgents, state.user])
+  }, [refreshUser, refresh, refreshAgents])
 
   const addProject = useCallback(async (p: Omit<Project, 'id' | 'userId' | 'createdAt'>) => {
     await fetch('/api/projects', {
@@ -261,12 +268,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     await refresh()
   }, [refresh])
 
+  const scanProjectNow = useCallback(async (id: string) => {
+    const res = await fetch(`/api/projects/${id}/scan`, { method: 'POST' })
+    if (res.ok) {
+      await refresh()
+    } else {
+      const data = await res.json()
+      throw new Error(data.error || '스캔 실행 실패')
+    }
+  }, [refresh])
+
   return (
     <StoreContext.Provider value={{
       state, refreshUser, refresh, logout,
       addProject, updateProject, deleteProject, addRole, updateRole, deleteRole,
       refreshAgents, addAgent, updateAgent, deleteAgent,
       assignAgent, unassignAgent,
+      scanProjectNow,
     }}>
       {children}
     </StoreContext.Provider>

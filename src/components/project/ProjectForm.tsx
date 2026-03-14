@@ -134,30 +134,37 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
         <label className="block text-xs font-semibold text-ive-text-muted mb-2">
           작업 확인 주기 <span className="text-ive-text-dim font-normal">(단위: 분)</span>
         </label>
-        <div className="flex items-center gap-3">
-          <input
-            type="number"
-            min="1"
-            max="1440"
-            value={checkInterval}
-            onChange={e => setCheckInterval(parseInt(e.target.value) || 1)}
-            className="flex-1 bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-sm text-ive-text focus:outline-none focus:border-ive-green font-bold"
-          />
-          <div className="flex gap-1">
-            {[1, 5, 10, 30, 60].map(n => (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <div className="flex bg-ive-bg-input border border-ive-border rounded-lg overflow-hidden">
               <button
-                key={n}
                 type="button"
-                onClick={() => setCheckInterval(n)}
-                className={`px-3 py-2 rounded-lg text-xs font-black border transition-all ${
-                  checkInterval === n
-                    ? 'bg-ive-green/10 border-ive-green text-ive-green'
-                    : 'bg-ive-bg-card border-ive-border-subtle text-ive-text-dim'
-                }`}
-              >
-                {n === 60 ? '1h' : `${n}m`}
-              </button>
-            ))}
+                onClick={() => setCheckInterval(v => Math.max(1, v - 1))}
+                className="px-3 py-3 text-ive-text-muted hover:text-ive-green hover:bg-ive-green/10 transition-colors text-sm font-black"
+              >−</button>
+              <span className="w-16 py-3 flex items-center justify-center text-sm font-black text-ive-text border-x border-ive-border">{checkInterval}</span>
+              <button
+                type="button"
+                onClick={() => setCheckInterval(v => Math.min(1440, v + 1))}
+                className="px-3 py-3 text-ive-text-muted hover:text-ive-green hover:bg-ive-green/10 transition-colors text-sm font-black"
+              >+</button>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {[5, 10, 30, 60].map(n => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setCheckInterval(n)}
+                  className={`px-3 py-3 rounded-lg text-xs font-black border transition-all ${
+                    checkInterval === n
+                      ? 'bg-ive-green/10 border-ive-green text-ive-green'
+                      : 'bg-ive-bg-card border-ive-border-subtle text-ive-text-dim'
+                  }`}
+                >
+                  {n === 60 ? '1h' : `${n}m`}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>

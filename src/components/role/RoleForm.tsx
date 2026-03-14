@@ -125,22 +125,27 @@ export default function RoleForm({ projectId, existing, onSuccess }: Props) {
       {/* 최대 Agent 수 */}
       <div>
         <label className="block text-xs font-semibold text-ive-text-muted mb-2">최대 투입 Agent 수</label>
-        <div className="flex items-center gap-3">
-          <input
-            type="number"
-            min="1"
-            max="100"
-            value={maxAgents}
-            onChange={e => setMaxAgents(parseInt(e.target.value) || 1)}
-            className="flex-1 bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-sm text-ive-text focus:outline-none focus:border-ive-green font-bold"
-          />
-          <div className="flex gap-1">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex bg-ive-bg-input border border-ive-border rounded-lg overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setMaxAgents(v => Math.max(1, v - 1))}
+              className="px-3 py-3 text-ive-text-muted hover:text-ive-green hover:bg-ive-green/10 transition-colors text-sm font-black"
+            >−</button>
+            <span className="w-16 py-3 flex items-center justify-center text-sm font-black text-ive-text border-x border-ive-border">{maxAgents}</span>
+            <button
+              type="button"
+              onClick={() => setMaxAgents(v => Math.min(100, v + 1))}
+              className="px-3 py-3 text-ive-text-muted hover:text-ive-green hover:bg-ive-green/10 transition-colors text-sm font-black"
+            >+</button>
+          </div>
+          <div className="flex flex-wrap gap-1">
             {[1, 3, 5, 10].map(n => (
               <button
                 key={n}
                 type="button"
                 onClick={() => setMaxAgents(n)}
-                className={`px-4 py-2 rounded-lg text-xs font-black border transition-all min-w-[38px] ${
+                className={`px-3 py-3 rounded-lg text-xs font-black border transition-all ${
                   maxAgents === n
                     ? 'bg-ive-green/10 border-ive-green text-ive-green'
                     : 'bg-ive-bg-card border-ive-border-subtle text-ive-text-dim'

@@ -1,11 +1,13 @@
-import { 
-  getAllProjects, 
-  updateProjectLastChecked, 
-  getRolesByProject, 
-  getRoleAssignments, 
+import {
+  getAllProjects,
+  updateProjectLastChecked,
+  getRolesByProject,
+  getRoleAssignments,
   updateAgentStatus,
   createExecution,
-  updateExecutionStatus
+  updateExecutionStatus,
+  resetStuckExecutions,
+  hasActiveExecution
 } from "./db";
 import { decrypt } from "./crypto";
 import { 
@@ -40,9 +42,13 @@ export function startScanner() {
   
   global.isScanning = false;
   console.log("[Scanner] Starting background scanner... (V2)");
+
+  // 서버 재시작으로 고착된 실행 복구
+  resetStuckExecutions();
+
   // 1분마다 전체 프로젝트 체크 (각 프로젝트의 checkInterval에 따라 실제 작업 수행 결정)
   global.scanInterval = setInterval(runScan, 60 * 1000);
-  
+
   // 첫 실행은 약간의 지연 후 실행 (서버 초기화 완료 대기)
   setTimeout(runScan, 5000);
 }
@@ -67,52 +73,8 @@ async function runScan() {
   
   try {
     const projects = getAllProjects();
-    const now = new Date();
-
     for (const project of projects) {
-    try {
-      // 스캐너 활성화 여부 확인
-      if (project.scannerActive === false) {
-        continue;
-      }
-
-      // 체크 주기 확인
-      if (project.lastCheckedAt) {
-        const lastChecked = new Date(project.lastCheckedAt);
-        const diffMinutes = (now.getTime() - lastChecked.getTime()) / (1000 * 60);
-        if (diffMinutes < project.checkInterval) {
-          continue; // 아직 체크할 시간이 아님
-        }
-      }
-
-      console.log(`[Scanner] Running scan for project: ${project.name} (Interval: ${project.checkInterval}m)`);
-      
-      const decryptedToken = decrypt(project.accessToken);
-      
-      let issueCount = 0;
-      if (project.provider === 'gitlab') {
-        // 1. 필수 레이블 확인 및 생성
-        await ensureGitLabLabels(project, decryptedToken);
-        
-        // 2. 관리 대상(labelTarget) 이슈 조회
-        const issues = await fetchGitLabIssues(project, decryptedToken, project.labelTarget);
-        issueCount = issues.length;
-        
-        if (issues.length > 0) {
-          console.log(`[Scanner] Found ${issues.length} target issues for ${project.name}`);
-          // 3. 이슈 처리 (에이전트 배정 등)
-          await processIssues(project, issues, decryptedToken);
-        }
-      } else if (project.provider === 'github') {
-        // GitHub 구현 예정
-      }
-
-      // 마지막 체크 시간 및 이슈 수 업데이트
-      updateProjectLastChecked(project.id, now.toISOString(), issueCount);
-      
-    } catch (err) {
-      console.error(`[Scanner] Error scanning project ${project.name}:`, err);
-    }
+      await scanProject(project, false);
     }
   } catch (err) {
     console.error(`[Scanner] Core runScan error:`, err);
@@ -121,46 +83,100 @@ async function runScan() {
   }
 }
 
-async function processIssues(project: Project, issues: any[], decryptedToken: string) {
-  // 프로젝트에 할당된 가용 역할들을 가져옴
-  const roles = getRolesByProject(project.id).filter(r => r.status === 'active');
-  
+/**
+ * 특정 프로젝트의 스캔을 수행합니다.
+ * @param force true인 경우 checkInterval을 무시하고 즉시 스캔합니다.
+ */
+export async function scanProject(project: Project, force: boolean = false) {
+  try {
+    // 스캐너 활성화 여부 확인 (수동 실행 시에도 비활성 상태면 건너뜀)
+    if (!force && project.scannerActive === false) {
+      return;
+    }
+
+    const now = new Date();
+
+    // 체크 주기 확인
+    if (!force && project.lastCheckedAt) {
+      const lastChecked = new Date(project.lastCheckedAt);
+      const diffMinutes = (now.getTime() - lastChecked.getTime()) / (1000 * 60);
+      if (diffMinutes < project.checkInterval) {
+        return; // 아직 체크할 시간이 아님
+      }
+    }
+
+    console.log(`[Scanner] ${force ? 'FORCED ' : ''}Scanning project: ${project.name}`);
+    
+    const decryptedToken = decrypt(project.accessToken);
+    let issueCount = 0;
+
+    if (project.provider === 'gitlab') {
+      await ensureGitLabLabels(project, decryptedToken);
+
+      // 개발 큐: labelTarget (예: IVE)
+      const devIssues = await fetchGitLabIssues(project, decryptedToken, project.labelTarget);
+      issueCount = devIssues.length;
+      if (devIssues.length > 0) {
+        console.log(`[Scanner] Found ${devIssues.length} dev-queue issues for ${project.name}`);
+        await processIssues(project, devIssues, decryptedToken, true);
+      }
+
+      // 검증 큐: labelValidation (예: IVE(V)) - 개발 완료 후 대기 중인 이슈
+      const valIssues = await fetchGitLabIssues(project, decryptedToken, project.labelValidation);
+      if (valIssues.length > 0) {
+        console.log(`[Scanner] Found ${valIssues.length} val-queue issues for ${project.name}`);
+        await processIssues(project, valIssues, decryptedToken, false);
+      }
+    } else if (project.provider === 'github') {
+      // 구현 예정
+    }
+
+    // 마지막 체크 시간 및 이슈 수 업데이트
+    updateProjectLastChecked(project.id, now.toISOString(), issueCount);
+    
+  } catch (err) {
+    console.error(`[Scanner] Error scanning project ${project.name}:`, err);
+  }
+}
+
+async function processIssues(project: Project, issues: any[], decryptedToken: string, isDevelop: boolean) {
+  const targetCategory = isDevelop ? '개발' : '검증';
+  const roles = getRolesByProject(project.id).filter(r => r.status !== 'paused');
+  const targetRoles = roles.filter(r => r.category === targetCategory);
+
   for (const issue of issues) {
-    // 이미 누군가가 처리 중인지 레이블로 한 번 더 체크 (fetch 시점에 걸러지지만 작업 시작 전 안전장치)
-    if (issue.labels.includes(project.labelInProgress) || issue.labels.includes(project.labelValidation)) {
+    // 개발 큐: 이미 IVE(D) 또는 IVE(V) 레이블이 있으면 스킵
+    if (isDevelop && (issue.labels.includes(project.labelInProgress) || issue.labels.includes(project.labelValidation))) {
+      continue;
+    }
+    // 검증 큐: 이미 실행 중인 execution이 있으면 스킵 (중복 배정 방지)
+    if (!isDevelop && hasActiveExecution(project.id, issue.iid)) {
       continue;
     }
 
     let assigned = false;
-    
-    // 이 이슈의 성격(개발/검증)에 맞는 역할을 찾음
-    // 여기서는 간단히 카테고리가 '개발'인 경우와 '검증'인 경우를 나눔
-    // 실제로는 이슈의 레이블이나 다른 정보를 통해 더 정밀하게 분류 가능
-    const targetCategory = issue.labels.includes('validation') ? '검증' : '개발';
-    const targetRoles = roles.filter(r => r.category === targetCategory);
 
     for (const role of targetRoles) {
       const assignments = getRoleAssignments(role.id);
       const availableAgent = assignments.find(a => a.agent.status === 'available');
-      
+
       if (availableAgent) {
-        console.log(`[Scanner] [ASSIGN] Project: ${project.name}, Issue: #${issue.iid}, Agent: ${availableAgent.agent.name}`);
-        
+        console.log(`[Scanner] [ASSIGN] Project: ${project.name}, Issue: #${issue.iid}, Agent: ${availableAgent.agent.name} (${targetCategory})`);
+
         // 1. 에이전트 바쁨 상태로 전환
         updateAgentStatus(availableAgent.agentId, 'busy');
 
-        // 2. 레이블 변경 (InProgress 등)
-        const inProgressLabel = role.category === '개발' ? project.labelInProgress : project.labelValidation;
-        await updateGitLabIssueLabels(
-          project, 
-          issue.iid, 
-          decryptedToken, 
-          [inProgressLabel], 
-          [project.labelTarget]
-        );
-        
-        // 3. 비동기로 태스크 실행 (병렬 처리 위해 await 하지 않음)
-        executeTask(project, issue, availableAgent.agent, decryptedToken, inProgressLabel, role.category === '개발')
+        // 2. 레이블 변경
+        //    개발: IVE → IVE(D)
+        //    검증: IVE(V) 그대로 유지 (이미 검증 큐 레이블이 붙어 있음)
+        const currentLabel = isDevelop ? project.labelTarget : project.labelValidation;
+        const inProgressLabel = isDevelop ? project.labelInProgress : project.labelValidation;
+        if (isDevelop) {
+          await updateGitLabIssueLabels(project, issue.iid, decryptedToken, [inProgressLabel], [currentLabel]);
+        }
+
+        // 3. 비동기로 태스크 실행
+        executeTask(project, issue, availableAgent.agent, decryptedToken, inProgressLabel, isDevelop)
           .then(() => {
             console.log(`[Scanner] [DONE] Issue #${issue.iid} processed.`);
           })
@@ -168,15 +184,14 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
             console.error(`[Scanner] [FAILED] Issue #${issue.iid} error:`, err);
           })
           .finally(() => {
-            // 태스크 완료 후 에이전트 복귀
             updateAgentStatus(availableAgent.agentId, 'available');
           });
 
         assigned = true;
-        break; 
+        break;
       }
     }
-    
+
     if (!assigned) {
       console.log(`[Scanner] [SKIP] No available agent for Issue #${issue.iid} (Category: ${targetCategory}). Will retry in next scan.`);
     }
@@ -215,18 +230,25 @@ async function executeTask(
 
   const logStream = fs.createWriteStream(logPath, { flags: 'a' });
   const log = (msg: string, type: 'info' | 'error' | 'warn' | 'system' = 'info') => {
-    const timestamp = new Date().toISOString();
+    const timestamp = new Date().toTimeString().slice(0, 8);
     let colorCode = '';
     if (type === 'system') colorCode = '\x1b[1;32m'; // Bright Green
     if (type === 'error') colorCode = '\x1b[1;31m';  // Bright Red
     if (type === 'warn') colorCode = '\x1b[1;33m';   // Bright Yellow
-    
+
     const coloredMsg = colorCode ? `${colorCode}${msg}\x1b[0m` : msg;
     logStream.write(`[${timestamp}] ${coloredMsg}\n`);
     console.log(`[Task #${iid}] ${msg}`);
   };
 
   try {
+    // 0-1. 이슈 정보 출력
+    log(`\x1b[1;36m${'═'.repeat(50)}\x1b[0m`, 'info');
+    log(`Issue #${iid}: ${issue.title}`, 'system');
+    log(`Agent : ${agent.name} (${isDevelop ? '개발' : '검증'})`, 'system');
+    log(`Project: ${project.name}`, 'system');
+    log(`\x1b[1;36m${'═'.repeat(50)}\x1b[0m`, 'info');
+
     // 1. 작업 디렉토리 준비
     log("Preparing workspace...", 'system');
     if (fs.existsSync(workspacePath)) {
@@ -276,27 +298,34 @@ ${iterationContext}
 - git commit/push는 하지 마세요. curl 등으로 외부 API를 직접 부르지 마세요.`;
 
     // 5. 에이전트 CLI 실행
-    log(`Starting Agent CLI: ${agent.cliName}...`, 'system');
     const startTime = Date.now();
-    
+
     await new Promise<void>((resolve, reject) => {
       const cliParts = agent.cliPath.split(' ');
       const mainCmd = cliParts[0];
-      const args = [...cliParts.slice(1), '-p', prompt];
-      
-      const child = spawn(mainCmd, args, { 
+      const args = [...cliParts.slice(1), '--dangerously-skip-permissions', '-p', prompt];
+
+      log(`CMD: ${mainCmd} ${args.slice(0, -1).join(' ')} [prompt omitted]`, 'system');
+      log(`CWD: ${workspacePath}`, 'system');
+
+      const child = spawn(mainCmd, args, {
         cwd: workspacePath,
+        stdio: ['ignore', 'pipe', 'pipe'],
         env: { ...process.env, GITLAB_API_TOKEN: token }
       });
 
       child.stdout.on('data', (data) => logStream.write(data));
       child.stderr.on('data', (data) => logStream.write(data));
 
-      child.on('close', (code) => {
+      child.on('close', (code, signal) => {
+        log(`Agent CLI exited: code=${code}, signal=${signal}`, code === 0 ? 'system' : 'error');
         if (code === 0) resolve();
         else reject(new Error(`Agent CLI exited with code ${code}`));
       });
-      child.on('error', reject);
+      child.on('error', (err) => {
+        log(`Failed to spawn agent CLI: ${err.message}`, 'error');
+        reject(err);
+      });
     });
 
     const durationSeconds = Math.floor((Date.now() - startTime) / 1000);
@@ -330,9 +359,11 @@ ${iterationContext}
       await addGitLabSpentTime(project, iid, token, durationStr);
       
       if (isDevelop) {
-        await updateGitLabIssueLabels(project, iid, token, [project.labelTarget, 'validation'], [currentLabel]);
+        // 개발 완료: IVE(D) → IVE(V) (검증 큐로 이동)
+        await updateGitLabIssueLabels(project, iid, token, [project.labelValidation], [currentLabel]);
       } else {
-        await updateGitLabIssueLabels(project, iid, token, [project.labelDone], [currentLabel, 'validation']);
+        // 검증 완료: IVE(V) → IVE(E) (완료)
+        await updateGitLabIssueLabels(project, iid, token, [project.labelDone], [currentLabel]);
       }
       log("Task successfully completed.", 'system');
       updateExecutionStatus(executionId, 'success', new Date().toISOString());

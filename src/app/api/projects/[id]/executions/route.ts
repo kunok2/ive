@@ -3,9 +3,9 @@ import { getLatestExecutionsByProject } from '@/lib/db';
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const projectId = params.id;
+  const { id: projectId } = await params;
   try {
     const executions = getLatestExecutionsByProject(projectId);
     return NextResponse.json(executions);
