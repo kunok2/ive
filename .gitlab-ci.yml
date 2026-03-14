@@ -11,7 +11,7 @@ docker-build:
   services:
     - docker:26-dind
   before_script:
-    - docker login -u kunok3 -p $DOCKERHUB_TOKEN
+    - docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
   script:
     - |
       docker build \
