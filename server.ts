@@ -3,7 +3,16 @@ import { parse } from 'url'
 import next from 'next'
 import { WebSocketServer, WebSocket } from 'ws'
 import * as pty from 'node-pty'
-import { verifyToken } from './src/lib/auth'
+import jwt from 'jsonwebtoken'
+
+const JWT_SECRET = process.env.JWT_SECRET || 'spring-ive-dev-secret-change-in-production'
+function verifyToken(token: string): { userId: string } | null {
+  try {
+    return jwt.verify(token, JWT_SECRET) as { userId: string }
+  } catch {
+    return null
+  }
+}
 
 const dev = process.env.NODE_ENV !== 'production'
 const port = parseInt(process.env.PORT || '3000', 10)
@@ -30,6 +39,8 @@ async function main() {
   const wss = new WebSocketServer({ noServer: true })
 
   server.on('upgrade', (req, socket, head) => {
+    // /_next/ 경로는 Next.js HMR용이므로 그냥 통과
+    if (!req.url || req.url.startsWith('/_next/')) return
     if (req.url !== '/api/terminal') {
       socket.destroy()
       return
@@ -50,15 +61,23 @@ async function main() {
   })
 
   wss.on('connection', (ws: WebSocket) => {
-    const shell = process.env.SHELL || (process.platform === 'win32' ? 'powershell.exe' : 'bash')
+    const shell = process.env.SHELL || (process.platform === 'win32' ? 'powershell.exe' : '/bin/zsh')
 
-    const ptyProcess = pty.spawn(shell, [], {
-      name: 'xterm-256color',
-      cols: 80,
-      rows: 24,
-      cwd: process.cwd(),
-      env: process.env as Record<string, string>,
-    })
+    let ptyProcess: pty.IPty
+    try {
+      ptyProcess = pty.spawn(shell, [], {
+        name: 'xterm-256color',
+        cols: 80,
+        rows: 24,
+        cwd: process.cwd(),
+        env: process.env as Record<string, string>,
+      })
+    } catch (err: any) {
+      ws.send(`\r\n\x1b[31mFailed to start terminal: ${err.message}\x1b[0m\r\n`)
+      ws.send(`\r\n\x1b[33mTry running: npm rebuild node-pty\x1b[0m\r\n`)
+      ws.close()
+      return
+    }
 
     ptyProcess.onData((data) => {
       if (ws.readyState === WebSocket.OPEN) ws.send(data)
