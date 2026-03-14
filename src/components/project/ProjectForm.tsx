@@ -48,6 +48,9 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
       labelFailVal: labelFailVal.trim(),
       labelDone: labelDone.trim(),
       checkInterval: Number(checkInterval) || 10,
+      lastCheckedAt: null,
+      lastScannedIssueCount: null,
+      scannerActive: false,
     }
 
     if (existing) {
