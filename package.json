@@ -6,7 +6,8 @@
     "dev": "tsx server.ts",
     "build": "next build",
     "start": "NODE_ENV=production tsx server.ts",
-    "lint": "eslint"
+    "lint": "eslint",
+    "postinstall": "node -e \"const os=require('os'),fs=require('fs'),path=require('path');const h=path.join('node_modules','node-pty','prebuilds',os.platform()+'-'+os.arch(),'spawn-helper');try{fs.chmodSync(h,'755');console.log('node-pty spawn-helper: chmod 755 ok')}catch(e){}\""
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.11.0",
