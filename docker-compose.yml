@@ -1,0 +1,16 @@
+services:
+  ive:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      # SQLite DB, 로그 영속
+      - ./data:/app/data
+      # 에이전트 작업 공간 영속
+      - ./workspaces:/app/workspaces
+    environment:
+      - NODE_ENV=production
+      # 반드시 안전한 값으로 변경하세요
+      - ENCRYPTION_KEY=spring-ive-dev-encryption-key-change-in-prod
+      - JWT_SECRET=spring-ive-dev-secret-change-in-production
+    restart: unless-stopped

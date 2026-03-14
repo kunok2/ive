@@ -1,0 +1,10 @@
+node_modules
+.next
+data
+workspaces
+.git
+.gitignore
+*.md
+debug_db.ts
+.env
+.env.*
