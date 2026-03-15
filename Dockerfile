@@ -43,7 +43,7 @@ RUN npm install -g @anthropic-ai/claude-code
 # 데이터 디렉토리 생성
 RUN mkdir -p data/logs workspaces
 
-EXPOSE 3000
+EXPOSE 443
 
 ENV NODE_ENV=production
 

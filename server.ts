@@ -1,4 +1,6 @@
-import { createServer } from 'http'
+import { createServer as createHttpServer } from 'http'
+import { createServer as createHttpsServer } from 'https'
+import { readFileSync, existsSync } from 'fs'
 import { parse } from 'url'
 import next from 'next'
 import { WebSocketServer, WebSocket } from 'ws'
@@ -15,7 +17,10 @@ function verifyToken(token: string): { userId: string } | null {
 }
 
 const dev = process.env.NODE_ENV !== 'production'
-const port = parseInt(process.env.PORT || '3000', 10)
+const SSL_CERT = process.env.SSL_CERT || '/app/ssl/cert.pem'
+const SSL_KEY = process.env.SSL_KEY || '/app/ssl/key.pem'
+const useHttps = !dev && existsSync(SSL_CERT) && existsSync(SSL_KEY)
+const port = parseInt(process.env.PORT || (useHttps ? '443' : '3000'), 10)
 
 function parseCookies(header: string): Record<string, string> {
   if (!header) return {}
@@ -32,9 +37,10 @@ async function main() {
   const handle = app.getRequestHandler()
   await app.prepare()
 
-  const server = createServer((req, res) => {
-    handle(req, res, parse(req.url!, true))
-  })
+  const handler = (req: any, res: any) => handle(req, res, parse(req.url!, true))
+  const server = useHttps
+    ? createHttpsServer({ cert: readFileSync(SSL_CERT), key: readFileSync(SSL_KEY) }, handler)
+    : createHttpServer(handler)
 
   const wss = new WebSocketServer({ noServer: true })
 
@@ -115,7 +121,7 @@ async function main() {
   })
 
   server.listen(port, () => {
-    console.log(`> Ready on http://localhost:${port}`)
+    console.log(`> Ready on ${useHttps ? 'https' : 'http'}://localhost:${port}`)
   })
 }
 

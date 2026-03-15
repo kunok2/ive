@@ -2,7 +2,7 @@ services:
   ive:
     image: dazzlepf/spring-ive:latest
     ports:
-      - "3000:3000"
+      - "443:443"
     volumes:
       # SQLite DB, 로그 영속
       - ./data:/app/data
@@ -10,6 +10,8 @@ services:
       - ./workspaces:/app/workspaces
       # Claude Code 설정/인증 영속 (claude 로그인 정보 등)
       - ./claude-config:/root/.claude
+      # SSL 인증서
+      - ./ssl:/app/ssl:ro
     environment:
       - NODE_ENV=production
       # 반드시 안전한 값으로 변경하세요
