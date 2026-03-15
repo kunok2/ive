@@ -30,6 +30,69 @@ import { promisify } from "util";
 
 const exec = promisify(require('child_process').exec);
 
+/**
+ * Claude CLI stream-json 이벤트를 읽기 좋은 로그 텍스트로 변환
+ */
+function formatStreamEvent(event: any): string | null {
+  const ts = new Date().toTimeString().slice(0, 8);
+
+  switch (event.type) {
+    case 'assistant': {
+      // assistant 메시지: content 배열에서 text/tool_use 추출
+      const parts = event.message?.content || [];
+      const lines: string[] = [];
+      for (const part of parts) {
+        if (part.type === 'text' && part.text?.trim()) {
+          lines.push(`[${ts}] ${part.text}`);
+        } else if (part.type === 'tool_use') {
+          const input = part.input || {};
+          const summary = formatToolInput(part.name, input);
+          lines.push(`[${ts}] \x1b[1;34m[Tool] ${part.name}\x1b[0m ${summary}`);
+        }
+      }
+      return lines.length > 0 ? lines.join('\n') : null;
+    }
+    case 'content_block_delta': {
+      const delta = event.delta;
+      if (delta?.type === 'text_delta' && delta.text) {
+        return delta.text; // 스트리밍 텍스트는 타임스탬프 없이
+      }
+      return null;
+    }
+    case 'result': {
+      const cost = event.cost_usd ? `$${event.cost_usd.toFixed(4)}` : '';
+      const dur = event.duration_ms ? `${(event.duration_ms / 1000).toFixed(1)}s` : '';
+      const tokens = event.total_tokens ? `${event.total_tokens} tokens` : '';
+      return `[${ts}] \x1b[1;32m[Result]\x1b[0m ${event.result || ''} ${[cost, dur, tokens].filter(Boolean).join(' | ')}`;
+    }
+    case 'system': {
+      const msg = event.message || event.data || JSON.stringify(event);
+      return `[${ts}] \x1b[1;36m[System]\x1b[0m ${msg}`;
+    }
+    default:
+      return null; // 불필요한 이벤트는 무시
+  }
+}
+
+function formatToolInput(toolName: string, input: any): string {
+  switch (toolName) {
+    case 'Read':
+      return input.file_path || '';
+    case 'Edit':
+      return `${input.file_path || ''} (edit)`;
+    case 'Write':
+      return `${input.file_path || ''} (write)`;
+    case 'Bash':
+      return input.command ? `\x1b[33m$ ${input.command.substring(0, 120)}\x1b[0m` : '';
+    case 'Glob':
+      return input.pattern || '';
+    case 'Grep':
+      return `"${input.pattern || ''}" ${input.path || ''}`;
+    default:
+      return '';
+  }
+}
+
 declare global {
   var scanInterval: NodeJS.Timeout | undefined;
   var isScanning: boolean;
@@ -116,10 +179,10 @@ export async function scanProject(project: Project, force: boolean = false) {
 
       // 개발 큐: labelTarget (예: IVE)
       const devIssues = await fetchGitLabIssues(project, decryptedToken, project.labelTarget);
-      issueCount = devIssues.length;
       if (devIssues.length > 0) {
         console.log(`[Scanner] Found ${devIssues.length} dev-queue issues for ${project.name}`);
-        await processIssues(project, devIssues, decryptedToken, true);
+        const assignedCount = await processIssues(project, devIssues, decryptedToken, true);
+        issueCount = devIssues.length - assignedCount;
       }
 
       // 검증 큐: labelValidation (예: IVE(V)) - 개발 완료 후 대기 중인 이슈
@@ -128,6 +191,8 @@ export async function scanProject(project: Project, force: boolean = false) {
         console.log(`[Scanner] Found ${valIssues.length} val-queue issues for ${project.name}`);
         await processIssues(project, valIssues, decryptedToken, false);
       }
+
+      if (issueCount < 0) issueCount = 0;
     } else if (project.provider === 'github') {
       // 구현 예정
     }
@@ -140,10 +205,11 @@ export async function scanProject(project: Project, force: boolean = false) {
   }
 }
 
-async function processIssues(project: Project, issues: any[], decryptedToken: string, isDevelop: boolean) {
+async function processIssues(project: Project, issues: any[], decryptedToken: string, isDevelop: boolean): Promise<number> {
   const targetCategory = isDevelop ? '개발' : '검증';
   const roles = getRolesByProject(project.id).filter(r => r.status !== 'paused');
   const targetRoles = roles.filter(r => r.category === targetCategory);
+  let assignedCount = 0;
 
   for (const issue of issues) {
     // 개발 큐: 이미 IVE(D) 또는 IVE(V) 레이블이 있거나 실행 중이면 스킵
@@ -211,10 +277,13 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
       }
     }
 
-    if (!assigned) {
+    if (assigned) {
+      assignedCount++;
+    } else {
       console.log(`[Scanner] [SKIP] No available agent for Issue #${issue.iid} (Category: ${targetCategory}). Will retry in next scan.`);
     }
   }
+  return assignedCount;
 }
 
 /**
@@ -307,16 +376,42 @@ async function executeTask(
         recentNotes.map((n: any) => `### ${n.author.name} (${n.created_at})\n${n.body.substring(0, 500)}`).join('\n');
     }
 
+    // GitLab API 정보 구성
+    const repoUrlParsed = new URL(project.repoUrl.replace(/\.git$/, ''));
+    const gitlabBaseUrl = `${repoUrlParsed.protocol}//${repoUrlParsed.host}`;
+    const projectPath = repoUrlParsed.pathname.startsWith('/') ? repoUrlParsed.pathname.slice(1) : repoUrlParsed.pathname;
+    const encodedProjectPath = encodeURIComponent(projectPath);
+
     const prompt = `다음 GitLab 이슈를 해결해주세요. 한국어로만 보고하세요.
 
 ## 이슈 #${iid}: ${issue.title}
 ${issue.description || "설명 없음"}
 ${iterationContext}
 
+## GitLab 연동 정보:
+- GitLab API: ${gitlabBaseUrl}/api/v4
+- Project: ${projectPath} (encoded: ${encodedProjectPath})
+- Issue IID: ${iid}
+- 인증: 환경변수 GITLAB_TOKEN 사용 (PRIVATE-TOKEN 헤더)
+
+### 사용 가능한 GitLab API 예시:
+\`\`\`bash
+# 이슈에 코멘트 달기
+curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" -X POST "${gitlabBaseUrl}/api/v4/projects/${encodedProjectPath}/issues/${iid}/notes" --data-urlencode "body=코멘트 내용"
+
+# 이슈 정보 조회
+curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/projects/${encodedProjectPath}/issues/${iid}"
+
+# 이슈 코멘트 목록
+curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/projects/${encodedProjectPath}/issues/${iid}/notes"
+\`\`\`
+
 ## 지시사항:
 - 프로젝트 구조와 스타일을 파악하고 관련 코드를 수정하세요.
 - 수정 완료 후 git add로 변경 사항을 스테이징하세요.
-- git commit/push는 하지 마세요. curl 등으로 외부 API를 직접 부르지 마세요.`;
+- git commit/push는 하지 마세요.
+- 작업 진행 중 중요한 발견이나 질문이 있으면 이슈에 코멘트를 남기세요.
+- 작업 시작 시 간단한 착수 코멘트를 이슈에 남기세요.`;
 
     // 5. 에이전트 CLI 실행
     const startTime = Date.now();
@@ -324,15 +419,15 @@ ${iterationContext}
     await new Promise<void>((resolve, reject) => {
       const cliParts = agent.cliPath.split(' ');
       const mainCmd = cliParts[0];
-      const args = [...cliParts.slice(1), '--dangerously-skip-permissions', '-p', prompt];
+      const args = [...cliParts.slice(1), '--dangerously-skip-permissions', '--output-format', 'stream-json', '-p', prompt];
 
-      log(`CMD: ${mainCmd} ${args.slice(0, -1).join(' ')} [prompt omitted]`, 'system');
+      log(`CMD: ${mainCmd} ${args.slice(0, -2).join(' ')} [prompt omitted]`, 'system');
       log(`CWD: ${workspacePath}`, 'system');
 
       const child = spawn(mainCmd, args, {
         cwd: workspacePath,
         stdio: ['ignore', 'pipe', 'pipe'],
-        env: { ...process.env, GITLAB_API_TOKEN: token },
+        env: { ...process.env, GITLAB_TOKEN: token, GITLAB_API_TOKEN: token },
         detached: true,  // 새 프로세스 그룹 생성 → kill -pgid로 전체 종료 가능
       });
 
@@ -342,10 +437,40 @@ ${iterationContext}
         log(`PID: ${child.pid} (PGID: -${child.pid})`, 'system');
       }
 
-      child.stdout.on('data', (data) => logStream.write(data));
-      child.stderr.on('data', (data) => logStream.write(data));
+      // stream-json 포맷을 파싱하여 사람이 읽을 수 있는 로그로 변환
+      let stdoutBuffer = '';
+      child.stdout.on('data', (data: Buffer) => {
+        stdoutBuffer += data.toString();
+        const lines = stdoutBuffer.split('\n');
+        stdoutBuffer = lines.pop() || ''; // 마지막 불완전한 줄 보관
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const event = JSON.parse(line);
+            const formatted = formatStreamEvent(event);
+            if (formatted) logStream.write(formatted + '\n');
+          } catch {
+            // JSON 파싱 실패 시 원본 출력
+            logStream.write(line + '\n');
+          }
+        }
+      });
+      child.stderr.on('data', (data: Buffer) => {
+        const text = data.toString().trim();
+        if (text) log(text, 'warn');
+      });
 
       child.on('close', (code, signal) => {
+        // 버퍼에 남은 데이터 처리
+        if (stdoutBuffer.trim()) {
+          try {
+            const event = JSON.parse(stdoutBuffer);
+            const formatted = formatStreamEvent(event);
+            if (formatted) logStream.write(formatted + '\n');
+          } catch {
+            logStream.write(stdoutBuffer + '\n');
+          }
+        }
         log(`Agent CLI exited: code=${code}, signal=${signal}`, code === 0 ? 'system' : 'error');
         if (code === 0) resolve();
         else reject(new Error(`Agent CLI exited with code ${code}`));
