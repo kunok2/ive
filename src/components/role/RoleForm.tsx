@@ -125,7 +125,7 @@ export default function RoleForm({ projectId, existing, onSuccess }: Props) {
       {/* 최대 Agent 수 */}
       <div>
         <label className="block text-base font-semibold text-ive-text-muted mb-2">최대 투입 Agent 수</label>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
           <div className="flex bg-ive-bg-input border border-ive-border rounded-lg overflow-hidden">
             <button
               type="button"
@@ -139,13 +139,13 @@ export default function RoleForm({ projectId, existing, onSuccess }: Props) {
               className="px-3 py-3 text-ive-text-muted hover:text-ive-green hover:bg-ive-green/10 transition-colors text-base font-black"
             >+</button>
           </div>
-          <div className="flex flex-wrap gap-1">
-            {[1, 3, 5, 10].map(n => (
+          <div className="flex gap-1 flex-1 min-w-0">
+            {[1, 3, 5].map(n => (
               <button
                 key={n}
                 type="button"
                 onClick={() => setMaxAgents(n)}
-                className={`px-3 py-3 rounded-lg text-base font-black border transition-all ${
+                className={`flex-1 py-3 rounded-lg text-base font-black border transition-all ${
                   maxAgents === n
                     ? 'bg-ive-green/10 border-ive-green text-ive-green'
                     : 'bg-ive-bg-card border-ive-border-subtle text-ive-text-dim'
