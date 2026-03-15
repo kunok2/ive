@@ -74,6 +74,48 @@ function formatStreamEvent(event: any): string | null {
   }
 }
 
+/**
+ * stream-json 이벤트를 GitLab 이슈 노트용 마크다운으로 변환
+ */
+function formatStreamEventMarkdown(event: any): string | null {
+  switch (event.type) {
+    case 'assistant': {
+      const parts = event.message?.content || [];
+      const lines: string[] = [];
+      for (const part of parts) {
+        if (part.type === 'text' && part.text?.trim()) {
+          lines.push(part.text);
+        } else if (part.type === 'tool_use') {
+          const summary = formatToolInputMarkdown(part.name, part.input || {});
+          lines.push(`> **🔧 ${part.name}** ${summary}`);
+        }
+      }
+      return lines.length > 0 ? lines.join('\n') : null;
+    }
+    case 'result': {
+      const info: string[] = [];
+      if (event.cost_usd) info.push(`비용: $${event.cost_usd.toFixed(4)}`);
+      if (event.duration_ms) info.push(`소요: ${(event.duration_ms / 1000).toFixed(1)}s`);
+      if (event.total_tokens) info.push(`토큰: ${event.total_tokens.toLocaleString()}`);
+      return `\n---\n**📊 실행 결과** ${info.join(' | ')}${event.result ? '\n\n' + event.result : ''}`;
+    }
+    default:
+      return null;
+  }
+}
+
+function formatToolInputMarkdown(toolName: string, input: any): string {
+  switch (toolName) {
+    case 'Read': return `\`${input.file_path || ''}\``;
+    case 'Edit': return `\`${input.file_path || ''}\``;
+    case 'Write': return `\`${input.file_path || ''}\``;
+    case 'Bash': return input.command ? `\`$ ${input.command.substring(0, 100)}\`` : '';
+    case 'Glob': return `\`${input.pattern || ''}\``;
+    case 'Grep': return `\`"${input.pattern || ''}"\``;
+    default: return '';
+  }
+}
+
 function formatToolInput(toolName: string, input: any): string {
   switch (toolName) {
     case 'Read':
@@ -415,6 +457,7 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
 
     // 5. 에이전트 CLI 실행
     const startTime = Date.now();
+    const conversationParts: string[] = []; // 이슈 노트용 대화 내용 수집
 
     await new Promise<void>((resolve, reject) => {
       const cliParts = agent.cliPath.split(' ');
@@ -449,8 +492,10 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
             const event = JSON.parse(line);
             const formatted = formatStreamEvent(event);
             if (formatted) logStream.write(formatted + '\n');
+            // 이슈 노트용 마크다운 수집
+            const md = formatStreamEventMarkdown(event);
+            if (md) conversationParts.push(md);
           } catch {
-            // JSON 파싱 실패 시 원본 출력
             logStream.write(line + '\n');
           }
         }
@@ -508,7 +553,10 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
         mrUrl = mrResult?.web_url || "";
       }
 
-      await addGitLabIssueComment(project, iid, token, `## IVE(봇) ${isDevelop ? '개발' : '검증'} 완료\n\nMR: ${mrUrl}\n소요 시간: ${durationStr}\n\n${isDevelop ? '개발이 완료되었습니다. 검증 단계로 전환합니다.' : '검증이 완료되었습니다. 리뷰 후 머지해주세요.'}`);
+      // 대화 내용을 마크다운으로 정리 (최대 60000자 — GitLab 노트 제한 65535)
+      const conversationLog = conversationParts.join('\n\n').substring(0, 60000);
+      const completionNote = `## IVE(봇) ${isDevelop ? '개발' : '검증'} 완료\n\nMR: ${mrUrl}\n소요 시간: ${durationStr}\n\n${isDevelop ? '개발이 완료되었습니다. 검증 단계로 전환합니다.' : '검증이 완료되었습니다. 리뷰 후 머지해주세요.'}\n\n<details>\n<summary>🤖 AI 작업 로그 (펼치기)</summary>\n\n${conversationLog}\n\n</details>`;
+      await addGitLabIssueComment(project, iid, token, completionNote);
       await addGitLabSpentTime(project, iid, token, durationStr);
       
       if (isDevelop) {
@@ -522,14 +570,16 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
       updateExecutionStatus(executionId, 'success', new Date().toISOString());
     } else {
       log("No changes generated.", 'warn');
-      await addGitLabIssueComment(project, iid, token, `## IVE(봇) 작업 보고\n적용할 코드가 감지되지 않았습니다. 상세 분석 결과가 필요합니다.`);
+      const noChangeLog = conversationParts.join('\n\n').substring(0, 60000);
+      await addGitLabIssueComment(project, iid, token, `## IVE(봇) 작업 보고\n적용할 코드가 감지되지 않았습니다.\n\n<details>\n<summary>🤖 AI 작업 로그 (펼치기)</summary>\n\n${noChangeLog}\n\n</details>`);
       await updateGitLabIssueLabels(project, iid, token, [isDevelop ? project.labelFailDev : project.labelFailVal], [currentLabel]);
       updateExecutionStatus(executionId, 'success', new Date().toISOString());
     }
 
   } catch (err: any) {
     log(`Error occurred: ${err.message}`, 'error');
-    await addGitLabIssueComment(project, iid, token, `## IVE(봇) 실행 오류\n오류가 발생했습니다: ${err.message}`);
+    const errorLog = conversationParts.join('\n\n').substring(0, 60000);
+    await addGitLabIssueComment(project, iid, token, `## IVE(봇) 실행 오류\n오류가 발생했습니다: ${err.message}\n\n<details>\n<summary>🤖 AI 작업 로그 (펼치기)</summary>\n\n${errorLog}\n\n</details>`);
     await updateGitLabIssueLabels(project, iid, token, [isDevelop ? project.labelFailDev : project.labelFailVal], [currentLabel]);
     updateExecutionStatus(executionId, 'failed', new Date().toISOString());
   } finally {
