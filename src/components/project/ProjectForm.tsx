@@ -14,7 +14,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
   const router = useRouter()
   const { addProject, updateProject } = useStore()
 
-  const [provider, setProvider] = useState<Provider>(existing?.provider ?? 'github')
+  const [provider, setProvider] = useState<Provider>(existing?.provider ?? 'gitlab')
   const [name, setName] = useState(existing?.name ?? '')
   const [repoUrl, setRepoUrl] = useState(existing?.repoUrl ?? '')
   const [accessToken, setAccessToken] = useState(existing?.accessToken ?? '')

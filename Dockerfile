@@ -40,11 +40,16 @@ COPY next.config.ts ./
 # Claude Code CLI 설치
 RUN npm install -g @anthropic-ai/claude-code
 
-# 데이터 디렉토리 생성
-RUN mkdir -p data/logs workspaces
+# non-root 사용자 생성 (Claude Code의 root 제한 우회)
+RUN useradd -m -s /bin/bash ive \
+    && mkdir -p data/logs workspaces /home/ive/.claude \
+    && ln -s /home/ive/.claude/.claude.json /home/ive/.claude.json \
+    && chown -R ive:ive /app /home/ive
 
 EXPOSE 443
 
 ENV NODE_ENV=production
+
+USER ive
 
 CMD ["npm", "start"]

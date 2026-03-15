@@ -9,7 +9,7 @@ services:
       # 에이전트 작업 공간 영속
       - ./workspaces:/app/workspaces
       # Claude Code 설정/인증 영속 (claude 로그인 정보 등)
-      - ./claude-config:/root/.claude
+      - ./claude-config:/home/ive/.claude
       # SSL 인증서
       - ./ssl:/app/ssl:ro
     environment:
