@@ -91,17 +91,23 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
       <main className="px-4 py-4 max-w-lg mx-auto">
         {/* 프로젝트 정보 헤더 */}
-        <div className="bg-ive-bg-card rounded-xl p-5 border border-ive-border-subtle mb-6 relative overflow-hidden group">
+        <div
+          className="bg-ive-bg-card rounded-xl p-5 border border-ive-border-subtle mb-6 relative overflow-hidden group"
+          style={{ borderLeftWidth: '3px', borderLeftColor: project.color || '#4ade80' }}
+        >
           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
              <i className={`fa-brands ${project.provider === 'github' ? 'fa-github' : 'fa-gitlab'} text-6xl`} />
           </div>
 
           <div className="flex items-center gap-3 mb-4 relative z-10">
-            <div className="w-12 h-12 rounded-xl bg-ive-bg-deep border border-ive-border flex items-center justify-center shrink-0 shadow-lg">
-              <i className={`fa-brands ${project.provider === 'github' ? 'fa-github' : 'fa-gitlab'} text-3xl text-ive-green`} />
+            <div
+              className="w-12 h-12 rounded-xl bg-ive-bg-deep border border-ive-border flex items-center justify-center shrink-0 shadow-lg"
+              style={{ borderColor: `${project.color || '#4ade80'}40` }}
+            >
+              <i className={`fa-brands ${project.provider === 'github' ? 'fa-github' : 'fa-gitlab'} text-3xl`} style={{ color: project.color || '#4ade80' }} />
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-xl font-bold text-ive-green-pale truncate leading-tight">{project.name}</div>
+              <div className="text-xl font-bold truncate leading-tight" style={{ color: project.color || '#4ade80' }}>{project.name}</div>
               <div className="text-base text-ive-text-muted truncate mt-0.5">{project.repoUrl}</div>
             </div>
           </div>

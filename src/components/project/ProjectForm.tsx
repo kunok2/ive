@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Provider, Project } from '@/types'
+import { Provider, Project, PROJECT_COLORS, ProjectColor } from '@/types'
 import { useStore } from '@/lib/store'
 
 interface Props {
@@ -15,6 +15,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
   const { addProject, updateProject } = useStore()
 
   const [provider, setProvider] = useState<Provider>(existing?.provider ?? 'gitlab')
+  const [color, setColor] = useState<ProjectColor>(existing?.color ?? '#4ade80')
   const [name, setName] = useState(existing?.name ?? '')
   const [repoUrl, setRepoUrl] = useState(existing?.repoUrl ?? '')
   const [accessToken, setAccessToken] = useState(existing?.accessToken ?? '')
@@ -39,6 +40,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
     const projectData = {
       name: name.trim(),
       provider,
+      color,
       repoUrl: repoUrl.trim(),
       accessToken: accessToken.trim(),
       labelTarget: labelTarget.trim(),
@@ -86,6 +88,31 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
             >
               <i className={`fa-brands ${p === 'github' ? 'fa-github' : 'fa-gitlab'} mr-1.5`} />
               {p === 'github' ? 'GitHub' : 'GitLab'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* 프로젝트 색상 */}
+      <div>
+        <label className="block text-base font-semibold text-ive-text-muted mb-2">프로젝트 색상</label>
+        <div className="flex gap-2 flex-wrap">
+          {PROJECT_COLORS.map(c => (
+            <button
+              key={c.value}
+              type="button"
+              onClick={() => setColor(c.value)}
+              className={`w-9 h-9 rounded-full border-2 transition-all flex items-center justify-center ${
+                color === c.value
+                  ? 'border-white scale-110 shadow-lg'
+                  : 'border-transparent opacity-60 hover:opacity-100'
+              }`}
+              style={{ backgroundColor: c.value }}
+              title={c.name}
+            >
+              {color === c.value && (
+                <i className="fa-solid fa-check text-xs" style={{ color: ['#fbbf24', '#a3e635', '#e0e0e0'].includes(c.value) ? '#000' : '#fff' }} />
+              )}
             </button>
           ))}
         </div>

@@ -162,19 +162,25 @@ export default function ProjectCard({ project, roles }: Props) {
   }
 
   return (
-    <div className={`bg-ive-bg-card rounded-xl border shadow-sm overflow-hidden transition-colors duration-200 ${showTrace ? 'border-ive-cyan/30' : 'border-ive-border-subtle hover:border-ive-green/30'}`}>
+    <div
+      className={`bg-ive-bg-card rounded-xl border shadow-sm overflow-hidden transition-colors duration-200 ${showTrace ? 'border-ive-cyan/30' : 'border-ive-border-subtle hover:border-ive-green/30'}`}
+      style={{ borderLeftWidth: '3px', borderLeftColor: project.color || '#4ade80' }}
+    >
       <Link
         href={`/projects/${project.id}`}
         className="block p-4 active:bg-white/[0.03] transition-colors group"
       >
         <div className="flex items-start gap-3">
           {/* 플랫폼 아이콘 */}
-          <div className="w-10 h-10 rounded-lg bg-ive-bg-deep border border-ive-border-subtle flex items-center justify-center shrink-0 mt-0.5">
-            <i className={`fa-brands ${project.provider === 'github' ? 'fa-github' : 'fa-gitlab'} text-xl text-ive-green`} />
+          <div
+            className="w-10 h-10 rounded-lg bg-ive-bg-deep border border-ive-border-subtle flex items-center justify-center shrink-0 mt-0.5"
+            style={{ borderColor: `${project.color || '#4ade80'}40` }}
+          >
+            <i className={`fa-brands ${project.provider === 'github' ? 'fa-github' : 'fa-gitlab'} text-xl`} style={{ color: project.color || '#4ade80' }} />
           </div>
 
           <div className="flex-1 min-w-0">
-            <div className="font-bold text-base text-ive-green-pale truncate leading-none mb-1">
+            <div className="font-bold text-base truncate leading-none mb-1" style={{ color: project.color || '#4ade80' }}>
               {project.name}
             </div>
             <div className="text-sm text-ive-text-muted font-mono opacity-60 mb-1 break-all leading-tight">

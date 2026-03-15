@@ -41,6 +41,7 @@ function initSchema(db: Database.Database) {
       provider TEXT NOT NULL CHECK(provider IN ('github', 'gitlab')),
       repo_url TEXT NOT NULL,
       access_token TEXT NOT NULL,
+      color TEXT NOT NULL DEFAULT '#4ade80',
       label_target TEXT NOT NULL DEFAULT 'IVE',
       label_in_progress TEXT NOT NULL DEFAULT 'IVE(D)',
       label_fail_dev TEXT NOT NULL DEFAULT 'IVE(DF)',
@@ -123,6 +124,9 @@ function initSchema(db: Database.Database) {
       db.exec("ALTER TABLE projects ADD COLUMN label_fail_val TEXT NOT NULL DEFAULT 'IVE(VF)'")
     }
 
+    if (!tableInfo.some(col => col.name === 'color')) {
+      db.exec("ALTER TABLE projects ADD COLUMN color TEXT NOT NULL DEFAULT '#4ade80'")
+    }
     if (!tableInfo.some(col => col.name === 'check_interval')) {
       db.exec("ALTER TABLE projects ADD COLUMN check_interval INTEGER NOT NULL DEFAULT 10")
     }
@@ -225,7 +229,7 @@ export function createUser(u: any) {
 export function getAllProjects(): Project[] {
   const rows = getDb().prepare('SELECT * FROM projects').all() as {
     id: string; user_id: string; name: string; provider: string;
-    repo_url: string; access_token: string; created_at: string;
+    repo_url: string; access_token: string; color: string; created_at: string;
     label_target: string; label_in_progress: string; label_fail_dev: string;
     label_validation: string; label_fail_val: string; label_done: string;
     check_interval: number; last_checked_at: string | null;
@@ -234,7 +238,8 @@ export function getAllProjects(): Project[] {
   }[]
   return rows.map(r => ({
     id: r.id, userId: r.user_id, name: r.name, provider: r.provider as Project['provider'],
-    repoUrl: r.repo_url, accessToken: r.access_token, createdAt: r.created_at,
+    repoUrl: r.repo_url, accessToken: r.access_token, color: (r.color || '#4ade80') as Project['color'],
+    createdAt: r.created_at,
     labelTarget: r.label_target, labelInProgress: r.label_in_progress,
     labelFailDev: r.label_fail_dev,
     labelValidation: r.label_validation, labelFailVal: r.label_fail_val,
@@ -249,7 +254,7 @@ export function getAllProjects(): Project[] {
 export function getProjectsByUser(userId: string): Project[] {
   const rows = getDb().prepare('SELECT * FROM projects WHERE user_id = ? ORDER BY created_at DESC').all(userId) as {
     id: string; user_id: string; name: string; provider: string;
-    repo_url: string; access_token: string; created_at: string;
+    repo_url: string; access_token: string; color: string; created_at: string;
     label_target: string; label_in_progress: string; label_fail_dev: string;
     label_validation: string; label_fail_val: string; label_done: string;
     check_interval: number; last_checked_at: string | null;
@@ -258,7 +263,8 @@ export function getProjectsByUser(userId: string): Project[] {
   }[]
   return rows.map(r => ({
     id: r.id, userId: r.user_id, name: r.name, provider: r.provider as Project['provider'],
-    repoUrl: r.repo_url, accessToken: r.access_token, createdAt: r.created_at,
+    repoUrl: r.repo_url, accessToken: r.access_token, color: (r.color || '#4ade80') as Project['color'],
+    createdAt: r.created_at,
     labelTarget: r.label_target, labelInProgress: r.label_in_progress,
     labelFailDev: r.label_fail_dev,
     labelValidation: r.label_validation, labelFailVal: r.label_fail_val,
@@ -273,7 +279,7 @@ export function getProjectsByUser(userId: string): Project[] {
 export function getProject(id: string): Project | null {
   const r = getDb().prepare('SELECT * FROM projects WHERE id = ?').get(id) as {
     id: string; user_id: string; name: string; provider: string;
-    repo_url: string; access_token: string; created_at: string;
+    repo_url: string; access_token: string; color: string; created_at: string;
     label_target: string; label_in_progress: string; label_fail_dev: string;
     label_validation: string; label_fail_val: string; label_done: string;
     check_interval: number; last_checked_at: string | null;
@@ -283,7 +289,8 @@ export function getProject(id: string): Project | null {
   if (!r) return null
   return {
     id: r.id, userId: r.user_id, name: r.name, provider: r.provider as Project['provider'],
-    repoUrl: r.repo_url, accessToken: r.access_token, createdAt: r.created_at,
+    repoUrl: r.repo_url, accessToken: r.access_token, color: (r.color || '#4ade80') as Project['color'],
+    createdAt: r.created_at,
     labelTarget: r.label_target, labelInProgress: r.label_in_progress,
     labelFailDev: r.label_fail_dev,
     labelValidation: r.label_validation, labelFailVal: r.label_fail_val,
@@ -298,12 +305,12 @@ export function getProject(id: string): Project | null {
 export function createProject(p: Project) {
   getDb().prepare(
     `INSERT INTO projects (
-      id, user_id, name, provider, repo_url, access_token, 
+      id, user_id, name, provider, repo_url, access_token, color,
       label_target, label_in_progress, label_fail_dev, label_validation, label_fail_val, label_done,
       check_interval, last_checked_at, last_scanned_issue_count, scanner_active, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
-    p.id, p.userId, p.name, p.provider, p.repoUrl, p.accessToken, 
+    p.id, p.userId, p.name, p.provider, p.repoUrl, p.accessToken, p.color || '#4ade80',
     p.labelTarget, p.labelInProgress, p.labelFailDev, p.labelValidation, p.labelFailVal, p.labelDone,
     p.checkInterval, p.lastCheckedAt, p.lastScannedIssueCount, p.scannerActive ? 1 : 0, p.createdAt
   )
@@ -311,15 +318,15 @@ export function createProject(p: Project) {
 
 export function updateProject(p: Project) {
   getDb().prepare(
-    `UPDATE projects SET 
-      name = ?, repo_url = ?, access_token = ?, 
-      label_target = ?, label_in_progress = ?, label_fail_dev = ?, 
+    `UPDATE projects SET
+      name = ?, repo_url = ?, access_token = ?, color = ?,
+      label_target = ?, label_in_progress = ?, label_fail_dev = ?,
       label_validation = ?, label_fail_val = ?, label_done = ?,
       check_interval = ?, last_checked_at = ?, last_scanned_issue_count = ?,
       scanner_active = ?
       WHERE id = ? AND user_id = ?`
   ).run(
-    p.name, p.repoUrl, p.accessToken, 
+    p.name, p.repoUrl, p.accessToken, p.color || '#4ade80',
     p.labelTarget, p.labelInProgress, p.labelFailDev,
     p.labelValidation, p.labelFailVal, p.labelDone,
     p.checkInterval, p.lastCheckedAt, p.lastScannedIssueCount,

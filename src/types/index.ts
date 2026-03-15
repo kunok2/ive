@@ -9,6 +9,21 @@ export type Provider = 'github' | 'gitlab'
 export type RoleCategory = '개발' | '검증'
 export type RoleStatus = 'active' | 'idle' | 'paused'
 
+export const PROJECT_COLORS = [
+  { name: '초록', value: '#4ade80' },
+  { name: '청록', value: '#22d3ee' },
+  { name: '파랑', value: '#60a5fa' },
+  { name: '보라', value: '#a78bfa' },
+  { name: '분홍', value: '#f472b6' },
+  { name: '빨강', value: '#f87171' },
+  { name: '주황', value: '#fb923c' },
+  { name: '노랑', value: '#fbbf24' },
+  { name: '라임', value: '#a3e635' },
+  { name: '흰색', value: '#e0e0e0' },
+] as const
+
+export type ProjectColor = typeof PROJECT_COLORS[number]['value']
+
 export interface Project {
   id: string
   userId: string
@@ -16,6 +31,7 @@ export interface Project {
   provider: Provider
   repoUrl: string
   accessToken: string
+  color: ProjectColor       // 프로젝트 구분 색상
   labelTarget: string      // 대상 이슈 레이블 (예: IVE)
   labelInProgress: string  // 진행 중 레이블 (예: IVE(D))
   labelFailDev: string     // 개발 실패 (예: IVE(DF))
