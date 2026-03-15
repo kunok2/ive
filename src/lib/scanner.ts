@@ -360,6 +360,7 @@ async function executeTask(
     logPath: logPath
   });
 
+  const conversationParts: string[] = []; // 이슈 노트용 대화 내용 수집
   const logStream = fs.createWriteStream(logPath, { flags: 'a' });
   const log = (msg: string, type: 'info' | 'error' | 'warn' | 'system' = 'info') => {
     const timestamp = new Date().toTimeString().slice(0, 8);
@@ -457,12 +458,19 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
 
     // 5. 에이전트 CLI 실행
     const startTime = Date.now();
-    const conversationParts: string[] = []; // 이슈 노트용 대화 내용 수집
-
     await new Promise<void>((resolve, reject) => {
       const cliParts = agent.cliPath.split(' ');
       const mainCmd = cliParts[0];
-      const args = [...cliParts.slice(1), '--dangerously-skip-permissions', '--output-format', 'stream-json', '-p', prompt];
+      const allowedTools = ['Read', 'Edit', 'Write', 'Grep', 'Glob', 'Bash', 'WebFetch'];
+      const args = [
+        ...cliParts.slice(1),
+        '--dangerously-skip-permissions',
+        '--output-format', 'stream-json',
+        '--verbose',
+        '--max-turns', '200',
+        '--allowedTools', ...allowedTools,
+        '-p', prompt
+      ];
 
       log(`CMD: ${mainCmd} ${args.slice(0, -2).join(' ')} [prompt omitted]`, 'system');
       log(`CWD: ${workspacePath}`, 'system');
