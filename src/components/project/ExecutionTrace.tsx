@@ -135,7 +135,7 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
             </div>
           ) : (
             executions.map(ex => (
-              <div key={ex.id} className="relative">
+              <div key={ex.id}>
                 <button
                   onClick={() => setSelectedId(ex.id)}
                   className="w-full text-left bg-ive-bg-card border border-ive-border-subtle p-4 rounded-xl hover:border-ive-green/50 hover:bg-ive-green/5 transition-all group"
@@ -174,28 +174,27 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
                       {ex.status === 'running' && tick >= 0 ? '' : ''}
                     </span>
                   </div>
+                  {ex.status === 'running' && (
+                    <div className="mt-2 pt-2 border-t border-ive-border-dark">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setKilling(ex.id)
+                          fetch(`/api/executions/${ex.id}/kill`, { method: 'POST' })
+                            .then(() => fetchExecutions())
+                            .finally(() => setKilling(null))
+                        }}
+                        disabled={killing === ex.id}
+                        className="w-full text-sm font-bold text-ive-red/70 border border-ive-red/30 px-2 py-1.5 rounded-lg bg-ive-bg-deep hover:bg-ive-red/10 transition-colors disabled:opacity-40"
+                      >
+                        {killing === ex.id
+                          ? <i className="fa-solid fa-circle-notch fa-spin" />
+                          : <><i className="fa-solid fa-skull-crossbones mr-1" />강제종료</>
+                        }
+                      </button>
+                    </div>
+                  )}
                 </button>
-                {ex.status === 'running' && (
-                  <button
-                    onClick={async (e) => {
-                      e.stopPropagation()
-                      setKilling(ex.id)
-                      try {
-                        await fetch(`/api/executions/${ex.id}/kill`, { method: 'POST' })
-                        await fetchExecutions()
-                      } finally {
-                        setKilling(null)
-                      }
-                    }}
-                    disabled={killing === ex.id}
-                    className="absolute top-3 right-12 text-sm font-bold text-ive-red/70 border border-ive-red/30 px-2 py-1 rounded-lg bg-ive-bg-deep hover:bg-ive-red/10 transition-colors disabled:opacity-40"
-                  >
-                    {killing === ex.id
-                      ? <i className="fa-solid fa-circle-notch fa-spin" />
-                      : <><i className="fa-solid fa-skull-crossbones mr-1" />강제종료</>
-                    }
-                  </button>
-                )}
               </div>
             ))
           )}
