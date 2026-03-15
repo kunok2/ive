@@ -153,7 +153,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
               >+</button>
             </div>
             <div className="flex flex-wrap gap-1">
-              {[5, 10, 30, 60].map(n => (
+              {[5, 10, 30].map(n => (
                 <button
                   key={n}
                   type="button"
@@ -164,7 +164,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
                       : 'bg-ive-bg-card border-ive-border-subtle text-ive-text-dim'
                   }`}
                 >
-                  {n === 60 ? '1h' : `${n}m`}
+                  {`${n}m`}
                 </button>
               ))}
             </div>
