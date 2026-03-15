@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Agent, CliName } from '@/types'
 
 interface Props {
@@ -22,6 +23,26 @@ const statusConfig = {
 export default function AgentCard({ agent, onDelete, compact, assignedCount }: Props) {
   const cli = cliConfig[agent.cliName]
   const status = statusConfig[agent.status]
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
+
+  async function handleTest() {
+    setTesting(true)
+    setTestResult(null)
+    try {
+      const res = await fetch(`/api/agents/${agent.id}/test`, { method: 'POST' })
+      const data = await res.json()
+      if (data.success) {
+        setTestResult({ success: true, message: data.version || '정상 동작' })
+      } else {
+        setTestResult({ success: false, message: data.error || '연결 실패' })
+      }
+    } catch {
+      setTestResult({ success: false, message: '네트워크 오류' })
+    } finally {
+      setTesting(false)
+    }
+  }
 
   if (compact) {
     return (
@@ -86,17 +107,36 @@ export default function AgentCard({ agent, onDelete, compact, assignedCount }: P
         )}
       </div>
 
-      {/* 삭제 */}
-      {onDelete && (
-        <div className="px-3 pb-3">
+      {/* 테스트 & 삭제 */}
+      <div className="px-3 pb-3 flex flex-col gap-2">
+        <button
+          onClick={handleTest}
+          disabled={testing}
+          className="w-full text-base text-ive-cyan py-1.5 rounded border border-ive-cyan/30 active:bg-ive-cyan/10 transition-colors disabled:opacity-50"
+        >
+          {testing ? (
+            <><i className="fa-solid fa-spinner fa-spin mr-1" /> 확인 중...</>
+          ) : (
+            <><i className="fa-solid fa-stethoscope mr-1" /> 동작 확인</>
+          )}
+        </button>
+
+        {testResult && (
+          <div className={`text-base rounded-lg px-3 py-2 ${testResult.success ? 'text-ive-green bg-ive-green/10' : 'text-ive-red bg-ive-red/10'}`}>
+            <i className={`fa-solid ${testResult.success ? 'fa-circle-check' : 'fa-circle-xmark'} mr-1`} />
+            {testResult.message}
+          </div>
+        )}
+
+        {onDelete && (
           <button
             onClick={() => onDelete(agent.id)}
             className="w-full text-base text-ive-red/60 py-1.5 rounded border border-ive-red/20 active:bg-ive-red/10 transition-colors"
           >
             <i className="fa-solid fa-trash-can mr-1" /> Agent 삭제
           </button>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }

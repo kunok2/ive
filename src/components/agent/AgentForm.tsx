@@ -69,26 +69,33 @@ export default function AgentForm({ onSuccess }: Props) {
       <div>
         <label className="block text-base font-semibold text-ive-text-muted mb-2">CLI 도구</label>
         <div className="flex flex-col gap-2">
-          {cliTools.map(t => (
-            <button
-              key={t.value}
-              type="button"
-              onClick={() => handleCliChange(t.value)}
-              className={`flex items-center gap-3 p-3 rounded-lg border text-left transition-colors ${
-                cliName === t.value
-                  ? 'bg-ive-green/10 border-ive-green'
-                  : 'bg-ive-bg-card border-ive-border-subtle'
-              }`}
-            >
-              <i className={`${t.icon} text-xl w-6 text-center`} />
-              <div>
-                <div className={`text-base font-bold ${cliName === t.value ? 'text-ive-green' : 'text-ive-text'}`}>
-                  {t.label}
+          {cliTools.map(t => {
+            const disabled = t.value !== 'claude'
+            return (
+              <button
+                key={t.value}
+                type="button"
+                onClick={() => !disabled && handleCliChange(t.value)}
+                disabled={disabled}
+                className={`flex items-center gap-3 p-3 rounded-lg border text-left transition-colors ${
+                  disabled
+                    ? 'bg-ive-bg-deep border-ive-border-subtle opacity-40 cursor-not-allowed'
+                    : cliName === t.value
+                      ? 'bg-ive-green/10 border-ive-green'
+                      : 'bg-ive-bg-card border-ive-border-subtle'
+                }`}
+              >
+                <i className={`${t.icon} text-xl w-6 text-center`} />
+                <div>
+                  <div className={`text-base font-bold ${disabled ? 'text-ive-text-dim' : cliName === t.value ? 'text-ive-green' : 'text-ive-text'}`}>
+                    {t.label}
+                    {disabled && <span className="ml-2 text-sm font-normal text-ive-text-dim">(준비 중)</span>}
+                  </div>
+                  <div className="text-base text-ive-text-muted">{t.desc}</div>
                 </div>
-                <div className="text-base text-ive-text-muted">{t.desc}</div>
-              </div>
-            </button>
-          ))}
+              </button>
+            )
+          })}
         </div>
       </div>
 
