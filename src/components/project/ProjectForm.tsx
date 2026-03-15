@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Provider, Project } from '@/types'
+import { Project, detectProvider } from '@/types'
 import { useStore } from '@/lib/store'
 
 interface Props {
@@ -14,7 +14,6 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
   const router = useRouter()
   const { addProject, updateProject } = useStore()
 
-  const [provider, setProvider] = useState<Provider>(existing?.provider ?? 'gitlab')
   const [name, setName] = useState(existing?.name ?? '')
   const [repoUrl, setRepoUrl] = useState(existing?.repoUrl ?? '')
   const [accessToken, setAccessToken] = useState(existing?.accessToken ?? '')
@@ -38,7 +37,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
 
     const projectData = {
       name: name.trim(),
-      provider,
+      provider: detectProvider(repoUrl.trim()),
       repoUrl: repoUrl.trim(),
       accessToken: accessToken.trim(),
       labelTarget: labelTarget.trim(),
@@ -69,28 +68,6 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-      {/* Provider 선택 */}
-      <div>
-        <label className="block text-base font-semibold text-ive-text-muted mb-2">플랫폼</label>
-        <div className="flex gap-2">
-          {(['github', 'gitlab'] as Provider[]).map(p => (
-            <button
-              key={p}
-              type="button"
-              onClick={() => setProvider(p)}
-              className={`flex-1 py-3 rounded-lg text-base font-bold border transition-colors ${
-                provider === p
-                  ? 'bg-ive-green/10 border-ive-green text-ive-green'
-                  : 'bg-ive-bg-card border-ive-border-subtle text-ive-text-dim'
-              }`}
-            >
-              <i className={`fa-brands ${p === 'github' ? 'fa-github' : 'fa-gitlab'} mr-1.5`} />
-              {p === 'github' ? 'GitHub' : 'GitLab'}
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* 프로젝트 이름 */}
       <div>
         <label className="block text-base font-semibold text-ive-text-muted mb-2">프로젝트 이름</label>
@@ -110,7 +87,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
           type="url"
           value={repoUrl}
           onChange={e => setRepoUrl(e.target.value)}
-          placeholder={`https://${provider === 'github' ? 'github.com' : 'gitlab.com'}/user/repo.git`}
+          placeholder="https://gitlab.com/user/repo.git"
           className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-base text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green"
         />
       </div>

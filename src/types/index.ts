@@ -6,6 +6,17 @@ export interface User {
 }
 
 export type Provider = 'github' | 'gitlab'
+
+/** URL에서 provider를 자동 감지 (github.com → github, 그 외 → gitlab) */
+export function detectProvider(url: string): Provider {
+  try {
+    const hostname = new URL(url).hostname.toLowerCase()
+    if (hostname === 'github.com' || hostname.endsWith('.github.com')) {
+      return 'github'
+    }
+  } catch { /* invalid URL */ }
+  return 'gitlab'
+}
 export type RoleCategory = '개발' | '검증'
 export type RoleStatus = 'active' | 'idle' | 'paused'
 
