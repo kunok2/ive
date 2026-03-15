@@ -33,6 +33,9 @@ export default function MobileTabBar() {
           )
         })}
       </div>
+      <div className="text-center text-xs text-ive-text-dim pb-1 -mt-1">
+        Spring IVE v{process.env.APP_VERSION}
+      </div>
     </nav>
   )
 }
