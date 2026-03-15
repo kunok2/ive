@@ -152,13 +152,13 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
                 className="px-3 py-3 text-ive-text-muted hover:text-ive-green hover:bg-ive-green/10 transition-colors text-base font-black"
               >+</button>
             </div>
-            <div className="flex flex-wrap gap-1">
+            <div className="flex gap-1 flex-1 min-w-0">
               {[5, 10, 30].map(n => (
                 <button
                   key={n}
                   type="button"
                   onClick={() => setCheckInterval(n)}
-                  className={`px-3 py-3 rounded-lg text-base font-black border transition-all ${
+                  className={`flex-1 py-3 rounded-lg text-base font-black border transition-all ${
                     checkInterval === n
                       ? 'bg-ive-green/10 border-ive-green text-ive-green'
                       : 'bg-ive-bg-card border-ive-border-subtle text-ive-text-dim'
