@@ -44,7 +44,11 @@ RUN npm install -g @anthropic-ai/claude-code
 RUN useradd -m -s /bin/bash ive \
     && mkdir -p data/logs workspaces /home/ive/.claude \
     && ln -s /home/ive/.claude/.claude.json /home/ive/.claude.json \
-    && chown -R ive:ive /app /home/ive
+    && chown -R ive:ive /app /home/ive \
+    && git config --global user.email "ive-agent@spring-ive.local" \
+    && git config --global user.name "IVE Agent" \
+    && cp /root/.gitconfig /home/ive/.gitconfig \
+    && chown ive:ive /home/ive/.gitconfig
 
 EXPOSE 443
 
