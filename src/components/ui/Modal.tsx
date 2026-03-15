@@ -41,7 +41,7 @@ export default function Modal({ open, onClose, title, children, dark }: Props) {
             <i className="fa-solid fa-xmark" />
           </button>
         </div>
-        <div className={`flex-1 overflow-y-auto ${dark ? '' : 'px-4 py-4 pb-6'}`}>
+        <div className={`flex-1 overflow-y-auto ${dark ? '' : 'px-4 py-4 pb-20'}`}>
           {children}
         </div>
       </div>
