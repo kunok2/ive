@@ -9,9 +9,9 @@ interface Props {
 }
 
 const cliTools: { value: CliName; label: string; icon: string; desc: string; defaultPath: string; defaultName: string }[] = [
-  { value: 'claude', label: 'Claude Code', icon: 'fa-solid fa-atom', desc: 'Anthropic의 AI 코딩 CLI', defaultPath: '/opt/homebrew/bin/claude', defaultName: 'Claude' },
-  { value: 'gemini', label: 'Gemini CLI', icon: 'fa-brands fa-google', desc: 'Google의 AI 코딩 CLI', defaultPath: '/opt/homebrew/bin/gemini', defaultName: 'Gemini' },
-  { value: 'codex', label: 'Codex CLI', icon: 'fa-solid fa-brain', desc: 'OpenAI의 AI 코딩 CLI', defaultPath: '/opt/homebrew/bin/codex', defaultName: 'Codex' },
+  { value: 'claude', label: 'Claude Code', icon: 'fa-solid fa-atom', desc: 'Anthropic의 AI 코딩 CLI', defaultPath: '/usr/local/bin/claude', defaultName: 'Claude' },
+  { value: 'gemini', label: 'Gemini CLI', icon: 'fa-brands fa-google', desc: 'Google의 AI 코딩 CLI', defaultPath: '/usr/local/bin/gemini', defaultName: 'Gemini' },
+  { value: 'codex', label: 'Codex CLI', icon: 'fa-solid fa-brain', desc: 'OpenAI의 AI 코딩 CLI', defaultPath: '/usr/local/bin/codex', defaultName: 'Codex' },
 ]
 
 export default function AgentForm({ onSuccess }: Props) {
