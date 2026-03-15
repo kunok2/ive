@@ -467,7 +467,7 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
         '--dangerously-skip-permissions',
         '--output-format', 'stream-json',
         '--verbose',
-        '--max-turns', '200',
+        '--max-turns', String(agent.maxTurns || 200),
         '--allowedTools', ...allowedTools,
         '-p', prompt
       ];

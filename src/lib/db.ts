@@ -74,6 +74,7 @@ function initSchema(db: Database.Database) {
       cli_name TEXT NOT NULL CHECK(cli_name IN ('claude', 'gemini', 'codex')),
       cli_path TEXT NOT NULL,
       cli_version TEXT NOT NULL DEFAULT '',
+      max_turns INTEGER NOT NULL DEFAULT 200,
       status TEXT NOT NULL DEFAULT 'available' CHECK(status IN ('available', 'busy', 'offline')),
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -135,6 +136,13 @@ function initSchema(db: Database.Database) {
       db.exec("ALTER TABLE projects ADD COLUMN scanner_active INTEGER NOT NULL DEFAULT 1")
     }
   } catch (e) { console.error("Migration failed for projects:", e) }
+
+  try {
+    const tableInfo = db.prepare("PRAGMA table_info(agents)").all() as any[]
+    if (!tableInfo.some(col => col.name === 'max_turns')) {
+      db.exec("ALTER TABLE agents ADD COLUMN max_turns INTEGER NOT NULL DEFAULT 200")
+    }
+  } catch (e) { console.error("Migration failed for agents:", e) }
 
   try {
     const tableInfo = db.prepare("PRAGMA table_info(roles)").all() as any[]
@@ -363,38 +371,40 @@ export function deleteRole(id: string) {
 export function getAgentsByUser(userId: string): Agent[] {
   const rows = getDb().prepare('SELECT * FROM agents WHERE user_id = ? ORDER BY created_at DESC').all(userId) as {
     id: string; user_id: string; name: string; cli_name: string;
-    cli_path: string; cli_version: string; status: string; created_at: string
+    cli_path: string; cli_version: string; max_turns: number; status: string; created_at: string
   }[]
   return rows.map(r => ({
     id: r.id, userId: r.user_id, name: r.name,
     cliName: r.cli_name as Agent['cliName'], cliPath: r.cli_path,
-    cliVersion: r.cli_version, status: r.status as Agent['status'], createdAt: r.created_at,
+    cliVersion: r.cli_version, maxTurns: r.max_turns ?? 200,
+    status: r.status as Agent['status'], createdAt: r.created_at,
   }))
 }
 
 export function getAgent(id: string): Agent | null {
   const r = getDb().prepare('SELECT * FROM agents WHERE id = ?').get(id) as {
     id: string; user_id: string; name: string; cli_name: string;
-    cli_path: string; cli_version: string; status: string; created_at: string
+    cli_path: string; cli_version: string; max_turns: number; status: string; created_at: string
   } | undefined
   if (!r) return null
   return {
     id: r.id, userId: r.user_id, name: r.name,
     cliName: r.cli_name as Agent['cliName'], cliPath: r.cli_path,
-    cliVersion: r.cli_version, status: r.status as Agent['status'], createdAt: r.created_at,
+    cliVersion: r.cli_version, maxTurns: r.max_turns ?? 200,
+    status: r.status as Agent['status'], createdAt: r.created_at,
   }
 }
 
 export function createAgent(a: Agent) {
   getDb().prepare(
-    'INSERT INTO agents (id, user_id, name, cli_name, cli_path, cli_version, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-  ).run(a.id, a.userId, a.name, a.cliName, a.cliPath, a.cliVersion, a.status, a.createdAt)
+    'INSERT INTO agents (id, user_id, name, cli_name, cli_path, cli_version, max_turns, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(a.id, a.userId, a.name, a.cliName, a.cliPath, a.cliVersion, a.maxTurns, a.status, a.createdAt)
 }
 
 export function updateAgent(a: Agent) {
   getDb().prepare(
-    'UPDATE agents SET name = ?, cli_name = ?, cli_path = ?, cli_version = ?, status = ? WHERE id = ? AND user_id = ?'
-  ).run(a.name, a.cliName, a.cliPath, a.cliVersion, a.status, a.id, a.userId)
+    'UPDATE agents SET name = ?, cli_name = ?, cli_path = ?, cli_version = ?, max_turns = ?, status = ? WHERE id = ? AND user_id = ?'
+  ).run(a.name, a.cliName, a.cliPath, a.cliVersion, a.maxTurns, a.status, a.id, a.userId)
 }
 
 export function deleteAgent(id: string, userId: string) {
@@ -409,7 +419,7 @@ export function updateAgentStatus(id: string, status: Agent['status']) {
 
 export function getRoleAssignments(roleId: string): (RoleAssignment & { agent: Agent })[] {
   const rows = getDb().prepare(`
-    SELECT ra.*, a.name as agent_name, a.cli_name, a.cli_path, a.cli_version,
+    SELECT ra.*, a.name as agent_name, a.cli_name, a.cli_path, a.cli_version, a.max_turns,
            a.status as agent_status, a.user_id, a.created_at as agent_created_at
     FROM role_assignments ra
     JOIN agents a ON ra.agent_id = a.id
@@ -417,7 +427,7 @@ export function getRoleAssignments(roleId: string): (RoleAssignment & { agent: A
     ORDER BY ra.assigned_at ASC
   `).all(roleId) as {
     id: string; role_id: string; agent_id: string; status: string; assigned_at: string;
-    agent_name: string; cli_name: string; cli_path: string; cli_version: string;
+    agent_name: string; cli_name: string; cli_path: string; cli_version: string; max_turns: number;
     agent_status: string; user_id: string; agent_created_at: string
   }[]
   return rows.map(r => ({
@@ -426,7 +436,8 @@ export function getRoleAssignments(roleId: string): (RoleAssignment & { agent: A
     agent: {
       id: r.agent_id, userId: r.user_id, name: r.agent_name,
       cliName: r.cli_name as Agent['cliName'], cliPath: r.cli_path,
-      cliVersion: r.cli_version, status: r.agent_status as Agent['status'],
+      cliVersion: r.cli_version, maxTurns: r.max_turns ?? 200,
+      status: r.agent_status as Agent['status'],
       createdAt: r.agent_created_at,
     },
   }))

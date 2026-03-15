@@ -51,6 +51,7 @@ export interface Agent {
   cliName: CliName
   cliPath: string
   cliVersion: string
+  maxTurns: number
   status: AgentStatus
   createdAt: string
 }

@@ -21,6 +21,7 @@ export default function AgentForm({ onSuccess }: Props) {
   const [name, setName] = useState(cliTools[0].defaultName)
   const [cliPath, setCliPath] = useState(cliTools[0].defaultPath)
   const [cliVersion, setCliVersion] = useState('')
+  const [maxTurns, setMaxTurns] = useState(200)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -53,6 +54,7 @@ export default function AgentForm({ onSuccess }: Props) {
         cliName,
         cliPath: cliPath.trim(),
         cliVersion: cliVersion.trim(),
+        maxTurns,
         status: 'available',
       })
       onSuccess?.()
@@ -140,6 +142,33 @@ export default function AgentForm({ onSuccess }: Props) {
           placeholder="예: 2.1.69"
           className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-base text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green font-mono"
         />
+      </div>
+
+      {/* Max Turns */}
+      <div>
+        <label className="block text-base font-semibold text-ive-text-muted mb-2">
+          <i className="fa-solid fa-repeat mr-1" />최대 턴 수
+        </label>
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            value={maxTurns}
+            onChange={e => setMaxTurns(Math.max(1, parseInt(e.target.value) || 200))}
+            min={1}
+            max={1000}
+            className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-base text-ive-text focus:outline-none focus:border-ive-green font-mono"
+          />
+          <div className="flex gap-1 flex-1 min-w-0">
+            {[50, 100, 200].map(v => (
+              <button key={v} type="button" onClick={() => setMaxTurns(v)}
+                className={`flex-1 px-2 py-3 rounded-lg text-sm font-bold border transition-colors ${maxTurns === v ? 'bg-ive-green/20 border-ive-green text-ive-green' : 'bg-ive-bg-deep border-ive-border-subtle text-ive-text-muted'}`}
+              >{v}</button>
+            ))}
+          </div>
+        </div>
+        <p className="text-sm text-ive-text-dim mt-1">
+          <i className="fa-solid fa-circle-info mr-1" />AI가 한 작업에서 수행할 수 있는 최대 대화 턴 수
+        </p>
       </div>
 
       {error && (
