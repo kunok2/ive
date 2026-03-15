@@ -33,10 +33,10 @@ export default function Modal({ open, onClose, title, children, dark }: Props) {
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       <div className={`relative w-full max-w-lg ${dark ? 'bg-[#0f172a] border-[#1e293b]' : 'bg-ive-bg-card border-ive-border'} border rounded-2xl max-h-[90vh] flex flex-col animate-slide-up overflow-hidden shadow-2xl`}>
         <div className={`flex items-center justify-between px-4 py-3 border-b ${dark ? 'border-[#1e293b]' : 'border-ive-border-dark'} shrink-0`}>
-          <h2 className={`text-sm font-bold ${dark ? 'text-slate-200' : 'text-ive-green-pale'}`}>{title}</h2>
+          <h2 className={`text-base font-bold ${dark ? 'text-slate-200' : 'text-ive-green-pale'}`}>{title}</h2>
           <button
             onClick={onClose}
-            className={`w-8 h-8 flex items-center justify-center rounded-full ${dark ? 'text-slate-400 hover:bg-white/5' : 'text-ive-text-muted hover:bg-ive-bg-deep'} transition-colors text-lg`}
+            className={`w-8 h-8 flex items-center justify-center rounded-full ${dark ? 'text-slate-400 hover:bg-white/5' : 'text-ive-text-muted hover:bg-ive-bg-deep'} transition-colors text-xl`}
           >
             <i className="fa-solid fa-xmark" />
           </button>

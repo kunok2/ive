@@ -27,8 +27,8 @@ export default function MobileTabBar() {
                 isActive ? 'text-ive-green' : 'text-ive-text-dim'
               }`}
             >
-              <i className={`${tab.icon} text-base`} />
-              <span className="text-[10px] font-semibold">{tab.label}</span>
+              <i className={`${tab.icon} text-lg`} />
+              <span className="text-sm font-semibold">{tab.label}</span>
             </Link>
           )
         })}

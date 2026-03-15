@@ -119,7 +119,7 @@ export default function TerminalPage() {
   return (
     <>
       {error && (
-        <div className="fixed top-0 left-0 right-0 z-40 bg-red-900/90 text-red-200 text-xs px-4 py-2 flex items-center gap-2">
+        <div className="fixed top-0 left-0 right-0 z-40 bg-red-900/90 text-red-200 text-base px-4 py-2 flex items-center gap-2">
           <i className="fa-solid fa-triangle-exclamation" />
           {error}
         </div>

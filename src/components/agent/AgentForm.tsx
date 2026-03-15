@@ -67,7 +67,7 @@ export default function AgentForm({ onSuccess }: Props) {
     <form onSubmit={handleSubmit} className="flex flex-col gap-5">
       {/* CLI 도구 선택 */}
       <div>
-        <label className="block text-xs font-semibold text-ive-text-muted mb-2">CLI 도구</label>
+        <label className="block text-base font-semibold text-ive-text-muted mb-2">CLI 도구</label>
         <div className="flex flex-col gap-2">
           {cliTools.map(t => (
             <button
@@ -80,12 +80,12 @@ export default function AgentForm({ onSuccess }: Props) {
                   : 'bg-ive-bg-card border-ive-border-subtle'
               }`}
             >
-              <i className={`${t.icon} text-lg w-6 text-center`} />
+              <i className={`${t.icon} text-xl w-6 text-center`} />
               <div>
-                <div className={`text-sm font-bold ${cliName === t.value ? 'text-ive-green' : 'text-ive-text'}`}>
+                <div className={`text-base font-bold ${cliName === t.value ? 'text-ive-green' : 'text-ive-text'}`}>
                   {t.label}
                 </div>
-                <div className="text-[11px] text-ive-text-muted">{t.desc}</div>
+                <div className="text-base text-ive-text-muted">{t.desc}</div>
               </div>
             </button>
           ))}
@@ -94,19 +94,19 @@ export default function AgentForm({ onSuccess }: Props) {
 
       {/* Agent 이름 */}
       <div>
-        <label className="block text-xs font-semibold text-ive-text-muted mb-2">Agent 이름</label>
+        <label className="block text-base font-semibold text-ive-text-muted mb-2">Agent 이름</label>
         <input
           type="text"
           value={name}
           onChange={e => setName(e.target.value)}
           placeholder="개발 Agent #1"
-          className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-sm text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green"
+          className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-base text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green"
         />
       </div>
 
       {/* CLI 설치 경로 */}
       <div>
-        <label className="block text-xs font-semibold text-ive-text-muted mb-2">
+        <label className="block text-base font-semibold text-ive-text-muted mb-2">
           <i className="fa-solid fa-folder mr-1" />설치 경로
         </label>
         <input
@@ -114,16 +114,16 @@ export default function AgentForm({ onSuccess }: Props) {
           value={cliPath}
           onChange={e => setCliPath(e.target.value)}
           placeholder="/opt/homebrew/bin/claude"
-          className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-sm text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green font-mono"
+          className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-base text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green font-mono"
         />
-        <p className="text-[10px] text-ive-text-dim mt-1">
+        <p className="text-sm text-ive-text-dim mt-1">
           <i className="fa-solid fa-circle-info mr-1" />장비에 설치된 CLI 실행 파일의 전체 경로
         </p>
       </div>
 
       {/* 버전 (선택) */}
       <div>
-        <label className="block text-xs font-semibold text-ive-text-muted mb-2">
+        <label className="block text-base font-semibold text-ive-text-muted mb-2">
           <i className="fa-solid fa-code-branch mr-1" />버전 <span className="text-ive-text-dim font-normal">(선택)</span>
         </label>
         <input
@@ -131,12 +131,12 @@ export default function AgentForm({ onSuccess }: Props) {
           value={cliVersion}
           onChange={e => setCliVersion(e.target.value)}
           placeholder="예: 2.1.69"
-          className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-sm text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green font-mono"
+          className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-base text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green font-mono"
         />
       </div>
 
       {error && (
-        <div className="text-xs text-ive-red bg-ive-red/10 rounded-lg px-3 py-2">
+        <div className="text-base text-ive-red bg-ive-red/10 rounded-lg px-3 py-2">
           <i className="fa-solid fa-circle-exclamation mr-1" />{error}
         </div>
       )}
@@ -144,7 +144,7 @@ export default function AgentForm({ onSuccess }: Props) {
       <button
         type="submit"
         disabled={loading}
-        className="w-full bg-ive-green-dark text-white font-bold py-3 rounded-lg text-sm active:bg-ive-green/80 transition-colors mt-2 disabled:opacity-50"
+        className="w-full bg-ive-green-dark text-white font-bold py-3 rounded-lg text-base active:bg-ive-green/80 transition-colors mt-2 disabled:opacity-50"
       >
         {loading ? (<><i className="fa-solid fa-spinner fa-spin mr-1.5" />생성 중...</>) : (<><i className="fa-solid fa-robot mr-1.5" />Agent 추가</>)}
       </button>

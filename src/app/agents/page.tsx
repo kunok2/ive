@@ -23,7 +23,7 @@ export default function AgentsPage() {
   }, [state.authChecked, state.user, router])
 
   if (!state.authChecked || !state.user) {
-    return <div className="min-h-screen flex items-center justify-center text-ive-text-muted text-sm">불러오는 중...</div>
+    return <div className="min-h-screen flex items-center justify-center text-ive-text-muted text-base">불러오는 중...</div>
   }
 
   // 각 Agent의 배정 수 계산
@@ -45,16 +45,16 @@ export default function AgentsPage() {
       <header className="sticky top-0 z-40 bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark">
         <div className="flex items-center justify-between px-4 py-3 max-w-lg mx-auto">
           <div>
-            <h1 className="text-lg font-extrabold text-ive-green">
+            <h1 className="text-xl font-extrabold text-ive-green">
               <i className="fa-solid fa-robot mr-1.5" />AI Agent
             </h1>
-            <p className="text-[10px] text-ive-text-muted">등록된 AI 개발자를 관리합니다</p>
+            <p className="text-sm text-ive-text-muted">등록된 AI 개발자를 관리합니다</p>
           </div>
           <button
             onClick={() => setShowNewAgent(true)}
             className="w-9 h-9 rounded-full bg-ive-green flex items-center justify-center text-ive-bg-deep active:scale-95 transition-transform"
           >
-            <i className="fa-solid fa-plus text-sm" />
+            <i className="fa-solid fa-plus text-base" />
           </button>
         </div>
       </header>
@@ -63,10 +63,10 @@ export default function AgentsPage() {
         {state.agents.length === 0 ? (
           <div className="text-center py-20">
             <i className="fa-solid fa-robot text-4xl text-ive-text-dim mb-4 block" />
-            <p className="text-sm text-ive-text-muted mb-4">아직 등록된 Agent가 없습니다</p>
+            <p className="text-base text-ive-text-muted mb-4">아직 등록된 Agent가 없습니다</p>
             <button
               onClick={() => setShowNewAgent(true)}
-              className="inline-block bg-ive-green-dark text-white font-bold px-6 py-2.5 rounded-lg text-sm"
+              className="inline-block bg-ive-green-dark text-white font-bold px-6 py-2.5 rounded-lg text-base"
             >
               <i className="fa-solid fa-plus mr-1.5" />첫 Agent 추가하기
             </button>

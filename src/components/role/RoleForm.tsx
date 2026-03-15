@@ -68,7 +68,7 @@ export default function RoleForm({ projectId, existing, onSuccess }: Props) {
     <form onSubmit={handleSubmit} className="flex flex-col gap-5">
       {/* 역할 카테고리 */}
       <div>
-        <label className="block text-xs font-semibold text-ive-text-muted mb-2">업무 단계 (카테고리)</label>
+        <label className="block text-base font-semibold text-ive-text-muted mb-2">업무 단계 (카테고리)</label>
         <div className="grid grid-cols-2 gap-2">
           {roleCategories.map(r => (
             <button
@@ -86,10 +86,10 @@ export default function RoleForm({ projectId, existing, onSuccess }: Props) {
             >
               <i className={`${r.icon} text-xl ${category === r.value ? 'text-ive-green' : 'text-ive-text-dim'}`} />
               <div className="space-y-0.5">
-                <div className={`text-sm font-black ${category === r.value ? 'text-ive-green' : 'text-ive-text'}`}>
+                <div className={`text-base font-black ${category === r.value ? 'text-ive-green' : 'text-ive-text'}`}>
                   {r.label}
                 </div>
-                <div className="text-[9px] text-ive-text-dim leading-tight">{r.desc}</div>
+                <div className="text-sm text-ive-text-dim leading-tight">{r.desc}</div>
               </div>
             </button>
           ))}
@@ -98,19 +98,19 @@ export default function RoleForm({ projectId, existing, onSuccess }: Props) {
 
       {/* 역할 이름 */}
       <div>
-        <label className="block text-xs font-semibold text-ive-text-muted mb-2">역할 이름</label>
+        <label className="block text-base font-semibold text-ive-text-muted mb-2">역할 이름</label>
         <input
           type="text"
           value={name}
           onChange={e => setName(e.target.value)}
           placeholder="예: API 서버 개발"
-          className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-sm text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green font-bold"
+          className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-base text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green font-bold"
         />
       </div>
 
       {/* 역할별 토큰 (선택) */}
       <div>
-        <label className="block text-xs font-semibold text-ive-text-muted mb-2">
+        <label className="block text-base font-semibold text-ive-text-muted mb-2">
           역할 전용 엑세스 토큰 <span className="text-ive-text-dim font-normal">(선택)</span>
         </label>
         <input
@@ -118,25 +118,25 @@ export default function RoleForm({ projectId, existing, onSuccess }: Props) {
           value={accessToken}
           onChange={e => setAccessToken(e.target.value)}
           placeholder="공란 시 프로젝트 기본 토큰을 사용"
-          className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-sm text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green font-mono"
+          className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-base text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green font-mono"
         />
       </div>
 
       {/* 최대 Agent 수 */}
       <div>
-        <label className="block text-xs font-semibold text-ive-text-muted mb-2">최대 투입 Agent 수</label>
+        <label className="block text-base font-semibold text-ive-text-muted mb-2">최대 투입 Agent 수</label>
         <div className="flex items-center gap-2 flex-wrap">
           <div className="flex bg-ive-bg-input border border-ive-border rounded-lg overflow-hidden">
             <button
               type="button"
               onClick={() => setMaxAgents(v => Math.max(1, v - 1))}
-              className="px-3 py-3 text-ive-text-muted hover:text-ive-green hover:bg-ive-green/10 transition-colors text-sm font-black"
+              className="px-3 py-3 text-ive-text-muted hover:text-ive-green hover:bg-ive-green/10 transition-colors text-base font-black"
             >−</button>
-            <span className="w-16 py-3 flex items-center justify-center text-sm font-black text-ive-text border-x border-ive-border">{maxAgents}</span>
+            <span className="w-16 py-3 flex items-center justify-center text-base font-black text-ive-text border-x border-ive-border">{maxAgents}</span>
             <button
               type="button"
               onClick={() => setMaxAgents(v => Math.min(100, v + 1))}
-              className="px-3 py-3 text-ive-text-muted hover:text-ive-green hover:bg-ive-green/10 transition-colors text-sm font-black"
+              className="px-3 py-3 text-ive-text-muted hover:text-ive-green hover:bg-ive-green/10 transition-colors text-base font-black"
             >+</button>
           </div>
           <div className="flex flex-wrap gap-1">
@@ -145,7 +145,7 @@ export default function RoleForm({ projectId, existing, onSuccess }: Props) {
                 key={n}
                 type="button"
                 onClick={() => setMaxAgents(n)}
-                className={`px-3 py-3 rounded-lg text-xs font-black border transition-all ${
+                className={`px-3 py-3 rounded-lg text-base font-black border transition-all ${
                   maxAgents === n
                     ? 'bg-ive-green/10 border-ive-green text-ive-green'
                     : 'bg-ive-bg-card border-ive-border-subtle text-ive-text-dim'
@@ -159,7 +159,7 @@ export default function RoleForm({ projectId, existing, onSuccess }: Props) {
       </div>
 
       {error && (
-        <div className="text-xs text-ive-red bg-ive-red/10 border border-ive-red/20 rounded-lg px-3 py-2 animate-shake">
+        <div className="text-base text-ive-red bg-ive-red/10 border border-ive-red/20 rounded-lg px-3 py-2 animate-shake">
           <i className="fa-solid fa-circle-exclamation mr-1.5" />{error}
         </div>
       )}
@@ -167,7 +167,7 @@ export default function RoleForm({ projectId, existing, onSuccess }: Props) {
       <button
         type="submit"
         disabled={loading}
-        className="w-full bg-ive-green-dark text-white font-black py-4 rounded-xl text-sm active:shadow-inner active:opacity-90 transition-all mt-4 disabled:opacity-50 shadow-lg shadow-ive-green/10"
+        className="w-full bg-ive-green-dark text-white font-black py-4 rounded-xl text-base active:shadow-inner active:opacity-90 transition-all mt-4 disabled:opacity-50 shadow-lg shadow-ive-green/10"
       >
         {loading ? (
           <><i className="fa-solid fa-spinner fa-spin mr-1.5" />처리 중...</>

@@ -20,7 +20,7 @@ export default function HomePage() {
   }, [state.authChecked, state.user, router])
 
   if (!state.authChecked || !state.user) {
-    return <div className="min-h-screen flex items-center justify-center text-ive-text-muted text-sm">불러오는 중...</div>
+    return <div className="min-h-screen flex items-center justify-center text-ive-text-muted text-base">불러오는 중...</div>
   }
 
   return (
@@ -28,12 +28,12 @@ export default function HomePage() {
       <header className="sticky top-0 z-40 bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark">
         <div className="flex items-center justify-between px-4 py-3 max-w-lg mx-auto">
           <div>
-            <h1 className="text-lg font-extrabold text-ive-green">Spring IVE</h1>
+            <h1 className="text-xl font-extrabold text-ive-green">Spring IVE</h1>
             <div className="flex items-center gap-2">
-              <p className="text-[10px] text-ive-text-muted">{state.user.name}</p>
+              <p className="text-sm text-ive-text-muted">{state.user.name}</p>
               <button
                 onClick={async () => { await logout(); router.push('/login') }}
-                className="text-[9px] text-ive-text-dim underline"
+                className="text-sm text-ive-text-dim underline"
               >
                 로그아웃
               </button>
@@ -43,21 +43,21 @@ export default function HomePage() {
             onClick={() => setShowNewProject(true)}
             className="w-9 h-9 rounded-full bg-ive-green flex items-center justify-center text-ive-bg-deep active:scale-95 transition-transform"
           >
-            <i className="fa-solid fa-plus text-sm" />
+            <i className="fa-solid fa-plus text-base" />
           </button>
         </div>
       </header>
 
       <main className="px-4 py-4 max-w-lg mx-auto">
         {state.loading ? (
-          <div className="text-center py-20 text-ive-text-muted text-sm">불러오는 중...</div>
+          <div className="text-center py-20 text-ive-text-muted text-base">불러오는 중...</div>
         ) : state.projects.length === 0 ? (
           <div className="text-center py-20">
             <i className="fa-solid fa-folder-open text-4xl text-ive-text-dim mb-4 block" />
-            <p className="text-sm text-ive-text-muted mb-4">아직 프로젝트가 없습니다</p>
+            <p className="text-base text-ive-text-muted mb-4">아직 프로젝트가 없습니다</p>
             <button
               onClick={() => setShowNewProject(true)}
-              className="inline-block bg-ive-green-dark text-white font-bold px-6 py-2.5 rounded-lg text-sm"
+              className="inline-block bg-ive-green-dark text-white font-bold px-6 py-2.5 rounded-lg text-base"
             >
               <i className="fa-solid fa-plus mr-1.5" />첫 프로젝트 만들기
             </button>

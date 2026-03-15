@@ -8,8 +8,8 @@ const roleConfig: Record<RoleCategory, { bg: string; text: string; icon: string 
 export default function RoleBadge({ category }: { category: RoleCategory }) {
   const config = roleConfig[category] || roleConfig['개발']
   return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-tighter ${config.bg} ${config.text}`}>
-      <i className={`${config.icon} text-[9px]`} />
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-sm font-black uppercase tracking-tighter ${config.bg} ${config.text}`}>
+      <i className={`${config.icon} text-sm`} />
       {category}
     </span>
   )

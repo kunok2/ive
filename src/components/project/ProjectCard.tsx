@@ -170,30 +170,30 @@ export default function ProjectCard({ project, roles }: Props) {
         <div className="flex items-start gap-3">
           {/* 플랫폼 아이콘 */}
           <div className="w-10 h-10 rounded-lg bg-ive-bg-deep border border-ive-border-subtle flex items-center justify-center shrink-0 mt-0.5">
-            <i className={`fa-brands ${project.provider === 'github' ? 'fa-github' : 'fa-gitlab'} text-lg text-ive-green`} />
+            <i className={`fa-brands ${project.provider === 'github' ? 'fa-github' : 'fa-gitlab'} text-xl text-ive-green`} />
           </div>
 
           <div className="flex-1 min-w-0">
-            <div className="font-bold text-sm text-ive-green-pale truncate leading-none mb-1">
+            <div className="font-bold text-base text-ive-green-pale truncate leading-none mb-1">
               {project.name}
             </div>
-            <div className="text-[10px] text-ive-text-muted font-mono opacity-60 mb-1 break-all leading-tight">
+            <div className="text-sm text-ive-text-muted font-mono opacity-60 mb-1 break-all leading-tight">
               {project.repoUrl}
             </div>
             <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
               <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden">
                 {project.lastCheckedAt ? (
                   <>
-                    <span className="text-[9px] text-ive-green/50 font-medium whitespace-nowrap flex items-center gap-1">
+                    <span className="text-sm text-ive-green/50 font-medium whitespace-nowrap flex items-center gap-1">
                       <i className="fa-solid fa-bolt-lightning opacity-70" />
                       {new Date(project.lastCheckedAt).toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).replace(',', '')}
                     </span>
-                    <span className="px-1 py-0.5 rounded bg-ive-green/10 text-[9px] text-ive-green/60 border border-ive-green/20 whitespace-nowrap shrink-0">
+                    <span className="px-1 py-0.5 rounded bg-ive-green/10 text-sm text-ive-green/60 border border-ive-green/20 whitespace-nowrap shrink-0">
                       {project.lastScannedIssueCount ?? 0} 이슈
                     </span>
                   </>
                 ) : (
-                  <span className="text-[9px] text-ive-text-dim italic font-medium opacity-50 whitespace-nowrap">No scan history</span>
+                  <span className="text-sm text-ive-text-dim italic font-medium opacity-50 whitespace-nowrap">No scan history</span>
                 )}
               </div>
             </div>
@@ -214,13 +214,13 @@ export default function ProjectCard({ project, roles }: Props) {
               >
                 <div className="absolute inset-[1px] rounded-full bg-ive-bg-card flex items-center justify-center shadow-lg">
                   {!project.scannerActive ? (
-                    <i className="fa-solid fa-circle-stop text-[10px] text-ive-red/60" />
+                    <i className="fa-solid fa-circle-stop text-sm text-ive-red/60" />
                   ) : timeLeft.text === '곧 실행' ? (
-                    <i className="fa-solid fa-circle-notch fa-spin text-[11px] text-ive-green" />
+                    <i className="fa-solid fa-circle-notch fa-spin text-base text-ive-green" />
                   ) : (
-                    <span className="text-[10px] font-black text-ive-green/90 flex items-baseline tracking-tight">
+                    <span className="text-sm font-black text-ive-green/90 flex items-baseline tracking-tight">
                       {timeLeft.displayValue}
-                      {timeLeft.unit && <span className="text-[6px] ml-0.5 opacity-60 font-black">{timeLeft.unit}</span>}
+                      {timeLeft.unit && <span className="text-xs ml-0.5 opacity-60 font-black">{timeLeft.unit}</span>}
                     </span>
                   )}
                 </div>
@@ -237,7 +237,7 @@ export default function ProjectCard({ project, roles }: Props) {
                     ? 'bg-ive-bg-deep text-ive-green/60 hover:text-ive-green hover:bg-ive-green/10 border border-ive-border-dark'
                     : 'bg-ive-red/10 text-ive-red border border-ive-red/30 hover:bg-ive-red/20 scale-105'
                 }`}>
-                  {project.scannerActive ? <i className="fa-solid fa-pause text-[9px]" /> : <i className="fa-solid fa-play text-[9px] ml-px" />}
+                  {project.scannerActive ? <i className="fa-solid fa-pause text-sm" /> : <i className="fa-solid fa-play text-sm ml-px" />}
                 </span>
               </button>
               <button
@@ -252,8 +252,8 @@ export default function ProjectCard({ project, roles }: Props) {
                     : 'bg-ive-bg-deep text-ive-green/60 hover:text-ive-green hover:bg-ive-green/10 border border-ive-border-dark'
                 }`}>
                   {scanning
-                    ? <i className="fa-solid fa-circle-notch fa-spin text-[9px]" />
-                    : <i className="fa-solid fa-rocket text-[9px]" />}
+                    ? <i className="fa-solid fa-circle-notch fa-spin text-sm" />
+                    : <i className="fa-solid fa-rocket text-sm" />}
                 </span>
               </button>
             </div>
@@ -262,16 +262,16 @@ export default function ProjectCard({ project, roles }: Props) {
 
         <div className="flex gap-4 mt-3 pt-3 border-t border-ive-border-dark">
           <div className="text-center">
-            <div className="text-base font-black text-ive-green-light leading-none">{roles.length}</div>
-            <div className="text-[8px] text-ive-text-muted uppercase tracking-tighter mt-1 font-bold">역할</div>
+            <div className="text-lg font-black text-ive-green-light leading-none">{roles.length}</div>
+            <div className="text-sm text-ive-text-muted uppercase tracking-tighter mt-1 font-bold">역할</div>
           </div>
           <div className="text-center">
-            <div className={`text-base font-black leading-none ${runningCount > 0 ? 'text-ive-amber animate-pulse' : 'text-ive-text-dim'}`}>{runningCount}</div>
-            <div className="text-[8px] text-ive-text-muted uppercase tracking-tighter mt-1 font-bold">작업중</div>
+            <div className={`text-lg font-black leading-none ${runningCount > 0 ? 'text-ive-amber animate-pulse' : 'text-ive-text-dim'}`}>{runningCount}</div>
+            <div className="text-sm text-ive-text-muted uppercase tracking-tighter mt-1 font-bold">작업중</div>
           </div>
           <div className="text-center">
-            <div className={`text-base font-black leading-none ${(project.lastScannedIssueCount ?? 0) > 0 ? 'text-ive-cyan' : 'text-ive-text-dim'}`}>{project.lastScannedIssueCount ?? 0}</div>
-            <div className="text-[8px] text-ive-text-muted uppercase tracking-tighter mt-1 font-bold">대기</div>
+            <div className={`text-lg font-black leading-none ${(project.lastScannedIssueCount ?? 0) > 0 ? 'text-ive-cyan' : 'text-ive-text-dim'}`}>{project.lastScannedIssueCount ?? 0}</div>
+            <div className="text-sm text-ive-text-muted uppercase tracking-tighter mt-1 font-bold">대기</div>
           </div>
           <div className="ml-auto flex items-center gap-1.5 self-end pb-0.5">
             <div className="flex gap-0.5">
@@ -279,7 +279,7 @@ export default function ProjectCard({ project, roles }: Props) {
                 <div key={i} className={`w-1 h-3 rounded-full ${i <= (roles.length > 3 ? 3 : roles.length) ? 'bg-ive-green/30' : 'bg-ive-border-dark'}`} />
               ))}
             </div>
-            <span className="text-[9px] text-ive-text-dim italic font-medium">Details</span>
+            <span className="text-sm text-ive-text-dim italic font-medium">Details</span>
           </div>
         </div>
       </Link>
@@ -287,26 +287,26 @@ export default function ProjectCard({ project, roles }: Props) {
       {/* 이슈 등록 버튼 */}
       <button
         onClick={openIssueModal}
-        className="w-full flex items-center justify-center gap-1.5 px-4 py-2.5 border-t border-ive-border-dark bg-ive-bg-deep/70 text-[10px] font-bold uppercase tracking-widest text-ive-text-dim hover:text-ive-green hover:bg-ive-green/5 transition-all"
+        className="w-full flex items-center justify-center gap-1.5 px-4 py-2.5 border-t border-ive-border-dark bg-ive-bg-deep/70 text-sm font-bold uppercase tracking-widest text-ive-text-dim hover:text-ive-green hover:bg-ive-green/5 transition-all"
       >
-        <i className="fa-solid fa-plus text-[9px]" />
+        <i className="fa-solid fa-plus text-sm" />
         이슈 등록
       </button>
 
       {/* 실행 기록 토글 */}
       <button
         onClick={() => setShowTrace(prev => !prev)}
-        className={`w-full flex items-center justify-between px-4 py-2.5 border-t text-[10px] font-bold uppercase tracking-widest transition-all ${
+        className={`w-full flex items-center justify-between px-4 py-2.5 border-t text-sm font-bold uppercase tracking-widest transition-all ${
           showTrace
             ? 'border-ive-cyan/20 bg-ive-cyan/5 text-ive-cyan'
             : 'border-ive-border-dark bg-ive-bg-deep/70 text-ive-text-dim hover:text-ive-cyan hover:bg-ive-cyan/5'
         }`}
       >
         <span className="flex items-center gap-1.5">
-          <i className="fa-solid fa-terminal text-[9px]" />
+          <i className="fa-solid fa-terminal text-sm" />
           실행 기록
         </span>
-        <i className={`fa-solid fa-chevron-${showTrace ? 'up' : 'down'} text-[8px]`} />
+        <i className={`fa-solid fa-chevron-${showTrace ? 'up' : 'down'} text-sm`} />
       </button>
 
       {showTrace && (
@@ -326,7 +326,7 @@ export default function ProjectCard({ project, roles }: Props) {
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-base font-black text-ive-green-pale flex items-center gap-2">
+              <h3 className="text-lg font-black text-ive-green-pale flex items-center gap-2">
                 <i className="fa-solid fa-circle-plus text-ive-green" />
                 이슈 등록 — {project.name}
               </h3>
@@ -342,14 +342,14 @@ export default function ProjectCard({ project, roles }: Props) {
                 value={issueTitle}
                 onChange={e => setIssueTitle(e.target.value)}
                 placeholder="이슈 제목"
-                className="w-full bg-ive-bg-input border border-ive-border rounded-xl px-4 py-4 text-base text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green"
+                className="w-full bg-ive-bg-input border border-ive-border rounded-xl px-4 py-4 text-lg text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green"
               />
               <textarea
                 ref={descRef}
                 value={issueDesc}
                 onChange={e => setIssueDesc(e.target.value)}
                 placeholder="설명 (선택)"
-                className="flex-1 min-h-0 w-full bg-ive-bg-input border border-ive-border rounded-xl px-4 py-4 text-sm text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green resize-none"
+                className="flex-1 min-h-0 w-full bg-ive-bg-input border border-ive-border rounded-xl px-4 py-4 text-base text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green resize-none"
               />
               <label className="flex items-center gap-3 cursor-pointer select-none py-1">
                 <div
@@ -358,14 +358,14 @@ export default function ProjectCard({ project, roles }: Props) {
                 >
                   <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${issueAsDev ? 'translate-x-5' : 'translate-x-0.5'}`} />
                 </div>
-                <span className="text-sm text-ive-text-muted">
+                <span className="text-base text-ive-text-muted">
                   바로 개발 의뢰로 처리
-                  <span className="ml-1.5 text-ive-green/60 font-mono text-xs">({project.labelTarget})</span>
+                  <span className="ml-1.5 text-ive-green/60 font-mono text-base">({project.labelTarget})</span>
                 </span>
               </label>
 
               {issueError && (
-                <div className="text-sm text-ive-red bg-ive-red/10 border border-ive-red/20 rounded-xl px-4 py-3">
+                <div className="text-base text-ive-red bg-ive-red/10 border border-ive-red/20 rounded-xl px-4 py-3">
                   <i className="fa-solid fa-circle-exclamation mr-1.5" />{issueError}
                 </div>
               )}
@@ -373,7 +373,7 @@ export default function ProjectCard({ project, roles }: Props) {
               <button
                 type="submit"
                 disabled={!issueTitle.trim() || issueSubmitting}
-                className="w-full bg-ive-green-dark text-white font-black py-4 rounded-xl text-base transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                className="w-full bg-ive-green-dark text-white font-black py-4 rounded-xl text-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {issueSubmitting
                   ? <><i className="fa-solid fa-circle-notch fa-spin mr-2" />등록 중...</>

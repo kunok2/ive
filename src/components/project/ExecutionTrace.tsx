@@ -105,7 +105,7 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
       {selectedId ? (
         <div className="flex-1 flex flex-col min-h-0 bg-black rounded-xl overflow-hidden border border-ive-border-dark shadow-2xl">
           <div className="bg-ive-bg-deep px-4 py-2 border-b border-ive-border-dark flex items-center justify-between shrink-0">
-            <span className="text-[10px] font-bold text-ive-green uppercase tracking-widest flex items-center gap-2">
+            <span className="text-sm font-bold text-ive-green uppercase tracking-widest flex items-center gap-2">
               Agent Trace Log
               {(() => {
                 const ex = executions.find(e => e.id === selectedId)
@@ -119,7 +119,7 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
             </span>
             <button 
               onClick={() => setSelectedId(null)}
-              className="text-[10px] font-bold text-ive-text-muted hover:text-ive-text bg-white/5 px-2 py-1 rounded"
+              className="text-sm font-bold text-ive-text-muted hover:text-ive-text bg-white/5 px-2 py-1 rounded"
             >
               목록으로 돌아가기
             </button>
@@ -131,7 +131,7 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
           {executions.length === 0 ? (
             <div className="text-center py-20 bg-ive-bg/50 rounded-2xl border border-dashed border-ive-border-subtle">
               <i className="fa-solid fa-list-check text-3xl text-ive-text-dim mb-3 block" />
-              <p className="text-xs text-ive-text-muted">아직 실행된 태스크가 없습니다</p>
+              <p className="text-base text-ive-text-muted">아직 실행된 태스크가 없습니다</p>
             </div>
           ) : (
             executions.map(ex => (
@@ -141,8 +141,8 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
                   className="w-full text-left bg-ive-bg-card border border-ive-border-subtle p-4 rounded-xl hover:border-ive-green/50 hover:bg-ive-green/5 transition-all group"
                 >
                   <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-xs font-black text-ive-green-pale">Issue #{ex.issueIid}</span>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-tighter ${
+                    <span className="text-base font-black text-ive-green-pale">Issue #{ex.issueIid}</span>
+                    <span className={`text-sm font-bold px-2 py-0.5 rounded-full uppercase tracking-tighter ${
                       ex.status === 'running' ? 'bg-ive-amber/20 text-ive-amber animate-pulse' :
                       ex.status === 'success' ? 'bg-ive-green/20 text-ive-green' :
                       'bg-ive-red/20 text-ive-red'
@@ -152,23 +152,23 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
                   </div>
                   <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                     {ex.roleName && (
-                      <span className="text-[10px] font-bold text-ive-cyan/80 bg-ive-cyan/10 border border-ive-cyan/20 px-1.5 py-0.5 rounded">
-                        <i className="fa-solid fa-id-badge mr-1 text-[8px]" />{ex.roleName}
+                      <span className="text-sm font-bold text-ive-cyan/80 bg-ive-cyan/10 border border-ive-cyan/20 px-1.5 py-0.5 rounded">
+                        <i className="fa-solid fa-id-badge mr-1 text-sm" />{ex.roleName}
                       </span>
                     )}
                     {ex.agentName && (
-                      <span className="text-[10px] font-bold text-ive-green/70 bg-ive-green/10 border border-ive-green/20 px-1.5 py-0.5 rounded">
-                        <i className="fa-solid fa-robot mr-1 text-[8px]" />{ex.agentName}
+                      <span className="text-sm font-bold text-ive-green/70 bg-ive-green/10 border border-ive-green/20 px-1.5 py-0.5 rounded">
+                        <i className="fa-solid fa-robot mr-1 text-sm" />{ex.agentName}
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center justify-between text-[10px] text-ive-text-muted group-hover:text-ive-text-dim">
+                  <div className="flex items-center justify-between text-sm text-ive-text-muted group-hover:text-ive-text-dim">
                     <span>
                       <i className="fa-solid fa-calendar-day mr-1" />
                       {new Date(ex.startedAt).toLocaleString()}
                     </span>
                     <span className={`font-mono font-bold ${ex.status === 'running' ? 'text-ive-amber' : 'text-ive-text-dim'}`}>
-                      {ex.status === 'running' && <i className="fa-solid fa-stopwatch mr-1 text-[9px]" />}
+                      {ex.status === 'running' && <i className="fa-solid fa-stopwatch mr-1 text-sm" />}
                       {formatDuration(ex.startedAt, ex.endedAt)}
                       {/* tick을 참조해 running 실행 시 리렌더 유발 */}
                       {ex.status === 'running' && tick >= 0 ? '' : ''}
@@ -188,7 +188,7 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
                       }
                     }}
                     disabled={killing === ex.id}
-                    className="absolute top-3 right-12 text-[10px] font-bold text-ive-red/70 border border-ive-red/30 px-2 py-1 rounded-lg bg-ive-bg-deep hover:bg-ive-red/10 transition-colors disabled:opacity-40"
+                    className="absolute top-3 right-12 text-sm font-bold text-ive-red/70 border border-ive-red/30 px-2 py-1 rounded-lg bg-ive-bg-deep hover:bg-ive-red/10 transition-colors disabled:opacity-40"
                   >
                     {killing === ex.id
                       ? <i className="fa-solid fa-circle-notch fa-spin" />

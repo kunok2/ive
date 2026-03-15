@@ -42,19 +42,19 @@ export default function ConfirmModal({
           <div className={`w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center ${danger ? 'bg-ive-red/15' : 'bg-ive-green/15'}`}>
             <i className={`fa-solid ${danger ? 'fa-triangle-exclamation text-ive-red' : 'fa-circle-question text-ive-green'} text-xl`} />
           </div>
-          <h3 className="text-sm font-bold text-ive-green-pale mb-1">{title}</h3>
-          <p className="text-xs text-ive-text-muted">{message}</p>
+          <h3 className="text-base font-bold text-ive-green-pale mb-1">{title}</h3>
+          <p className="text-base text-ive-text-muted">{message}</p>
         </div>
         <div className="flex border-t border-ive-border-dark">
           <button
             onClick={onClose}
-            className="flex-1 py-3 text-sm font-semibold text-ive-text-muted border-r border-ive-border-dark rounded-bl-2xl active:bg-ive-bg-deep transition-colors"
+            className="flex-1 py-3 text-base font-semibold text-ive-text-muted border-r border-ive-border-dark rounded-bl-2xl active:bg-ive-bg-deep transition-colors"
           >
             {cancelLabel}
           </button>
           <button
             onClick={() => { onConfirm(); onClose() }}
-            className={`flex-1 py-3 text-sm font-bold rounded-br-2xl active:opacity-80 transition-colors ${
+            className={`flex-1 py-3 text-base font-bold rounded-br-2xl active:opacity-80 transition-colors ${
               danger ? 'text-ive-red' : 'text-ive-green'
             }`}
           >

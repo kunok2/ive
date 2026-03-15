@@ -21,11 +21,11 @@ export default function NewRolePage({ params }: { params: Promise<{ id: string }
     <div className="min-h-screen">
       <header className="sticky top-0 z-40 bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark shadow">
         <div className="flex items-center gap-3 px-4 py-3 max-w-lg mx-auto">
-          <button onClick={() => router.back()} className="text-ive-green text-sm font-semibold hover:opacity-75 transition-opacity">
+          <button onClick={() => router.back()} className="text-ive-green text-base font-semibold hover:opacity-75 transition-opacity">
             <i className="fa-solid fa-arrow-left mr-1" />뒤로
           </button>
-          <h1 className="text-base font-bold text-ive-green-pale">역할 정의</h1>
-          <span className="text-[10px] text-ive-text-muted ml-auto truncate font-medium uppercase tracking-wider">{project.name}</span>
+          <h1 className="text-lg font-bold text-ive-green-pale">역할 정의</h1>
+          <span className="text-sm text-ive-text-muted ml-auto truncate font-medium uppercase tracking-wider">{project.name}</span>
         </div>
       </header>
       <main className="px-4 py-6 max-w-lg mx-auto">
