@@ -212,7 +212,7 @@ export default function ProjectCard({ project, roles }: Props) {
                     : 'none'
                 }}
               >
-                <div className="absolute inset-[3px] rounded-full bg-ive-bg-card flex items-center justify-center shadow-lg">
+                <div className="absolute inset-[2px] rounded-full bg-ive-bg-card flex items-center justify-center shadow-lg">
                   {!project.scannerActive ? (
                     <i className="fa-solid fa-circle-stop text-sm text-ive-red/60" />
                   ) : timeLeft.text === '곧 실행' ? (
