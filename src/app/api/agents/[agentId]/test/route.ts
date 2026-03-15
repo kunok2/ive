@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getAgent } from '@/lib/db'
+import { getAgent, updateAgent } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { execFile } from 'child_process'
 import { existsSync } from 'fs'
@@ -33,6 +33,11 @@ export async function POST(_req: Request, { params }: { params: Promise<{ agentI
         }
       })
     })
+
+    // 버전 정보를 DB에 저장
+    if (version) {
+      updateAgent({ ...agent, cliVersion: version })
+    }
 
     return NextResponse.json({
       success: true,

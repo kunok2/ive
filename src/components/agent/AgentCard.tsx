@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Agent, CliName } from '@/types'
+import { useStore } from '@/lib/store'
 
 interface Props {
   agent: Agent
@@ -21,6 +22,7 @@ const statusConfig = {
 }
 
 export default function AgentCard({ agent, onDelete, compact, assignedCount }: Props) {
+  const { refreshAgents } = useStore()
   const cli = cliConfig[agent.cliName]
   const status = statusConfig[agent.status]
   const [testing, setTesting] = useState(false)
@@ -34,6 +36,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedCount }: P
       const data = await res.json()
       if (data.success) {
         setTestResult({ success: true, message: data.version || '정상 동작' })
+        refreshAgents()
       } else {
         setTestResult({ success: false, message: data.error || '연결 실패' })
       }
