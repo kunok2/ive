@@ -23,7 +23,17 @@ const TabContext = createContext<{
 })
 
 export function TabProvider({ children }: { children: ReactNode }) {
-  const [activeTab, setActiveTab] = useState<TabKey>('projects')
+  const [activeTab, setActiveTabState] = useState<TabKey>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('ive-active-tab')
+      if (saved && ['projects', 'issues', 'agents', 'terminal'].includes(saved)) return saved as TabKey
+    }
+    return 'projects'
+  })
+  const setActiveTab = useCallback((tab: TabKey) => {
+    setActiveTabState(tab)
+    localStorage.setItem('ive-active-tab', tab)
+  }, [])
   const [issuesProjectId, setIssuesProjectId] = useState<string | null>(null)
   const [issuesFilter, setIssuesFilter] = useState('all')
 
