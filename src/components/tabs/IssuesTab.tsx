@@ -345,7 +345,7 @@ export default function IssuesTab() {
       {/* 스크롤 가능한 리스트 영역 */}
       {selectedProjectId && (
         <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar" data-scroll-container="issues-list">
-          <div className="px-4 pb-4 max-w-lg mx-auto">
+          <div className="px-4 pb-4 max-w-lg mx-auto w-full">
             {loading ? (
               <div className="text-center py-20 text-ive-text-muted">이슈 불러오는 중...</div>
             ) : filtered.length === 0 ? (
