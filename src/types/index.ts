@@ -44,8 +44,6 @@ export interface Project {
   labelTarget: string      // 대상 이슈 레이블 (예: IVE)
   labelInProgress: string  // 진행 중 레이블 (예: IVE(D))
   labelFailDev: string     // 개발 실패 (예: IVE(DF))
-  labelValidation: string  // 검증 단계 레이블 (예: IVE(V))
-  labelFailVal: string     // 검증 실패 (예: IVE(VF))
   labelDone: string        // 완료 레이블 (예: IVE(E))
   checkInterval: number    // 체크 간격 (분)
   lastCheckedAt: string | null // 마지막 체크 시간

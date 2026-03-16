@@ -30,8 +30,6 @@ const STAGE_INFO: Record<string, { label: string; color: string; icon: string; b
   waiting:    { label: '대기',     color: 'text-ive-green',    icon: 'fa-clock',              bg: 'bg-ive-green/10' },
   dev:        { label: '개발 중',  color: 'text-ive-cyan',     icon: 'fa-code',               bg: 'bg-ive-cyan/10' },
   dev_fail:   { label: '개발 실패', color: 'text-ive-red',     icon: 'fa-circle-xmark',       bg: 'bg-ive-red/10' },
-  validation: { label: '검증 대기', color: 'text-ive-amber',   icon: 'fa-flask',              bg: 'bg-ive-amber/10' },
-  val_fail:   { label: '검증 실패', color: 'text-ive-red',     icon: 'fa-triangle-exclamation', bg: 'bg-ive-red/10' },
   done:       { label: '완료',     color: 'text-emerald-400', icon: 'fa-circle-check',       bg: 'bg-emerald-500/10' },
   unknown:    { label: '알 수 없음', color: 'text-ive-text-dim', icon: 'fa-question',         bg: 'bg-white/5' },
 }
@@ -51,15 +49,7 @@ const STAGE_ACTIONS: Record<string, StageAction[]> = {
   dev_fail: [
     { action: 'retry', label: '재시도 (대기로)', icon: 'fa-rotate' },
   ],
-  validation: [
-    { action: 'reject', label: '반려 (대기로)', icon: 'fa-rotate-left', danger: true },
-  ],
-  val_fail: [
-    { action: 'revalidate', label: '재검증', icon: 'fa-flask' },
-    { action: 'retry', label: '재개발 (대기로)', icon: 'fa-rotate' },
-  ],
   done: [
-    { action: 'revalidate', label: '재검증 요청', icon: 'fa-flask' },
     { action: 'reopen', label: '다시 열기 (대기로)', icon: 'fa-rotate' },
   ],
 }

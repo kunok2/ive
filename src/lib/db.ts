@@ -256,7 +256,7 @@ type ProjectRow = {
   id: string; user_id: string; name: string; provider: string;
   repo_url: string; access_token: string; color: string; created_at: string;
   label_target: string; label_in_progress: string; label_fail_dev: string;
-  label_validation: string; label_fail_val: string; label_done: string;
+  label_done: string;
   check_interval: number; last_checked_at: string | null;
   last_scanned_issue_count: number | null; scanner_active: number;
   last_error: string | null; last_error_at: string | null;
@@ -271,7 +271,6 @@ function mapProject(r: ProjectRow): Project {
     createdAt: r.created_at,
     labelTarget: r.label_target, labelInProgress: r.label_in_progress,
     labelFailDev: r.label_fail_dev,
-    labelValidation: r.label_validation, labelFailVal: r.label_fail_val,
     labelDone: r.label_done,
     checkInterval: r.check_interval,
     lastCheckedAt: r.last_checked_at,
@@ -307,13 +306,13 @@ export function createProject(p: Project) {
   getDb().prepare(
     `INSERT INTO projects (
       id, user_id, name, provider, repo_url, access_token, color,
-      label_target, label_in_progress, label_fail_dev, label_validation, label_fail_val, label_done,
+      label_target, label_in_progress, label_fail_dev, label_done,
       check_interval, last_checked_at, last_scanned_issue_count, scanner_active, sort_order,
       snapshot_interval, sparkline_points, stats_retention, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     p.id, p.userId, p.name, p.provider, p.repoUrl, p.accessToken, p.color || '#4ade80',
-    p.labelTarget, p.labelInProgress, p.labelFailDev, p.labelValidation, p.labelFailVal, p.labelDone,
+    p.labelTarget, p.labelInProgress, p.labelFailDev, p.labelDone,
     p.checkInterval, p.lastCheckedAt, p.lastScannedIssueCount, p.scannerActive ? 1 : 0, sortOrder,
     p.snapshotInterval ?? 1, p.sparklinePoints ?? 60, p.statsRetention ?? 7, p.createdAt
   )
@@ -324,7 +323,7 @@ export function updateProject(p: Project) {
     `UPDATE projects SET
       name = ?, repo_url = ?, access_token = ?, color = ?,
       label_target = ?, label_in_progress = ?, label_fail_dev = ?,
-      label_validation = ?, label_fail_val = ?, label_done = ?,
+      label_done = ?,
       check_interval = ?, last_checked_at = ?, last_scanned_issue_count = ?,
       scanner_active = ?, sort_order = ?,
       snapshot_interval = ?, sparkline_points = ?, stats_retention = ?
@@ -332,7 +331,7 @@ export function updateProject(p: Project) {
   ).run(
     p.name, p.repoUrl, p.accessToken, p.color || '#4ade80',
     p.labelTarget, p.labelInProgress, p.labelFailDev,
-    p.labelValidation, p.labelFailVal, p.labelDone,
+    p.labelDone,
     p.checkInterval, p.lastCheckedAt, p.lastScannedIssueCount,
     p.scannerActive ? 1 : 0, p.sortOrder ?? 0,
     p.snapshotInterval ?? 1, p.sparklinePoints ?? 60, p.statsRetention ?? 7,

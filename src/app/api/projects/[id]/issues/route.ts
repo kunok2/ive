@@ -18,7 +18,7 @@ export async function GET(
     // IVE 라벨 목록
     const iveLabels = [
       project.labelTarget, project.labelInProgress, project.labelFailDev,
-      project.labelValidation, project.labelFailVal, project.labelDone,
+      project.labelDone,
     ];
 
     // 각 이슈에 stage 정보 부여
@@ -26,8 +26,6 @@ export async function GET(
       [project.labelTarget]: 'waiting',
       [project.labelInProgress]: 'dev',
       [project.labelFailDev]: 'dev_fail',
-      [project.labelValidation]: 'validation',
-      [project.labelFailVal]: 'val_fail',
       [project.labelDone]: 'done',
     };
 

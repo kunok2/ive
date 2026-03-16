@@ -24,18 +24,8 @@ function getTransitions(project: any): Record<string, StageTransition[]> {
     dev_fail: [
       { action: 'retry', fromLabel: project.labelFailDev, toLabel: project.labelTarget },
     ],
-    // 검증 대기
-    validation: [
-      { action: 'reject', fromLabel: project.labelValidation, toLabel: project.labelTarget },
-    ],
-    // 검증 실패 → 재검증 또는 재개발
-    val_fail: [
-      { action: 'revalidate', fromLabel: project.labelFailVal, toLabel: project.labelValidation },
-      { action: 'retry', fromLabel: project.labelFailVal, toLabel: project.labelTarget },
-    ],
-    // 완료 → 다시 검증 요청
+    // 완료 → 다시 열기
     done: [
-      { action: 'revalidate', fromLabel: project.labelDone, toLabel: project.labelValidation },
       { action: 'reopen', fromLabel: project.labelDone, toLabel: project.labelTarget },
     ],
   };
