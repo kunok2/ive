@@ -28,6 +28,7 @@ const STAGE_INFO: Record<string, { label: string; color: string; icon: string }>
 
 const FILTER_TABS = [
   { key: 'all', label: '전체' },
+  { key: 'waiting', label: '대기' },
   { key: 'active', label: '진행' },
   { key: 'failed', label: '실패' },
   { key: 'done', label: '완료' },
@@ -125,7 +126,8 @@ export default function IssuesTab() {
 
   const filtered = issues.filter(issue => {
     if (filter === 'all') return true
-    if (filter === 'active') return ['waiting', 'dev', 'validation'].includes(issue.stage)
+    if (filter === 'waiting') return issue.stage === 'waiting'
+    if (filter === 'active') return ['dev', 'validation'].includes(issue.stage)
     if (filter === 'failed') return ['dev_fail', 'val_fail'].includes(issue.stage)
     if (filter === 'done') return issue.stage === 'done'
     return true
@@ -149,6 +151,7 @@ export default function IssuesTab() {
     if (selected.size === 0) return
     const selectedIssues = issues.filter(i => selected.has(i.iid))
     const stage = selectedIssues[0].stage
+    const isClose = action === 'close'
     cancelRef.current = false
     setBulkProgress({ total: selectedIssues.length, done: 0, failed: 0 })
 
@@ -157,10 +160,13 @@ export default function IssuesTab() {
     for (const issue of selectedIssues) {
       if (cancelRef.current) break
       try {
-        const res = await fetch(`/api/projects/${selectedProjectId}/issues/${issue.iid}/stage`, {
+        const url = isClose
+          ? `/api/projects/${selectedProjectId}/issues/${issue.iid}/close`
+          : `/api/projects/${selectedProjectId}/issues/${issue.iid}/stage`
+        const res = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ stage, action }),
+          ...(isClose ? {} : { body: JSON.stringify({ stage, action }) }),
         })
         if (!res.ok) failed++
         else done++
@@ -400,23 +406,37 @@ export default function IssuesTab() {
                 {!bulkProgress && selected.size > 0 && (
                   <div className="flex gap-2 flex-wrap">
                     {stages.size > 1 ? (
-                      <span className="text-xs text-ive-amber py-1">같은 단계의 이슈만 선택하면 일괄 변경할 수 있습니다</span>
-                    ) : bulkActions.length === 0 ? (
-                      <span className="text-xs text-ive-text-dim py-1">이 단계에서는 일괄 변경할 수 없습니다</span>
-                    ) : (
-                      bulkActions.map(act => (
+                      <>
+                        <span className="text-xs text-ive-amber py-1">같은 단계의 이슈만 선택하면 일괄 변경할 수 있습니다</span>
                         <button
-                          key={act.action}
-                          onClick={() => handleBulkAction(act.action)}
-                          className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-all active:scale-95 ${
-                            act.danger
-                              ? 'text-ive-red/80 border-ive-red/30 bg-ive-bg-deep hover:bg-ive-red/10'
-                              : 'text-ive-green border-ive-green/30 bg-ive-bg-deep hover:bg-ive-green/10'
-                          }`}
+                          onClick={() => handleBulkAction('close')}
+                          className="text-xs font-bold px-3 py-1.5 rounded-lg border text-ive-red/80 border-ive-red/30 bg-ive-bg-deep hover:bg-ive-red/10 transition-all active:scale-95"
                         >
-                          <i className={`fa-solid ${act.icon} mr-1`} />{act.label} ({selected.size})
+                          <i className="fa-solid fa-xmark mr-1" />닫기 ({selected.size})
                         </button>
-                      ))
+                      </>
+                    ) : (
+                      <>
+                        {bulkActions.map(act => (
+                          <button
+                            key={act.action}
+                            onClick={() => handleBulkAction(act.action)}
+                            className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-all active:scale-95 ${
+                              act.danger
+                                ? 'text-ive-red/80 border-ive-red/30 bg-ive-bg-deep hover:bg-ive-red/10'
+                                : 'text-ive-green border-ive-green/30 bg-ive-bg-deep hover:bg-ive-green/10'
+                            }`}
+                          >
+                            <i className={`fa-solid ${act.icon} mr-1`} />{act.label} ({selected.size})
+                          </button>
+                        ))}
+                        <button
+                          onClick={() => handleBulkAction('close')}
+                          className="text-xs font-bold px-3 py-1.5 rounded-lg border text-ive-red/80 border-ive-red/30 bg-ive-bg-deep hover:bg-ive-red/10 transition-all active:scale-95"
+                        >
+                          <i className="fa-solid fa-xmark mr-1" />닫기 ({selected.size})
+                        </button>
+                      </>
                     )}
                   </div>
                 )}
