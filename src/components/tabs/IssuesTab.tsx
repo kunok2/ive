@@ -83,7 +83,7 @@ export default function IssuesTab() {
       })
       sessionStorage.removeItem('issues-scroll')
     }
-  }, [filtered])
+  }, [issues])
 
   const toggleSelect = (iid: number) => {
     setSelected(prev => {
