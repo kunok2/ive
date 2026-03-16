@@ -67,6 +67,11 @@ export default function IssuesTab() {
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [bulkProgress, setBulkProgress] = useState<{ total: number; done: number; failed: number } | null>(null)
   const cancelRef = useRef(false)
+  const [showAddForm, setShowAddForm] = useState(false)
+  const [newTitle, setNewTitle] = useState('')
+  const [newDesc, setNewDesc] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [closing, setClosing] = useState<number | null>(null)
 
   const setSelectedProjectId = (id: string) => setIssuesProjectId(id)
   const setFilter = (f: string) => setIssuesFilter(f)
@@ -181,6 +186,40 @@ export default function IssuesTab() {
     else setSelected(new Set(filtered.map(i => i.iid)))
   }
 
+  const handleCreateIssue = async () => {
+    if (!newTitle.trim() || !selectedProjectId) return
+    setCreating(true)
+    try {
+      const res = await fetch(`/api/projects/${selectedProjectId}/issues`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: newTitle.trim(), description: newDesc.trim(), asDev: true }),
+      })
+      if (res.ok) {
+        setNewTitle('')
+        setNewDesc('')
+        setShowAddForm(false)
+        fetchIssues()
+      }
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  const handleCloseIssue = async (e: React.MouseEvent, iid: number) => {
+    e.stopPropagation()
+    if (closing) return
+    setClosing(iid)
+    try {
+      const res = await fetch(`/api/projects/${selectedProjectId}/issues/${iid}/close`, {
+        method: 'POST',
+      })
+      if (res.ok) fetchIssues()
+    } finally {
+      setClosing(null)
+    }
+  }
+
   const selectedProject = state.projects.find(p => p.id === selectedProjectId)
   const bulkActions = getAvailableBulkActions()
   const stages = selectedStages()
@@ -222,6 +261,15 @@ export default function IssuesTab() {
                     <div className="text-lg font-black text-ive-green-light">{issues.length}</div>
                     <div className="text-xs text-ive-text-dim">이슈</div>
                   </div>
+                  {!bulkMode && (
+                    <button
+                      onClick={() => setShowAddForm(true)}
+                      className="w-8 h-8 rounded-full bg-ive-green/20 border border-ive-green/30 flex items-center justify-center text-ive-green hover:bg-ive-green/30 transition-all"
+                      title="이슈 추가"
+                    >
+                      <i className="fa-solid fa-plus text-sm" />
+                    </button>
+                  )}
                   {issues.length > 0 && !bulkMode && (
                     <button
                       onClick={() => setBulkMode(true)}
@@ -253,6 +301,43 @@ export default function IssuesTab() {
                 </button>
               ))}
             </div>
+
+            {/* 이슈 추가 폼 */}
+            {showAddForm && (
+              <div className="mb-3 bg-ive-bg-card border border-ive-green/30 rounded-xl p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-bold text-ive-green">
+                    <i className="fa-solid fa-plus mr-1" />새 이슈 추가
+                  </span>
+                  <button onClick={() => { setShowAddForm(false); setNewTitle(''); setNewDesc('') }} className="text-xs text-ive-text-dim hover:text-ive-text font-bold px-2 py-1 rounded-lg hover:bg-white/5 transition-all">
+                    취소
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  value={newTitle}
+                  onChange={e => setNewTitle(e.target.value)}
+                  placeholder="이슈 제목"
+                  className="w-full mb-2 bg-ive-bg-deep border border-ive-border-dark rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim focus:outline-none focus:border-ive-green/50"
+                  autoFocus
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleCreateIssue() } }}
+                />
+                <textarea
+                  value={newDesc}
+                  onChange={e => setNewDesc(e.target.value)}
+                  placeholder="설명 (선택사항)"
+                  rows={2}
+                  className="w-full mb-2 bg-ive-bg-deep border border-ive-border-dark rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-green/50"
+                />
+                <button
+                  onClick={handleCreateIssue}
+                  disabled={creating || !newTitle.trim()}
+                  className="w-full py-2 rounded-lg bg-ive-green text-ive-bg-deep text-sm font-bold transition-all active:scale-[0.98] disabled:opacity-40"
+                >
+                  {creating ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />생성 중...</> : <><i className="fa-solid fa-paper-plane mr-1" />이슈 생성</>}
+                </button>
+              </div>
+            )}
 
             {/* 벌크 모드 툴바 */}
             {bulkMode && (
@@ -405,6 +490,16 @@ export default function IssuesTab() {
                             month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
                           })}
                         </span>
+                        {!bulkMode && (
+                          <button
+                            onClick={(e) => handleCloseIssue(e, issue.iid)}
+                            disabled={closing === issue.iid}
+                            className="ml-auto text-xs font-bold text-ive-text-dim hover:text-ive-red border border-ive-border-subtle hover:border-ive-red/30 px-2 py-0.5 rounded-lg transition-all active:scale-95 disabled:opacity-40"
+                            title="이슈 닫기"
+                          >
+                            {closing === issue.iid ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-xmark mr-0.5" />닫기</>}
+                          </button>
+                        )}
                       </div>
                     </div>
                   )
