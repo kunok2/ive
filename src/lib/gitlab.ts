@@ -87,11 +87,16 @@ export async function fetchGitLabIssues(project: Project, decryptedToken: string
       }
     );
 
-    if (!res.ok) throw new Error(`Failed to fetch issues: ${res.statusText}`);
+    if (!res.ok) {
+      const status = res.status;
+      if (status === 401) throw new Error('인증 토큰이 유효하지 않거나 만료되었습니다.');
+      if (status === 404) throw new Error('프로젝트를 찾을 수 없습니다. 저장소 주소를 확인하세요.');
+      if (status === 403) throw new Error('접근 권한이 없습니다. 토큰 권한을 확인하세요.');
+      throw new Error(`GitLab API 오류 (${status}): ${res.statusText}`);
+    }
     return await res.json();
   } catch (err) {
-    console.error(`[GitLab] Error fetching issues for ${project.name}:`, err);
-    return [];
+    throw err;
   }
 }
 
@@ -263,6 +268,41 @@ export async function addGitLabMRNote(project: Project, decryptedToken: string, 
     });
   } catch (err) {
     console.error(`[GitLab] Error adding note to MR #${mrIid}:`, err);
+  }
+}
+
+/**
+ * 프로젝트의 IVE 관련 이슈를 모두 가져옵니다 (모든 IVE 레이블 대상).
+ */
+export async function fetchAllIveIssues(project: Project, decryptedToken: string) {
+  const projectPath = getProjectPath(project.repoUrl);
+  if (!projectPath) return [];
+
+  const allLabels = [
+    project.labelTarget, project.labelInProgress, project.labelFailDev,
+    project.labelValidation, project.labelFailVal, project.labelDone,
+  ];
+
+  try {
+    const results: any[] = [];
+    for (const label of allLabels) {
+      const res = await fetch(
+        `https://gitlab.com/api/v4/projects/${projectPath}/issues?labels=${encodeURIComponent(label)}&state=opened&per_page=100`,
+        { headers: { 'PRIVATE-TOKEN': decryptedToken } }
+      );
+      if (res.ok) {
+        const issues = await res.json();
+        for (const issue of issues) {
+          if (!results.some(r => r.iid === issue.iid)) {
+            results.push(issue);
+          }
+        }
+      }
+    }
+    return results.sort((a, b) => b.iid - a.iid);
+  } catch (err) {
+    console.error(`[GitLab] Error fetching all IVE issues for ${project.name}:`, err);
+    return [];
   }
 }
 

@@ -139,6 +139,10 @@ function initSchema(db: Database.Database) {
     if (!tableInfo.some(col => col.name === 'scanner_active')) {
       db.exec("ALTER TABLE projects ADD COLUMN scanner_active INTEGER NOT NULL DEFAULT 1")
     }
+    if (!tableInfo.some(col => col.name === 'last_error')) {
+      db.exec("ALTER TABLE projects ADD COLUMN last_error TEXT")
+      db.exec("ALTER TABLE projects ADD COLUMN last_error_at TEXT")
+    }
   } catch (e) { console.error("Migration failed for projects:", e) }
 
   try {
@@ -235,6 +239,8 @@ export function getAllProjects(): Project[] {
     check_interval: number; last_checked_at: string | null;
     last_scanned_issue_count: number | null;
     scanner_active: number;
+    last_error: string | null;
+    last_error_at: string | null;
   }[]
   return rows.map(r => ({
     id: r.id, userId: r.user_id, name: r.name, provider: r.provider as Project['provider'],
@@ -248,6 +254,8 @@ export function getAllProjects(): Project[] {
     lastCheckedAt: r.last_checked_at,
     lastScannedIssueCount: r.last_scanned_issue_count,
     scannerActive: r.scanner_active === 1,
+    lastError: r.last_error ?? null,
+    lastErrorAt: r.last_error_at ?? null,
   }))
 }
 
@@ -260,6 +268,8 @@ export function getProjectsByUser(userId: string): Project[] {
     check_interval: number; last_checked_at: string | null;
     last_scanned_issue_count: number | null;
     scanner_active: number;
+    last_error: string | null;
+    last_error_at: string | null;
   }[]
   return rows.map(r => ({
     id: r.id, userId: r.user_id, name: r.name, provider: r.provider as Project['provider'],
@@ -273,6 +283,8 @@ export function getProjectsByUser(userId: string): Project[] {
     lastCheckedAt: r.last_checked_at,
     lastScannedIssueCount: r.last_scanned_issue_count,
     scannerActive: r.scanner_active === 1,
+    lastError: r.last_error ?? null,
+    lastErrorAt: r.last_error_at ?? null,
   }))
 }
 
@@ -285,6 +297,8 @@ export function getProject(id: string): Project | null {
     check_interval: number; last_checked_at: string | null;
     last_scanned_issue_count: number | null;
     scanner_active: number;
+    last_error: string | null;
+    last_error_at: string | null;
   } | undefined
   if (!r) return null
   return {
@@ -299,6 +313,8 @@ export function getProject(id: string): Project | null {
     lastCheckedAt: r.last_checked_at,
     lastScannedIssueCount: r.last_scanned_issue_count,
     scannerActive: r.scanner_active === 1,
+    lastError: r.last_error ?? null,
+    lastErrorAt: r.last_error_at ?? null,
   }
 }
 
@@ -336,7 +352,15 @@ export function updateProject(p: Project) {
 }
 
 export function updateProjectLastChecked(id: string, timestamp: string, issueCount: number) {
-  getDb().prepare('UPDATE projects SET last_checked_at = ?, last_scanned_issue_count = ? WHERE id = ?').run(timestamp, issueCount, id)
+  getDb().prepare('UPDATE projects SET last_checked_at = ?, last_scanned_issue_count = ?, last_error = NULL, last_error_at = NULL WHERE id = ?').run(timestamp, issueCount, id)
+}
+
+export function updateProjectError(id: string, error: string) {
+  getDb().prepare('UPDATE projects SET last_error = ?, last_error_at = ? WHERE id = ?').run(error, new Date().toISOString(), id)
+}
+
+export function clearProjectError(id: string) {
+  getDb().prepare('UPDATE projects SET last_error = NULL, last_error_at = NULL WHERE id = ?').run(id)
 }
 
 export function deleteProject(id: string, userId: string) {

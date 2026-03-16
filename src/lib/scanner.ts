@@ -1,6 +1,7 @@
 import {
   getAllProjects,
   updateProjectLastChecked,
+  updateProjectError,
   getRolesByProject,
   getRoleAssignments,
   createExecution,
@@ -296,7 +297,9 @@ export async function scanProject(project: Project, force: boolean = false) {
     updateProjectLastChecked(project.id, now.toISOString(), issueCount);
     
   } catch (err) {
-    console.error(`[Scanner] Error scanning project ${project.name}:`, err);
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[Scanner] Error scanning project ${project.name}:`, msg);
+    updateProjectError(project.id, msg);
   }
 }
 

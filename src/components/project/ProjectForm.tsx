@@ -17,7 +17,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
   const [color, setColor] = useState<ProjectColor>(existing?.color ?? '#4ade80')
   const [name, setName] = useState(existing?.name ?? '')
   const [repoUrl, setRepoUrl] = useState(existing?.repoUrl ?? '')
-  const [accessToken, setAccessToken] = useState(existing?.accessToken ?? '')
+  const [accessToken, setAccessToken] = useState('')
   
   // 이슈 레이블 설정 추가
   const [labelTarget, setLabelTarget] = useState(existing?.labelTarget ?? 'IVE')
@@ -34,14 +34,14 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!name.trim() || !repoUrl.trim() || !accessToken.trim()) return
+    if (!name.trim() || !repoUrl.trim() || (!existing && !accessToken.trim())) return
 
     const projectData = {
       name: name.trim(),
       provider: detectProvider(repoUrl.trim()),
       color,
       repoUrl: repoUrl.trim(),
-      accessToken: accessToken.trim(),
+      accessToken: accessToken.trim() || (existing?.accessToken ?? ''),
       labelTarget: labelTarget.trim(),
       labelInProgress: labelInProgress.trim(),
       labelFailDev: labelFailDev.trim(),
@@ -52,6 +52,8 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
       lastCheckedAt: null,
       lastScannedIssueCount: null,
       scannerActive: false,
+      lastError: null,
+      lastErrorAt: null,
     }
 
     if (existing) {
@@ -128,7 +130,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
           type="password"
           value={accessToken}
           onChange={e => setAccessToken(e.target.value)}
-          placeholder="ghp_xxxxxxxxxxxx"
+          placeholder={existing ? '변경 시에만 입력' : 'ghp_xxxxxxxxxxxx'}
           className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-base text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green font-mono"
         />
         <p className="text-sm text-ive-text-dim mt-1">

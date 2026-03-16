@@ -270,6 +270,18 @@ export default function ProjectCard({ project, roles }: Props) {
           </div>
         </div>
 
+        {project.lastError && (
+          <div className="mt-3 mx-0 bg-ive-red/10 border border-ive-red/20 rounded-lg px-3 py-2 text-sm text-ive-red/80">
+            <i className="fa-solid fa-triangle-exclamation mr-1.5" />
+            <span className="font-bold">오류:</span> {project.lastError}
+            {project.lastErrorAt && (
+              <span className="text-ive-red/50 ml-1.5 text-xs">
+                ({new Date(project.lastErrorAt).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })})
+              </span>
+            )}
+          </div>
+        )}
+
         <div className="flex gap-4 mt-3 pt-3 border-t border-ive-border-dark">
           <div className="text-center">
             <div className="text-lg font-black text-ive-green-light leading-none">{roles.length}</div>

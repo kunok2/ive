@@ -53,6 +53,8 @@ export interface Project {
   lastCheckedAt: string | null // 마지막 체크 시간
   lastScannedIssueCount: number | null // 마지막 스캔 이슈 수
   scannerActive: boolean   // 스캐너 활성화 여부
+  lastError: string | null      // 마지막 에러 메시지
+  lastErrorAt: string | null    // 마지막 에러 시간
   createdAt: string
 }
 

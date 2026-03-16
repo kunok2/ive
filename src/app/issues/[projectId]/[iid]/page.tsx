@@ -1,0 +1,337 @@
+'use client'
+
+import { use, useCallback, useEffect, useState } from 'react'
+import Link from 'next/link'
+import MobileTabBar from '@/components/layout/MobileTabBar'
+
+interface IssueDetail {
+  iid: number
+  title: string
+  description: string
+  stage: string
+  state: string
+  labels: string[]
+  createdAt: string
+  updatedAt: string
+  webUrl: string
+  author: string
+}
+
+interface Note {
+  id: number
+  body: string
+  author: string
+  system: boolean
+  createdAt: string
+}
+
+const STAGE_INFO: Record<string, { label: string; color: string; icon: string; bg: string }> = {
+  waiting:    { label: '대기',     color: 'text-ive-green',    icon: 'fa-clock',              bg: 'bg-ive-green/10' },
+  dev:        { label: '개발 중',  color: 'text-ive-cyan',     icon: 'fa-code',               bg: 'bg-ive-cyan/10' },
+  dev_fail:   { label: '개발 실패', color: 'text-ive-red',     icon: 'fa-circle-xmark',       bg: 'bg-ive-red/10' },
+  validation: { label: '검증 대기', color: 'text-ive-amber',   icon: 'fa-flask',              bg: 'bg-ive-amber/10' },
+  val_fail:   { label: '검증 실패', color: 'text-ive-red',     icon: 'fa-triangle-exclamation', bg: 'bg-ive-red/10' },
+  done:       { label: '완료',     color: 'text-emerald-400', icon: 'fa-circle-check',       bg: 'bg-emerald-500/10' },
+  unknown:    { label: '알 수 없음', color: 'text-ive-text-dim', icon: 'fa-question',         bg: 'bg-white/5' },
+}
+
+interface StageAction {
+  action: string
+  label: string
+  icon: string
+  danger?: boolean
+}
+
+const STAGE_ACTIONS: Record<string, StageAction[]> = {
+  waiting: [],
+  dev: [
+    { action: 'cancel', label: '개발 취소 (대기로)', icon: 'fa-rotate-left', danger: true },
+  ],
+  dev_fail: [
+    { action: 'retry', label: '재시도 (대기로)', icon: 'fa-rotate' },
+  ],
+  validation: [
+    { action: 'reject', label: '반려 (대기로)', icon: 'fa-rotate-left', danger: true },
+  ],
+  val_fail: [
+    { action: 'revalidate', label: '재검증', icon: 'fa-flask' },
+    { action: 'retry', label: '재개발 (대기로)', icon: 'fa-rotate' },
+  ],
+  done: [
+    { action: 'revalidate', label: '재검증 요청', icon: 'fa-flask' },
+    { action: 'reopen', label: '다시 열기 (대기로)', icon: 'fa-rotate' },
+  ],
+}
+
+export default function IssueDetailPage({ params }: { params: Promise<{ projectId: string; iid: string }> }) {
+  const { projectId, iid } = use(params)
+  const [issue, setIssue] = useState<IssueDetail | null>(null)
+  const [notes, setNotes] = useState<Note[]>([])
+  const [loading, setLoading] = useState(true)
+  const [notesLoading, setNotesLoading] = useState(true)
+  const [comment, setComment] = useState('')
+  const [posting, setPosting] = useState(false)
+  const [stageChanging, setStageChanging] = useState(false)
+  const [showDesc, setShowDesc] = useState(false)
+
+  const fetchIssue = useCallback(async () => {
+    const res = await fetch(`/api/projects/${projectId}/issues`)
+    if (res.ok) {
+      const issues = await res.json()
+      const found = issues.find((i: any) => i.iid === Number(iid))
+      if (found) setIssue(found)
+    }
+    setLoading(false)
+  }, [projectId, iid])
+
+  const fetchNotes = useCallback(async () => {
+    setNotesLoading(true)
+    const res = await fetch(`/api/projects/${projectId}/issues/${iid}/notes`)
+    if (res.ok) {
+      const data = await res.json()
+      setNotes(data)
+    }
+    setNotesLoading(false)
+  }, [projectId, iid])
+
+  useEffect(() => {
+    fetchIssue()
+    fetchNotes()
+  }, [fetchIssue, fetchNotes])
+
+  async function handleStageAction(action: string) {
+    if (!issue) return
+    setStageChanging(true)
+    try {
+      const res = await fetch(`/api/projects/${projectId}/issues/${iid}/stage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stage: issue.stage, action }),
+      })
+      if (res.ok) {
+        await fetchIssue()
+        await fetchNotes()
+      }
+    } finally {
+      setStageChanging(false)
+    }
+  }
+
+  async function handlePostComment() {
+    if (!comment.trim()) return
+    setPosting(true)
+    try {
+      const res = await fetch(`/api/projects/${projectId}/issues/${iid}/notes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: comment.trim() }),
+      })
+      if (res.ok) {
+        setComment('')
+        await fetchNotes()
+      }
+    } finally {
+      setPosting(false)
+    }
+  }
+
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center text-ive-text-muted">불러오는 중...</div>
+  }
+
+  if (!issue) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-ive-text-muted mb-4">이슈를 찾을 수 없습니다</p>
+          <Link href="/issues" className="text-ive-green font-semibold">
+            <i className="fa-solid fa-arrow-left mr-1" />목록으로
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
+  const stageInfo = STAGE_INFO[issue.stage] || STAGE_INFO.unknown
+  const actions = STAGE_ACTIONS[issue.stage] || []
+
+  return (
+    <div className="min-h-screen pb-20">
+      <header className="sticky top-0 z-40 bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark">
+        <div className="flex items-center gap-3 px-4 py-3 max-w-lg mx-auto">
+          <Link href="/issues" className="text-ive-green text-base font-semibold p-1 hover:bg-ive-green/5 rounded">
+            <i className="fa-solid fa-arrow-left mr-1" />목록
+          </Link>
+          <h1 className="text-base font-bold text-ive-text flex-1 truncate">
+            <span className="text-ive-green font-black">#{issue.iid}</span> {issue.title}
+          </h1>
+        </div>
+      </header>
+
+      <main className="px-4 py-4 max-w-lg mx-auto space-y-4">
+        {/* 이슈 정보 카드 */}
+        <div className="bg-ive-bg-card border border-ive-border-subtle rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className={`text-sm font-bold px-2.5 py-1 rounded-lg border ${stageInfo.bg} ${stageInfo.color} border-current/20`}>
+              <i className={`fa-solid ${stageInfo.icon} mr-1`} />
+              {stageInfo.label}
+            </span>
+            <span className="text-xs text-ive-text-dim ml-auto">
+              {new Date(issue.createdAt).toLocaleString('ko-KR', {
+                year: 'numeric', month: 'short', day: 'numeric',
+              })}
+            </span>
+          </div>
+
+          <h2 className="text-lg font-bold text-ive-text leading-snug mb-2">{issue.title}</h2>
+
+          {issue.description && (
+            <div>
+              <button
+                onClick={() => setShowDesc(!showDesc)}
+                className="text-sm text-ive-text-muted hover:text-ive-text transition-colors"
+              >
+                <i className={`fa-solid ${showDesc ? 'fa-chevron-up' : 'fa-chevron-down'} mr-1`} />
+                설명 {showDesc ? '접기' : '보기'}
+              </button>
+              {showDesc && (
+                <div className="mt-2 text-sm text-ive-text-muted bg-ive-bg-deep rounded-lg p-3 whitespace-pre-wrap break-words leading-relaxed">
+                  {issue.description}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="flex items-center gap-3 mt-3 text-xs text-ive-text-dim">
+            <span><i className="fa-solid fa-user mr-1" />{issue.author}</span>
+            <span>
+              <i className="fa-solid fa-clock mr-1" />
+              업데이트 {new Date(issue.updatedAt).toLocaleString('ko-KR', {
+                month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
+              })}
+            </span>
+          </div>
+        </div>
+
+        {/* 단계 변경 액션 */}
+        {actions.length > 0 && (
+          <div className="bg-ive-bg-card border border-ive-border-subtle rounded-xl p-4">
+            <h3 className="text-sm font-bold text-ive-text-muted mb-3">
+              <i className="fa-solid fa-arrow-right-arrow-left mr-1.5" />단계 변경
+            </h3>
+            <div className="flex flex-col gap-2">
+              {actions.map(act => (
+                <button
+                  key={act.action}
+                  onClick={() => handleStageAction(act.action)}
+                  disabled={stageChanging}
+                  className={`w-full text-sm font-bold px-4 py-2.5 rounded-xl border transition-all active:scale-[0.98] disabled:opacity-40 ${
+                    act.danger
+                      ? 'text-ive-red/80 border-ive-red/30 bg-ive-bg-deep hover:bg-ive-red/10'
+                      : 'text-ive-green border-ive-green/30 bg-ive-bg-deep hover:bg-ive-green/10'
+                  }`}
+                >
+                  {stageChanging ? (
+                    <i className="fa-solid fa-circle-notch fa-spin" />
+                  ) : (
+                    <><i className={`fa-solid ${act.icon} mr-1.5`} />{act.label}</>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 노트 타임라인 */}
+        <div className="bg-ive-bg-card border border-ive-border-subtle rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-ive-border-dark">
+            <h3 className="text-sm font-bold text-ive-text-muted">
+              <i className="fa-solid fa-comments mr-1.5" />활동 기록
+              {!notesLoading && <span className="ml-1 text-xs opacity-50">({notes.length})</span>}
+            </h3>
+          </div>
+
+          <div className="max-h-[50vh] overflow-y-auto custom-scrollbar">
+            {notesLoading ? (
+              <div className="text-center py-10 text-ive-text-dim text-sm">노트 불러오는 중...</div>
+            ) : notes.length === 0 ? (
+              <div className="text-center py-10 text-ive-text-dim text-sm">아직 활동 기록이 없습니다</div>
+            ) : (
+              <div className="divide-y divide-ive-border-dark">
+                {notes.map(note => (
+                  <div key={note.id} className={`px-4 py-3 ${note.system ? 'bg-white/[0.02]' : ''}`}>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className={`text-xs font-bold ${note.system ? 'text-ive-text-dim' : 'text-ive-cyan'}`}>
+                        {note.system ? (
+                          <><i className="fa-solid fa-gear mr-1" />시스템</>
+                        ) : (
+                          <><i className="fa-solid fa-user mr-1" />{note.author}</>
+                        )}
+                      </span>
+                      <span className="text-xs text-ive-text-dim ml-auto">
+                        {new Date(note.createdAt).toLocaleString('ko-KR', {
+                          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
+                        })}
+                      </span>
+                    </div>
+                    <div className={`text-sm leading-relaxed whitespace-pre-wrap break-words ${
+                      note.system ? 'text-ive-text-dim italic' : 'text-ive-text-muted'
+                    }`}>
+                      {note.body.length > 500 ? (
+                        <NoteBody body={note.body} />
+                      ) : (
+                        note.body
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 코멘트 입력 */}
+        <div className="bg-ive-bg-card border border-ive-border-subtle rounded-xl p-4">
+          <textarea
+            value={comment}
+            onChange={e => setComment(e.target.value)}
+            placeholder="코멘트를 입력하세요..."
+            rows={3}
+            className="w-full bg-ive-bg-deep border border-ive-border rounded-xl px-3 py-2.5 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-green/50"
+          />
+          <div className="flex justify-end mt-2">
+            <button
+              onClick={handlePostComment}
+              disabled={posting || !comment.trim()}
+              className="text-sm font-bold bg-ive-green text-ive-bg-deep px-5 py-2 rounded-xl active:scale-95 transition-all disabled:opacity-40"
+            >
+              {posting ? (
+                <i className="fa-solid fa-circle-notch fa-spin" />
+              ) : (
+                <><i className="fa-solid fa-paper-plane mr-1.5" />전송</>
+              )}
+            </button>
+          </div>
+        </div>
+      </main>
+
+      <MobileTabBar />
+    </div>
+  )
+}
+
+// 긴 노트를 접었다 펼 수 있는 컴포넌트
+function NoteBody({ body }: { body: string }) {
+  const [expanded, setExpanded] = useState(false)
+  return (
+    <>
+      {expanded ? body : body.slice(0, 500) + '...'}
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="block mt-1 text-xs text-ive-green hover:underline"
+      >
+        {expanded ? '접기' : '전체 보기'}
+      </button>
+    </>
+  )
+}

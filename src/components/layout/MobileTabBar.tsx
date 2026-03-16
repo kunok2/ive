@@ -1,37 +1,39 @@
 'use client'
 
-import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { useTab, TabKey } from '@/lib/tab-context'
+import { usePathname, useRouter } from 'next/navigation'
 
-const tabs = [
-  { href: '/', icon: 'fa-solid fa-folder-open', label: '프로젝트' },
-  { href: '/agents', icon: 'fa-solid fa-robot', label: 'Agent' },
-  { href: '/terminal', icon: 'fa-solid fa-terminal', label: 'CLI' },
+const tabs: { key: TabKey; icon: string; label: string }[] = [
+  { key: 'projects', icon: 'fa-solid fa-folder-open', label: '프로젝트' },
+  { key: 'issues', icon: 'fa-solid fa-list-check', label: '이슈' },
+  { key: 'agents', icon: 'fa-solid fa-robot', label: 'Agent' },
+  { key: 'terminal', icon: 'fa-solid fa-terminal', label: 'CLI' },
 ]
 
 export default function MobileTabBar() {
+  const { activeTab, setActiveTab } = useTab()
   const pathname = usePathname()
+  const router = useRouter()
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-ive-bg-card border-t border-ive-border">
       <div className="flex justify-around items-center h-14">
-        {tabs.map(tab => {
-          const isActive = tab.href === '/'
-            ? pathname === '/'
-            : pathname.startsWith(tab.href)
-          return (
-            <Link
-              key={tab.href}
-              href={tab.href}
-              className={`flex flex-col items-center gap-0.5 px-3 py-1 transition-colors ${
-                isActive ? 'text-ive-green' : 'text-ive-text-dim'
-              }`}
-            >
-              <i className={`${tab.icon} text-lg`} />
-              <span className="text-sm font-semibold">{tab.label}</span>
-            </Link>
-          )
-        })}
+        {tabs.map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => {
+              setActiveTab(tab.key)
+              // 서브페이지에 있으면 메인으로 돌아가기
+              if (pathname !== '/') router.push('/')
+            }}
+            className={`flex flex-col items-center gap-0.5 px-3 py-1 transition-colors ${
+              activeTab === tab.key ? 'text-ive-green' : 'text-ive-text-dim'
+            }`}
+          >
+            <i className={`${tab.icon} text-lg`} />
+            <span className="text-sm font-semibold">{tab.label}</span>
+          </button>
+        ))}
       </div>
     </nav>
   )
