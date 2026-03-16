@@ -13,13 +13,13 @@ export const metadata: Metadata = {
     statusBarStyle: "black-translucent",
     title: "IVE",
   },
-  themeColor: "#0e160e",
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
+  themeColor: "#0e160e",
 };
 
 export default function RootLayout({
