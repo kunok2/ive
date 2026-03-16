@@ -71,14 +71,19 @@ export default function IssuesTab() {
   const setSelectedProjectId = (id: string) => setIssuesProjectId(id)
   const setFilter = (f: string) => setIssuesFilter(f)
 
-  // 스크롤 위치 저장/복원
+  const listRef = useRef<HTMLDivElement | null>(null)
+
+  // 스크롤 위치 복원
   useEffect(() => {
     const saved = sessionStorage.getItem('issues-scroll')
     if (saved) {
-      requestAnimationFrame(() => window.scrollTo(0, Number(saved)))
+      requestAnimationFrame(() => {
+        const el = document.querySelector('[data-scroll-container="issues-list"]')
+        if (el) el.scrollTop = Number(saved)
+      })
       sessionStorage.removeItem('issues-scroll')
     }
-  }, [])
+  }, [filtered])
 
   const toggleSelect = (iid: number) => {
     setSelected(prev => {
@@ -181,13 +186,13 @@ export default function IssuesTab() {
   const stages = selectedStages()
 
   return (
-    <div className="min-h-screen pb-20">
-      <main className="px-4 py-4 max-w-lg mx-auto">
+    <div className="h-[calc(100dvh-3.5rem)] flex flex-col">
+      <div className="px-4 pt-4 max-w-lg mx-auto w-full shrink-0">
         {state.projects.length > 1 && (
           <select
             value={selectedProjectId}
             onChange={e => setSelectedProjectId(e.target.value)}
-            className="w-full mb-4 bg-ive-bg-card border border-ive-border-subtle rounded-xl px-4 py-3 text-ive-text font-bold text-base focus:outline-none focus:border-ive-green/50"
+            className="w-full mb-3 bg-ive-bg-card border border-ive-border-subtle rounded-xl px-4 py-3 text-ive-text font-bold text-base focus:outline-none focus:border-ive-green/50"
           >
             <option value="">프로젝트 선택</option>
             {state.projects.map(p => (
@@ -204,7 +209,7 @@ export default function IssuesTab() {
         ) : (
           <>
             {selectedProject && (
-              <div className="flex items-center gap-3 mb-4 bg-ive-bg-card border border-ive-border-subtle rounded-xl px-4 py-3"
+              <div className="flex items-center gap-3 mb-3 bg-ive-bg-card border border-ive-border-subtle rounded-xl px-4 py-3"
                    style={{ borderLeftWidth: '3px', borderLeftColor: selectedProject.color || '#4ade80' }}>
                 <i className={`fa-brands ${selectedProject.provider === 'github' ? 'fa-github' : 'fa-gitlab'} text-xl`}
                    style={{ color: selectedProject.color || '#4ade80' }} />
@@ -230,7 +235,7 @@ export default function IssuesTab() {
               </div>
             )}
 
-            <div className="flex gap-1 mb-4 bg-ive-bg-card rounded-xl p-1 border border-ive-border-subtle">
+            <div className="flex gap-1 mb-3 bg-ive-bg-card rounded-xl p-1 border border-ive-border-subtle">
               {FILTER_TABS.map(tab => (
                 <button
                   key={tab.key}
@@ -333,6 +338,14 @@ export default function IssuesTab() {
               </div>
             )}
 
+          </>
+        )}
+      </div>
+
+      {/* 스크롤 가능한 리스트 영역 */}
+      {selectedProjectId && (
+        <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-4 custom-scrollbar" data-scroll-container="issues-list">
+          <div className="max-w-lg mx-auto">
             {loading ? (
               <div className="text-center py-20 text-ive-text-muted">이슈 불러오는 중...</div>
             ) : filtered.length === 0 ? (
@@ -352,7 +365,8 @@ export default function IssuesTab() {
                       key={issue.iid}
                       onClick={() => {
                         if (bulkMode) { toggleSelect(issue.iid); return }
-                        sessionStorage.setItem('issues-scroll', String(window.scrollY))
+                        const el = document.querySelector('[data-scroll-container="issues-list"]')
+                        if (el) sessionStorage.setItem('issues-scroll', String(el.scrollTop))
                         router.push(`/issues/${selectedProjectId}/${issue.iid}`)
                       }}
                       className={`bg-ive-bg-card border rounded-xl p-4 transition-all cursor-pointer active:scale-[0.98] ${
@@ -398,9 +412,9 @@ export default function IssuesTab() {
                 })}
               </div>
             )}
-          </>
-        )}
-      </main>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
