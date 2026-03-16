@@ -4,10 +4,8 @@ import { use, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useStore } from '@/lib/store'
-import RoleCard from '@/components/role/RoleCard'
-import RoleForm from '@/components/role/RoleForm'
+import AgentCard from '@/components/agent/AgentCard'
 import ProjectForm from '@/components/project/ProjectForm'
-import AgentAssignList from '@/components/agent/AgentAssignList'
 import MobileTabBar from '@/components/layout/MobileTabBar'
 import Modal from '@/components/ui/Modal'
 import ConfirmModal from '@/components/ui/ConfirmModal'
@@ -15,15 +13,11 @@ import ConfirmModal from '@/components/ui/ConfirmModal'
 export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
-  const { state, deleteProject, deleteRole, assignAgent, unassignAgent } = useStore()
+  const { state, deleteProject, assignAgentToProject, unassignAgentFromProject } = useStore()
 
-  const [showNewRole, setShowNewRole] = useState(false)
   const [showEditProject, setShowEditProject] = useState(false)
   const [showDeleteProject, setShowDeleteProject] = useState(false)
-
-  const [deleteRoleId, setDeleteRoleId] = useState<string | null>(null)
-  const [editRole, setEditRole] = useState<any | null>(null)
-  const [manageAgentsRoleId, setManageAgentsRoleId] = useState<string | null>(null)
+  const [showAssignAgent, setShowAssignAgent] = useState(false)
   const [assignError, setAssignError] = useState('')
 
   const project = state.projects.find(p => p.id === id)
@@ -45,36 +39,36 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     )
   }
 
-  const roles = project.roles || []
-  const managingRole = roles.find(r => r.id === manageAgentsRoleId)
+  const assignedAgents = project.assignedAgents || []
+  // 모든 프로젝트에 배정된 에이전트 ID 수집 (한 에이전트는 한 프로젝트에만 배정 가능)
+  const allAssignedAgentIds = new Set<string>()
+  for (const p of state.projects) {
+    for (const pa of (p.assignedAgents || [])) {
+      allAssignedAgentIds.add(pa.agentId)
+    }
+  }
+  const availableAgents = state.agents.filter(a => !allAssignedAgentIds.has(a.id))
 
   async function handleDeleteProject() {
     await deleteProject(id)
     router.push('/')
   }
 
-  async function handleDeleteRole(roleId: string) {
-    await deleteRole(id, roleId)
-    setDeleteRoleId(null)
-  }
-
   async function handleAssignAgent(agentId: string) {
-    if (!manageAgentsRoleId) return
     setAssignError('')
     try {
-      await assignAgent(id, manageAgentsRoleId, agentId)
+      await assignAgentToProject(id, agentId)
     } catch (err) {
-      setAssignError(err instanceof Error ? err.message : 'Agent 배정 실패')
+      setAssignError(err instanceof Error ? err.message : '개발자 배정 실패')
     }
   }
 
   async function handleUnassignAgent(agentId: string) {
-    if (!manageAgentsRoleId) return
     setAssignError('')
     try {
-      await unassignAgent(id, manageAgentsRoleId, agentId)
+      await unassignAgentFromProject(id, agentId)
     } catch (err) {
-      setAssignError(err instanceof Error ? err.message : 'Agent 해제 실패')
+      setAssignError(err instanceof Error ? err.message : '개발자 해제 실패')
     }
   }
 
@@ -123,20 +117,14 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           <div className="flex items-center justify-between mt-4 pt-4 border-t border-ive-border-dark relative z-10 gap-2">
             <div className="flex items-center gap-4">
               <div className="text-center">
-                <div className="text-xl font-black text-ive-green-light leading-none">{roles.length}</div>
-                <div className="text-sm text-ive-text-muted mt-1 uppercase tracking-wider font-bold">역할</div>
+                <div className={`text-xl font-black leading-none ${assignedAgents.length > 0 ? 'text-ive-green-light' : 'text-ive-text-dim'}`}>{assignedAgents.length}</div>
+                <div className="text-sm text-ive-text-muted mt-1 uppercase tracking-wider font-bold">개발자</div>
               </div>
               <div className="text-center">
-                <div className="text-xl font-black text-ive-amber leading-none">
-                  {roles.filter(r => r.status === 'active').length}
+                <div className={`text-xl font-black leading-none ${(project.lastScannedIssueCount ?? 0) > 0 ? 'text-ive-cyan' : 'text-ive-text-dim'}`}>
+                  {project.lastScannedIssueCount ?? 0}
                 </div>
-                <div className="text-sm text-ive-text-muted mt-1 uppercase tracking-wider font-bold">활성</div>
-              </div>
-              <div className="text-center">
-                <div className="text-xl font-black text-ive-cyan leading-none">
-                  {roles.reduce((sum, r) => sum + (r.assignedAgents?.length || 0), 0)}
-                </div>
-                <div className="text-sm text-ive-text-muted mt-1 uppercase tracking-wider font-bold">Agent</div>
+                <div className="text-sm text-ive-text-muted mt-1 uppercase tracking-wider font-bold">대기</div>
               </div>
             </div>
             <div className="flex gap-2 shrink-0">
@@ -156,90 +144,80 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           </div>
         </div>
 
-        {/* 역할 섹션 */}
+        {/* 배정된 개발자 섹션 */}
         <div className="flex items-center justify-between mb-4 px-1">
           <h2 className="text-base font-black text-ive-text uppercase tracking-widest flex items-center gap-2">
             <span className="w-1.5 h-1.5 rounded-full bg-ive-green" />
-            역할 목록 ({roles.length})
+            배정된 개발자 ({assignedAgents.length})
           </h2>
           <button
-            onClick={() => setShowNewRole(true)}
+            onClick={() => { setShowAssignAgent(true); setAssignError('') }}
             className="text-base font-bold text-ive-green bg-ive-green/10 px-4 py-2 rounded-xl active:scale-95 transition-all hover:bg-ive-green/15"
           >
-            <i className="fa-solid fa-plus mr-1.5" />역할 추가
+            <i className="fa-solid fa-plus mr-1.5" />개발자 배정
           </button>
         </div>
 
-        {roles.length === 0 ? (
+        {assignedAgents.length === 0 ? (
           <div className="text-center py-16 bg-ive-bg-card rounded-2xl border border-dashed border-ive-border-subtle group hover:border-ive-green/30 transition-all">
-            <i className="fa-solid fa-id-card-clip text-4xl text-ive-text-dim mb-4 block group-hover:scale-110 transition-transform" />
-            <p className="text-base text-ive-text-muted mb-4 font-medium">프로젝트 내 수행할 역할을 정의해주세요</p>
+            <i className="fa-solid fa-robot text-4xl text-ive-text-dim mb-4 block group-hover:scale-110 transition-transform" />
+            <p className="text-base text-ive-text-muted mb-4 font-medium">이 프로젝트에 배정된 개발자가 없습니다</p>
             <button
-              onClick={() => setShowNewRole(true)}
+              onClick={() => { setShowAssignAgent(true); setAssignError('') }}
               className="inline-flex items-center gap-2 bg-ive-green-dark text-white font-black px-6 py-2.5 rounded-xl text-base shadow-lg shadow-ive-green/10"
             >
-              <i className="fa-solid fa-plus" />첫 역할 만들기
+              <i className="fa-solid fa-plus" />개발자 배정하기
             </button>
           </div>
         ) : (
-          <div className="grid gap-4">
-            {roles.map(role => (
-              <RoleCard
-                key={role.id}
-                role={role}
-                onDelete={(roleId) => setDeleteRoleId(roleId)}
-                onManageAgents={(roleId) => {
-                  setManageAgentsRoleId(roleId)
-                  setAssignError('')
-                }}
-                onEdit={(role) => setEditRole(role)}
-              />
+          <div className="grid gap-3">
+            {assignedAgents.map(pa => (
+              <AgentCard key={pa.id} agent={pa.agent} compact onRemove={() => handleUnassignAgent(pa.agentId)} />
             ))}
+          </div>
+        )}
+
+        {assignError && (
+          <div className="mt-3 text-base text-ive-red bg-ive-red/10 rounded-lg px-4 py-3 border border-ive-red/20 animate-shake">
+            <i className="fa-solid fa-circle-exclamation mr-1.5" />{assignError}
           </div>
         )}
       </main>
 
       {/* 모달들 */}
-      <Modal open={showNewRole} onClose={() => setShowNewRole(false)} title="역할 정의">
-        <RoleForm projectId={id} onSuccess={() => setShowNewRole(false)} />
-      </Modal>
-
-      <Modal open={editRole !== null} onClose={() => setEditRole(null)} title="역할 수정">
-        {editRole && (
-          <RoleForm
-            projectId={id}
-            existing={editRole}
-            onSuccess={() => setEditRole(null)}
-          />
-        )}
-      </Modal>
-
       <Modal open={showEditProject} onClose={() => setShowEditProject(false)} title="프로젝트 설정">
         <ProjectForm existing={project} onSuccess={() => setShowEditProject(false)} />
       </Modal>
 
-      <Modal
-        open={manageAgentsRoleId !== null}
-        onClose={() => setManageAgentsRoleId(null)}
-        title={managingRole ? `AI Agent 배정 — ${managingRole.name}` : 'Agent 배정'}
-      >
-        {managingRole && (
-          <div className="space-y-4">
-            <AgentAssignList
-              agents={state.agents}
-              assignedAgentIds={managingRole.assignedAgents?.map(ra => ra.agentId) || []}
-              onAssign={handleAssignAgent}
-              onUnassign={handleUnassignAgent}
-              maxAgents={managingRole.maxAgents}
-              currentCount={managingRole.assignedAgents?.length || 0}
-            />
-            {assignError && (
-              <div className="text-base text-ive-red bg-ive-red/10 rounded-lg px-4 py-3 border border-ive-red/20 animate-shake">
-                <i className="fa-solid fa-circle-exclamation mr-1.5" />{assignError}
+      <Modal open={showAssignAgent} onClose={() => setShowAssignAgent(false)} title="개발자 배정">
+        <div className="space-y-3">
+          {availableAgents.length === 0 ? (
+            <div className="text-center py-8 text-ive-text-muted">
+              <i className="fa-solid fa-robot text-3xl text-ive-text-dim mb-3 block" />
+              <p className="text-base">배정 가능한 개발자가 없습니다</p>
+              <p className="text-sm text-ive-text-dim mt-1">새 개발자를 등록하거나, 다른 프로젝트에서 해제하세요</p>
+            </div>
+          ) : (
+            availableAgents.map(agent => (
+              <div key={agent.id} className="flex items-center gap-3 bg-ive-bg rounded-xl p-3 border border-ive-border-subtle">
+                <div className="flex-1 min-w-0">
+                  <AgentCard agent={agent} compact />
+                </div>
+                <button
+                  onClick={() => handleAssignAgent(agent.id)}
+                  className="shrink-0 text-base font-bold text-ive-green bg-ive-green/10 px-3 py-1.5 rounded-lg hover:bg-ive-green/20 transition-colors"
+                >
+                  <i className="fa-solid fa-plus mr-1" />배정
+                </button>
               </div>
-            )}
-          </div>
-        )}
+            ))
+          )}
+          {assignError && (
+            <div className="text-base text-ive-red bg-ive-red/10 rounded-lg px-4 py-3 border border-ive-red/20">
+              <i className="fa-solid fa-circle-exclamation mr-1.5" />{assignError}
+            </div>
+          )}
+        </div>
       </Modal>
 
       <ConfirmModal
@@ -247,23 +225,12 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         onClose={() => setShowDeleteProject(false)}
         onConfirm={handleDeleteProject}
         title="프로젝트 삭제"
-        message="정말 이 프로젝트를 삭제하시겠습니까? 관련 역할과 배정 정보가 모두 사라집니다."
+        message="정말 이 프로젝트를 삭제하시겠습니까? 배정된 개발자와 실행 기록이 모두 사라집니다."
         confirmLabel="영구 삭제"
         danger
       />
 
-      <ConfirmModal
-        open={deleteRoleId !== null}
-        onClose={() => setDeleteRoleId(null)}
-        onConfirm={() => deleteRoleId && handleDeleteRole(deleteRoleId)}
-        title="역할 삭제"
-        message="이 역할을 삭제하면 배정된 Agent들이 해제됩니다. 정말 삭제하시겠습니까?"
-        confirmLabel="역할 삭제"
-        danger
-      />
-
-
-<MobileTabBar />
+      <MobileTabBar />
     </div>
   )
 }

@@ -5,8 +5,8 @@ import { usePathname, useRouter } from 'next/navigation'
 
 const tabs: { key: TabKey; icon: string; label: string }[] = [
   { key: 'projects', icon: 'fa-solid fa-folder-open', label: '프로젝트' },
-  { key: 'issues', icon: 'fa-solid fa-list-check', label: '이슈' },
-  { key: 'agents', icon: 'fa-solid fa-robot', label: 'Agent' },
+  { key: 'agents', icon: 'fa-solid fa-robot', label: '개발자' },
+  { key: 'issues', icon: 'fa-solid fa-list-check', label: '작업' },
   { key: 'terminal', icon: 'fa-solid fa-terminal', label: 'CLI' },
 ]
 
@@ -17,7 +17,7 @@ export default function MobileTabBar() {
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-ive-bg-card border-t border-ive-border">
-      <div className="flex justify-around items-center h-14">
+      <div className="flex justify-around items-center h-14 max-w-lg mx-auto">
         {tabs.map(tab => (
           <button
             key={tab.key}

@@ -17,8 +17,6 @@ export function detectProvider(url: string): Provider {
   } catch { /* invalid URL */ }
   return 'gitlab'
 }
-export type RoleCategory = '개발' | '검증'
-export type RoleStatus = 'active' | 'idle' | 'paused'
 
 export const PROJECT_COLORS = [
   { name: '초록', value: '#4ade80' },
@@ -55,23 +53,15 @@ export interface Project {
   scannerActive: boolean   // 스캐너 활성화 여부
   lastError: string | null      // 마지막 에러 메시지
   lastErrorAt: string | null    // 마지막 에러 시간
-  createdAt: string
-}
-
-export interface ProjectRole {
-  id: string
-  projectId: string
-  name: string
-  category: RoleCategory
-  status: RoleStatus
-  accessToken?: string
-  maxAgents: number
+  sortOrder: number             // 표시 순서
+  snapshotInterval: number      // 스냅샷 수집 간격 (분)
+  sparklinePoints: number       // 스파크라인 표시 건수
+  statsRetention: number        // 데이터 보관 기간 (일)
   createdAt: string
 }
 
 export type CliName = 'claude' | 'gemini' | 'codex'
 export type AgentStatus = 'available' | 'busy' | 'offline'
-export type RoleAssignmentStatus = 'active' | 'paused'
 
 export interface Agent {
   id: string
@@ -82,14 +72,16 @@ export interface Agent {
   cliVersion: string
   maxTurns: number
   status: AgentStatus
+  snapshotInterval: number      // 스냅샷 수집 간격 (분)
+  sparklinePoints: number       // 스파크라인 표시 건수
+  statsRetention: number        // 데이터 보관 기간 (일)
   createdAt: string
 }
 
-export interface RoleAssignment {
+export interface ProjectAssignment {
   id: string
-  roleId: string
+  projectId: string
   agentId: string
-  status: RoleAssignmentStatus
   assignedAt: string
 }
 
@@ -98,15 +90,30 @@ export type TaskStatus = 'running' | 'success' | 'failed'
 export interface TaskExecution {
   id: string
   projectId: string
-  roleId: string
   agentId: string
   issueIid: number
+  issueTitle?: string
   status: TaskStatus
   startedAt: string
   endedAt?: string
   logPath: string
-  pid?: number        // 에이전트 프로세스 그룹 ID (강제 종료용)
-  // joined fields (API 응답에만 포함)
+  pid?: number
   agentName?: string
-  roleName?: string
+  inputTokens: number
+  outputTokens: number
+  costUsd: number
+  turns: number
+}
+
+export interface StatSnapshot {
+  id: string
+  entityType: 'project' | 'agent'
+  entityId: string
+  timestamp: string
+  running: number
+  waiting: number
+  completed: number
+  failed: number
+  totalTokens: number
+  costUsd: number
 }

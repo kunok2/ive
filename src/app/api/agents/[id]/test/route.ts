@@ -4,12 +4,12 @@ import { getCurrentUser } from '@/lib/auth'
 import { execFile } from 'child_process'
 import { existsSync } from 'fs'
 
-export async function POST(_req: Request, { params }: { params: Promise<{ agentId: string }> }) {
+export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { agentId } = await params
-  const agent = getAgent(agentId)
+  const { id } = await params
+  const agent = getAgent(id)
   if (!agent || agent.userId !== user.id) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
@@ -25,7 +25,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ agentI
   // CLI 버전 확인 실행
   try {
     const version = await new Promise<string>((resolve, reject) => {
-      const child = execFile(agent.cliPath, ['--version'], { timeout: 15000 }, (err, stdout, stderr) => {
+      execFile(agent.cliPath, ['--version'], { timeout: 15000 }, (err, stdout, stderr) => {
         if (err) {
           reject(new Error(stderr || err.message))
         } else {

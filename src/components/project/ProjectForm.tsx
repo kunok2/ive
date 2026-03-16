@@ -30,7 +30,11 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
   // 작업 주기 설정 추가 (단위: 분)
   const [checkInterval, setCheckInterval] = useState(existing?.checkInterval ?? 10)
 
+  const [snapshotInterval, setSnapshotInterval] = useState(existing?.snapshotInterval ?? 1)
+  const [sparklinePoints, setSparklinePoints] = useState(existing?.sparklinePoints ?? 60)
+  const [statsRetention, setStatsRetention] = useState(existing?.statsRetention ?? 7)
   const [showAdvanced, setShowAdvanced] = useState(false)
+  const [showMonitoring, setShowMonitoring] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -54,6 +58,10 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
       scannerActive: false,
       lastError: null,
       lastErrorAt: null,
+      sortOrder: existing?.sortOrder ?? 0,
+      snapshotInterval,
+      sparklinePoints,
+      statsRetention,
     }
 
     if (existing) {
@@ -127,11 +135,16 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
           Git 액세스 토큰 <span className="text-ive-text-dim font-normal">(Personal Access Token)</span>
         </label>
         <input
-          type="password"
+          type="text"
+          autoComplete="off"
+          data-1p-ignore
+          data-lpignore="true"
+          data-form-type="other"
           value={accessToken}
           onChange={e => setAccessToken(e.target.value)}
           placeholder={existing ? '변경 시에만 입력' : 'ghp_xxxxxxxxxxxx'}
           className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-base text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green font-mono"
+          style={{ WebkitTextSecurity: 'disc' } as React.CSSProperties}
         />
         <p className="text-sm text-ive-text-dim mt-1">
           <i className="fa-solid fa-lock mr-1" />이슈 목록 조회 및 작업 완료 보고를 위해 필요합니다. 암호화되어 저장됩니다.
@@ -254,6 +267,82 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
                 placeholder="IVE(E)"
                 className="w-full bg-ive-bg-deep border border-ive-border rounded-lg px-3 py-2 text-base text-ive-text focus:outline-none focus:border-ive-green font-bold"
               />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 모니터링 설정 */}
+      <div className="border-t border-ive-border-dark pt-2">
+        <button
+          type="button"
+          onClick={() => setShowMonitoring(!showMonitoring)}
+          className="flex items-center gap-1.5 text-base font-bold text-ive-cyan mb-3"
+        >
+          <i className={`fa-solid ${showMonitoring ? 'fa-chevron-down' : 'fa-chevron-right'} text-sm`} />
+          모니터링 설정
+        </button>
+
+        {showMonitoring && (
+          <div className="space-y-4 pb-2 animate-in fade-in slide-in-from-top-2">
+            <div>
+              <label className="block text-sm font-bold text-ive-text-muted mb-1.5 ml-1">
+                스냅샷 수집 간격 <span className="text-ive-text-dim font-normal">(분)</span>
+              </label>
+              <div className="flex items-center gap-2">
+                <div className="flex bg-ive-bg-input border border-ive-border rounded-lg overflow-hidden">
+                  <button type="button" onClick={() => setSnapshotInterval(v => Math.max(1, v - 1))} className="px-3 py-2 text-ive-text-muted hover:text-ive-cyan hover:bg-ive-cyan/10 transition-colors text-base font-black">−</button>
+                  <span className="w-12 py-2 flex items-center justify-center text-base font-black text-ive-text border-x border-ive-border">{snapshotInterval}</span>
+                  <button type="button" onClick={() => setSnapshotInterval(v => Math.min(60, v + 1))} className="px-3 py-2 text-ive-text-muted hover:text-ive-cyan hover:bg-ive-cyan/10 transition-colors text-base font-black">+</button>
+                </div>
+                <div className="flex gap-1 flex-1">
+                  {[1, 5, 10].map(v => (
+                    <button key={v} type="button" onClick={() => setSnapshotInterval(v)}
+                      className={`flex-1 py-2 rounded-lg text-sm font-black border transition-all ${snapshotInterval === v ? 'bg-ive-cyan/10 border-ive-cyan text-ive-cyan' : 'bg-ive-bg-card border-ive-border-subtle text-ive-text-dim'}`}
+                    >{v}m</button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-ive-text-muted mb-1.5 ml-1">
+                스파크라인 표시 건수
+              </label>
+              <div className="flex items-center gap-2">
+                <div className="flex bg-ive-bg-input border border-ive-border rounded-lg overflow-hidden">
+                  <button type="button" onClick={() => setSparklinePoints(v => Math.max(10, v - 10))} className="px-3 py-2 text-ive-text-muted hover:text-ive-cyan hover:bg-ive-cyan/10 transition-colors text-base font-black">−</button>
+                  <span className="w-12 py-2 flex items-center justify-center text-base font-black text-ive-text border-x border-ive-border">{sparklinePoints}</span>
+                  <button type="button" onClick={() => setSparklinePoints(v => Math.min(200, v + 10))} className="px-3 py-2 text-ive-text-muted hover:text-ive-cyan hover:bg-ive-cyan/10 transition-colors text-base font-black">+</button>
+                </div>
+                <div className="flex gap-1 flex-1">
+                  {[30, 60, 120].map(v => (
+                    <button key={v} type="button" onClick={() => setSparklinePoints(v)}
+                      className={`flex-1 py-2 rounded-lg text-sm font-black border transition-all ${sparklinePoints === v ? 'bg-ive-cyan/10 border-ive-cyan text-ive-cyan' : 'bg-ive-bg-card border-ive-border-subtle text-ive-text-dim'}`}
+                    >{v}</button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-ive-text-muted mb-1.5 ml-1">
+                데이터 보관 기간 <span className="text-ive-text-dim font-normal">(일)</span>
+              </label>
+              <div className="flex items-center gap-2">
+                <div className="flex bg-ive-bg-input border border-ive-border rounded-lg overflow-hidden">
+                  <button type="button" onClick={() => setStatsRetention(v => Math.max(1, v - 1))} className="px-3 py-2 text-ive-text-muted hover:text-ive-cyan hover:bg-ive-cyan/10 transition-colors text-base font-black">−</button>
+                  <span className="w-12 py-2 flex items-center justify-center text-base font-black text-ive-text border-x border-ive-border">{statsRetention}</span>
+                  <button type="button" onClick={() => setStatsRetention(v => Math.min(90, v + 1))} className="px-3 py-2 text-ive-text-muted hover:text-ive-cyan hover:bg-ive-cyan/10 transition-colors text-base font-black">+</button>
+                </div>
+                <div className="flex gap-1 flex-1">
+                  {[7, 14, 30].map(v => (
+                    <button key={v} type="button" onClick={() => setStatsRetention(v)}
+                      className={`flex-1 py-2 rounded-lg text-sm font-black border transition-all ${statsRetention === v ? 'bg-ive-cyan/10 border-ive-cyan text-ive-cyan' : 'bg-ive-bg-card border-ive-border-subtle text-ive-text-dim'}`}
+                    >{v}d</button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         )}

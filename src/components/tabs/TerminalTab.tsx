@@ -118,14 +118,16 @@ export default function TerminalTab() {
   }, [])
 
   return (
-    <div className="pb-14">
-      {error && (
-        <div className="bg-red-900/90 text-red-200 text-base px-4 py-2 flex items-center gap-2">
-          <i className="fa-solid fa-triangle-exclamation" />
-          {error}
-        </div>
-      )}
-      <div ref={containerRef} className="bg-[#0d1117]" style={{ height: 'calc(100vh - 3.5rem)' }} />
+    <div className="min-h-screen pb-20">
+      <main className="px-4 py-4 max-w-lg mx-auto">
+        {error && (
+          <div className="bg-red-900/90 text-red-200 text-base px-4 py-2 rounded-lg flex items-center gap-2 mb-3">
+            <i className="fa-solid fa-triangle-exclamation" />
+            {error}
+          </div>
+        )}
+        <div ref={containerRef} className="bg-[#0d1117] rounded-lg overflow-hidden" style={{ height: 'calc(100vh - 10rem)' }} />
+      </main>
     </div>
   )
 }

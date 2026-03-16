@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getProject, updateProject, deleteProject, getRolesByProject, getRoleAssignments } from '@/lib/db'
+import { getProject, updateProject, deleteProject, getProjectAssignments } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { encrypt } from '@/lib/crypto'
 
@@ -13,12 +13,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
-  const roles = getRolesByProject(id).map(r => ({
-    ...r,
-    assignedAgents: getRoleAssignments(r.id)
-  }))
+  const assignedAgents = getProjectAssignments(id)
 
-  return NextResponse.json({ ...project, roles })
+  return NextResponse.json({ ...project, assignedAgents })
 }
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {

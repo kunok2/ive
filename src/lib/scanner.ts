@@ -2,11 +2,11 @@ import {
   getAllProjects,
   updateProjectLastChecked,
   updateProjectError,
-  getRolesByProject,
-  getRoleAssignments,
+  getProjectAssignments,
   createExecution,
   updateExecutionStatus,
   updateExecutionPid,
+  updateExecutionTokens,
   resetStuckExecutions,
   hasActiveExecution,
   countActiveExecutionsByAgent
@@ -24,12 +24,25 @@ import {
   addGitLabMRNote 
 } from "./gitlab";
 import { Project, Agent } from "@/types";
+import { startStatsCollector } from "./stats-collector";
 import { spawn } from "child_process";
 import fs from "fs";
 import path from "path";
 import { promisify } from "util";
 
 const exec = promisify(require('child_process').exec);
+
+// CLI별 토큰 단가 (USD per 1M tokens) — cost_usd가 제공되지 않을 때 사용
+const TOKEN_PRICING: Record<string, { input: number; output: number }> = {
+  claude:  { input: 3.0,  output: 15.0 },   // Sonnet 기본
+  gemini:  { input: 1.25, output: 5.0 },     // Gemini 2.0 Flash
+  codex:   { input: 2.5,  output: 10.0 },    // GPT-4.1 mini
+}
+
+function estimateCost(cliName: string, inputTokens: number, outputTokens: number): number {
+  const pricing = TOKEN_PRICING[cliName] || TOKEN_PRICING.claude
+  return (inputTokens * pricing.input + outputTokens * pricing.output) / 1_000_000
+}
 
 /**
  * Claude CLI stream-json 이벤트를 읽기 좋은 로그 텍스트로 변환
@@ -211,6 +224,9 @@ export function startScanner() {
 
   // 첫 실행은 약간의 지연 후 실행 (서버 초기화 완료 대기)
   setTimeout(runScan, 5000);
+
+  // 통계 수집기 시작
+  startStatsCollector();
 }
 
 export function stopScanner() {
@@ -277,18 +293,17 @@ export async function scanProject(project: Project, force: boolean = false) {
       const devIssues = await fetchGitLabIssues(project, decryptedToken, project.labelTarget);
       if (devIssues.length > 0) {
         console.log(`[Scanner] Found ${devIssues.length} dev-queue issues for ${project.name}`);
-        const assignedCount = await processIssues(project, devIssues, decryptedToken, true);
-        issueCount = devIssues.length - assignedCount;
+        const { assigned, waiting } = await processIssues(project, devIssues, decryptedToken, true);
+        issueCount += waiting;
       }
 
       // 검증 큐: labelValidation (예: IVE(V)) - 개발 완료 후 대기 중인 이슈
       const valIssues = await fetchGitLabIssues(project, decryptedToken, project.labelValidation);
       if (valIssues.length > 0) {
         console.log(`[Scanner] Found ${valIssues.length} val-queue issues for ${project.name}`);
-        await processIssues(project, valIssues, decryptedToken, false);
+        const { waiting: valWaiting } = await processIssues(project, valIssues, decryptedToken, false);
+        issueCount += valWaiting;
       }
-
-      if (issueCount < 0) issueCount = 0;
     } else if (project.provider === 'github') {
       // 구현 예정
     }
@@ -298,17 +313,18 @@ export async function scanProject(project: Project, force: boolean = false) {
     
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[Scanner] Error scanning project ${project.name}:`, msg);
+    console.warn(`[Scanner] Error scanning project ${project.name}: ${msg}`);
     updateProjectError(project.id, msg);
   }
 }
 
-async function processIssues(project: Project, issues: any[], decryptedToken: string, isDevelop: boolean): Promise<number> {
-  const targetCategory = isDevelop ? '개발' : '검증';
-  const roles = getRolesByProject(project.id).filter(r => r.status !== 'paused');
-  const targetRoles = roles.filter(r => r.category === targetCategory);
+async function processIssues(project: Project, issues: any[], decryptedToken: string, isDevelop: boolean): Promise<{ assigned: number; waiting: number }> {
+  const assignments = getProjectAssignments(project.id);
   let assignedCount = 0;
+  let waitingCount = 0;
+  const busyAgentIds = new Set<string>();
 
+  console.log(`[Scanner] processIssues: ${issues.length} issues, ${assignments.length} agents, isDevelop=${isDevelop}`);
   for (const issue of issues) {
     // 개발 큐: 이미 IVE(D) 또는 IVE(V) 레이블이 있거나 실행 중이면 스킵
     if (isDevelop && (
@@ -316,6 +332,7 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
       issue.labels.includes(project.labelValidation) ||
       hasActiveExecution(project.id, issue.iid)
     )) {
+      console.log(`[Scanner] [SKIP-INPROG] Issue #${issue.iid} (labels: ${issue.labels.join(',')}, activeExec: ${hasActiveExecution(project.id, issue.iid)})`);
       continue;
     }
     // 검증 큐: 이미 실행 중인 execution이 있으면 스킵 (중복 배정 방지)
@@ -323,65 +340,47 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
       continue;
     }
 
-    let assigned = false;
-
-    for (const role of targetRoles) {
-      const assignments = getRoleAssignments(role.id);
-
-      // 에이전트별 슬롯 수 집계 (멀티슬롯: 같은 에이전트를 여러 번 배정 가능)
-      const agentSlots = new Map<string, { assignment: typeof assignments[0], slots: number }>();
-      for (const a of assignments) {
-        const existing = agentSlots.get(a.agentId);
-        if (existing) {
-          existing.slots++;
-        } else {
-          agentSlots.set(a.agentId, { assignment: a, slots: 1 });
-        }
-      }
-
-      // 실행 중인 작업 수가 슬롯보다 적은 에이전트 탐색
-      let availableAssignment: typeof assignments[0] | null = null;
-      for (const [agentId, { assignment, slots }] of agentSlots) {
-        const running = countActiveExecutionsByAgent(agentId);
-        if (running < slots) {
-          availableAssignment = assignment;
-          break;
-        }
-      }
-
-      if (availableAssignment) {
-        console.log(`[Scanner] [ASSIGN] Project: ${project.name}, Issue: #${issue.iid}, Agent: ${availableAssignment.agent.name} (${targetCategory})`);
-
-        // 레이블 변경
-        //    개발: IVE → IVE(D)
-        //    검증: IVE(V) 그대로 유지 (이미 검증 큐 레이블이 붙어 있음)
-        const currentLabel = isDevelop ? project.labelTarget : project.labelValidation;
-        const inProgressLabel = isDevelop ? project.labelInProgress : project.labelValidation;
-        if (isDevelop) {
-          await updateGitLabIssueLabels(project, issue.iid, decryptedToken, [inProgressLabel], [currentLabel]);
-        }
-
-        // 비동기로 태스크 실행
-        executeTask(project, issue, availableAssignment.agent, decryptedToken, inProgressLabel, isDevelop, role.id)
-          .then(() => {
-            console.log(`[Scanner] [DONE] Issue #${issue.iid} processed.`);
-          })
-          .catch(err => {
-            console.error(`[Scanner] [FAILED] Issue #${issue.iid} error:`, err);
-          });
-
-        assigned = true;
+    // 실행 중인 작업이 없는 에이전트 탐색 (이번 루프에서 이미 배정한 에이전트도 제외)
+    let availableAgent: Agent | null = null;
+    for (const pa of assignments) {
+      if (busyAgentIds.has(pa.agentId)) continue;
+      const running = countActiveExecutionsByAgent(pa.agentId);
+      if (running === 0) {
+        availableAgent = pa.agent;
         break;
       }
     }
 
-    if (assigned) {
+    if (availableAgent) {
+      busyAgentIds.add(availableAgent.id);
+      const taskType = isDevelop ? '개발' : '검증';
+      console.log(`[Scanner] [ASSIGN] Project: ${project.name}, Issue: #${issue.iid}, Agent: ${availableAgent.name} (${taskType})`);
+
+      // 레이블 변경
+      const currentLabel = isDevelop ? project.labelTarget : project.labelValidation;
+      const inProgressLabel = isDevelop ? project.labelInProgress : project.labelValidation;
+      if (isDevelop) {
+        await updateGitLabIssueLabels(project, issue.iid, decryptedToken, [inProgressLabel], [currentLabel]);
+      }
+
+      // 비동기로 태스크 실행
+      executeTask(project, issue, availableAgent, decryptedToken, inProgressLabel, isDevelop)
+        .then(() => {
+          console.log(`[Scanner] [DONE] Issue #${issue.iid} processed.`);
+        })
+        .catch(err => {
+          console.error(`[Scanner] [FAILED] Issue #${issue.iid} error:`, err);
+        });
+
       assignedCount++;
     } else {
-      console.log(`[Scanner] [SKIP] No available agent for Issue #${issue.iid} (Category: ${targetCategory}). Will retry in next scan.`);
+      waitingCount++;
+      const taskType = isDevelop ? '개발' : '검증';
+      console.log(`[Scanner] [SKIP] No available agent for Issue #${issue.iid} (${taskType}). Will retry in next scan.`);
     }
   }
-  return assignedCount;
+  console.log(`[Scanner] processIssues result: assigned=${assignedCount}, waiting=${waitingCount}, busyAgents=[${[...busyAgentIds].join(',')}]`);
+  return { assigned: assignedCount, waiting: waitingCount };
 }
 
 /**
@@ -393,8 +392,7 @@ async function executeTask(
   agent: Agent,
   token: string,
   currentLabel: string,
-  isDevelop: boolean,
-  roleId: string
+  isDevelop: boolean
 ) {
   const iid = issue.iid;
   const executionId = `ex-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
@@ -408,12 +406,16 @@ async function executeTask(
   createExecution({
     id: executionId,
     projectId: project.id,
-    roleId: roleId,
     agentId: agent.id,
     issueIid: iid,
+    issueTitle: issue.title,
     status: 'running',
     startedAt: new Date().toISOString(),
-    logPath: logPath
+    logPath: logPath,
+    inputTokens: 0,
+    outputTokens: 0,
+    costUsd: 0,
+    turns: 0,
   });
 
   const conversationParts: string[] = []; // 이슈 노트용 대화 내용 수집
@@ -546,6 +548,12 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
 
       // stream-json 포맷을 파싱하여 사람이 읽을 수 있는 로그로 변환
       let stdoutBuffer = '';
+      let totalInputTokens = 0;
+      let totalOutputTokens = 0;
+      let totalCostUsd = 0;
+      let totalTurns = 0;
+      let assistantTurnCount = 0;
+
       child.stdout.on('data', (data: Buffer) => {
         stdoutBuffer += data.toString();
         const lines = stdoutBuffer.split('\n');
@@ -559,6 +567,21 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
             // 이슈 노트용 마크다운 수집
             const md = formatStreamEventMarkdown(event);
             if (md) conversationParts.push(md);
+            // assistant 이벤트 카운트 (턴 수 fallback용)
+            if (event.type === 'assistant') {
+              assistantTurnCount++;
+            }
+            // 토큰/비용/턴 누적
+            if (event.type === 'result') {
+              const iT = event.input_tokens ?? event.inputTokens ?? event.usage?.input_tokens ?? 0;
+              const oT = event.output_tokens ?? event.outputTokens ?? event.usage?.output_tokens ?? 0;
+              const cost = event.cost_usd ?? event.costUsd ?? event.cost ?? 0;
+              const turns = event.num_turns ?? event.numTurns ?? 0;
+              totalInputTokens += Number(iT);
+              totalOutputTokens += Number(oT);
+              totalCostUsd += Number(cost);
+              totalTurns = Math.max(totalTurns, Number(turns));
+            }
           } catch {
             logStream.write(line + '\n');
           }
@@ -581,6 +604,15 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
           }
         }
         log(`CLI 종료: code=${code}, signal=${signal}`, code === 0 ? 'system' : 'error');
+        // 토큰/비용/턴 DB 저장 (CLI가 cost를 제공하지 않으면 토큰 수로 환산)
+        // result 이벤트에서 turns를 못 가져왔으면 assistant 이벤트 카운트를 사용
+        const finalTurns = totalTurns > 0 ? totalTurns : assistantTurnCount;
+        if (totalInputTokens || totalOutputTokens || totalCostUsd || finalTurns) {
+          const finalCost = totalCostUsd > 0
+            ? totalCostUsd
+            : estimateCost(agent.cliName, totalInputTokens, totalOutputTokens);
+          updateExecutionTokens(executionId, totalInputTokens, totalOutputTokens, finalCost, finalTurns);
+        }
         if (code === 0) resolve();
         else reject(new Error(`Agent CLI exited with code ${code}`));
       });

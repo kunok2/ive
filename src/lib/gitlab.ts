@@ -49,7 +49,10 @@ export async function ensureGitLabLabels(project: Project, decryptedToken: strin
       headers: { 'PRIVATE-TOKEN': decryptedToken }
     });
 
-    if (!res.ok) throw new Error(`Failed to fetch labels: ${res.statusText}`);
+    if (!res.ok) {
+      if (res.status === 401) throw new Error('인증 토큰이 유효하지 않거나 만료되었습니다.');
+      throw new Error(`Failed to fetch labels: ${res.statusText}`);
+    }
     const existingLabels: any[] = await res.json();
     const existingNames = existingLabels.map(l => l.name);
 
@@ -68,7 +71,8 @@ export async function ensureGitLabLabels(project: Project, decryptedToken: strin
       }
     }
   } catch (err) {
-    console.error(`[GitLab] Error ensuring labels for ${project.name}:`, err);
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`[GitLab] Label sync failed for ${project.name}: ${msg}`);
   }
 }
 

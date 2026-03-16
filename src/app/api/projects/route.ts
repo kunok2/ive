@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getProjectsByUser, createProject, getRolesByProject, getRoleAssignments } from '@/lib/db'
+import { getProjectsByUser, createProject, getProjectAssignments } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { decrypt, encrypt } from '@/lib/crypto'
 
@@ -11,11 +11,7 @@ export async function GET() {
   const data = projects.map(p => ({
     ...p,
     accessToken: safeDecrypt(p.accessToken),
-    roles: getRolesByProject(p.id).map(r => ({
-      ...r,
-      accessToken: safeDecrypt(r.accessToken || ''),
-      assignedAgents: getRoleAssignments(r.id),
-    })),
+    assignedAgents: getProjectAssignments(p.id),
   }))
   return NextResponse.json(data)
 }

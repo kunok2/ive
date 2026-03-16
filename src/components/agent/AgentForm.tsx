@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { CliName } from '@/types'
 import { useStore } from '@/lib/store'
 
@@ -8,20 +8,53 @@ interface Props {
   onSuccess?: () => void
 }
 
-const cliTools: { value: CliName; label: string; icon: string; desc: string; defaultPath: string; defaultName: string }[] = [
-  { value: 'claude', label: 'Claude Code', icon: 'fa-solid fa-atom', desc: 'Anthropic의 AI 코딩 CLI', defaultPath: '/usr/local/bin/claude', defaultName: 'Claude' },
-  { value: 'gemini', label: 'Gemini CLI', icon: 'fa-brands fa-google', desc: 'Google의 AI 코딩 CLI', defaultPath: '/usr/local/bin/gemini', defaultName: 'Gemini' },
-  { value: 'codex', label: 'Codex CLI', icon: 'fa-solid fa-brain', desc: 'OpenAI의 AI 코딩 CLI', defaultPath: '/usr/local/bin/codex', defaultName: 'Codex' },
+type OS = 'mac' | 'windows' | 'linux'
+
+function detectOS(): OS {
+  if (typeof navigator === 'undefined') return 'linux'
+  const ua = navigator.userAgent.toLowerCase()
+  if (ua.includes('win')) return 'windows'
+  if (ua.includes('mac')) return 'mac'
+  return 'linux'
+}
+
+const defaultPaths: Record<OS, Record<CliName, string>> = {
+  mac: {
+    claude: '/opt/homebrew/bin/claude',
+    gemini: '/opt/homebrew/bin/gemini',
+    codex: '/opt/homebrew/bin/codex',
+  },
+  linux: {
+    claude: '/usr/local/bin/claude',
+    gemini: '/usr/local/bin/gemini',
+    codex: '/usr/local/bin/codex',
+  },
+  windows: {
+    claude: 'C:\\Users\\%USERNAME%\\AppData\\Roaming\\npm\\claude.cmd',
+    gemini: 'C:\\Users\\%USERNAME%\\AppData\\Roaming\\npm\\gemini.cmd',
+    codex: 'C:\\Users\\%USERNAME%\\AppData\\Roaming\\npm\\codex.cmd',
+  },
+}
+
+const cliTools: { value: CliName; label: string; icon: string; desc: string; defaultName: string }[] = [
+  { value: 'claude', label: 'Claude Code', icon: 'fa-solid fa-atom', desc: 'Anthropic의 AI 코딩 CLI', defaultName: 'Claude' },
+  { value: 'gemini', label: 'Gemini CLI', icon: 'fa-brands fa-google', desc: 'Google의 AI 코딩 CLI', defaultName: 'Gemini' },
+  { value: 'codex', label: 'Codex CLI', icon: 'fa-solid fa-brain', desc: 'OpenAI의 AI 코딩 CLI', defaultName: 'Codex' },
 ]
 
 export default function AgentForm({ onSuccess }: Props) {
   const { addAgent } = useStore()
+  const os = useMemo(() => detectOS(), [])
 
   const [cliName, setCliName] = useState<CliName>('claude')
   const [name, setName] = useState(cliTools[0].defaultName)
-  const [cliPath, setCliPath] = useState(cliTools[0].defaultPath)
+  const [cliPath, setCliPath] = useState(defaultPaths[os].claude)
   const [cliVersion, setCliVersion] = useState('')
   const [maxTurns, setMaxTurns] = useState(200)
+  const [snapshotInterval, setSnapshotInterval] = useState(1)
+  const [sparklinePoints, setSparklinePoints] = useState(60)
+  const [statsRetention, setStatsRetention] = useState(7)
+  const [showMonitoring, setShowMonitoring] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -29,7 +62,7 @@ export default function AgentForm({ onSuccess }: Props) {
     setCliName(cli)
     const tool = cliTools.find(t => t.value === cli)
     if (tool) {
-      setCliPath(tool.defaultPath)
+      setCliPath(defaultPaths[os][cli])
       setName(tool.defaultName)
     }
   }
@@ -56,6 +89,9 @@ export default function AgentForm({ onSuccess }: Props) {
         cliVersion: cliVersion.trim(),
         maxTurns,
         status: 'available',
+        snapshotInterval,
+        sparklinePoints,
+        statsRetention,
       })
       onSuccess?.()
     } catch (err) {
@@ -171,6 +207,82 @@ export default function AgentForm({ onSuccess }: Props) {
             ))}
           </div>
         </div>
+      </div>
+
+      {/* 모니터링 설정 */}
+      <div className="border-t border-ive-border-dark pt-2">
+        <button
+          type="button"
+          onClick={() => setShowMonitoring(!showMonitoring)}
+          className="flex items-center gap-1.5 text-base font-bold text-ive-cyan mb-3"
+        >
+          <i className={`fa-solid ${showMonitoring ? 'fa-chevron-down' : 'fa-chevron-right'} text-sm`} />
+          모니터링 설정
+        </button>
+
+        {showMonitoring && (
+          <div className="space-y-4 pb-2 animate-in fade-in slide-in-from-top-2">
+            <div>
+              <label className="block text-sm font-bold text-ive-text-muted mb-1.5 ml-1">
+                스냅샷 수집 간격 <span className="text-ive-text-dim font-normal">(분)</span>
+              </label>
+              <div className="flex items-center gap-2">
+                <div className="flex bg-ive-bg-input border border-ive-border rounded-lg overflow-hidden">
+                  <button type="button" onClick={() => setSnapshotInterval(v => Math.max(1, v - 1))} className="px-3 py-2 text-ive-text-muted hover:text-ive-cyan hover:bg-ive-cyan/10 transition-colors text-base font-black">−</button>
+                  <span className="w-12 py-2 flex items-center justify-center text-base font-black text-ive-text border-x border-ive-border">{snapshotInterval}</span>
+                  <button type="button" onClick={() => setSnapshotInterval(v => Math.min(60, v + 1))} className="px-3 py-2 text-ive-text-muted hover:text-ive-cyan hover:bg-ive-cyan/10 transition-colors text-base font-black">+</button>
+                </div>
+                <div className="flex gap-1 flex-1">
+                  {[1, 5, 10].map(v => (
+                    <button key={v} type="button" onClick={() => setSnapshotInterval(v)}
+                      className={`flex-1 py-2 rounded-lg text-sm font-black border transition-all ${snapshotInterval === v ? 'bg-ive-cyan/10 border-ive-cyan text-ive-cyan' : 'bg-ive-bg-card border-ive-border-subtle text-ive-text-dim'}`}
+                    >{v}m</button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-ive-text-muted mb-1.5 ml-1">
+                스파크라인 표시 건수
+              </label>
+              <div className="flex items-center gap-2">
+                <div className="flex bg-ive-bg-input border border-ive-border rounded-lg overflow-hidden">
+                  <button type="button" onClick={() => setSparklinePoints(v => Math.max(10, v - 10))} className="px-3 py-2 text-ive-text-muted hover:text-ive-cyan hover:bg-ive-cyan/10 transition-colors text-base font-black">−</button>
+                  <span className="w-12 py-2 flex items-center justify-center text-base font-black text-ive-text border-x border-ive-border">{sparklinePoints}</span>
+                  <button type="button" onClick={() => setSparklinePoints(v => Math.min(200, v + 10))} className="px-3 py-2 text-ive-text-muted hover:text-ive-cyan hover:bg-ive-cyan/10 transition-colors text-base font-black">+</button>
+                </div>
+                <div className="flex gap-1 flex-1">
+                  {[30, 60, 120].map(v => (
+                    <button key={v} type="button" onClick={() => setSparklinePoints(v)}
+                      className={`flex-1 py-2 rounded-lg text-sm font-black border transition-all ${sparklinePoints === v ? 'bg-ive-cyan/10 border-ive-cyan text-ive-cyan' : 'bg-ive-bg-card border-ive-border-subtle text-ive-text-dim'}`}
+                    >{v}</button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-ive-text-muted mb-1.5 ml-1">
+                데이터 보관 기간 <span className="text-ive-text-dim font-normal">(일)</span>
+              </label>
+              <div className="flex items-center gap-2">
+                <div className="flex bg-ive-bg-input border border-ive-border rounded-lg overflow-hidden">
+                  <button type="button" onClick={() => setStatsRetention(v => Math.max(1, v - 1))} className="px-3 py-2 text-ive-text-muted hover:text-ive-cyan hover:bg-ive-cyan/10 transition-colors text-base font-black">−</button>
+                  <span className="w-12 py-2 flex items-center justify-center text-base font-black text-ive-text border-x border-ive-border">{statsRetention}</span>
+                  <button type="button" onClick={() => setStatsRetention(v => Math.min(90, v + 1))} className="px-3 py-2 text-ive-text-muted hover:text-ive-cyan hover:bg-ive-cyan/10 transition-colors text-base font-black">+</button>
+                </div>
+                <div className="flex gap-1 flex-1">
+                  {[7, 14, 30].map(v => (
+                    <button key={v} type="button" onClick={() => setStatsRetention(v)}
+                      className={`flex-1 py-2 rounded-lg text-sm font-black border transition-all ${statsRetention === v ? 'bg-ive-cyan/10 border-ive-cyan text-ive-cyan' : 'bg-ive-bg-card border-ive-border-subtle text-ive-text-dim'}`}
+                    >{v}d</button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {error && (

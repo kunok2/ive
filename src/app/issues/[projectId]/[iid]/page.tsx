@@ -156,164 +156,115 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   const actions = STAGE_ACTIONS[issue.stage] || []
 
   return (
-    <div className="min-h-screen pb-20">
-      <header className="sticky top-0 z-40 bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark">
-        <div className="flex items-center gap-3 px-4 py-3 max-w-lg mx-auto">
-          <Link href="/issues" className="text-ive-green text-base font-semibold p-1 hover:bg-ive-green/5 rounded">
-            <i className="fa-solid fa-arrow-left mr-1" />목록
+    <div className="h-screen flex flex-col">
+      {/* 헤더: 뒤로가기 + 이슈번호 + 상태 + 외부링크 */}
+      <header className="sticky top-0 z-40 bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark shrink-0">
+        <div className="flex items-center gap-2 px-3 py-2 max-w-lg mx-auto">
+          <Link href="/issues" className="text-ive-green font-semibold p-1 hover:bg-ive-green/5 rounded shrink-0">
+            <i className="fa-solid fa-arrow-left" />
           </Link>
-          <h1 className="text-base font-bold text-ive-text flex-1 truncate">
-            <span className="text-ive-green font-black">#{issue.iid}</span> {issue.title}
-          </h1>
+          <span className="text-base font-black text-ive-green shrink-0">#{issue.iid}</span>
+          <span className={`text-xs font-bold px-1.5 py-0.5 rounded border ${stageInfo.bg} ${stageInfo.color} border-current/20 shrink-0`}>
+            <i className={`fa-solid ${stageInfo.icon} mr-0.5`} />{stageInfo.label}
+          </span>
+          <span className="text-xs text-ive-text-dim shrink-0"><i className="fa-solid fa-user mr-0.5" />{issue.author}</span>
+          <span className="text-xs text-ive-text-dim ml-auto shrink-0">
+            {new Date(issue.updatedAt).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}
+          </span>
         </div>
-      </header>
-
-      <main className="px-4 py-4 max-w-lg mx-auto space-y-4">
-        {/* 이슈 정보 카드 */}
-        <div className="bg-ive-bg-card border border-ive-border-subtle rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <span className={`text-sm font-bold px-2.5 py-1 rounded-lg border ${stageInfo.bg} ${stageInfo.color} border-current/20`}>
-              <i className={`fa-solid ${stageInfo.icon} mr-1`} />
-              {stageInfo.label}
-            </span>
-            <span className="text-xs text-ive-text-dim ml-auto">
-              {new Date(issue.createdAt).toLocaleString('ko-KR', {
-                year: 'numeric', month: 'short', day: 'numeric',
-              })}
-            </span>
-          </div>
-
-          <h2 className="text-lg font-bold text-ive-text leading-snug mb-2">{issue.title}</h2>
-
-          {issue.description && (
-            <div>
-              <button
-                onClick={() => setShowDesc(!showDesc)}
-                className="text-sm text-ive-text-muted hover:text-ive-text transition-colors"
-              >
-                <i className={`fa-solid ${showDesc ? 'fa-chevron-up' : 'fa-chevron-down'} mr-1`} />
-                설명 {showDesc ? '접기' : '보기'}
-              </button>
-              {showDesc && (
-                <div className="mt-2 text-sm text-ive-text-muted bg-ive-bg-deep rounded-lg p-3 whitespace-pre-wrap break-words leading-relaxed">
-                  {issue.description}
-                </div>
+        {/* 제목 + 설명 토글 + 단계 변경 */}
+        <div className="px-3 pb-2 max-w-lg mx-auto">
+          <div className="flex items-start gap-2">
+            <h1 className="text-sm font-bold text-ive-text leading-snug flex-1 line-clamp-2">{issue.title}</h1>
+            <div className="flex items-center gap-1 shrink-0">
+              {issue.description && (
+                <button onClick={() => setShowDesc(!showDesc)} className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all ${showDesc ? 'bg-ive-green/10 text-ive-green' : 'bg-ive-bg-card text-ive-text-dim border border-ive-border-subtle'}`} title="설명 보기">
+                  <i className={`fa-solid fa-file-lines text-xs`} />
+                </button>
               )}
-            </div>
-          )}
-
-          <div className="flex items-center gap-3 mt-3 text-xs text-ive-text-dim">
-            <span><i className="fa-solid fa-user mr-1" />{issue.author}</span>
-            <span>
-              <i className="fa-solid fa-clock mr-1" />
-              업데이트 {new Date(issue.updatedAt).toLocaleString('ko-KR', {
-                month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
-              })}
-            </span>
-          </div>
-        </div>
-
-        {/* 단계 변경 액션 */}
-        {actions.length > 0 && (
-          <div className="bg-ive-bg-card border border-ive-border-subtle rounded-xl p-4">
-            <h3 className="text-sm font-bold text-ive-text-muted mb-3">
-              <i className="fa-solid fa-arrow-right-arrow-left mr-1.5" />단계 변경
-            </h3>
-            <div className="flex flex-col gap-2">
               {actions.map(act => (
                 <button
                   key={act.action}
                   onClick={() => handleStageAction(act.action)}
                   disabled={stageChanging}
-                  className={`w-full text-sm font-bold px-4 py-2.5 rounded-xl border transition-all active:scale-[0.98] disabled:opacity-40 ${
+                  className={`h-7 px-2 rounded-lg text-xs font-bold border transition-all active:scale-95 disabled:opacity-40 ${
                     act.danger
-                      ? 'text-ive-red/80 border-ive-red/30 bg-ive-bg-deep hover:bg-ive-red/10'
-                      : 'text-ive-green border-ive-green/30 bg-ive-bg-deep hover:bg-ive-green/10'
+                      ? 'text-ive-red/80 border-ive-red/30 bg-ive-bg-card hover:bg-ive-red/10'
+                      : 'text-ive-green border-ive-green/30 bg-ive-bg-card hover:bg-ive-green/10'
                   }`}
                 >
-                  {stageChanging ? (
-                    <i className="fa-solid fa-circle-notch fa-spin" />
-                  ) : (
-                    <><i className={`fa-solid ${act.icon} mr-1.5`} />{act.label}</>
-                  )}
+                  {stageChanging ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className={`fa-solid ${act.icon} mr-0.5`} />{act.label}</>}
                 </button>
               ))}
             </div>
           </div>
-        )}
+          {showDesc && issue.description && (
+            <div className="mt-1.5 text-sm text-ive-text-muted bg-ive-bg-card rounded-lg p-2.5 whitespace-pre-wrap break-words leading-relaxed max-h-[30vh] overflow-y-auto">
+              {issue.description}
+            </div>
+          )}
+        </div>
+      </header>
 
-        {/* 노트 타임라인 */}
-        <div className="bg-ive-bg-card border border-ive-border-subtle rounded-xl overflow-hidden">
-          <div className="px-4 py-3 border-b border-ive-border-dark">
-            <h3 className="text-sm font-bold text-ive-text-muted">
-              <i className="fa-solid fa-comments mr-1.5" />활동 기록
-              {!notesLoading && <span className="ml-1 text-xs opacity-50">({notes.length})</span>}
-            </h3>
-          </div>
-
-          <div className="max-h-[50vh] overflow-y-auto custom-scrollbar">
-            {notesLoading ? (
-              <div className="text-center py-10 text-ive-text-dim text-sm">노트 불러오는 중...</div>
-            ) : notes.length === 0 ? (
-              <div className="text-center py-10 text-ive-text-dim text-sm">아직 활동 기록이 없습니다</div>
-            ) : (
-              <div className="divide-y divide-ive-border-dark">
-                {notes.map(note => (
-                  <div key={note.id} className={`px-4 py-3 ${note.system ? 'bg-white/[0.02]' : ''}`}>
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <span className={`text-xs font-bold ${note.system ? 'text-ive-text-dim' : 'text-ive-cyan'}`}>
-                        {note.system ? (
-                          <><i className="fa-solid fa-gear mr-1" />시스템</>
-                        ) : (
-                          <><i className="fa-solid fa-user mr-1" />{note.author}</>
-                        )}
-                      </span>
-                      <span className="text-xs text-ive-text-dim ml-auto">
-                        {new Date(note.createdAt).toLocaleString('ko-KR', {
-                          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
-                        })}
-                      </span>
-                    </div>
-                    <div className={`text-sm leading-relaxed whitespace-pre-wrap break-words ${
-                      note.system ? 'text-ive-text-dim italic' : 'text-ive-text-muted'
-                    }`}>
-                      {note.body.length > 500 ? (
-                        <NoteBody body={note.body} />
-                      ) : (
-                        note.body
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+      {/* 활동 기록 - 남은 공간 전체 사용 */}
+      <div className="flex-1 flex flex-col min-h-0 max-w-lg mx-auto w-full">
+        <div className="px-3 py-1.5 shrink-0 flex items-center justify-between">
+          <span className="text-xs font-bold text-ive-text-dim uppercase tracking-widest">
+            <i className="fa-solid fa-comments mr-1" />활동 기록
+            {!notesLoading && <span className="ml-1 opacity-50">({notes.length})</span>}
+          </span>
         </div>
 
-        {/* 코멘트 입력 */}
-        <div className="bg-ive-bg-card border border-ive-border-subtle rounded-xl p-4">
-          <textarea
-            value={comment}
-            onChange={e => setComment(e.target.value)}
-            placeholder="코멘트를 입력하세요..."
-            rows={3}
-            className="w-full bg-ive-bg-deep border border-ive-border rounded-xl px-3 py-2.5 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-green/50"
-          />
-          <div className="flex justify-end mt-2">
+        <div className="flex-1 overflow-y-auto px-3 pb-2">
+          {notesLoading ? (
+            <div className="text-center py-10 text-ive-text-dim text-sm">노트 불러오는 중...</div>
+          ) : notes.length === 0 ? (
+            <div className="text-center py-10 text-ive-text-dim text-sm">아직 활동 기록이 없습니다</div>
+          ) : (
+            <div className="space-y-1.5">
+              {notes.map(note => (
+                <div key={note.id} className={`rounded-lg px-3 py-2 ${note.system ? 'bg-white/[0.02]' : 'bg-ive-bg-card border border-ive-border-subtle'}`}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={`text-xs font-bold ${note.system ? 'text-ive-text-dim' : 'text-ive-cyan'}`}>
+                      {note.system ? (
+                        <><i className="fa-solid fa-gear mr-0.5" />시스템</>
+                      ) : (
+                        <><i className="fa-solid fa-user mr-0.5" />{note.author}</>
+                      )}
+                    </span>
+                    <span className="text-xs text-ive-text-dim ml-auto">
+                      {new Date(note.createdAt).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}
+                    </span>
+                  </div>
+                  <div className={`text-sm leading-relaxed whitespace-pre-wrap break-words ${note.system ? 'text-ive-text-dim italic' : 'text-ive-text-muted'}`}>
+                    {note.body.length > 500 ? <NoteBody body={note.body} /> : note.body}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* 코멘트 입력 - 하단 고정 */}
+        <div className="shrink-0 px-3 pb-20 pt-2 border-t border-ive-border-dark bg-ive-bg-deep/80">
+          <div className="flex gap-2 items-end">
+            <textarea
+              value={comment}
+              onChange={e => setComment(e.target.value)}
+              placeholder="코멘트..."
+              rows={1}
+              className="flex-1 bg-ive-bg-card border border-ive-border rounded-xl px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-green/50"
+            />
             <button
               onClick={handlePostComment}
               disabled={posting || !comment.trim()}
-              className="text-sm font-bold bg-ive-green text-ive-bg-deep px-5 py-2 rounded-xl active:scale-95 transition-all disabled:opacity-40"
+              className="shrink-0 w-10 h-10 rounded-xl bg-ive-green text-ive-bg-deep flex items-center justify-center active:scale-95 transition-all disabled:opacity-40"
             >
-              {posting ? (
-                <i className="fa-solid fa-circle-notch fa-spin" />
-              ) : (
-                <><i className="fa-solid fa-paper-plane mr-1.5" />전송</>
-              )}
+              {posting ? <i className="fa-solid fa-circle-notch fa-spin" /> : <i className="fa-solid fa-paper-plane" />}
             </button>
           </div>
         </div>
-      </main>
+      </div>
 
       <MobileTabBar />
     </div>

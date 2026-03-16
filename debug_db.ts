@@ -1,4 +1,4 @@
-import { getAllProjects, getRolesByProject, getRoleAssignments } from './src/lib/db';
+import { getAllProjects, getProjectAssignments } from './src/lib/db';
 
 async function debug() {
   try {
@@ -6,15 +6,10 @@ async function debug() {
     console.log('--- Projects ---');
     projects.forEach(p => {
       console.log(`Project: ${p.name} (ID: ${p.id}, TargetLabel: ${p.labelTarget})`);
-      const roles = getRolesByProject(p.id);
-      console.log(`  Total Roles: ${roles.length}`);
-      roles.forEach(r => {
-        const assignments = getRoleAssignments(r.id);
-        console.log(`    Role: ${r.name} (Category: ${r.category}, Status: ${r.status})`);
-        console.log(`      Assignments Count: ${assignments.length}`);
-        assignments.forEach(a => {
-          console.log(`        Agent: ${a.agent.name} (Status: ${a.agent.status})`);
-        });
+      const agents = getProjectAssignments(p.id);
+      console.log(`  Assigned Agents: ${agents.length}`);
+      agents.forEach(a => {
+        console.log(`    Agent: ${a.agent.name} (Status: ${a.agent.status})`);
       });
     });
   } catch (err) {
