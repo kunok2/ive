@@ -160,22 +160,19 @@ function XtermMiniView({ executionId }: { executionId: string }) {
     }
     eventSource.onerror = () => eventSource.close()
 
-    // 모바일 터치 스크롤 지원
+    // 모바일 터치 스크롤 지원 (iOS Safari)
     const el = termRef.current!
-    const xtScreen = el.querySelector('.xterm-screen') as HTMLElement
-    const xtViewport = el.querySelector('.xterm-viewport') as HTMLElement
-    if (xtScreen) xtScreen.style.touchAction = 'pan-y'
-    if (xtViewport) xtViewport.style.touchAction = 'pan-y'
     let touchY = 0
     const onTouchStart = (e: TouchEvent) => { touchY = e.touches[0].clientY }
     const onTouchMove = (e: TouchEvent) => {
+      e.preventDefault()
       const dy = touchY - e.touches[0].clientY
       touchY = e.touches[0].clientY
-      const lines = Math.round(dy / 20)
+      const lines = Math.round(dy / 14)
       if (lines !== 0) term.scrollLines(lines)
     }
     el.addEventListener('touchstart', onTouchStart, { passive: true })
-    el.addEventListener('touchmove', onTouchMove, { passive: true })
+    el.addEventListener('touchmove', onTouchMove, { passive: false })
 
     const handleResize = () => fit.fit()
     window.addEventListener('resize', handleResize)
