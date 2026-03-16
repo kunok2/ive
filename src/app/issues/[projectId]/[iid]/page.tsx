@@ -73,6 +73,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   const [posting, setPosting] = useState(false)
   const [stageChanging, setStageChanging] = useState(false)
   const [showDesc, setShowDesc] = useState(false)
+  const [isClosing, setIsClosing] = useState(false)
 
   const fetchIssue = useCallback(async () => {
     const res = await fetch(`/api/projects/${projectId}/issues`)
@@ -114,6 +115,21 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
       }
     } finally {
       setStageChanging(false)
+    }
+  }
+
+  async function handleCloseIssue() {
+    setIsClosing(true)
+    try {
+      const res = await fetch(`/api/projects/${projectId}/issues/${iid}/close`, {
+        method: 'POST',
+      })
+      if (res.ok) {
+        await fetchIssue()
+        await fetchNotes()
+      }
+    } finally {
+      setIsClosing(false)
     }
   }
 
@@ -196,6 +212,13 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                   {stageChanging ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className={`fa-solid ${act.icon} mr-0.5`} />{act.label}</>}
                 </button>
               ))}
+              <button
+                onClick={handleCloseIssue}
+                disabled={isClosing || stageChanging}
+                className="h-7 px-2 rounded-lg text-xs font-bold border text-ive-red/80 border-ive-red/30 bg-ive-bg-card hover:bg-ive-red/10 transition-all active:scale-95 disabled:opacity-40"
+              >
+                {isClosing ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-xmark mr-0.5" />닫기</>}
+              </button>
             </div>
           </div>
           {showDesc && issue.description && (

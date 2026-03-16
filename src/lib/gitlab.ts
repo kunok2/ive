@@ -311,6 +311,55 @@ export async function fetchAllIveIssues(project: Project, decryptedToken: string
 }
 
 /**
+ * 프로젝트의 모든 열린 이슈를 가져옵니다 (IVE 라벨 유무 상관없이).
+ */
+export async function fetchAllProjectIssues(project: Project, decryptedToken: string) {
+  const projectPath = getProjectPath(project.repoUrl);
+  if (!projectPath) return [];
+
+  try {
+    const allIssues: any[] = [];
+    let page = 1;
+    while (true) {
+      const res = await fetch(
+        `https://gitlab.com/api/v4/projects/${projectPath}/issues?state=opened&per_page=100&page=${page}`,
+        { headers: { 'PRIVATE-TOKEN': decryptedToken } }
+      );
+      if (!res.ok) break;
+      const issues = await res.json();
+      if (issues.length === 0) break;
+      allIssues.push(...issues);
+      if (issues.length < 100) break;
+      page++;
+    }
+    return allIssues.sort((a: any, b: any) => b.iid - a.iid);
+  } catch (err) {
+    console.error(`[GitLab] Error fetching all project issues for ${project.name}:`, err);
+    return [];
+  }
+}
+
+/**
+ * GitLab 이슈를 닫습니다.
+ */
+export async function closeGitLabIssue(project: Project, issueIid: number, decryptedToken: string) {
+  const projectPath = getProjectPath(project.repoUrl);
+  if (!projectPath) throw new Error('Invalid repo URL');
+
+  const res = await fetch(`https://gitlab.com/api/v4/projects/${projectPath}/issues/${issueIid}`, {
+    method: 'PUT',
+    headers: {
+      'PRIVATE-TOKEN': decryptedToken,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ state_event: 'close' }),
+  });
+
+  if (!res.ok) throw new Error(`이슈 닫기 실패: ${res.statusText}`);
+  return await res.json();
+}
+
+/**
  * 이슈를 생성합니다.
  */
 export async function createGitLabIssue(

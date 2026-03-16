@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getProject } from '@/lib/db';
 import { decrypt } from '@/lib/crypto';
-import { createGitLabIssue, fetchAllIveIssues } from '@/lib/gitlab';
+import { createGitLabIssue, fetchAllProjectIssues } from '@/lib/gitlab';
 
 export async function GET(
   _req: NextRequest,
@@ -13,7 +13,13 @@ export async function GET(
 
   try {
     const decryptedToken = decrypt(project.accessToken);
-    const issues = await fetchAllIveIssues(project, decryptedToken);
+    const issues = await fetchAllProjectIssues(project, decryptedToken);
+
+    // IVE 라벨 목록
+    const iveLabels = [
+      project.labelTarget, project.labelInProgress, project.labelFailDev,
+      project.labelValidation, project.labelFailVal, project.labelDone,
+    ];
 
     // 각 이슈에 stage 정보 부여
     const stageMap: Record<string, string> = {
@@ -27,10 +33,18 @@ export async function GET(
 
     const mapped = issues.map((issue: any) => {
       let stage = 'unknown';
-      for (const label of issue.labels || []) {
+      const issueLabels = issue.labels || [];
+      for (const label of issueLabels) {
         if (stageMap[label]) {
           stage = stageMap[label];
           break;
+        }
+      }
+      // IVE 라벨이 하나도 없는 이슈는 "대기"로 분류
+      if (stage === 'unknown') {
+        const hasIveLabel = issueLabels.some((l: string) => iveLabels.includes(l));
+        if (!hasIveLabel) {
+          stage = 'waiting';
         }
       }
       return {
