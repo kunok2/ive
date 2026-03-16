@@ -186,8 +186,8 @@ export default function IssuesTab() {
   const stages = selectedStages()
 
   return (
-    <div className="h-[calc(100dvh-3.5rem)] flex flex-col">
-      <div className="px-4 pt-4 max-w-lg mx-auto w-full shrink-0">
+    <div className="h-[calc(100dvh-3.5rem)] flex flex-col max-w-lg mx-auto px-4">
+      <div className="pt-4 shrink-0">
         {state.projects.length > 1 && (
           <select
             value={selectedProjectId}
@@ -344,8 +344,7 @@ export default function IssuesTab() {
 
       {/* 스크롤 가능한 리스트 영역 */}
       {selectedProjectId && (
-        <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar" data-scroll-container="issues-list">
-          <div className="px-4 pb-4 max-w-lg mx-auto w-full">
+        <div className="flex-1 min-h-0 overflow-y-auto pb-4 custom-scrollbar" data-scroll-container="issues-list">
             {loading ? (
               <div className="text-center py-20 text-ive-text-muted">이슈 불러오는 중...</div>
             ) : filtered.length === 0 ? (
@@ -412,7 +411,6 @@ export default function IssuesTab() {
                 })}
               </div>
             )}
-          </div>
         </div>
       )}
     </div>
