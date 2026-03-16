@@ -1,10 +1,8 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-import { Terminal } from '@xterm/xterm'
-import { FitAddon } from '@xterm/addon-fit'
-import '@xterm/xterm/css/xterm.css'
+import { useEffect, useState } from 'react'
 import { TaskExecution } from '@/types'
+import LogViewer from '@/components/ui/LogViewer'
 
 function formatDuration(startedAt: string, endedAt?: string): string {
   const start = new Date(startedAt).getTime()
@@ -29,9 +27,6 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
     const timer = setInterval(() => setTick(t => t + 1), 1000)
     return () => clearInterval(timer)
   }, [executions])
-  const terminalRef = useRef<HTMLDivElement>(null)
-  const xtermRef = useRef<Terminal | null>(null)
-  const fitAddonRef = useRef<FitAddon | null>(null)
 
   useEffect(() => {
     fetchExecutions()
@@ -51,68 +46,6 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
       setLoading(false)
     }
   }
-
-  useEffect(() => {
-    if (selectedId && terminalRef.current) {
-      // 터미널 초기화
-      const term = new Terminal({
-        theme: {
-          background: '#000000',
-          foreground: '#f8fafc',
-          cursor: '#34d399',
-          selectionBackground: '#334155',
-        },
-        fontSize: 12,
-        fontFamily: 'JetBrains Mono, Menlo, Courier New, monospace',
-        cursorBlink: true,
-        scrollback: 10000,
-      })
-
-      const fitAddon = new FitAddon()
-      term.loadAddon(fitAddon)
-      
-      term.open(terminalRef.current)
-      fitAddon.fit()
-      
-      term.writeln('\x1b[1;32m[SYSTEM] Connecting to agent trace stream...\x1b[0m')
-      
-      xtermRef.current = term
-      fitAddonRef.current = fitAddon
-
-      // SSE 연결
-      const eventSource = new EventSource(`/api/executions/${selectedId}/logs`)
-      
-      eventSource.onmessage = (event) => {
-        // SSE data: 필드는 브라우저가 \n으로 join → xterm은 \r\n 필요
-        term.write(event.data.replace(/\r?\n/g, '\r\n') + '\r\n')
-      }
-
-      eventSource.onerror = () => {
-        eventSource.close()
-      }
-
-      // 모바일 터치 스크롤 지원 (iOS Safari)
-      const el = terminalRef.current!
-      let touchY = 0
-      const onTouchStart = (e: TouchEvent) => { touchY = e.touches[0].clientY }
-      const onTouchMove = (e: TouchEvent) => {
-        e.preventDefault()
-        const dy = touchY - e.touches[0].clientY
-        touchY = e.touches[0].clientY
-        const lines = Math.round(dy / 14)
-        if (lines !== 0) term.scrollLines(lines)
-      }
-      el.addEventListener('touchstart', onTouchStart, { passive: true })
-      el.addEventListener('touchmove', onTouchMove, { passive: false })
-
-      return () => {
-        eventSource.close()
-        el.removeEventListener('touchstart', onTouchStart)
-        el.removeEventListener('touchmove', onTouchMove)
-        term.dispose()
-      }
-    }
-  }, [selectedId])
 
   if (loading) return <div className="text-center py-10 text-ive-text-muted">실행 이력 로딩 중...</div>
 
@@ -136,14 +69,19 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
                 )
               })()}
             </span>
-            <button 
+            <button
               onClick={() => setSelectedId(null)}
               className="text-sm font-bold text-ive-text-muted hover:text-ive-text bg-white/5 px-2 py-1 rounded"
             >
               목록으로
             </button>
           </div>
-          <div className="flex-1 min-h-0 p-2" ref={terminalRef} />
+          <LogViewer
+            sseUrl={`/api/executions/${selectedId}/logs`}
+            fontSize={12}
+            maxLines={10000}
+            className="flex-1 min-h-0"
+          />
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto space-y-2 p-3 custom-scrollbar">
@@ -184,7 +122,6 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
                     <span className={`font-mono font-bold ${ex.status === 'running' ? 'text-ive-amber' : 'text-ive-text-dim'}`}>
                       {ex.status === 'running' && <i className="fa-solid fa-stopwatch mr-1 text-sm" />}
                       {formatDuration(ex.startedAt, ex.endedAt)}
-                      {/* tick을 참조해 running 실행 시 리렌더 유발 */}
                       {ex.status === 'running' && tick >= 0 ? '' : ''}
                     </span>
                   </div>
