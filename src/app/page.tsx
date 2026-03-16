@@ -26,25 +26,27 @@ export default function HomePage() {
   return (
     <div className="min-h-screen pb-20">
       <header className="sticky top-0 z-40 bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark">
-        <div className="flex items-center justify-between px-4 py-3 max-w-lg mx-auto">
-          <div>
-            <h1 className="text-xl font-extrabold text-ive-green">Spring IVE</h1>
+        <div className="px-4 py-3 max-w-lg mx-auto">
+          <div className="flex items-center justify-between">
+            <h1 className="text-xl font-extrabold text-ive-green">
+              Spring IVE <span className="text-sm font-normal text-ive-text-dim">(v{process.env.APP_VERSION})</span>
+            </h1>
             <div className="flex items-center gap-2">
-              <p className="text-sm text-ive-text-muted">{state.user.name}</p>
+              <span className="text-sm text-ive-text-muted">{state.user.name}</span>
               <button
                 onClick={async () => { await logout(); router.push('/login') }}
-                className="text-sm text-ive-text-dim underline"
+                className="text-sm text-ive-text-dim hover:text-ive-text transition-colors"
               >
-                로그아웃
+                <i className="fa-solid fa-right-from-bracket" />
+              </button>
+              <button
+                onClick={() => setShowNewProject(true)}
+                className="w-8 h-8 rounded-full bg-ive-green flex items-center justify-center text-ive-bg-deep active:scale-95 transition-transform ml-1"
+              >
+                <i className="fa-solid fa-plus text-sm" />
               </button>
             </div>
           </div>
-          <button
-            onClick={() => setShowNewProject(true)}
-            className="w-9 h-9 rounded-full bg-ive-green flex items-center justify-center text-ive-bg-deep active:scale-95 transition-transform"
-          >
-            <i className="fa-solid fa-plus text-base" />
-          </button>
         </div>
       </header>
 
