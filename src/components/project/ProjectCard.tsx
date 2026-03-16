@@ -183,9 +183,16 @@ export default function ProjectCard({ project, roles }: Props) {
             <div className="font-bold text-base truncate leading-none mb-1" style={{ color: project.color || '#4ade80' }}>
               {project.name}
             </div>
-            <div className="text-sm text-ive-text-muted font-mono opacity-60 mb-1 break-all leading-tight">
+            <a
+              href={project.repoUrl.replace(/\.git$/, '')}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={e => e.stopPropagation()}
+              className="text-sm text-ive-text-muted font-mono opacity-60 mb-1 break-all leading-tight hover:text-ive-green hover:opacity-100 transition-colors inline-block"
+            >
               {project.repoUrl}
-            </div>
+              <i className="fa-solid fa-arrow-up-right-from-square text-xs ml-1 opacity-50" />
+            </a>
             <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
               <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden">
                 {project.lastCheckedAt ? (

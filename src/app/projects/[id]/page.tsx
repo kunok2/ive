@@ -108,7 +108,15 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             </div>
             <div className="min-w-0 flex-1">
               <div className="text-xl font-bold truncate leading-tight" style={{ color: project.color || '#4ade80' }}>{project.name}</div>
-              <div className="text-base text-ive-text-muted truncate mt-0.5">{project.repoUrl}</div>
+              <a
+                href={project.repoUrl.replace(/\.git$/, '')}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-base text-ive-text-muted truncate mt-0.5 hover:text-ive-green transition-colors inline-flex items-center gap-1"
+              >
+                {project.repoUrl}
+                <i className="fa-solid fa-arrow-up-right-from-square text-xs opacity-50 shrink-0" />
+              </a>
             </div>
           </div>
 
