@@ -269,6 +269,16 @@ export default function IssuesTab() {
                   </div>
                   {!bulkMode && (
                     <button
+                      onClick={fetchIssues}
+                      disabled={loading}
+                      className="w-8 h-8 rounded-full bg-ive-bg-deep border border-ive-border-subtle flex items-center justify-center text-ive-text-dim hover:text-ive-green hover:border-ive-green/30 transition-all disabled:opacity-40"
+                      title="새로고침"
+                    >
+                      <i className={`fa-solid fa-arrows-rotate text-sm ${loading ? 'fa-spin' : ''}`} />
+                    </button>
+                  )}
+                  {!bulkMode && (
+                    <button
                       onClick={() => setShowAddForm(true)}
                       className="w-8 h-8 rounded-full bg-ive-green/20 border border-ive-green/30 flex items-center justify-center text-ive-green hover:bg-ive-green/30 transition-all"
                       title="이슈 추가"
