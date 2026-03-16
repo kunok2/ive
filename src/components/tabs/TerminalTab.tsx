@@ -83,6 +83,25 @@ export default function TerminalTab() {
         }
       })
 
+      // 모바일 터치 스크롤 지원
+      const viewport = containerRef.current!.querySelector('.xterm-viewport') as HTMLElement
+      const screen = containerRef.current!.querySelector('.xterm-screen') as HTMLElement
+      if (screen) screen.style.touchAction = 'pan-y'
+      if (viewport) viewport.style.touchAction = 'pan-y'
+      let touchStartY = 0
+      const handleTouchStart = (e: TouchEvent) => {
+        touchStartY = e.touches[0].clientY
+      }
+      const handleTouchMove = (e: TouchEvent) => {
+        const dy = touchStartY - e.touches[0].clientY
+        touchStartY = e.touches[0].clientY
+        const lines = Math.round(dy / 20)
+        if (lines > 0) term.scrollLines(lines)
+        else if (lines < 0) term.scrollLines(lines)
+      }
+      containerRef.current!.addEventListener('touchstart', handleTouchStart, { passive: true })
+      containerRef.current!.addEventListener('touchmove', handleTouchMove, { passive: true })
+
       containerRef.current!.addEventListener('contextmenu', (e) => {
         e.preventDefault()
         navigator.clipboard.readText().then(text => {

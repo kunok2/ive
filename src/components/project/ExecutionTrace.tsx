@@ -91,8 +91,27 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
         eventSource.close()
       }
 
+      // 모바일 터치 스크롤 지원
+      const el = terminalRef.current!
+      const xtScreen = el.querySelector('.xterm-screen') as HTMLElement
+      const xtViewport = el.querySelector('.xterm-viewport') as HTMLElement
+      if (xtScreen) xtScreen.style.touchAction = 'pan-y'
+      if (xtViewport) xtViewport.style.touchAction = 'pan-y'
+      let touchY = 0
+      const onTouchStart = (e: TouchEvent) => { touchY = e.touches[0].clientY }
+      const onTouchMove = (e: TouchEvent) => {
+        const dy = touchY - e.touches[0].clientY
+        touchY = e.touches[0].clientY
+        const lines = Math.round(dy / 20)
+        if (lines !== 0) term.scrollLines(lines)
+      }
+      el.addEventListener('touchstart', onTouchStart, { passive: true })
+      el.addEventListener('touchmove', onTouchMove, { passive: true })
+
       return () => {
         eventSource.close()
+        el.removeEventListener('touchstart', onTouchStart)
+        el.removeEventListener('touchmove', onTouchMove)
         term.dispose()
       }
     }

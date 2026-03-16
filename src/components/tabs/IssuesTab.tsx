@@ -71,6 +71,15 @@ export default function IssuesTab() {
   const setSelectedProjectId = (id: string) => setIssuesProjectId(id)
   const setFilter = (f: string) => setIssuesFilter(f)
 
+  // 스크롤 위치 저장/복원
+  useEffect(() => {
+    const saved = sessionStorage.getItem('issues-scroll')
+    if (saved) {
+      requestAnimationFrame(() => window.scrollTo(0, Number(saved)))
+      sessionStorage.removeItem('issues-scroll')
+    }
+  }, [])
+
   const toggleSelect = (iid: number) => {
     setSelected(prev => {
       const next = new Set(prev)
@@ -343,6 +352,7 @@ export default function IssuesTab() {
                       key={issue.iid}
                       onClick={() => {
                         if (bulkMode) { toggleSelect(issue.iid); return }
+                        sessionStorage.setItem('issues-scroll', String(window.scrollY))
                         router.push(`/issues/${selectedProjectId}/${issue.iid}`)
                       }}
                       className={`bg-ive-bg-card border rounded-xl p-4 transition-all cursor-pointer active:scale-[0.98] ${
