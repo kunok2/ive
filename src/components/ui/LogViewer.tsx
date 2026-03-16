@@ -304,7 +304,7 @@ interface LogViewerProps {
   onConnectionChange?: (connected: boolean) => void
   /** 라인 수 콜백 */
   onLineCountChange?: (count: number) => void
-  /** 초기 자동 스크롤 활성화 여부 (기본: true). 과거 이력 조회 시 false로 설정 */
+  /** 자동 스크롤 활성화 여부 (기본: true). false이면 초기 스크롤을 맨 위로 유지 */
   initialAutoScroll?: boolean
 }
 
@@ -325,7 +325,7 @@ export default function LogViewer({
   const autoScrollRef = useRef(initialAutoScroll)
   const linesRef = useRef<LineData[]>([])
 
-  // 자동 스크롤 (부드러운 스크롤 적용)
+  // 자동 스크롤 (부드럽게)
   const scrollToBottom = useCallback(() => {
     if (containerRef.current) {
       containerRef.current.scrollTo({
