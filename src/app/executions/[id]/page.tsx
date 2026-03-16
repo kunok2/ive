@@ -23,7 +23,7 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
 
   const scrollToBottom = useCallback(() => {
     const el = containerRef.current?.querySelector('[data-log-scroll]')
-    if (el) el.scrollTop = el.scrollHeight
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
   }, [])
 
   return (

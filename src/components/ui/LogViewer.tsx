@@ -304,6 +304,8 @@ interface LogViewerProps {
   onConnectionChange?: (connected: boolean) => void
   /** 라인 수 콜백 */
   onLineCountChange?: (count: number) => void
+  /** 초기 자동 스크롤 활성화 여부 (기본: true). 과거 이력 조회 시 false로 설정 */
+  initialAutoScroll?: boolean
 }
 
 const ANSI_ESCAPE_RE = /\x1b\[/
@@ -316,16 +318,20 @@ export default function LogViewer({
   className = '',
   onConnectionChange,
   onLineCountChange,
+  initialAutoScroll = true,
 }: LogViewerProps) {
   const [lines, setLines] = useState<LineData[]>([])
   const containerRef = useRef<HTMLDivElement>(null)
-  const autoScrollRef = useRef(true)
+  const autoScrollRef = useRef(initialAutoScroll)
   const linesRef = useRef<LineData[]>([])
 
-  // 자동 스크롤
+  // 자동 스크롤 (부드러운 스크롤 적용)
   const scrollToBottom = useCallback(() => {
     if (containerRef.current) {
-      containerRef.current.scrollTop = containerRef.current.scrollHeight
+      containerRef.current.scrollTo({
+        top: containerRef.current.scrollHeight,
+        behavior: 'smooth',
+      })
     }
   }, [])
 
@@ -446,7 +452,10 @@ export default function LogViewer({
 export function useLogViewerScroll(containerRef: React.RefObject<HTMLDivElement | null>) {
   return useCallback(() => {
     if (containerRef.current) {
-      containerRef.current.scrollTop = containerRef.current.scrollHeight
+      containerRef.current.scrollTo({
+        top: containerRef.current.scrollHeight,
+        behavior: 'smooth',
+      })
     }
   }, [containerRef])
 }
