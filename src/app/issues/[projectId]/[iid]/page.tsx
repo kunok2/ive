@@ -1,6 +1,7 @@
 'use client'
 
 import { use, useCallback, useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import MobileTabBar from '@/components/layout/MobileTabBar'
 
@@ -65,6 +66,7 @@ const STAGE_ACTIONS: Record<string, StageAction[]> = {
 
 export default function IssueDetailPage({ params }: { params: Promise<{ projectId: string; iid: string }> }) {
   const { projectId, iid } = use(params)
+  const router = useRouter()
   const [issue, setIssue] = useState<IssueDetail | null>(null)
   const [notes, setNotes] = useState<Note[]>([])
   const [loading, setLoading] = useState(true)
@@ -125,8 +127,8 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
         method: 'POST',
       })
       if (res.ok) {
-        await fetchIssue()
-        await fetchNotes()
+        router.back()
+        return
       }
     } finally {
       setIsClosing(false)
