@@ -106,13 +106,16 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
         <div className="flex-1 flex flex-col min-h-0 bg-black rounded-xl overflow-hidden border border-ive-border-dark shadow-2xl">
           <div className="bg-ive-bg-deep px-4 py-2 border-b border-ive-border-dark flex items-center justify-between shrink-0">
             <span className="text-sm font-bold text-ive-green uppercase tracking-widest flex items-center gap-2">
-              Agent Trace Log
+              에이전트 실행 로그
               {(() => {
                 const ex = executions.find(e => e.id === selectedId)
                 if (!ex) return null
+                const elapsed = formatDuration(ex.startedAt, ex.endedAt)
                 return (
                   <span className="text-ive-text-muted font-mono normal-case tracking-normal">
-                    {new Date(ex.startedAt).toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
+                    {new Date(ex.startedAt).toLocaleString('ko-KR', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}
+                    {ex.status === 'running' && <span className="text-ive-amber ml-2">{elapsed}{tick >= 0 ? '' : ''}</span>}
+                    {ex.status !== 'running' && <span className="text-ive-text-dim ml-2">{elapsed}</span>}
                   </span>
                 )
               })()}
@@ -121,7 +124,7 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
               onClick={() => setSelectedId(null)}
               className="text-sm font-bold text-ive-text-muted hover:text-ive-text bg-white/5 px-2 py-1 rounded"
             >
-              목록으로 돌아가기
+              목록으로
             </button>
           </div>
           <div className="flex-1 min-h-0 p-2" ref={terminalRef} />
@@ -136,18 +139,18 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
           ) : (
             executions.map(ex => (
               <div key={ex.id}>
-                <button
+                <div
                   onClick={() => setSelectedId(ex.id)}
-                  className="w-full text-left bg-ive-bg-card border border-ive-border-subtle p-4 rounded-xl hover:border-ive-green/50 hover:bg-ive-green/5 transition-all group"
+                  className="w-full text-left bg-ive-bg-card border border-ive-border-subtle p-4 rounded-xl hover:border-ive-green/50 hover:bg-ive-green/5 transition-all group cursor-pointer"
                 >
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-base font-black text-ive-green-pale">Issue #{ex.issueIid}</span>
-                    <span className={`text-sm font-bold px-2 py-0.5 rounded-full uppercase tracking-tighter ${
+                    <span className={`text-sm font-bold px-2 py-0.5 rounded-full tracking-tighter ${
                       ex.status === 'running' ? 'bg-ive-amber/20 text-ive-amber animate-pulse' :
                       ex.status === 'success' ? 'bg-ive-green/20 text-ive-green' :
                       'bg-ive-red/20 text-ive-red'
                     }`}>
-                      {ex.status}
+                      {ex.status === 'running' ? '실행 중' : ex.status === 'success' ? '완료' : '실패'}
                     </span>
                   </div>
                   <div className="flex items-center gap-2 mb-1.5 flex-wrap">
@@ -165,7 +168,7 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
                   <div className="flex items-center justify-between text-sm text-ive-text-muted group-hover:text-ive-text-dim">
                     <span>
                       <i className="fa-solid fa-calendar-day mr-1" />
-                      {new Date(ex.startedAt).toLocaleString()}
+                      {new Date(ex.startedAt).toLocaleString('ko-KR', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}
                     </span>
                     <span className={`font-mono font-bold ${ex.status === 'running' ? 'text-ive-amber' : 'text-ive-text-dim'}`}>
                       {ex.status === 'running' && <i className="fa-solid fa-stopwatch mr-1 text-sm" />}
@@ -194,7 +197,7 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
                       </button>
                     </div>
                   )}
-                </button>
+                </div>
               </div>
             ))
           )}

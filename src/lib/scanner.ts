@@ -33,12 +33,26 @@ const exec = promisify(require('child_process').exec);
 /**
  * Claude CLI stream-json 이벤트를 읽기 좋은 로그 텍스트로 변환
  */
+function extractMeta(event: any, usage?: any): string | null {
+  const meta: string[] = [];
+  const u = usage || {};
+  const inputT = u.input_tokens ?? u.inputTokens ?? event.input_tokens;
+  const outputT = u.output_tokens ?? u.outputTokens ?? event.output_tokens;
+  if (inputT || outputT) meta.push(`입력 ${Number(inputT||0).toLocaleString()} + 출력 ${Number(outputT||0).toLocaleString()} 토큰`);
+  const cost = event.cost_usd ?? event.costUsd ?? event.cost;
+  if (cost) meta.push(`비용 $${Number(cost).toFixed(4)}`);
+  const dur = event.duration_ms ?? event.durationMs ?? event.duration_api_ms;
+  if (dur) meta.push(`응답 ${(Number(dur) / 1000).toFixed(1)}초`);
+  const turns = event.num_turns ?? event.numTurns;
+  if (turns) meta.push(`${turns}턴`);
+  return meta.length > 0 ? `(${meta.join(' | ')})` : null;
+}
+
 function formatStreamEvent(event: any): string | null {
   const ts = new Date().toTimeString().slice(0, 8);
 
   switch (event.type) {
     case 'assistant': {
-      // assistant 메시지: content 배열에서 text/tool_use 추출
       const parts = event.message?.content || [];
       const lines: string[] = [];
       for (const part of parts) {
@@ -50,27 +64,43 @@ function formatStreamEvent(event: any): string | null {
           lines.push(`[${ts}] \x1b[1;34m[Tool] ${part.name}\x1b[0m ${summary}`);
         }
       }
-      return lines.length > 0 ? lines.join('\n') : null;
+      if (lines.length === 0) return null;
+      const usage = event.message?.usage || event.usage;
+      const meta = extractMeta(event, usage);
+      if (meta) lines.push(`\x1b[90m       ${meta}\x1b[0m`);
+      return lines.join('\n');
     }
     case 'content_block_delta': {
       const delta = event.delta;
       if (delta?.type === 'text_delta' && delta.text) {
-        return delta.text; // 스트리밍 텍스트는 타임스탬프 없이
+        return delta.text;
       }
       return null;
     }
     case 'result': {
-      const cost = event.cost_usd ? `$${event.cost_usd.toFixed(4)}` : '';
-      const dur = event.duration_ms ? `${(event.duration_ms / 1000).toFixed(1)}s` : '';
-      const tokens = event.total_tokens ? `${event.total_tokens} tokens` : '';
-      return `[${ts}] \x1b[1;32m[Result]\x1b[0m ${event.result || ''} ${[cost, dur, tokens].filter(Boolean).join(' | ')}`;
+      const meta = extractMeta(event, event.usage) || '';
+      const metaStr = meta ? `\x1b[90m${meta}\x1b[0m ` : '';
+      return `[${ts}] \x1b[1;32m[완료]\x1b[0m ${metaStr}${event.result ? '\n' + event.result : ''}`;
     }
     case 'system': {
-      const msg = event.message || event.data || JSON.stringify(event);
-      return `[${ts}] \x1b[1;36m[System]\x1b[0m ${msg}`;
+      // system 이벤트 중 의미 있는 메시지만 출력 (JSON 덤프 방지)
+      if (event.subtype === 'init' || event.subtype === 'session') {
+        return `[${ts}] \x1b[1;36m[시작]\x1b[0m 세션 초기화`;
+      }
+      // task_notification 등 내부 이벤트는 메타만 간략히
+      if (event.subtype === 'task_notification') {
+        const summary = event.summary || '';
+        const tokens = event.usage?.total_tokens ? ` (${event.usage.total_tokens.toLocaleString()} tokens)` : '';
+        return summary ? `[${ts}] \x1b[90m[내부작업] ${summary}${tokens}\x1b[0m` : null;
+      }
+      // 문자열 메시지가 있으면 표시, 아니면 무시
+      if (typeof event.message === 'string' && event.message.trim()) {
+        return `[${ts}] \x1b[1;36m[System]\x1b[0m ${event.message}`;
+      }
+      return null; // 나머지 system 이벤트는 무시
     }
     default:
-      return null; // 불필요한 이벤트는 무시
+      return null;
   }
 }
 
@@ -94,9 +124,17 @@ function formatStreamEventMarkdown(event: any): string | null {
     }
     case 'result': {
       const info: string[] = [];
-      if (event.cost_usd) info.push(`비용: $${event.cost_usd.toFixed(4)}`);
-      if (event.duration_ms) info.push(`소요: ${(event.duration_ms / 1000).toFixed(1)}s`);
-      if (event.total_tokens) info.push(`토큰: ${event.total_tokens.toLocaleString()}`);
+      const cost = event.cost_usd ?? event.costUsd ?? event.cost;
+      const duration = event.duration_ms ?? event.durationMs ?? event.duration_api_ms;
+      const tokens = event.total_tokens ?? event.totalTokens ?? event.usage?.total_tokens;
+      const inputTokens = event.input_tokens ?? event.inputTokens ?? event.usage?.input_tokens;
+      const outputTokens = event.output_tokens ?? event.outputTokens ?? event.usage?.output_tokens;
+      const turns = event.num_turns ?? event.numTurns;
+      if (cost) info.push(`비용: $${Number(cost).toFixed(4)}`);
+      if (duration) info.push(`소요: ${(Number(duration) / 1000).toFixed(1)}s`);
+      if (tokens) info.push(`토큰: ${Number(tokens).toLocaleString()}`);
+      else if (inputTokens || outputTokens) info.push(`토큰: ${(Number(inputTokens||0) + Number(outputTokens||0)).toLocaleString()}`);
+      if (turns) info.push(`턴: ${turns}`);
       return `\n---\n**📊 실행 결과** ${info.join(' | ')}${event.result ? '\n\n' + event.result : ''}`;
     }
     default:
@@ -112,7 +150,14 @@ function formatToolInputMarkdown(toolName: string, input: any): string {
     case 'Bash': return input.command ? `\`$ ${input.command.substring(0, 100)}\`` : '';
     case 'Glob': return `\`${input.pattern || ''}\``;
     case 'Grep': return `\`"${input.pattern || ''}"\``;
-    default: return '';
+    case 'ToolSearch': return input.query ? `\`${input.query}\`` : '';
+    case 'WebSearch': return `\`${input.query || input.search_query || ''}\``;
+    case 'WebFetch': return `\`${input.url || ''}\``;
+    case 'Agent': return input.description || input.prompt?.substring(0, 80) || '';
+    default: {
+      const vals = Object.values(input).filter(v => typeof v === 'string').join(' ').substring(0, 80);
+      return vals ? `\`${vals}\`` : '';
+    }
   }
 }
 
@@ -130,8 +175,16 @@ function formatToolInput(toolName: string, input: any): string {
       return input.pattern || '';
     case 'Grep':
       return `"${input.pattern || ''}" ${input.path || ''}`;
+    case 'ToolSearch':
+      return input.query || '';
+    case 'WebSearch':
+      return input.query || input.search_query || '';
+    case 'WebFetch':
+      return input.url || '';
+    case 'Agent':
+      return input.description || input.prompt?.substring(0, 80) || '';
     default:
-      return '';
+      return Object.values(input).filter(v => typeof v === 'string').join(' ').substring(0, 80) || '';
   }
 }
 
@@ -383,7 +436,7 @@ async function executeTask(
     log(`\x1b[1;36m${'═'.repeat(50)}\x1b[0m`, 'info');
 
     // 1. 작업 디렉토리 준비
-    log("Preparing workspace...", 'system');
+    log("작업 디렉토리 준비 중...", 'system');
     if (fs.existsSync(workspacePath)) {
       fs.rmSync(workspacePath, { recursive: true, force: true });
     }
@@ -393,7 +446,7 @@ async function executeTask(
     const repoUrl = project.repoUrl.replace('https://', `https://oauth2:${token}@`);
     const branchName = isDevelop ? `dev-${iid}` : `val-${iid}`;
     
-    log("Cloning repository...", 'system');
+    log("저장소 클론 중...", 'system');
     await exec(`git clone ${repoUrl} .`, { cwd: workspacePath });
     
     let baseBranch = 'staging';
@@ -524,12 +577,12 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
             logStream.write(stdoutBuffer + '\n');
           }
         }
-        log(`Agent CLI exited: code=${code}, signal=${signal}`, code === 0 ? 'system' : 'error');
+        log(`CLI 종료: code=${code}, signal=${signal}`, code === 0 ? 'system' : 'error');
         if (code === 0) resolve();
         else reject(new Error(`Agent CLI exited with code ${code}`));
       });
       child.on('error', (err) => {
-        log(`Failed to spawn agent CLI: ${err.message}`, 'error');
+        log(`CLI 실행 실패: ${err.message}`, 'error');
         reject(err);
       });
     });
@@ -540,7 +593,7 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
     // 6. 변경 사항 확인 및 커밋/푸시
     const { stdout: diffResult } = await exec(`git diff --cached --name-only`, { cwd: workspacePath });
     if (diffResult.trim()) {
-      log("Changes detected. Committing and pushing...", 'system');
+      log("변경사항 감지. 커밋 및 푸시 중...", 'system');
       await exec(`git commit -m "fix: resolve #${iid} - ${issue.title}"`, { cwd: workspacePath });
       await exec(`git push -f origin ${branchName}`, { cwd: workspacePath });
 
@@ -574,18 +627,23 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
         // 검증 완료: IVE(V) → IVE(E) (완료)
         await updateGitLabIssueLabels(project, iid, token, [project.labelDone], [currentLabel]);
       }
-      log("Task successfully completed.", 'system');
+      log("작업 완료.", 'system');
       updateExecutionStatus(executionId, 'success', new Date().toISOString());
     } else {
-      log("No changes generated.", 'warn');
+      log("코드 변경사항 없음. 작업 완료로 처리.", 'system');
       const noChangeLog = conversationParts.join('\n\n').substring(0, 60000);
-      await addGitLabIssueComment(project, iid, token, `## IVE(봇) 작업 보고\n적용할 코드가 감지되지 않았습니다.\n\n<details>\n<summary>🤖 AI 작업 로그 (펼치기)</summary>\n\n${noChangeLog}\n\n</details>`);
-      await updateGitLabIssueLabels(project, iid, token, [isDevelop ? project.labelFailDev : project.labelFailVal], [currentLabel]);
+      await addGitLabIssueComment(project, iid, token, `## IVE(봇) ${isDevelop ? '개발' : '검증'} 완료\n\n코드 변경 없이 작업을 완료했습니다.\n소요 시간: ${durationStr}\n\n<details>\n<summary>🤖 AI 작업 로그 (펼치기)</summary>\n\n${noChangeLog}\n\n</details>`);
+      await addGitLabSpentTime(project, iid, token, durationStr);
+      if (isDevelop) {
+        await updateGitLabIssueLabels(project, iid, token, [project.labelValidation], [currentLabel]);
+      } else {
+        await updateGitLabIssueLabels(project, iid, token, [project.labelDone], [currentLabel]);
+      }
       updateExecutionStatus(executionId, 'success', new Date().toISOString());
     }
 
   } catch (err: any) {
-    log(`Error occurred: ${err.message}`, 'error');
+    log(`오류 발생: ${err.message}`, 'error');
     const errorLog = conversationParts.join('\n\n').substring(0, 60000);
     await addGitLabIssueComment(project, iid, token, `## IVE(봇) 실행 오류\n오류가 발생했습니다: ${err.message}\n\n<details>\n<summary>🤖 AI 작업 로그 (펼치기)</summary>\n\n${errorLog}\n\n</details>`);
     await updateGitLabIssueLabels(project, iid, token, [isDevelop ? project.labelFailDev : project.labelFailVal], [currentLabel]);

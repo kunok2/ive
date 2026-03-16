@@ -149,26 +149,28 @@ export default function AgentForm({ onSuccess }: Props) {
         <label className="block text-base font-semibold text-ive-text-muted mb-2">
           <i className="fa-solid fa-repeat mr-1" />최대 턴 수
         </label>
-        <div className="flex items-center gap-2">
-          <input
-            type="number"
-            value={maxTurns}
-            onChange={e => setMaxTurns(Math.max(1, parseInt(e.target.value) || 200))}
-            min={1}
-            max={1000}
-            className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-base text-ive-text focus:outline-none focus:border-ive-green font-mono"
-          />
+        <div className="flex items-center gap-1.5">
+          <div className="flex items-center border border-ive-border rounded-lg overflow-hidden bg-ive-bg-input shrink-0">
+            <button
+              type="button"
+              onClick={() => setMaxTurns(v => Math.max(1, v - 10))}
+              className="px-2.5 py-3 text-ive-text-muted hover:text-ive-green hover:bg-ive-green/10 transition-colors text-base font-black"
+            >−</button>
+            <span className="w-12 py-3 flex items-center justify-center text-base font-black text-ive-text border-x border-ive-border">{maxTurns}</span>
+            <button
+              type="button"
+              onClick={() => setMaxTurns(v => Math.min(1000, v + 10))}
+              className="px-2.5 py-3 text-ive-text-muted hover:text-ive-green hover:bg-ive-green/10 transition-colors text-base font-black"
+            >+</button>
+          </div>
           <div className="flex gap-1 flex-1 min-w-0">
             {[50, 100, 200].map(v => (
               <button key={v} type="button" onClick={() => setMaxTurns(v)}
-                className={`flex-1 px-2 py-3 rounded-lg text-sm font-bold border transition-colors ${maxTurns === v ? 'bg-ive-green/20 border-ive-green text-ive-green' : 'bg-ive-bg-deep border-ive-border-subtle text-ive-text-muted'}`}
+                className={`flex-1 py-3 rounded-lg text-sm font-black border transition-all ${maxTurns === v ? 'bg-ive-green/10 border-ive-green text-ive-green' : 'bg-ive-bg-card border-ive-border-subtle text-ive-text-dim'}`}
               >{v}</button>
             ))}
           </div>
         </div>
-        <p className="text-sm text-ive-text-dim mt-1">
-          <i className="fa-solid fa-circle-info mr-1" />AI가 한 작업에서 수행할 수 있는 최대 대화 턴 수
-        </p>
       </div>
 
       {error && (

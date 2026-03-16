@@ -183,16 +183,13 @@ export default function ProjectCard({ project, roles }: Props) {
             <div className="font-bold text-base truncate leading-none mb-1" style={{ color: project.color || '#4ade80' }}>
               {project.name}
             </div>
-            <a
-              href={project.repoUrl.replace(/\.git$/, '')}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={e => e.stopPropagation()}
-              className="text-sm text-ive-text-muted font-mono opacity-60 mb-1 break-all leading-tight hover:text-ive-green hover:opacity-100 transition-colors inline-block"
+            <span
+              onClick={e => { e.preventDefault(); e.stopPropagation(); window.open(project.repoUrl.replace(/\.git$/, ''), '_blank') }}
+              className="text-sm text-ive-text-muted font-mono opacity-60 mb-1 break-all leading-tight hover:text-ive-green hover:opacity-100 transition-colors inline-block cursor-pointer"
             >
               {project.repoUrl}
               <i className="fa-solid fa-arrow-up-right-from-square text-xs ml-1 opacity-50" />
-            </a>
+            </span>
             <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
               <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden">
                 {project.lastCheckedAt ? (
@@ -255,7 +252,7 @@ export default function ProjectCard({ project, roles }: Props) {
               </button>
               <button
                 onClick={handleManualScan}
-                disabled={scanning || !project.scannerActive}
+                disabled={scanning}
                 className="p-2 flex items-center justify-center transition-all disabled:opacity-30 disabled:cursor-not-allowed"
                 title="지금 스캔 수행"
               >

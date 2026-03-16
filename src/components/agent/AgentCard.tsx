@@ -22,7 +22,7 @@ const statusConfig = {
 }
 
 export default function AgentCard({ agent, onDelete, compact, assignedCount }: Props) {
-  const { refreshAgents } = useStore()
+  const { refreshAgents, updateAgent } = useStore()
   const cli = cliConfig[agent.cliName]
   const status = statusConfig[agent.status]
   const [testing, setTesting] = useState(false)
@@ -99,6 +99,21 @@ export default function AgentCard({ agent, onDelete, compact, assignedCount }: P
             <span className="text-ive-text font-semibold">{agent.cliVersion}</span>
           </div>
         )}
+
+        <div className="flex items-center gap-2 text-base">
+          <span className="text-ive-text-muted"><i className="fa-solid fa-repeat w-4 text-center" /> 턴</span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => updateAgent({ ...agent, maxTurns: Math.max(10, agent.maxTurns - 10) })}
+              className="w-6 h-6 rounded text-xs text-ive-text-dim hover:text-ive-green hover:bg-ive-green/10 transition-colors font-black"
+            >−</button>
+            <span className="text-ive-text font-semibold w-8 text-center">{agent.maxTurns}</span>
+            <button
+              onClick={() => updateAgent({ ...agent, maxTurns: Math.min(1000, agent.maxTurns + 10) })}
+              className="w-6 h-6 rounded text-xs text-ive-text-dim hover:text-ive-green hover:bg-ive-green/10 transition-colors font-black"
+            >+</button>
+          </div>
+        </div>
 
         {assignedCount !== undefined && (
           <div className="flex items-center gap-2 text-base">
