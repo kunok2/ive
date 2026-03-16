@@ -1,11 +1,9 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { TaskExecution, Agent } from '@/types'
-import { Terminal } from '@xterm/xterm'
-import { FitAddon } from '@xterm/addon-fit'
-import '@xterm/xterm/css/xterm.css'
+import LogViewer from '@/components/ui/LogViewer'
 
 function formatDuration(startedAt: string): string {
   const s = Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000)
@@ -87,8 +85,14 @@ export default function LiveTracePanel({ agents, onKill }: Props) {
             </span>
           </div>
 
-          {/* 실시간 로그 xterm — 남은 공간 채움 */}
-          <XtermMiniView executionId={current.execution.id} />
+          {/* 실시간 로그 — 커스텀 뷰어 */}
+          <LogViewer
+            sseUrl={`/api/executions/${current.execution.id}/logs`}
+            fontSize={11}
+            showLineNumbers={false}
+            maxLines={500}
+            className="rounded-lg flex-1 min-h-0"
+          />
 
           <div className="flex gap-2 shrink-0">
             {onKill && (
@@ -116,80 +120,5 @@ export default function LiveTracePanel({ agents, onKill }: Props) {
         </div>
       )}
     </div>
-  )
-}
-
-/** SSE + xterm.js 미니뷰 */
-function XtermMiniView({ executionId }: { executionId: string }) {
-  const termRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!termRef.current) return
-
-    const term = new Terminal({
-      theme: {
-        background: '#0a0a0a',
-        foreground: '#d4d4d4',
-        cursor: '#4ade80',
-        black: '#171717', red: '#f87171', green: '#4ade80', yellow: '#facc15',
-        blue: '#60a5fa', magenta: '#c084fc', cyan: '#22d3ee', white: '#e5e5e5',
-        brightBlack: '#737373', brightRed: '#fca5a5', brightGreen: '#86efac', brightYellow: '#fde68a',
-        brightBlue: '#93c5fd', brightMagenta: '#d8b4fe', brightCyan: '#67e8f9', brightWhite: '#ffffff',
-      },
-      fontSize: 11,
-      fontFamily: '"JetBrains Mono", "Fira Code", Menlo, Monaco, monospace',
-      lineHeight: 1.3,
-      cursorStyle: 'bar',
-      cursorBlink: false,
-      scrollback: 500,
-      convertEol: true,
-      disableStdin: true,
-    })
-
-    const fit = new FitAddon()
-    term.loadAddon(fit)
-    term.open(termRef.current)
-    fit.fit()
-
-    const eventSource = new EventSource(`/api/executions/${executionId}/logs`)
-    eventSource.onmessage = (event) => {
-      const lines = event.data.split('\n')
-      for (const line of lines) {
-        term.writeln(line)
-      }
-    }
-    eventSource.onerror = () => eventSource.close()
-
-    // 모바일 터치 스크롤 지원 (iOS Safari)
-    const el = termRef.current!
-    let touchY = 0
-    const onTouchStart = (e: TouchEvent) => { touchY = e.touches[0].clientY }
-    const onTouchMove = (e: TouchEvent) => {
-      e.preventDefault()
-      const dy = touchY - e.touches[0].clientY
-      touchY = e.touches[0].clientY
-      const lines = Math.round(dy / 14)
-      if (lines !== 0) term.scrollLines(lines)
-    }
-    el.addEventListener('touchstart', onTouchStart, { passive: true })
-    el.addEventListener('touchmove', onTouchMove, { passive: false })
-
-    const handleResize = () => fit.fit()
-    window.addEventListener('resize', handleResize)
-
-    return () => {
-      eventSource.close()
-      window.removeEventListener('resize', handleResize)
-      el.removeEventListener('touchstart', onTouchStart)
-      el.removeEventListener('touchmove', onTouchMove)
-      term.dispose()
-    }
-  }, [executionId])
-
-  return (
-    <div
-      ref={termRef}
-      className="rounded-lg overflow-hidden flex-1 min-h-0"
-    />
   )
 }
