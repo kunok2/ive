@@ -7,6 +7,7 @@ import Sparkline from '@/components/ui/Sparkline'
 import ExecutionList from '@/components/execution/ExecutionList'
 import ExecutionStats from '@/components/execution/ExecutionStats'
 import AgentAvatar, { AvatarSelector } from '@/components/agent/AgentAvatar'
+import ReactMarkdown from 'react-markdown'
 
 interface Props {
   agent: Agent
@@ -406,7 +407,34 @@ export default function AgentCard({ agent, onDelete, compact, assignedProject, o
                       ? 'bg-ive-green/15 text-ive-green-pale'
                       : 'bg-ive-bg-card text-ive-text border border-ive-border-subtle'
                   }`}>
-                    {msg.text}
+                    {msg.role === 'agent' ? (
+                      <ReactMarkdown
+                        components={{
+                          h1: ({ children }) => <h1 className="text-base font-bold text-ive-text mt-2 mb-1">{children}</h1>,
+                          h2: ({ children }) => <h2 className="text-sm font-bold text-ive-text mt-2 mb-1">{children}</h2>,
+                          h3: ({ children }) => <h3 className="text-sm font-bold text-ive-text mt-1.5 mb-0.5">{children}</h3>,
+                          p: ({ children }) => <p className="mb-1.5 last:mb-0">{children}</p>,
+                          ul: ({ children }) => <ul className="list-disc list-inside mb-1.5 space-y-0.5">{children}</ul>,
+                          ol: ({ children }) => <ol className="list-decimal list-inside mb-1.5 space-y-0.5">{children}</ol>,
+                          li: ({ children }) => <li>{children}</li>,
+                          strong: ({ children }) => <strong className="font-bold text-ive-text">{children}</strong>,
+                          em: ({ children }) => <em className="italic">{children}</em>,
+                          code: ({ children, className }) => {
+                            const isBlock = className?.includes('language-')
+                            if (isBlock) {
+                              return <code className="block bg-ive-bg-deep rounded-lg p-2 my-1.5 text-xs font-mono overflow-x-auto whitespace-pre">{children}</code>
+                            }
+                            return <code className="bg-ive-bg-deep px-1 py-0.5 rounded text-xs font-mono text-ive-cyan">{children}</code>
+                          },
+                          pre: ({ children }) => <pre className="mb-1.5">{children}</pre>,
+                          blockquote: ({ children }) => <blockquote className="border-l-2 border-ive-border pl-2.5 my-1.5 text-ive-text-dim">{children}</blockquote>,
+                          a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-ive-cyan hover:underline">{children}</a>,
+                          hr: () => <hr className="border-ive-border-dark my-2" />,
+                        }}
+                      >
+                        {msg.text}
+                      </ReactMarkdown>
+                    ) : msg.text}
                   </div>
                 </div>
               ))}
