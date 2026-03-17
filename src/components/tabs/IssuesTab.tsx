@@ -59,8 +59,7 @@ export default function IssuesTab() {
   const [bulkProgress, setBulkProgress] = useState<{ total: number; done: number; failed: number } | null>(null)
   const cancelRef = useRef(false)
   const [showAddForm, setShowAddForm] = useState(false)
-  const [newTitle, setNewTitle] = useState('')
-  const [newDesc, setNewDesc] = useState('')
+  const [newBody, setNewBody] = useState('')
   const [creating, setCreating] = useState(false)
   const [closing, setClosing] = useState<number | null>(null)
 
@@ -188,17 +187,19 @@ export default function IssuesTab() {
   }
 
   const handleCreateIssue = async () => {
-    if (!newTitle.trim() || !selectedProjectId) return
+    const lines = newBody.split('\n')
+    const title = lines[0].trim()
+    const description = lines.slice(1).join('\n').trim()
+    if (!title || !selectedProjectId) return
     setCreating(true)
     try {
       const res = await fetch(`/api/projects/${selectedProjectId}/issues`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: newTitle.trim(), description: newDesc.trim(), asDev: true }),
+        body: JSON.stringify({ title, description, asDev: true }),
       })
       if (res.ok) {
-        setNewTitle('')
-        setNewDesc('')
+        setNewBody('')
         setShowAddForm(false)
         fetchIssues()
       }
@@ -353,29 +354,21 @@ export default function IssuesTab() {
                   <span className="text-sm font-bold text-ive-green">
                     <i className="fa-solid fa-plus mr-1" />새 이슈 추가
                   </span>
-                  <button onClick={() => { setShowAddForm(false); setNewTitle(''); setNewDesc('') }} className="text-xs text-ive-text-dim hover:text-ive-text font-bold px-2 py-1 rounded-lg hover:bg-white/5 transition-all">
+                  <button onClick={() => { setShowAddForm(false); setNewBody('') }} className="text-xs text-ive-text-dim hover:text-ive-text font-bold px-2 py-1 rounded-lg hover:bg-white/5 transition-all">
                     취소
                   </button>
                 </div>
-                <input
-                  type="text"
-                  value={newTitle}
-                  onChange={e => setNewTitle(e.target.value)}
-                  placeholder="이슈 제목"
-                  className="w-full mb-2 bg-ive-bg-deep border border-ive-border-dark rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim focus:outline-none focus:border-ive-green/50"
-                  autoFocus
-                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleCreateIssue() } }}
-                />
                 <textarea
-                  value={newDesc}
-                  onChange={e => setNewDesc(e.target.value)}
-                  placeholder="설명 (선택사항)"
-                  rows={2}
+                  value={newBody}
+                  onChange={e => setNewBody(e.target.value)}
+                  placeholder="첫 줄이 제목이 됩니다&#10;두 번째 줄부터 본문입니다"
+                  rows={4}
                   className="w-full mb-2 bg-ive-bg-deep border border-ive-border-dark rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-green/50"
+                  autoFocus
                 />
                 <button
                   onClick={handleCreateIssue}
-                  disabled={creating || !newTitle.trim()}
+                  disabled={creating || !newBody.split('\n')[0].trim()}
                   className="w-full py-2 rounded-lg bg-ive-green text-ive-bg-deep text-sm font-bold transition-all active:scale-[0.98] disabled:opacity-40"
                 >
                   {creating ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />생성 중...</> : <><i className="fa-solid fa-paper-plane mr-1" />이슈 생성</>}
