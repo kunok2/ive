@@ -515,6 +515,8 @@ export function killExecution(id: string): boolean {
     }
   }
   getDb().prepare("UPDATE task_executions SET status = 'failed', ended_at = ? WHERE id = ?").run(new Date().toISOString(), id)
+  // 에이전트 상태를 'available'로 복원
+  getDb().prepare("UPDATE agents SET status = 'available' WHERE id = ? AND status = 'busy'").run(r.agent_id)
   return true
 }
 
@@ -527,6 +529,8 @@ export function resetStuckExecutions() {
       }
     }
     getDb().prepare("UPDATE task_executions SET status = 'failed', ended_at = ? WHERE id = ?").run(new Date().toISOString(), r.id)
+    // 고착된 에이전트 상태도 'available'로 복원
+    getDb().prepare("UPDATE agents SET status = 'available' WHERE id = ? AND status = 'busy'").run(r.agent_id)
     console.log(`[DB] Reset stuck execution ${r.id}`)
   }
   if (stuckRows.length > 0) console.log(`[DB] Reset ${stuckRows.length} stuck execution(s).`)

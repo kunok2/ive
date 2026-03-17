@@ -9,7 +9,8 @@ import {
   updateExecutionTokens,
   resetStuckExecutions,
   hasActiveExecution,
-  countActiveExecutionsByAgent
+  countActiveExecutionsByAgent,
+  updateAgentStatus
 } from "./db";
 import { decrypt } from "./crypto";
 import { 
@@ -381,6 +382,9 @@ async function executeTask(
 
   if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
 
+  // 0. 에이전트 상태를 'busy'로 변경
+  updateAgentStatus(agent.id, 'busy');
+
   // 0. DB에 실행 시작 기록
   createExecution({
     id: executionId,
@@ -655,6 +659,9 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
     await updateGitLabIssueLabels(project, iid, token, [project.labelFailDev], [project.labelInProgress]);
     updateExecutionStatus(executionId, 'failed', new Date().toISOString());
   } finally {
+    // 에이전트 상태를 'available'로 복원
+    updateAgentStatus(agent.id, 'available');
+
     logStream.end();
     try {
       if (fs.existsSync(workspacePath)) {
