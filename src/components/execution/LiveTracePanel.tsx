@@ -90,8 +90,9 @@ export default function LiveTracePanel({ agents, onKill }: Props) {
             sseUrl={`/api/executions/${current.execution.id}/logs`}
             initialFetchUrl={`/api/executions/${current.execution.id}/content`}
             fontSize={11}
-            showLineNumbers={false}
+            showLineNumbers
             maxLines={500}
+            isLive={current.execution.status === 'running'}
             className="rounded-lg flex-1 min-h-0"
           />
 

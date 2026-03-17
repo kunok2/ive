@@ -66,6 +66,7 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
           className="h-full"
           onConnectionChange={setConnected}
           onLineCountChange={setLineCount}
+          isLive={connected}
         />
       </div>
 

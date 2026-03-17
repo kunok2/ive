@@ -308,6 +308,8 @@ interface LogViewerProps {
   onLineCountChange?: (count: number) => void
   /** 자동 스크롤 활성화 여부 (기본: true). false이면 초기 스크롤을 맨 위로 유지 */
   initialAutoScroll?: boolean
+  /** 실시간 로그 여부 — true이면 하단에 thinking 애니메이션 표시 */
+  isLive?: boolean
 }
 
 const ANSI_ESCAPE_RE = /\x1b\[/
@@ -322,12 +324,14 @@ export default function LogViewer({
   onConnectionChange,
   onLineCountChange,
   initialAutoScroll = true,
+  isLive,
 }: LogViewerProps) {
   const [lines, setLines] = useState<LineData[]>([])
   const containerRef = useRef<HTMLDivElement>(null)
   const autoScrollRef = useRef(initialAutoScroll)
   const linesRef = useRef<LineData[]>([])
   const initialLoadedRef = useRef(false)
+  const [connected, setConnected] = useState(false)
 
   const appendLines = useCallback((text: string) => {
     if (!text) return
@@ -389,7 +393,7 @@ export default function LogViewer({
     const url = initialFetchUrl ? `${sseUrl}${sseUrl.includes('?') ? '&' : '?'}skipInitial=1` : sseUrl
     const eventSource = new EventSource(url)
 
-    eventSource.onopen = () => onConnectionChange?.(true)
+    eventSource.onopen = () => { setConnected(true); onConnectionChange?.(true) }
 
     eventSource.onmessage = (event) => {
       appendLines(event.data)
@@ -397,6 +401,7 @@ export default function LogViewer({
 
     eventSource.onerror = () => {
       eventSource.close()
+      setConnected(false)
       onConnectionChange?.(false)
     }
 
@@ -454,6 +459,18 @@ export default function LogViewer({
             return <LogLine key={`${bi}-${li}`} line={l} lineNum={lineNum} showLineNum={showLineNumbers} />
           })
         })}
+
+        {/* Thinking 애니메이션 */}
+        {(isLive ?? connected) && (
+          <div className="flex items-center gap-1 pt-2 pb-1">
+            {showLineNumbers && <span className="w-12 shrink-0" />}
+            <span className="inline-flex gap-[3px]">
+              <span className="w-[5px] h-[5px] rounded-full bg-ive-cyan/70 animate-[thinking_1.4s_ease-in-out_infinite]" />
+              <span className="w-[5px] h-[5px] rounded-full bg-ive-cyan/70 animate-[thinking_1.4s_ease-in-out_0.2s_infinite]" />
+              <span className="w-[5px] h-[5px] rounded-full bg-ive-cyan/70 animate-[thinking_1.4s_ease-in-out_0.4s_infinite]" />
+            </span>
+          </div>
+        )}
       </div>
     </div>
   )

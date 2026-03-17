@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useStore } from '@/lib/store'
 import { useTab } from '@/lib/tab-context'
@@ -219,21 +219,54 @@ export default function IssuesTab() {
   const selectedProject = state.projects.find(p => p.id === selectedProjectId)
   const bulkActions = getAvailableBulkActions()
   const stages = selectedStages()
+  const [projectDropdownOpen, setProjectDropdownOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
+  // 드롭다운 바깥 클릭 시 닫기
+  useEffect(() => {
+    if (!projectDropdownOpen) return
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setProjectDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [projectDropdownOpen])
 
   return (
     <div className="h-[calc(100dvh-3.5rem)] flex flex-col max-w-lg mx-auto px-4">
       <div className="pt-4 shrink-0">
         {state.projects.length > 1 && (
-          <select
-            value={selectedProjectId}
-            onChange={e => setSelectedProjectId(e.target.value)}
-            className="w-full mb-3 bg-ive-bg-card border border-ive-border-subtle rounded-xl px-4 py-3 text-ive-text font-bold text-base focus:outline-none focus:border-ive-green/50"
-          >
-            <option value="">프로젝트 선택</option>
-            {state.projects.map(p => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
+          <div ref={dropdownRef} className="relative mb-3">
+            <button
+              type="button"
+              onClick={() => setProjectDropdownOpen(v => !v)}
+              className="w-full bg-ive-bg-card border border-ive-border-subtle rounded-xl px-4 py-3 text-left flex items-center justify-between focus:outline-none focus:border-ive-green/50 transition-colors"
+            >
+              <span className={`text-base font-bold ${selectedProjectId ? 'text-ive-text' : 'text-ive-text-dim'}`}>
+                {selectedProject?.name || '프로젝트 선택'}
+              </span>
+              <i className={`fa-solid fa-chevron-down text-xs text-ive-text-dim transition-transform ${projectDropdownOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {projectDropdownOpen && (
+              <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-ive-bg-card border border-ive-border-subtle rounded-xl overflow-hidden shadow-lg shadow-black/30">
+                {state.projects.map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => { setSelectedProjectId(p.id); setProjectDropdownOpen(false) }}
+                    className={`w-full px-4 py-3 text-left text-base font-bold transition-colors ${
+                      p.id === selectedProjectId
+                        ? 'bg-ive-green/10 text-ive-green'
+                        : 'text-ive-text hover:bg-white/5'
+                    }`}
+                  >
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         )}
 
         {!selectedProjectId ? (
