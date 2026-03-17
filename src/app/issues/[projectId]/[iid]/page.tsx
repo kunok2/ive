@@ -70,11 +70,9 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   const notesEndRef = useRef<HTMLDivElement>(null)
 
   const fetchIssue = useCallback(async () => {
-    const res = await fetch(`/api/projects/${projectId}/issues`)
+    const res = await fetch(`/api/projects/${projectId}/issues/${iid}`)
     if (res.ok) {
-      const issues = await res.json()
-      const found = issues.find((i: any) => i.iid === Number(iid))
-      if (found) setIssue(found)
+      setIssue(await res.json())
     }
     setLoading(false)
   }, [projectId, iid])

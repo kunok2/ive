@@ -52,7 +52,18 @@ export default function IssuesTab() {
   const { activeTab, issuesProjectId, setIssuesProjectId, issuesFilter, setIssuesFilter } = useTab()
   const selectedProjectId = issuesProjectId ?? ''
   const filter = issuesFilter
-  const [issues, setIssues] = useState<IveIssue[]>([])
+  const [issues, setIssues] = useState<IveIssue[]>(() => {
+    if (typeof window !== 'undefined') {
+      const cached = sessionStorage.getItem('issues-cache')
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached)
+          if (parsed.projectId === (issuesProjectId ?? '')) return parsed.issues
+        } catch { /* ignore */ }
+      }
+    }
+    return []
+  })
   const [loading, setLoading] = useState(false)
   const [bulkMode, setBulkMode] = useState(false)
   const [selected, setSelected] = useState<Set<number>>(new Set())
@@ -62,6 +73,12 @@ export default function IssuesTab() {
   const [newBody, setNewBody] = useState('')
   const [creating, setCreating] = useState(false)
   const [closing, setClosing] = useState<number | null>(null)
+  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>(() => {
+    if (typeof window !== 'undefined') {
+      return (localStorage.getItem('ive-issues-sort') as 'newest' | 'oldest') || 'newest'
+    }
+    return 'newest'
+  })
 
   const setSelectedProjectId = (id: string) => setIssuesProjectId(id)
   const setFilter = (f: string) => setIssuesFilter(f)
@@ -107,7 +124,10 @@ export default function IssuesTab() {
     setLoading(true)
     fetch(`/api/projects/${selectedProjectId}/issues`)
       .then(res => res.ok ? res.json() : [])
-      .then(data => setIssues(data))
+      .then(data => {
+        setIssues(data)
+        sessionStorage.setItem('issues-cache', JSON.stringify({ projectId: selectedProjectId, issues: data }))
+      })
       .finally(() => setLoading(false))
   }, [selectedProjectId])
 
@@ -125,6 +145,9 @@ export default function IssuesTab() {
     if (filter === 'failed') return issue.stage === 'dev_fail'
     if (filter === 'done') return issue.stage === 'done'
     return true
+  }).sort((a, b) => {
+    if (sortOrder === 'newest') return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
   })
 
   // 선택된 이슈들의 공통 stage 기반 벌크 액션 계산
@@ -328,7 +351,7 @@ export default function IssuesTab() {
               </div>
             )}
 
-            <div className="flex gap-1 mb-3 bg-ive-bg-card rounded-xl p-1 border border-ive-border-subtle">
+            <div className="flex gap-1 mb-2 bg-ive-bg-card rounded-xl p-1 border border-ive-border-subtle">
               {FILTER_TABS.map(tab => (
                 <button
                   key={tab.key}
@@ -345,6 +368,21 @@ export default function IssuesTab() {
                   )}
                 </button>
               ))}
+            </div>
+
+            {/* 정렬 */}
+            <div className="flex items-center justify-end mb-3">
+              <button
+                onClick={() => {
+                  const next = sortOrder === 'newest' ? 'oldest' : 'newest'
+                  setSortOrder(next)
+                  localStorage.setItem('ive-issues-sort', next)
+                }}
+                className="text-xs font-bold text-ive-text-dim hover:text-ive-text flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-white/5 transition-all"
+              >
+                <i className={`fa-solid ${sortOrder === 'newest' ? 'fa-arrow-down-wide-short' : 'fa-arrow-up-wide-short'}`} />
+                {sortOrder === 'newest' ? '최신순' : '오래된순'}
+              </button>
             </div>
 
             {/* 이슈 추가 폼 */}
