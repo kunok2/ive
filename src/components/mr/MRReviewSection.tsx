@@ -87,7 +87,7 @@ export default function MRReviewSection({ projectId, issueIid }: Props) {
       <div className="mt-6 bg-ive-bg-card rounded-xl border border-ive-border-subtle overflow-hidden">
         <div className="px-4 py-3 border-b border-ive-border-dark flex items-center gap-2">
           <i className="fa-solid fa-code-merge text-ive-cyan" />
-          <span className="text-sm font-bold text-ive-text uppercase tracking-wider">Merge Request</span>
+          <span className="text-sm font-bold text-ive-text tracking-wider">작업결과 반영</span>
         </div>
 
         <div className="p-4">
