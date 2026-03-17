@@ -5,13 +5,13 @@ import { User } from '@/types'
 import { useDialog } from '@/components/ui/ConfirmDialog'
 import TerminalTab from './TerminalTab'
 
-type SubTab = 'users' | 'mail' | 'env' | 'pricing' | 'cli'
+type SubTab = 'users' | 'mail' | 'settings' | 'pricing' | 'cli'
 
 export default function AdminTab() {
   const [subTab, setSubTab] = useState<SubTab>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('ive-admin-subtab')
-      if (saved && ['users', 'mail', 'env', 'pricing', 'cli'].includes(saved)) return saved as SubTab
+      if (saved && ['users', 'mail', 'settings', 'pricing', 'cli'].includes(saved)) return saved as SubTab
     }
     return 'users'
   })
@@ -23,7 +23,7 @@ export default function AdminTab() {
   const subTabs: { key: SubTab; icon: string; label: string }[] = [
     { key: 'users', icon: 'fa-solid fa-users', label: '사용자' },
     { key: 'mail', icon: 'fa-solid fa-envelope', label: '메일' },
-    { key: 'env', icon: 'fa-solid fa-sliders', label: '환경변수' },
+    { key: 'settings', icon: 'fa-solid fa-gear', label: '설정' },
     { key: 'pricing', icon: 'fa-solid fa-coins', label: '단가' },
     { key: 'cli', icon: 'fa-solid fa-terminal', label: 'CLI' },
   ]
@@ -51,7 +51,7 @@ export default function AdminTab() {
 
       {subTab === 'users' && <UsersPanel />}
       {subTab === 'mail' && <MailPanel />}
-      {subTab === 'env' && <EnvPanel />}
+      {subTab === 'settings' && <SettingsPanel />}
       {subTab === 'pricing' && <PricingPanel />}
       {subTab === 'cli' && <TerminalTab />}
     </div>
@@ -397,63 +397,153 @@ function MailPanel() {
   )
 }
 
-// ── Env Panel ──
-function EnvPanel() {
+// ── Settings Panel ──
+
+interface SettingGroup {
+  key: string
+  label: string
+  icon: string
+  fields: { key: string; label: string; type: 'text' | 'password' | 'number'; placeholder?: string }[]
+}
+
+const SETTING_GROUPS: SettingGroup[] = [
+  {
+    key: 'mail', label: 'SMTP 메일', icon: 'fa-solid fa-envelope',
+    fields: [
+      { key: 'mail.smtp_host', label: 'SMTP 호스트', type: 'text', placeholder: 'smtp.gmail.com' },
+      { key: 'mail.smtp_port', label: 'SMTP 포트', type: 'text', placeholder: '587' },
+      { key: 'mail.smtp_user', label: 'SMTP 계정', type: 'text', placeholder: 'user@gmail.com' },
+      { key: 'mail.smtp_password', label: 'SMTP 비밀번호', type: 'password', placeholder: '앱 비밀번호' },
+      { key: 'mail.from_name', label: '발신자 이름', type: 'text', placeholder: 'IVE' },
+      { key: 'mail.domain', label: '메일 도메인', type: 'text', placeholder: 'example.com' },
+    ],
+  },
+]
+
+function SettingsPanel() {
   const { alert } = useDialog()
-  const [content, setContent] = useState('')
+  const [settings, setSettings] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/admin/env')
       .then(r => r.json())
-      .then(data => { setContent(data.content || ''); setLoading(false) })
+      .then(data => { setSettings(data.settings || {}); setLoading(false) })
       .catch(() => setLoading(false))
   }, [])
 
+  function updateSetting(key: string, value: string) {
+    setSettings(prev => ({ ...prev, [key]: value }))
+    setSaved(false)
+  }
+
   async function handleSave() {
     setSaving(true)
-    setSaved(false)
     try {
       const res = await fetch('/api/admin/env', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content }),
+        body: JSON.stringify({ settings }),
       })
-      const data = await res.json()
       if (res.ok) {
         setSaved(true)
-        await alert({ title: '저장 완료', message: data.message || '저장되었습니다.', variant: 'success' })
-        setTimeout(() => setSaved(false), 3000)
+        setTimeout(() => setSaved(false), 2000)
       } else {
+        const data = await res.json()
         await alert({ message: data.error || '저장 실패', variant: 'error' })
       }
-    } finally {
-      setSaving(false)
-    }
+    } finally { setSaving(false) }
+  }
+
+  async function handleTestMail() {
+    setTesting(true)
+    try {
+      // 먼저 현재 설정 저장
+      await fetch('/api/admin/env', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ settings }),
+      })
+      // 테스트 메일 발송
+      const res = await fetch('/api/admin/mail', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subject: '[Spring IVE] 메일 설정 테스트',
+          body: '<p>메일 설정이 정상적으로 작동합니다.</p><p style="color:#999;font-size:12px;">이 메일은 테스트 발송입니다.</p>',
+        }),
+      })
+      const data = await res.json()
+      if (res.ok && data.sent > 0) {
+        await alert({ title: '발송 성공', message: `${data.sent}명에게 테스트 메일을 발송했습니다.`, variant: 'success' })
+      } else if (res.ok && data.failed > 0) {
+        await alert({ message: `발송 실패 ${data.failed}건`, variant: 'error' })
+      } else {
+        await alert({ message: data.error || '발송 실패', variant: 'error' })
+      }
+    } catch {
+      await alert({ message: '테스트 실패', variant: 'error' })
+    } finally { setTesting(false) }
   }
 
   if (loading) return <div className="text-center py-10 text-ive-text-dim">불러오는 중...</div>
 
   return (
-    <main className="px-4 py-4 max-w-lg mx-auto">
-      <div className="mb-3">
-        <div className="flex items-center justify-between mb-2">
-          <label className="text-sm font-bold text-ive-text-muted">
-            <i className="fa-solid fa-file-code mr-1" />.env 파일
-          </label>
-          <span className="text-[10px] text-ive-text-dim">저장 후 서버 재시작 필요</span>
-        </div>
-        <textarea
-          value={content}
-          onChange={e => setContent(e.target.value)}
-          rows={16}
-          spellCheck={false}
-          className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2.5 text-sm text-ive-text font-mono focus:outline-none focus:border-ive-green resize-none leading-relaxed"
-          placeholder="KEY=value&#10;ANOTHER_KEY=value"
-        />
+    <main className="px-4 py-4 max-w-lg mx-auto space-y-3">
+      <div className="text-xs text-ive-text-dim mb-1">
+        시스템 설정은 DB에 저장되며 즉시 적용됩니다.
       </div>
+
+      {SETTING_GROUPS.map(group => (
+        <div key={group.key} className="bg-ive-bg-card border border-ive-border-subtle rounded-xl overflow-hidden">
+          <button
+            onClick={() => setExpandedGroup(expandedGroup === group.key ? null : group.key)}
+            className="w-full px-4 py-3 flex items-center gap-2 text-left hover:bg-white/[0.02]"
+          >
+            <i className={`${group.icon} text-sm text-ive-text-dim`} />
+            <span className="text-sm font-bold text-ive-text flex-1">{group.label}</span>
+            <span className="text-xs text-ive-text-dim">
+              {group.fields.filter(f => settings[f.key]).length}/{group.fields.length}
+            </span>
+            <i className={`fa-solid fa-chevron-${expandedGroup === group.key ? 'up' : 'down'} text-xs text-ive-text-dim`} />
+          </button>
+
+          {expandedGroup === group.key && (
+            <div className="px-4 pb-4 border-t border-ive-border-dark space-y-3 pt-3">
+              {group.fields.map(field => (
+                <div key={field.key}>
+                  <label className="block text-xs font-bold text-ive-text-muted mb-1">{field.label}</label>
+                  <input
+                    type={field.type}
+                    value={settings[field.key] || ''}
+                    onChange={e => updateSetting(field.key, e.target.value)}
+                    placeholder={field.placeholder}
+                    className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green/50"
+                  />
+                </div>
+              ))}
+
+              {/* 메일 그룹에 테스트 버튼 */}
+              {group.key === 'mail' && (
+                <button
+                  onClick={handleTestMail}
+                  disabled={testing}
+                  className="w-full py-2 rounded-lg text-xs font-bold bg-ive-bg-deep border border-ive-border-subtle text-ive-cyan active:scale-[0.98] transition-all disabled:opacity-40"
+                >
+                  {testing
+                    ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />테스트 중...</>
+                    : <><i className="fa-solid fa-paper-plane mr-1" />테스트 메일 발송</>
+                  }
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ))}
 
       <button
         onClick={handleSave}
@@ -462,13 +552,12 @@ function EnvPanel() {
           saved ? 'bg-ive-green/20 text-ive-green' : 'bg-ive-green-dark text-white'
         }`}
       >
-        {saving ? (
-          <><i className="fa-solid fa-circle-notch fa-spin mr-1" />저장 중...</>
-        ) : saved ? (
-          <><i className="fa-solid fa-check mr-1" />저장 완료</>
-        ) : (
-          <><i className="fa-solid fa-floppy-disk mr-1" />저장</>
-        )}
+        {saving
+          ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />저장 중...</>
+          : saved
+            ? <><i className="fa-solid fa-check mr-1" />저장됨</>
+            : <><i className="fa-solid fa-floppy-disk mr-1" />저장</>
+        }
       </button>
     </main>
   )

@@ -12,6 +12,8 @@ services:
       - ./claude-config:/home/ive/.claude
       # SSL 인증서
       - ./ssl:/app/ssl:ro
+    env_file:
+      - .env
     environment:
       - NODE_ENV=production
       # 반드시 안전한 값으로 변경하세요

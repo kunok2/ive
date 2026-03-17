@@ -1,26 +1,37 @@
 import nodemailer from 'nodemailer'
+import { getSystemSettings } from '@/lib/db'
 
-const transporter = nodemailer.createTransport({
-  host: process.env.MAIL_SMTP_HOST || 'smtp.gmail.com',
-  port: Number(process.env.MAIL_SMTP_PORT) || 587,
-  secure: false, // STARTTLS
-  auth: {
-    user: process.env.MAIL_SMTP_NAME,
-    pass: process.env.MAIL_SMTP_PASSWORD,
-  },
-})
+function getSmtpConfig() {
+  const s = getSystemSettings('mail.')
+  return {
+    host: s['mail.smtp_host'] || process.env.MAIL_SMTP_HOST || 'smtp.gmail.com',
+    port: Number(s['mail.smtp_port'] || process.env.MAIL_SMTP_PORT) || 587,
+    user: s['mail.smtp_user'] || process.env.MAIL_SMTP_NAME || '',
+    pass: s['mail.smtp_password'] || process.env.MAIL_SMTP_PASSWORD || '',
+    fromName: s['mail.from_name'] || process.env.MAIL_FROM_ADDRESS || 'IVE',
+    domain: s['mail.domain'] || process.env.MAIL_DOMAIN || '',
+  }
+}
 
-function getFromAddress() {
-  const name = process.env.MAIL_FROM_ADDRESS || 'IVE'
-  const domain = process.env.MAIL_DOMAIN
-  const smtpName = process.env.MAIL_SMTP_NAME
-  // MAIL_FROM_ADDRESS에 @가 없으면 MAIL_DOMAIN 붙이기
-  if (name.includes('@')) return name
-  if (domain) return `${name}@${domain}`
-  return smtpName || name
+export function createTransporter() {
+  const cfg = getSmtpConfig()
+  return nodemailer.createTransport({
+    host: cfg.host,
+    port: cfg.port,
+    secure: false, // STARTTLS
+    auth: cfg.user ? { user: cfg.user, pass: cfg.pass } : undefined,
+  })
+}
+
+export function getFromAddress() {
+  const cfg = getSmtpConfig()
+  if (cfg.fromName.includes('@')) return cfg.fromName
+  if (cfg.domain) return `${cfg.fromName}@${cfg.domain}`
+  return cfg.user || cfg.fromName
 }
 
 export async function sendVerificationEmail(to: string, code: string) {
+  const transporter = createTransporter()
   const from = getFromAddress()
   await transporter.sendMail({
     from: `"Spring IVE" <${from}>`,

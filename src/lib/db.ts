@@ -270,6 +270,15 @@ function initSchema(db: Database.Database) {
     }
   } catch (e) { console.error("Migration failed for projects avatar_url:", e) }
 
+  // system_settings 테이블
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS system_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `)
+
   seedAdmin(db)
   seedTokenPricing(db)
 }
@@ -801,4 +810,40 @@ export function getExecutionsInRange(userId: string, start: string, end: string)
     inputTokens: r.input_tokens ?? 0, outputTokens: r.output_tokens ?? 0,
     costUsd: r.cost_usd ?? 0, turns: r.turns ?? 0,
   }))
+}
+
+// ── System Settings ──
+
+export function getSystemSetting(key: string): string | null {
+  const r = getDb().prepare('SELECT value FROM system_settings WHERE key = ?').get(key) as any
+  return r ? r.value : null
+}
+
+export function getSystemSettings(prefix?: string): Record<string, string> {
+  const rows = prefix
+    ? getDb().prepare('SELECT key, value FROM system_settings WHERE key LIKE ?').all(`${prefix}%`) as any[]
+    : getDb().prepare('SELECT key, value FROM system_settings').all() as any[]
+  const result: Record<string, string> = {}
+  for (const r of rows) result[r.key] = r.value
+  return result
+}
+
+export function setSystemSetting(key: string, value: string) {
+  getDb().prepare(`
+    INSERT INTO system_settings (key, value, updated_at) VALUES (?, ?, datetime('now'))
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+  `).run(key, value)
+}
+
+export function setSystemSettings(settings: Record<string, string>) {
+  const stmt = getDb().prepare(`
+    INSERT INTO system_settings (key, value, updated_at) VALUES (?, ?, datetime('now'))
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+  `)
+  const tx = getDb().transaction(() => {
+    for (const [key, value] of Object.entries(settings)) {
+      stmt.run(key, value)
+    }
+  })
+  tx()
 }
