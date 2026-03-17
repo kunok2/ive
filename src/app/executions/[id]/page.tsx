@@ -45,15 +45,17 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
             <div className="text-xs text-ive-text-dim font-mono truncate">{id}</div>
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            onClick={handleKill}
-            disabled={killing}
-            className="text-xs font-bold text-ive-red/70 border border-ive-red/30 px-3 py-1.5 rounded-lg bg-ive-bg-deep hover:bg-ive-red/10 transition-colors disabled:opacity-40"
-          >
-            {killing ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-skull-crossbones mr-1" />강제종료</>}
-          </button>
-        </div>
+        {connected && (
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={handleKill}
+              disabled={killing}
+              className="text-xs font-bold text-ive-red/70 border border-ive-red/30 px-3 py-1.5 rounded-lg bg-ive-bg-deep hover:bg-ive-red/10 transition-colors disabled:opacity-40"
+            >
+              {killing ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-skull-crossbones mr-1" />강제종료</>}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* 커스텀 로그 뷰어 */}

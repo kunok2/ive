@@ -97,7 +97,7 @@ export default function LiveTracePanel({ agents, onKill }: Props) {
           />
 
           <div className="flex gap-2 shrink-0">
-            {onKill && (
+            {onKill && current.execution!.status === 'running' && (
               <button
                 onClick={() => onKill(current.execution!.id)}
                 className="flex-1 text-xs font-bold text-ive-red/70 border border-ive-red/30 py-1.5 rounded-lg bg-ive-bg-deep hover:bg-ive-red/10 transition-colors"
