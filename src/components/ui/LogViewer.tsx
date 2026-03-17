@@ -236,7 +236,7 @@ function LogLine({ line, showLineNum, lineNum }: { line: LineData; lineNum: numb
   return (
     <div className="flex hover:bg-white/[0.02] group leading-relaxed">
       {showLineNum && (
-        <span className="select-none text-ive-text-muted/60 group-hover:text-ive-text-muted shrink-0 pr-2 font-mono text-[0.85em]">
+        <span className="select-none text-ive-text-muted/60 group-hover:text-ive-text-muted w-6 shrink-0 text-right pr-2 font-mono text-[0.85em]">
           {lineNum}
         </span>
       )}
