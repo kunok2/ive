@@ -2,6 +2,7 @@
 
 import { useStore } from '@/lib/store'
 import ProjectCard from '@/components/project/ProjectCard'
+import PullToRefresh from '@/components/ui/PullToRefresh'
 
 interface Props {
   editMode: boolean
@@ -9,10 +10,10 @@ interface Props {
 }
 
 export default function ProjectsTab({ editMode, onAdd }: Props) {
-  const { state, reorderProject } = useStore()
+  const { state, reorderProject, refresh } = useStore()
 
   return (
-    <div className="min-h-screen pb-20">
+    <PullToRefresh onRefresh={refresh} className="min-h-screen pb-20">
       <main className="px-4 py-4 max-w-lg mx-auto">
         {state.loading ? (
           <div className="text-center py-20 text-ive-text-muted text-base">불러오는 중...</div>
@@ -60,6 +61,6 @@ export default function ProjectsTab({ editMode, onAdd }: Props) {
           </div>
         )}
       </main>
-    </div>
+    </PullToRefresh>
   )
 }

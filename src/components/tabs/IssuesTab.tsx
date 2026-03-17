@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useStore } from '@/lib/store'
 import { useTab } from '@/lib/tab-context'
+import PullToRefresh from '@/components/ui/PullToRefresh'
 
 interface IveIssue {
   iid: number
@@ -120,9 +121,9 @@ export default function IssuesTab() {
   }, [state.projects, selectedProjectId])
 
   const fetchIssues = useCallback(() => {
-    if (!selectedProjectId) return
+    if (!selectedProjectId) return Promise.resolve()
     setLoading(true)
-    fetch(`/api/projects/${selectedProjectId}/issues`)
+    return fetch(`/api/projects/${selectedProjectId}/issues`)
       .then(res => res.ok ? res.json() : [])
       .then(data => {
         setIssues(data)
@@ -264,7 +265,7 @@ export default function IssuesTab() {
   }, [projectDropdownOpen])
 
   return (
-    <div className="h-[calc(100dvh-3.5rem)] flex flex-col max-w-lg mx-auto px-4">
+    <PullToRefresh onRefresh={fetchIssues} className="h-[calc(100dvh-3.5rem)] flex flex-col max-w-lg mx-auto px-4">
       <div className="pt-4 shrink-0">
         {state.projects.length > 1 && (
           <div ref={dropdownRef} className="relative mb-3">
@@ -597,6 +598,6 @@ export default function IssuesTab() {
             )}
         </div>
       )}
-    </div>
+    </PullToRefresh>
   )
 }

@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { DEFAULT_AVATARS } from '@/types'
+import PullToRefresh from '@/components/ui/PullToRefresh'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 
 const REPORT_STATE_KEY = 'ive-report-state'
@@ -203,7 +204,16 @@ export default function ReportsTab() {
     } finally { setLoading(false) }
   }, [type, date])
 
-  useEffect(() => { fetchReport() }, [fetchReport])
+  // 탭 진입 시 항상 조회 + type/date 변경 시 재조회
+  const initialFetchDone = useRef(false)
+  useEffect(() => {
+    fetchReport()
+    initialFetchDone.current = true
+  }, [fetchReport])
+  useEffect(() => {
+    if (!initialFetchDone.current) fetchReport()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   function navigate(dir: -1 | 1) {
     const d = new Date(date)
@@ -294,7 +304,7 @@ export default function ReportsTab() {
     : []
 
   return (
-    <div className="min-h-screen pb-20">
+    <PullToRefresh onRefresh={fetchReport} className="min-h-screen pb-20">
       {/* Period selector */}
       <div className="sticky top-[57px] z-30 bg-ive-bg-deep border-b border-ive-border-dark">
         <div className="px-4 py-3 max-w-lg mx-auto">
@@ -681,7 +691,7 @@ export default function ReportsTab() {
           )}
         </main>
       )}
-    </div>
+    </PullToRefresh>
   )
 }
 

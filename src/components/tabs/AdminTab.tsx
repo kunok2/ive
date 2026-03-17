@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { User } from '@/types'
 import { useDialog } from '@/components/ui/ConfirmDialog'
 import TerminalTab from './TerminalTab'
+import PullToRefresh from '@/components/ui/PullToRefresh'
 
 type SubTab = 'users' | 'mail' | 'settings' | 'pricing' | 'cli'
 
@@ -15,10 +16,15 @@ export default function AdminTab() {
     }
     return 'users'
   })
+  const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
     localStorage.setItem('ive-admin-subtab', subTab)
   }, [subTab])
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshKey(k => k + 1)
+  }, [])
 
   const subTabs: { key: SubTab; icon: string; label: string }[] = [
     { key: 'users', icon: 'fa-solid fa-users', label: '사용자' },
@@ -29,7 +35,7 @@ export default function AdminTab() {
   ]
 
   return (
-    <div className="min-h-screen pb-20">
+    <PullToRefresh onRefresh={handleRefresh} className="min-h-screen pb-20">
       {/* 서브 탭 바 */}
       <div className="sticky top-[57px] z-30 bg-ive-bg-deep border-b border-ive-border-dark">
         <div className="flex max-w-lg mx-auto">
@@ -49,12 +55,12 @@ export default function AdminTab() {
         </div>
       </div>
 
-      {subTab === 'users' && <UsersPanel />}
-      {subTab === 'mail' && <MailPanel />}
-      {subTab === 'settings' && <SettingsPanel />}
-      {subTab === 'pricing' && <PricingPanel />}
+      {subTab === 'users' && <UsersPanel key={refreshKey} />}
+      {subTab === 'mail' && <MailPanel key={refreshKey} />}
+      {subTab === 'settings' && <SettingsPanel key={refreshKey} />}
+      {subTab === 'pricing' && <PricingPanel key={refreshKey} />}
       {subTab === 'cli' && <TerminalTab />}
-    </div>
+    </PullToRefresh>
   )
 }
 

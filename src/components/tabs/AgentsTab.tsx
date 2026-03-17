@@ -4,9 +4,10 @@ import { useState } from 'react'
 import { useStore } from '@/lib/store'
 import AgentCard from '@/components/agent/AgentCard'
 import ConfirmModal from '@/components/ui/ConfirmModal'
+import PullToRefresh from '@/components/ui/PullToRefresh'
 
 export default function AgentsTab({ onAdd }: { onAdd?: () => void }) {
-  const { state, deleteAgent } = useStore()
+  const { state, deleteAgent, refreshAgents } = useStore()
   const [deleteAgentId, setDeleteAgentId] = useState<string | null>(null)
 
   function getAssignedProject(agentId: string): string | null {
@@ -19,7 +20,7 @@ export default function AgentsTab({ onAdd }: { onAdd?: () => void }) {
   }
 
   return (
-    <div className="min-h-screen pb-20">
+    <PullToRefresh onRefresh={refreshAgents} className="min-h-screen pb-20">
       <main className="px-4 py-4 max-w-lg mx-auto">
         {state.agents.length === 0 ? (
           <div className="text-center py-20">
@@ -63,6 +64,6 @@ export default function AgentsTab({ onAdd }: { onAdd?: () => void }) {
         confirmLabel="삭제"
         danger
       />
-    </div>
+    </PullToRefresh>
   )
 }
