@@ -31,6 +31,10 @@ export async function POST(req: Request) {
     if (!existing) {
       return NextResponse.json({ error: '가입되지 않은 이메일입니다' }, { status: 404 })
     }
+  } else if (purpose === 'change-email') {
+    if (existing) {
+      return NextResponse.json({ error: '이미 사용 중인 이메일입니다' }, { status: 409 })
+    }
   } else {
     if (existing) {
       return NextResponse.json({ error: '이미 사용 중인 이메일입니다' }, { status: 409 })
