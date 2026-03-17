@@ -44,7 +44,16 @@ export function TabProvider({ children }: { children: ReactNode }) {
     setIssuesProjectIdState(id)
     localStorage.setItem('ive-issues-project', id)
   }, [])
-  const [issuesFilter, setIssuesFilter] = useState('all')
+  const [issuesFilter, setIssuesFilterState] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('ive-issues-filter') || 'all'
+    }
+    return 'all'
+  })
+  const setIssuesFilter = useCallback((filter: string) => {
+    setIssuesFilterState(filter)
+    localStorage.setItem('ive-issues-filter', filter)
+  }, [])
 
   const navigateToIssues = useCallback((projectId: string) => {
     setIssuesProjectId(projectId)

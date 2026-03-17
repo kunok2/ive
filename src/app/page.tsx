@@ -47,6 +47,7 @@ export default function HomePage() {
               <h1 className="text-xl font-extrabold leading-none">
                 <span className="text-ive-green">Spring</span>{' '}
                 <span className="text-orange-400">IVE</span>
+                <span className="text-xs font-normal text-ive-text-dim ml-1">(v{process.env.APP_VERSION})</span>
               </h1>
               <p className="text-xs text-ive-text-dim mt-0.5">{subtitle[activeTab]}</p>
             </div>
