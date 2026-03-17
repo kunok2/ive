@@ -264,7 +264,7 @@ export default function IssuesTab() {
   }, [projectDropdownOpen])
 
   return (
-    <div className="h-[calc(100dvh-4rem-env(safe-area-inset-bottom))] flex flex-col max-w-lg mx-auto px-4">
+    <div className="h-[calc(100dvh-3.5rem)] flex flex-col max-w-lg mx-auto px-4">
       <div className="pt-4 shrink-0">
         {state.projects.length > 1 && (
           <div ref={dropdownRef} className="relative mb-3">
