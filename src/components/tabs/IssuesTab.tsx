@@ -49,7 +49,7 @@ const BULK_ACTIONS: Record<string, { action: string; label: string; icon: string
 export default function IssuesTab() {
   const router = useRouter()
   const { state } = useStore()
-  const { issuesProjectId, setIssuesProjectId, issuesFilter, setIssuesFilter } = useTab()
+  const { activeTab, issuesProjectId, setIssuesProjectId, issuesFilter, setIssuesFilter } = useTab()
   const selectedProjectId = issuesProjectId ?? ''
   const filter = issuesFilter
   const [issues, setIssues] = useState<IveIssue[]>([])
@@ -113,6 +113,11 @@ export default function IssuesTab() {
   }, [selectedProjectId])
 
   useEffect(() => { fetchIssues() }, [fetchIssues])
+
+  // 탭 전환 시 자동 새로고침
+  useEffect(() => {
+    if (activeTab === 'issues' && selectedProjectId) fetchIssues()
+  }, [activeTab])
 
   const filtered = issues.filter(issue => {
     if (filter === 'all') return true
