@@ -1,9 +1,22 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { DEFAULT_AVATARS } from '@/types'
 import AgentAvatar from '@/components/agent/AgentAvatar'
+
+const REPORT_STATE_KEY = 'ive-report-state'
+
+function saveReportState(state: Record<string, unknown>) {
+  try { sessionStorage.setItem(REPORT_STATE_KEY, JSON.stringify(state)) } catch { /* ignore */ }
+}
+
+function loadReportState(): Record<string, unknown> | null {
+  try {
+    const raw = sessionStorage.getItem(REPORT_STATE_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch { return null }
+}
 
 type ReportType = 'weekly' | 'monthly' | 'yearly'
 
@@ -88,16 +101,42 @@ const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토']
 
 export default function ReportsTab() {
   const router = useRouter()
-  const [type, setType] = useState<ReportType>('weekly')
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const issueListRef = useRef<HTMLDivElement | null>(null)
+
+  // sessionStorage에서 이전 상태 복원
+  const saved = typeof window !== 'undefined' ? loadReportState() : null
+
+  const [type, setType] = useState<ReportType>(() => (saved?.type as ReportType) || 'weekly')
+  const [date, setDate] = useState(() => (saved?.date as string) || new Date().toISOString().slice(0, 10))
   const [data, setData] = useState<ReportData | null>(null)
   const [loading, setLoading] = useState(false)
-  const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set())
-  const [expandedAgents, setExpandedAgents] = useState<Set<string>>(new Set())
-  const [showAllIssues, setShowAllIssues] = useState(false)
-  const [issueFilter, setIssueFilter] = useState<IssueFilter>('all')
-  const [issueProjectFilter, setIssueProjectFilter] = useState<string>('all')
-  const [issueKeyword, setIssueKeyword] = useState('')
+  const [expandedProjects, setExpandedProjects] = useState<Set<string>>(() => new Set((saved?.expandedProjects as string[]) || []))
+  const [expandedAgents, setExpandedAgents] = useState<Set<string>>(() => new Set((saved?.expandedAgents as string[]) || []))
+  const [issueFilter, setIssueFilter] = useState<IssueFilter>(() => (saved?.issueFilter as IssueFilter) || 'all')
+  const [issueProjectFilter, setIssueProjectFilter] = useState<string>(() => (saved?.issueProjectFilter as string) || 'all')
+  const [issueKeyword, setIssueKeyword] = useState(() => (saved?.issueKeyword as string) || '')
+
+  // 상태가 변경될 때마다 sessionStorage에 저장
+  useEffect(() => {
+    saveReportState({
+      type, date,
+      expandedProjects: [...expandedProjects],
+      expandedAgents: [...expandedAgents],
+      issueFilter, issueProjectFilter, issueKeyword,
+    })
+  }, [type, date, expandedProjects, expandedAgents, issueFilter, issueProjectFilter, issueKeyword])
+
+  // 이슈 목록 스크롤 위치 복원
+  useEffect(() => {
+    if (!data || loading) return
+    const savedScroll = sessionStorage.getItem('report-issues-scroll')
+    if (savedScroll && issueListRef.current) {
+      requestAnimationFrame(() => {
+        if (issueListRef.current) issueListRef.current.scrollTop = Number(savedScroll)
+      })
+      sessionStorage.removeItem('report-issues-scroll')
+    }
+  }, [data, loading])
 
   const fetchReport = useCallback(async () => {
     setLoading(true)
@@ -381,11 +420,21 @@ export default function ReportsTab() {
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                {(showAllIssues ? filteredIssues : filteredIssues.slice(0, 10)).map((issue, i) => (
+              <div
+                ref={issueListRef}
+                className="space-y-1.5 max-h-[60vh] overflow-y-auto overscroll-contain pr-0.5"
+                style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.15) transparent' }}
+              >
+                {filteredIssues.map((issue, i) => (
                   <div
                     key={i}
-                    onClick={() => router.push(`/issues/${issue.projectId}/${issue.issueIid}`)}
+                    onClick={() => {
+                      // 스크롤 위치 저장
+                      if (issueListRef.current) {
+                        sessionStorage.setItem('report-issues-scroll', String(issueListRef.current.scrollTop))
+                      }
+                      router.push(`/issues/${issue.projectId}/${issue.issueIid}`)
+                    }}
                     className="bg-ive-bg-card border border-ive-border-subtle rounded-xl px-3 py-2 cursor-pointer hover:border-ive-green/30 active:scale-[0.99] transition-all"
                   >
                     <div className="flex items-start gap-2">
@@ -411,14 +460,6 @@ export default function ReportsTab() {
                     </div>
                   </div>
                 ))}
-                {filteredIssues.length > 10 && !showAllIssues && (
-                  <button
-                    onClick={() => setShowAllIssues(true)}
-                    className="w-full text-center text-xs text-ive-cyan font-bold py-2"
-                  >
-                    +{filteredIssues.length - 10}건 더보기
-                  </button>
-                )}
                 {filteredIssues.length === 0 && (
                   <div className="text-center text-xs text-ive-text-dim py-4">
                     필터 조건에 맞는 이슈가 없습니다.
