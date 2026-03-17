@@ -4,7 +4,7 @@ import { Project } from "@/types";
  * GitLab API URL에서 프로젝트 경로를 추출하여 인코딩된 문자열로 반환합니다.
  * 예: https://gitlab.com/kojoung/dazzlepf -> kojoung%2Fdazzlepf
  */
-function getProjectPath(repoUrl: string): string {
+export function getProjectPath(repoUrl: string): string {
   try {
     const url = new URL(repoUrl.replace(/\.git$/, ''));
     const path = url.pathname.startsWith('/') ? url.pathname.slice(1) : url.pathname;
@@ -31,7 +31,7 @@ function getProjectId(repoUrl: string): string {
  * 저장소 URL에서 GitLab API 베이스 URL을 추출합니다.
  * 예: https://gitlab.example.com/user/repo → https://gitlab.example.com/api/v4
  */
-function getApiBaseUrl(repoUrl: string): string {
+export function getApiBaseUrl(repoUrl: string): string {
   try {
     const url = new URL(repoUrl.replace(/\.git$/, ''));
     return `${url.protocol}//${url.host}/api/v4`;
@@ -43,7 +43,7 @@ function getApiBaseUrl(repoUrl: string): string {
 /**
  * 프로젝트의 인증 방식에 따라 적절한 HTTP 헤더를 반환합니다.
  */
-function getAuthHeaders(project: Project, decryptedToken: string): Record<string, string> {
+export function getAuthHeaders(project: Project, decryptedToken: string): Record<string, string> {
   if (project.authType === 'basic') {
     const encoded = Buffer.from(`${project.gitUsername}:${decryptedToken}`).toString('base64');
     return { 'Authorization': `Basic ${encoded}` };
