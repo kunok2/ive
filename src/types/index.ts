@@ -138,6 +138,7 @@ export interface TaskExecution {
   outputTokens: number
   costUsd: number
   turns: number
+  issueCreatedAt?: string
 }
 
 export interface StatSnapshot {

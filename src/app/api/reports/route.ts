@@ -171,8 +171,57 @@ export async function GET(req: NextRequest) {
         startedAt: e.startedAt,
         durationMin: Math.round(durationMin(e.startedAt, e.endedAt) * 10) / 10,
         cost: Math.round(calcCost(pricingMap, e.cliName, e.inputTokens, e.outputTokens) * 100) / 100,
+        waitMin: e.issueCreatedAt
+          ? Math.round(durationMin(e.issueCreatedAt, e.startedAt) * 10) / 10
+          : null,
       }))
     : undefined
+
+  // 이슈 생애주기 집계
+  const finishedExecs = execs.filter(e => (e.status === 'success' || e.status === 'failed') && e.endedAt)
+
+  // 대기시간: issue_created_at → started_at
+  const waitTimes = finishedExecs
+    .filter(e => e.issueCreatedAt)
+    .map(e => durationMin(e.issueCreatedAt!, e.startedAt))
+    .filter(v => v >= 0)
+  // 처리시간: started_at → ended_at
+  const procTimes = finishedExecs
+    .map(e => durationMin(e.startedAt, e.endedAt!))
+    .filter(v => v > 0)
+  // 총시간: issue_created_at → ended_at
+  const totalTimes = finishedExecs
+    .filter(e => e.issueCreatedAt)
+    .map(e => durationMin(e.issueCreatedAt!, e.endedAt!))
+    .filter(v => v >= 0)
+
+  // 이슈별 실행 횟수
+  const issueExecCounts = new Map<string, number>()
+  for (const e of finishedExecs) {
+    const key = `${e.projectId}:${e.issueIid}`
+    issueExecCounts.set(key, (issueExecCounts.get(key) || 0) + 1)
+  }
+  const execCounts = [...issueExecCounts.values()]
+  const retryIssues = execCounts.filter(c => c > 1).length
+
+  const avg = (arr: number[]) => arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0
+  const max = (arr: number[]) => arr.length > 0 ? Math.max(...arr) : 0
+  const round1 = (v: number) => Math.round(v * 10) / 10
+
+  const lifecycle = {
+    waitAvg: round1(avg(waitTimes)),
+    waitMax: round1(max(waitTimes)),
+    waitCount: waitTimes.length,
+    procAvg: round1(avg(procTimes)),
+    procMax: round1(max(procTimes)),
+    procCount: procTimes.length,
+    totalAvg: round1(avg(totalTimes)),
+    totalMax: round1(max(totalTimes)),
+    totalCount: totalTimes.length,
+    avgAttempts: execCounts.length > 0 ? round1(avg(execCounts)) : 0,
+    retryRate: execCounts.length > 0 ? round1((retryIssues / execCounts.length) * 100) : 0,
+    uniqueIssues: execCounts.length,
+  }
 
   return NextResponse.json({
     period: { start: range.start, end: range.end, type },
@@ -192,5 +241,6 @@ export async function GET(req: NextRequest) {
     byAgent,
     dailyTrend,
     resolvedIssues,
+    lifecycle,
   })
 }

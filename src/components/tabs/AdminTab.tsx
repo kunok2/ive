@@ -418,6 +418,13 @@ const SETTING_GROUPS: SettingGroup[] = [
       { key: 'mail.domain', label: '메일 도메인', type: 'text', placeholder: 'example.com' },
     ],
   },
+  {
+    key: 'retention', label: '데이터 보관', icon: 'fa-solid fa-database',
+    fields: [
+      { key: 'retention.executions_days', label: '실행 기록 보관 (일)', type: 'number', placeholder: '365 — 보고서 원본 데이터. 이 기간이 지난 실행 기록과 로그 파일이 자동 삭제됩니다.' },
+      { key: 'retention.snapshots_days', label: '스냅샷 보관 (일)', type: 'number', placeholder: '7 — 프로젝트 카드 스파크라인용. 짧게 유지해도 보고서에는 영향 없습니다.' },
+    ],
+  },
 ]
 
 function SettingsPanel() {

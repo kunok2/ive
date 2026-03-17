@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getProject } from '@/lib/db';
 import { decrypt } from '@/lib/crypto';
-import { fetchGitLabIssueNotes, addGitLabIssueComment } from '@/lib/gitlab';
+import { fetchIssueNotes, addIssueComment } from '@/lib/provider';
 
 export async function GET(
   _req: NextRequest,
@@ -13,7 +13,7 @@ export async function GET(
 
   try {
     const decryptedToken = decrypt(project.accessToken);
-    const notes = await fetchGitLabIssueNotes(project, Number(iid), decryptedToken);
+    const notes = await fetchIssueNotes(project, Number(iid), decryptedToken);
 
     const mapped = (notes as any[]).map((n: any) => ({
       id: n.id,
@@ -42,7 +42,7 @@ export async function POST(
 
   try {
     const decryptedToken = decrypt(project.accessToken);
-    await addGitLabIssueComment(project, Number(iid), decryptedToken, body.trim());
+    await addIssueComment(project, Number(iid), decryptedToken, body.trim());
     return NextResponse.json({ success: true });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : '코멘트 추가 실패' }, { status: 500 });

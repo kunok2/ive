@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getProject } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { decrypt } from '@/lib/crypto'
-import { fetchGitLabMRByBranch, mergeGitLabMR } from '@/lib/gitlab'
+import { fetchMRByBranch, mergeMR } from '@/lib/provider'
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string; iid: string }> }) {
   const user = await getCurrentUser()
@@ -16,7 +16,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   const decryptedToken = decrypt(project.accessToken)
   const sourceBranch = `dev-${iid}`
-  const mr = await fetchGitLabMRByBranch(project, decryptedToken, sourceBranch)
+  const mr = await fetchMRByBranch(project, decryptedToken, sourceBranch)
 
   if (!mr) {
     return NextResponse.json({ mr: null })
@@ -57,13 +57,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (body.action === 'merge') {
     const decryptedToken = decrypt(project.accessToken)
     const sourceBranch = `dev-${iid}`
-    const mr = await fetchGitLabMRByBranch(project, decryptedToken, sourceBranch)
+    const mr = await fetchMRByBranch(project, decryptedToken, sourceBranch)
     if (!mr) {
       return NextResponse.json({ error: 'MR not found' }, { status: 404 })
     }
 
     try {
-      const result = await mergeGitLabMR(project, decryptedToken, mr.iid)
+      const result = await mergeMR(project, decryptedToken, mr.iid)
       return NextResponse.json({ success: true, mr: result })
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)

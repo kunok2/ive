@@ -53,6 +53,14 @@ interface DailyTrend { date: string; tasks: number; success: number; failed: num
 interface ResolvedIssue {
   issueIid: number; issueTitle: string; projectId: string; projectName: string; projectColor: string
   agentName: string; agentAvatar: string; status: 'success' | 'failed'; startedAt: string; durationMin: number; cost: number
+  waitMin: number | null
+}
+
+interface Lifecycle {
+  waitAvg: number; waitMax: number; waitCount: number
+  procAvg: number; procMax: number; procCount: number
+  totalAvg: number; totalMax: number; totalCount: number
+  avgAttempts: number; retryRate: number; uniqueIssues: number
 }
 
 interface ReportData {
@@ -62,14 +70,22 @@ interface ReportData {
   byAgent: AgentGlobal[]
   dailyTrend: DailyTrend[]
   resolvedIssues?: ResolvedIssue[]
+  lifecycle: Lifecycle
 }
 
+type SectionSortKey = 'tasks' | 'cost'
+type SectionSortDir = 'desc' | 'asc'
+
 type IssueFilter = 'all' | 'success' | 'failed'
-type IssueSortKey = 'date' | 'iid' | 'duration' | 'cost'
+type IssueSortKey = 'date' | 'iid' | 'wait' | 'duration' | 'cost'
 type IssueSortDir = 'desc' | 'asc'
 
 const SORT_KEY = 'ive-report-sort'
 const SORT_DIR_KEY = 'ive-report-sort-dir'
+const PROJ_SORT_KEY = 'ive-report-proj-sort'
+const PROJ_SORT_DIR = 'ive-report-proj-sort-dir'
+const AGENT_SORT_KEY = 'ive-report-agent-sort'
+const AGENT_SORT_DIR = 'ive-report-agent-sort-dir'
 
 function formatDuration(min: number): string {
   if (min < 60) return `${min.toFixed(1)}분`
@@ -116,6 +132,22 @@ export default function ReportsTab() {
   const [loading, setLoading] = useState(false)
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(() => new Set((saved?.expandedProjects as string[]) || []))
   const [expandedAgents, setExpandedAgents] = useState<Set<string>>(() => new Set((saved?.expandedAgents as string[]) || []))
+  const [projectSortKey, setProjectSortKey] = useState<SectionSortKey>(() => {
+    if (typeof window === 'undefined') return 'tasks'
+    return (localStorage.getItem(PROJ_SORT_KEY) as SectionSortKey) || 'tasks'
+  })
+  const [projectSortDir, setProjectSortDir] = useState<SectionSortDir>(() => {
+    if (typeof window === 'undefined') return 'desc'
+    return (localStorage.getItem(PROJ_SORT_DIR) as SectionSortDir) || 'desc'
+  })
+  const [agentSortKey, setAgentSortKey] = useState<SectionSortKey>(() => {
+    if (typeof window === 'undefined') return 'tasks'
+    return (localStorage.getItem(AGENT_SORT_KEY) as SectionSortKey) || 'tasks'
+  })
+  const [agentSortDir, setAgentSortDir] = useState<SectionSortDir>(() => {
+    if (typeof window === 'undefined') return 'desc'
+    return (localStorage.getItem(AGENT_SORT_DIR) as SectionSortDir) || 'desc'
+  })
   const [issueFilter, setIssueFilter] = useState<IssueFilter>(() => (saved?.issueFilter as IssueFilter) || 'all')
   const [issueProjectFilter, setIssueProjectFilter] = useState<string>(() => (saved?.issueProjectFilter as string) || 'all')
   const [issueKeyword, setIssueKeyword] = useState(() => (saved?.issueKeyword as string) || '')
@@ -189,6 +221,38 @@ export default function ReportsTab() {
     setExpandedAgents(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next })
   }
 
+  function toggleSectionSort(
+    currentKey: SectionSortKey, currentDir: SectionSortDir,
+    setKey: (k: SectionSortKey) => void, setDir: (d: SectionSortDir) => void,
+    key: SectionSortKey, lsKey: string, lsDir: string,
+  ) {
+    if (currentKey === key) {
+      const next = currentDir === 'desc' ? 'asc' : 'desc'
+      setDir(next)
+      localStorage.setItem(lsDir, next)
+    } else {
+      setKey(key); setDir('desc')
+      localStorage.setItem(lsKey, key)
+      localStorage.setItem(lsDir, 'desc')
+    }
+  }
+
+  function sortedProjects() {
+    if (!data) return []
+    return [...data.byProject].sort((a, b) => {
+      const v = projectSortKey === 'cost' ? a.cost - b.cost : a.tasks - b.tasks
+      return projectSortDir === 'desc' ? -v : v
+    })
+  }
+
+  function sortedAgents() {
+    if (!data) return []
+    return [...data.byAgent].sort((a, b) => {
+      const v = agentSortKey === 'cost' ? a.cost - b.cost : a.tasks - b.tasks
+      return agentSortDir === 'desc' ? -v : v
+    })
+  }
+
   function changeSort(key: IssueSortKey) {
     if (issueSort === key) {
       const newDir = issueSortDir === 'desc' ? 'asc' : 'desc'
@@ -217,6 +281,7 @@ export default function ReportsTab() {
     switch (issueSort) {
       case 'date': return dir * b.startedAt.localeCompare(a.startedAt)
       case 'iid': return dir * (b.issueIid - a.issueIid)
+      case 'wait': return dir * ((b.waitMin ?? 0) - (a.waitMin ?? 0))
       case 'duration': return dir * (b.durationMin - a.durationMin)
       case 'cost': return dir * (b.cost - a.cost)
       default: return 0
@@ -282,6 +347,70 @@ export default function ReportsTab() {
             </div>
           </section>
 
+          {/* Lifecycle */}
+          {data.lifecycle.procCount > 0 && (
+            <section>
+              <div className="text-xs font-bold text-ive-text-dim mb-2 uppercase tracking-wider">이슈 생애주기</div>
+              <div className="bg-ive-bg-card border border-ive-border-subtle rounded-xl p-3 space-y-3">
+                {/* 단계별 평균/최대 */}
+                {(() => {
+                  const hasWait = data.lifecycle.waitCount > 0
+                  const hasTotal = data.lifecycle.totalCount > 0
+                  const cols = 1 + (hasWait ? 1 : 0) + (hasTotal ? 1 : 0)
+                  return (
+                    <div className={`grid gap-2 ${cols === 3 ? 'grid-cols-3' : cols === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                      {hasWait && (
+                        <div className="text-center">
+                          <div className="text-[10px] text-ive-text-dim">생성→배정</div>
+                          <div className="text-sm font-extrabold text-ive-cyan">{formatDuration(data.lifecycle.waitAvg)}</div>
+                          <div className="text-[10px] text-ive-text-dim">최대 {formatDuration(data.lifecycle.waitMax)}</div>
+                        </div>
+                      )}
+                      <div className="text-center">
+                        <div className="text-[10px] text-ive-text-dim">처리시간</div>
+                        <div className="text-sm font-extrabold text-ive-green">{formatDuration(data.lifecycle.procAvg)}</div>
+                        <div className="text-[10px] text-ive-text-dim">최대 {formatDuration(data.lifecycle.procMax)}</div>
+                      </div>
+                      {hasTotal && (
+                        <div className="text-center">
+                          <div className="text-[10px] text-ive-text-dim">총 소요</div>
+                          <div className="text-sm font-extrabold text-ive-text">{formatDuration(data.lifecycle.totalAvg)}</div>
+                          <div className="text-[10px] text-ive-text-dim">최대 {formatDuration(data.lifecycle.totalMax)}</div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
+                {/* 비율 바 */}
+                {data.lifecycle.waitCount > 0 && data.lifecycle.totalAvg > 0 && (() => {
+                  const waitPct = Math.round((data.lifecycle.waitAvg / data.lifecycle.totalAvg) * 100)
+                  const procPct = Math.round((data.lifecycle.procAvg / data.lifecycle.totalAvg) * 100)
+                  const otherPct = Math.max(0, 100 - waitPct - procPct)
+                  return (
+                    <div>
+                      <div className="flex h-2.5 rounded-full overflow-hidden bg-ive-bg-deep">
+                        <div className="bg-ive-cyan/60" style={{ width: `${waitPct}%` }} />
+                        <div className="bg-ive-green/60" style={{ width: `${procPct}%` }} />
+                        {otherPct > 0 && <div className="bg-ive-amber/40" style={{ width: `${otherPct}%` }} />}
+                      </div>
+                      <div className="flex justify-between mt-1 text-[9px] text-ive-text-dim">
+                        <span>대기 {waitPct}%</span>
+                        <span>처리 {procPct}%</span>
+                        {otherPct > 0 && <span>기타 {otherPct}%</span>}
+                      </div>
+                    </div>
+                  )
+                })()}
+                {/* 재시도 */}
+                <div className="flex justify-center gap-4 text-[10px] text-ive-text-dim">
+                  <span>이슈 {data.lifecycle.uniqueIssues}건</span>
+                  <span>평균 {data.lifecycle.avgAttempts}회 시도</span>
+                  <span>재시도율 {data.lifecycle.retryRate}%</span>
+                </div>
+              </div>
+            </section>
+          )}
+
           {/* Daily Trend */}
           {data.dailyTrend.length > 0 && (
             <section>
@@ -319,9 +448,12 @@ export default function ReportsTab() {
           {/* By Project */}
           {data.byProject.length > 0 && (
             <section>
-              <div className="text-xs font-bold text-ive-text-dim mb-2 uppercase tracking-wider">프로젝트별</div>
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-xs font-bold text-ive-text-dim uppercase tracking-wider">프로젝트별</div>
+                <SortButtons sortKey={projectSortKey} sortDir={projectSortDir} onToggle={(k) => toggleSectionSort(projectSortKey, projectSortDir, setProjectSortKey, setProjectSortDir, k, PROJ_SORT_KEY, PROJ_SORT_DIR)} />
+              </div>
               <div className="space-y-2">
-                {data.byProject.map(p => (
+                {sortedProjects().map(p => (
                   <div key={p.projectId} className="bg-ive-bg-card border border-ive-border-subtle rounded-xl overflow-hidden">
                     <button onClick={() => toggleProject(p.projectId)} className="w-full px-3 py-2.5 flex items-center gap-2 text-left">
                       {p.projectAvatarUrl ? (
@@ -331,6 +463,7 @@ export default function ReportsTab() {
                       )}
                       <span className="text-sm font-bold text-ive-text flex-1 truncate">{p.projectName}</span>
                       <span className="text-xs text-ive-text-dim">{p.tasks}건</span>
+                      <span className="text-xs text-ive-amber">${p.cost.toFixed(2)}</span>
                       <i className={`fa-solid fa-chevron-${expandedProjects.has(p.projectId) ? 'up' : 'down'} text-xs text-ive-text-dim`} />
                     </button>
                     {expandedProjects.has(p.projectId) && (
@@ -371,14 +504,18 @@ export default function ReportsTab() {
           {/* By Agent */}
           {data.byAgent.length > 0 && (
             <section>
-              <div className="text-xs font-bold text-ive-text-dim mb-2 uppercase tracking-wider">작업자별</div>
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-xs font-bold text-ive-text-dim uppercase tracking-wider">작업자별</div>
+                <SortButtons sortKey={agentSortKey} sortDir={agentSortDir} onToggle={(k) => toggleSectionSort(agentSortKey, agentSortDir, setAgentSortKey, setAgentSortDir, k, AGENT_SORT_KEY, AGENT_SORT_DIR)} />
+              </div>
               <div className="space-y-2">
-                {data.byAgent.map(a => (
+                {sortedAgents().map(a => (
                   <div key={a.agentId} className="bg-ive-bg-card border border-ive-border-subtle rounded-xl overflow-hidden">
                     <button onClick={() => toggleAgent(a.agentId)} className="w-full px-3 py-2.5 flex items-center gap-2 text-left">
                       <AgentAvatar avatar={a.agentAvatar} size="sm" className="!w-6 !h-6 !text-sm" />
                       <span className="text-sm font-bold text-ive-text flex-1 truncate">{a.agentName}</span>
                       <span className="text-xs text-ive-text-dim">{a.tasks}건</span>
+                      <span className="text-xs text-ive-amber">${a.cost.toFixed(2)}</span>
                       <i className={`fa-solid fa-chevron-${expandedAgents.has(a.agentId) ? 'up' : 'down'} text-xs text-ive-text-dim`} />
                     </button>
                     {expandedAgents.has(a.agentId) && (
@@ -467,7 +604,7 @@ export default function ReportsTab() {
                 {/* 정렬 */}
                 <div className="flex items-center gap-1">
                   <span className="text-[10px] text-ive-text-dim mr-0.5">정렬</span>
-                  {([['date', '일자'], ['iid', '번호'], ['duration', '시간'], ['cost', '비용']] as [IssueSortKey, string][]).map(([key, label]) => (
+                  {([['date', '일자'], ['iid', '번호'], ['wait', '대기'], ['duration', '시간'], ['cost', '비용']] as [IssueSortKey, string][]).map(([key, label]) => (
                     <button
                       key={key}
                       onClick={() => changeSort(key)}
@@ -509,7 +646,10 @@ export default function ReportsTab() {
                             <AgentAvatar avatar={issue.agentAvatar} size="sm" className="!w-3.5 !h-3.5 !text-[8px]" />
                             {issue.agentName}
                           </span>
-                          <span>{issue.durationMin}분</span>
+                          {issue.waitMin != null && (
+                            <span className="text-ive-cyan">대기 {formatDuration(issue.waitMin)}</span>
+                          )}
+                          <span>{formatDuration(issue.durationMin)}</span>
                           <span className="text-ive-amber">${issue.cost.toFixed(2)}</span>
                         </div>
                       </div>
@@ -614,6 +754,30 @@ function CustomSelect({ value, onChange, options }: {
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+function SortButtons({ sortKey, sortDir, onToggle }: {
+  sortKey: SectionSortKey; sortDir: SectionSortDir
+  onToggle: (key: SectionSortKey) => void
+}) {
+  return (
+    <div className="flex items-center gap-1">
+      {([['tasks', '건수'], ['cost', '비용']] as [SectionSortKey, string][]).map(([key, label]) => (
+        <button
+          key={key}
+          onClick={() => onToggle(key)}
+          className={`px-1.5 py-0.5 text-[10px] font-bold rounded transition-all flex items-center gap-0.5 ${
+            sortKey === key ? 'bg-ive-green/20 text-ive-green' : 'text-ive-text-dim hover:bg-ive-bg-card'
+          }`}
+        >
+          {label}
+          {sortKey === key && (
+            <i className={`fa-solid fa-sort-${sortDir === 'desc' ? 'down' : 'up'} text-[8px]`} />
+          )}
+        </button>
+      ))}
     </div>
   )
 }

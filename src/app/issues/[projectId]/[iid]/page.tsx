@@ -67,6 +67,10 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   const [stageChanging, setStageChanging] = useState(false)
   const [showDesc, setShowDesc] = useState(false)
   const [isClosing, setIsClosing] = useState(false)
+  const [editMode, setEditMode] = useState(false)
+  const [editTitle, setEditTitle] = useState('')
+  const [editDesc, setEditDesc] = useState('')
+  const [saving, setSaving] = useState(false)
   const notesEndRef = useRef<HTMLDivElement>(null)
 
   const fetchIssue = useCallback(async () => {
@@ -172,6 +176,31 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
     }
   }
 
+  function startEdit() {
+    if (!issue) return
+    setEditTitle(issue.title)
+    setEditDesc(issue.description || '')
+    setEditMode(true)
+  }
+
+  async function handleSaveEdit() {
+    if (!editTitle.trim()) return
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/projects/${projectId}/issues/${iid}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: editTitle.trim(), description: editDesc }),
+      })
+      if (res.ok) {
+        setEditMode(false)
+        await fetchIssue()
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
+
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center text-ive-text-muted">불러오는 중...</div>
   }
@@ -217,41 +246,85 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
         </div>
         {/* 제목 + 설명 토글 + 단계 변경 */}
         <div className="px-3 pb-2 max-w-lg mx-auto">
-          <div className="flex items-start gap-2">
-            <h1 className="text-sm font-bold text-ive-text leading-snug flex-1 line-clamp-2">{issue.title}</h1>
-            <div className="flex items-center gap-1 shrink-0">
-              {issue.description && (
-                <button onClick={() => setShowDesc(!showDesc)} className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all ${showDesc ? 'bg-ive-green/10 text-ive-green' : 'bg-ive-bg-card text-ive-text-dim border border-ive-border-subtle'}`} title="설명 보기">
-                  <i className={`fa-solid fa-file-lines text-xs`} />
-                </button>
-              )}
-              {actions.map(act => (
+          {editMode ? (
+            <div className="space-y-2">
+              <input
+                type="text"
+                value={editTitle}
+                onChange={e => setEditTitle(e.target.value)}
+                className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-1.5 text-sm font-bold text-ive-text focus:outline-none focus:border-ive-green"
+                placeholder="제목"
+                autoFocus
+              />
+              <textarea
+                value={editDesc}
+                onChange={e => setEditDesc(e.target.value)}
+                className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-1.5 text-sm text-ive-text resize-none focus:outline-none focus:border-ive-green"
+                placeholder="설명 (선택)"
+                rows={4}
+              />
+              <div className="flex gap-2">
                 <button
-                  key={act.action}
-                  onClick={() => handleStageAction(act.action)}
-                  disabled={stageChanging}
-                  className={`h-7 px-2 rounded-lg text-xs font-bold border transition-all active:scale-95 disabled:opacity-40 ${
-                    act.danger
-                      ? 'text-ive-red/80 border-ive-red/30 bg-ive-bg-card hover:bg-ive-red/10'
-                      : 'text-ive-green border-ive-green/30 bg-ive-bg-card hover:bg-ive-green/10'
-                  }`}
+                  onClick={handleSaveEdit}
+                  disabled={saving || !editTitle.trim()}
+                  className="flex-1 text-xs font-bold text-ive-green border border-ive-green/30 py-1.5 rounded-lg hover:bg-ive-green/10 transition-colors disabled:opacity-40"
                 >
-                  {stageChanging ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className={`fa-solid ${act.icon} mr-0.5`} />{act.label}</>}
+                  {saving ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-check mr-1" />저장</>}
                 </button>
-              ))}
-              <button
-                onClick={handleCloseIssue}
-                disabled={isClosing || stageChanging}
-                className="h-7 px-2 rounded-lg text-xs font-bold border text-ive-red/80 border-ive-red/30 bg-ive-bg-card hover:bg-ive-red/10 transition-all active:scale-95 disabled:opacity-40"
-              >
-                {isClosing ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-xmark mr-0.5" />닫기</>}
-              </button>
+                <button
+                  onClick={() => setEditMode(false)}
+                  className="flex-1 text-xs font-bold text-ive-text-dim border border-ive-border py-1.5 rounded-lg hover:bg-ive-bg-deep transition-colors"
+                >
+                  취소
+                </button>
+              </div>
             </div>
-          </div>
-          {showDesc && issue.description && (
-            <div className="mt-1.5 text-sm text-ive-text-muted bg-ive-bg-card rounded-lg p-2.5 whitespace-pre-wrap break-words leading-relaxed max-h-[30vh] overflow-y-auto">
-              {issue.description}
-            </div>
+          ) : (
+            <>
+              <div className="flex items-start gap-2">
+                <h1 className="text-sm font-bold text-ive-text leading-snug flex-1 line-clamp-2">{issue.title}</h1>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={startEdit}
+                    className="w-7 h-7 rounded-lg flex items-center justify-center bg-ive-bg-card text-ive-text-dim border border-ive-border-subtle hover:text-ive-green hover:border-ive-green/30 transition-all"
+                    title="수정"
+                  >
+                    <i className="fa-solid fa-pen text-xs" />
+                  </button>
+                  {issue.description && (
+                    <button onClick={() => setShowDesc(!showDesc)} className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all ${showDesc ? 'bg-ive-green/10 text-ive-green' : 'bg-ive-bg-card text-ive-text-dim border border-ive-border-subtle'}`} title="설명 보기">
+                      <i className={`fa-solid fa-file-lines text-xs`} />
+                    </button>
+                  )}
+                  {actions.map(act => (
+                    <button
+                      key={act.action}
+                      onClick={() => handleStageAction(act.action)}
+                      disabled={stageChanging}
+                      className={`h-7 px-2 rounded-lg text-xs font-bold border transition-all active:scale-95 disabled:opacity-40 ${
+                        act.danger
+                          ? 'text-ive-red/80 border-ive-red/30 bg-ive-bg-card hover:bg-ive-red/10'
+                          : 'text-ive-green border-ive-green/30 bg-ive-bg-card hover:bg-ive-green/10'
+                      }`}
+                    >
+                      {stageChanging ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className={`fa-solid ${act.icon} mr-0.5`} />{act.label}</>}
+                    </button>
+                  ))}
+                  <button
+                    onClick={handleCloseIssue}
+                    disabled={isClosing || stageChanging}
+                    className="h-7 px-2 rounded-lg text-xs font-bold border text-ive-red/80 border-ive-red/30 bg-ive-bg-card hover:bg-ive-red/10 transition-all active:scale-95 disabled:opacity-40"
+                  >
+                    {isClosing ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-xmark mr-0.5" />닫기</>}
+                  </button>
+                </div>
+              </div>
+              {showDesc && issue.description && (
+                <div className="mt-1.5 text-sm text-ive-text-muted bg-ive-bg-card rounded-lg p-2.5 whitespace-pre-wrap break-words leading-relaxed max-h-[30vh] overflow-y-auto">
+                  {issue.description}
+                </div>
+              )}
+            </>
           )}
         </div>
       </header>

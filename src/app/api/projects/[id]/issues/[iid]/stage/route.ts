@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getProject } from '@/lib/db';
 import { decrypt } from '@/lib/crypto';
-import { updateGitLabIssueLabels } from '@/lib/gitlab';
+import { updateIssueLabels } from '@/lib/provider';
 
 // 단계 전환 매핑
 // action: 사용자가 선택할 수 있는 액션명
@@ -57,7 +57,7 @@ export async function POST(
 
   try {
     const decryptedToken = decrypt(project.accessToken);
-    await updateGitLabIssueLabels(
+    await updateIssueLabels(
       project,
       Number(iid),
       decryptedToken,

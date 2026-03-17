@@ -1,6 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getProject } from '@/lib/db'
 import { decrypt } from '@/lib/crypto'
+import { updateIssue, fetchSingleIssue } from '@/lib/provider'
+
+export async function PUT(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string; iid: string }> }
+) {
+  const { id: projectId, iid } = await params
+  const project = getProject(projectId)
+  if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+
+  try {
+    const { title, description } = await req.json()
+    if (!title?.trim()) {
+      return NextResponse.json({ error: '제목은 필수입니다' }, { status: 400 })
+    }
+    const decryptedToken = decrypt(project.accessToken)
+    const updated = await updateIssue(project, Number(iid), decryptedToken, {
+      title: title.trim(),
+      description: description ?? '',
+    })
+    return NextResponse.json({
+      iid: updated.iid,
+      title: updated.title,
+      description: updated.description,
+    })
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : '이슈 수정 실패' },
+      { status: 500 }
+    )
+  }
+}
 
 export async function GET(
   _req: NextRequest,
@@ -13,19 +45,8 @@ export async function GET(
   try {
     const decryptedToken = decrypt(project.accessToken)
 
-    // GitLab API에서 단일 이슈 직접 조회 (열린/닫힌 이슈 모두)
-    const { getApiBaseUrl, getProjectPath, getAuthHeaders } = await import('@/lib/gitlab')
-    const base = getApiBaseUrl(project.repoUrl)
-    const projectPath = getProjectPath(project.repoUrl)
-    const headers = getAuthHeaders(project, decryptedToken)
-
-    const res = await fetch(`${base}/projects/${projectPath}/issues/${iid}`, { headers })
-    if (!res.ok) {
-      if (res.status === 404) return NextResponse.json({ error: '이슈를 찾을 수 없습니다' }, { status: 404 })
-      throw new Error(`GitLab API 오류: ${res.statusText}`)
-    }
-
-    const issue = await res.json()
+    const issue = await fetchSingleIssue(project, Number(iid), decryptedToken)
+    if (!issue) return NextResponse.json({ error: '이슈를 찾을 수 없습니다' }, { status: 404 })
 
     // stage 정보 부여
     const stageMap: Record<string, string> = {

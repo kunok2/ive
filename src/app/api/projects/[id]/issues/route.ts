@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getProject } from '@/lib/db';
 import { decrypt } from '@/lib/crypto';
-import { createGitLabIssue, fetchAllProjectIssues } from '@/lib/gitlab';
+import { fetchAllProjectIssues, createIssue } from '@/lib/provider';
 
 export async function GET(
   _req: NextRequest,
@@ -79,7 +79,7 @@ export async function POST(
   try {
     const decryptedToken = decrypt(project.accessToken);
     const labels = asDev ? [project.labelTarget] : [];
-    const issue = await createGitLabIssue(project, decryptedToken, title.trim(), description?.trim() ?? '', labels);
+    const issue = await createIssue(project, decryptedToken, title.trim(), description?.trim() ?? '', labels);
     return NextResponse.json(issue);
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : '이슈 생성 실패' }, { status: 500 });

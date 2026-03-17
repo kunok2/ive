@@ -7,6 +7,7 @@ import Sparkline from '@/components/ui/Sparkline'
 import ExecutionList from '@/components/execution/ExecutionList'
 import ExecutionStats from '@/components/execution/ExecutionStats'
 import AgentAvatar, { AvatarSelector } from '@/components/agent/AgentAvatar'
+import type { ToolCategory } from '@/lib/tool-activity'
 import ReactMarkdown from 'react-markdown'
 
 interface Props {
@@ -82,6 +83,26 @@ export default function AgentCard({ agent, onDelete, compact, assignedProject, o
   const [snapshots, setSnapshots] = useState<StatSnapshot[]>([])
   const [executions, setExecutions] = useState<TaskExecution[]>([])
   const [killing, setKilling] = useState<string | null>(null)
+  const [toolBadge, setToolBadge] = useState<ToolCategory | null>(null)
+
+  // 에이전트가 busy 상태일 때 도구 활동 폴링
+  useEffect(() => {
+    if (compact || agent.status !== 'busy') { setToolBadge(null); return }
+    let active = true
+    const poll = async () => {
+      try {
+        const res = await fetch('/api/activities')
+        if (res.ok && active) {
+          const list = await res.json()
+          const mine = list.find((a: any) => a.agentId === agent.id)
+          setToolBadge(mine?.category ?? null)
+        }
+      } catch { /* ignore */ }
+    }
+    poll()
+    const timer = setInterval(poll, 2000)
+    return () => { active = false; clearInterval(timer) }
+  }, [agent.id, agent.status, compact])
 
   const fetchStats = useCallback(async () => {
     try {
@@ -216,7 +237,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProject, o
         className={`p-3 flex items-center justify-between cursor-pointer active:bg-white/[0.02] transition-colors ${collapsed ? '' : 'border-b border-ive-border-dark'}`}
       >
         <div className="flex items-center gap-2.5">
-          <AgentAvatar avatar={agent.avatar} size="md" />
+          <AgentAvatar avatar={agent.avatar} size="md" toolBadge={toolBadge} />
           <div>
             <div className="text-base font-bold text-ive-green-pale">{agent.name}</div>
             <div className="text-sm text-ive-text-muted">{cli.label} · {cli.desc}</div>

@@ -1,6 +1,7 @@
 import {
   getDb, getAllProjects, getAgentsByUser,
-  createSnapshot, cleanOldSnapshots, cleanOldExecutions
+  createSnapshot, cleanOldSnapshots, cleanOldExecutions,
+  getSystemSetting
 } from './db'
 
 let collectorStarted = false
@@ -21,8 +22,10 @@ export function startStatsCollector() {
   // 1시간마다 오래된 데이터 정리
   setInterval(() => {
     try {
-      cleanOldSnapshots(7)
-      cleanOldExecutions(30)
+      const snapshotDays = Number(getSystemSetting('retention.snapshots_days')) || 7
+      const execDays = Number(getSystemSetting('retention.executions_days')) || 365
+      cleanOldSnapshots(snapshotDays)
+      cleanOldExecutions(execDays)
     } catch (e) {
       console.warn('[StatsCollector] Cleanup error:', (e as Error).message)
     }

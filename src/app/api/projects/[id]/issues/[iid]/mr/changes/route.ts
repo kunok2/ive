@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getProject } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { decrypt } from '@/lib/crypto'
-import { fetchGitLabMRByBranch, fetchGitLabMRChanges } from '@/lib/gitlab'
+import { fetchMRByBranch, fetchMRChanges } from '@/lib/provider'
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string; iid: string }> }) {
   const user = await getCurrentUser()
@@ -16,13 +16,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   const decryptedToken = decrypt(project.accessToken)
   const sourceBranch = `dev-${iid}`
-  const mr = await fetchGitLabMRByBranch(project, decryptedToken, sourceBranch)
+  const mr = await fetchMRByBranch(project, decryptedToken, sourceBranch)
 
   if (!mr) {
     return NextResponse.json({ error: 'MR not found' }, { status: 404 })
   }
 
-  const changes = await fetchGitLabMRChanges(project, decryptedToken, mr.iid)
+  const changes = await fetchMRChanges(project, decryptedToken, mr.iid)
   if (!changes) {
     return NextResponse.json({ error: 'Failed to fetch changes' }, { status: 500 })
   }

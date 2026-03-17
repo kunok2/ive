@@ -224,6 +224,9 @@ function initSchema(db: Database.Database) {
     if (!tableInfo.some((col: any) => col.name === 'turns')) {
       db.exec("ALTER TABLE task_executions ADD COLUMN turns INTEGER NOT NULL DEFAULT 0")
     }
+    if (!tableInfo.some((col: any) => col.name === 'issue_created_at')) {
+      db.exec("ALTER TABLE task_executions ADD COLUMN issue_created_at TEXT")
+    }
   } catch (e) { console.error("Migration failed for task_executions:", e) }
 
   // 프로젝트 모니터링 설정
@@ -580,13 +583,14 @@ function mapExecution(r: any): TaskExecution {
     agentName: r.agent_name ?? undefined,
     inputTokens: r.input_tokens ?? 0, outputTokens: r.output_tokens ?? 0,
     costUsd: r.cost_usd ?? 0, turns: r.turns ?? 0,
+    issueCreatedAt: r.issue_created_at ?? undefined,
   }
 }
 
 export function createExecution(ex: TaskExecution) {
   getDb().prepare(
-    'INSERT INTO task_executions (id, project_id, agent_id, issue_iid, issue_title, status, started_at, log_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-  ).run(ex.id, ex.projectId, ex.agentId, ex.issueIid, ex.issueTitle ?? null, ex.status, ex.startedAt, ex.logPath)
+    'INSERT INTO task_executions (id, project_id, agent_id, issue_iid, issue_title, status, started_at, log_path, issue_created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(ex.id, ex.projectId, ex.agentId, ex.issueIid, ex.issueTitle ?? null, ex.status, ex.startedAt, ex.logPath, ex.issueCreatedAt ?? null)
 }
 
 export function updateExecutionStatus(id: string, status: TaskStatus, endedAt?: string) {
@@ -817,6 +821,7 @@ export interface ReportExecution {
   outputTokens: number
   costUsd: number
   turns: number
+  issueCreatedAt: string | null
 }
 
 export function getExecutionsInRange(userId: string, start: string, end: string): ReportExecution[] {
@@ -824,7 +829,8 @@ export function getExecutionsInRange(userId: string, start: string, end: string)
     SELECT te.id, te.project_id, p.name as project_name, p.color as project_color, p.avatar_url as project_avatar_url,
            te.agent_id, a.name as agent_name, a.avatar as agent_avatar, a.cli_name,
            te.issue_iid, te.issue_title, te.status,
-           te.started_at, te.ended_at, te.input_tokens, te.output_tokens, te.cost_usd, te.turns
+           te.started_at, te.ended_at, te.input_tokens, te.output_tokens, te.cost_usd, te.turns,
+           te.issue_created_at
     FROM task_executions te
     JOIN projects p ON p.id = te.project_id
     JOIN agents a ON a.id = te.agent_id
@@ -839,6 +845,7 @@ export function getExecutionsInRange(userId: string, start: string, end: string)
     status: r.status, startedAt: r.started_at, endedAt: r.ended_at,
     inputTokens: r.input_tokens ?? 0, outputTokens: r.output_tokens ?? 0,
     costUsd: r.cost_usd ?? 0, turns: r.turns ?? 0,
+    issueCreatedAt: r.issue_created_at ?? null,
   }))
 }
 

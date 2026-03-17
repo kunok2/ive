@@ -68,11 +68,12 @@ export default function ProjectCard({ project }: Props) {
 
   useEffect(() => {
     fetchStats()
-    const timer = setInterval(fetchStats, 10000)
+    const interval = (stats?.running ?? 0) > 0 ? 3000 : 10000
+    const timer = setInterval(fetchStats, interval)
     const onVisible = () => { if (document.visibilityState === 'visible') fetchStats() }
     document.addEventListener('visibilitychange', onVisible)
     return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVisible) }
-  }, [fetchStats])
+  }, [fetchStats, stats?.running])
 
   // 패널 열릴 때 실행 목록 로드
   useEffect(() => {

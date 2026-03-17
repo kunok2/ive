@@ -1,5 +1,6 @@
 import {
   getAllProjects,
+  getProject,
   updateProjectLastChecked,
   updateProjectError,
   getProjectAssignments,
@@ -14,23 +15,34 @@ import {
   getLastCompletedAt
 } from "./db";
 import { decrypt } from "./crypto";
-import { 
-  ensureGitLabLabels, 
-  fetchGitLabIssues, 
-  updateGitLabIssueLabels, 
-  addGitLabIssueComment, 
-  fetchGitLabIssueNotes, 
-  addGitLabSpentTime, 
-  createGitLabMR, 
-  getGitLabMR, 
-  addGitLabMRNote 
+import {
+  ensureGitLabLabels,
+  fetchGitLabIssues,
+  updateGitLabIssueLabels,
+  addGitLabIssueComment,
+  fetchGitLabIssueNotes,
+  addGitLabSpentTime,
+  createGitLabMR,
+  getGitLabMR,
+  addGitLabMRNote
 } from "./gitlab";
+import {
+  ensureGitHubLabels,
+  fetchGitHubIssues,
+  updateGitHubIssueLabels,
+  addGitHubIssueComment,
+  fetchGitHubIssueNotes,
+  createGitHubPR,
+  getGitHubPR,
+  addGitHubPRNote,
+} from "./github";
 import { Project, Agent } from "@/types";
 import { startStatsCollector } from "./stats-collector";
 import { spawn } from "child_process";
 import fs from "fs";
 import path from "path";
 import { promisify } from "util";
+import { setToolActivity, setThinking, clearActivity } from "./tool-activity";
 
 const exec = promisify(require('child_process').exec);
 
@@ -299,7 +311,14 @@ export async function scanProject(project: Project, force: boolean = false) {
         issueCount += waiting;
       }
     } else if (project.provider === 'github') {
-      // 구현 예정
+      await ensureGitHubLabels(project, decryptedToken);
+
+      const devIssues = await fetchGitHubIssues(project, decryptedToken, project.labelTarget);
+      if (devIssues.length > 0) {
+        console.log(`[Scanner] Found ${devIssues.length} dev-queue issues for ${project.name} (GitHub)`);
+        const { assigned, waiting } = await processIssues(project, devIssues, decryptedToken);
+        issueCount += waiting;
+      }
     }
 
     // 마지막 체크 시간 및 이슈 수 업데이트
@@ -358,7 +377,11 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
       console.log(`[Scanner] [ASSIGN] Project: ${project.name}, Issue: #${issue.iid}, Agent: ${availableAgent.name}${agentToken !== decryptedToken ? ' (자체 토큰)' : ''}`);
 
       // 레이블 변경: 대기 → 개발 중
-      await updateGitLabIssueLabels(project, issue.iid, decryptedToken, [project.labelInProgress], [project.labelTarget]);
+      if (project.provider === 'github') {
+        await updateGitHubIssueLabels(project, issue.iid, decryptedToken, [project.labelInProgress], [project.labelTarget]);
+      } else {
+        await updateGitLabIssueLabels(project, issue.iid, decryptedToken, [project.labelInProgress], [project.labelTarget]);
+      }
 
       // 비동기로 태스크 실행 (개발자별 토큰 우선)
       executeTask(project, issue, availableAgent, agentToken)
@@ -413,8 +436,10 @@ async function executeTask(
     outputTokens: 0,
     costUsd: 0,
     turns: 0,
+    issueCreatedAt: issue.created_at || undefined,
   });
 
+  const isGitHub = project.provider === 'github';
   const conversationParts: string[] = []; // 이슈 노트용 대화 내용 수집
   const logStream = fs.createWriteStream(logPath, { flags: 'a' });
   const log = (msg: string, type: 'info' | 'error' | 'warn' | 'system' = 'info') => {
@@ -445,9 +470,14 @@ async function executeTask(
     fs.mkdirSync(workspacePath, { recursive: true });
 
     // 2. Git 클론 및 준비
-    const repoUrl = project.authType === 'basic'
-      ? project.repoUrl.replace('https://', `https://${encodeURIComponent(project.gitUsername)}:${encodeURIComponent(token)}@`)
-      : project.repoUrl.replace('https://', `https://oauth2:${token}@`);
+    let repoUrl: string;
+    if (project.authType === 'basic') {
+      repoUrl = project.repoUrl.replace('https://', `https://${encodeURIComponent(project.gitUsername)}:${encodeURIComponent(token)}@`);
+    } else if (isGitHub) {
+      repoUrl = project.repoUrl.replace('https://', `https://x-access-token:${token}@`);
+    } else {
+      repoUrl = project.repoUrl.replace('https://', `https://oauth2:${token}@`);
+    }
     const branchName = `dev-${iid}`;
     
     log("저장소 클론 중...", 'system');
@@ -467,7 +497,9 @@ async function executeTask(
     await exec(`git checkout -B ${branchName}`, { cwd: workspacePath });
 
     // 3. 이전 작업 이력 및 사용자 피드백 확인
-    const notes = await fetchGitLabIssueNotes(project, iid, token);
+    const notes = project.provider === 'github'
+      ? await fetchGitHubIssueNotes(project, iid, token)
+      : await fetchGitLabIssueNotes(project, iid, token);
     const botCompletions = notes.filter((n: any) => n.body.includes("IVE(봇)"));
     const iterationCount = botCompletions.length + 1;
 
@@ -518,7 +550,11 @@ async function executeTask(
     if (iterationCount > 1 && !latestFeedback) {
       log(`${iterationCount}차 실행이지만 새로운 사용자 지시가 없어 스킵합니다.`, 'system');
       // 라벨을 done 상태로 복원 (진행중 → 완료)
-      await updateGitLabIssueLabels(project, iid, token, [project.labelDone], [project.labelInProgress]);
+      if (project.provider === 'github') {
+        await updateGitHubIssueLabels(project, iid, token, [project.labelDone], [project.labelInProgress]);
+      } else {
+        await updateGitLabIssueLabels(project, iid, token, [project.labelDone], [project.labelInProgress]);
+      }
       updateExecutionStatus(executionId, 'success', new Date().toISOString());
       updateAgentStatus(agent.id, 'available');
       logStream.end();
@@ -530,22 +566,18 @@ async function executeTask(
       return;
     }
 
-    // GitLab API 정보 구성
+    // API 정보 구성
     const repoUrlParsed = new URL(project.repoUrl.replace(/\.git$/, ''));
-    const gitlabBaseUrl = `${repoUrlParsed.protocol}//${repoUrlParsed.host}`;
-    const projectPath = repoUrlParsed.pathname.startsWith('/') ? repoUrlParsed.pathname.slice(1) : repoUrlParsed.pathname;
-    const encodedProjectPath = encodeURIComponent(projectPath);
 
     // 1차: 이슈 본문이 지시사항 / 2차+: 사용자 피드백만이 지시사항
     let prompt: string;
+    const providerLabel = isGitHub ? 'GitHub' : 'GitLab';
     if (iterationCount === 1) {
-      // 최초 실행: 이슈 본문 전체가 작업 지시
-      prompt = `다음 GitLab 이슈를 해결해주세요. 한국어로만 보고하세요.
+      prompt = `다음 ${providerLabel} 이슈를 해결해주세요. 한국어로만 보고하세요.
 
 ## 이슈 #${iid}: ${issue.title}
 ${issue.description || "설명 없음"}`;
     } else {
-      // 2차 이상: 사용자 피드백이 유일한 작업 지시 (이슈 본문은 참고용 제목만)
       prompt = `이슈 #${iid} "${issue.title}"에 대한 ${iterationCount}차 후속 작업입니다. 한국어로만 보고하세요.
 ${iterationContext}
 
@@ -555,7 +587,32 @@ ${latestFeedback}
 **중요: 이슈 본문의 원래 요청은 이미 처리 완료되었습니다. 위 대화 히스토리는 맥락 참고용이며, "이번 작업 지시" 섹션의 사용자 코멘트만 수행하세요.**`;
     }
 
-    prompt += `
+    if (isGitHub) {
+      const ownerRepo = repoUrlParsed.pathname.startsWith('/') ? repoUrlParsed.pathname.slice(1) : repoUrlParsed.pathname;
+      prompt += `
+
+## GitHub 연동 정보:
+- GitHub API: https://api.github.com
+- Repository: ${ownerRepo}
+- Issue Number: ${iid}
+- 인증: 환경변수 GITHUB_TOKEN 사용 (Authorization: Bearer 헤더)
+
+### 사용 가능한 GitHub API 예시:
+\`\`\`bash
+# 이슈에 코멘트 달기
+curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" -X POST "https://api.github.com/repos/${ownerRepo}/issues/${iid}/comments" -d '{"body":"코멘트 내용"}'
+
+# 이슈 정보 조회
+curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${ownerRepo}/issues/${iid}"
+
+# 이슈 코멘트 목록
+curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${ownerRepo}/issues/${iid}/comments"
+\`\`\``;
+    } else {
+      const gitlabBaseUrl = `${repoUrlParsed.protocol}//${repoUrlParsed.host}`;
+      const projectPath = repoUrlParsed.pathname.startsWith('/') ? repoUrlParsed.pathname.slice(1) : repoUrlParsed.pathname;
+      const encodedProjectPath = encodeURIComponent(projectPath);
+      prompt += `
 
 ## GitLab 연동 정보:
 - GitLab API: ${gitlabBaseUrl}/api/v4
@@ -573,7 +630,10 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
 
 # 이슈 코멘트 목록
 curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/projects/${encodedProjectPath}/issues/${iid}/notes"
-\`\`\`
+\`\`\``;
+    }
+
+    prompt += `
 
 ## 지시사항:
 - 프로젝트 구조와 스타일을 파악하고 관련 코드를 수정하세요.
@@ -604,7 +664,11 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
       const child = spawn(mainCmd, args, {
         cwd: workspacePath,
         stdio: ['ignore', 'pipe', 'pipe'],
-        env: { ...process.env, GITLAB_TOKEN: token, GITLAB_API_TOKEN: token },
+        env: {
+          ...process.env,
+          GITLAB_TOKEN: token, GITLAB_API_TOKEN: token,
+          GITHUB_TOKEN: token,
+        },
         detached: true,  // 새 프로세스 그룹 생성 → kill -pgid로 전체 종료 가능
       });
 
@@ -635,8 +699,18 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
             // 이슈 노트용 마크다운 수집
             const md = formatStreamEventMarkdown(event);
             if (md) conversationParts.push(md);
-            // assistant 이벤트 카운트 (턴 수 fallback용)
+            // 도구 활동 추적
             if (event.type === 'assistant') {
+              const parts = event.message?.content || [];
+              let foundTool = false;
+              for (const part of parts) {
+                if (part.type === 'tool_use' && part.name) {
+                  const detail = formatToolInput(part.name, part.input || '');
+                  setToolActivity(executionId, agent.id, part.name, detail);
+                  foundTool = true;
+                }
+              }
+              if (!foundTool) setThinking(executionId, agent.id);
               assistantTurnCount++;
             }
             // 토큰/비용/턴 누적
@@ -671,6 +745,7 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
             logStream.write(stdoutBuffer + '\n');
           }
         }
+        clearActivity(executionId);
         log(`CLI 종료: code=${code}, signal=${signal}`, code === 0 ? 'system' : 'error');
         // 토큰/비용/턴 DB 저장 (CLI가 cost를 제공하지 않으면 토큰 수로 환산)
         // result 이벤트에서 turns를 못 가져왔으면 assistant 이벤트 카운트를 사용
@@ -700,48 +775,89 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
       await exec(`git commit -m "fix: resolve #${iid} - ${issue.title}"`, { cwd: workspacePath });
       await exec(`git push -f origin ${branchName}`, { cwd: workspacePath });
 
-      const existingMR = await getGitLabMR(project, token, branchName);
+      // MR/PR 생성 또는 업데이트
       let mrUrl = "";
-      if (existingMR) {
-        mrUrl = existingMR.web_url;
-        await addGitLabMRNote(project, token, existingMR.iid, `## 반복 수정 (${iterationCount}차)\n피드백을 반영하여 추가 수정했습니다.`);
+      if (isGitHub) {
+        const existingPR = await getGitHubPR(project, token, branchName);
+        if (existingPR) {
+          mrUrl = existingPR.web_url;
+          await addGitHubPRNote(project, token, existingPR.iid, `## 반복 수정 (${iterationCount}차)\n피드백을 반영하여 추가 수정했습니다.`);
+        } else {
+          const prResult = await createGitHubPR(project, token, {
+            source_branch: branchName,
+            target_branch: baseBranch,
+            title: `fix: resolve #${iid} - ${issue.title}`,
+            description: `이슈 #${iid} 해결을 위한 자동 PR입니다. (${iterationCount}차 작업)`,
+          });
+          mrUrl = prResult?.web_url || "";
+        }
       } else {
-        const mrResult = await createGitLabMR(project, token, {
-          source_branch: branchName,
-          target_branch: baseBranch,
-          title: `fix: resolve #${iid} - ${issue.title}`,
-          description: `이슈 #${iid} 해결을 위한 자동 MR입니다. (${iterationCount}차 작업)`,
-          remove_source_branch: false,
-          squash: true
-        });
-        mrUrl = mrResult?.web_url || "";
+        const existingMR = await getGitLabMR(project, token, branchName);
+        if (existingMR) {
+          mrUrl = existingMR.web_url;
+          await addGitLabMRNote(project, token, existingMR.iid, `## 반복 수정 (${iterationCount}차)\n피드백을 반영하여 추가 수정했습니다.`);
+        } else {
+          const mrResult = await createGitLabMR(project, token, {
+            source_branch: branchName,
+            target_branch: baseBranch,
+            title: `fix: resolve #${iid} - ${issue.title}`,
+            description: `이슈 #${iid} 해결을 위한 자동 MR입니다. (${iterationCount}차 작업)`,
+            remove_source_branch: false,
+            squash: true
+          });
+          mrUrl = mrResult?.web_url || "";
+        }
       }
 
-      // 대화 내용을 마크다운으로 정리 (최대 60000자 — GitLab 노트 제한 65535)
+      const mrLabel = isGitHub ? 'PR' : 'MR';
+      // 대화 내용을 마크다운으로 정리 (최대 60000자)
       const conversationLog = conversationParts.join('\n\n').substring(0, 60000);
-      const completionNote = `## IVE(봇) 개발 완료\n\nMR: ${mrUrl}\n소요 시간: ${durationStr}\n\n개발이 완료되었습니다. 리뷰 후 머지해주세요.\n\n<details>\n<summary>🤖 AI 작업 로그 (펼치기)</summary>\n\n${conversationLog}\n\n</details>`;
-      await addGitLabIssueComment(project, iid, token, completionNote);
-      await addGitLabSpentTime(project, iid, token, durationStr);
+      const completionNote = `## IVE(봇) 개발 완료\n\n${mrLabel}: ${mrUrl}\n소요 시간: ${durationStr}\n\n개발이 완료되었습니다. 리뷰 후 머지해주세요.\n\n<details>\n<summary>🤖 AI 작업 로그 (펼치기)</summary>\n\n${conversationLog}\n\n</details>`;
+      if (isGitHub) {
+        await addGitHubIssueComment(project, iid, token, completionNote);
+      } else {
+        await addGitLabIssueComment(project, iid, token, completionNote);
+        await addGitLabSpentTime(project, iid, token, durationStr);
+      }
 
-      // 개발 완료: IVE(D) → IVE(E) (완료)
-      await updateGitLabIssueLabels(project, iid, token, [project.labelDone], [project.labelInProgress]);
+      // 개발 완료: labelInProgress → labelDone
+      if (isGitHub) {
+        await updateGitHubIssueLabels(project, iid, token, [project.labelDone], [project.labelInProgress]);
+      } else {
+        await updateGitLabIssueLabels(project, iid, token, [project.labelDone], [project.labelInProgress]);
+      }
       log("작업 완료.", 'system');
       updateExecutionStatus(executionId, 'success', new Date().toISOString());
     } else {
       log("코드 변경사항 없음. 작업 완료로 처리.", 'system');
       const noChangeLog = conversationParts.join('\n\n').substring(0, 60000);
-      await addGitLabIssueComment(project, iid, token, `## IVE(봇) 개발 완료\n\n코드 변경 없이 작업을 완료했습니다.\n소요 시간: ${durationStr}\n\n<details>\n<summary>🤖 AI 작업 로그 (펼치기)</summary>\n\n${noChangeLog}\n\n</details>`);
-      await addGitLabSpentTime(project, iid, token, durationStr);
-      // 개발 완료: IVE(D) → IVE(E) (완료)
-      await updateGitLabIssueLabels(project, iid, token, [project.labelDone], [project.labelInProgress]);
+      const noChangeNote = `## IVE(봇) 개발 완료\n\n코드 변경 없이 작업을 완료했습니다.\n소요 시간: ${durationStr}\n\n<details>\n<summary>🤖 AI 작업 로그 (펼치기)</summary>\n\n${noChangeLog}\n\n</details>`;
+      if (isGitHub) {
+        await addGitHubIssueComment(project, iid, token, noChangeNote);
+      } else {
+        await addGitLabIssueComment(project, iid, token, noChangeNote);
+        await addGitLabSpentTime(project, iid, token, durationStr);
+      }
+      // 개발 완료: labelInProgress → labelDone
+      if (isGitHub) {
+        await updateGitHubIssueLabels(project, iid, token, [project.labelDone], [project.labelInProgress]);
+      } else {
+        await updateGitLabIssueLabels(project, iid, token, [project.labelDone], [project.labelInProgress]);
+      }
       updateExecutionStatus(executionId, 'success', new Date().toISOString());
     }
 
   } catch (err: any) {
     log(`오류 발생: ${err.message}`, 'error');
     const errorLog = conversationParts.join('\n\n').substring(0, 60000);
-    await addGitLabIssueComment(project, iid, token, `## IVE(봇) 실행 오류\n오류가 발생했습니다: ${err.message}\n\n<details>\n<summary>🤖 AI 작업 로그 (펼치기)</summary>\n\n${errorLog}\n\n</details>`);
-    await updateGitLabIssueLabels(project, iid, token, [project.labelFailDev], [project.labelInProgress]);
+    const errorNote = `## IVE(봇) 실행 오류\n오류가 발생했습니다: ${err.message}\n\n<details>\n<summary>🤖 AI 작업 로그 (펼치기)</summary>\n\n${errorLog}\n\n</details>`;
+    if (isGitHub) {
+      await addGitHubIssueComment(project, iid, token, errorNote);
+      await updateGitHubIssueLabels(project, iid, token, [project.labelFailDev], [project.labelInProgress]);
+    } else {
+      await addGitLabIssueComment(project, iid, token, errorNote);
+      await updateGitLabIssueLabels(project, iid, token, [project.labelFailDev], [project.labelInProgress]);
+    }
     updateExecutionStatus(executionId, 'failed', new Date().toISOString());
   } finally {
     // 에이전트 상태를 'available'로 복원
@@ -751,6 +867,15 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
     try {
       if (fs.existsSync(workspacePath)) {
         fs.rmSync(workspacePath, { recursive: true, force: true });
+      }
+    } catch (e) { /* ignore */ }
+
+    // 대기 이슈가 있으면 즉시 재스캔 → 빈 에이전트에 바로 배정
+    try {
+      const freshProject = getProject(project.id);
+      if (freshProject && (freshProject.lastScannedIssueCount ?? 0) > 0) {
+        console.log(`[Scanner] Agent ${agent.name} freed — re-scanning ${freshProject.name} for waiting issues`);
+        scanProject(freshProject, true);
       }
     } catch (e) { /* ignore */ }
   }

@@ -486,6 +486,30 @@ export async function closeGitLabIssue(project: Project, issueIid: number, decry
 }
 
 /**
+ * 이슈 제목/설명을 수정합니다.
+ */
+export async function updateGitLabIssue(
+  project: Project,
+  issueIid: number,
+  decryptedToken: string,
+  updates: { title?: string; description?: string }
+) {
+  const projectPath = getProjectPath(project.repoUrl);
+  if (!projectPath) throw new Error('Invalid repo URL');
+
+  const headers = getAuthHeaders(project, decryptedToken);
+
+  const res = await fetch(apiUrl(project, `/issues/${issueIid}`), {
+    method: 'PUT',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify(updates),
+  });
+
+  if (!res.ok) throw new Error(`이슈 수정 실패: ${res.statusText}`);
+  return await res.json();
+}
+
+/**
  * 이슈를 생성합니다.
  */
 export async function createGitLabIssue(

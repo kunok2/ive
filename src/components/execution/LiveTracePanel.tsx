@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { TaskExecution, Agent } from '@/types'
+import type { ToolActivity } from '@/lib/tool-activity'
 import LogViewer from '@/components/ui/LogViewer'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 
@@ -27,11 +28,30 @@ export default function LiveTracePanel({ agents, onKill }: Props) {
   const router = useRouter()
   const [activeIdx, setActiveIdx] = useState(0)
   const [tick, setTick] = useState(0)
+  const [activities, setActivities] = useState<Record<string, ToolActivity>>({})
 
   useEffect(() => {
     const timer = setInterval(() => setTick(t => t + 1), 1000)
     return () => clearInterval(timer)
   }, [])
+
+  const fetchActivities = useCallback(async () => {
+    try {
+      const res = await fetch('/api/activities')
+      if (res.ok) {
+        const list: ToolActivity[] = await res.json()
+        const map: Record<string, ToolActivity> = {}
+        for (const a of list) map[a.agentId] = a
+        setActivities(map)
+      }
+    } catch { /* ignore */ }
+  }, [])
+
+  useEffect(() => {
+    fetchActivities()
+    const timer = setInterval(fetchActivities, 2000)
+    return () => clearInterval(timer)
+  }, [fetchActivities])
 
   const runningAgents = agents.filter(a => a.execution?.status === 'running')
 
@@ -51,7 +71,9 @@ export default function LiveTracePanel({ agents, onKill }: Props) {
     <div className="border-t border-ive-cyan/20 flex-1 flex flex-col min-h-0">
       {/* 에이전트 탭 */}
       <div className="flex border-b border-ive-border-dark bg-ive-bg-deep/50 shrink-0">
-        {runningAgents.map((tab, idx) => (
+        {runningAgents.map((tab, idx) => {
+          const activity = activities[tab.agent.id]
+          return (
             <button
               key={tab.agent.id}
               onClick={() => setActiveIdx(idx)}
@@ -61,13 +83,15 @@ export default function LiveTracePanel({ agents, onKill }: Props) {
                   : 'text-ive-text-dim hover:text-ive-text-muted'
               }`}
             >
-              <div className="relative shrink-0">
-                <AgentAvatar avatar={tab.agent.avatar} size="sm" />
-                <div className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-ive-amber animate-pulse border border-ive-bg-deep" />
-              </div>
+              <AgentAvatar
+                avatar={tab.agent.avatar}
+                size="sm"
+                toolBadge={activity?.category ?? null}
+              />
               <span className="truncate">{tab.agent.name}</span>
             </button>
-          ))}
+          )
+        })}
       </div>
 
       {/* 현재 선택된 에이전트 내용 */}
@@ -79,10 +103,21 @@ export default function LiveTracePanel({ agents, onKill }: Props) {
               <span className="text-sm text-ive-text ml-1.5 font-semibold">{current.execution!.issueTitle}</span>
             )}
           </div>
-          <span className="text-xs font-mono font-bold text-ive-amber shrink-0 ml-2">
-            {formatDuration(current.execution!.startedAt)}
-            {tick >= 0 ? '' : ''}
-          </span>
+          <div className="flex items-center gap-2 shrink-0 ml-2">
+            {(() => {
+              const activity = activities[current.agent.id]
+              if (!activity) return null
+              return (
+                <span className="text-[10px] text-ive-text-dim bg-ive-bg-deep px-1.5 py-0.5 rounded font-mono truncate max-w-[140px]">
+                  {activity.tool === 'thinking' ? '생각 중...' : activity.tool}
+                </span>
+              )
+            })()}
+            <span className="text-xs font-mono font-bold text-ive-amber">
+              {formatDuration(current.execution!.startedAt)}
+              {tick >= 0 ? '' : ''}
+            </span>
+          </div>
         </div>
 
         <LogViewer
