@@ -331,30 +331,30 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
 
       {/* 활동 기록 - 남은 공간 전체 사용 */}
       <div className="flex-1 flex flex-col min-h-0 max-w-lg mx-auto w-full">
-        {/* MR 리뷰 섹션 */}
-        {(issue.stage === 'done' || issue.stage === 'dev') && (
-          <div className="px-3 shrink-0">
-            <MRReviewSection projectId={projectId} issueIid={Number(iid)} />
-          </div>
-        )}
-
-        <div className="px-3 py-1.5 shrink-0 flex items-center justify-between mt-2">
-          <span className="text-xs font-bold text-ive-text-dim uppercase tracking-widest">
-            <i className="fa-solid fa-comments mr-1" />활동 기록
-            {!notesLoading && <span className="ml-1 opacity-50">({notes.length})</span>}
-          </span>
-          {notes.length > 0 && (
-            <button
-              onClick={() => notesEndRef.current?.scrollIntoView({ behavior: 'smooth' })}
-              className="text-xs font-bold text-ive-text-dim hover:text-ive-green border border-ive-border-subtle hover:border-ive-green/30 px-2 py-0.5 rounded-lg transition-all"
-              title="마지막 노트로 이동"
-            >
-              <i className="fa-solid fa-angles-down mr-1" />마지막
-            </button>
-          )}
-        </div>
-
         <div className="flex-1 overflow-y-auto pb-2 pl-3 pr-1">
+          {/* MR 리뷰 섹션 - 스크롤 영역 안에 배치 */}
+          {(issue.stage === 'done' || issue.stage === 'dev') && (
+            <div className="pr-2">
+              <MRReviewSection projectId={projectId} issueIid={Number(iid)} />
+            </div>
+          )}
+
+          <div className="py-1.5 pr-2 flex items-center justify-between mt-2 sticky top-0 z-10 bg-ive-bg-deep/95 backdrop-blur-sm">
+            <span className="text-xs font-bold text-ive-text-dim uppercase tracking-widest">
+              <i className="fa-solid fa-comments mr-1" />활동 기록
+              {!notesLoading && <span className="ml-1 opacity-50">({notes.length})</span>}
+            </span>
+            {notes.length > 0 && (
+              <button
+                onClick={() => notesEndRef.current?.scrollIntoView({ behavior: 'smooth' })}
+                className="text-xs font-bold text-ive-text-dim hover:text-ive-green border border-ive-border-subtle hover:border-ive-green/30 px-2 py-0.5 rounded-lg transition-all"
+                title="마지막 노트로 이동"
+              >
+                <i className="fa-solid fa-angles-down mr-1" />마지막
+              </button>
+            )}
+          </div>
+
           {notesLoading ? (
             <div className="text-center py-10 text-ive-text-dim text-sm">노트 불러오는 중...</div>
           ) : notes.length === 0 ? (
