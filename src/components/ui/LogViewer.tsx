@@ -236,7 +236,7 @@ function LogLine({ line, showLineNum, lineNum }: { line: LineData; lineNum: numb
   return (
     <div className="flex hover:bg-white/[0.02] group leading-relaxed">
       {showLineNum && (
-        <span className="select-none text-ive-text-dim/40 group-hover:text-ive-text-dim/60 w-12 shrink-0 text-right pr-3 font-mono text-[0.85em]">
+        <span className="select-none text-ive-text-muted/60 group-hover:text-ive-text-muted w-8 shrink-0 text-right pr-2 font-mono text-[0.85em]">
           {lineNum}
         </span>
       )}
@@ -463,7 +463,7 @@ export default function LogViewer({
         {/* Thinking 애니메이션 */}
         {(isLive ?? connected) && (
           <div className="flex items-center gap-1 pt-2 pb-1">
-            {showLineNumbers && <span className="w-12 shrink-0" />}
+            {showLineNumbers && <span className="w-8 shrink-0" />}
             <span className="inline-flex gap-[3px]">
               <span className="w-[5px] h-[5px] rounded-full bg-ive-cyan/70 animate-[thinking_1.4s_ease-in-out_infinite]" />
               <span className="w-[5px] h-[5px] rounded-full bg-ive-cyan/70 animate-[thinking_1.4s_ease-in-out_0.2s_infinite]" />
