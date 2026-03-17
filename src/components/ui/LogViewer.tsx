@@ -292,6 +292,8 @@ function groupIntoBlocks(lines: LineData[]): Block[] {
 interface LogViewerProps {
   /** SSE 엔드포인트 URL */
   sseUrl: string
+  /** 초기 내용 fetch URL (마운트 시 기존 로그를 즉시 로드) */
+  initialFetchUrl?: string
   /** 라인 번호 표시 여부 */
   showLineNumbers?: boolean
   /** 폰트 크기 (px) */
@@ -312,6 +314,7 @@ const ANSI_ESCAPE_RE = /\x1b\[/
 
 export default function LogViewer({
   sseUrl,
+  initialFetchUrl,
   showLineNumbers = true,
   fontSize = 13,
   maxLines = 50000,
@@ -324,6 +327,27 @@ export default function LogViewer({
   const containerRef = useRef<HTMLDivElement>(null)
   const autoScrollRef = useRef(initialAutoScroll)
   const linesRef = useRef<LineData[]>([])
+  const initialLoadedRef = useRef(false)
+
+  const appendLines = useCallback((text: string) => {
+    if (!text) return
+    const newLines = text.split('\n').map((raw: string): LineData => ({
+      raw,
+      hasAnsi: ANSI_ESCAPE_RE.test(raw),
+    }))
+    // 마지막 빈 줄 제거
+    if (newLines.length > 0 && newLines[newLines.length - 1].raw === '') {
+      newLines.pop()
+    }
+    if (newLines.length === 0) return
+
+    linesRef.current = [...linesRef.current, ...newLines]
+    if (linesRef.current.length > maxLines) {
+      linesRef.current = linesRef.current.slice(-maxLines)
+    }
+    setLines([...linesRef.current])
+    onLineCountChange?.(linesRef.current.length)
+  }, [maxLines, onLineCountChange])
 
   // 자동 스크롤 (부드럽게)
   const scrollToBottom = useCallback(() => {
@@ -342,26 +366,33 @@ export default function LogViewer({
     autoScrollRef.current = scrollHeight - scrollTop - clientHeight < 50
   }, [])
 
+  // 초기 내용 fetch (SSE보다 먼저 표시)
+  useEffect(() => {
+    if (!initialFetchUrl || initialLoadedRef.current) return
+    initialLoadedRef.current = true
+
+    fetch(initialFetchUrl)
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data?.content) {
+          appendLines(data.content)
+          if (data.status !== 'running') {
+            onConnectionChange?.(false)
+          }
+        }
+      })
+      .catch(() => {})
+  }, [initialFetchUrl, appendLines, onConnectionChange])
+
   // SSE 연결
   useEffect(() => {
-    const eventSource = new EventSource(sseUrl)
+    const url = initialFetchUrl ? `${sseUrl}${sseUrl.includes('?') ? '&' : '?'}skipInitial=1` : sseUrl
+    const eventSource = new EventSource(url)
 
     eventSource.onopen = () => onConnectionChange?.(true)
 
     eventSource.onmessage = (event) => {
-      const newLines = event.data.split('\n').map((raw: string): LineData => ({
-        raw,
-        hasAnsi: ANSI_ESCAPE_RE.test(raw),
-      }))
-
-      linesRef.current = [...linesRef.current, ...newLines]
-      // maxLines 초과 시 앞에서 자르기
-      if (linesRef.current.length > maxLines) {
-        linesRef.current = linesRef.current.slice(-maxLines)
-      }
-
-      setLines([...linesRef.current])
-      onLineCountChange?.(linesRef.current.length)
+      appendLines(event.data)
     }
 
     eventSource.onerror = () => {
@@ -372,7 +403,7 @@ export default function LogViewer({
     return () => {
       eventSource.close()
     }
-  }, [sseUrl, maxLines, onConnectionChange, onLineCountChange])
+  }, [sseUrl, appendLines, onConnectionChange])
 
   // 자동 스크롤 실행
   useEffect(() => {
@@ -380,26 +411,6 @@ export default function LogViewer({
       scrollToBottom()
     }
   }, [lines, scrollToBottom])
-
-  // 모바일 터치 스크롤 지원
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-
-    let touchY = 0
-    const onTouchStart = (e: TouchEvent) => { touchY = e.touches[0].clientY }
-    const onTouchMove = (e: TouchEvent) => {
-      const dy = touchY - e.touches[0].clientY
-      touchY = e.touches[0].clientY
-      el.scrollTop += dy
-    }
-    el.addEventListener('touchstart', onTouchStart, { passive: true })
-    el.addEventListener('touchmove', onTouchMove, { passive: true })
-    return () => {
-      el.removeEventListener('touchstart', onTouchStart)
-      el.removeEventListener('touchmove', onTouchMove)
-    }
-  }, [])
 
   const blocks = useMemo(() => groupIntoBlocks(lines), [lines])
 

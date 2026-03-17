@@ -34,7 +34,16 @@ export function TabProvider({ children }: { children: ReactNode }) {
     setActiveTabState(tab)
     localStorage.setItem('ive-active-tab', tab)
   }, [])
-  const [issuesProjectId, setIssuesProjectId] = useState<string | null>(null)
+  const [issuesProjectId, setIssuesProjectIdState] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('ive-issues-project') || null
+    }
+    return null
+  })
+  const setIssuesProjectId = useCallback((id: string) => {
+    setIssuesProjectIdState(id)
+    localStorage.setItem('ive-issues-project', id)
+  }, [])
   const [issuesFilter, setIssuesFilter] = useState('all')
 
   const navigateToIssues = useCallback((projectId: string) => {

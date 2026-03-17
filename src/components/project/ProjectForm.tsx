@@ -22,7 +22,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
   // 이슈 레이블 설정 추가
   const [labelTarget, setLabelTarget] = useState(existing?.labelTarget ?? 'IVE')
   const [labelInProgress, setLabelInProgress] = useState(existing?.labelInProgress ?? 'IVE(D)')
-  const [labelFailDev, setLabelFailDev] = useState(existing?.labelFailDev ?? 'IVE(DF)')
+  const [labelFailDev, setLabelFailDev] = useState(existing?.labelFailDev ?? 'IVE(F)')
   const [labelDone, setLabelDone] = useState(existing?.labelDone ?? 'IVE(E)')
   
   // 작업 주기 설정 추가 (단위: 분)
@@ -31,6 +31,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
   const [snapshotInterval, setSnapshotInterval] = useState(existing?.snapshotInterval ?? 1)
   const [sparklinePoints, setSparklinePoints] = useState(existing?.sparklinePoints ?? 60)
   const [statsRetention, setStatsRetention] = useState(existing?.statsRetention ?? 7)
+  const [showToolUsage, setShowToolUsage] = useState(existing?.showToolUsage ?? false)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [showMonitoring, setShowMonitoring] = useState(false)
 
@@ -48,6 +49,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
       labelInProgress: labelInProgress.trim(),
       labelFailDev: labelFailDev.trim(),
       labelDone: labelDone.trim(),
+      showToolUsage,
       checkInterval: Number(checkInterval) || 10,
       lastCheckedAt: null,
       lastScannedIssueCount: null,
@@ -223,12 +225,12 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
               />
             </div>
             <div>
-              <label className="block text-sm font-bold text-ive-red/70 mb-1.5 uppercase ml-1">개발 실패 (DF)</label>
+              <label className="block text-sm font-bold text-ive-red/70 mb-1.5 uppercase ml-1">실패 (F)</label>
               <input
                 type="text"
                 value={labelFailDev}
                 onChange={e => setLabelFailDev(e.target.value)}
-                placeholder="IVE(DF)"
+                placeholder="IVE(F)"
                 className="w-full bg-ive-bg-deep border border-ive-red/20 rounded-lg px-3 py-2 text-base text-ive-text focus:outline-none focus:border-ive-red/50 font-bold"
               />
             </div>
@@ -245,6 +247,24 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
             </div>
           </div>
         )}
+      </div>
+
+      {/* 트레이스 설정 */}
+      <div className="border-t border-ive-border-dark pt-3">
+        <label className="flex items-center justify-between cursor-pointer">
+          <span className="text-base font-bold text-ive-text-muted">
+            <i className="fa-solid fa-wrench mr-1.5 text-sm" />
+            트레이스에 툴 사용 표시
+          </span>
+          <button
+            type="button"
+            onClick={() => setShowToolUsage(!showToolUsage)}
+            className={`w-11 h-6 rounded-full transition-all relative ${showToolUsage ? 'bg-ive-green' : 'bg-ive-bg-deep border border-ive-border'}`}
+          >
+            <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${showToolUsage ? 'left-[1.375rem]' : 'left-0.5'}`} />
+          </button>
+        </label>
+        <p className="text-xs text-ive-text-dim mt-1 ml-6">에이전트 실행 로그에 Read, Edit, Bash 등 툴 호출 내역을 포함합니다</p>
       </div>
 
       {/* 모니터링 설정 */}

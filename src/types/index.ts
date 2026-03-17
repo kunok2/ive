@@ -43,8 +43,9 @@ export interface Project {
   color: ProjectColor       // 프로젝트 구분 색상
   labelTarget: string      // 대상 이슈 레이블 (예: IVE)
   labelInProgress: string  // 진행 중 레이블 (예: IVE(D))
-  labelFailDev: string     // 개발 실패 (예: IVE(DF))
+  labelFailDev: string     // 개발 실패 (예: IVE(F))
   labelDone: string        // 완료 레이블 (예: IVE(E))
+  showToolUsage: boolean   // 트레이스에 툴 사용 표시 여부
   checkInterval: number    // 체크 간격 (분)
   lastCheckedAt: string | null // 마지막 체크 시간
   lastScannedIssueCount: number | null // 마지막 스캔 이슈 수

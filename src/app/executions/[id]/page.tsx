@@ -60,6 +60,7 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
       <div ref={containerRef} className="flex-1 min-h-0">
         <LogViewer
           sseUrl={`/api/executions/${id}/logs`}
+          initialFetchUrl={`/api/executions/${id}/content`}
           fontSize={13}
           maxLines={50000}
           className="h-full"

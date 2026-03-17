@@ -78,6 +78,7 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
           </div>
           <LogViewer
             sseUrl={`/api/executions/${selectedId}/logs`}
+            initialFetchUrl={`/api/executions/${selectedId}/content`}
             fontSize={12}
             maxLines={10000}
             className="flex-1 min-h-0"

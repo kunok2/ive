@@ -25,15 +25,18 @@ export async function GET(
   }
 
   const logPath = execution.logPath;
+  const skipInitial = req.nextUrl.searchParams.get('skipInitial') === '1';
 
   const stream = new ReadableStream({
     start(controller) {
       let position = 0;
 
-      // 기존 내용 전송
-      const initialContent = fs.readFileSync(logPath, 'utf-8');
-      if (initialContent) {
-        controller.enqueue(new TextEncoder().encode(toSSE(initialContent)));
+      if (!skipInitial) {
+        // 기존 내용 전송
+        const initialContent = fs.readFileSync(logPath, 'utf-8');
+        if (initialContent) {
+          controller.enqueue(new TextEncoder().encode(toSSE(initialContent)));
+        }
       }
       position = fs.statSync(logPath).size;
 

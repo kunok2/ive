@@ -43,10 +43,9 @@ function initSchema(db: Database.Database) {
       color TEXT NOT NULL DEFAULT '#4ade80',
       label_target TEXT NOT NULL DEFAULT 'IVE',
       label_in_progress TEXT NOT NULL DEFAULT 'IVE(D)',
-      label_fail_dev TEXT NOT NULL DEFAULT 'IVE(DF)',
-      label_validation TEXT NOT NULL DEFAULT 'IVE(V)',
-      label_fail_val TEXT NOT NULL DEFAULT 'IVE(VF)',
+      label_fail_dev TEXT NOT NULL DEFAULT 'IVE(F)',
       label_done TEXT NOT NULL DEFAULT 'IVE(E)',
+      show_tool_usage INTEGER NOT NULL DEFAULT 0,
       check_interval INTEGER NOT NULL DEFAULT 10,
       last_checked_at TEXT,
       last_scanned_issue_count INTEGER,
@@ -134,13 +133,10 @@ function initSchema(db: Database.Database) {
     if (!tableInfo.some((col: any) => col.name === 'label_target')) {
       db.exec("ALTER TABLE projects ADD COLUMN label_target TEXT NOT NULL DEFAULT 'IVE'")
       db.exec("ALTER TABLE projects ADD COLUMN label_in_progress TEXT NOT NULL DEFAULT 'IVE(D)'")
-      db.exec("ALTER TABLE projects ADD COLUMN label_fail_dev TEXT NOT NULL DEFAULT 'IVE(DF)'")
-      db.exec("ALTER TABLE projects ADD COLUMN label_validation TEXT NOT NULL DEFAULT 'IVE(V)'")
-      db.exec("ALTER TABLE projects ADD COLUMN label_fail_val TEXT NOT NULL DEFAULT 'IVE(VF)'")
+      db.exec("ALTER TABLE projects ADD COLUMN label_fail_dev TEXT NOT NULL DEFAULT 'IVE(F)'")
       db.exec("ALTER TABLE projects ADD COLUMN label_done TEXT NOT NULL DEFAULT 'IVE(E)'")
     } else if (!tableInfo.some((col: any) => col.name === 'label_fail_dev')) {
-      db.exec("ALTER TABLE projects ADD COLUMN label_fail_dev TEXT NOT NULL DEFAULT 'IVE(DF)'")
-      db.exec("ALTER TABLE projects ADD COLUMN label_fail_val TEXT NOT NULL DEFAULT 'IVE(VF)'")
+      db.exec("ALTER TABLE projects ADD COLUMN label_fail_dev TEXT NOT NULL DEFAULT 'IVE(F)'")
     }
     if (!tableInfo.some((col: any) => col.name === 'color')) {
       db.exec("ALTER TABLE projects ADD COLUMN color TEXT NOT NULL DEFAULT '#4ade80'")
@@ -160,6 +156,9 @@ function initSchema(db: Database.Database) {
     if (!tableInfo.some((col: any) => col.name === 'last_error')) {
       db.exec("ALTER TABLE projects ADD COLUMN last_error TEXT")
       db.exec("ALTER TABLE projects ADD COLUMN last_error_at TEXT")
+    }
+    if (!tableInfo.some((col: any) => col.name === 'show_tool_usage')) {
+      db.exec("ALTER TABLE projects ADD COLUMN show_tool_usage INTEGER NOT NULL DEFAULT 0")
     }
     if (!tableInfo.some((col: any) => col.name === 'sort_order')) {
       db.exec("ALTER TABLE projects ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0")
@@ -256,7 +255,7 @@ type ProjectRow = {
   id: string; user_id: string; name: string; provider: string;
   repo_url: string; access_token: string; color: string; created_at: string;
   label_target: string; label_in_progress: string; label_fail_dev: string;
-  label_done: string;
+  label_done: string; show_tool_usage: number;
   check_interval: number; last_checked_at: string | null;
   last_scanned_issue_count: number | null; scanner_active: number;
   last_error: string | null; last_error_at: string | null;
@@ -272,6 +271,7 @@ function mapProject(r: ProjectRow): Project {
     labelTarget: r.label_target, labelInProgress: r.label_in_progress,
     labelFailDev: r.label_fail_dev,
     labelDone: r.label_done,
+    showToolUsage: r.show_tool_usage === 1,
     checkInterval: r.check_interval,
     lastCheckedAt: r.last_checked_at,
     lastScannedIssueCount: r.last_scanned_issue_count,
@@ -306,13 +306,13 @@ export function createProject(p: Project) {
   getDb().prepare(
     `INSERT INTO projects (
       id, user_id, name, provider, repo_url, access_token, color,
-      label_target, label_in_progress, label_fail_dev, label_done,
+      label_target, label_in_progress, label_fail_dev, label_done, show_tool_usage,
       check_interval, last_checked_at, last_scanned_issue_count, scanner_active, sort_order,
       snapshot_interval, sparkline_points, stats_retention, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     p.id, p.userId, p.name, p.provider, p.repoUrl, p.accessToken, p.color || '#4ade80',
-    p.labelTarget, p.labelInProgress, p.labelFailDev, p.labelDone,
+    p.labelTarget, p.labelInProgress, p.labelFailDev, p.labelDone, p.showToolUsage ? 1 : 0,
     p.checkInterval, p.lastCheckedAt, p.lastScannedIssueCount, p.scannerActive ? 1 : 0, sortOrder,
     p.snapshotInterval ?? 1, p.sparklinePoints ?? 60, p.statsRetention ?? 7, p.createdAt
   )
@@ -323,7 +323,7 @@ export function updateProject(p: Project) {
     `UPDATE projects SET
       name = ?, repo_url = ?, access_token = ?, color = ?,
       label_target = ?, label_in_progress = ?, label_fail_dev = ?,
-      label_done = ?,
+      label_done = ?, show_tool_usage = ?,
       check_interval = ?, last_checked_at = ?, last_scanned_issue_count = ?,
       scanner_active = ?, sort_order = ?,
       snapshot_interval = ?, sparkline_points = ?, stats_retention = ?
@@ -331,7 +331,7 @@ export function updateProject(p: Project) {
   ).run(
     p.name, p.repoUrl, p.accessToken, p.color || '#4ade80',
     p.labelTarget, p.labelInProgress, p.labelFailDev,
-    p.labelDone,
+    p.labelDone, p.showToolUsage ? 1 : 0,
     p.checkInterval, p.lastCheckedAt, p.lastScannedIssueCount,
     p.scannerActive ? 1 : 0, p.sortOrder ?? 0,
     p.snapshotInterval ?? 1, p.sparklinePoints ?? 60, p.statsRetention ?? 7,

@@ -88,6 +88,7 @@ export default function LiveTracePanel({ agents, onKill }: Props) {
           {/* 실시간 로그 — 커스텀 뷰어 */}
           <LogViewer
             sseUrl={`/api/executions/${current.execution.id}/logs`}
+            initialFetchUrl={`/api/executions/${current.execution.id}/content`}
             fontSize={11}
             showLineNumbers={false}
             maxLines={500}
