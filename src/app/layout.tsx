@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { StoreProvider } from "@/lib/store";
 import { TabProvider } from "@/lib/tab-context";
+import { DialogProvider } from "@/components/ui/ConfirmDialog";
 import PWARegister from "@/components/PWARegister";
 import "./globals.css";
 
@@ -35,7 +36,7 @@ export default function RootLayout({
       </head>
       <body>
         <PWARegister />
-        <StoreProvider><TabProvider>{children}</TabProvider></StoreProvider>
+        <StoreProvider><TabProvider><DialogProvider>{children}</DialogProvider></TabProvider></StoreProvider>
       </body>
     </html>
   );

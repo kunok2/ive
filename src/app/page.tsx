@@ -7,26 +7,32 @@ import { useTab } from '@/lib/tab-context'
 import ProjectsTab from '@/components/tabs/ProjectsTab'
 import IssuesTab from '@/components/tabs/IssuesTab'
 import AgentsTab from '@/components/tabs/AgentsTab'
-import TerminalTab from '@/components/tabs/TerminalTab'
+import AdminTab from '@/components/tabs/AdminTab'
+import ReportsTab from '@/components/tabs/ReportsTab'
 import MobileTabBar from '@/components/layout/MobileTabBar'
 import ProjectForm from '@/components/project/ProjectForm'
 import AgentForm from '@/components/agent/AgentForm'
 import Modal from '@/components/ui/Modal'
+import { useDialog } from '@/components/ui/ConfirmDialog'
+import ChangePasswordForm from '@/components/auth/ChangePasswordForm'
 
 const subtitle: Record<string, string> = {
   projects: '프로젝트',
   agents: '개발자',
   issues: '작업',
-  terminal: 'CLI',
+  reports: '보고서',
+  admin: '관리',
 }
 
 export default function HomePage() {
   const router = useRouter()
   const { state, logout } = useStore()
   const { activeTab } = useTab()
+  const { alert: showAlert } = useDialog()
   const [showNewProject, setShowNewProject] = useState(false)
   const [showNewAgent, setShowNewAgent] = useState(false)
   const [editMode, setEditMode] = useState(false)
+  const [showChangePassword, setShowChangePassword] = useState(false)
 
   useEffect(() => {
     if (state.authChecked && !state.user) {
@@ -78,13 +84,27 @@ export default function HomePage() {
 
             {activeTab === 'agents' && (
               <button
-                onClick={() => setShowNewAgent(true)}
+                onClick={async () => {
+                  const maxAgents = state.user?.maxAgents || 0
+                  if (maxAgents > 0 && state.agents.length >= maxAgents) {
+                    await showAlert({ title: '제한 초과', message: `최대 ${maxAgents}개의 개발자만 생성할 수 있습니다.\n관리자에게 문의하세요.`, variant: 'error' })
+                    return
+                  }
+                  setShowNewAgent(true)
+                }}
                 className="w-8 h-8 rounded-full bg-ive-green flex items-center justify-center text-ive-bg-deep active:scale-95 transition-transform"
               >
                 <i className="fa-solid fa-plus text-sm" />
               </button>
             )}
 
+            <button
+              onClick={() => setShowChangePassword(true)}
+              className="w-8 h-8 rounded-full bg-ive-bg-card border border-ive-border-subtle flex items-center justify-center text-ive-text-dim hover:text-ive-text active:scale-95 transition-all"
+              title="비밀번호 변경"
+            >
+              <i className="fa-solid fa-key text-sm" />
+            </button>
             <button
               onClick={async () => { await logout(); router.push('/login') }}
               className="w-8 h-8 rounded-full bg-ive-bg-card border border-ive-border-subtle flex items-center justify-center text-ive-text-dim hover:text-ive-text active:scale-95 transition-all"
@@ -96,17 +116,22 @@ export default function HomePage() {
       </header>
 
       <div style={{ display: activeTab === 'projects' ? 'block' : 'none' }}>
-        <ProjectsTab editMode={editMode} />
+        <ProjectsTab editMode={editMode} onAdd={() => setShowNewProject(true)} />
       </div>
       <div style={{ display: activeTab === 'agents' ? 'block' : 'none' }}>
-        <AgentsTab />
+        <AgentsTab onAdd={() => setShowNewAgent(true)} />
       </div>
       <div style={{ display: activeTab === 'issues' ? 'block' : 'none' }}>
         <IssuesTab />
       </div>
-      <div style={{ display: activeTab === 'terminal' ? 'block' : 'none' }}>
-        <TerminalTab />
+      <div style={{ display: activeTab === 'reports' ? 'block' : 'none' }}>
+        <ReportsTab />
       </div>
+      {state.user.isAdmin && (
+        <div style={{ display: activeTab === 'admin' ? 'block' : 'none' }}>
+          <AdminTab />
+        </div>
+      )}
       <MobileTabBar />
 
       <Modal open={showNewProject} onClose={() => setShowNewProject(false)} title="새 프로젝트">
@@ -114,6 +139,9 @@ export default function HomePage() {
       </Modal>
       <Modal open={showNewAgent} onClose={() => setShowNewAgent(false)} title="개발자 추가">
         <AgentForm onSuccess={() => setShowNewAgent(false)} />
+      </Modal>
+      <Modal open={showChangePassword} onClose={() => setShowChangePassword(false)} title="비밀번호 변경">
+        <ChangePasswordForm email={state.user.email} onSuccess={() => setShowChangePassword(false)} onCancel={() => setShowChangePassword(false)} />
       </Modal>
     </>
   )

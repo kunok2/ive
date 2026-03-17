@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { TaskExecution, Agent } from '@/types'
 import LogViewer from '@/components/ui/LogViewer'
+import AgentAvatar from '@/components/agent/AgentAvatar'
 
 function formatDuration(startedAt: string): string {
   const s = Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000)
@@ -52,17 +53,18 @@ export default function LiveTracePanel({ agents, onKill }: Props) {
             <button
               key={tab.agent.id}
               onClick={() => setActiveIdx(idx)}
-              className={`flex-1 px-3 py-2 text-sm font-bold flex items-center justify-center gap-1.5 transition-all ${
+              className={`flex-1 px-2 py-1.5 text-sm font-bold flex items-center justify-center gap-1.5 transition-all ${
                 idx === activeIdx
                   ? 'text-ive-cyan border-b-2 border-ive-cyan bg-ive-cyan/5'
                   : 'text-ive-text-dim hover:text-ive-text-muted'
               }`}
             >
-              {isRunning ? (
-                <i className="fa-solid fa-gear fa-spin text-ive-amber text-xs" />
-              ) : (
-                <i className="fa-solid fa-robot text-xs" />
-              )}
+              <div className="relative shrink-0">
+                <AgentAvatar avatar={tab.agent.avatar} size="sm" />
+                {isRunning && (
+                  <div className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-ive-amber animate-pulse border border-ive-bg-deep" />
+                )}
+              </div>
               <span className="truncate">{tab.agent.name}</span>
             </button>
           )

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import ChangePasswordForm from '@/components/auth/ChangePasswordForm'
 import { useStore } from '@/lib/store'
 
 export default function LoginPage() {
@@ -12,6 +13,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [showChangePassword, setShowChangePassword] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -84,10 +86,17 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p className="text-center text-base text-ive-text-muted mt-6">
-          계정이 없으신가요?{' '}
+        <div className="flex justify-center gap-4 mt-6 text-base text-ive-text-muted">
           <Link href="/register" className="text-ive-green font-semibold">회원가입</Link>
-        </p>
+          <button onClick={() => setShowChangePassword(true)} className="text-ive-cyan font-semibold">비밀번호 변경</button>
+        </div>
+
+        {showChangePassword && (
+          <div className="mt-6 bg-ive-bg-card border border-ive-border-subtle rounded-xl p-4">
+            <h3 className="text-sm font-bold text-ive-text mb-3">비밀번호 변경</h3>
+            <ChangePasswordForm onSuccess={() => setShowChangePassword(false)} onCancel={() => setShowChangePassword(false)} />
+          </div>
+        )}
       </div>
     </div>
   )

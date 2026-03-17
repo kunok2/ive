@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { CliName } from '@/types'
+import { CliName, DEFAULT_AVATARS } from '@/types'
 import { useStore } from '@/lib/store'
+import { AvatarSelector } from '@/components/agent/AgentAvatar'
 
 interface Props {
   onSuccess?: () => void
@@ -43,14 +44,19 @@ const cliTools: { value: CliName; label: string; icon: string; desc: string; def
 ]
 
 export default function AgentForm({ onSuccess }: Props) {
-  const { addAgent } = useStore()
+  const { addAgent, state } = useStore()
   const os = useMemo(() => detectOS(), [])
+  const userMaxAgents = state.user?.maxAgents || 0
+  const userMaxTurns = state.user?.maxTurns || 0
+  const currentAgentCount = state.agents.length
+  const limitReached = userMaxAgents > 0 && currentAgentCount >= userMaxAgents
 
   const [cliName, setCliName] = useState<CliName>('claude')
   const [name, setName] = useState(cliTools[0].defaultName)
+  const [avatar, setAvatar] = useState<string>(() => DEFAULT_AVATARS[Math.floor(Math.random() * DEFAULT_AVATARS.length)].id)
   const [cliPath, setCliPath] = useState(defaultPaths[os].claude)
   const [cliVersion, setCliVersion] = useState('')
-  const [maxTurns, setMaxTurns] = useState(200)
+  const [maxTurns, setMaxTurns] = useState(() => userMaxTurns > 0 ? Math.floor(userMaxTurns / 2) : 200)
   const [snapshotInterval, setSnapshotInterval] = useState(1)
   const [sparklinePoints, setSparklinePoints] = useState(60)
   const [statsRetention, setStatsRetention] = useState(7)
@@ -84,6 +90,7 @@ export default function AgentForm({ onSuccess }: Props) {
     try {
       await addAgent({
         name: name.trim(),
+        avatar,
         cliName,
         cliPath: cliPath.trim(),
         cliVersion: cliVersion.trim(),
@@ -149,6 +156,12 @@ export default function AgentForm({ onSuccess }: Props) {
         />
       </div>
 
+      {/* 아바타 선택 */}
+      <div>
+        <label className="block text-base font-semibold text-ive-text-muted mb-2">아바타</label>
+        <AvatarSelector value={avatar} onChange={setAvatar} />
+      </div>
+
       {/* CLI 설치 경로 */}
       <div>
         <label className="block text-base font-semibold text-ive-text-muted mb-2">
@@ -195,12 +208,13 @@ export default function AgentForm({ onSuccess }: Props) {
             <span className="w-12 py-3 flex items-center justify-center text-base font-black text-ive-text border-x border-ive-border">{maxTurns}</span>
             <button
               type="button"
-              onClick={() => setMaxTurns(v => Math.min(1000, v + 10))}
+              onClick={() => setMaxTurns(v => Math.min(userMaxTurns > 0 ? userMaxTurns : 1000, v + 10))}
               className="px-2.5 py-3 text-ive-text-muted hover:text-ive-green hover:bg-ive-green/10 transition-colors text-base font-black"
             >+</button>
           </div>
+          {userMaxTurns > 0 && <span className="text-[10px] text-ive-amber shrink-0">max {userMaxTurns}</span>}
           <div className="flex gap-1 flex-1 min-w-0">
-            {[50, 100, 200].map(v => (
+            {[50, 100, 200].filter(v => userMaxTurns <= 0 || v <= userMaxTurns).map(v => (
               <button key={v} type="button" onClick={() => setMaxTurns(v)}
                 className={`flex-1 py-3 rounded-lg text-sm font-black border transition-all ${maxTurns === v ? 'bg-ive-green/10 border-ive-green text-ive-green' : 'bg-ive-bg-card border-ive-border-subtle text-ive-text-dim'}`}
               >{v}</button>
@@ -285,6 +299,13 @@ export default function AgentForm({ onSuccess }: Props) {
         )}
       </div>
 
+      {limitReached && (
+        <div className="text-sm text-ive-amber bg-ive-amber/10 rounded-lg px-3 py-2">
+          <i className="fa-solid fa-triangle-exclamation mr-1" />
+          최대 {userMaxAgents}개의 개발자만 생성할 수 있습니다. (현재 {currentAgentCount}개)
+        </div>
+      )}
+
       {error && (
         <div className="text-base text-ive-red bg-ive-red/10 rounded-lg px-3 py-2">
           <i className="fa-solid fa-circle-exclamation mr-1" />{error}
@@ -293,7 +314,7 @@ export default function AgentForm({ onSuccess }: Props) {
 
       <button
         type="submit"
-        disabled={loading}
+        disabled={loading || limitReached}
         className="w-full bg-ive-green-dark text-white font-bold py-3 rounded-lg text-base active:bg-ive-green/80 transition-colors mt-2 disabled:opacity-50"
       >
         {loading ? (<><i className="fa-solid fa-spinner fa-spin mr-1.5" />생성 중...</>) : (<><i className="fa-solid fa-robot mr-1.5" />Agent 추가</>)}

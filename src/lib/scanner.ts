@@ -330,24 +330,29 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
 
     // 실행 중인 작업이 없는 에이전트 탐색 (이번 루프에서 이미 배정한 에이전트도 제외)
     let availableAgent: Agent | null = null;
+    let agentToken = decryptedToken; // 기본: 프로젝트 토큰
     for (const pa of assignments) {
       if (busyAgentIds.has(pa.agentId)) continue;
       const running = countActiveExecutionsByAgent(pa.agentId);
       if (running === 0) {
         availableAgent = pa.agent;
+        // 개발자별 토큰이 있으면 복호화하여 사용
+        if (pa.accessToken) {
+          try { agentToken = decrypt(pa.accessToken); } catch { agentToken = decryptedToken; }
+        }
         break;
       }
     }
 
     if (availableAgent) {
       busyAgentIds.add(availableAgent.id);
-      console.log(`[Scanner] [ASSIGN] Project: ${project.name}, Issue: #${issue.iid}, Agent: ${availableAgent.name}`);
+      console.log(`[Scanner] [ASSIGN] Project: ${project.name}, Issue: #${issue.iid}, Agent: ${availableAgent.name}${agentToken !== decryptedToken ? ' (자체 토큰)' : ''}`);
 
       // 레이블 변경: 대기 → 개발 중
       await updateGitLabIssueLabels(project, issue.iid, decryptedToken, [project.labelInProgress], [project.labelTarget]);
 
-      // 비동기로 태스크 실행
-      executeTask(project, issue, availableAgent, decryptedToken)
+      // 비동기로 태스크 실행 (개발자별 토큰 우선)
+      executeTask(project, issue, availableAgent, agentToken)
         .then(() => {
           console.log(`[Scanner] [DONE] Issue #${issue.iid} processed.`);
         })
@@ -431,7 +436,9 @@ async function executeTask(
     fs.mkdirSync(workspacePath, { recursive: true });
 
     // 2. Git 클론 및 준비
-    const repoUrl = project.repoUrl.replace('https://', `https://oauth2:${token}@`);
+    const repoUrl = project.authType === 'basic'
+      ? project.repoUrl.replace('https://', `https://${encodeURIComponent(project.gitUsername)}:${encodeURIComponent(token)}@`)
+      : project.repoUrl.replace('https://', `https://oauth2:${token}@`);
     const branchName = `dev-${iid}`;
     
     log("저장소 클론 중...", 'system');

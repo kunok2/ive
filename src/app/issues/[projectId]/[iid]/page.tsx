@@ -2,7 +2,6 @@
 
 import { use, useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import MobileTabBar from '@/components/layout/MobileTabBar'
 import MRReviewSection from '@/components/mr/MRReviewSection'
 import ReactMarkdown from 'react-markdown'
@@ -184,9 +183,9 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <p className="text-ive-text-muted mb-4">이슈를 찾을 수 없습니다</p>
-          <Link href="/issues" className="text-ive-green font-semibold">
-            <i className="fa-solid fa-arrow-left mr-1" />목록으로
-          </Link>
+          <button onClick={() => router.back()} className="text-ive-green font-semibold">
+            <i className="fa-solid fa-arrow-left mr-1" />돌아가기
+          </button>
         </div>
       </div>
     )
@@ -201,9 +200,9 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
       {/* 헤더: 뒤로가기 + 이슈번호 + 상태 + 외부링크 */}
       <header className="sticky top-0 z-40 bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark shrink-0">
         <div className="flex items-center gap-2 px-3 py-2 max-w-lg mx-auto">
-          <Link href="/issues" className="text-ive-green font-semibold p-1 hover:bg-ive-green/5 rounded shrink-0">
+          <button onClick={() => router.back()} className="text-ive-green font-semibold p-1 hover:bg-ive-green/5 rounded shrink-0">
             <i className="fa-solid fa-arrow-left" />
-          </Link>
+          </button>
           <span className="text-base font-black text-ive-green shrink-0">#{issue.iid}</span>
           <span className={`text-xs font-bold px-1.5 py-0.5 rounded border ${stageInfo.bg} ${stageInfo.color} border-current/20 shrink-0`}>
             <i className={`fa-solid ${stageInfo.icon} mr-0.5`} />{stageInfo.label}

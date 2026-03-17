@@ -18,7 +18,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
   const [name, setName] = useState(existing?.name ?? '')
   const [repoUrl, setRepoUrl] = useState(existing?.repoUrl ?? '')
   const [accessToken, setAccessToken] = useState('')
-  
+
   // 이슈 레이블 설정 추가
   const [labelTarget, setLabelTarget] = useState(existing?.labelTarget ?? 'IVE')
   const [labelInProgress, setLabelInProgress] = useState(existing?.labelInProgress ?? 'IVE(D)')
@@ -34,6 +34,42 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
   const [showToolUsage, setShowToolUsage] = useState(existing?.showToolUsage ?? false)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [showMonitoring, setShowMonitoring] = useState(false)
+  const [avatarUrl, setAvatarUrl] = useState(existing?.avatarUrl ?? '')
+  const [testStatus, setTestStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  const [testResult, setTestResult] = useState<{ name?: string; fullPath?: string; defaultBranch?: string; openIssuesCount?: number; avatarUrl?: string; error?: string } | null>(null)
+
+  async function handleTestConnection() {
+    if (!repoUrl.trim()) return
+    if (!accessToken.trim() && !existing) return
+
+    setTestStatus('loading')
+    setTestResult(null)
+    try {
+      const res = await fetch('/api/projects/test-connection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          repoUrl: repoUrl.trim(),
+          authType: 'token',
+          gitUsername: '',
+          accessToken: accessToken.trim(),
+          ...(existing ? { projectId: existing.id } : {}),
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setTestStatus('error')
+        setTestResult({ error: data.error })
+      } else {
+        setTestStatus('success')
+        setTestResult(data.project)
+        if (data.project.avatarUrl) setAvatarUrl(data.project.avatarUrl)
+      }
+    } catch {
+      setTestStatus('error')
+      setTestResult({ error: '서버 연결에 실패했습니다' })
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -44,6 +80,8 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
       provider: detectProvider(repoUrl.trim()),
       color,
       repoUrl: repoUrl.trim(),
+      authType: 'token' as const,
+      gitUsername: '',
       accessToken: accessToken.trim() || (existing?.accessToken ?? ''),
       labelTarget: labelTarget.trim(),
       labelInProgress: labelInProgress.trim(),
@@ -57,6 +95,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
       lastError: null,
       lastErrorAt: null,
       sortOrder: existing?.sortOrder ?? 0,
+      avatarUrl,
       snapshotInterval,
       sparklinePoints,
       statsRetention,
@@ -147,6 +186,53 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
         <p className="text-sm text-ive-text-dim mt-1">
           <i className="fa-solid fa-lock mr-1" />이슈 목록 조회 및 작업 완료 보고를 위해 필요합니다. 암호화되어 저장됩니다.
         </p>
+      </div>
+
+      {/* 연결 테스트 */}
+      <div>
+        <button
+          type="button"
+          onClick={handleTestConnection}
+          disabled={testStatus === 'loading' || !repoUrl.trim() || (!accessToken.trim() && !existing)}
+          className="w-full py-2.5 rounded-lg text-sm font-bold border transition-all disabled:opacity-40 bg-ive-bg-card border-ive-border-subtle text-ive-text-muted hover:border-ive-green hover:text-ive-green"
+        >
+          {testStatus === 'loading' ? (
+            <><i className="fa-solid fa-circle-notch fa-spin mr-1.5" />연결 확인 중...</>
+          ) : (
+            <><i className="fa-solid fa-plug mr-1.5" />연결 테스트</>
+          )}
+        </button>
+
+        {testStatus === 'success' && testResult && (
+          <div className="mt-2 bg-ive-green/10 border border-ive-green/30 rounded-lg px-3 py-2.5 text-sm animate-in fade-in slide-in-from-top-1">
+            <div className="flex items-center gap-1.5 text-ive-green font-bold mb-1.5">
+              {testResult.avatarUrl ? (
+                <img src={testResult.avatarUrl} alt="" className="w-5 h-5 rounded object-cover" />
+              ) : (
+                <i className="fa-solid fa-circle-check" />
+              )}
+              연결 성공
+            </div>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-ive-text-muted">
+              <span className="text-ive-text-dim">프로젝트</span>
+              <span className="font-bold text-ive-text">{testResult.name}</span>
+              <span className="text-ive-text-dim">경로</span>
+              <span className="font-mono text-xs text-ive-text">{testResult.fullPath}</span>
+              <span className="text-ive-text-dim">기본 브랜치</span>
+              <span className="font-bold text-ive-text">{testResult.defaultBranch}</span>
+              <span className="text-ive-text-dim">열린 이슈</span>
+              <span className="font-bold text-ive-text">{testResult.openIssuesCount}개</span>
+            </div>
+          </div>
+        )}
+
+        {testStatus === 'error' && testResult && (
+          <div className="mt-2 bg-ive-red/10 border border-ive-red/30 rounded-lg px-3 py-2.5 text-sm animate-in fade-in slide-in-from-top-1">
+            <div className="flex items-center gap-1.5 text-ive-red font-bold">
+              <i className="fa-solid fa-circle-xmark" />{testResult.error}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 작업 확인 주기 */}

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getAgentsByUser, createAgent } from '@/lib/db'
+import { getAgentsByUser, createAgent, getUserById } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 
 export async function GET() {
@@ -20,6 +20,18 @@ export async function POST(req: Request) {
   }
   if (!body.cliPath?.trim()) {
     return NextResponse.json({ error: 'CLI 경로를 입력해주세요' }, { status: 400 })
+  }
+
+  // 사용자 제한 확인
+  const fullUser = getUserById(user.id)
+  if (fullUser && fullUser.maxAgents > 0) {
+    const existing = getAgentsByUser(user.id)
+    if (existing.length >= fullUser.maxAgents) {
+      return NextResponse.json({ error: `최대 ${fullUser.maxAgents}개의 개발자만 생성할 수 있습니다.` }, { status: 400 })
+    }
+  }
+  if (fullUser && fullUser.maxTurns > 0 && body.maxTurns > fullUser.maxTurns) {
+    return NextResponse.json({ error: `최대 턴 수는 ${fullUser.maxTurns} 이하로 설정해야 합니다.` }, { status: 400 })
   }
 
   const agent = { ...body, userId: user.id }

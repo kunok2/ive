@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { Project, ProjectAssignment, Agent, TaskExecution, StatSnapshot } from '@/types'
 import { useEffect, useState, useCallback } from 'react'
 import { useStore } from '@/lib/store'
+import { useDialog } from '@/components/ui/ConfirmDialog'
 import Sparkline from '@/components/ui/Sparkline'
 import ExecutionList from '@/components/execution/ExecutionList'
 import LiveTracePanel from '@/components/execution/LiveTracePanel'
@@ -32,6 +33,7 @@ interface ProjectStats {
 export default function ProjectCard({ project }: Props) {
   const agentCount = project.assignedAgents?.length ?? 0
   const { updateProject, scanProjectNow } = useStore()
+  const { alert: showAlert } = useDialog()
   const [scanning, setScanning] = useState(false)
   const [expandedPanel, _setExpandedPanel] = useState<'running' | 'done' | 'waiting' | null>(() => {
     if (typeof window === 'undefined') return null
@@ -148,7 +150,7 @@ export default function ProjectCard({ project }: Props) {
     if (scanning) return
     setScanning(true)
     try { await scanProjectNow(project.id) }
-    catch (err) { alert(err instanceof Error ? err.message : '스캔 실행 중 오류가 발생했습니다.') }
+    catch (err) { showAlert({ message: err instanceof Error ? err.message : '스캔 실행 중 오류가 발생했습니다.', variant: 'error' }) }
     finally { setScanning(false) }
   }
 
@@ -180,9 +182,13 @@ export default function ProjectCard({ project }: Props) {
     >
       <Link href={`/projects/${project.id}`} className="block p-4 active:bg-white/[0.03] transition-colors group">
         <div className="flex items-start gap-3">
-          <div className="w-10 h-10 rounded-lg bg-ive-bg-deep border border-ive-border-subtle flex items-center justify-center shrink-0 mt-0.5" style={{ borderColor: `${project.color || '#4ade80'}40` }}>
-            <i className={`fa-brands ${project.provider === 'github' ? 'fa-github' : 'fa-gitlab'} text-xl`} style={{ color: project.color || '#4ade80' }} />
-          </div>
+          {project.avatarUrl ? (
+            <img src={project.avatarUrl} alt="" className="w-10 h-10 rounded-lg object-cover border border-ive-border-subtle shrink-0 mt-0.5" style={{ borderColor: `${project.color || '#4ade80'}40` }} />
+          ) : (
+            <div className="w-10 h-10 rounded-lg bg-ive-bg-deep border border-ive-border-subtle flex items-center justify-center shrink-0 mt-0.5" style={{ borderColor: `${project.color || '#4ade80'}40` }}>
+              <i className={`fa-brands ${project.provider === 'github' ? 'fa-github' : 'fa-gitlab'} text-xl`} style={{ color: project.color || '#4ade80' }} />
+            </div>
+          )}
           <div className="flex-1 min-w-0">
             <div className="font-bold text-base truncate leading-none mb-1" style={{ color: project.color || '#4ade80' }}>{project.name}</div>
             <span onClick={e => { e.preventDefault(); e.stopPropagation(); window.open(project.repoUrl.replace(/\.git$/, ''), '_blank') }} className="text-sm text-ive-text-muted font-mono opacity-60 mb-1 break-all leading-tight hover:text-ive-green hover:opacity-100 transition-colors inline-block cursor-pointer">

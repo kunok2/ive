@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3'
 import path from 'path'
 import bcrypt from 'bcryptjs'
-import { User, Project, Agent, ProjectAssignment, TaskExecution, TaskStatus, StatSnapshot } from '@/types'
+import { User, Project, Agent, ProjectAssignment, TaskExecution, TaskStatus, StatSnapshot, TokenPricing } from '@/types'
 import { startScanner } from './scanner'
 
 declare global {
@@ -30,6 +30,9 @@ function initSchema(db: Database.Database) {
       email TEXT UNIQUE NOT NULL,
       password TEXT NOT NULL,
       name TEXT NOT NULL,
+      is_admin INTEGER NOT NULL DEFAULT 0,
+      max_agents INTEGER NOT NULL DEFAULT 1,
+      max_turns INTEGER NOT NULL DEFAULT 20,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -39,6 +42,8 @@ function initSchema(db: Database.Database) {
       name TEXT NOT NULL,
       provider TEXT NOT NULL CHECK(provider IN ('github', 'gitlab')),
       repo_url TEXT NOT NULL,
+      auth_type TEXT NOT NULL DEFAULT 'token',
+      git_username TEXT NOT NULL DEFAULT '',
       access_token TEXT NOT NULL,
       color TEXT NOT NULL DEFAULT '#4ade80',
       label_target TEXT NOT NULL DEFAULT 'IVE',
@@ -71,6 +76,7 @@ function initSchema(db: Database.Database) {
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL,
       agent_id TEXT NOT NULL,
+      access_token TEXT NOT NULL DEFAULT '',
       assigned_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
       FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE,
@@ -103,6 +109,15 @@ function initSchema(db: Database.Database) {
       cost_usd REAL NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS idx_stat_snapshots_entity ON stat_snapshots(entity_type, entity_id, timestamp);
+
+    CREATE TABLE IF NOT EXISTS token_pricing (
+      id TEXT PRIMARY KEY,
+      cli_name TEXT NOT NULL UNIQUE,
+      model_name TEXT NOT NULL,
+      input_price REAL NOT NULL,
+      output_price REAL NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
 
     -- 레거시 테이블 유지 (데이터 보존, 참조하지 않음)
     CREATE TABLE IF NOT EXISTS roles (
@@ -157,6 +172,10 @@ function initSchema(db: Database.Database) {
       db.exec("ALTER TABLE projects ADD COLUMN last_error TEXT")
       db.exec("ALTER TABLE projects ADD COLUMN last_error_at TEXT")
     }
+    if (!tableInfo.some((col: any) => col.name === 'auth_type')) {
+      db.exec("ALTER TABLE projects ADD COLUMN auth_type TEXT NOT NULL DEFAULT 'token'")
+      db.exec("ALTER TABLE projects ADD COLUMN git_username TEXT NOT NULL DEFAULT ''")
+    }
     if (!tableInfo.some((col: any) => col.name === 'show_tool_usage')) {
       db.exec("ALTER TABLE projects ADD COLUMN show_tool_usage INTEGER NOT NULL DEFAULT 0")
     }
@@ -179,6 +198,13 @@ function initSchema(db: Database.Database) {
     const tableInfo = db.prepare("PRAGMA table_info(users)").all() as any[]
     if (tableInfo.some((col: any) => col.name === 'password_hash') && !tableInfo.some((col: any) => col.name === 'password')) {
       db.exec("ALTER TABLE users RENAME COLUMN password_hash TO password")
+    }
+    if (!tableInfo.some((col: any) => col.name === 'is_admin')) {
+      db.exec("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0")
+    }
+    if (!tableInfo.some((col: any) => col.name === 'max_agents')) {
+      db.exec("ALTER TABLE users ADD COLUMN max_agents INTEGER NOT NULL DEFAULT 1")
+      db.exec("ALTER TABLE users ADD COLUMN max_turns INTEGER NOT NULL DEFAULT 20")
     }
   } catch (e) { console.error("Migration failed for users:", e) }
 
@@ -220,18 +246,58 @@ function initSchema(db: Database.Database) {
     }
   } catch (e) { console.error("Migration failed for agents monitoring:", e) }
 
+  // project_assignments에 access_token 컬럼 추가
+  try {
+    const tableInfo = db.prepare("PRAGMA table_info(project_assignments)").all() as any[]
+    if (!tableInfo.some((col: any) => col.name === 'access_token')) {
+      db.exec("ALTER TABLE project_assignments ADD COLUMN access_token TEXT NOT NULL DEFAULT ''")
+    }
+  } catch (e) { console.error("Migration failed for project_assignments:", e) }
+
+  // agents에 avatar 컬럼 추가
+  try {
+    const tableInfo = db.prepare("PRAGMA table_info(agents)").all() as any[]
+    if (!tableInfo.some((col: any) => col.name === 'avatar')) {
+      db.exec("ALTER TABLE agents ADD COLUMN avatar TEXT NOT NULL DEFAULT 'av-01'")
+    }
+  } catch (e) { console.error("Migration failed for agents avatar:", e) }
+
+  // projects에 avatar_url 컬럼 추가
+  try {
+    const tableInfo = db.prepare("PRAGMA table_info(projects)").all() as any[]
+    if (!tableInfo.some((col: any) => col.name === 'avatar_url')) {
+      db.exec("ALTER TABLE projects ADD COLUMN avatar_url TEXT NOT NULL DEFAULT ''")
+    }
+  } catch (e) { console.error("Migration failed for projects avatar_url:", e) }
+
   seedAdmin(db)
+  seedTokenPricing(db)
+}
+
+function seedTokenPricing(db: Database.Database) {
+  const defaults = [
+    { id: 'tp-claude', cli: 'claude', model: 'Claude Sonnet 4.6', input: 3.00, output: 15.00 },
+    { id: 'tp-gemini', cli: 'gemini', model: 'Gemini 2.5 Pro', input: 1.25, output: 10.00 },
+    { id: 'tp-codex', cli: 'codex', model: 'GPT-4.1', input: 2.00, output: 8.00 },
+  ]
+  const stmt = db.prepare('INSERT OR IGNORE INTO token_pricing (id, cli_name, model_name, input_price, output_price) VALUES (?, ?, ?, ?, ?)')
+  for (const d of defaults) {
+    stmt.run(d.id, d.cli, d.model, d.input, d.output)
+  }
 }
 
 function seedAdmin(db: Database.Database) {
   const exists = db.prepare('SELECT id FROM users WHERE email = ?').get('admin@ive.local')
   if (!exists) {
-    db.prepare('INSERT INTO users (id, email, password, name) VALUES (?, ?, ?, ?)').run(
+    db.prepare('INSERT INTO users (id, email, password, name, is_admin, max_agents, max_turns) VALUES (?, ?, ?, ?, 1, 0, 0)').run(
       'user-admin',
       'admin@ive.local',
       bcrypt.hashSync('admin', 10),
       '관리자'
     )
+  } else {
+    // 기존 admin 계정에 is_admin + 무제한 보장
+    db.prepare('UPDATE users SET is_admin = 1, max_agents = 0, max_turns = 0 WHERE email = ?').run('admin@ive.local')
   }
 }
 
@@ -242,7 +308,18 @@ export function getUserByEmail(email: string): any {
 }
 
 export function getUserById(id: string): User | null {
-  return getDb().prepare('SELECT * FROM users WHERE id = ?').get(id) as User | null
+  const row = getDb().prepare('SELECT * FROM users WHERE id = ?').get(id) as any
+  if (!row) return null
+  return { id: row.id, email: row.email, name: row.name, isAdmin: !!row.is_admin, maxAgents: row.max_agents ?? 0, maxTurns: row.max_turns ?? 0, createdAt: row.created_at }
+}
+
+export function getAllUsers(): User[] {
+  const rows = getDb().prepare('SELECT * FROM users ORDER BY created_at ASC').all() as any[]
+  return rows.map(r => ({ id: r.id, email: r.email, name: r.name, isAdmin: !!r.is_admin, maxAgents: r.max_agents ?? 0, maxTurns: r.max_turns ?? 0, createdAt: r.created_at }))
+}
+
+export function deleteUser(id: string) {
+  getDb().prepare('DELETE FROM users WHERE id = ?').run(id)
 }
 
 export function createUser(u: any) {
@@ -253,20 +330,23 @@ export function createUser(u: any) {
 
 type ProjectRow = {
   id: string; user_id: string; name: string; provider: string;
-  repo_url: string; access_token: string; color: string; created_at: string;
+  repo_url: string; auth_type: string; git_username: string;
+  access_token: string; color: string; created_at: string;
   label_target: string; label_in_progress: string; label_fail_dev: string;
   label_done: string; show_tool_usage: number;
   check_interval: number; last_checked_at: string | null;
   last_scanned_issue_count: number | null; scanner_active: number;
   last_error: string | null; last_error_at: string | null;
-  sort_order: number;
+  sort_order: number; avatar_url: string;
   snapshot_interval: number; sparkline_points: number; stats_retention: number;
 }
 
 function mapProject(r: ProjectRow): Project {
   return {
     id: r.id, userId: r.user_id, name: r.name, provider: r.provider as Project['provider'],
-    repoUrl: r.repo_url, accessToken: r.access_token, color: (r.color || '#4ade80') as Project['color'],
+    repoUrl: r.repo_url, authType: (r.auth_type || 'token') as Project['authType'],
+    gitUsername: r.git_username || '', accessToken: r.access_token,
+    color: (r.color || '#4ade80') as Project['color'],
     createdAt: r.created_at,
     labelTarget: r.label_target, labelInProgress: r.label_in_progress,
     labelFailDev: r.label_fail_dev,
@@ -279,6 +359,7 @@ function mapProject(r: ProjectRow): Project {
     lastError: r.last_error ?? null,
     lastErrorAt: r.last_error_at ?? null,
     sortOrder: r.sort_order ?? 0,
+    avatarUrl: r.avatar_url || '',
     snapshotInterval: r.snapshot_interval ?? 1,
     sparklinePoints: r.sparkline_points ?? 60,
     statsRetention: r.stats_retention ?? 7,
@@ -305,16 +386,17 @@ export function createProject(p: Project) {
 
   getDb().prepare(
     `INSERT INTO projects (
-      id, user_id, name, provider, repo_url, access_token, color,
+      id, user_id, name, provider, repo_url, auth_type, git_username, access_token, color,
       label_target, label_in_progress, label_fail_dev, label_done, show_tool_usage,
       check_interval, last_checked_at, last_scanned_issue_count, scanner_active, sort_order,
-      snapshot_interval, sparkline_points, stats_retention, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      avatar_url, snapshot_interval, sparkline_points, stats_retention, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
-    p.id, p.userId, p.name, p.provider, p.repoUrl, p.accessToken, p.color || '#4ade80',
+    p.id, p.userId, p.name, p.provider, p.repoUrl, p.authType || 'token', p.gitUsername || '',
+    p.accessToken, p.color || '#4ade80',
     p.labelTarget, p.labelInProgress, p.labelFailDev, p.labelDone, p.showToolUsage ? 1 : 0,
     p.checkInterval, p.lastCheckedAt, p.lastScannedIssueCount, p.scannerActive ? 1 : 0, sortOrder,
-    p.snapshotInterval ?? 1, p.sparklinePoints ?? 60, p.statsRetention ?? 7, p.createdAt
+    p.avatarUrl || '', p.snapshotInterval ?? 1, p.sparklinePoints ?? 60, p.statsRetention ?? 7, p.createdAt
   )
 }
 
@@ -322,18 +404,20 @@ export function updateProject(p: Project) {
   getDb().prepare(
     `UPDATE projects SET
       name = ?, repo_url = ?, access_token = ?, color = ?,
+      auth_type = ?, git_username = ?,
       label_target = ?, label_in_progress = ?, label_fail_dev = ?,
       label_done = ?, show_tool_usage = ?,
       check_interval = ?, last_checked_at = ?, last_scanned_issue_count = ?,
-      scanner_active = ?, sort_order = ?,
+      scanner_active = ?, sort_order = ?, avatar_url = ?,
       snapshot_interval = ?, sparkline_points = ?, stats_retention = ?
       WHERE id = ? AND user_id = ?`
   ).run(
     p.name, p.repoUrl, p.accessToken, p.color || '#4ade80',
+    p.authType || 'token', p.gitUsername || '',
     p.labelTarget, p.labelInProgress, p.labelFailDev,
     p.labelDone, p.showToolUsage ? 1 : 0,
     p.checkInterval, p.lastCheckedAt, p.lastScannedIssueCount,
-    p.scannerActive ? 1 : 0, p.sortOrder ?? 0,
+    p.scannerActive ? 1 : 0, p.sortOrder ?? 0, p.avatarUrl || '',
     p.snapshotInterval ?? 1, p.sparklinePoints ?? 60, p.statsRetention ?? 7,
     p.id, p.userId
   )
@@ -370,6 +454,7 @@ export function deleteProject(id: string, userId: string) {
 function mapAgent(r: any): Agent {
   return {
     id: r.id, userId: r.user_id, name: r.name,
+    avatar: r.avatar || 'av-01',
     cliName: r.cli_name as Agent['cliName'], cliPath: r.cli_path,
     cliVersion: r.cli_version, maxTurns: r.max_turns ?? 200,
     status: r.status as Agent['status'],
@@ -393,14 +478,14 @@ export function getAgent(id: string): Agent | null {
 
 export function createAgent(a: Agent) {
   getDb().prepare(
-    'INSERT INTO agents (id, user_id, name, cli_name, cli_path, cli_version, max_turns, status, snapshot_interval, sparkline_points, stats_retention, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-  ).run(a.id, a.userId, a.name, a.cliName, a.cliPath, a.cliVersion, a.maxTurns, a.status, a.snapshotInterval ?? 1, a.sparklinePoints ?? 60, a.statsRetention ?? 7, a.createdAt)
+    'INSERT INTO agents (id, user_id, name, avatar, cli_name, cli_path, cli_version, max_turns, status, snapshot_interval, sparkline_points, stats_retention, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(a.id, a.userId, a.name, a.avatar || 'av-01', a.cliName, a.cliPath, a.cliVersion, a.maxTurns, a.status, a.snapshotInterval ?? 1, a.sparklinePoints ?? 60, a.statsRetention ?? 7, a.createdAt)
 }
 
 export function updateAgent(a: Agent) {
   getDb().prepare(
-    'UPDATE agents SET name = ?, cli_name = ?, cli_path = ?, cli_version = ?, max_turns = ?, status = ?, snapshot_interval = ?, sparkline_points = ?, stats_retention = ? WHERE id = ? AND user_id = ?'
-  ).run(a.name, a.cliName, a.cliPath, a.cliVersion, a.maxTurns, a.status, a.snapshotInterval ?? 1, a.sparklinePoints ?? 60, a.statsRetention ?? 7, a.id, a.userId)
+    'UPDATE agents SET name = ?, avatar = ?, cli_name = ?, cli_path = ?, cli_version = ?, max_turns = ?, status = ?, snapshot_interval = ?, sparkline_points = ?, stats_retention = ? WHERE id = ? AND user_id = ?'
+  ).run(a.name, a.avatar || 'av-01', a.cliName, a.cliPath, a.cliVersion, a.maxTurns, a.status, a.snapshotInterval ?? 1, a.sparklinePoints ?? 60, a.statsRetention ?? 7, a.id, a.userId)
 }
 
 export function deleteAgent(id: string, userId: string) {
@@ -415,7 +500,7 @@ export function updateAgentStatus(id: string, status: Agent['status']) {
 
 export function getProjectAssignments(projectId: string): (ProjectAssignment & { agent: Agent })[] {
   const rows = getDb().prepare(`
-    SELECT pa.*, a.name as agent_name, a.cli_name, a.cli_path, a.cli_version, a.max_turns,
+    SELECT pa.*, a.name as agent_name, a.avatar as agent_avatar, a.cli_name, a.cli_path, a.cli_version, a.max_turns,
            a.status as agent_status, a.user_id, a.created_at as agent_created_at,
            a.snapshot_interval as a_snapshot_interval, a.sparkline_points as a_sparkline_points, a.stats_retention as a_stats_retention
     FROM project_assignments pa
@@ -424,9 +509,11 @@ export function getProjectAssignments(projectId: string): (ProjectAssignment & {
     ORDER BY pa.assigned_at ASC
   `).all(projectId) as any[]
   return rows.map(r => ({
-    id: r.id, projectId: r.project_id, agentId: r.agent_id, assignedAt: r.assigned_at,
+    id: r.id, projectId: r.project_id, agentId: r.agent_id,
+    accessToken: r.access_token || '', assignedAt: r.assigned_at,
     agent: {
       id: r.agent_id, userId: r.user_id, name: r.agent_name,
+      avatar: r.agent_avatar || 'av-01',
       cliName: r.cli_name as Agent['cliName'], cliPath: r.cli_path,
       cliVersion: r.cli_version, maxTurns: r.max_turns ?? 200,
       status: r.agent_status as Agent['status'],
@@ -445,8 +532,14 @@ export function getAgentProjectId(agentId: string): string | null {
 
 export function assignAgentToProject(pa: ProjectAssignment) {
   getDb().prepare(
-    'INSERT INTO project_assignments (id, project_id, agent_id, assigned_at) VALUES (?, ?, ?, ?)'
-  ).run(pa.id, pa.projectId, pa.agentId, pa.assignedAt)
+    'INSERT INTO project_assignments (id, project_id, agent_id, access_token, assigned_at) VALUES (?, ?, ?, ?, ?)'
+  ).run(pa.id, pa.projectId, pa.agentId, pa.accessToken || '', pa.assignedAt)
+}
+
+export function updateAssignmentToken(projectId: string, agentId: string, accessToken: string) {
+  getDb().prepare(
+    'UPDATE project_assignments SET access_token = ? WHERE project_id = ? AND agent_id = ?'
+  ).run(accessToken, projectId, agentId)
 }
 
 export function unassignAgentFromProject(projectId: string, agentId: string) {
@@ -631,4 +724,81 @@ export function getSnapshots(entityType: string, entityId: string, limit: number
 export function cleanOldSnapshots(retentionDays: number = 7) {
   const cutoff = new Date(Date.now() - retentionDays * 86400000).toISOString()
   getDb().prepare('DELETE FROM stat_snapshots WHERE timestamp < ?').run(cutoff)
+}
+
+// ── Token Pricing ──
+
+function mapPricing(r: any): TokenPricing {
+  return {
+    id: r.id, cliName: r.cli_name, modelName: r.model_name,
+    inputPrice: r.input_price, outputPrice: r.output_price,
+    updatedAt: r.updated_at,
+  }
+}
+
+export function getAllTokenPricing(): TokenPricing[] {
+  return (getDb().prepare('SELECT * FROM token_pricing ORDER BY cli_name ASC').all() as any[]).map(mapPricing)
+}
+
+export function getTokenPricingByCli(cliName: string): TokenPricing | null {
+  const r = getDb().prepare('SELECT * FROM token_pricing WHERE cli_name = ?').get(cliName) as any
+  return r ? mapPricing(r) : null
+}
+
+export function upsertTokenPricing(p: TokenPricing) {
+  getDb().prepare(`
+    INSERT INTO token_pricing (id, cli_name, model_name, input_price, output_price, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(cli_name) DO UPDATE SET
+      model_name = excluded.model_name,
+      input_price = excluded.input_price,
+      output_price = excluded.output_price,
+      updated_at = excluded.updated_at
+  `).run(p.id, p.cliName, p.modelName, p.inputPrice, p.outputPrice, p.updatedAt)
+}
+
+// ── Reports ──
+
+export interface ReportExecution {
+  id: string
+  projectId: string
+  projectName: string
+  projectColor: string
+  projectAvatarUrl: string
+  agentId: string
+  agentName: string
+  agentAvatar: string
+  cliName: string
+  issueIid: number
+  issueTitle: string | null
+  status: string
+  startedAt: string
+  endedAt: string | null
+  inputTokens: number
+  outputTokens: number
+  costUsd: number
+  turns: number
+}
+
+export function getExecutionsInRange(userId: string, start: string, end: string): ReportExecution[] {
+  const rows = getDb().prepare(`
+    SELECT te.id, te.project_id, p.name as project_name, p.color as project_color, p.avatar_url as project_avatar_url,
+           te.agent_id, a.name as agent_name, a.avatar as agent_avatar, a.cli_name,
+           te.issue_iid, te.issue_title, te.status,
+           te.started_at, te.ended_at, te.input_tokens, te.output_tokens, te.cost_usd, te.turns
+    FROM task_executions te
+    JOIN projects p ON p.id = te.project_id
+    JOIN agents a ON a.id = te.agent_id
+    WHERE p.user_id = ? AND te.started_at >= ? AND te.started_at < ?
+    ORDER BY te.started_at ASC
+  `).all(userId, start, end) as any[]
+  return rows.map(r => ({
+    id: r.id, projectId: r.project_id, projectName: r.project_name,
+    projectColor: r.project_color, projectAvatarUrl: r.project_avatar_url || '',
+    agentId: r.agent_id, agentName: r.agent_name, agentAvatar: r.agent_avatar || 'av-01',
+    cliName: r.cli_name, issueIid: r.issue_iid, issueTitle: r.issue_title,
+    status: r.status, startedAt: r.started_at, endedAt: r.ended_at,
+    inputTokens: r.input_tokens ?? 0, outputTokens: r.output_tokens ?? 0,
+    costUsd: r.cost_usd ?? 0, turns: r.turns ?? 0,
+  }))
 }

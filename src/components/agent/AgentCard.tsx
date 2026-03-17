@@ -6,6 +6,7 @@ import { useStore } from '@/lib/store'
 import Sparkline from '@/components/ui/Sparkline'
 import ExecutionList from '@/components/execution/ExecutionList'
 import ExecutionStats from '@/components/execution/ExecutionStats'
+import AgentAvatar, { AvatarSelector } from '@/components/agent/AgentAvatar'
 
 interface Props {
   agent: Agent
@@ -43,11 +44,18 @@ const statusConfig = {
 }
 
 export default function AgentCard({ agent, onDelete, compact, assignedProject, onRemove }: Props) {
-  const { refreshAgents } = useStore()
+  const { refreshAgents, updateAgent } = useStore()
   const cli = cliConfig[agent.cliName]
   const status = statusConfig[agent.status]
+  const [editing, setEditing] = useState(false)
+  const [editName, setEditName] = useState(agent.name)
+  const [editAvatar, setEditAvatar] = useState(agent.avatar)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
+  const [showInterview, setShowInterview] = useState(false)
+  const [chatHistory, setChatHistory] = useState<{ role: 'user' | 'agent'; text: string }[]>([])
+  const [chatInput, setChatInput] = useState('')
+  const [chatLoading, setChatLoading] = useState(false)
   const [expandedPanel, _setExpandedPanel] = useState<'running' | 'done' | 'failed' | 'stats' | null>(() => {
     if (typeof window === 'undefined') return null
     const saved = sessionStorage.getItem(`ac-panel-${agent.id}`)
@@ -115,6 +123,31 @@ export default function AgentCard({ agent, onDelete, compact, assignedProject, o
     }
   }
 
+  async function handleInterview() {
+    if (!chatInput.trim() || chatLoading) return
+    const question = chatInput.trim()
+    setChatInput('')
+    setChatHistory(prev => [...prev, { role: 'user', text: question }])
+    setChatLoading(true)
+    try {
+      const res = await fetch(`/api/agents/${agent.id}/interview`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setChatHistory(prev => [...prev, { role: 'agent', text: data.answer }])
+      } else {
+        setChatHistory(prev => [...prev, { role: 'agent', text: `⚠ ${data.error || '응답 실패'}` }])
+      }
+    } catch {
+      setChatHistory(prev => [...prev, { role: 'agent', text: '⚠ 네트워크 오류' }])
+    } finally {
+      setChatLoading(false)
+    }
+  }
+
   const handleKill = async (id: string) => {
     setKilling(id)
     try {
@@ -128,9 +161,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProject, o
   if (compact) {
     return (
       <div className="flex items-center gap-3 bg-ive-bg-card rounded-lg p-3 border border-ive-border-subtle">
-        <div className="w-8 h-8 rounded-lg bg-ive-bg flex items-center justify-center shrink-0">
-          <i className={`${cli.icon} ${cli.color} text-base`} />
-        </div>
+        <AgentAvatar avatar={agent.avatar} size="sm" />
         <div className="flex-1 min-w-0">
           <div className="text-base font-bold text-ive-green-pale truncate">{agent.name}</div>
           <div className="text-sm text-ive-text-muted truncate">{cli.label}</div>
@@ -170,9 +201,9 @@ export default function AgentCard({ agent, onDelete, compact, assignedProject, o
       {/* 헤더 */}
       <div className="p-3 flex items-center justify-between border-b border-ive-border-dark">
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-lg bg-ive-bg flex items-center justify-center shrink-0">
-            <i className={`${cli.icon} ${cli.color} text-lg`} />
-          </div>
+          <button onClick={() => { setEditing(!editing); setEditName(agent.name); setEditAvatar(agent.avatar) }} className="shrink-0">
+            <AgentAvatar avatar={agent.avatar} size="md" className="hover:ring-2 hover:ring-ive-green/30 transition-all cursor-pointer" />
+          </button>
           <div>
             <div className="text-base font-bold text-ive-green-pale">{agent.name}</div>
             <div className="text-sm text-ive-text-muted">{cli.label} · {cli.desc}</div>
@@ -183,6 +214,43 @@ export default function AgentCard({ agent, onDelete, compact, assignedProject, o
           <span className="text-sm text-ive-text-muted">{status.label}</span>
         </div>
       </div>
+
+      {/* 이름/아바타 편집 */}
+      {editing && (
+        <div className="p-3 border-b border-ive-border-dark bg-ive-bg-deep/50 space-y-3">
+          <div>
+            <label className="block text-xs font-bold text-ive-text-muted mb-1">이름</label>
+            <input
+              type="text"
+              value={editName}
+              onChange={e => setEditName(e.target.value)}
+              className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2 text-base text-ive-text focus:outline-none focus:border-ive-green"
+              autoFocus
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-ive-text-muted mb-1">아바타</label>
+            <AvatarSelector value={editAvatar} onChange={setEditAvatar} />
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={async () => {
+                await updateAgent({ ...agent, name: editName.trim() || agent.name, avatar: editAvatar })
+                setEditing(false)
+              }}
+              className="flex-1 text-sm font-bold text-ive-green border border-ive-green/30 py-1.5 rounded-lg hover:bg-ive-green/10 transition-colors"
+            >
+              <i className="fa-solid fa-check mr-1" />저장
+            </button>
+            <button
+              onClick={() => setEditing(false)}
+              className="flex-1 text-sm font-bold text-ive-text-dim border border-ive-border py-1.5 rounded-lg hover:bg-ive-bg-deep transition-colors"
+            >
+              취소
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 정보 */}
       <div className="p-3 space-y-2">
@@ -274,35 +342,101 @@ export default function AgentCard({ agent, onDelete, compact, assignedProject, o
         </button>
       </div>
 
-      {/* 테스트 & 제거 */}
+      {/* 인터뷰 & 동작확인 & 제거 */}
       <div className="px-3 py-2 flex flex-col gap-2 border-t border-ive-border-dark">
         <div className="flex gap-2">
           <button
+            onClick={() => {
+              if (!showInterview) {
+                setShowInterview(true)
+                if (chatHistory.length === 0) {
+                  setChatHistory([{ role: 'agent', text: `안녕하세요, ${agent.name}입니다. 무엇이든 물어보세요!` }])
+                }
+              } else {
+                setShowInterview(false)
+              }
+            }}
+            className={`flex-1 text-base py-1.5 rounded border transition-colors ${
+              showInterview
+                ? 'text-ive-green border-ive-green/40 bg-ive-green/10'
+                : 'text-ive-cyan border-ive-cyan/30 active:bg-ive-cyan/10'
+            }`}
+          >
+            <i className="fa-solid fa-comments mr-1" /> 인터뷰
+          </button>
+
+          <button
             onClick={handleTest}
             disabled={testing}
-            className="flex-1 text-base text-ive-cyan py-1.5 rounded border border-ive-cyan/30 active:bg-ive-cyan/10 transition-colors disabled:opacity-50"
+            className="text-base text-ive-text-dim py-1.5 px-3 rounded border border-ive-border active:bg-white/5 transition-colors disabled:opacity-50"
+            title="동작 확인"
           >
-            {testing ? (
-              <><i className="fa-solid fa-spinner fa-spin mr-1" /> 확인 중...</>
-            ) : (
-              <><i className="fa-solid fa-stethoscope mr-1" /> 동작 확인</>
-            )}
+            {testing ? <i className="fa-solid fa-spinner fa-spin" /> : <i className="fa-solid fa-stethoscope" />}
           </button>
 
           {onDelete && (
             <button
               onClick={() => onDelete(agent.id)}
-              className="flex-1 text-base text-ive-red/60 py-1.5 rounded border border-ive-red/20 active:bg-ive-red/10 transition-colors"
+              className="text-base text-ive-red/60 py-1.5 px-3 rounded border border-ive-red/20 active:bg-ive-red/10 transition-colors"
+              title="제거"
             >
-              <i className="fa-solid fa-trash-can mr-1" /> 제거
+              <i className="fa-solid fa-trash-can" />
             </button>
           )}
         </div>
 
-        {testResult && (
+        {testResult && !showInterview && (
           <div className={`text-base rounded-lg px-3 py-2 ${testResult.success ? 'text-ive-green bg-ive-green/10' : 'text-ive-red bg-ive-red/10'}`}>
             <i className={`fa-solid ${testResult.success ? 'fa-circle-check' : 'fa-circle-xmark'} mr-1`} />
             {testResult.message}
+          </div>
+        )}
+
+        {/* 인터뷰 채팅 */}
+        {showInterview && (
+          <div className="bg-ive-bg rounded-xl border border-ive-border-subtle overflow-hidden">
+            <div className="max-h-[240px] overflow-y-auto p-3 space-y-2.5" ref={el => { if (el) el.scrollTop = el.scrollHeight }}>
+              {chatHistory.map((msg, i) => (
+                <div key={i} className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  {msg.role === 'agent' && (
+                    <AgentAvatar avatar={agent.avatar} size="sm" className="shrink-0 mt-0.5" />
+                  )}
+                  <div className={`max-w-[80%] rounded-xl px-3 py-2 text-sm leading-relaxed ${
+                    msg.role === 'user'
+                      ? 'bg-ive-green/15 text-ive-green-pale'
+                      : 'bg-ive-bg-card text-ive-text border border-ive-border-subtle'
+                  }`}>
+                    {msg.text}
+                  </div>
+                </div>
+              ))}
+              {chatLoading && (
+                <div className="flex gap-2 justify-start">
+                  <AgentAvatar avatar={agent.avatar} size="sm" className="shrink-0 mt-0.5" />
+                  <div className="bg-ive-bg-card text-ive-text-dim border border-ive-border-subtle rounded-xl px-3 py-2 text-sm">
+                    <i className="fa-solid fa-ellipsis fa-beat-fade" /> 생각 중...
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="border-t border-ive-border-dark p-2 flex gap-2">
+              <input
+                type="text"
+                value={chatInput}
+                onChange={e => setChatInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleInterview()}
+                placeholder="질문을 입력하세요..."
+                className="flex-1 bg-ive-bg-input border border-ive-border rounded-lg px-3 py-1.5 text-sm text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green"
+                disabled={chatLoading}
+              />
+              <button
+                onClick={handleInterview}
+                disabled={chatLoading || !chatInput.trim()}
+                className="text-sm font-bold text-ive-green px-3 py-1.5 rounded-lg border border-ive-green/30 hover:bg-ive-green/10 transition-colors disabled:opacity-30"
+              >
+                <i className="fa-solid fa-paper-plane" />
+              </button>
+            </div>
           </div>
         )}
       </div>

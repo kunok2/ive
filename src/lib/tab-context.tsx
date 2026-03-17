@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useCallback, ReactNode } from 'react'
 
-export type TabKey = 'projects' | 'issues' | 'agents' | 'terminal'
+export type TabKey = 'projects' | 'issues' | 'agents' | 'reports' | 'admin'
 
 const TabContext = createContext<{
   activeTab: TabKey
@@ -26,7 +26,7 @@ export function TabProvider({ children }: { children: ReactNode }) {
   const [activeTab, setActiveTabState] = useState<TabKey>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('ive-active-tab')
-      if (saved && ['projects', 'issues', 'agents', 'terminal'].includes(saved)) return saved as TabKey
+      if (saved && ['projects', 'issues', 'agents', 'reports', 'admin'].includes(saved)) return saved as TabKey
     }
     return 'projects'
   })

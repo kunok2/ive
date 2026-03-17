@@ -5,9 +5,10 @@ import ProjectCard from '@/components/project/ProjectCard'
 
 interface Props {
   editMode: boolean
+  onAdd?: () => void
 }
 
-export default function ProjectsTab({ editMode }: Props) {
+export default function ProjectsTab({ editMode, onAdd }: Props) {
   const { state, reorderProject } = useStore()
 
   return (
@@ -18,8 +19,16 @@ export default function ProjectsTab({ editMode }: Props) {
         ) : state.projects.length === 0 ? (
           <div className="text-center py-20">
             <i className="fa-solid fa-folder-open text-4xl text-ive-text-dim mb-4 block" />
-            <p className="text-base text-ive-text-muted mb-4">아직 프로젝트가 없습니다</p>
-            <p className="text-sm text-ive-text-dim">상단 + 버튼으로 프로젝트를 추가하세요</p>
+            <p className="text-base text-ive-text-muted mb-2">아직 프로젝트가 없습니다</p>
+            <p className="text-sm text-ive-text-dim mb-5">GitLab/GitHub 저장소를 연결하여 AI 개발자가 이슈를 처리하도록 설정하세요</p>
+            {onAdd && (
+              <button
+                onClick={onAdd}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-ive-green text-ive-bg-deep font-bold text-sm rounded-xl active:scale-95 transition-transform"
+              >
+                <i className="fa-solid fa-plus" />프로젝트 추가
+              </button>
+            )}
           </div>
         ) : (
           <div className="flex flex-col gap-3">

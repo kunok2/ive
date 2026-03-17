@@ -28,12 +28,46 @@ function getProjectId(repoUrl: string): string {
 }
 
 /**
+ * 저장소 URL에서 GitLab API 베이스 URL을 추출합니다.
+ * 예: https://gitlab.example.com/user/repo → https://gitlab.example.com/api/v4
+ */
+function getApiBaseUrl(repoUrl: string): string {
+  try {
+    const url = new URL(repoUrl.replace(/\.git$/, ''));
+    return `${url.protocol}//${url.host}/api/v4`;
+  } catch {
+    return 'https://gitlab.com/api/v4';
+  }
+}
+
+/**
+ * 프로젝트의 인증 방식에 따라 적절한 HTTP 헤더를 반환합니다.
+ */
+function getAuthHeaders(project: Project, decryptedToken: string): Record<string, string> {
+  if (project.authType === 'basic') {
+    const encoded = Buffer.from(`${project.gitUsername}:${decryptedToken}`).toString('base64');
+    return { 'Authorization': `Basic ${encoded}` };
+  }
+  return { 'PRIVATE-TOKEN': decryptedToken };
+}
+
+/**
+ * API 요청을 위한 URL과 헤더를 반환합니다.
+ */
+function apiUrl(project: Project, path: string): string {
+  const base = getApiBaseUrl(project.repoUrl);
+  const projectPath = getProjectPath(project.repoUrl);
+  return `${base}/projects/${projectPath}${path}`;
+}
+
+/**
  * GitLab 프로젝트에 필요한 레이블들이 있는지 확인하고, 없으면 생성합니다.
  */
 export async function ensureGitLabLabels(project: Project, decryptedToken: string) {
   const projectPath = getProjectPath(project.repoUrl);
   if (!projectPath) return;
 
+  const headers = getAuthHeaders(project, decryptedToken);
   const labelsToEnsure = [
     { name: project.labelTarget, color: '#34d399', description: 'IVE Target Issue' },
     { name: project.labelInProgress, color: '#22d3ee', description: 'IVE Development in Progress' },
@@ -42,28 +76,21 @@ export async function ensureGitLabLabels(project: Project, decryptedToken: strin
   ];
 
   try {
-    // 1. 기존 레이블 조회
-    const res = await fetch(`https://gitlab.com/api/v4/projects/${projectPath}/labels`, {
-      headers: { 'PRIVATE-TOKEN': decryptedToken }
-    });
+    const res = await fetch(apiUrl(project, '/labels'), { headers });
 
     if (!res.ok) {
-      if (res.status === 401) throw new Error('인증 토큰이 유효하지 않거나 만료되었습니다.');
+      if (res.status === 401) throw new Error('인증 정보가 유효하지 않거나 만료되었습니다.');
       throw new Error(`Failed to fetch labels: ${res.statusText}`);
     }
     const existingLabels: any[] = await res.json();
     const existingNames = existingLabels.map(l => l.name);
 
-    // 2. 없는 레이블 생성
     for (const label of labelsToEnsure) {
       if (!existingNames.includes(label.name)) {
         console.log(`[GitLab] Creating label: ${label.name} for project: ${project.name}`);
-        await fetch(`https://gitlab.com/api/v4/projects/${projectPath}/labels`, {
+        await fetch(apiUrl(project, '/labels'), {
           method: 'POST',
-          headers: { 
-            'PRIVATE-TOKEN': decryptedToken,
-            'Content-Type': 'application/json'
-          },
+          headers: { ...headers, 'Content-Type': 'application/json' },
           body: JSON.stringify(label)
         });
       }
@@ -81,19 +108,19 @@ export async function fetchGitLabIssues(project: Project, decryptedToken: string
   const projectPath = getProjectPath(project.repoUrl);
   if (!projectPath) return [];
 
+  const headers = getAuthHeaders(project, decryptedToken);
+
   try {
     const res = await fetch(
-      `https://gitlab.com/api/v4/projects/${projectPath}/issues?labels=${encodeURIComponent(label)}&state=opened`,
-      {
-        headers: { 'PRIVATE-TOKEN': decryptedToken }
-      }
+      apiUrl(project, `/issues?labels=${encodeURIComponent(label)}&state=opened`),
+      { headers }
     );
 
     if (!res.ok) {
       const status = res.status;
-      if (status === 401) throw new Error('인증 토큰이 유효하지 않거나 만료되었습니다.');
+      if (status === 401) throw new Error('인증 정보가 유효하지 않거나 만료되었습니다.');
       if (status === 404) throw new Error('프로젝트를 찾을 수 없습니다. 저장소 주소를 확인하세요.');
-      if (status === 403) throw new Error('접근 권한이 없습니다. 토큰 권한을 확인하세요.');
+      if (status === 403) throw new Error('접근 권한이 없습니다. 인증 정보를 확인하세요.');
       throw new Error(`GitLab API 오류 (${status}): ${res.statusText}`);
     }
     return await res.json();
@@ -106,41 +133,35 @@ export async function fetchGitLabIssues(project: Project, decryptedToken: string
  * 특정 이슈의 레이블을 업데이트합니다.
  */
 export async function updateGitLabIssueLabels(
-  project: Project, 
-  issueIid: number, 
-  decryptedToken: string, 
-  addLabels: string[], 
+  project: Project,
+  issueIid: number,
+  decryptedToken: string,
+  addLabels: string[],
   removeLabels: string[]
 ) {
   const projectPath = getProjectPath(project.repoUrl);
   if (!projectPath) return;
 
+  const headers = getAuthHeaders(project, decryptedToken);
+
   try {
-    // 1. 현재 레이블 조회
-    const res = await fetch(`https://gitlab.com/api/v4/projects/${projectPath}/issues/${issueIid}`, {
-      headers: { 'PRIVATE-TOKEN': decryptedToken }
-    });
-    
+    const res = await fetch(apiUrl(project, `/issues/${issueIid}`), { headers });
+
     if (!res.ok) throw new Error(`Fetch issue failed: ${res.statusText}`);
     const issueData = await res.json();
     let currentLabels: string[] = issueData.labels || [];
-    
-    // 2. 레이블 수정
+
     let newLabels = currentLabels.filter(l => !removeLabels.includes(l));
     addLabels.forEach(l => {
       if (!newLabels.includes(l)) newLabels.push(l);
     });
-    
-    // 3. 업데이트 적용
-    await fetch(`https://gitlab.com/api/v4/projects/${projectPath}/issues/${issueIid}`, {
+
+    await fetch(apiUrl(project, `/issues/${issueIid}`), {
       method: 'PUT',
-      headers: { 
-        'PRIVATE-TOKEN': decryptedToken,
-        'Content-Type': 'application/json' 
-      },
+      headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ labels: newLabels.join(',') })
     });
-    
+
     console.log(`[GitLab] Updated labels for issue #${issueIid}: [${newLabels.join(', ')}]`);
   } catch (err) {
     console.error(`[GitLab] Error updating labels for issue #${issueIid}:`, err);
@@ -154,13 +175,12 @@ export async function addGitLabIssueComment(project: Project, issueIid: number, 
   const projectPath = getProjectPath(project.repoUrl);
   if (!projectPath) return;
 
+  const headers = getAuthHeaders(project, decryptedToken);
+
   try {
-    await fetch(`https://gitlab.com/api/v4/projects/${projectPath}/issues/${issueIid}/notes`, {
+    await fetch(apiUrl(project, `/issues/${issueIid}/notes`), {
       method: 'POST',
-      headers: { 
-        'PRIVATE-TOKEN': decryptedToken,
-        'Content-Type': 'application/json' 
-      },
+      headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ body })
     });
   } catch (err) {
@@ -175,10 +195,10 @@ export async function fetchGitLabIssueNotes(project: Project, issueIid: number, 
   const projectPath = getProjectPath(project.repoUrl);
   if (!projectPath) return [];
 
+  const headers = getAuthHeaders(project, decryptedToken);
+
   try {
-    const res = await fetch(`https://gitlab.com/api/v4/projects/${projectPath}/issues/${issueIid}/notes?sort=asc&per_page=100`, {
-      headers: { 'PRIVATE-TOKEN': decryptedToken }
-    });
+    const res = await fetch(apiUrl(project, `/issues/${issueIid}/notes?sort=asc&per_page=100`), { headers });
     if (!res.ok) throw new Error(`Fetch notes failed: ${res.statusText}`);
     return await res.json();
   } catch (err) {
@@ -194,13 +214,12 @@ export async function addGitLabSpentTime(project: Project, issueIid: number, dec
   const projectPath = getProjectPath(project.repoUrl);
   if (!projectPath) return;
 
+  const headers = getAuthHeaders(project, decryptedToken);
+
   try {
-    await fetch(`https://gitlab.com/api/v4/projects/${projectPath}/issues/${issueIid}/add_spent_time`, {
+    await fetch(apiUrl(project, `/issues/${issueIid}/add_spent_time`), {
       method: 'POST',
-      headers: { 
-        'PRIVATE-TOKEN': decryptedToken,
-        'Content-Type': 'application/json' 
-      },
+      headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ duration })
     });
   } catch (err) {
@@ -215,13 +234,12 @@ export async function createGitLabMR(project: Project, decryptedToken: string, p
   const projectPath = getProjectPath(project.repoUrl);
   if (!projectPath) return null;
 
+  const headers = getAuthHeaders(project, decryptedToken);
+
   try {
-    const res = await fetch(`https://gitlab.com/api/v4/projects/${projectPath}/merge_requests`, {
+    const res = await fetch(apiUrl(project, '/merge_requests'), {
       method: 'POST',
-      headers: { 
-        'PRIVATE-TOKEN': decryptedToken,
-        'Content-Type': 'application/json' 
-      },
+      headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
     if (!res.ok) throw new Error(`Create MR failed: ${res.statusText}`);
@@ -239,10 +257,10 @@ export async function getGitLabMR(project: Project, decryptedToken: string, sour
   const projectPath = getProjectPath(project.repoUrl);
   if (!projectPath) return null;
 
+  const headers = getAuthHeaders(project, decryptedToken);
+
   try {
-    const res = await fetch(`https://gitlab.com/api/v4/projects/${projectPath}/merge_requests?source_branch=${sourceBranch}&state=opened`, {
-      headers: { 'PRIVATE-TOKEN': decryptedToken }
-    });
+    const res = await fetch(apiUrl(project, `/merge_requests?source_branch=${sourceBranch}&state=opened`), { headers });
     if (!res.ok) throw new Error(`Fetch MR failed: ${res.statusText}`);
     const mrs = await res.json();
     return mrs.length > 0 ? mrs[0] : null;
@@ -259,13 +277,12 @@ export async function addGitLabMRNote(project: Project, decryptedToken: string, 
   const projectPath = getProjectPath(project.repoUrl);
   if (!projectPath) return;
 
+  const headers = getAuthHeaders(project, decryptedToken);
+
   try {
-    await fetch(`https://gitlab.com/api/v4/projects/${projectPath}/merge_requests/${mrIid}/notes`, {
+    await fetch(apiUrl(project, `/merge_requests/${mrIid}/notes`), {
       method: 'POST',
-      headers: { 
-        'PRIVATE-TOKEN': decryptedToken,
-        'Content-Type': 'application/json' 
-      },
+      headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ body })
     });
   } catch (err) {
@@ -280,11 +297,13 @@ export async function fetchGitLabMRByBranch(project: Project, decryptedToken: st
   const projectPath = getProjectPath(project.repoUrl);
   if (!projectPath) return null;
 
+  const headers = getAuthHeaders(project, decryptedToken);
+
   try {
     // opened 먼저 조회
     let res = await fetch(
-      `https://gitlab.com/api/v4/projects/${projectPath}/merge_requests?source_branch=${encodeURIComponent(sourceBranch)}&state=opened&per_page=1`,
-      { headers: { 'PRIVATE-TOKEN': decryptedToken } }
+      apiUrl(project, `/merge_requests?source_branch=${encodeURIComponent(sourceBranch)}&state=opened&per_page=1`),
+      { headers }
     );
     if (res.ok) {
       const mrs = await res.json();
@@ -292,8 +311,8 @@ export async function fetchGitLabMRByBranch(project: Project, decryptedToken: st
     }
     // merged도 조회
     res = await fetch(
-      `https://gitlab.com/api/v4/projects/${projectPath}/merge_requests?source_branch=${encodeURIComponent(sourceBranch)}&state=merged&per_page=1`,
-      { headers: { 'PRIVATE-TOKEN': decryptedToken } }
+      apiUrl(project, `/merge_requests?source_branch=${encodeURIComponent(sourceBranch)}&state=merged&per_page=1`),
+      { headers }
     );
     if (res.ok) {
       const mrs = await res.json();
@@ -313,10 +332,12 @@ export async function fetchGitLabMRChanges(project: Project, decryptedToken: str
   const projectPath = getProjectPath(project.repoUrl);
   if (!projectPath) return null;
 
+  const headers = getAuthHeaders(project, decryptedToken);
+
   try {
     const res = await fetch(
-      `https://gitlab.com/api/v4/projects/${projectPath}/merge_requests/${mrIid}/changes`,
-      { headers: { 'PRIVATE-TOKEN': decryptedToken } }
+      apiUrl(project, `/merge_requests/${mrIid}/changes`),
+      { headers }
     );
     if (!res.ok) throw new Error(`Fetch MR changes failed: ${res.statusText}`);
     return await res.json();
@@ -333,10 +354,12 @@ export async function mergeGitLabMR(project: Project, decryptedToken: string, mr
   const projectPath = getProjectPath(project.repoUrl);
   if (!projectPath) throw new Error('Invalid repo URL');
 
+  const headers = getAuthHeaders(project, decryptedToken);
+
   // MR 상태 확인 — checking 중이면 대기 후 재시도
   const checkRes = await fetch(
-    `https://gitlab.com/api/v4/projects/${projectPath}/merge_requests/${mrIid}`,
-    { headers: { 'PRIVATE-TOKEN': decryptedToken } }
+    apiUrl(project, `/merge_requests/${mrIid}`),
+    { headers }
   );
   if (checkRes.ok) {
     const mrInfo = await checkRes.json();
@@ -346,13 +369,10 @@ export async function mergeGitLabMR(project: Project, decryptedToken: string, mr
   }
 
   const res = await fetch(
-    `https://gitlab.com/api/v4/projects/${projectPath}/merge_requests/${mrIid}/merge`,
+    apiUrl(project, `/merge_requests/${mrIid}/merge`),
     {
       method: 'PUT',
-      headers: {
-        'PRIVATE-TOKEN': decryptedToken,
-        'Content-Type': 'application/json',
-      },
+      headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         should_remove_source_branch: true,
       }),
@@ -363,7 +383,6 @@ export async function mergeGitLabMR(project: Project, decryptedToken: string, mr
     const body = await res.text();
     console.error(`[mergeGitLabMR] 실패 status=${res.status} body=${body} mrIid=${mrIid} projectPath=${projectPath}`);
     if (res.status === 405) {
-      // 405: Method Not Allowed — MR이 머지 불가 상태
       try {
         const parsed = JSON.parse(body);
         throw new Error(parsed.message || `머지 불가 (405): ${body}`);
@@ -387,6 +406,7 @@ export async function fetchAllIveIssues(project: Project, decryptedToken: string
   const projectPath = getProjectPath(project.repoUrl);
   if (!projectPath) return [];
 
+  const headers = getAuthHeaders(project, decryptedToken);
   const allLabels = [
     project.labelTarget, project.labelInProgress, project.labelFailDev,
     project.labelDone,
@@ -396,8 +416,8 @@ export async function fetchAllIveIssues(project: Project, decryptedToken: string
     const results: any[] = [];
     for (const label of allLabels) {
       const res = await fetch(
-        `https://gitlab.com/api/v4/projects/${projectPath}/issues?labels=${encodeURIComponent(label)}&state=opened&per_page=100`,
-        { headers: { 'PRIVATE-TOKEN': decryptedToken } }
+        apiUrl(project, `/issues?labels=${encodeURIComponent(label)}&state=opened&per_page=100`),
+        { headers }
       );
       if (res.ok) {
         const issues = await res.json();
@@ -422,13 +442,15 @@ export async function fetchAllProjectIssues(project: Project, decryptedToken: st
   const projectPath = getProjectPath(project.repoUrl);
   if (!projectPath) return [];
 
+  const headers = getAuthHeaders(project, decryptedToken);
+
   try {
     const allIssues: any[] = [];
     let page = 1;
     while (true) {
       const res = await fetch(
-        `https://gitlab.com/api/v4/projects/${projectPath}/issues?state=opened&per_page=100&page=${page}`,
-        { headers: { 'PRIVATE-TOKEN': decryptedToken } }
+        apiUrl(project, `/issues?state=opened&per_page=100&page=${page}`),
+        { headers }
       );
       if (!res.ok) break;
       const issues = await res.json();
@@ -451,12 +473,11 @@ export async function closeGitLabIssue(project: Project, issueIid: number, decry
   const projectPath = getProjectPath(project.repoUrl);
   if (!projectPath) throw new Error('Invalid repo URL');
 
-  const res = await fetch(`https://gitlab.com/api/v4/projects/${projectPath}/issues/${issueIid}`, {
+  const headers = getAuthHeaders(project, decryptedToken);
+
+  const res = await fetch(apiUrl(project, `/issues/${issueIid}`), {
     method: 'PUT',
-    headers: {
-      'PRIVATE-TOKEN': decryptedToken,
-      'Content-Type': 'application/json',
-    },
+    headers: { ...headers, 'Content-Type': 'application/json' },
     body: JSON.stringify({ state_event: 'close' }),
   });
 
@@ -477,12 +498,11 @@ export async function createGitLabIssue(
   const projectPath = getProjectPath(project.repoUrl);
   if (!projectPath) throw new Error('Invalid repo URL');
 
-  const res = await fetch(`https://gitlab.com/api/v4/projects/${projectPath}/issues`, {
+  const headers = getAuthHeaders(project, decryptedToken);
+
+  const res = await fetch(apiUrl(project, '/issues'), {
     method: 'POST',
-    headers: {
-      'PRIVATE-TOKEN': decryptedToken,
-      'Content-Type': 'application/json',
-    },
+    headers: { ...headers, 'Content-Type': 'application/json' },
     body: JSON.stringify({ title, description, labels: labels.join(',') }),
   });
 

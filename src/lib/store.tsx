@@ -51,8 +51,9 @@ const StoreContext = createContext<{
   addAgent: (a: Omit<Agent, 'id' | 'userId' | 'createdAt'>) => Promise<void>
   updateAgent: (a: Agent) => Promise<void>
   deleteAgent: (id: string) => Promise<void>
-  assignAgentToProject: (projectId: string, agentId: string) => Promise<void>
+  assignAgentToProject: (projectId: string, agentId: string, accessToken?: string) => Promise<void>
   unassignAgentFromProject: (projectId: string, agentId: string) => Promise<void>
+  updateAgentToken: (projectId: string, agentId: string, accessToken: string) => Promise<void>
   reorderProject: (projectId: string, direction: 'up' | 'down') => Promise<void>
   scanProjectNow: (id: string) => Promise<void>
 }>({
@@ -69,6 +70,7 @@ const StoreContext = createContext<{
   deleteAgent: async () => {},
   assignAgentToProject: async () => {},
   unassignAgentFromProject: async () => {},
+  updateAgentToken: async () => {},
   reorderProject: async () => {},
   scanProjectNow: async () => {},
 })
@@ -200,16 +202,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     await refresh()
   }, [refreshAgents, refresh])
 
-  const assignAgentToProject = useCallback(async (projectId: string, agentId: string) => {
+  const assignAgentToProject = useCallback(async (projectId: string, agentId: string, accessToken?: string) => {
     const res = await fetch(`/api/projects/${projectId}/agents`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ agentId }),
+      body: JSON.stringify({ agentId, accessToken: accessToken || '' }),
     })
     if (!res.ok) {
       const data = await res.json()
       throw new Error(data.error || 'Agent 배정 실패')
     }
+    await refresh()
+  }, [refresh])
+
+  const updateAgentToken = useCallback(async (projectId: string, agentId: string, accessToken: string) => {
+    await fetch(`/api/projects/${projectId}/agents`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agentId, accessToken }),
+    })
     await refresh()
   }, [refresh])
 
@@ -258,7 +269,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       state, refreshUser, refresh, logout,
       addProject, updateProject, deleteProject,
       refreshAgents, addAgent, updateAgent, deleteAgent,
-      assignAgentToProject, unassignAgentFromProject,
+      assignAgentToProject, unassignAgentFromProject, updateAgentToken,
       reorderProject, scanProjectNow,
     }}>
       {children}
