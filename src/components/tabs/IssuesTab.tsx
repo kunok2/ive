@@ -291,7 +291,7 @@ export default function IssuesTab() {
                   <div className="text-xs text-ive-text-dim truncate">{selectedProject.repoUrl}</div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <div className="text-right">
+                  <div className="text-center">
                     <div className="text-lg font-black text-ive-green-light">{issues.length}</div>
                     <div className="text-xs text-ive-text-dim">이슈</div>
                   </div>
