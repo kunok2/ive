@@ -20,8 +20,6 @@ const STAGE_INFO: Record<string, { label: string; color: string; icon: string }>
   waiting:    { label: '대기',     color: 'bg-ive-green/20 text-ive-green border-ive-green/30', icon: 'fa-clock' },
   dev:        { label: '개발 중',  color: 'bg-ive-cyan/20 text-ive-cyan border-ive-cyan/30', icon: 'fa-code' },
   dev_fail:   { label: '개발 실패', color: 'bg-ive-red/20 text-ive-red border-ive-red/30', icon: 'fa-circle-xmark' },
-  validation: { label: '검증 대기', color: 'bg-ive-amber/20 text-ive-amber border-ive-amber/30', icon: 'fa-flask' },
-  val_fail:   { label: '검증 실패', color: 'bg-ive-red/20 text-ive-red border-ive-red/30', icon: 'fa-triangle-exclamation' },
   done:       { label: '완료',     color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30', icon: 'fa-circle-check' },
   unknown:    { label: '알 수 없음', color: 'bg-white/10 text-ive-text-dim border-white/20', icon: 'fa-question' },
 }
@@ -43,15 +41,7 @@ const BULK_ACTIONS: Record<string, { action: string; label: string; icon: string
   dev_fail: [
     { action: 'retry', label: '대기로 (재시도)', icon: 'fa-rotate' },
   ],
-  validation: [
-    { action: 'reject', label: '대기로 (반려)', icon: 'fa-rotate-left', danger: true },
-  ],
-  val_fail: [
-    { action: 'revalidate', label: '재검증', icon: 'fa-flask' },
-    { action: 'retry', label: '대기로 (재개발)', icon: 'fa-rotate' },
-  ],
   done: [
-    { action: 'revalidate', label: '재검증', icon: 'fa-flask' },
     { action: 'reopen', label: '대기로 (다시 열기)', icon: 'fa-rotate' },
   ],
 }
@@ -127,8 +117,8 @@ export default function IssuesTab() {
   const filtered = issues.filter(issue => {
     if (filter === 'all') return true
     if (filter === 'waiting') return issue.stage === 'waiting'
-    if (filter === 'active') return ['dev', 'validation'].includes(issue.stage)
-    if (filter === 'failed') return ['dev_fail', 'val_fail'].includes(issue.stage)
+    if (filter === 'active') return issue.stage === 'dev'
+    if (filter === 'failed') return issue.stage === 'dev_fail'
     if (filter === 'done') return issue.stage === 'done'
     return true
   })

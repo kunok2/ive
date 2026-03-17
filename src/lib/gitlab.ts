@@ -38,8 +38,6 @@ export async function ensureGitLabLabels(project: Project, decryptedToken: strin
     { name: project.labelTarget, color: '#34d399', description: 'IVE Target Issue' },
     { name: project.labelInProgress, color: '#22d3ee', description: 'IVE Development in Progress' },
     { name: project.labelFailDev, color: '#ef4444', description: 'IVE Development Failed' },
-    { name: project.labelValidation, color: '#fbbf24', description: 'IVE Validation in Progress' },
-    { name: project.labelFailVal, color: '#f87171', description: 'IVE Validation Failed' },
     { name: project.labelDone, color: '#a3e635', description: 'IVE Completed' },
   ];
 
@@ -284,7 +282,7 @@ export async function fetchAllIveIssues(project: Project, decryptedToken: string
 
   const allLabels = [
     project.labelTarget, project.labelInProgress, project.labelFailDev,
-    project.labelValidation, project.labelFailVal, project.labelDone,
+    project.labelDone,
   ];
 
   try {

@@ -23,8 +23,6 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
   const [labelTarget, setLabelTarget] = useState(existing?.labelTarget ?? 'IVE')
   const [labelInProgress, setLabelInProgress] = useState(existing?.labelInProgress ?? 'IVE(D)')
   const [labelFailDev, setLabelFailDev] = useState(existing?.labelFailDev ?? 'IVE(DF)')
-  const [labelValidation, setLabelValidation] = useState(existing?.labelValidation ?? 'IVE(V)')
-  const [labelFailVal, setLabelFailVal] = useState(existing?.labelFailVal ?? 'IVE(VF)')
   const [labelDone, setLabelDone] = useState(existing?.labelDone ?? 'IVE(E)')
   
   // 작업 주기 설정 추가 (단위: 분)
@@ -49,8 +47,6 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
       labelTarget: labelTarget.trim(),
       labelInProgress: labelInProgress.trim(),
       labelFailDev: labelFailDev.trim(),
-      labelValidation: labelValidation.trim(),
-      labelFailVal: labelFailVal.trim(),
       labelDone: labelDone.trim(),
       checkInterval: Number(checkInterval) || 10,
       lastCheckedAt: null,
@@ -233,27 +229,6 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
                 value={labelFailDev}
                 onChange={e => setLabelFailDev(e.target.value)}
                 placeholder="IVE(DF)"
-                className="w-full bg-ive-bg-deep border border-ive-red/20 rounded-lg px-3 py-2 text-base text-ive-text focus:outline-none focus:border-ive-red/50 font-bold"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-bold text-ive-text-muted mb-1.5 uppercase ml-1">검증 단계 (V)</label>
-              <input
-                type="text"
-                value={labelValidation}
-                onChange={e => setLabelValidation(e.target.value)}
-                placeholder="IVE(V)"
-                className="w-full bg-ive-bg-deep border border-ive-border rounded-lg px-3 py-2 text-base text-ive-text focus:outline-none focus:border-ive-green font-bold"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-ive-red/70 mb-1.5 uppercase ml-1">검증 실패 (VF)</label>
-              <input
-                type="text"
-                value={labelFailVal}
-                onChange={e => setLabelFailVal(e.target.value)}
-                placeholder="IVE(VF)"
                 className="w-full bg-ive-bg-deep border border-ive-red/20 rounded-lg px-3 py-2 text-base text-ive-text focus:outline-none focus:border-ive-red/50 font-bold"
               />
             </div>
