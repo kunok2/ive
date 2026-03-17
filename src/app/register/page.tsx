@@ -11,12 +11,17 @@ export default function RegisterPage() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [passwordConfirm, setPasswordConfirm] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
+    if (password !== passwordConfirm) {
+      setError('비밀번호가 일치하지 않습니다.')
+      return
+    }
     setLoading(true)
 
     const res = await fetch('/api/auth/register', {
@@ -81,6 +86,26 @@ export default function RegisterPage() {
               minLength={6}
               className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-base text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green"
             />
+          </div>
+
+          <div>
+            <label className="block text-base font-semibold text-ive-text-muted mb-1.5">비밀번호 확인</label>
+            <input
+              type="password"
+              value={passwordConfirm}
+              onChange={e => setPasswordConfirm(e.target.value)}
+              placeholder="비밀번호 재입력"
+              required
+              minLength={6}
+              className={`w-full bg-ive-bg-input border rounded-lg px-4 py-3 text-base text-ive-text placeholder:text-ive-text-dim focus:outline-none ${
+                passwordConfirm && password !== passwordConfirm
+                  ? 'border-ive-red focus:border-ive-red'
+                  : 'border-ive-border focus:border-ive-green'
+              }`}
+            />
+            {passwordConfirm && password !== passwordConfirm && (
+              <p className="text-xs text-ive-red mt-1">비밀번호가 일치하지 않습니다.</p>
+            )}
           </div>
 
           {error && (
