@@ -35,7 +35,7 @@ RUN --mount=type=bind,from=builder,source=/app/public,target=/builder-public \
 COPY server.ts ./
 COPY src ./src
 COPY tsconfig.json ./
-COPY next.config.ts ./
+COPY next.config.mjs ./
 
 # Claude Code CLI 설치
 RUN npm install -g @anthropic-ai/claude-code
