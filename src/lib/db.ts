@@ -562,6 +562,13 @@ export function countActiveExecutionsByAgent(agentId: string): number {
   return r.cnt
 }
 
+export function getLastCompletedAt(agentId: string): string | null {
+  const r = getDb().prepare(
+    "SELECT ended_at FROM task_executions WHERE agent_id = ? AND status IN ('success','failed') ORDER BY ended_at DESC LIMIT 1"
+  ).get(agentId) as { ended_at: string } | undefined
+  return r?.ended_at ?? null
+}
+
 // ── Task Executions ──
 
 function mapExecution(r: any): TaskExecution {
@@ -733,6 +740,29 @@ export function getSnapshots(entityType: string, entityId: string, limit: number
 export function cleanOldSnapshots(retentionDays: number = 7) {
   const cutoff = new Date(Date.now() - retentionDays * 86400000).toISOString()
   getDb().prepare('DELETE FROM stat_snapshots WHERE timestamp < ?').run(cutoff)
+}
+
+export function cleanOldExecutions(retentionDays: number = 30) {
+  const fs = require('fs')
+  const cutoff = new Date(Date.now() - retentionDays * 86400000).toISOString()
+  const rows = getDb().prepare(
+    "SELECT id, log_path FROM task_executions WHERE status != 'running' AND ended_at IS NOT NULL AND ended_at < ?"
+  ).all(cutoff) as { id: string; log_path: string }[]
+
+  let deletedLogs = 0
+  for (const row of rows) {
+    if (row.log_path) {
+      try { fs.unlinkSync(row.log_path); deletedLogs++ } catch { /* already gone */ }
+    }
+  }
+
+  const result = getDb().prepare(
+    "DELETE FROM task_executions WHERE status != 'running' AND ended_at IS NOT NULL AND ended_at < ?"
+  ).run(cutoff)
+
+  if (rows.length > 0) {
+    console.log(`[Cleanup] Purged ${result.changes} executions, ${deletedLogs} log files (retention: ${retentionDays}d)`)
+  }
 }
 
 // ── Token Pricing ──

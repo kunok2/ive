@@ -52,7 +52,7 @@ interface DailyTrend { date: string; tasks: number; success: number; failed: num
 
 interface ResolvedIssue {
   issueIid: number; issueTitle: string; projectId: string; projectName: string; projectColor: string
-  agentName: string; agentAvatar: string; status: 'success' | 'failed'; durationMin: number; cost: number
+  agentName: string; agentAvatar: string; status: 'success' | 'failed'; startedAt: string; durationMin: number; cost: number
 }
 
 interface ReportData {
@@ -65,12 +65,17 @@ interface ReportData {
 }
 
 type IssueFilter = 'all' | 'success' | 'failed'
+type IssueSortKey = 'date' | 'iid' | 'duration' | 'cost'
+type IssueSortDir = 'desc' | 'asc'
+
+const SORT_KEY = 'ive-report-sort'
+const SORT_DIR_KEY = 'ive-report-sort-dir'
 
 function formatDuration(min: number): string {
   if (min < 60) return `${min.toFixed(1)}분`
   const h = Math.floor(min / 60)
   const m = Math.round(min % 60)
-  return `${h}h ${m}m`
+  return `${h}시간 ${m}분`
 }
 
 function formatTokens(n: number): string {
@@ -101,7 +106,6 @@ const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토']
 
 export default function ReportsTab() {
   const router = useRouter()
-  const issueListRef = useRef<HTMLDivElement | null>(null)
 
   // sessionStorage에서 이전 상태 복원
   const saved = typeof window !== 'undefined' ? loadReportState() : null
@@ -115,6 +119,29 @@ export default function ReportsTab() {
   const [issueFilter, setIssueFilter] = useState<IssueFilter>(() => (saved?.issueFilter as IssueFilter) || 'all')
   const [issueProjectFilter, setIssueProjectFilter] = useState<string>(() => (saved?.issueProjectFilter as string) || 'all')
   const [issueKeyword, setIssueKeyword] = useState(() => (saved?.issueKeyword as string) || '')
+  const [visibleCount, setVisibleCount] = useState(20)
+  const [issueSort, setIssueSort] = useState<IssueSortKey>(() => {
+    if (typeof window === 'undefined') return 'date'
+    return (localStorage.getItem(SORT_KEY) as IssueSortKey) || 'date'
+  })
+  const [issueSortDir, setIssueSortDir] = useState<IssueSortDir>(() => {
+    if (typeof window === 'undefined') return 'desc'
+    return (localStorage.getItem(SORT_DIR_KEY) as IssueSortDir) || 'desc'
+  })
+
+  // 필터/정렬 변경 시 표시 건수 리셋
+  useEffect(() => { setVisibleCount(20) }, [issueFilter, issueProjectFilter, issueKeyword, issueSort, issueSortDir])
+
+  // 무한 스크롤: 하단 도달 시 추가 로드
+  useEffect(() => {
+    function handleScroll() {
+      if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 200) {
+        setVisibleCount(prev => prev + 20)
+      }
+    }
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
 
   // 상태가 변경될 때마다 sessionStorage에 저장
   useEffect(() => {
@@ -126,14 +153,12 @@ export default function ReportsTab() {
     })
   }, [type, date, expandedProjects, expandedAgents, issueFilter, issueProjectFilter, issueKeyword])
 
-  // 이슈 목록 스크롤 위치 복원
+  // 페이지 스크롤 위치 복원
   useEffect(() => {
     if (!data || loading) return
     const savedScroll = sessionStorage.getItem('report-issues-scroll')
-    if (savedScroll && issueListRef.current) {
-      requestAnimationFrame(() => {
-        if (issueListRef.current) issueListRef.current.scrollTop = Number(savedScroll)
-      })
+    if (savedScroll) {
+      requestAnimationFrame(() => { window.scrollTo(0, Number(savedScroll)) })
       sessionStorage.removeItem('report-issues-scroll')
     }
   }, [data, loading])
@@ -164,6 +189,19 @@ export default function ReportsTab() {
     setExpandedAgents(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next })
   }
 
+  function changeSort(key: IssueSortKey) {
+    if (issueSort === key) {
+      const newDir = issueSortDir === 'desc' ? 'asc' : 'desc'
+      setIssueSortDir(newDir)
+      localStorage.setItem(SORT_DIR_KEY, newDir)
+    } else {
+      setIssueSort(key)
+      setIssueSortDir('desc')
+      localStorage.setItem(SORT_KEY, key)
+      localStorage.setItem(SORT_DIR_KEY, 'desc')
+    }
+  }
+
   // 필터된 이슈
   const filteredIssues = data?.resolvedIssues?.filter(issue => {
     if (issueFilter !== 'all' && issue.status !== issueFilter) return false
@@ -174,6 +212,15 @@ export default function ReportsTab() {
       if (!text.includes(kw)) return false
     }
     return true
+  })?.sort((a, b) => {
+    const dir = issueSortDir === 'desc' ? 1 : -1
+    switch (issueSort) {
+      case 'date': return dir * b.startedAt.localeCompare(a.startedAt)
+      case 'iid': return dir * (b.issueIid - a.issueIid)
+      case 'duration': return dir * (b.durationMin - a.durationMin)
+      case 'cost': return dir * (b.cost - a.cost)
+      default: return 0
+    }
   }) ?? []
 
   // 고유 프로젝트 목록 (필터용)
@@ -386,16 +433,14 @@ export default function ReportsTab() {
 
                   {/* 프로젝트 필터 */}
                   {uniqueProjects.length > 1 && (
-                    <select
+                    <CustomSelect
                       value={issueProjectFilter}
-                      onChange={e => setIssueProjectFilter(e.target.value)}
-                      className="text-xs bg-ive-bg-card border border-ive-border-subtle rounded-lg px-2 py-1 text-ive-text focus:outline-none focus:border-ive-green flex-1 min-w-0"
-                    >
-                      <option value="all">전체 프로젝트</option>
-                      {uniqueProjects.map(p => (
-                        <option key={p.id} value={p.id}>{p.name}</option>
-                      ))}
-                    </select>
+                      onChange={setIssueProjectFilter}
+                      options={[
+                        { value: 'all', label: '전체 프로젝트' },
+                        ...uniqueProjects.map(p => ({ value: p.id, label: p.name, color: p.color })),
+                      ]}
+                    />
                   )}
                 </div>
 
@@ -418,21 +463,33 @@ export default function ReportsTab() {
                     </button>
                   )}
                 </div>
+
+                {/* 정렬 */}
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] text-ive-text-dim mr-0.5">정렬</span>
+                  {([['date', '일자'], ['iid', '번호'], ['duration', '시간'], ['cost', '비용']] as [IssueSortKey, string][]).map(([key, label]) => (
+                    <button
+                      key={key}
+                      onClick={() => changeSort(key)}
+                      className={`px-1.5 py-0.5 text-[10px] font-bold rounded transition-all flex items-center gap-0.5 ${
+                        issueSort === key ? 'bg-ive-green/20 text-ive-green' : 'text-ive-text-dim hover:bg-ive-bg-card'
+                      }`}
+                    >
+                      {label}
+                      {issueSort === key && (
+                        <i className={`fa-solid fa-sort-${issueSortDir === 'desc' ? 'down' : 'up'} text-[8px]`} />
+                      )}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              <div
-                ref={issueListRef}
-                className="space-y-1.5 max-h-[60vh] overflow-y-auto overscroll-contain pr-0.5"
-                style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.15) transparent' }}
-              >
-                {filteredIssues.map((issue, i) => (
+              <div className="space-y-1.5">
+                {filteredIssues.slice(0, visibleCount).map((issue, i) => (
                   <div
                     key={i}
                     onClick={() => {
-                      // 스크롤 위치 저장
-                      if (issueListRef.current) {
-                        sessionStorage.setItem('report-issues-scroll', String(issueListRef.current.scrollTop))
-                      }
+                      sessionStorage.setItem('report-issues-scroll', String(window.scrollY))
                       router.push(`/issues/${issue.projectId}/${issue.issueIid}`)
                     }}
                     className="bg-ive-bg-card border border-ive-border-subtle rounded-xl px-3 py-2 cursor-pointer hover:border-ive-green/30 active:scale-[0.99] transition-all"
@@ -463,6 +520,12 @@ export default function ReportsTab() {
                 {filteredIssues.length === 0 && (
                   <div className="text-center text-xs text-ive-text-dim py-4">
                     필터 조건에 맞는 이슈가 없습니다.
+                  </div>
+                )}
+                {visibleCount < filteredIssues.length && (
+                  <div className="text-center text-xs text-ive-text-dim py-3">
+                    <i className="fa-solid fa-circle-notch fa-spin mr-1" />
+                    {filteredIssues.length - visibleCount}건 더 있음
                   </div>
                 )}
               </div>
@@ -497,6 +560,60 @@ function MiniStat({ label, value, color }: { label: string; value: string | numb
     <div>
       <div className="text-[10px] text-ive-text-dim">{label}</div>
       <div className={`text-xs font-bold ${color}`}>{value}</div>
+    </div>
+  )
+}
+
+function CustomSelect({ value, onChange, options }: {
+  value: string
+  onChange: (v: string) => void
+  options: { value: string; label: string; color?: string }[]
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [open])
+
+  const selected = options.find(o => o.value === value)
+
+  return (
+    <div ref={ref} className="relative flex-1 min-w-0">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="w-full text-xs bg-ive-bg-card border border-ive-border-subtle rounded-lg px-2 py-1 text-left text-ive-text flex items-center gap-1.5 focus:outline-none focus:border-ive-green"
+      >
+        {selected?.color && (
+          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: selected.color }} />
+        )}
+        <span className="flex-1 truncate">{selected?.label ?? ''}</span>
+        <i className={`fa-solid fa-chevron-down text-[8px] text-ive-text-dim transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="absolute top-full left-0 right-0 mt-1 bg-ive-bg-card border border-ive-border-subtle rounded-lg shadow-xl z-50 max-h-48 overflow-y-auto">
+          {options.map(o => (
+            <button
+              key={o.value}
+              onClick={() => { onChange(o.value); setOpen(false) }}
+              className={`w-full text-left px-2 py-1.5 text-xs flex items-center gap-1.5 transition-colors ${
+                value === o.value ? 'bg-ive-green/15 text-ive-green' : 'text-ive-text hover:bg-ive-bg-deep'
+              }`}
+            >
+              {o.color && (
+                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: o.color }} />
+              )}
+              <span className="truncate">{o.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

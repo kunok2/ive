@@ -211,6 +211,15 @@ export default function ProjectCard({ project }: Props) {
                   {scanning ? <i className="fa-solid fa-circle-notch fa-spin text-[10px]" /> : <i className="fa-solid fa-rocket text-[10px]" />}
                 </span>
               </button>
+              <button
+                onClick={e => { e.preventDefault(); e.stopPropagation(); window.location.href = `/projects/${project.id}` }}
+                className="flex items-center transition-all"
+                title="편집"
+              >
+                <span className="h-6 px-2 rounded-full flex items-center gap-1 text-xs font-bold bg-ive-bg-deep text-ive-text-dim hover:text-ive-text hover:bg-white/[0.05] border border-ive-border-dark transition-all">
+                  <i className="fa-solid fa-ellipsis text-[10px]" />
+                </span>
+              </button>
             </div>
           </div>
           {/* 스캐너 남은시간 차트 */}
@@ -295,21 +304,6 @@ export default function ProjectCard({ project }: Props) {
           <span className="text-xs text-ive-text-dim font-bold">토큰</span>
         </div>
       </div>
-
-      {/* Details 링크 */}
-      <Link
-        href={`/projects/${project.id}`}
-        className="flex items-center justify-end px-4 py-1.5 border-t border-ive-border-dark hover:bg-white/[0.02] transition-colors"
-      >
-        <div className="flex items-center gap-1.5">
-          <div className="flex gap-0.5">
-            {[1, 2, 3].map(i => (
-              <div key={i} className={`w-1 h-3 rounded-full ${i <= (agentCount > 3 ? 3 : agentCount) ? 'bg-ive-green/30' : 'bg-ive-border-dark'}`} />
-            ))}
-          </div>
-          <span className="text-sm text-ive-text-dim italic font-medium">Details</span>
-        </div>
-      </Link>
 
       {/* 작업 현황 패널 */}
       {expandedPanel === 'running' && (

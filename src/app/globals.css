@@ -29,7 +29,7 @@
 body {
   background: var(--color-ive-bg-deep);
   color: var(--color-ive-text);
-  font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Segoe UI', 'Malgun Gothic', 'Noto Sans KR', sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 

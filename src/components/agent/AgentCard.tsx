@@ -48,6 +48,17 @@ export default function AgentCard({ agent, onDelete, compact, assignedProject, o
   const { refreshAgents, updateAgent } = useStore()
   const cli = cliConfig[agent.cliName]
   const status = statusConfig[agent.status]
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === 'undefined') return true
+    return sessionStorage.getItem(`ac-collapsed-${agent.id}`) !== 'false'
+  })
+  const toggleCollapsed = () => {
+    setCollapsed(prev => {
+      const next = !prev
+      sessionStorage.setItem(`ac-collapsed-${agent.id}`, String(next))
+      return next
+    })
+  }
   const [editing, setEditing] = useState(false)
   const [editName, setEditName] = useState(agent.name)
   const [editAvatar, setEditAvatar] = useState(agent.avatar)
@@ -199,24 +210,28 @@ export default function AgentCard({ agent, onDelete, compact, assignedProject, o
 
   return (
     <div className={`bg-ive-bg-card rounded-xl border overflow-hidden transition-colors duration-200 ${expandedPanel ? 'border-ive-cyan/30' : 'border-ive-border-subtle'}`}>
-      {/* 헤더 */}
-      <div className="p-3 flex items-center justify-between border-b border-ive-border-dark">
+      {/* 헤더 — 클릭으로 접기/펼치기 */}
+      <div
+        onClick={toggleCollapsed}
+        className={`p-3 flex items-center justify-between cursor-pointer active:bg-white/[0.02] transition-colors ${collapsed ? '' : 'border-b border-ive-border-dark'}`}
+      >
         <div className="flex items-center gap-2.5">
-          <button onClick={() => { setEditing(!editing); setEditName(agent.name); setEditAvatar(agent.avatar) }} className="shrink-0">
-            <AgentAvatar avatar={agent.avatar} size="md" className="hover:ring-2 hover:ring-ive-green/30 transition-all cursor-pointer" />
-          </button>
+          <AgentAvatar avatar={agent.avatar} size="md" />
           <div>
             <div className="text-base font-bold text-ive-green-pale">{agent.name}</div>
             <div className="text-sm text-ive-text-muted">{cli.label} · {cli.desc}</div>
           </div>
         </div>
-        <div className="flex items-center gap-1.5">
-          <div className={`w-2 h-2 rounded-full ${status.dot}`} />
-          <span className="text-sm text-ive-text-muted">{status.label}</span>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
+            <div className={`w-2 h-2 rounded-full ${status.dot}`} />
+            <span className="text-sm text-ive-text-muted">{status.label}</span>
+          </div>
+          <i className={`fa-solid fa-chevron-down text-xs text-ive-text-dim transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`} />
         </div>
       </div>
 
-      {/* 이름/아바타 편집 */}
+      {!collapsed && <>
       {editing && (
         <div className="p-3 border-b border-ive-border-dark bg-ive-bg-deep/50 space-y-3">
           <div>
@@ -257,9 +272,15 @@ export default function AgentCard({ agent, onDelete, compact, assignedProject, o
       <div className="p-3 space-y-2">
         <div className="flex items-center gap-2 text-base">
           <span className="text-ive-text-muted"><i className="fa-solid fa-folder w-4 text-center" /> 경로</span>
-          <code className="text-base text-ive-text-dim bg-ive-bg-deep px-2 py-0.5 rounded font-mono truncate">
+          <code className="flex-1 text-base text-ive-text-dim bg-ive-bg-deep px-2 py-0.5 rounded font-mono truncate">
             {agent.cliPath}
           </code>
+          <button
+            onClick={() => { setEditing(true); setEditName(agent.name); setEditAvatar(agent.avatar) }}
+            className="shrink-0 text-xs text-ive-text-dim hover:text-ive-text transition-colors"
+          >
+            <i className="fa-solid fa-pen text-[10px]" />
+          </button>
         </div>
 
         {agent.cliVersion && (
@@ -529,6 +550,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProject, o
           />
         </div>
       )}
+      </>}
     </div>
   )
 }

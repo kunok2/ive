@@ -10,7 +10,8 @@ import {
   resetStuckExecutions,
   hasActiveExecution,
   countActiveExecutionsByAgent,
-  updateAgentStatus
+  updateAgentStatus,
+  getLastCompletedAt
 } from "./db";
 import { decrypt } from "./crypto";
 import { 
@@ -328,19 +329,27 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
       continue;
     }
 
-    // 실행 중인 작업이 없는 에이전트 탐색 (이번 루프에서 이미 배정한 에이전트도 제외)
+    // 가용 에이전트 중 가장 오래 쉰 에이전트 선택 (라운드로빈)
     let availableAgent: Agent | null = null;
     let agentToken = decryptedToken; // 기본: 프로젝트 토큰
+    let oldestTime = Infinity;
+    let selectedPa: typeof assignments[0] | null = null;
     for (const pa of assignments) {
       if (busyAgentIds.has(pa.agentId)) continue;
       const running = countActiveExecutionsByAgent(pa.agentId);
       if (running === 0) {
-        availableAgent = pa.agent;
-        // 개발자별 토큰이 있으면 복호화하여 사용
-        if (pa.accessToken) {
-          try { agentToken = decrypt(pa.accessToken); } catch { agentToken = decryptedToken; }
+        const lastDone = getLastCompletedAt(pa.agentId);
+        const t = lastDone ? new Date(lastDone).getTime() : 0; // 작업 이력 없으면 최우선
+        if (t < oldestTime) {
+          oldestTime = t;
+          selectedPa = pa;
         }
-        break;
+      }
+    }
+    if (selectedPa) {
+      availableAgent = selectedPa.agent;
+      if (selectedPa.accessToken) {
+        try { agentToken = decrypt(selectedPa.accessToken); } catch { agentToken = decryptedToken; }
       }
     }
 

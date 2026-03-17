@@ -23,7 +23,7 @@ export default function MobileTabBar() {
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-ive-bg-card border-t border-ive-border">
-      <div className="flex justify-around items-center h-14 max-w-lg mx-auto">
+      <div className="flex justify-around items-start pt-2 h-16 max-w-lg mx-auto">
         {tabs.map(tab => (
           <button
             key={tab.key}
@@ -31,7 +31,7 @@ export default function MobileTabBar() {
               setActiveTab(tab.key)
               if (pathname !== '/') router.push('/')
             }}
-            className={`flex flex-col items-center gap-0.5 px-3 py-1 transition-colors ${
+            className={`flex flex-col items-center gap-0.5 px-3 transition-colors ${
               activeTab === tab.key ? 'text-ive-green' : 'text-ive-text-dim'
             }`}
           >

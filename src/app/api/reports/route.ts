@@ -168,6 +168,7 @@ export async function GET(req: NextRequest) {
         agentName: e.agentName,
         agentAvatar: e.agentAvatar,
         status: e.status as 'success' | 'failed',
+        startedAt: e.startedAt,
         durationMin: Math.round(durationMin(e.startedAt, e.endedAt) * 10) / 10,
         cost: Math.round(calcCost(pricingMap, e.cliName, e.inputTokens, e.outputTokens) * 100) / 100,
       }))

@@ -427,6 +427,7 @@ function SettingsPanel() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [testing, setTesting] = useState(false)
+  const [testEmail, setTestEmail] = useState('')
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null)
 
   useEffect(() => {
@@ -460,6 +461,10 @@ function SettingsPanel() {
   }
 
   async function handleTestMail() {
+    if (!testEmail) {
+      await alert({ message: '수신 주소를 입력해주세요', variant: 'error' })
+      return
+    }
     setTesting(true)
     try {
       // 먼저 현재 설정 저장
@@ -468,20 +473,15 @@ function SettingsPanel() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ settings }),
       })
-      // 테스트 메일 발송
-      const res = await fetch('/api/admin/mail', {
+      // 테스트 메일 발송 (입력한 주소로만)
+      const res = await fetch('/api/admin/mail/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          subject: '[Spring IVE] 메일 설정 테스트',
-          body: '<p>메일 설정이 정상적으로 작동합니다.</p><p style="color:#999;font-size:12px;">이 메일은 테스트 발송입니다.</p>',
-        }),
+        body: JSON.stringify({ to: testEmail }),
       })
       const data = await res.json()
-      if (res.ok && data.sent > 0) {
-        await alert({ title: '발송 성공', message: `${data.sent}명에게 테스트 메일을 발송했습니다.`, variant: 'success' })
-      } else if (res.ok && data.failed > 0) {
-        await alert({ message: `발송 실패 ${data.failed}건`, variant: 'error' })
+      if (res.ok) {
+        await alert({ title: '발송 성공', message: `${testEmail}로 테스트 메일을 발송했습니다.`, variant: 'success' })
       } else {
         await alert({ message: data.error || '발송 실패', variant: 'error' })
       }
@@ -527,18 +527,27 @@ function SettingsPanel() {
                 </div>
               ))}
 
-              {/* 메일 그룹에 테스트 버튼 */}
+              {/* 메일 그룹에 테스트 발송 */}
               {group.key === 'mail' && (
-                <button
-                  onClick={handleTestMail}
-                  disabled={testing}
-                  className="w-full py-2 rounded-lg text-xs font-bold bg-ive-bg-deep border border-ive-border-subtle text-ive-cyan active:scale-[0.98] transition-all disabled:opacity-40"
-                >
-                  {testing
-                    ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />테스트 중...</>
-                    : <><i className="fa-solid fa-paper-plane mr-1" />테스트 메일 발송</>
-                  }
-                </button>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={testEmail}
+                    onChange={e => setTestEmail(e.target.value)}
+                    placeholder="수신 주소 입력"
+                    className="flex-1 bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green/50"
+                  />
+                  <button
+                    onClick={handleTestMail}
+                    disabled={testing || !testEmail}
+                    className="px-4 py-2 rounded-lg text-xs font-bold bg-ive-bg-deep border border-ive-border-subtle text-ive-cyan active:scale-[0.98] transition-all disabled:opacity-40 whitespace-nowrap"
+                  >
+                    {testing
+                      ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />발송중</>
+                      : <><i className="fa-solid fa-paper-plane mr-1" />테스트</>
+                    }
+                  </button>
+                </div>
               )}
             </div>
           )}

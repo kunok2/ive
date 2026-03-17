@@ -1,6 +1,6 @@
 import {
   getDb, getAllProjects, getAgentsByUser,
-  createSnapshot, cleanOldSnapshots
+  createSnapshot, cleanOldSnapshots, cleanOldExecutions
 } from './db'
 
 let collectorStarted = false
@@ -22,6 +22,7 @@ export function startStatsCollector() {
   setInterval(() => {
     try {
       cleanOldSnapshots(7)
+      cleanOldExecutions(30)
     } catch (e) {
       console.warn('[StatsCollector] Cleanup error:', (e as Error).message)
     }
