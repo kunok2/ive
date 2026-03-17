@@ -1,6 +1,6 @@
 'use client'
 
-import { use, useCallback, useEffect, useState } from 'react'
+import { use, useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import MobileTabBar from '@/components/layout/MobileTabBar'
@@ -66,6 +66,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   const [stageChanging, setStageChanging] = useState(false)
   const [showDesc, setShowDesc] = useState(false)
   const [isClosing, setIsClosing] = useState(false)
+  const notesEndRef = useRef<HTMLDivElement>(null)
 
   const fetchIssue = useCallback(async () => {
     const res = await fetch(`/api/projects/${projectId}/issues`)
@@ -228,6 +229,15 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
             <i className="fa-solid fa-comments mr-1" />활동 기록
             {!notesLoading && <span className="ml-1 opacity-50">({notes.length})</span>}
           </span>
+          {notes.length > 0 && (
+            <button
+              onClick={() => notesEndRef.current?.scrollIntoView({ behavior: 'smooth' })}
+              className="text-xs font-bold text-ive-text-dim hover:text-ive-green border border-ive-border-subtle hover:border-ive-green/30 px-2 py-0.5 rounded-lg transition-all"
+              title="마지막 노트로 이동"
+            >
+              <i className="fa-solid fa-angles-down mr-1" />마지막
+            </button>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto px-3 pb-2">
@@ -256,6 +266,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                   </div>
                 </div>
               ))}
+              <div ref={notesEndRef} />
             </div>
           )}
         </div>
