@@ -14,7 +14,7 @@ import ProjectForm from '@/components/project/ProjectForm'
 import AgentForm from '@/components/agent/AgentForm'
 import Modal from '@/components/ui/Modal'
 import { useDialog } from '@/components/ui/ConfirmDialog'
-import ChangePasswordForm from '@/components/auth/ChangePasswordForm'
+import UserProfileForm from '@/components/auth/UserProfileForm'
 
 const subtitle: Record<string, string> = {
   projects: '프로젝트',
@@ -26,7 +26,7 @@ const subtitle: Record<string, string> = {
 
 export default function HomePage() {
   const router = useRouter()
-  const { state, logout } = useStore()
+  const { state, logout, refreshUser } = useStore()
   const { activeTab } = useTab()
   const { alert: showAlert } = useDialog()
   const [showNewProject, setShowNewProject] = useState(false)
@@ -101,9 +101,9 @@ export default function HomePage() {
             <button
               onClick={() => setShowChangePassword(true)}
               className="w-8 h-8 rounded-full bg-ive-bg-card border border-ive-border-subtle flex items-center justify-center text-ive-text-dim hover:text-ive-text active:scale-95 transition-all"
-              title="비밀번호 변경"
+              title="정보 열람 및 수정"
             >
-              <i className="fa-solid fa-key text-sm" />
+              <i className="fa-solid fa-user-gear text-sm" />
             </button>
             <button
               onClick={async () => { await logout(); router.push('/login') }}
@@ -140,8 +140,8 @@ export default function HomePage() {
       <Modal open={showNewAgent} onClose={() => setShowNewAgent(false)} title="개발자 추가">
         <AgentForm onSuccess={() => setShowNewAgent(false)} />
       </Modal>
-      <Modal open={showChangePassword} onClose={() => setShowChangePassword(false)} title="비밀번호 변경">
-        <ChangePasswordForm email={state.user.email} onSuccess={() => setShowChangePassword(false)} onCancel={() => setShowChangePassword(false)} />
+      <Modal open={showChangePassword} onClose={() => setShowChangePassword(false)} title="내 정보">
+        <UserProfileForm email={state.user.email} name={state.user.name} onSuccess={() => setShowChangePassword(false)} onCancel={() => setShowChangePassword(false)} onEmailChanged={() => refreshUser()} />
       </Modal>
     </>
   )
