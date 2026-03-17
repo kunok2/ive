@@ -450,14 +450,68 @@ async function executeTask(
     
     await exec(`git checkout -B ${branchName}`, { cwd: workspacePath });
 
-    // 3. 이전 작업 이력 확인
+    // 3. 이전 작업 이력 및 사용자 피드백 확인
     const notes = await fetchGitLabIssueNotes(project, iid, token);
-    const iterationCount = notes.filter((n: any) => n.body.includes("IVE(봇) 이슈 해결")).length + 1;
+    const botCompletions = notes.filter((n: any) => n.body.includes("IVE(봇)"));
+    const iterationCount = botCompletions.length + 1;
+
+    // 사용자 코멘트 추출 (시스템/봇 노트/봇 착수 코멘트 제외)
+    const userNotes = notes.filter((n: any) =>
+      !n.system &&
+      !n.body.includes("IVE(봇)") &&
+      !n.body.includes("착수") &&
+      !n.body.includes("작업을 시작") &&
+      !n.body.includes("이슈 해결")
+    );
+
+    // 마지막 봇 완료 이후의 사용자 코멘트 = 최신 피드백/지시사항
+    let latestFeedback = "";
+    if (botCompletions.length > 0) {
+      const lastBotNoteId = botCompletions[botCompletions.length - 1].id;
+      const feedbackNotes = userNotes.filter((n: any) => n.id > lastBotNoteId);
+      if (feedbackNotes.length > 0) {
+        latestFeedback = "\n\n## ⚠️ 최신 사용자 피드백 (반드시 우선 반영):\n" +
+          feedbackNotes.map((n: any) => `> **${n.author.name}**: ${n.body}`).join('\n\n');
+      }
+    }
+
+    // 이전 대화 히스토리 (재시도인 경우 — 이슈의 전체 대화 흐름을 제공)
     let iterationContext = "";
     if (iterationCount > 1) {
-      const recentNotes = notes.filter((n: any) => !n.system).slice(-5);
-      iterationContext = "\n## 이전 작업 이력 및 피드백:\n" + 
-        recentNotes.map((n: any) => `### ${n.author.name} (${n.created_at})\n${n.body.substring(0, 500)}`).join('\n');
+      // 시스템 노트 제외, 봇 작업 로그(<details> 블록) 축약
+      const conversationNotes = notes
+        .filter((n: any) => !n.system)
+        .map((n: any) => {
+          let body = n.body || "";
+          // <details>...</details> 블록 제거 (긴 작업 로그 축약)
+          body = body.replace(/<details>[\s\S]*?<\/details>/gi, "[작업 로그 생략]");
+          // 너무 긴 노트는 잘라냄
+          if (body.length > 800) body = body.substring(0, 800) + "\n...(이하 생략)";
+          const role = n.body.includes("IVE(봇)") || n.body.includes("착수") ? "🤖 봇" : `👤 ${n.author?.name || "사용자"}`;
+          return `**${role}** (${n.created_at}):\n${body}`;
+        });
+      iterationContext = "\n## 이슈 대화 히스토리:\n" + conversationNotes.join('\n\n---\n\n');
+    }
+
+    log(`반복 횟수: ${iterationCount}차, 봇 완료 노트: ${botCompletions.length}건, 사용자 피드백: ${latestFeedback ? '있음' : '없음'}`, 'system');
+    if (latestFeedback) {
+      log(`피드백 내용:\n${latestFeedback.substring(0, 300)}`, 'system');
+    }
+
+    // 2차 이상 실행인데 사용자 피드백(지시)이 없으면 실행하지 않음
+    if (iterationCount > 1 && !latestFeedback) {
+      log(`${iterationCount}차 실행이지만 새로운 사용자 지시가 없어 스킵합니다.`, 'system');
+      // 라벨을 done 상태로 복원 (진행중 → 완료)
+      await updateGitLabIssueLabels(project, iid, token, [project.labelDone], [project.labelInProgress]);
+      updateExecutionStatus(executionId, 'success', new Date().toISOString());
+      updateAgentStatus(agent.id, 'available');
+      logStream.end();
+      try {
+        if (fs.existsSync(workspacePath)) {
+          fs.rmSync(workspacePath, { recursive: true, force: true });
+        }
+      } catch (e) { /* ignore */ }
+      return;
     }
 
     // GitLab API 정보 구성
@@ -466,11 +520,26 @@ async function executeTask(
     const projectPath = repoUrlParsed.pathname.startsWith('/') ? repoUrlParsed.pathname.slice(1) : repoUrlParsed.pathname;
     const encodedProjectPath = encodeURIComponent(projectPath);
 
-    const prompt = `다음 GitLab 이슈를 해결해주세요. 한국어로만 보고하세요.
+    // 1차: 이슈 본문이 지시사항 / 2차+: 사용자 피드백만이 지시사항
+    let prompt: string;
+    if (iterationCount === 1) {
+      // 최초 실행: 이슈 본문 전체가 작업 지시
+      prompt = `다음 GitLab 이슈를 해결해주세요. 한국어로만 보고하세요.
 
 ## 이슈 #${iid}: ${issue.title}
-${issue.description || "설명 없음"}
+${issue.description || "설명 없음"}`;
+    } else {
+      // 2차 이상: 사용자 피드백이 유일한 작업 지시 (이슈 본문은 참고용 제목만)
+      prompt = `이슈 #${iid} "${issue.title}"에 대한 ${iterationCount}차 후속 작업입니다. 한국어로만 보고하세요.
 ${iterationContext}
+
+## ⚠️ 이번 작업 지시 (아래 사용자 코멘트만 수행하세요):
+${latestFeedback}
+
+**중요: 이슈 본문의 원래 요청은 이미 처리 완료되었습니다. 위 대화 히스토리는 맥락 참고용이며, "이번 작업 지시" 섹션의 사용자 코멘트만 수행하세요.**`;
+    }
+
+    prompt += `
 
 ## GitLab 연동 정보:
 - GitLab API: ${gitlabBaseUrl}/api/v4

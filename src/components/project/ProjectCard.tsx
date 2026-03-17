@@ -195,14 +195,14 @@ export default function ProjectCard({ project }: Props) {
                   {new Date(project.lastCheckedAt).toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).replace(',', '')}
                 </span>
               )}
-              <button onClick={toggleScanner} className="flex items-center justify-center transition-all" title={project.scannerActive ? '일시정지' : '다시 시작'}>
-                <span className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${project.scannerActive ? 'bg-ive-bg-deep text-ive-green/60 hover:text-ive-green hover:bg-ive-green/10 border border-ive-border-dark' : 'bg-ive-red/10 text-ive-red border border-ive-red/30 hover:bg-ive-red/20 scale-105'}`}>
-                  {project.scannerActive ? <i className="fa-solid fa-pause text-xs" /> : <i className="fa-solid fa-play text-xs ml-px" />}
+              <button onClick={toggleScanner} className="flex items-center gap-1 transition-all" title={project.scannerActive ? '일시정지' : '다시 시작'}>
+                <span className={`h-6 px-2 rounded-full flex items-center gap-1 text-xs font-bold transition-all ${project.scannerActive ? 'bg-ive-bg-deep text-ive-green/60 hover:text-ive-green hover:bg-ive-green/10 border border-ive-border-dark' : 'bg-ive-red/10 text-ive-red border border-ive-red/30 hover:bg-ive-red/20 scale-105'}`}>
+                  {project.scannerActive ? <><i className="fa-solid fa-pause text-[10px]" />멈춤</> : <><i className="fa-solid fa-play text-[10px] ml-px" />시작</>}
                 </span>
               </button>
-              <button onClick={handleManualScan} disabled={scanning} className="flex items-center justify-center transition-all disabled:opacity-30 disabled:cursor-not-allowed" title="지금 스캔 수행">
-                <span className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${scanning ? 'bg-ive-green/20 text-ive-green border border-ive-green/30' : 'bg-ive-bg-deep text-ive-green/60 hover:text-ive-green hover:bg-ive-green/10 border border-ive-border-dark'}`}>
-                  {scanning ? <i className="fa-solid fa-circle-notch fa-spin text-xs" /> : <i className="fa-solid fa-rocket text-xs" />}
+              <button onClick={handleManualScan} disabled={scanning} className="flex items-center gap-1 transition-all disabled:opacity-30 disabled:cursor-not-allowed" title="지금 스캔 수행">
+                <span className={`h-6 px-2 rounded-full flex items-center gap-1 text-xs font-bold transition-all ${scanning ? 'bg-ive-green/20 text-ive-green border border-ive-green/30' : 'bg-ive-bg-deep text-ive-green/60 hover:text-ive-green hover:bg-ive-green/10 border border-ive-border-dark'}`}>
+                  {scanning ? <><i className="fa-solid fa-circle-notch fa-spin text-[10px]" />실행중</> : <><i className="fa-solid fa-rocket text-[10px]" />즉시실행</>}
                 </span>
               </button>
             </div>

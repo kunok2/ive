@@ -4,6 +4,8 @@ import { use, useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import MobileTabBar from '@/components/layout/MobileTabBar'
+import MRReviewSection from '@/components/mr/MRReviewSection'
+import ReactMarkdown from 'react-markdown'
 
 interface IssueDetail {
   iid: number
@@ -144,6 +146,35 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
     }
   }
 
+  // 코멘트 작성 + 상태를 대기로 변경 (재실행 트리거)
+  async function handleCommentAndRetry() {
+    if (!comment.trim()) return
+    setPosting(true)
+    try {
+      // 1. 코멘트 등록
+      const res = await fetch(`/api/projects/${projectId}/issues/${iid}/notes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: comment.trim() }),
+      })
+      if (!res.ok) return
+      setComment('')
+      // 2. 상태를 대기로 변경 (waiting이면 이미 대기이므로 스킵)
+      if (issue?.stage !== 'waiting') {
+        const stageAction = issue?.stage === 'done' ? 'reopen' : 'retry'
+        await fetch(`/api/projects/${projectId}/issues/${iid}/stage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stage: issue?.stage, action: stageAction }),
+        })
+      }
+      await fetchIssue()
+      await fetchNotes()
+    } finally {
+      setPosting(false)
+    }
+  }
+
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center text-ive-text-muted">불러오는 중...</div>
   }
@@ -163,6 +194,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
 
   const stageInfo = STAGE_INFO[issue.stage] || STAGE_INFO.unknown
   const actions = STAGE_ACTIONS[issue.stage] || []
+  const iterationCount = notes.filter(n => n.body.includes('IVE(봇)')).length
 
   return (
     <div className="h-screen flex flex-col">
@@ -176,6 +208,11 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
           <span className={`text-xs font-bold px-1.5 py-0.5 rounded border ${stageInfo.bg} ${stageInfo.color} border-current/20 shrink-0`}>
             <i className={`fa-solid ${stageInfo.icon} mr-0.5`} />{stageInfo.label}
           </span>
+          {iterationCount > 0 && (
+            <span className="text-xs font-bold px-1.5 py-0.5 rounded border bg-ive-cyan/10 text-ive-cyan border-ive-cyan/20 shrink-0" title={`${iterationCount}회 작업 완료`}>
+              <i className="fa-solid fa-repeat mr-0.5" />{iterationCount}차
+            </span>
+          )}
           <span className="text-xs text-ive-text-dim shrink-0"><i className="fa-solid fa-user mr-0.5" />{issue.author}</span>
           <span className="text-xs text-ive-text-dim ml-auto shrink-0">
             {new Date(issue.updatedAt).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}
@@ -224,7 +261,14 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
 
       {/* 활동 기록 - 남은 공간 전체 사용 */}
       <div className="flex-1 flex flex-col min-h-0 max-w-lg mx-auto w-full">
-        <div className="px-3 py-1.5 shrink-0 flex items-center justify-between">
+        {/* MR 리뷰 섹션 */}
+        {(issue.stage === 'done' || issue.stage === 'dev') && (
+          <div className="px-3 shrink-0">
+            <MRReviewSection projectId={projectId} issueIid={Number(iid)} />
+          </div>
+        )}
+
+        <div className="px-3 py-1.5 shrink-0 flex items-center justify-between mt-2">
           <span className="text-xs font-bold text-ive-text-dim uppercase tracking-widest">
             <i className="fa-solid fa-comments mr-1" />활동 기록
             {!notesLoading && <span className="ml-1 opacity-50">({notes.length})</span>}
@@ -240,7 +284,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto px-3 pb-2">
+        <div className="flex-1 overflow-y-auto pb-2 pl-3 pr-1">
           {notesLoading ? (
             <div className="text-center py-10 text-ive-text-dim text-sm">노트 불러오는 중...</div>
           ) : notes.length === 0 ? (
@@ -261,8 +305,8 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                       {new Date(note.createdAt).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}
                     </span>
                   </div>
-                  <div className={`text-sm leading-relaxed whitespace-pre-wrap break-words ${note.system ? 'text-ive-text-dim italic' : 'text-ive-text-muted'}`}>
-                    {note.body.length > 500 ? <NoteBody body={note.body} /> : note.body}
+                  <div className={`text-sm leading-relaxed break-words ${note.system ? 'text-ive-text-dim italic' : 'text-ive-text-muted'}`}>
+                    {note.body.length > 500 ? <NoteBody body={note.body} /> : <MarkdownNote body={cleanNoteBody(note.body)} />}
                   </div>
                 </div>
               ))}
@@ -276,18 +320,34 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
           <div className="flex gap-2 items-end">
             <textarea
               value={comment}
-              onChange={e => setComment(e.target.value)}
+              onChange={e => {
+                setComment(e.target.value)
+                e.target.style.height = 'auto'
+                e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
+              }}
               placeholder="코멘트..."
               rows={1}
               className="flex-1 bg-ive-bg-card border border-ive-border rounded-xl px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-green/50"
+              style={{ overflow: 'hidden' }}
             />
             <button
               onClick={handlePostComment}
               disabled={posting || !comment.trim()}
               className="shrink-0 w-10 h-10 rounded-xl bg-ive-green text-ive-bg-deep flex items-center justify-center active:scale-95 transition-all disabled:opacity-40"
+              title="코멘트만 등록"
             >
               {posting ? <i className="fa-solid fa-circle-notch fa-spin" /> : <i className="fa-solid fa-paper-plane" />}
             </button>
+            {issue.stage !== 'dev' && (
+              <button
+                onClick={handleCommentAndRetry}
+                disabled={posting || !comment.trim()}
+                className="shrink-0 h-10 px-3 rounded-xl bg-ive-cyan text-ive-bg-deep flex items-center justify-center gap-1 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold"
+                title="코멘트 등록 + 재실행"
+              >
+                {posting ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-paper-plane" /><i className="fa-solid fa-play" /></>}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -297,12 +357,60 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   )
 }
 
+/** 노트 본문 정리: 도구 태그 제거, HTML 태그를 MD로 변환 */
+function cleanNoteBody(body: string): string {
+  return body
+    .split('\n')
+    .filter(line => !line.match(/^>\s*\*{0,2}🔧/))
+    .join('\n')
+    .replace(/<details>/gi, '')
+    .replace(/<\/details>/gi, '')
+    .replace(/<summary>(.*?)<\/summary>/gi, '**$1**')
+    .replace(/<\/?br\s*\/?>/gi, '\n')
+    .replace(/<\/?(?:div|span|p)[^>]*>/gi, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+function MarkdownNote({ body }: { body: string }) {
+  return (
+    <ReactMarkdown
+      components={{
+        h1: ({ children }) => <h1 className="text-base font-bold text-ive-text mt-2 mb-1">{children}</h1>,
+        h2: ({ children }) => <h2 className="text-sm font-bold text-ive-text mt-2 mb-1">{children}</h2>,
+        h3: ({ children }) => <h3 className="text-sm font-bold text-ive-text mt-1.5 mb-0.5">{children}</h3>,
+        p: ({ children }) => <p className="mb-1.5 last:mb-0">{children}</p>,
+        ul: ({ children }) => <ul className="list-disc list-inside mb-1.5 space-y-0.5">{children}</ul>,
+        ol: ({ children }) => <ol className="list-decimal list-inside mb-1.5 space-y-0.5">{children}</ol>,
+        li: ({ children }) => <li>{children}</li>,
+        strong: ({ children }) => <strong className="font-bold text-ive-text">{children}</strong>,
+        em: ({ children }) => <em className="italic">{children}</em>,
+        code: ({ children, className }) => {
+          const isBlock = className?.includes('language-')
+          if (isBlock) {
+            return <code className="block bg-ive-bg-deep rounded-lg p-2 my-1.5 text-xs font-mono overflow-x-auto whitespace-pre">{children}</code>
+          }
+          return <code className="bg-ive-bg-deep px-1 py-0.5 rounded text-xs font-mono text-ive-cyan">{children}</code>
+        },
+        pre: ({ children }) => <pre className="mb-1.5">{children}</pre>,
+        blockquote: ({ children }) => <blockquote className="border-l-2 border-ive-border pl-2.5 my-1.5 text-ive-text-dim">{children}</blockquote>,
+        a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-ive-cyan hover:underline">{children}</a>,
+        hr: () => <hr className="border-ive-border-dark my-2" />,
+      }}
+    >
+      {body}
+    </ReactMarkdown>
+  )
+}
+
 // 긴 노트를 접었다 펼 수 있는 컴포넌트
 function NoteBody({ body }: { body: string }) {
   const [expanded, setExpanded] = useState(false)
+  const cleaned = cleanNoteBody(body)
+  const display = expanded ? cleaned : cleaned.slice(0, 500) + '...'
   return (
     <>
-      {expanded ? body : body.slice(0, 500) + '...'}
+      <MarkdownNote body={display} />
       <button
         onClick={() => setExpanded(!expanded)}
         className="block mt-1 text-xs text-ive-green hover:underline"

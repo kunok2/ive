@@ -274,6 +274,113 @@ export async function addGitLabMRNote(project: Project, decryptedToken: string, 
 }
 
 /**
+ * source_branch로 MR을 조회합니다 (opened + merged 모두).
+ */
+export async function fetchGitLabMRByBranch(project: Project, decryptedToken: string, sourceBranch: string) {
+  const projectPath = getProjectPath(project.repoUrl);
+  if (!projectPath) return null;
+
+  try {
+    // opened 먼저 조회
+    let res = await fetch(
+      `https://gitlab.com/api/v4/projects/${projectPath}/merge_requests?source_branch=${encodeURIComponent(sourceBranch)}&state=opened&per_page=1`,
+      { headers: { 'PRIVATE-TOKEN': decryptedToken } }
+    );
+    if (res.ok) {
+      const mrs = await res.json();
+      if (mrs.length > 0) return mrs[0];
+    }
+    // merged도 조회
+    res = await fetch(
+      `https://gitlab.com/api/v4/projects/${projectPath}/merge_requests?source_branch=${encodeURIComponent(sourceBranch)}&state=merged&per_page=1`,
+      { headers: { 'PRIVATE-TOKEN': decryptedToken } }
+    );
+    if (res.ok) {
+      const mrs = await res.json();
+      if (mrs.length > 0) return mrs[0];
+    }
+    return null;
+  } catch (err) {
+    console.error(`[GitLab] Error fetching MR by branch ${sourceBranch}:`, err);
+    return null;
+  }
+}
+
+/**
+ * MR의 변경사항(diff)을 조회합니다.
+ */
+export async function fetchGitLabMRChanges(project: Project, decryptedToken: string, mrIid: number) {
+  const projectPath = getProjectPath(project.repoUrl);
+  if (!projectPath) return null;
+
+  try {
+    const res = await fetch(
+      `https://gitlab.com/api/v4/projects/${projectPath}/merge_requests/${mrIid}/changes`,
+      { headers: { 'PRIVATE-TOKEN': decryptedToken } }
+    );
+    if (!res.ok) throw new Error(`Fetch MR changes failed: ${res.statusText}`);
+    return await res.json();
+  } catch (err) {
+    console.error(`[GitLab] Error fetching MR changes for !${mrIid}:`, err);
+    return null;
+  }
+}
+
+/**
+ * MR을 머지합니다.
+ */
+export async function mergeGitLabMR(project: Project, decryptedToken: string, mrIid: number) {
+  const projectPath = getProjectPath(project.repoUrl);
+  if (!projectPath) throw new Error('Invalid repo URL');
+
+  // MR 상태 확인 — checking 중이면 대기 후 재시도
+  const checkRes = await fetch(
+    `https://gitlab.com/api/v4/projects/${projectPath}/merge_requests/${mrIid}`,
+    { headers: { 'PRIVATE-TOKEN': decryptedToken } }
+  );
+  if (checkRes.ok) {
+    const mrInfo = await checkRes.json();
+    if (mrInfo.merge_status === 'checking' || mrInfo.detailed_merge_status === 'checking') {
+      await new Promise(r => setTimeout(r, 3000));
+    }
+  }
+
+  const res = await fetch(
+    `https://gitlab.com/api/v4/projects/${projectPath}/merge_requests/${mrIid}/merge`,
+    {
+      method: 'PUT',
+      headers: {
+        'PRIVATE-TOKEN': decryptedToken,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        should_remove_source_branch: true,
+      }),
+    }
+  );
+
+  if (!res.ok) {
+    const body = await res.text();
+    console.error(`[mergeGitLabMR] 실패 status=${res.status} body=${body} mrIid=${mrIid} projectPath=${projectPath}`);
+    if (res.status === 405) {
+      // 405: Method Not Allowed — MR이 머지 불가 상태
+      try {
+        const parsed = JSON.parse(body);
+        throw new Error(parsed.message || `머지 불가 (405): ${body}`);
+      } catch (e) {
+        if (e instanceof Error && e.message !== body) throw e;
+        throw new Error(`머지 불가 (405): ${body}`);
+      }
+    }
+    if (res.status === 406) {
+      throw new Error(`머지 불가: 충돌이 있거나 파이프라인 진행 중입니다.`);
+    }
+    throw new Error(`MR 머지 실패 (${res.status}): ${body}`);
+  }
+  return await res.json();
+}
+
+/**
  * 프로젝트의 IVE 관련 이슈를 모두 가져옵니다 (모든 IVE 레이블 대상).
  */
 export async function fetchAllIveIssues(project: Project, decryptedToken: string) {
