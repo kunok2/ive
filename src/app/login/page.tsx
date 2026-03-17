@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import ChangePasswordForm from '@/components/auth/ChangePasswordForm'
+import IntroSlides from '@/components/auth/IntroSlides'
 import { useStore } from '@/lib/store'
 
 export default function LoginPage() {
@@ -14,6 +15,7 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [showChangePassword, setShowChangePassword] = useState(false)
+  const [showIntro, setShowIntro] = useState(true)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -97,7 +99,18 @@ export default function LoginPage() {
             <ChangePasswordForm onSuccess={() => setShowChangePassword(false)} onCancel={() => setShowChangePassword(false)} />
           </div>
         )}
+
+        <div className="mt-4 text-center">
+          <button
+            onClick={() => setShowIntro(true)}
+            className="text-sm text-ive-text-muted hover:text-ive-green transition-colors"
+          >
+            <i className="fa-solid fa-circle-info mr-1" />Spring IVE가 처음이신가요?
+          </button>
+        </div>
       </div>
+
+      {showIntro && <IntroSlides onComplete={() => setShowIntro(false)} />}
     </div>
   )
 }
