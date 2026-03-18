@@ -3,6 +3,7 @@
 import { use, useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import MobileTabBar from '@/components/layout/MobileTabBar'
+import { useDialog } from '@/components/ui/ConfirmDialog'
 import MRReviewSection from '@/components/mr/MRReviewSection'
 import ReactMarkdown from 'react-markdown'
 
@@ -58,6 +59,7 @@ const STAGE_ACTIONS: Record<string, StageAction[]> = {
 export default function IssueDetailPage({ params }: { params: Promise<{ projectId: string; iid: string }> }) {
   const { projectId, iid } = use(params)
   const router = useRouter()
+  const { confirm } = useDialog()
   const [issue, setIssue] = useState<IssueDetail | null>(null)
   const [notes, setNotes] = useState<Note[]>([])
   const [loading, setLoading] = useState(true)
@@ -115,6 +117,14 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   }
 
   async function handleCloseIssue() {
+    const ok = await confirm({
+      title: '이슈 닫기',
+      message: `#${iid} 이슈를 닫으시겠습니까?`,
+      confirmText: '닫기',
+      cancelText: '취소',
+      variant: 'warning',
+    })
+    if (!ok) return
     setIsClosing(true)
     try {
       const res = await fetch(`/api/projects/${projectId}/issues/${iid}/close`, {

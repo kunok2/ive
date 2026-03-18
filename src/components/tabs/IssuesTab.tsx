@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useStore } from '@/lib/store'
 import { useTab } from '@/lib/tab-context'
 import PullToRefresh from '@/components/ui/PullToRefresh'
+import { useDialog } from '@/components/ui/ConfirmDialog'
 
 interface IveIssue {
   iid: number
@@ -49,6 +50,7 @@ const BULK_ACTIONS: Record<string, { action: string; label: string; icon: string
 
 export default function IssuesTab() {
   const router = useRouter()
+  const { confirm } = useDialog()
   const { state } = useStore()
   const { activeTab, setActiveTab, issuesProjectId, setIssuesProjectId, issuesFilter, setIssuesFilter } = useTab()
   const selectedProjectId = issuesProjectId ?? ''
@@ -180,6 +182,16 @@ export default function IssuesTab() {
     const selectedIssues = issues.filter(i => selected.has(i.iid))
     const stage = selectedIssues[0].stage
     const isClose = action === 'close'
+    if (isClose) {
+      const ok = await confirm({
+        title: '이슈 일괄 닫기',
+        message: `선택한 ${selectedIssues.length}개 이슈를 모두 닫으시겠습니까?`,
+        confirmText: '닫기',
+        cancelText: '취소',
+        variant: 'warning',
+      })
+      if (!ok) return
+    }
     cancelRef.current = false
     setBulkProgress({ total: selectedIssues.length, done: 0, failed: 0 })
 
@@ -245,6 +257,14 @@ export default function IssuesTab() {
   const handleCloseIssue = async (e: React.MouseEvent, iid: number) => {
     e.stopPropagation()
     if (closing) return
+    const ok = await confirm({
+      title: '이슈 닫기',
+      message: `#${iid} 이슈를 닫으시겠습니까?`,
+      confirmText: '닫기',
+      cancelText: '취소',
+      variant: 'warning',
+    })
+    if (!ok) return
     setClosing(iid)
     try {
       const res = await fetch(`/api/projects/${selectedProjectId}/issues/${iid}/close`, {
