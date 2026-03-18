@@ -140,20 +140,80 @@ export async function GET(req: NextRequest) {
     }
   })
 
-  // Daily trend
-  const dayMap = new Map<string, { tasks: number; success: number; failed: number; cost: number }>()
+  // Daily trend (extended with waitAvg, procAvg)
+  const dayMap = new Map<string, { tasks: number; success: number; failed: number; cost: number; waitTimes: number[]; procTimes: number[] }>()
   for (const e of execs) {
     const day = e.startedAt.slice(0, 10)
-    if (!dayMap.has(day)) dayMap.set(day, { tasks: 0, success: 0, failed: 0, cost: 0 })
+    if (!dayMap.has(day)) dayMap.set(day, { tasks: 0, success: 0, failed: 0, cost: 0, waitTimes: [], procTimes: [] })
     const d = dayMap.get(day)!
     d.tasks++
     if (e.status === 'success') d.success++
     if (e.status === 'failed') d.failed++
     d.cost += calcCost(pricingMap, e.cliName, e.inputTokens, e.outputTokens)
+    if ((e.status === 'success' || e.status === 'failed') && e.endedAt) {
+      const proc = durationMin(e.startedAt, e.endedAt)
+      if (proc > 0) d.procTimes.push(proc)
+      if (e.issueCreatedAt) {
+        const wait = durationMin(e.issueCreatedAt, e.startedAt)
+        if (wait >= 0) d.waitTimes.push(wait)
+      }
+    }
   }
   const dailyTrend = Array.from(dayMap.entries())
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, d]) => ({ date, ...d, cost: Math.round(d.cost * 100) / 100 }))
+    .map(([date, d]) => ({
+      date,
+      tasks: d.tasks, success: d.success, failed: d.failed,
+      cost: Math.round(d.cost * 100) / 100,
+      waitAvg: d.waitTimes.length > 0 ? Math.round(d.waitTimes.reduce((a, b) => a + b, 0) / d.waitTimes.length * 10) / 10 : null,
+      procAvg: d.procTimes.length > 0 ? Math.round(d.procTimes.reduce((a, b) => a + b, 0) / d.procTimes.length * 10) / 10 : null,
+    }))
+
+  // Project trend (daily breakdown per project)
+  const projectDayMap = new Map<string, Map<string, { tasks: number; cost: number }>>()
+  for (const e of execs) {
+    const day = e.startedAt.slice(0, 10)
+    if (!projectDayMap.has(e.projectId)) projectDayMap.set(e.projectId, new Map())
+    const pMap = projectDayMap.get(e.projectId)!
+    if (!pMap.has(day)) pMap.set(day, { tasks: 0, cost: 0 })
+    const d = pMap.get(day)!
+    d.tasks++
+    d.cost += calcCost(pricingMap, e.cliName, e.inputTokens, e.outputTokens)
+  }
+  const projectTrend = Array.from(projectDayMap.entries()).map(([pid, pMap]) => {
+    const pInfo = execs.find(e => e.projectId === pid)!
+    return {
+      projectId: pid,
+      projectName: pInfo.projectName,
+      projectColor: pInfo.projectColor,
+      daily: Array.from(pMap.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([date, d]) => ({ date, tasks: d.tasks, cost: Math.round(d.cost * 100) / 100 })),
+    }
+  })
+
+  // Agent trend (daily breakdown per agent)
+  const agentDayMap = new Map<string, Map<string, { tasks: number; cost: number }>>()
+  for (const e of execs) {
+    const day = e.startedAt.slice(0, 10)
+    if (!agentDayMap.has(e.agentId)) agentDayMap.set(e.agentId, new Map())
+    const aMap = agentDayMap.get(e.agentId)!
+    if (!aMap.has(day)) aMap.set(day, { tasks: 0, cost: 0 })
+    const d = aMap.get(day)!
+    d.tasks++
+    d.cost += calcCost(pricingMap, e.cliName, e.inputTokens, e.outputTokens)
+  }
+  const agentTrend = Array.from(agentDayMap.entries()).map(([aid, aMap]) => {
+    const aInfo = execs.find(e => e.agentId === aid)!
+    return {
+      agentId: aid,
+      agentName: aInfo.agentName,
+      agentAvatar: aInfo.agentAvatar,
+      daily: Array.from(aMap.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([date, d]) => ({ date, tasks: d.tasks, cost: Math.round(d.cost * 100) / 100 })),
+    }
+  })
 
   // Resolved issues (weekly only)
   const resolvedIssues = type === 'weekly'
@@ -223,6 +283,110 @@ export async function GET(req: NextRequest) {
     uniqueIssues: execCounts.length,
   }
 
+  // 추이 분석 인사이트 생성
+  const insights: string[] = []
+  if (dailyTrend.length >= 2) {
+    const mid = Math.floor(dailyTrend.length / 2)
+    const firstHalf = dailyTrend.slice(0, mid)
+    const secondHalf = dailyTrend.slice(mid)
+    const avgArr = <T,>(arr: T[], fn: (d: T) => number) =>
+      arr.length > 0 ? arr.reduce((s, d) => s + fn(d), 0) / arr.length : 0
+
+    // 작업 건수 추이
+    const taskFirst = avgArr(firstHalf, d => d.tasks)
+    const taskSecond = avgArr(secondHalf, d => d.tasks)
+    if (taskFirst > 0) {
+      const taskChange = ((taskSecond - taskFirst) / taskFirst) * 100
+      if (Math.abs(taskChange) >= 10) {
+        insights.push(`작업 건수가 ${taskChange > 0 ? '증가' : '감소'} 추세입니다 (${taskChange > 0 ? '+' : ''}${Math.round(taskChange)}%)`)
+      }
+    }
+
+    // 비용 추이
+    const costFirst = avgArr(firstHalf, d => d.cost)
+    const costSecond = avgArr(secondHalf, d => d.cost)
+    if (costFirst > 0) {
+      const costChange = ((costSecond - costFirst) / costFirst) * 100
+      if (Math.abs(costChange) >= 10) {
+        insights.push(`비용이 ${costChange > 0 ? '증가' : '감소'} 추세입니다 (${costChange > 0 ? '+' : ''}${Math.round(costChange)}%)`)
+      }
+    }
+
+    // 대기시간 추이
+    const waitFirst = firstHalf.filter(d => d.waitAvg !== null)
+    const waitSecond = secondHalf.filter(d => d.waitAvg !== null)
+    if (waitFirst.length > 0 && waitSecond.length > 0) {
+      const wFirst = avgArr(waitFirst, d => d.waitAvg ?? 0)
+      const wSecond = avgArr(waitSecond, d => d.waitAvg ?? 0)
+      if (wFirst > 0) {
+        const wChange = ((wSecond - wFirst) / wFirst) * 100
+        if (Math.abs(wChange) >= 10) {
+          insights.push(`평균 대기시간이 ${wChange > 0 ? '늘어나고' : '줄어들고'} 있습니다 (${wChange > 0 ? '+' : ''}${Math.round(wChange)}%)`)
+        }
+      }
+    }
+
+    // 수행시간 추이
+    const procFirst = firstHalf.filter(d => d.procAvg !== null)
+    const procSecond = secondHalf.filter(d => d.procAvg !== null)
+    if (procFirst.length > 0 && procSecond.length > 0) {
+      const pFirst = avgArr(procFirst, d => d.procAvg ?? 0)
+      const pSecond = avgArr(procSecond, d => d.procAvg ?? 0)
+      if (pFirst > 0) {
+        const pChange = ((pSecond - pFirst) / pFirst) * 100
+        if (Math.abs(pChange) >= 10) {
+          insights.push(`평균 수행시간이 ${pChange > 0 ? '늘어나고' : '줄어들고'} 있습니다 (${pChange > 0 ? '+' : ''}${Math.round(pChange)}%)`)
+        }
+      }
+    }
+
+    // 성공률 추이
+    const srFirst = avgArr(firstHalf, d => d.tasks > 0 ? (d.success / d.tasks) * 100 : 0)
+    const srSecond = avgArr(secondHalf, d => d.tasks > 0 ? (d.success / d.tasks) * 100 : 0)
+    const srDiff = srSecond - srFirst
+    if (Math.abs(srDiff) >= 5) {
+      insights.push(`성공률이 ${srDiff > 0 ? '개선' : '하락'}되고 있습니다 (${srDiff > 0 ? '+' : ''}${Math.round(srDiff)}%p)`)
+    }
+
+    // 프로젝트별 주요 변화
+    for (const pt of projectTrend) {
+      if (pt.daily.length >= 2) {
+        const pMid = Math.floor(pt.daily.length / 2)
+        const pFirst = pt.daily.slice(0, pMid)
+        const pSecond = pt.daily.slice(pMid)
+        const pcFirst = avgArr(pFirst, d => d.cost)
+        const pcSecond = avgArr(pSecond, d => d.cost)
+        if (pcFirst > 0) {
+          const pcChange = ((pcSecond - pcFirst) / pcFirst) * 100
+          if (Math.abs(pcChange) >= 30) {
+            insights.push(`${pt.projectName} 프로젝트 비용이 ${pcChange > 0 ? '급증' : '급감'}했습니다 (${pcChange > 0 ? '+' : ''}${Math.round(pcChange)}%)`)
+          }
+        }
+      }
+    }
+
+    // 개발자별 주요 변화
+    for (const at of agentTrend) {
+      if (at.daily.length >= 2) {
+        const aMid = Math.floor(at.daily.length / 2)
+        const aFirst = at.daily.slice(0, aMid)
+        const aSecond = at.daily.slice(aMid)
+        const atFirst = avgArr(aFirst, d => d.tasks)
+        const atSecond = avgArr(aSecond, d => d.tasks)
+        if (atFirst > 0) {
+          const atChange = ((atSecond - atFirst) / atFirst) * 100
+          if (Math.abs(atChange) >= 30) {
+            insights.push(`${at.agentName} 작업자의 작업량이 ${atChange > 0 ? '증가' : '감소'}했습니다 (${atChange > 0 ? '+' : ''}${Math.round(atChange)}%)`)
+          }
+        }
+      }
+    }
+  }
+
+  if (insights.length === 0 && totalTasks > 0) {
+    insights.push('선택 구간 내 유의미한 변동이 없습니다. 안정적인 추세입니다.')
+  }
+
   return NextResponse.json({
     period: { start: range.start, end: range.end, type },
     summary: {
@@ -240,7 +404,10 @@ export async function GET(req: NextRequest) {
     byProject,
     byAgent,
     dailyTrend,
+    projectTrend,
+    agentTrend,
     resolvedIssues,
     lifecycle,
+    insights,
   })
 }

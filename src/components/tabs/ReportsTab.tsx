@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { DEFAULT_AVATARS } from '@/types'
 import PullToRefresh from '@/components/ui/PullToRefresh'
 import AgentAvatar from '@/components/agent/AgentAvatar'
+import Sparkline from '@/components/ui/Sparkline'
 
 const REPORT_STATE_KEY = 'ive-report-state'
 
@@ -49,7 +50,19 @@ interface AgentGlobal {
   inputTokens: number; outputTokens: number; cost: number; avgTurns: number
 }
 
-interface DailyTrend { date: string; tasks: number; success: number; failed: number; cost: number }
+interface DailyTrend { date: string; tasks: number; success: number; failed: number; cost: number; waitAvg: number | null; procAvg: number | null }
+
+interface TrendDaily { date: string; tasks: number; cost: number }
+
+interface ProjectTrend {
+  projectId: string; projectName: string; projectColor: string
+  daily: TrendDaily[]
+}
+
+interface AgentTrend {
+  agentId: string; agentName: string; agentAvatar: string
+  daily: TrendDaily[]
+}
 
 interface ResolvedIssue {
   issueIid: number; issueTitle: string; projectId: string; projectName: string; projectColor: string
@@ -70,8 +83,11 @@ interface ReportData {
   byProject: ProjectStat[]
   byAgent: AgentGlobal[]
   dailyTrend: DailyTrend[]
+  projectTrend: ProjectTrend[]
+  agentTrend: AgentTrend[]
   resolvedIssues?: ResolvedIssue[]
   lifecycle: Lifecycle
+  insights: string[]
 }
 
 type SectionSortKey = 'tasks' | 'cost'
@@ -153,6 +169,8 @@ export default function ReportsTab() {
   const [issueProjectFilter, setIssueProjectFilter] = useState<string>(() => (saved?.issueProjectFilter as string) || 'all')
   const [issueKeyword, setIssueKeyword] = useState(() => (saved?.issueKeyword as string) || '')
   const [visibleCount, setVisibleCount] = useState(20)
+  const [showInsights, setShowInsights] = useState(false)
+
   const [issueSort, setIssueSort] = useState<IssueSortKey>(() => {
     if (typeof window === 'undefined') return 'date'
     return (localStorage.getItem(SORT_KEY) as IssueSortKey) || 'date'
@@ -421,6 +439,71 @@ export default function ReportsTab() {
             </section>
           )}
 
+          {/* 대기시간/수행시간 평균 트렌드 */}
+          {data.dailyTrend.length >= 2 && (data.dailyTrend.some(d => d.waitAvg !== null) || data.dailyTrend.some(d => d.procAvg !== null)) && (
+            <section>
+              <div className="text-xs font-bold text-ive-text-dim mb-2 uppercase tracking-wider">
+                대기/수행시간 평균 트렌드
+              </div>
+              <div className="bg-ive-bg-card border border-ive-border-subtle rounded-xl p-3 space-y-3">
+                {data.dailyTrend.some(d => d.waitAvg !== null) && (() => {
+                  const waitData = data.dailyTrend.map(d => d.waitAvg ?? 0)
+                  const firstAvg = waitData.slice(0, Math.floor(waitData.length / 2))
+                  const secondAvg = waitData.slice(Math.floor(waitData.length / 2))
+                  const avg1 = firstAvg.reduce((a, b) => a + b, 0) / firstAvg.length
+                  const avg2 = secondAvg.reduce((a, b) => a + b, 0) / secondAvg.length
+                  const trendDir = avg2 > avg1 * 1.1 ? 'up' : avg2 < avg1 * 0.9 ? 'down' : 'flat'
+                  return (
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-xs font-bold text-ive-cyan">대기시간</span>
+                          <span className={`text-[10px] font-bold ${trendDir === 'up' ? 'text-ive-red' : trendDir === 'down' ? 'text-ive-green' : 'text-ive-text-dim'}`}>
+                            {trendDir === 'up' ? '증가 ↑' : trendDir === 'down' ? '감소 ↓' : '안정 →'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Sparkline data={waitData} width={120} height={24} color={trendDir === 'up' ? 'red' : trendDir === 'down' ? 'green' : 'cyan'} />
+                          <div className="text-right">
+                            <div className="text-xs font-bold text-ive-text">{formatDuration(waitData[waitData.length - 1])}</div>
+                            <div className="text-[10px] text-ive-text-dim">최근</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
+                {data.dailyTrend.some(d => d.procAvg !== null) && (() => {
+                  const procData = data.dailyTrend.map(d => d.procAvg ?? 0)
+                  const firstAvg = procData.slice(0, Math.floor(procData.length / 2))
+                  const secondAvg = procData.slice(Math.floor(procData.length / 2))
+                  const avg1 = firstAvg.reduce((a, b) => a + b, 0) / firstAvg.length
+                  const avg2 = secondAvg.reduce((a, b) => a + b, 0) / secondAvg.length
+                  const trendDir = avg2 > avg1 * 1.1 ? 'up' : avg2 < avg1 * 0.9 ? 'down' : 'flat'
+                  return (
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-xs font-bold text-ive-green">수행시간</span>
+                          <span className={`text-[10px] font-bold ${trendDir === 'up' ? 'text-ive-red' : trendDir === 'down' ? 'text-ive-green' : 'text-ive-text-dim'}`}>
+                            {trendDir === 'up' ? '증가 ↑' : trendDir === 'down' ? '감소 ↓' : '안정 →'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Sparkline data={procData} width={120} height={24} color={trendDir === 'up' ? 'red' : trendDir === 'down' ? 'green' : 'green'} />
+                          <div className="text-right">
+                            <div className="text-xs font-bold text-ive-text">{formatDuration(procData[procData.length - 1])}</div>
+                            <div className="text-[10px] text-ive-text-dim">최근</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
+              </div>
+            </section>
+          )}
+
           {/* Daily Trend */}
           {data.dailyTrend.length > 0 && (
             <section>
@@ -463,7 +546,9 @@ export default function ReportsTab() {
                 <SortButtons sortKey={projectSortKey} sortDir={projectSortDir} onToggle={(k) => toggleSectionSort(projectSortKey, projectSortDir, setProjectSortKey, setProjectSortDir, k, PROJ_SORT_KEY, PROJ_SORT_DIR)} />
               </div>
               <div className="space-y-2">
-                {sortedProjects().map(p => (
+                {sortedProjects().map(p => {
+                  const pt = data.projectTrend?.find(t => t.projectId === p.projectId)
+                  return (
                   <div key={p.projectId} className="bg-ive-bg-card border border-ive-border-subtle rounded-xl overflow-hidden">
                     <button onClick={() => toggleProject(p.projectId)} className="w-full px-3 py-2.5 flex items-center gap-2 text-left">
                       {p.projectAvatarUrl ? (
@@ -490,6 +575,22 @@ export default function ReportsTab() {
                         <div className="text-xs text-ive-text-dim mt-1 text-center">
                           입력 {formatTokens(p.inputTokens)} / 출력 {formatTokens(p.outputTokens)} 토큰
                         </div>
+                        {/* 프로젝트별 건수/비용 추이 */}
+                        {pt && pt.daily.length >= 2 && (
+                          <div className="mt-2 bg-ive-bg-deep rounded-lg p-2">
+                            <div className="text-[10px] font-bold text-ive-text-dim mb-1.5">건수/비용 추이</div>
+                            <div className="flex items-center gap-4">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] text-ive-text-dim">건수</span>
+                                <Sparkline data={pt.daily.map(d => d.tasks)} width={60} height={18} color="auto" />
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] text-ive-text-dim">비용</span>
+                                <Sparkline data={pt.daily.map(d => d.cost)} width={60} height={18} color="amber" />
+                              </div>
+                            </div>
+                          </div>
+                        )}
                         {p.byAgent.length > 0 && (
                           <div className="mt-2 space-y-1">
                             <div className="text-xs font-bold text-ive-text-dim">작업자</div>
@@ -506,7 +607,8 @@ export default function ReportsTab() {
                       </div>
                     )}
                   </div>
-                ))}
+                  )
+                })}
               </div>
             </section>
           )}
@@ -519,7 +621,9 @@ export default function ReportsTab() {
                 <SortButtons sortKey={agentSortKey} sortDir={agentSortDir} onToggle={(k) => toggleSectionSort(agentSortKey, agentSortDir, setAgentSortKey, setAgentSortDir, k, AGENT_SORT_KEY, AGENT_SORT_DIR)} />
               </div>
               <div className="space-y-2">
-                {sortedAgents().map(a => (
+                {sortedAgents().map(a => {
+                  const at = data.agentTrend?.find(t => t.agentId === a.agentId)
+                  return (
                   <div key={a.agentId} className="bg-ive-bg-card border border-ive-border-subtle rounded-xl overflow-hidden">
                     <button onClick={() => toggleAgent(a.agentId)} className="w-full px-3 py-2.5 flex items-center gap-2 text-left">
                       <AgentAvatar avatar={a.agentAvatar} size="sm" className="!w-6 !h-6 !text-sm" />
@@ -543,11 +647,61 @@ export default function ReportsTab() {
                         <div className="text-xs text-ive-text-dim mt-1 text-center">
                           입력 {formatTokens(a.inputTokens)} / 출력 {formatTokens(a.outputTokens)} 토큰
                         </div>
+                        {/* 작업자별 건수/비용 추이 */}
+                        {at && at.daily.length >= 2 && (
+                          <div className="mt-2 bg-ive-bg-deep rounded-lg p-2">
+                            <div className="text-[10px] font-bold text-ive-text-dim mb-1.5">건수/비용 추이</div>
+                            <div className="flex items-center gap-4">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] text-ive-text-dim">건수</span>
+                                <Sparkline data={at.daily.map(d => d.tasks)} width={60} height={18} color="auto" />
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] text-ive-text-dim">비용</span>
+                                <Sparkline data={at.daily.map(d => d.cost)} width={60} height={18} color="amber" />
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
-                ))}
+                  )
+                })}
               </div>
+            </section>
+          )}
+
+          {/* 추이 분석 */}
+          {data.insights && data.insights.length > 0 && (
+            <section>
+              <button
+                onClick={() => setShowInsights(v => !v)}
+                className="w-full flex items-center justify-between bg-ive-bg-card border border-ive-border-subtle rounded-xl px-3 py-2.5 hover:border-ive-cyan/30 transition-all"
+              >
+                <div className="flex items-center gap-2">
+                  <i className="fa-solid fa-lightbulb text-ive-amber text-sm" />
+                  <span className="text-xs font-bold text-ive-text">추이 분석</span>
+                  <span className="text-[10px] text-ive-text-dim">{data.insights.length}건</span>
+                </div>
+                <i className={`fa-solid fa-chevron-${showInsights ? 'up' : 'down'} text-xs text-ive-text-dim`} />
+              </button>
+              {showInsights && (
+                <div className="mt-2 bg-ive-bg-card border border-ive-border-subtle rounded-xl p-3 space-y-2">
+                  {data.insights.map((insight, i) => (
+                    <div key={i} className="flex items-start gap-2">
+                      <i className={`fa-solid ${
+                        insight.includes('증가') || insight.includes('늘어나') || insight.includes('급증') ? 'fa-arrow-trend-up text-ive-red'
+                        : insight.includes('감소') || insight.includes('줄어들') || insight.includes('급감') ? 'fa-arrow-trend-down text-ive-green'
+                        : insight.includes('개선') ? 'fa-arrow-trend-up text-ive-green'
+                        : insight.includes('하락') ? 'fa-arrow-trend-down text-ive-red'
+                        : 'fa-minus text-ive-text-dim'
+                      } text-xs mt-0.5`} />
+                      <span className="text-xs text-ive-text">{insight}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </section>
           )}
 
