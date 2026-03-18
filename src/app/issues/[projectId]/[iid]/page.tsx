@@ -6,6 +6,7 @@ import MobileTabBar from '@/components/layout/MobileTabBar'
 import { useDialog } from '@/components/ui/ConfirmDialog'
 import MRReviewSection from '@/components/mr/MRReviewSection'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 interface IssueDetail {
   iid: number
@@ -468,6 +469,7 @@ function cleanNoteBody(body: string): string {
 function MarkdownNote({ body }: { body: string }) {
   return (
     <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
       components={{
         h1: ({ children }) => <h1 className="text-base font-bold text-ive-text mt-2 mb-1">{children}</h1>,
         h2: ({ children }) => <h2 className="text-sm font-bold text-ive-text mt-2 mb-1">{children}</h2>,
@@ -489,6 +491,12 @@ function MarkdownNote({ body }: { body: string }) {
         blockquote: ({ children }) => <blockquote className="border-l-2 border-ive-border pl-2.5 my-1.5 text-ive-text-dim">{children}</blockquote>,
         a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-ive-cyan hover:underline">{children}</a>,
         hr: () => <hr className="border-ive-border-dark my-2" />,
+        table: ({ children }) => <table className="w-full border-collapse my-2 text-sm">{children}</table>,
+        thead: ({ children }) => <thead className="bg-ive-bg-deep">{children}</thead>,
+        tbody: ({ children }) => <tbody>{children}</tbody>,
+        tr: ({ children }) => <tr className="border-b border-ive-border-dark">{children}</tr>,
+        th: ({ children }) => <th className="border border-ive-border-dark px-2 py-1 text-left font-bold text-ive-text">{children}</th>,
+        td: ({ children }) => <td className="border border-ive-border-dark px-2 py-1 text-ive-text-dim">{children}</td>,
       }}
     >
       {body}
