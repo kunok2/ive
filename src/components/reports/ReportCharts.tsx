@@ -4,6 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid, ComposedChart, Line, Area, Cell,
 } from 'recharts'
+import AgentAvatar from '@/components/agent/AgentAvatar'
 
 const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토']
 
@@ -107,7 +108,7 @@ export function DailyTrendChart({ data, prevData, type }: {
 // ───────────── 프로젝트별 요약 (차트 X, 깔끔한 테이블) ─────────────
 
 interface CompareItem {
-  name: string; color: string
+  name: string; color: string; avatar?: string
   tasks: number; cost: number; prevTasks: number; prevCost: number
 }
 
@@ -135,7 +136,11 @@ export function CompareTable({ title, data, icon }: { title: string; data: Compa
         return (
           <div key={i} className="grid grid-cols-[1fr_60px_50px_60px_50px] items-center px-3 py-2 border-b border-ive-border-dark/30 last:border-b-0 hover:bg-white/[0.02]">
             <div className="flex items-center gap-1.5 min-w-0">
-              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
+              {d.avatar ? (
+                <AgentAvatar avatar={d.avatar} size="sm" className="!w-4 !h-4 !text-[8px]" />
+              ) : (
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
+              )}
               <span className="text-xs font-bold text-ive-text truncate">{d.name}</span>
             </div>
             <span className="text-xs font-extrabold text-ive-text text-right">{d.tasks}</span>
