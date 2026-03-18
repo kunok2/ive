@@ -510,6 +510,28 @@ export async function updateGitLabIssue(
 }
 
 /**
+ * MR의 파이프라인 목록을 조회합니다.
+ */
+export async function fetchGitLabMRPipelines(project: Project, decryptedToken: string, mrIid: number) {
+  const projectPath = getProjectPath(project.repoUrl);
+  if (!projectPath) return [];
+
+  const headers = getAuthHeaders(project, decryptedToken);
+
+  try {
+    const res = await fetch(
+      apiUrl(project, `/merge_requests/${mrIid}/pipelines`),
+      { headers }
+    );
+    if (!res.ok) return [];
+    return await res.json();
+  } catch (err) {
+    console.error(`[GitLab] Error fetching pipelines for MR !${mrIid}:`, err);
+    return [];
+  }
+}
+
+/**
  * 이슈를 생성합니다.
  */
 export async function createGitLabIssue(

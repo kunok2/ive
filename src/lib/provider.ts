@@ -67,6 +67,13 @@ export function mergeMR(project: Project, token: string, mrIid: number) {
     : gitlab.mergeGitLabMR(project, token, mrIid);
 }
 
+// Pipeline / Check Runs
+export function fetchMRPipelines(project: Project, token: string, mrIid: number) {
+  return project.provider === 'github'
+    ? github.fetchGitHubPRCheckRuns(project, token, mrIid)
+    : gitlab.fetchGitLabMRPipelines(project, token, mrIid);
+}
+
 // Single issue fetch (for GET /issues/[iid])
 export async function fetchSingleIssue(project: Project, iid: number, token: string) {
   if (project.provider === 'github') {

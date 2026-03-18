@@ -388,6 +388,46 @@ export async function addGitHubPRNote(project: Project, decryptedToken: string, 
 }
 
 /**
+ * PR의 커밋에 연결된 check runs (CI 상태)를 조회합니다.
+ * GitLab 파이프라인에 대응하는 GitHub 기능입니다.
+ */
+export async function fetchGitHubPRCheckRuns(project: Project, decryptedToken: string, prNumber: number) {
+  const ownerRepo = getOwnerRepo(project.repoUrl);
+  if (!ownerRepo) return [];
+
+  const headers = getGitHubAuthHeaders(project, decryptedToken);
+
+  try {
+    // PR의 최신 커밋 SHA 조회
+    const prRes = await fetch(apiUrl(project, `/pulls/${prNumber}`), { headers });
+    if (!prRes.ok) return [];
+    const prData = await prRes.json();
+    const sha = prData.head?.sha;
+    if (!sha) return [];
+
+    // 해당 커밋의 check runs 조회
+    const checksRes = await fetch(apiUrl(project, `/commits/${sha}/check-runs`), { headers });
+    if (!checksRes.ok) return [];
+    const checksData = await checksRes.json();
+
+    // GitLab 파이프라인 형식으로 변환
+    const runs = checksData.check_runs || [];
+    if (runs.length === 0) return [];
+
+    // 전체 상태 판단
+    const allCompleted = runs.every((r: any) => r.status === 'completed');
+    const anyFailed = runs.some((r: any) => r.conclusion === 'failure');
+    let status = 'running';
+    if (allCompleted) status = anyFailed ? 'failed' : 'success';
+
+    return [{ id: 0, status, web_url: prData.html_url, created_at: runs[0]?.started_at }];
+  } catch (err) {
+    console.error(`[GitHub] Error fetching check runs for PR #${prNumber}:`, err);
+    return [];
+  }
+}
+
+/**
  * 프로젝트의 IVE 관련 이슈를 모두 가져옵니다 (모든 IVE 레이블 대상).
  */
 export async function fetchAllIveIssues(project: Project, decryptedToken: string) {
