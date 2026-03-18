@@ -1,40 +1,12 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { CliName, DEFAULT_AVATARS } from '@/types'
 import { useStore } from '@/lib/store'
 import { AvatarSelector } from '@/components/agent/AgentAvatar'
 
 interface Props {
   onSuccess?: () => void
-}
-
-type OS = 'mac' | 'windows' | 'linux'
-
-function detectOS(): OS {
-  if (typeof navigator === 'undefined') return 'linux'
-  const ua = navigator.userAgent.toLowerCase()
-  if (ua.includes('win')) return 'windows'
-  if (ua.includes('mac')) return 'mac'
-  return 'linux'
-}
-
-const defaultPaths: Record<OS, Record<CliName, string>> = {
-  mac: {
-    claude: '/opt/homebrew/bin/claude',
-    gemini: '/opt/homebrew/bin/gemini',
-    codex: '/opt/homebrew/bin/codex',
-  },
-  linux: {
-    claude: '/usr/local/bin/claude',
-    gemini: '/usr/local/bin/gemini',
-    codex: '/usr/local/bin/codex',
-  },
-  windows: {
-    claude: 'C:\\Users\\%USERNAME%\\AppData\\Roaming\\npm\\claude.cmd',
-    gemini: 'C:\\Users\\%USERNAME%\\AppData\\Roaming\\npm\\gemini.cmd',
-    codex: 'C:\\Users\\%USERNAME%\\AppData\\Roaming\\npm\\codex.cmd',
-  },
 }
 
 const cliTools: { value: CliName; label: string; icon: string; desc: string; defaultName: string }[] = [
@@ -45,7 +17,6 @@ const cliTools: { value: CliName; label: string; icon: string; desc: string; def
 
 export default function AgentForm({ onSuccess }: Props) {
   const { addAgent, state } = useStore()
-  const os = useMemo(() => detectOS(), [])
   const userMaxAgents = state.user?.maxAgents || 0
   const userMaxTurns = state.user?.maxTurns || 0
   const currentAgentCount = state.agents.length
@@ -54,7 +25,7 @@ export default function AgentForm({ onSuccess }: Props) {
   const [cliName, setCliName] = useState<CliName>('claude')
   const [name, setName] = useState(cliTools[0].defaultName)
   const [avatar, setAvatar] = useState<string>(() => DEFAULT_AVATARS[Math.floor(Math.random() * DEFAULT_AVATARS.length)].id)
-  const [cliPath, setCliPath] = useState(defaultPaths[os].claude)
+  const [cliPaths, setCliPaths] = useState<Record<string, string>>({})
   const [cliVersion, setCliVersion] = useState('')
   const [maxTurns, setMaxTurns] = useState(() => userMaxTurns > 0 ? Math.floor(userMaxTurns / 2) : 200)
   const [snapshotInterval, setSnapshotInterval] = useState(1)
@@ -64,14 +35,22 @@ export default function AgentForm({ onSuccess }: Props) {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
+  useEffect(() => {
+    fetch('/api/settings/cli-paths')
+      .then(r => r.json())
+      .then(setCliPaths)
+      .catch(() => {})
+  }, [])
+
   function handleCliChange(cli: CliName) {
     setCliName(cli)
     const tool = cliTools.find(t => t.value === cli)
     if (tool) {
-      setCliPath(defaultPaths[os][cli])
       setName(tool.defaultName)
     }
   }
+
+  const currentCliPath = cliPaths[cliName] || ''
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -81,8 +60,8 @@ export default function AgentForm({ onSuccess }: Props) {
       setError('Agent 이름을 입력해주세요')
       return
     }
-    if (!cliPath.trim()) {
-      setError('CLI 설치 경로를 입력해주세요')
+    if (!currentCliPath) {
+      setError('관리자가 CLI 경로를 설정하지 않았습니다. 관리자에게 문의하세요.')
       return
     }
 
@@ -92,7 +71,7 @@ export default function AgentForm({ onSuccess }: Props) {
         name: name.trim(),
         avatar,
         cliName,
-        cliPath: cliPath.trim(),
+        cliPath: currentCliPath,
         cliVersion: cliVersion.trim(),
         maxTurns,
         status: 'available',
@@ -162,20 +141,20 @@ export default function AgentForm({ onSuccess }: Props) {
         <AvatarSelector value={avatar} onChange={setAvatar} />
       </div>
 
-      {/* CLI 설치 경로 */}
+      {/* CLI 설치 경로 (관리자 설정) */}
       <div>
         <label className="block text-base font-semibold text-ive-text-muted mb-2">
           <i className="fa-solid fa-folder mr-1" />설치 경로
         </label>
-        <input
-          type="text"
-          value={cliPath}
-          onChange={e => setCliPath(e.target.value)}
-          placeholder="/opt/homebrew/bin/claude"
-          className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-base text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green font-mono"
-        />
+        <div className="w-full bg-ive-bg-deep border border-ive-border rounded-lg px-4 py-3 text-base font-mono truncate">
+          {currentCliPath ? (
+            <span className="text-ive-text">{currentCliPath}</span>
+          ) : (
+            <span className="text-ive-text-dim">관리자 설정 필요</span>
+          )}
+        </div>
         <p className="text-sm text-ive-text-dim mt-1">
-          <i className="fa-solid fa-circle-info mr-1" />장비에 설치된 CLI 실행 파일의 전체 경로
+          <i className="fa-solid fa-shield mr-1" />관리자가 설정한 경로가 자동 적용됩니다
         </p>
       </div>
 

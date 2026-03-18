@@ -12,7 +12,8 @@ import {
   hasActiveExecution,
   countActiveExecutionsByAgent,
   updateAgentStatus,
-  getLastCompletedAt
+  getLastCompletedAt,
+  getSystemSetting
 } from "./db";
 import { decrypt } from "./crypto";
 import {
@@ -642,10 +643,12 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
 - 작업 진행 중 중요한 발견이나 질문이 있으면 이슈에 코멘트를 남기세요.
 - 작업 시작 시 간단한 착수 코멘트를 이슈에 남기세요.`;
 
-    // 5. 에이전트 CLI 실행
+    // 5. 에이전트 CLI 실행 (시스템 설정의 CLI 경로 우선 사용)
     const startTime = Date.now();
     await new Promise<void>((resolve, reject) => {
-      const cliParts = agent.cliPath.split(' ');
+      const systemCliPath = getSystemSetting(`cli.${agent.cliName}.path`);
+      const resolvedCliPath = systemCliPath || agent.cliPath;
+      const cliParts = resolvedCliPath.split(' ');
       const mainCmd = cliParts[0];
       const allowedTools = ['Read', 'Edit', 'Write', 'Grep', 'Glob', 'Bash', 'WebFetch'];
       const args = [
