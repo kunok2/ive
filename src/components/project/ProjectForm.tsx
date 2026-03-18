@@ -70,15 +70,16 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
     if (existing && showSharing) fetchShares()
   }, [existing, showSharing, fetchShares])
 
-  async function handleAddShare() {
-    if (!existing || !selectedUserId) return
+  async function handleAddShare(userId?: string) {
+    const targetId = userId || selectedUserId
+    if (!existing || !targetId) return
     setShareError('')
     setShareLoading(true)
     try {
       const res = await fetch(`/api/projects/${existing.id}/shares`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: selectedUserId, role: shareRole }),
+        body: JSON.stringify({ userId: targetId, role: shareRole }),
       })
       if (!res.ok) {
         const data = await res.json()
@@ -556,64 +557,37 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
               {/* 새 사용자 추가 */}
               {candidates.length > 0 ? (
                 <div className="space-y-2">
-                  {/* 사용자 선택 커스텀 드롭다운 */}
-                  <div className="relative">
+                  {/* 역할 선택 */}
+                  <div className="flex bg-ive-bg-input rounded-lg overflow-hidden border border-ive-border">
                     <button
                       type="button"
-                      onClick={() => setUserDropdownOpen(!userDropdownOpen)}
-                      className={`w-full flex items-center justify-between bg-ive-bg-input border rounded-lg px-3 py-2.5 text-sm text-left transition-all ${userDropdownOpen ? 'border-ive-purple' : 'border-ive-border'}`}
-                    >
-                      {selectedUserId ? (
-                        <span className="text-ive-text font-bold truncate">
-                          {candidates.find(u => u.id === selectedUserId)?.name}
-                          <span className="text-ive-text-dim font-normal ml-1.5">
-                            {candidates.find(u => u.id === selectedUserId)?.email}
-                          </span>
-                        </span>
-                      ) : (
-                        <span className="text-ive-text-dim">사용자 선택...</span>
-                      )}
-                      <i className={`fa-solid fa-chevron-down text-xs text-ive-text-dim transition-transform ${userDropdownOpen ? 'rotate-180' : ''}`} />
-                    </button>
-                    {userDropdownOpen && (
-                      <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-ive-bg-card border border-ive-border rounded-lg shadow-xl max-h-48 overflow-y-auto">
-                        {candidates.map(u => (
-                          <button
-                            key={u.id}
-                            type="button"
-                            onClick={() => { setSelectedUserId(u.id); setUserDropdownOpen(false); setShareError('') }}
-                            className={`w-full text-left px-3 py-2 text-sm hover:bg-ive-purple/10 transition-colors flex items-center gap-2 ${selectedUserId === u.id ? 'bg-ive-purple/10' : ''}`}
-                          >
-                            <i className="fa-solid fa-user-circle text-ive-text-dim" />
-                            <span className="font-bold text-ive-text truncate">{u.name}</span>
-                            <span className="text-ive-text-dim text-xs truncate">{u.email}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
+                      onClick={() => setShareRole('viewer')}
+                      className={`flex-1 py-2 text-sm font-black transition-all ${shareRole === 'viewer' ? 'bg-ive-cyan/15 text-ive-cyan' : 'text-ive-text-dim hover:text-ive-text'}`}
+                    >뷰어</button>
+                    <button
+                      type="button"
+                      onClick={() => setShareRole('editor')}
+                      className={`flex-1 py-2 text-sm font-black transition-all border-l border-ive-border ${shareRole === 'editor' ? 'bg-ive-amber/15 text-ive-amber' : 'text-ive-text-dim hover:text-ive-text'}`}
+                    >편집자</button>
                   </div>
-                  {/* 역할 선택 + 추가 버튼 */}
-                  <div className="flex gap-2">
-                    <div className="flex bg-ive-bg-input rounded-lg overflow-hidden border border-ive-border flex-1">
+                  {/* 사용자 목록 — 클릭하면 바로 추가 */}
+                  <div className="space-y-1">
+                    {candidates.map(u => (
                       <button
+                        key={u.id}
                         type="button"
-                        onClick={() => setShareRole('viewer')}
-                        className={`flex-1 py-2 text-sm font-black transition-all ${shareRole === 'viewer' ? 'bg-ive-cyan/15 text-ive-cyan' : 'text-ive-text-dim hover:text-ive-text'}`}
-                      >뷰어</button>
-                      <button
-                        type="button"
-                        onClick={() => setShareRole('editor')}
-                        className={`flex-1 py-2 text-sm font-black transition-all border-l border-ive-border ${shareRole === 'editor' ? 'bg-ive-amber/15 text-ive-amber' : 'text-ive-text-dim hover:text-ive-text'}`}
-                      >편집자</button>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleAddShare}
-                      disabled={shareLoading || !selectedUserId}
-                      className="px-4 py-2 bg-ive-purple/20 text-ive-purple border border-ive-purple/30 rounded-lg text-sm font-bold hover:bg-ive-purple/30 transition-all disabled:opacity-40"
-                    >
-                      {shareLoading ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-plus mr-1" />추가</>}
-                    </button>
+                        disabled={shareLoading}
+                        onClick={() => { setShareError(''); handleAddShare(u.id) }}
+                        className="w-full text-left px-3 py-2.5 text-sm bg-ive-bg-deep rounded-lg border border-ive-border-dark hover:border-ive-purple/40 hover:bg-ive-purple/5 transition-all flex items-center gap-2 disabled:opacity-40"
+                      >
+                        <i className="fa-solid fa-user-circle text-lg text-ive-text-dim" />
+                        <div className="flex-1 min-w-0">
+                          <span className="font-bold text-ive-text">{u.name}</span>
+                          <span className="text-ive-text-dim text-xs ml-1.5">{u.email}</span>
+                        </div>
+                        <i className="fa-solid fa-plus text-xs text-ive-purple/60" />
+                      </button>
+                    ))}
                   </div>
                 </div>
               ) : (

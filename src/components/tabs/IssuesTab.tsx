@@ -277,6 +277,8 @@ export default function IssuesTab() {
   }
 
   const selectedProject = state.projects.find(p => p.id === selectedProjectId)
+  // 소유자 또는 편집자만 이슈 추가/닫기/일괄수정 가능
+  const canEdit = selectedProject ? !selectedProject.shareRole || selectedProject.shareRole === 'editor' : false
   const bulkActions = getAvailableBulkActions()
   const stages = selectedStages()
   const [projectDropdownOpen, setProjectDropdownOpen] = useState(false)
@@ -362,7 +364,7 @@ export default function IssuesTab() {
                     <div className="text-lg font-black text-ive-green-light">{issues.length}</div>
                     <div className="text-xs text-ive-text-dim">이슈</div>
                   </div>
-                  {!bulkMode && (
+                  {canEdit && !bulkMode && (
                     <button
                       onClick={() => setShowAddForm(true)}
                       className="w-9 h-9 rounded-full bg-ive-green/20 border border-ive-green/30 flex items-center justify-center text-ive-green hover:bg-ive-green/30 transition-all"
@@ -371,7 +373,7 @@ export default function IssuesTab() {
                       <i className="fa-solid fa-plus text-sm" />
                     </button>
                   )}
-                  {issues.length > 0 && !bulkMode && (
+                  {canEdit && issues.length > 0 && !bulkMode && (
                     <button
                       onClick={() => setBulkMode(true)}
                       className="w-9 h-9 rounded-full bg-ive-bg-deep border border-ive-border-subtle flex items-center justify-center text-ive-text-dim hover:text-ive-text hover:border-ive-green/30 transition-all"
@@ -622,7 +624,7 @@ export default function IssuesTab() {
                             month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
                           })}
                         </span>
-                        {!bulkMode && (
+                        {canEdit && !bulkMode && (
                           <button
                             onClick={(e) => handleCloseIssue(e, issue.iid)}
                             disabled={closing === issue.iid}
