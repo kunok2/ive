@@ -414,6 +414,14 @@ interface SettingGroup {
 
 const SETTING_GROUPS: SettingGroup[] = [
   {
+    key: 'cli_paths', label: 'CLI 경로', icon: 'fa-solid fa-terminal',
+    fields: [
+      { key: 'cli.claude.path', label: 'Claude Code 경로', type: 'text', placeholder: '/usr/local/bin/claude' },
+      { key: 'cli.gemini.path', label: 'Gemini CLI 경로', type: 'text', placeholder: '/usr/local/bin/gemini' },
+      { key: 'cli.codex.path', label: 'Codex CLI 경로', type: 'text', placeholder: '/usr/local/bin/codex' },
+    ],
+  },
+  {
     key: 'mail', label: 'SMTP 메일', icon: 'fa-solid fa-envelope',
     fields: [
       { key: 'mail.smtp_host', label: 'SMTP 호스트', type: 'text', placeholder: 'smtp.gmail.com' },

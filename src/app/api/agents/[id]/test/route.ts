@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getAgent, updateAgent } from '@/lib/db'
+import { getAgent, updateAgent, getSystemSetting } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { execFile } from 'child_process'
 import { existsSync } from 'fs'
@@ -14,18 +14,21 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
+  // CLI 경로: 시스템 설정 우선, 없으면 에이전트 저장 경로 사용
+  const cliPath = getSystemSetting(`cli.${agent.cliName}.path`) || agent.cliPath
+
   // CLI 경로 존재 여부 확인
-  if (!existsSync(agent.cliPath)) {
+  if (!existsSync(cliPath)) {
     return NextResponse.json({
       success: false,
-      error: `CLI 파일을 찾을 수 없습니다: ${agent.cliPath}`,
+      error: `CLI 파일을 찾을 수 없습니다: ${cliPath}`,
     })
   }
 
   // CLI 버전 확인 실행
   try {
     const version = await new Promise<string>((resolve, reject) => {
-      execFile(agent.cliPath, ['--version'], { timeout: 15000 }, (err, stdout, stderr) => {
+      execFile(cliPath, ['--version'], { timeout: 15000 }, (err, stdout, stderr) => {
         if (err) {
           reject(new Error(stderr || err.message))
         } else {
