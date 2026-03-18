@@ -409,16 +409,16 @@ interface SettingGroup {
   key: string
   label: string
   icon: string
-  fields: { key: string; label: string; type: 'text' | 'password' | 'number'; placeholder?: string }[]
+  fields: { key: string; label: string; type: 'text' | 'password' | 'number'; placeholder?: string; defaultValue?: string }[]
 }
 
 const SETTING_GROUPS: SettingGroup[] = [
   {
     key: 'cli_paths', label: 'CLI 경로', icon: 'fa-solid fa-terminal',
     fields: [
-      { key: 'cli.claude.path', label: 'Claude Code 경로', type: 'text', placeholder: '/usr/local/bin/claude' },
-      { key: 'cli.gemini.path', label: 'Gemini CLI 경로', type: 'text', placeholder: '/usr/local/bin/gemini' },
-      { key: 'cli.codex.path', label: 'Codex CLI 경로', type: 'text', placeholder: '/usr/local/bin/codex' },
+      { key: 'cli.claude.path', label: 'Claude Code 경로', type: 'text', placeholder: '/usr/local/bin/claude', defaultValue: '/usr/local/bin/claude' },
+      { key: 'cli.gemini.path', label: 'Gemini CLI 경로', type: 'text', placeholder: '/usr/local/bin/gemini', defaultValue: '/usr/local/bin/gemini' },
+      { key: 'cli.codex.path', label: 'Codex CLI 경로', type: 'text', placeholder: '/usr/local/bin/codex', defaultValue: '/usr/local/bin/codex' },
     ],
   },
   {
@@ -454,7 +454,19 @@ function SettingsPanel() {
   useEffect(() => {
     fetch('/api/admin/env')
       .then(r => r.json())
-      .then(data => { setSettings(data.settings || {}); setLoading(false) })
+      .then(data => {
+        const s = data.settings || {}
+        // 기본값이 있는 필드에 값이 없으면 기본값 적용
+        for (const group of SETTING_GROUPS) {
+          for (const field of group.fields) {
+            if (field.defaultValue && !s[field.key]) {
+              s[field.key] = field.defaultValue
+            }
+          }
+        }
+        setSettings(s)
+        setLoading(false)
+      })
       .catch(() => setLoading(false))
   }, [])
 
