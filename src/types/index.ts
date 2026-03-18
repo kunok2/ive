@@ -154,6 +154,16 @@ export interface StatSnapshot {
   costUsd: number
 }
 
+export type ShareRole = 'viewer' | 'editor'
+
+export interface ProjectShare {
+  id: string
+  projectId: string
+  userId: string
+  role: ShareRole
+  createdAt: string
+}
+
 export interface TokenPricing {
   id: string
   cliName: string

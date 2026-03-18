@@ -6,6 +6,7 @@ import { DEFAULT_AVATARS } from '@/types'
 import PullToRefresh from '@/components/ui/PullToRefresh'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 import Sparkline from '@/components/ui/Sparkline'
+import { DailyTrendChart, CompareTable } from '@/components/reports/ReportCharts'
 
 const REPORT_STATE_KEY = 'ive-report-state'
 
@@ -67,7 +68,7 @@ interface AgentTrend {
 interface ResolvedIssue {
   issueIid: number; issueTitle: string; projectId: string; projectName: string; projectColor: string
   agentName: string; agentAvatar: string; status: 'success' | 'failed'; startedAt: string; durationMin: number; cost: number
-  waitMin: number | null
+  waitMin: number | null; turns: number; attempts: number
 }
 
 interface Lifecycle {
@@ -77,9 +78,27 @@ interface Lifecycle {
   avgAttempts: number; retryRate: number; uniqueIssues: number
 }
 
+interface PrevSummary {
+  totalTasks: number; successCount: number; failedCount: number
+  successRate: number; totalDurationMin: number; avgDurationMin: number; totalCost: number
+}
+interface PrevLifecycle {
+  waitAvg: number; waitCount: number
+  procAvg: number; procCount: number
+  totalAvg: number; totalCount: number
+}
+interface PrevByItem { tasks: number; cost: number }
+interface PrevDaily { date: string; tasks: number; cost: number }
+
 interface ReportData {
   period: { start: string; end: string; type: string }
+  prevPeriod: { start: string; end: string }
   summary: Summary
+  prevSummary: PrevSummary
+  prevByProject: (PrevByItem & { projectId: string; projectName: string })[]
+  prevByAgent: (PrevByItem & { agentId: string; agentName: string })[]
+  prevDailyTrend: PrevDaily[]
+  prevLifecycle: PrevLifecycle
   byProject: ProjectStat[]
   byAgent: AgentGlobal[]
   dailyTrend: DailyTrend[]
@@ -136,6 +155,17 @@ function formatPeriodLabel(type: ReportType, start: string, end: string): string
 }
 
 const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토']
+
+/** 퍼센트 변동 (이전 대비). 이전값 0이면 비교 불가 */
+function diffPct(cur: number, prev: number): number | null {
+  if (prev === 0) return null
+  return Math.round(((cur - prev) / prev) * 100)
+}
+/** 포인트 차이 (성공률 등 % 단위 비교용) */
+function diffPt(cur: number, prev: number): number | null {
+  if (prev === 0 && cur === 0) return null
+  return Math.round((cur - prev) * 10) / 10
+}
 
 export default function ReportsTab() {
   const router = useRouter()
@@ -361,17 +391,112 @@ export default function ReportsTab() {
 
       {data && !loading && (
         <main className="px-4 py-4 max-w-lg mx-auto space-y-4">
+          {/* 총평 */}
+          {(() => {
+            const s = data.summary, ps = data.prevSummary, lc = data.lifecycle, plc = data.prevLifecycle
+            const periodLabel = type === 'weekly' ? '이번 주' : type === 'monthly' ? '이번 달' : '올해'
+            const prevLabel = type === 'weekly' ? '지난주' : type === 'monthly' ? '지난달' : '작년'
+            const lines: { icon: string; color: string; text: string }[] = []
+
+            // 작업량 변화
+            if (ps.totalTasks > 0) {
+              const taskPct = Math.round(((s.totalTasks - ps.totalTasks) / ps.totalTasks) * 100)
+              if (Math.abs(taskPct) >= 5) {
+                lines.push({
+                  icon: taskPct > 0 ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down',
+                  color: taskPct > 0 ? 'text-ive-green' : 'text-ive-red',
+                  text: `${periodLabel} 작업량이 ${prevLabel} 대비 ${Math.abs(taskPct)}% ${taskPct > 0 ? '증가' : '감소'}했습니다.`,
+                })
+              } else {
+                lines.push({ icon: 'fa-equals', color: 'text-ive-text-dim', text: `${periodLabel} 작업량은 ${prevLabel}과 비슷한 수준입니다.` })
+              }
+            } else if (s.totalTasks > 0) {
+              lines.push({ icon: 'fa-sparkles', color: 'text-ive-cyan', text: `${prevLabel}에는 실행이 없었으나 ${periodLabel}에 ${s.totalTasks}건이 처리되었습니다.` })
+            }
+
+            // 비용 변화
+            if (ps.totalCost > 0) {
+              const costPct = Math.round(((s.totalCost - ps.totalCost) / ps.totalCost) * 100)
+              if (Math.abs(costPct) >= 10) {
+                lines.push({
+                  icon: costPct > 0 ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down',
+                  color: costPct > 0 ? 'text-ive-red' : 'text-ive-green',
+                  text: `비용이 ${prevLabel} 대비 ${Math.abs(costPct)}% ${costPct > 0 ? '증가' : '절감'}되었습니다. ($${ps.totalCost.toFixed(2)} → $${s.totalCost.toFixed(2)})`,
+                })
+              }
+            }
+
+            // 성공률 변화
+            if (ps.totalTasks > 0 && s.totalTasks > 0) {
+              const srDiff = s.successRate - ps.successRate
+              if (Math.abs(srDiff) >= 3) {
+                lines.push({
+                  icon: srDiff > 0 ? 'fa-circle-check' : 'fa-circle-exclamation',
+                  color: srDiff > 0 ? 'text-ive-green' : 'text-ive-red',
+                  text: `성공률이 ${prevLabel} ${ps.successRate.toFixed(0)}%에서 ${s.successRate.toFixed(0)}%로 ${srDiff > 0 ? '개선' : '하락'}했습니다.`,
+                })
+              }
+            }
+
+            // 대기시간 변화
+            if (plc.waitCount > 0 && lc.waitCount > 0 && plc.waitAvg > 0) {
+              const wPct = Math.round(((lc.waitAvg - plc.waitAvg) / plc.waitAvg) * 100)
+              if (Math.abs(wPct) >= 15) {
+                lines.push({
+                  icon: wPct > 0 ? 'fa-clock' : 'fa-bolt',
+                  color: wPct > 0 ? 'text-ive-red' : 'text-ive-green',
+                  text: `평균 대기시간이 ${prevLabel} 대비 ${Math.abs(wPct)}% ${wPct > 0 ? '늘어났습니다' : '단축되었습니다'}. (${formatDuration(plc.waitAvg)} → ${formatDuration(lc.waitAvg)})`,
+                })
+              }
+            }
+
+            // 수행시간 변화
+            if (plc.procCount > 0 && lc.procCount > 0 && plc.procAvg > 0) {
+              const pPct = Math.round(((lc.procAvg - plc.procAvg) / plc.procAvg) * 100)
+              if (Math.abs(pPct) >= 15) {
+                lines.push({
+                  icon: pPct > 0 ? 'fa-hourglass-half' : 'fa-forward-fast',
+                  color: pPct > 0 ? 'text-ive-red' : 'text-ive-green',
+                  text: `평균 수행시간이 ${prevLabel} 대비 ${Math.abs(pPct)}% ${pPct > 0 ? '늘어났습니다' : '단축되었습니다'}.`,
+                })
+              }
+            }
+
+            if (lines.length === 0 && s.totalTasks === 0) return null
+            if (lines.length === 0) {
+              lines.push({ icon: 'fa-check', color: 'text-ive-green', text: `${periodLabel}은 ${prevLabel}과 비교하여 전반적으로 안정적인 수준입니다.` })
+            }
+
+            return (
+              <section className="bg-gradient-to-r from-ive-bg-card to-ive-bg-deep border border-ive-border-subtle rounded-xl p-3">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <i className="fa-solid fa-comment-dots text-ive-amber text-sm" />
+                  <span className="text-xs font-bold text-ive-text">총평</span>
+                  <span className="text-[10px] text-ive-text-dim">vs {prevLabel}</span>
+                </div>
+                <div className="space-y-1.5">
+                  {lines.map((l, i) => (
+                    <div key={i} className="flex items-start gap-2">
+                      <i className={`fa-solid ${l.icon} ${l.color} text-xs mt-0.5 w-4 text-center shrink-0`} />
+                      <span className="text-xs text-ive-text leading-relaxed">{l.text}</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )
+          })()}
+
           {/* Summary Cards */}
           <section>
             <div className="text-xs font-bold text-ive-text-dim mb-2 uppercase tracking-wider">전체 요약</div>
             <div className="grid grid-cols-3 gap-2">
-              <SummaryCard label="작업" value={`${data.summary.totalTasks}건`} sub={`성공 ${data.summary.successCount}`} color="text-ive-green" />
-              <SummaryCard label="성공률" value={`${data.summary.successRate}%`} sub={`실패 ${data.summary.failedCount}`} color="text-ive-cyan" />
-              <SummaryCard label="비용" value={`$${data.summary.totalCost.toFixed(2)}`} sub={`${formatTokens(data.summary.totalInputTokens + data.summary.totalOutputTokens)} tok`} color="text-ive-amber" />
+              <SummaryCard label="작업" value={`${data.summary.totalTasks}건`} sub={`성공 ${data.summary.successCount}`} color="text-ive-green" diff={diffPct(data.summary.totalTasks, data.prevSummary.totalTasks)} />
+              <SummaryCard label="성공률" value={`${data.summary.successRate}%`} sub={`실패 ${data.summary.failedCount}`} color="text-ive-cyan" diff={diffPt(data.summary.successRate, data.prevSummary.successRate)} />
+              <SummaryCard label="비용" value={`$${data.summary.totalCost.toFixed(2)}`} sub={`${formatTokens(data.summary.totalInputTokens + data.summary.totalOutputTokens)} tok`} color="text-ive-amber" diff={diffPct(data.summary.totalCost, data.prevSummary.totalCost)} invertColor />
             </div>
             <div className="mt-2 grid grid-cols-2 gap-2">
-              <SummaryCard label="총 소요시간" value={formatDuration(data.summary.totalDurationMin)} sub="" color="text-ive-text" />
-              <SummaryCard label="평균 소요시간" value={formatDuration(data.summary.avgDurationMin)} sub="" color="text-ive-text" />
+              <SummaryCard label="총 소요시간" value={formatDuration(data.summary.totalDurationMin)} sub="" color="text-ive-text" diff={diffPct(data.summary.totalDurationMin, data.prevSummary.totalDurationMin)} invertColor />
+              <SummaryCard label="평균 소요시간" value={formatDuration(data.summary.avgDurationMin)} sub="" color="text-ive-text" diff={diffPct(data.summary.avgDurationMin, data.prevSummary.avgDurationMin)} invertColor />
             </div>
           </section>
 
@@ -380,11 +505,21 @@ export default function ReportsTab() {
             <section>
               <div className="text-xs font-bold text-ive-text-dim mb-2 uppercase tracking-wider">이슈 생애주기</div>
               <div className="bg-ive-bg-card border border-ive-border-subtle rounded-xl p-3 space-y-3">
-                {/* 단계별 평균/최대 */}
+                {/* 단계별 평균/최대 + 이전 비교 */}
                 {(() => {
                   const hasWait = data.lifecycle.waitCount > 0
                   const hasTotal = data.lifecycle.totalCount > 0
                   const cols = 1 + (hasWait ? 1 : 0) + (hasTotal ? 1 : 0)
+                  const prev = data.prevLifecycle
+                  const waitDiff = diffPct(data.lifecycle.waitAvg, prev.waitAvg)
+                  const procDiff = diffPct(data.lifecycle.procAvg, prev.procAvg)
+                  const totalDiff = diffPct(data.lifecycle.totalAvg, prev.totalAvg)
+                  const DiffBadge = ({ diff, isNew }: { diff: number | null; isNew?: boolean }) => {
+                    if (isNew) return <span className="text-[9px] font-bold px-1 py-0.5 rounded text-ive-cyan bg-ive-cyan/10">NEW</span>
+                    if (diff == null) return null
+                    const color = diff > 0 ? 'text-ive-red bg-ive-red/10' : diff < 0 ? 'text-ive-green bg-ive-green/10' : 'text-ive-text-dim bg-white/5'
+                    return <span className={`text-[9px] font-bold px-1 py-0.5 rounded ${color}`}>{diff > 0 ? '+' : ''}{diff}%</span>
+                  }
                   return (
                     <div className={`grid gap-2 ${cols === 3 ? 'grid-cols-3' : cols === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
                       {hasWait && (
@@ -392,18 +527,30 @@ export default function ReportsTab() {
                           <div className="text-[10px] text-ive-text-dim">생성→배정</div>
                           <div className="text-sm font-extrabold text-ive-cyan">{formatDuration(data.lifecycle.waitAvg)}</div>
                           <div className="text-[10px] text-ive-text-dim">최대 {formatDuration(data.lifecycle.waitMax)}</div>
+                          <div className="mt-0.5">
+                            <DiffBadge diff={waitDiff} isNew={waitDiff == null && data.lifecycle.waitCount > 0 && prev.waitCount === 0} />
+                            {prev.waitCount > 0 && <div className="text-[9px] text-ive-text-dim mt-0.5">이전 {formatDuration(prev.waitAvg)}</div>}
+                          </div>
                         </div>
                       )}
                       <div className="text-center">
                         <div className="text-[10px] text-ive-text-dim">처리시간</div>
                         <div className="text-sm font-extrabold text-ive-green">{formatDuration(data.lifecycle.procAvg)}</div>
                         <div className="text-[10px] text-ive-text-dim">최대 {formatDuration(data.lifecycle.procMax)}</div>
+                        <div className="mt-0.5">
+                          <DiffBadge diff={procDiff} isNew={procDiff == null && data.lifecycle.procCount > 0 && prev.procCount === 0} />
+                          {prev.procCount > 0 && <div className="text-[9px] text-ive-text-dim mt-0.5">이전 {formatDuration(prev.procAvg)}</div>}
+                        </div>
                       </div>
                       {hasTotal && (
                         <div className="text-center">
                           <div className="text-[10px] text-ive-text-dim">총 소요</div>
                           <div className="text-sm font-extrabold text-ive-text">{formatDuration(data.lifecycle.totalAvg)}</div>
                           <div className="text-[10px] text-ive-text-dim">최대 {formatDuration(data.lifecycle.totalMax)}</div>
+                          <div className="mt-0.5">
+                            <DiffBadge diff={totalDiff} isNew={totalDiff == null && data.lifecycle.totalCount > 0 && prev.totalCount === 0} />
+                            {prev.totalCount > 0 && <div className="text-[9px] text-ive-text-dim mt-0.5">이전 {formatDuration(prev.totalAvg)}</div>}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -447,12 +594,14 @@ export default function ReportsTab() {
               </div>
               <div className="bg-ive-bg-card border border-ive-border-subtle rounded-xl p-3 space-y-3">
                 {data.dailyTrend.some(d => d.waitAvg !== null) && (() => {
-                  const waitData = data.dailyTrend.map(d => d.waitAvg ?? 0)
-                  const firstAvg = waitData.slice(0, Math.floor(waitData.length / 2))
-                  const secondAvg = waitData.slice(Math.floor(waitData.length / 2))
-                  const avg1 = firstAvg.reduce((a, b) => a + b, 0) / firstAvg.length
-                  const avg2 = secondAvg.reduce((a, b) => a + b, 0) / secondAvg.length
+                  const waitData = data.dailyTrend.map(d => d.tasks === null ? null : (d.waitAvg ?? 0))
+                  const validWait = waitData.filter((v): v is number => v !== null)
+                  const firstAvg = validWait.slice(0, Math.floor(validWait.length / 2))
+                  const secondAvg = validWait.slice(Math.floor(validWait.length / 2))
+                  const avg1 = firstAvg.length > 0 ? firstAvg.reduce((a, b) => a + b, 0) / firstAvg.length : 0
+                  const avg2 = secondAvg.length > 0 ? secondAvg.reduce((a, b) => a + b, 0) / secondAvg.length : 0
                   const trendDir = avg2 > avg1 * 1.1 ? 'up' : avg2 < avg1 * 0.9 ? 'down' : 'flat'
+                  const prevDiff = diffPct(data.lifecycle.waitAvg, data.prevLifecycle.waitAvg)
                   return (
                     <div className="flex items-center gap-3">
                       <div className="flex-1">
@@ -461,25 +610,43 @@ export default function ReportsTab() {
                           <span className={`text-[10px] font-bold ${trendDir === 'up' ? 'text-ive-red' : trendDir === 'down' ? 'text-ive-green' : 'text-ive-text-dim'}`}>
                             {trendDir === 'up' ? '증가 ↑' : trendDir === 'down' ? '감소 ↓' : '안정 →'}
                           </span>
+                          {prevDiff != null && (
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${prevDiff > 0 ? 'text-ive-red bg-ive-red/10' : prevDiff < 0 ? 'text-ive-green bg-ive-green/10' : 'text-ive-text-dim bg-white/5'}`}>
+                              vs 이전 {prevDiff > 0 ? '+' : ''}{prevDiff}%
+                            </span>
+                          )}
+                          {prevDiff == null && data.lifecycle.waitCount > 0 && data.prevLifecycle.waitCount === 0 && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded text-ive-cyan bg-ive-cyan/10">NEW</span>
+                          )}
                         </div>
                         <div className="flex items-center gap-2">
-                          <Sparkline data={waitData} width={120} height={24} color={trendDir === 'up' ? 'red' : trendDir === 'down' ? 'green' : 'cyan'} />
-                          <div className="text-right">
-                            <div className="text-xs font-bold text-ive-text">{formatDuration(waitData[waitData.length - 1])}</div>
+                          <div className="flex-1 min-w-0">
+                            <Sparkline data={waitData} width="100%" height={24} color={trendDir === 'up' ? 'red' : trendDir === 'down' ? 'green' : 'cyan'} />
+                          </div>
+                          <div className="text-right shrink-0">
+                            <div className="text-xs font-bold text-ive-text">{formatDuration(validWait[validWait.length - 1] ?? 0)}</div>
                             <div className="text-[10px] text-ive-text-dim">최근</div>
                           </div>
+                          {data.prevLifecycle.waitCount > 0 && (
+                            <div className="text-right shrink-0 ml-1">
+                              <div className="text-xs font-bold text-ive-text-dim">{formatDuration(data.prevLifecycle.waitAvg)}</div>
+                              <div className="text-[10px] text-ive-text-dim">이전 평균</div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
                   )
                 })()}
                 {data.dailyTrend.some(d => d.procAvg !== null) && (() => {
-                  const procData = data.dailyTrend.map(d => d.procAvg ?? 0)
-                  const firstAvg = procData.slice(0, Math.floor(procData.length / 2))
-                  const secondAvg = procData.slice(Math.floor(procData.length / 2))
-                  const avg1 = firstAvg.reduce((a, b) => a + b, 0) / firstAvg.length
-                  const avg2 = secondAvg.reduce((a, b) => a + b, 0) / secondAvg.length
+                  const procData = data.dailyTrend.map(d => d.tasks === null ? null : (d.procAvg ?? 0))
+                  const validProc = procData.filter((v): v is number => v !== null)
+                  const firstAvg = validProc.slice(0, Math.floor(validProc.length / 2))
+                  const secondAvg = validProc.slice(Math.floor(validProc.length / 2))
+                  const avg1 = firstAvg.length > 0 ? firstAvg.reduce((a, b) => a + b, 0) / firstAvg.length : 0
+                  const avg2 = secondAvg.length > 0 ? secondAvg.reduce((a, b) => a + b, 0) / secondAvg.length : 0
                   const trendDir = avg2 > avg1 * 1.1 ? 'up' : avg2 < avg1 * 0.9 ? 'down' : 'flat'
+                  const prevDiff = diffPct(data.lifecycle.procAvg, data.prevLifecycle.procAvg)
                   return (
                     <div className="flex items-center gap-3">
                       <div className="flex-1">
@@ -488,13 +655,29 @@ export default function ReportsTab() {
                           <span className={`text-[10px] font-bold ${trendDir === 'up' ? 'text-ive-red' : trendDir === 'down' ? 'text-ive-green' : 'text-ive-text-dim'}`}>
                             {trendDir === 'up' ? '증가 ↑' : trendDir === 'down' ? '감소 ↓' : '안정 →'}
                           </span>
+                          {prevDiff != null && (
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${prevDiff > 0 ? 'text-ive-red bg-ive-red/10' : prevDiff < 0 ? 'text-ive-green bg-ive-green/10' : 'text-ive-text-dim bg-white/5'}`}>
+                              vs 이전 {prevDiff > 0 ? '+' : ''}{prevDiff}%
+                            </span>
+                          )}
+                          {prevDiff == null && data.lifecycle.procCount > 0 && data.prevLifecycle.procCount === 0 && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded text-ive-cyan bg-ive-cyan/10">NEW</span>
+                          )}
                         </div>
                         <div className="flex items-center gap-2">
-                          <Sparkline data={procData} width={120} height={24} color={trendDir === 'up' ? 'red' : trendDir === 'down' ? 'green' : 'green'} />
-                          <div className="text-right">
-                            <div className="text-xs font-bold text-ive-text">{formatDuration(procData[procData.length - 1])}</div>
+                          <div className="flex-1 min-w-0">
+                            <Sparkline data={procData} width="100%" height={24} color={trendDir === 'up' ? 'red' : trendDir === 'down' ? 'green' : 'green'} />
+                          </div>
+                          <div className="text-right shrink-0">
+                            <div className="text-xs font-bold text-ive-text">{formatDuration(validProc[validProc.length - 1] ?? 0)}</div>
                             <div className="text-[10px] text-ive-text-dim">최근</div>
                           </div>
+                          {data.prevLifecycle.procCount > 0 && (
+                            <div className="text-right shrink-0 ml-1">
+                              <div className="text-xs font-bold text-ive-text-dim">{formatDuration(data.prevLifecycle.procAvg)}</div>
+                              <div className="text-[10px] text-ive-text-dim">이전 평균</div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -504,37 +687,41 @@ export default function ReportsTab() {
             </section>
           )}
 
-          {/* Daily Trend */}
+          {/* 일별 종합 트렌드 (건수 바 + 비용 라인 + 이전 기간) */}
           {data.dailyTrend.length > 0 && (
             <section>
               <div className="text-xs font-bold text-ive-text-dim mb-2 uppercase tracking-wider">
                 {type === 'yearly' ? '월별' : '일별'} 추이
               </div>
-              <div className="bg-ive-bg-card border border-ive-border-subtle rounded-xl p-3">
-                {data.dailyTrend.map(d => {
-                  const maxTasks = Math.max(...data.dailyTrend.map(x => x.tasks), 1)
-                  const dt = new Date(d.date)
-                  const label = type === 'yearly'
-                    ? `${dt.getMonth() + 1}월`
-                    : type === 'weekly'
-                      ? DAY_LABELS[dt.getDay()]
-                      : `${dt.getDate()}`
-                  return (
-                    <div key={d.date} className="flex items-center gap-2 py-0.5">
-                      <span className="text-xs text-ive-text-dim w-6 text-right shrink-0">{label}</span>
-                      <div className="flex-1 h-4 bg-ive-bg-deep rounded overflow-hidden relative">
-                        {d.success > 0 && (
-                          <div className="absolute left-0 top-0 h-full bg-ive-green/60 rounded-l" style={{ width: `${(d.success / maxTasks) * 100}%` }} />
-                        )}
-                        {d.failed > 0 && (
-                          <div className="absolute top-0 h-full bg-ive-red/60" style={{ left: `${(d.success / maxTasks) * 100}%`, width: `${(d.failed / maxTasks) * 100}%` }} />
-                        )}
-                      </div>
-                      <span className="text-xs font-bold text-ive-text w-6 text-right shrink-0">{d.tasks}</span>
-                    </div>
-                  )
+              <DailyTrendChart data={data.dailyTrend} prevData={data.prevDailyTrend} type={type} />
+            </section>
+          )}
+
+          {/* 프로젝트별 비교 */}
+          {data.byProject.length > 0 && (
+            <section>
+              <CompareTable
+                title="프로젝트별"
+                icon="fa-folder"
+                data={data.byProject.map(p => {
+                  const prev = data.prevByProject?.find(pp => pp.projectId === p.projectId)
+                  return { name: p.projectName, color: p.projectColor, tasks: p.tasks, cost: p.cost, prevTasks: prev?.tasks ?? 0, prevCost: prev?.cost ?? 0 }
                 })}
-              </div>
+              />
+            </section>
+          )}
+
+          {/* 작업자별 비교 */}
+          {data.byAgent.length > 0 && (
+            <section>
+              <CompareTable
+                title="작업자별"
+                icon="fa-robot"
+                data={data.byAgent.map(a => {
+                  const prev = data.prevByAgent?.find(pa => pa.agentId === a.agentId)
+                  return { name: a.agentName, color: '#22d3ee', tasks: a.tasks, cost: a.cost, prevTasks: prev?.tasks ?? 0, prevCost: prev?.cost ?? 0 }
+                })}
+              />
             </section>
           )}
 
@@ -548,6 +735,9 @@ export default function ReportsTab() {
               <div className="space-y-2">
                 {sortedProjects().map(p => {
                   const pt = data.projectTrend?.find(t => t.projectId === p.projectId)
+                  const prev = data.prevByProject?.find(pp => pp.projectId === p.projectId)
+                  const taskDiff = diffPct(p.tasks, prev?.tasks ?? 0)
+                  const costDiff = diffPct(p.cost, prev?.cost ?? 0)
                   return (
                   <div key={p.projectId} className="bg-ive-bg-card border border-ive-border-subtle rounded-xl overflow-hidden">
                     <button onClick={() => toggleProject(p.projectId)} className="w-full px-3 py-2.5 flex items-center gap-2 text-left">
@@ -558,7 +748,9 @@ export default function ReportsTab() {
                       )}
                       <span className="text-sm font-bold text-ive-text flex-1 truncate">{p.projectName}</span>
                       <span className="text-xs text-ive-text-dim">{p.tasks}건</span>
+                      {taskDiff != null && <span className={`text-[10px] font-bold ${taskDiff > 0 ? 'text-ive-green' : taskDiff < 0 ? 'text-ive-red' : 'text-ive-text-dim'}`}>{taskDiff > 0 ? '+' : ''}{taskDiff}%</span>}
                       <span className="text-xs text-ive-amber">${p.cost.toFixed(2)}</span>
+                      {costDiff != null && <span className={`text-[10px] font-bold ${costDiff > 0 ? 'text-ive-red' : costDiff < 0 ? 'text-ive-green' : 'text-ive-text-dim'}`}>{costDiff > 0 ? '+' : ''}{costDiff}%</span>}
                       <i className={`fa-solid fa-chevron-${expandedProjects.has(p.projectId) ? 'up' : 'down'} text-xs text-ive-text-dim`} />
                     </button>
                     {expandedProjects.has(p.projectId) && (
@@ -579,14 +771,14 @@ export default function ReportsTab() {
                         {pt && pt.daily.length >= 2 && (
                           <div className="mt-2 bg-ive-bg-deep rounded-lg p-2">
                             <div className="text-[10px] font-bold text-ive-text-dim mb-1.5">건수/비용 추이</div>
-                            <div className="flex items-center gap-4">
+                            <div className="grid grid-cols-2 gap-2">
                               <div className="flex items-center gap-1.5">
-                                <span className="text-[10px] text-ive-text-dim">건수</span>
-                                <Sparkline data={pt.daily.map(d => d.tasks)} width={60} height={18} color="auto" />
+                                <span className="text-[10px] text-ive-text-dim shrink-0">건수</span>
+                                <Sparkline data={pt.daily.map(d => d.tasks)} width={100} height={20} color="auto" />
                               </div>
                               <div className="flex items-center gap-1.5">
-                                <span className="text-[10px] text-ive-text-dim">비용</span>
-                                <Sparkline data={pt.daily.map(d => d.cost)} width={60} height={18} color="amber" />
+                                <span className="text-[10px] text-ive-text-dim shrink-0">비용</span>
+                                <Sparkline data={pt.daily.map(d => d.cost)} width={100} height={20} color="amber" />
                               </div>
                             </div>
                           </div>
@@ -623,13 +815,18 @@ export default function ReportsTab() {
               <div className="space-y-2">
                 {sortedAgents().map(a => {
                   const at = data.agentTrend?.find(t => t.agentId === a.agentId)
+                  const prev = data.prevByAgent?.find(pa => pa.agentId === a.agentId)
+                  const taskDiff = diffPct(a.tasks, prev?.tasks ?? 0)
+                  const costDiff = diffPct(a.cost, prev?.cost ?? 0)
                   return (
                   <div key={a.agentId} className="bg-ive-bg-card border border-ive-border-subtle rounded-xl overflow-hidden">
                     <button onClick={() => toggleAgent(a.agentId)} className="w-full px-3 py-2.5 flex items-center gap-2 text-left">
                       <AgentAvatar avatar={a.agentAvatar} size="sm" className="!w-6 !h-6 !text-sm" />
                       <span className="text-sm font-bold text-ive-text flex-1 truncate">{a.agentName}</span>
                       <span className="text-xs text-ive-text-dim">{a.tasks}건</span>
+                      {taskDiff != null && <span className={`text-[10px] font-bold ${taskDiff > 0 ? 'text-ive-green' : taskDiff < 0 ? 'text-ive-red' : 'text-ive-text-dim'}`}>{taskDiff > 0 ? '+' : ''}{taskDiff}%</span>}
                       <span className="text-xs text-ive-amber">${a.cost.toFixed(2)}</span>
+                      {costDiff != null && <span className={`text-[10px] font-bold ${costDiff > 0 ? 'text-ive-red' : costDiff < 0 ? 'text-ive-green' : 'text-ive-text-dim'}`}>{costDiff > 0 ? '+' : ''}{costDiff}%</span>}
                       <i className={`fa-solid fa-chevron-${expandedAgents.has(a.agentId) ? 'up' : 'down'} text-xs text-ive-text-dim`} />
                     </button>
                     {expandedAgents.has(a.agentId) && (
@@ -651,14 +848,14 @@ export default function ReportsTab() {
                         {at && at.daily.length >= 2 && (
                           <div className="mt-2 bg-ive-bg-deep rounded-lg p-2">
                             <div className="text-[10px] font-bold text-ive-text-dim mb-1.5">건수/비용 추이</div>
-                            <div className="flex items-center gap-4">
+                            <div className="grid grid-cols-2 gap-2">
                               <div className="flex items-center gap-1.5">
-                                <span className="text-[10px] text-ive-text-dim">건수</span>
-                                <Sparkline data={at.daily.map(d => d.tasks)} width={60} height={18} color="auto" />
+                                <span className="text-[10px] text-ive-text-dim shrink-0">건수</span>
+                                <Sparkline data={at.daily.map(d => d.tasks)} width={100} height={20} color="auto" />
                               </div>
                               <div className="flex items-center gap-1.5">
-                                <span className="text-[10px] text-ive-text-dim">비용</span>
-                                <Sparkline data={at.daily.map(d => d.cost)} width={60} height={18} color="amber" />
+                                <span className="text-[10px] text-ive-text-dim shrink-0">비용</span>
+                                <Sparkline data={at.daily.map(d => d.cost)} width={100} height={20} color="amber" />
                               </div>
                             </div>
                           </div>
@@ -815,6 +1012,12 @@ export default function ReportsTab() {
                           )}
                           <span>{formatDuration(issue.durationMin)}</span>
                           <span className="text-ive-amber">${issue.cost.toFixed(2)}</span>
+                          {issue.turns > 0 && (
+                            <span className="text-ive-text-dim">{issue.turns}턴</span>
+                          )}
+                          {issue.attempts > 1 && (
+                            <span className="text-ive-red">{issue.attempts}회 시도</span>
+                          )}
                         </div>
                       </div>
                       <i className="fa-solid fa-chevron-right text-xs text-ive-text-dim mt-1 shrink-0" />
@@ -849,12 +1052,25 @@ export default function ReportsTab() {
   )
 }
 
-function SummaryCard({ label, value, sub, color }: { label: string; value: string; sub: string; color: string }) {
+function SummaryCard({ label, value, sub, color, diff, invertColor }: {
+  label: string; value: string; sub: string; color: string
+  diff?: number | null; invertColor?: boolean
+}) {
+  const diffColor = diff == null ? '' : invertColor
+    ? (diff > 0 ? 'text-ive-red' : diff < 0 ? 'text-ive-green' : 'text-ive-text-dim')
+    : (diff > 0 ? 'text-ive-green' : diff < 0 ? 'text-ive-red' : 'text-ive-text-dim')
   return (
     <div className="bg-ive-bg-card border border-ive-border-subtle rounded-xl px-3 py-2 text-center">
       <div className="text-xs text-ive-text-dim">{label}</div>
       <div className={`text-lg font-extrabold ${color}`}>{value}</div>
-      {sub && <div className="text-xs text-ive-text-dim">{sub}</div>}
+      <div className="flex items-center justify-center gap-1">
+        {sub && <span className="text-xs text-ive-text-dim">{sub}</span>}
+        {diff != null && (
+          <span className={`text-[10px] font-bold ${diffColor}`}>
+            {diff > 0 ? '+' : ''}{diff}%
+          </span>
+        )}
+      </div>
     </div>
   )
 }

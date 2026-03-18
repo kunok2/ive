@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3'
 import path from 'path'
 import bcrypt from 'bcryptjs'
-import { User, Project, Agent, ProjectAssignment, TaskExecution, TaskStatus, StatSnapshot, TokenPricing } from '@/types'
+import { User, Project, Agent, ProjectAssignment, TaskExecution, TaskStatus, StatSnapshot, TokenPricing, ProjectShare, ShareRole } from '@/types'
 import { startScanner } from './scanner'
 
 declare global {
@@ -117,6 +117,17 @@ function initSchema(db: Database.Database) {
       input_price REAL NOT NULL,
       output_price REAL NOT NULL,
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS project_shares (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'viewer' CHECK(role IN ('viewer', 'editor')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE(project_id, user_id)
     );
 
     -- 레거시 테이블 유지 (데이터 보존, 참조하지 않음)
@@ -800,6 +811,61 @@ export function upsertTokenPricing(p: TokenPricing) {
   `).run(p.id, p.cliName, p.modelName, p.inputPrice, p.outputPrice, p.updatedAt)
 }
 
+// ── Project Shares (프로젝트 공유) ──
+
+export function getProjectShares(projectId: string): (ProjectShare & { userName: string; userEmail: string })[] {
+  const rows = getDb().prepare(`
+    SELECT ps.*, u.name as user_name, u.email as user_email
+    FROM project_shares ps
+    JOIN users u ON ps.user_id = u.id
+    WHERE ps.project_id = ?
+    ORDER BY ps.created_at ASC
+  `).all(projectId) as any[]
+  return rows.map(r => ({
+    id: r.id, projectId: r.project_id, userId: r.user_id,
+    role: r.role as ShareRole, createdAt: r.created_at,
+    userName: r.user_name, userEmail: r.user_email,
+  }))
+}
+
+export function getSharedProjectsForUser(userId: string): (Project & { shareRole: ShareRole })[] {
+  const rows = getDb().prepare(`
+    SELECT p.*, ps.role as share_role
+    FROM project_shares ps
+    JOIN projects p ON ps.project_id = p.id
+    WHERE ps.user_id = ?
+    ORDER BY p.name ASC
+  `).all(userId) as any[]
+  return rows.map(r => ({ ...mapProject(r as ProjectRow), shareRole: r.share_role as ShareRole }))
+}
+
+export function getProjectShareRole(projectId: string, userId: string): ShareRole | null {
+  const r = getDb().prepare('SELECT role FROM project_shares WHERE project_id = ? AND user_id = ?').get(projectId, userId) as { role: string } | undefined
+  return r ? r.role as ShareRole : null
+}
+
+export function createProjectShare(share: ProjectShare) {
+  getDb().prepare(
+    'INSERT INTO project_shares (id, project_id, user_id, role, created_at) VALUES (?, ?, ?, ?, ?)'
+  ).run(share.id, share.projectId, share.userId, share.role, share.createdAt)
+}
+
+export function updateProjectShareRole(id: string, role: ShareRole) {
+  getDb().prepare('UPDATE project_shares SET role = ? WHERE id = ?').run(role, id)
+}
+
+export function deleteProjectShare(id: string) {
+  getDb().prepare('DELETE FROM project_shares WHERE id = ?').run(id)
+}
+
+/** 프로젝트 접근 권한 확인: 소유자이면 'owner', 공유 사용자이면 해당 role, 아니면 null */
+export function getProjectAccess(projectId: string, userId: string): 'owner' | ShareRole | null {
+  const project = getProject(projectId)
+  if (!project) return null
+  if (project.userId === userId) return 'owner'
+  return getProjectShareRole(projectId, userId)
+}
+
 // ── Reports ──
 
 export interface ReportExecution {
@@ -834,9 +900,10 @@ export function getExecutionsInRange(userId: string, start: string, end: string)
     FROM task_executions te
     JOIN projects p ON p.id = te.project_id
     JOIN agents a ON a.id = te.agent_id
-    WHERE p.user_id = ? AND te.started_at >= ? AND te.started_at < ?
+    WHERE (p.user_id = ? OR EXISTS (SELECT 1 FROM project_shares ps WHERE ps.project_id = p.id AND ps.user_id = ?))
+      AND te.started_at >= ? AND te.started_at < ?
     ORDER BY te.started_at ASC
-  `).all(userId, start, end) as any[]
+  `).all(userId, userId, start, end) as any[]
   return rows.map(r => ({
     id: r.id, projectId: r.project_id, projectName: r.project_name,
     projectColor: r.project_color, projectAvatarUrl: r.project_avatar_url || '',

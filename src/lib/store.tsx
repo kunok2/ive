@@ -5,6 +5,7 @@ import { User, Project, Agent, ProjectAssignment } from '@/types'
 
 interface ProjectWithAgents extends Project {
   assignedAgents: (ProjectAssignment & { agent: Agent })[]
+  shareRole?: string | null  // null=소유자, 'viewer', 'editor'
 }
 
 interface State {
@@ -25,7 +26,8 @@ type Action =
 function reducer(state: State, action: Action): State {
   switch (action.type) {
     case 'SET_USER':
-      return { ...state, user: action.user, authChecked: true }
+      // 비로그인이면 loading도 해제
+      return { ...state, user: action.user, authChecked: true, loading: action.user ? state.loading : false }
     case 'SET_PROJECTS':
       return { ...state, projects: action.projects, loading: false }
     case 'SET_AGENTS':
@@ -41,7 +43,7 @@ function reducer(state: State, action: Action): State {
 
 const StoreContext = createContext<{
   state: State
-  refreshUser: () => Promise<void>
+  refreshUser: () => Promise<User | null>
   refresh: () => Promise<void>
   logout: () => Promise<void>
   addProject: (p: Omit<Project, 'id' | 'userId' | 'createdAt'>) => Promise<void>
@@ -58,7 +60,7 @@ const StoreContext = createContext<{
   scanProjectNow: (id: string) => Promise<void>
 }>({
   state: { user: null, projects: [], agents: [], loading: true, authChecked: false },
-  refreshUser: async () => {},
+  refreshUser: async () => null,
   refresh: async () => {},
   logout: async () => {},
   addProject: async () => {},
@@ -84,13 +86,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     authChecked: false,
   })
 
-  const refreshUser = useCallback(async () => {
+  const refreshUser = useCallback(async (): Promise<User | null> => {
     const res = await fetch('/api/auth/me')
     if (res.ok) {
-      const user = await res.json()
+      const data = await res.json()
+      const user = data.user === null ? null : (data.id ? data : null)
       dispatch({ type: 'SET_USER', user })
+      return user
     } else {
       dispatch({ type: 'SET_USER', user: null })
+      return null
     }
   }, [])
 
@@ -119,6 +124,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'SET_USER', user: null })
     dispatch({ type: 'SET_PROJECTS', projects: [] })
     dispatch({ type: 'SET_AGENTS', agents: [] })
+    // 세션 캐시 제거
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('issues-cache')
+      sessionStorage.removeItem('issues-scroll')
+    }
   }, [])
 
   const userRef = useRef(state.user)
@@ -127,9 +137,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [state.user])
 
   useEffect(() => {
-    refreshUser().then(() => {
-      refresh()
-      refreshAgents()
+    refreshUser().then((user) => {
+      if (user) {
+        dispatch({ type: 'SET_LOADING', loading: true })
+        refresh()
+        refreshAgents()
+      }
     })
 
     // 10초마다 데이터 자동 갱신 (스캐너 상태 등 반영)

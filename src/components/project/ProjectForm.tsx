@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Project, PROJECT_COLORS, ProjectColor, detectProvider } from '@/types'
+import { Project, PROJECT_COLORS, ProjectColor, detectProvider, ShareRole } from '@/types'
 import { useStore } from '@/lib/store'
 
 interface Props {
@@ -37,6 +37,79 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
   const [avatarUrl, setAvatarUrl] = useState(existing?.avatarUrl ?? '')
   const [testStatus, setTestStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [testResult, setTestResult] = useState<{ name?: string; fullPath?: string; defaultBranch?: string; openIssuesCount?: number; avatarUrl?: string; error?: string } | null>(null)
+
+  // 프로젝트 공유
+  const [showSharing, setShowSharing] = useState(false)
+  const [shares, setShares] = useState<{ id: string; userId: string; userName: string; userEmail: string; role: ShareRole; createdAt: string }[]>([])
+  const [candidates, setCandidates] = useState<{ id: string; name: string; email: string }[]>([])
+  const [selectedUserId, setSelectedUserId] = useState('')
+  const [shareRole, setShareRole] = useState<ShareRole>('viewer')
+  const [userDropdownOpen, setUserDropdownOpen] = useState(false)
+  const [shareError, setShareError] = useState('')
+  const [shareLoading, setShareLoading] = useState(false)
+
+  const fetchShares = useCallback(async () => {
+    if (!existing) return
+    try {
+      const res = await fetch(`/api/projects/${existing.id}/shares`)
+      if (res.ok) {
+        const data = await res.json()
+        setShares(data.shares)
+        setCandidates(data.candidates)
+      }
+    } catch { /* ignore */ }
+  }, [existing])
+
+  // 초기 진입 시 공유 수 로드
+  useEffect(() => {
+    if (existing) fetchShares()
+  }, [existing, fetchShares])
+
+  // 패널 열릴 때 최신 데이터 갱신
+  useEffect(() => {
+    if (existing && showSharing) fetchShares()
+  }, [existing, showSharing, fetchShares])
+
+  async function handleAddShare() {
+    if (!existing || !selectedUserId) return
+    setShareError('')
+    setShareLoading(true)
+    try {
+      const res = await fetch(`/api/projects/${existing.id}/shares`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: selectedUserId, role: shareRole }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        setShareError(data.error || '공유 추가 실패')
+      } else {
+        setSelectedUserId('')
+        fetchShares()
+      }
+    } catch { setShareError('서버 오류') }
+    finally { setShareLoading(false) }
+  }
+
+  async function handleRemoveShare(shareId: string) {
+    if (!existing) return
+    await fetch(`/api/projects/${existing.id}/shares`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ shareId }),
+    })
+    fetchShares()
+  }
+
+  async function handleChangeShareRole(shareId: string, role: ShareRole) {
+    if (!existing) return
+    await fetch(`/api/projects/${existing.id}/shares`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ shareId, role }),
+    })
+    fetchShares()
+  }
 
   async function handleTestConnection() {
     if (!repoUrl.trim()) return
@@ -89,11 +162,9 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
       labelDone: labelDone.trim(),
       showToolUsage,
       checkInterval: Number(checkInterval) || 10,
-      lastCheckedAt: null,
-      lastScannedIssueCount: null,
-      scannerActive: false,
-      lastError: null,
-      lastErrorAt: null,
+      ...(existing
+        ? {}
+        : { lastCheckedAt: null, lastScannedIssueCount: null, scannerActive: false, lastError: null, lastErrorAt: null }),
       sortOrder: existing?.sortOrder ?? 0,
       avatarUrl,
       snapshotInterval,
@@ -428,6 +499,137 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
           </div>
         )}
       </div>
+
+      {/* 프로젝트 공유 (기존 프로젝트만) */}
+      {existing && (
+        <div className="border-t border-ive-border-dark pt-2">
+          <button
+            type="button"
+            onClick={() => setShowSharing(!showSharing)}
+            className="flex items-center gap-1.5 text-base font-bold text-ive-purple mb-3"
+          >
+            <i className={`fa-solid ${showSharing ? 'fa-chevron-down' : 'fa-chevron-right'} text-sm`} />
+            <i className="fa-solid fa-share-nodes mr-0.5" />
+            프로젝트 공유
+            {shares.length > 0 && <span className="text-xs font-black bg-ive-purple/20 text-ive-purple px-1.5 py-0.5 rounded-full">{shares.length}</span>}
+          </button>
+
+          {showSharing && (
+            <div className="space-y-3 pb-2 animate-in fade-in slide-in-from-top-2">
+              {/* 공유 사용자 목록 */}
+              {shares.length > 0 && (
+                <div className="space-y-2">
+                  {shares.map(s => (
+                    <div key={s.id} className="flex items-center gap-2 bg-ive-bg-deep rounded-lg px-3 py-2 border border-ive-border-dark">
+                      <i className="fa-solid fa-user-circle text-lg text-ive-text-dim" />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-bold text-ive-text truncate">{s.userName}</div>
+                        <div className="text-xs text-ive-text-dim truncate">{s.userEmail}</div>
+                      </div>
+                      <div className="flex bg-ive-bg-input rounded-lg overflow-hidden border border-ive-border">
+                        <button
+                          type="button"
+                          onClick={() => handleChangeShareRole(s.id, 'viewer')}
+                          className={`px-2 py-1 text-xs font-black transition-all ${s.role === 'viewer' ? 'bg-ive-cyan/15 text-ive-cyan' : 'text-ive-text-dim hover:text-ive-text'}`}
+                        >뷰어</button>
+                        <button
+                          type="button"
+                          onClick={() => handleChangeShareRole(s.id, 'editor')}
+                          className={`px-2 py-1 text-xs font-black transition-all border-l border-ive-border ${s.role === 'editor' ? 'bg-ive-amber/15 text-ive-amber' : 'text-ive-text-dim hover:text-ive-text'}`}
+                        >편집자</button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveShare(s.id)}
+                        className="text-ive-red/60 hover:text-ive-red transition-colors p-1"
+                        title="공유 해제"
+                      >
+                        <i className="fa-solid fa-xmark" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* 새 사용자 추가 */}
+              {candidates.length > 0 ? (
+                <div className="space-y-2">
+                  {/* 사용자 선택 커스텀 드롭다운 */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setUserDropdownOpen(!userDropdownOpen)}
+                      className={`w-full flex items-center justify-between bg-ive-bg-input border rounded-lg px-3 py-2.5 text-sm text-left transition-all ${userDropdownOpen ? 'border-ive-purple' : 'border-ive-border'}`}
+                    >
+                      {selectedUserId ? (
+                        <span className="text-ive-text font-bold truncate">
+                          {candidates.find(u => u.id === selectedUserId)?.name}
+                          <span className="text-ive-text-dim font-normal ml-1.5">
+                            {candidates.find(u => u.id === selectedUserId)?.email}
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="text-ive-text-dim">사용자 선택...</span>
+                      )}
+                      <i className={`fa-solid fa-chevron-down text-xs text-ive-text-dim transition-transform ${userDropdownOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    {userDropdownOpen && (
+                      <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-ive-bg-card border border-ive-border rounded-lg shadow-xl max-h-48 overflow-y-auto">
+                        {candidates.map(u => (
+                          <button
+                            key={u.id}
+                            type="button"
+                            onClick={() => { setSelectedUserId(u.id); setUserDropdownOpen(false); setShareError('') }}
+                            className={`w-full text-left px-3 py-2 text-sm hover:bg-ive-purple/10 transition-colors flex items-center gap-2 ${selectedUserId === u.id ? 'bg-ive-purple/10' : ''}`}
+                          >
+                            <i className="fa-solid fa-user-circle text-ive-text-dim" />
+                            <span className="font-bold text-ive-text truncate">{u.name}</span>
+                            <span className="text-ive-text-dim text-xs truncate">{u.email}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {/* 역할 선택 + 추가 버튼 */}
+                  <div className="flex gap-2">
+                    <div className="flex bg-ive-bg-input rounded-lg overflow-hidden border border-ive-border flex-1">
+                      <button
+                        type="button"
+                        onClick={() => setShareRole('viewer')}
+                        className={`flex-1 py-2 text-sm font-black transition-all ${shareRole === 'viewer' ? 'bg-ive-cyan/15 text-ive-cyan' : 'text-ive-text-dim hover:text-ive-text'}`}
+                      >뷰어</button>
+                      <button
+                        type="button"
+                        onClick={() => setShareRole('editor')}
+                        className={`flex-1 py-2 text-sm font-black transition-all border-l border-ive-border ${shareRole === 'editor' ? 'bg-ive-amber/15 text-ive-amber' : 'text-ive-text-dim hover:text-ive-text'}`}
+                      >편집자</button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddShare}
+                      disabled={shareLoading || !selectedUserId}
+                      className="px-4 py-2 bg-ive-purple/20 text-ive-purple border border-ive-purple/30 rounded-lg text-sm font-bold hover:bg-ive-purple/30 transition-all disabled:opacity-40"
+                    >
+                      {shareLoading ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-plus mr-1" />추가</>}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-ive-text-dim">
+                  <i className="fa-solid fa-users-slash mr-1" />추가할 수 있는 사용자가 없습니다
+                </p>
+              )}
+              {shareError && (
+                <p className="text-xs text-ive-red font-bold"><i className="fa-solid fa-circle-exclamation mr-1" />{shareError}</p>
+              )}
+              <p className="text-xs text-ive-text-dim">
+                <i className="fa-solid fa-info-circle mr-1" />
+                <b>뷰어</b>: 프로젝트 현황·보고서 조회만 가능 / <b>편집자</b>: 작업 생성도 가능
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 버튼 */}
       <button

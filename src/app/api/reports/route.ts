@@ -27,6 +27,33 @@ function getYearRange(date: Date): { start: string; end: string } {
   return { start: `${y}-01-01`, end: `${y + 1}-01-01` }
 }
 
+/** 기간 내 모든 버킷 키를 생성 (yearly→월별, 그 외→일별) */
+function periodKeys(start: string, end: string, type: string): string[] {
+  const keys: string[] = []
+  if (type === 'yearly') {
+    // 월별: 2026-01, 2026-02, ...
+    const s = new Date(start), e = new Date(end)
+    const cur = new Date(s.getFullYear(), s.getMonth(), 1)
+    while (cur < e) {
+      keys.push(cur.toISOString().slice(0, 7)) // YYYY-MM
+      cur.setMonth(cur.getMonth() + 1)
+    }
+  } else {
+    // 일별
+    const cur = new Date(start), e = new Date(end)
+    while (cur < e) {
+      keys.push(cur.toISOString().slice(0, 10))
+      cur.setDate(cur.getDate() + 1)
+    }
+  }
+  return keys
+}
+
+/** 날짜 → 버킷 키 변환 */
+function toBucketKey(dateStr: string, type: string): string {
+  return type === 'yearly' ? dateStr.slice(0, 7) : dateStr.slice(0, 10)
+}
+
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -41,7 +68,24 @@ export async function GET(req: NextRequest) {
   else if (type === 'yearly') range = getYearRange(date)
   else range = getWeekRange(date)
 
+  // 이전 기간 계산
+  let prevRange: { start: string; end: string }
+  if (type === 'monthly') {
+    const pm = new Date(date)
+    pm.setMonth(pm.getMonth() - 1)
+    prevRange = getMonthRange(pm)
+  } else if (type === 'yearly') {
+    const py = new Date(date)
+    py.setFullYear(py.getFullYear() - 1)
+    prevRange = getYearRange(py)
+  } else {
+    const pw = new Date(date)
+    pw.setDate(pw.getDate() - 7)
+    prevRange = getWeekRange(pw)
+  }
+
   const execs = getExecutionsInRange(user.id, range.start, range.end)
+  const prevExecs = getExecutionsInRange(user.id, prevRange.start, prevRange.end)
   const pricingList = getAllTokenPricing()
   const pricingMap: Record<string, { input: number; output: number }> = {}
   for (const p of pricingList) {
@@ -66,6 +110,55 @@ export async function GET(req: NextRequest) {
   const totalOutputTokens = execs.reduce((s, e) => s + e.outputTokens, 0)
   const totalCost = execs.reduce((s, e) => s + calcCost(pricingMap, e.cliName, e.inputTokens, e.outputTokens), 0)
   const successRate = totalTasks > 0 ? (successCount / (successCount + failedCount || 1)) * 100 : 0
+
+  // 이전 기간 요약
+  const prevTotalTasks = prevExecs.length
+  const prevSuccessCount = prevExecs.filter(e => e.status === 'success').length
+  const prevFailedCount = prevExecs.filter(e => e.status === 'failed').length
+  const prevTotalDurationMin = prevExecs.reduce((s, e) => s + durationMin(e.startedAt, e.endedAt), 0)
+  const prevFinished = prevSuccessCount + prevFailedCount
+  const prevTotalCost = prevExecs.reduce((s, e) => s + calcCost(pricingMap, e.cliName, e.inputTokens, e.outputTokens), 0)
+  const prevSuccessRate = prevTotalTasks > 0 ? (prevSuccessCount / (prevFinished || 1)) * 100 : 0
+
+  // 이전 기간 프로젝트별
+  const prevProjectMap = new Map<string, typeof prevExecs>()
+  for (const e of prevExecs) {
+    if (!prevProjectMap.has(e.projectId)) prevProjectMap.set(e.projectId, [])
+    prevProjectMap.get(e.projectId)!.push(e)
+  }
+  const prevByProject = Array.from(prevProjectMap.entries()).map(([pid, pExecs]) => ({
+    projectId: pid, projectName: pExecs[0].projectName,
+    tasks: pExecs.length,
+    cost: Math.round(pExecs.reduce((s, e) => s + calcCost(pricingMap, e.cliName, e.inputTokens, e.outputTokens), 0) * 100) / 100,
+  }))
+
+  // 이전 기간 작업자별
+  const prevAgentMap = new Map<string, typeof prevExecs>()
+  for (const e of prevExecs) {
+    if (!prevAgentMap.has(e.agentId)) prevAgentMap.set(e.agentId, [])
+    prevAgentMap.get(e.agentId)!.push(e)
+  }
+  const prevByAgent = Array.from(prevAgentMap.entries()).map(([aid, aExecs]) => ({
+    agentId: aid, agentName: aExecs[0].agentName,
+    tasks: aExecs.length,
+    cost: Math.round(aExecs.reduce((s, e) => s + calcCost(pricingMap, e.cliName, e.inputTokens, e.outputTokens), 0) * 100) / 100,
+  }))
+
+  // 이전 기간 일별 트렌드 — 전체 기간 버킷 채움
+  const prevAllKeys = periodKeys(prevRange.start, prevRange.end, type)
+  const prevDayMap = new Map<string, { tasks: number; cost: number }>()
+  for (const key of prevAllKeys) prevDayMap.set(key, { tasks: 0, cost: 0 })
+  for (const e of prevExecs) {
+    const key = toBucketKey(e.startedAt, type)
+    if (!prevDayMap.has(key)) prevDayMap.set(key, { tasks: 0, cost: 0 })
+    const d = prevDayMap.get(key)!
+    d.tasks++
+    d.cost += calcCost(pricingMap, e.cliName, e.inputTokens, e.outputTokens)
+  }
+  const prevDailyTrend = prevAllKeys.map(key => {
+    const d = prevDayMap.get(key)!
+    return { date: key, tasks: d.tasks, cost: Math.round(d.cost * 100) / 100 }
+  })
 
   // By project
   const projectMap = new Map<string, typeof execs>()
@@ -140,12 +233,16 @@ export async function GET(req: NextRequest) {
     }
   })
 
-  // Daily trend (extended with waitAvg, procAvg)
-  const dayMap = new Map<string, { tasks: number; success: number; failed: number; cost: number; waitTimes: number[]; procTimes: number[] }>()
+  // Daily trend (extended with waitAvg, procAvg) — 전체 기간 버킷 채움
+  const allKeys = periodKeys(range.start, range.end, type)
+  const todayKey = toBucketKey(new Date().toISOString(), type)
+  type BucketData = { tasks: number; success: number; failed: number; cost: number; waitTimes: number[]; procTimes: number[] }
+  const dayMap = new Map<string, BucketData>()
+  for (const key of allKeys) dayMap.set(key, { tasks: 0, success: 0, failed: 0, cost: 0, waitTimes: [], procTimes: [] })
   for (const e of execs) {
-    const day = e.startedAt.slice(0, 10)
-    if (!dayMap.has(day)) dayMap.set(day, { tasks: 0, success: 0, failed: 0, cost: 0, waitTimes: [], procTimes: [] })
-    const d = dayMap.get(day)!
+    const key = toBucketKey(e.startedAt, type)
+    if (!dayMap.has(key)) dayMap.set(key, { tasks: 0, success: 0, failed: 0, cost: 0, waitTimes: [], procTimes: [] })
+    const d = dayMap.get(key)!
     d.tasks++
     if (e.status === 'success') d.success++
     if (e.status === 'failed') d.failed++
@@ -159,24 +256,32 @@ export async function GET(req: NextRequest) {
       }
     }
   }
-  const dailyTrend = Array.from(dayMap.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, d]) => ({
-      date,
-      tasks: d.tasks, success: d.success, failed: d.failed,
-      cost: Math.round(d.cost * 100) / 100,
-      waitAvg: d.waitTimes.length > 0 ? Math.round(d.waitTimes.reduce((a, b) => a + b, 0) / d.waitTimes.length * 10) / 10 : null,
-      procAvg: d.procTimes.length > 0 ? Math.round(d.procTimes.reduce((a, b) => a + b, 0) / d.procTimes.length * 10) / 10 : null,
-    }))
+  const dailyTrend = allKeys.map(key => {
+    const isFuture = key > todayKey
+    const d = dayMap.get(key)!
+    return {
+      date: key,
+      tasks: isFuture ? null : d.tasks,
+      success: isFuture ? null : d.success,
+      failed: isFuture ? null : d.failed,
+      cost: isFuture ? null : Math.round(d.cost * 100) / 100,
+      waitAvg: isFuture ? null : (d.waitTimes.length > 0 ? Math.round(d.waitTimes.reduce((a, b) => a + b, 0) / d.waitTimes.length * 10) / 10 : null),
+      procAvg: isFuture ? null : (d.procTimes.length > 0 ? Math.round(d.procTimes.reduce((a, b) => a + b, 0) / d.procTimes.length * 10) / 10 : null),
+    }
+  })
 
-  // Project trend (daily breakdown per project)
+  // Project trend (daily breakdown per project) — 전체 기간 버킷 채움
   const projectDayMap = new Map<string, Map<string, { tasks: number; cost: number }>>()
   for (const e of execs) {
-    const day = e.startedAt.slice(0, 10)
-    if (!projectDayMap.has(e.projectId)) projectDayMap.set(e.projectId, new Map())
+    const key = toBucketKey(e.startedAt, type)
+    if (!projectDayMap.has(e.projectId)) {
+      const m = new Map<string, { tasks: number; cost: number }>()
+      for (const k of allKeys) m.set(k, { tasks: 0, cost: 0 })
+      projectDayMap.set(e.projectId, m)
+    }
     const pMap = projectDayMap.get(e.projectId)!
-    if (!pMap.has(day)) pMap.set(day, { tasks: 0, cost: 0 })
-    const d = pMap.get(day)!
+    if (!pMap.has(key)) pMap.set(key, { tasks: 0, cost: 0 })
+    const d = pMap.get(key)!
     d.tasks++
     d.cost += calcCost(pricingMap, e.cliName, e.inputTokens, e.outputTokens)
   }
@@ -186,20 +291,26 @@ export async function GET(req: NextRequest) {
       projectId: pid,
       projectName: pInfo.projectName,
       projectColor: pInfo.projectColor,
-      daily: Array.from(pMap.entries())
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([date, d]) => ({ date, tasks: d.tasks, cost: Math.round(d.cost * 100) / 100 })),
+      daily: allKeys.map(key => {
+        const isFuture = key > todayKey
+        const d = pMap.get(key) ?? { tasks: 0, cost: 0 }
+        return { date: key, tasks: isFuture ? null : d.tasks, cost: isFuture ? null : Math.round(d.cost * 100) / 100 }
+      }),
     }
   })
 
-  // Agent trend (daily breakdown per agent)
+  // Agent trend (daily breakdown per agent) — 전체 기간 버킷 채움
   const agentDayMap = new Map<string, Map<string, { tasks: number; cost: number }>>()
   for (const e of execs) {
-    const day = e.startedAt.slice(0, 10)
-    if (!agentDayMap.has(e.agentId)) agentDayMap.set(e.agentId, new Map())
+    const key = toBucketKey(e.startedAt, type)
+    if (!agentDayMap.has(e.agentId)) {
+      const m = new Map<string, { tasks: number; cost: number }>()
+      for (const k of allKeys) m.set(k, { tasks: 0, cost: 0 })
+      agentDayMap.set(e.agentId, m)
+    }
     const aMap = agentDayMap.get(e.agentId)!
-    if (!aMap.has(day)) aMap.set(day, { tasks: 0, cost: 0 })
-    const d = aMap.get(day)!
+    if (!aMap.has(key)) aMap.set(key, { tasks: 0, cost: 0 })
+    const d = aMap.get(key)!
     d.tasks++
     d.cost += calcCost(pricingMap, e.cliName, e.inputTokens, e.outputTokens)
   }
@@ -209,13 +320,21 @@ export async function GET(req: NextRequest) {
       agentId: aid,
       agentName: aInfo.agentName,
       agentAvatar: aInfo.agentAvatar,
-      daily: Array.from(aMap.entries())
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([date, d]) => ({ date, tasks: d.tasks, cost: Math.round(d.cost * 100) / 100 })),
+      daily: allKeys.map(key => {
+        const isFuture = key > todayKey
+        const d = aMap.get(key) ?? { tasks: 0, cost: 0 }
+        return { date: key, tasks: isFuture ? null : d.tasks, cost: isFuture ? null : Math.round(d.cost * 100) / 100 }
+      }),
     }
   })
 
   // Resolved issues (weekly only)
+  // 이슈별 실행 횟수 (attempts) 계산
+  const issueAttemptMap = new Map<string, number>()
+  for (const e of execs) {
+    const key = `${e.projectId}:${e.issueIid}`
+    issueAttemptMap.set(key, (issueAttemptMap.get(key) || 0) + 1)
+  }
   const resolvedIssues = type === 'weekly'
     ? execs
       .filter(e => e.status === 'success' || e.status === 'failed')
@@ -234,6 +353,8 @@ export async function GET(req: NextRequest) {
         waitMin: e.issueCreatedAt
           ? Math.round(durationMin(e.issueCreatedAt, e.startedAt) * 10) / 10
           : null,
+        turns: e.turns,
+        attempts: issueAttemptMap.get(`${e.projectId}:${e.issueIid}`) || 1,
       }))
     : undefined
 
@@ -283,18 +404,42 @@ export async function GET(req: NextRequest) {
     uniqueIssues: execCounts.length,
   }
 
-  // 추이 분석 인사이트 생성
+  // 이전 기간 생애주기 집계
+  const prevFinishedExecs = prevExecs.filter(e => (e.status === 'success' || e.status === 'failed') && e.endedAt)
+  const prevWaitTimes = prevFinishedExecs
+    .filter(e => e.issueCreatedAt)
+    .map(e => durationMin(e.issueCreatedAt!, e.startedAt))
+    .filter(v => v >= 0)
+  const prevProcTimes = prevFinishedExecs
+    .map(e => durationMin(e.startedAt, e.endedAt!))
+    .filter(v => v > 0)
+  const prevTotalTimes = prevFinishedExecs
+    .filter(e => e.issueCreatedAt)
+    .map(e => durationMin(e.issueCreatedAt!, e.endedAt!))
+    .filter(v => v >= 0)
+
+  const prevLifecycle = {
+    waitAvg: round1(avg(prevWaitTimes)),
+    waitCount: prevWaitTimes.length,
+    procAvg: round1(avg(prevProcTimes)),
+    procCount: prevProcTimes.length,
+    totalAvg: round1(avg(prevTotalTimes)),
+    totalCount: prevTotalTimes.length,
+  }
+
+  // 추이 분석 인사이트 생성 (미래 버킷 제외)
+  const pastTrend = dailyTrend.filter(d => d.tasks !== null)
   const insights: string[] = []
-  if (dailyTrend.length >= 2) {
-    const mid = Math.floor(dailyTrend.length / 2)
-    const firstHalf = dailyTrend.slice(0, mid)
-    const secondHalf = dailyTrend.slice(mid)
+  if (pastTrend.length >= 2) {
+    const mid = Math.floor(pastTrend.length / 2)
+    const firstHalf = pastTrend.slice(0, mid)
+    const secondHalf = pastTrend.slice(mid)
     const avgArr = <T,>(arr: T[], fn: (d: T) => number) =>
       arr.length > 0 ? arr.reduce((s, d) => s + fn(d), 0) / arr.length : 0
 
     // 작업 건수 추이
-    const taskFirst = avgArr(firstHalf, d => d.tasks)
-    const taskSecond = avgArr(secondHalf, d => d.tasks)
+    const taskFirst = avgArr(firstHalf, d => d.tasks!)
+    const taskSecond = avgArr(secondHalf, d => d.tasks!)
     if (taskFirst > 0) {
       const taskChange = ((taskSecond - taskFirst) / taskFirst) * 100
       if (Math.abs(taskChange) >= 10) {
@@ -303,8 +448,8 @@ export async function GET(req: NextRequest) {
     }
 
     // 비용 추이
-    const costFirst = avgArr(firstHalf, d => d.cost)
-    const costSecond = avgArr(secondHalf, d => d.cost)
+    const costFirst = avgArr(firstHalf, d => d.cost!)
+    const costSecond = avgArr(secondHalf, d => d.cost!)
     if (costFirst > 0) {
       const costChange = ((costSecond - costFirst) / costFirst) * 100
       if (Math.abs(costChange) >= 10) {
@@ -341,8 +486,8 @@ export async function GET(req: NextRequest) {
     }
 
     // 성공률 추이
-    const srFirst = avgArr(firstHalf, d => d.tasks > 0 ? (d.success / d.tasks) * 100 : 0)
-    const srSecond = avgArr(secondHalf, d => d.tasks > 0 ? (d.success / d.tasks) * 100 : 0)
+    const srFirst = avgArr(firstHalf, d => d.tasks! > 0 ? (d.success! / d.tasks!) * 100 : 0)
+    const srSecond = avgArr(secondHalf, d => d.tasks! > 0 ? (d.success! / d.tasks!) * 100 : 0)
     const srDiff = srSecond - srFirst
     if (Math.abs(srDiff) >= 5) {
       insights.push(`성공률이 ${srDiff > 0 ? '개선' : '하락'}되고 있습니다 (${srDiff > 0 ? '+' : ''}${Math.round(srDiff)}%p)`)
@@ -350,12 +495,13 @@ export async function GET(req: NextRequest) {
 
     // 프로젝트별 주요 변화
     for (const pt of projectTrend) {
-      if (pt.daily.length >= 2) {
-        const pMid = Math.floor(pt.daily.length / 2)
-        const pFirst = pt.daily.slice(0, pMid)
-        const pSecond = pt.daily.slice(pMid)
-        const pcFirst = avgArr(pFirst, d => d.cost)
-        const pcSecond = avgArr(pSecond, d => d.cost)
+      const pastDaily = pt.daily.filter(d => d.tasks !== null)
+      if (pastDaily.length >= 2) {
+        const pMid = Math.floor(pastDaily.length / 2)
+        const pFirst = pastDaily.slice(0, pMid)
+        const pSecond = pastDaily.slice(pMid)
+        const pcFirst = avgArr(pFirst, d => d.cost!)
+        const pcSecond = avgArr(pSecond, d => d.cost!)
         if (pcFirst > 0) {
           const pcChange = ((pcSecond - pcFirst) / pcFirst) * 100
           if (Math.abs(pcChange) >= 30) {
@@ -367,12 +513,13 @@ export async function GET(req: NextRequest) {
 
     // 개발자별 주요 변화
     for (const at of agentTrend) {
-      if (at.daily.length >= 2) {
-        const aMid = Math.floor(at.daily.length / 2)
-        const aFirst = at.daily.slice(0, aMid)
-        const aSecond = at.daily.slice(aMid)
-        const atFirst = avgArr(aFirst, d => d.tasks)
-        const atSecond = avgArr(aSecond, d => d.tasks)
+      const pastDaily = at.daily.filter(d => d.tasks !== null)
+      if (pastDaily.length >= 2) {
+        const aMid = Math.floor(pastDaily.length / 2)
+        const aFirst = pastDaily.slice(0, aMid)
+        const aSecond = pastDaily.slice(aMid)
+        const atFirst = avgArr(aFirst, d => d.tasks!)
+        const atSecond = avgArr(aSecond, d => d.tasks!)
         if (atFirst > 0) {
           const atChange = ((atSecond - atFirst) / atFirst) * 100
           if (Math.abs(atChange) >= 30) {
@@ -389,6 +536,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     period: { start: range.start, end: range.end, type },
+    prevPeriod: { start: prevRange.start, end: prevRange.end },
     summary: {
       totalTasks,
       successCount,
@@ -401,6 +549,19 @@ export async function GET(req: NextRequest) {
       totalOutputTokens,
       totalCost: Math.round(totalCost * 100) / 100,
     },
+    prevSummary: {
+      totalTasks: prevTotalTasks,
+      successCount: prevSuccessCount,
+      failedCount: prevFailedCount,
+      successRate: Math.round(prevSuccessRate * 10) / 10,
+      totalDurationMin: Math.round(prevTotalDurationMin * 10) / 10,
+      avgDurationMin: prevFinished > 0 ? Math.round((prevTotalDurationMin / prevFinished) * 10) / 10 : 0,
+      totalCost: Math.round(prevTotalCost * 100) / 100,
+    },
+    prevByProject,
+    prevByAgent,
+    prevDailyTrend,
+    prevLifecycle,
     byProject,
     byAgent,
     dailyTrend,

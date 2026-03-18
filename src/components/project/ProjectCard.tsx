@@ -16,7 +16,7 @@ function formatTokens(n: number): string {
 }
 
 interface Props {
-  project: Project & { assignedAgents?: (ProjectAssignment & { agent: Agent })[] }
+  project: Project & { assignedAgents?: (ProjectAssignment & { agent: Agent })[]; shareRole?: string | null }
 }
 
 interface ProjectStats {
@@ -32,6 +32,7 @@ interface ProjectStats {
 
 export default function ProjectCard({ project }: Props) {
   const agentCount = project.assignedAgents?.length ?? 0
+  const isOwner = !project.shareRole
   const { updateProject, scanProjectNow } = useStore()
   const { alert: showAlert } = useDialog()
   const [scanning, setScanning] = useState(false)
@@ -50,10 +51,6 @@ export default function ProjectCard({ project }: Props) {
   const [executions, setExecutions] = useState<TaskExecution[]>([])
   const [killing, setKilling] = useState<string | null>(null)
   const [waitingIssues, setWaitingIssues] = useState<any[]>([])
-
-  const [timeLeft, setTimeLeft] = useState<{ text: string; percent: number; displayValue: string; unit: string }>({
-    text: '대기 중', percent: 0, displayValue: '-', unit: ''
-  })
 
   const fetchStats = useCallback(async () => {
     try {
@@ -106,41 +103,6 @@ export default function ProjectCard({ project }: Props) {
     return () => clearInterval(timer)
   }, [expandedPanel, project.id])
 
-  useEffect(() => {
-    function calculateStatus() {
-      if (!project.scannerActive) {
-        setTimeLeft({ text: '일시정지', percent: 0, displayValue: 'PAUSE', unit: '' })
-        return
-      }
-      if (!project.lastCheckedAt) {
-        setTimeLeft({ text: '대기 중', percent: 0, displayValue: '-', unit: '' })
-        return
-      }
-      const now = new Date()
-      const last = new Date(project.lastCheckedAt)
-      const intervalMs = project.checkInterval * 60 * 1000
-      const elapsedMs = now.getTime() - last.getTime()
-      if (elapsedMs >= intervalMs) {
-        setTimeLeft({ text: '곧 실행', percent: 100, displayValue: '0', unit: 's' })
-        return
-      }
-      const remainingMs = Math.max(0, intervalMs - elapsedMs)
-      const percent = Math.min(100, Math.max(0, (elapsedMs / intervalMs) * 100))
-      let displayValue = '', unit = '', bottomText = ''
-      if (remainingMs < 60 * 1000) {
-        displayValue = Math.ceil(remainingMs / 1000).toString(); unit = 's'; bottomText = `${displayValue}초 남음`
-      } else if (remainingMs < 60 * 60 * 1000) {
-        displayValue = Math.ceil(remainingMs / (60 * 1000)).toString(); unit = 'm'; bottomText = `${displayValue}분 남음`
-      } else {
-        displayValue = Math.ceil(remainingMs / (60 * 60 * 1000)).toString(); unit = 'h'; bottomText = `${displayValue}시간 남음`
-      }
-      setTimeLeft({ text: bottomText, percent, displayValue, unit })
-    }
-    calculateStatus()
-    const timer = setInterval(calculateStatus, 1000)
-    return () => clearInterval(timer)
-  }, [project.lastCheckedAt, project.checkInterval, project.scannerActive])
-
   const toggleScanner = async (e: React.MouseEvent) => {
     e.preventDefault(); e.stopPropagation()
     await updateProject({ ...project, scannerActive: !project.scannerActive, lastCheckedAt: !project.scannerActive ? new Date().toISOString() : project.lastCheckedAt })
@@ -191,7 +153,15 @@ export default function ProjectCard({ project }: Props) {
             </div>
           )}
           <div className="flex-1 min-w-0">
-            <div className="font-bold text-base truncate leading-none mb-1" style={{ color: project.color || '#4ade80' }}>{project.name}</div>
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className="font-bold text-base truncate leading-none" style={{ color: project.color || '#4ade80' }}>{project.name}</span>
+              {project.shareRole && (
+                <span className={`shrink-0 text-[10px] font-black px-1.5 py-0.5 rounded-full leading-none flex items-center gap-0.5 ${project.shareRole === 'editor' ? 'bg-ive-amber/15 text-ive-amber border border-ive-amber/30' : 'bg-ive-cyan/15 text-ive-cyan border border-ive-cyan/30'}`}>
+                  <i className="fa-solid fa-share-nodes" />
+                  {project.shareRole === 'editor' ? '참조·편집' : '참조·뷰어'}
+                </span>
+              )}
+            </div>
             <span onClick={e => { e.preventDefault(); e.stopPropagation(); window.open(project.repoUrl.replace(/\.git$/, ''), '_blank') }} className="text-sm text-ive-text-muted font-mono opacity-60 mb-1 break-all leading-tight hover:text-ive-green hover:opacity-100 transition-colors inline-block cursor-pointer">
               {project.repoUrl}<i className="fa-solid fa-arrow-up-right-from-square text-xs ml-1 opacity-50" />
             </span>
@@ -202,40 +172,40 @@ export default function ProjectCard({ project }: Props) {
                   {new Date(project.lastCheckedAt).toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).replace(',', '')}
                 </span>
               )}
-              <button onClick={toggleScanner} className="flex items-center gap-1 transition-all" title={project.scannerActive ? '일시정지' : '다시 시작'}>
-                <span className={`h-6 px-2 rounded-full flex items-center gap-1 text-xs font-bold transition-all ${project.scannerActive ? 'bg-ive-bg-deep text-ive-green/60 hover:text-ive-green hover:bg-ive-green/10 border border-ive-border-dark' : 'bg-ive-red/10 text-ive-red border border-ive-red/30 hover:bg-ive-red/20 scale-105'}`}>
-                  {project.scannerActive ? <i className="fa-solid fa-pause text-[10px]" /> : <i className="fa-solid fa-play text-[10px] ml-px" />}
-                </span>
-              </button>
-              <button onClick={handleManualScan} disabled={scanning} className="flex items-center gap-1 transition-all disabled:opacity-30 disabled:cursor-not-allowed" title="지금 스캔 수행">
-                <span className={`h-6 px-2 rounded-full flex items-center gap-1 text-xs font-bold transition-all ${scanning ? 'bg-ive-green/20 text-ive-green border border-ive-green/30' : 'bg-ive-bg-deep text-ive-green/60 hover:text-ive-green hover:bg-ive-green/10 border border-ive-border-dark'}`}>
-                  {scanning ? <i className="fa-solid fa-circle-notch fa-spin text-[10px]" /> : <i className="fa-solid fa-rocket text-[10px]" />}
-                </span>
-              </button>
-              <button
-                onClick={e => { e.preventDefault(); e.stopPropagation(); window.location.href = `/projects/${project.id}` }}
-                className="flex items-center transition-all"
-                title="편집"
-              >
-                <span className="h-6 px-2 rounded-full flex items-center gap-1 text-xs font-bold bg-ive-bg-deep text-ive-text-dim hover:text-ive-text hover:bg-white/[0.05] border border-ive-border-dark transition-all">
-                  <i className="fa-solid fa-ellipsis text-[10px]" />
-                </span>
-              </button>
+              {isOwner && (
+                <>
+                  <button onClick={toggleScanner} className="flex items-center gap-1 transition-all" title={project.scannerActive ? '일시정지' : '다시 시작'}>
+                    <span className={`h-6 px-2 rounded-full flex items-center gap-1 text-xs font-bold transition-all ${project.scannerActive ? 'bg-ive-bg-deep text-ive-green/60 hover:text-ive-green hover:bg-ive-green/10 border border-ive-border-dark' : 'bg-ive-red/10 text-ive-red border border-ive-red/30 hover:bg-ive-red/20 scale-105'}`}>
+                      {project.scannerActive ? <i className="fa-solid fa-pause text-[10px]" /> : <i className="fa-solid fa-play text-[10px] ml-px" />}
+                    </span>
+                  </button>
+                  <button onClick={handleManualScan} disabled={scanning} className="flex items-center gap-1 transition-all disabled:opacity-30 disabled:cursor-not-allowed" title="지금 스캔 수행">
+                    <span className={`h-6 px-2 rounded-full flex items-center gap-1 text-xs font-bold transition-all ${scanning ? 'bg-ive-green/20 text-ive-green border border-ive-green/30' : 'bg-ive-bg-deep text-ive-green/60 hover:text-ive-green hover:bg-ive-green/10 border border-ive-border-dark'}`}>
+                      {scanning ? <i className="fa-solid fa-circle-notch fa-spin text-[10px]" /> : <i className="fa-solid fa-rocket text-[10px]" />}
+                    </span>
+                  </button>
+                  <button
+                    onClick={e => { e.preventDefault(); e.stopPropagation(); window.location.href = `/projects/${project.id}` }}
+                    className="flex items-center transition-all"
+                    title="편집"
+                  >
+                    <span className="h-6 px-2 rounded-full flex items-center gap-1 text-xs font-bold bg-ive-bg-deep text-ive-text-dim hover:text-ive-text hover:bg-white/[0.05] border border-ive-border-dark transition-all">
+                      <i className="fa-solid fa-ellipsis text-[10px]" />
+                    </span>
+                  </button>
+                </>
+              )}
             </div>
           </div>
-          {/* 스캐너 남은시간 차트 */}
-          <div className="shrink-0 flex items-center">
-            <div className="relative w-12 h-12">
-              <div className={`absolute inset-0 rounded-full border flex items-center justify-center overflow-hidden transition-all duration-500 shadow-inner ${project.scannerActive ? 'bg-ive-bg-deep border-ive-border-dark' : 'bg-ive-bg-deep/50 border-ive-red/20 opacity-60'}`}
-                style={{ background: project.scannerActive ? `conic-gradient(#34d399 ${timeLeft.percent}%, transparent ${timeLeft.percent}%)` : 'none' }}>
-                <div className="absolute inset-[2px] rounded-full bg-ive-bg-card flex items-center justify-center shadow-lg">
-                  {!project.scannerActive ? (<i className="fa-solid fa-circle-stop text-base text-ive-red/60" />) : timeLeft.text === '곧 실행' ? (<i className="fa-solid fa-circle-notch fa-spin text-lg text-ive-green" />) : (
-                    <span className="text-base font-black text-ive-green/90 flex items-baseline tracking-tight">{timeLeft.displayValue}{timeLeft.unit && <span className="text-xs ml-0.5 opacity-60 font-black">{timeLeft.unit}</span>}</span>
-                  )}
-                </div>
+          {/* 작업 중 애니메이션 아이콘 — runningCount > 0 일 때만 표시 */}
+          {runningCount > 0 && (
+            <div className="shrink-0 flex items-center">
+              <div className="relative w-10 h-10 flex items-center justify-center">
+                <i className="fa-solid fa-gear fa-spin text-xl text-ive-amber" style={{ animationDuration: '2s' }} />
+                <span className="absolute -bottom-0.5 -right-0.5 bg-ive-amber text-ive-bg-deep text-[9px] font-black rounded-full w-4 h-4 flex items-center justify-center">{runningCount}</span>
               </div>
             </div>
-          </div>
+          )}
         </div>
 
         {project.lastError && (

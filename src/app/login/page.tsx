@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import ChangePasswordForm from '@/components/auth/ChangePasswordForm'
@@ -15,7 +15,13 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [showChangePassword, setShowChangePassword] = useState(false)
-  const [showIntro, setShowIntro] = useState(true)
+  const [showIntro, setShowIntro] = useState(false)
+
+  useEffect(() => {
+    if (!localStorage.getItem('ive-intro-seen')) {
+      setShowIntro(true)
+    }
+  }, [])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -36,15 +42,18 @@ export default function LoginPage() {
       return
     }
 
-    await refreshUser()
-    router.push('/')
+    // 이전 세션 캐시 제거
+    sessionStorage.removeItem('issues-cache')
+    sessionStorage.removeItem('issues-scroll')
+    const user = await refreshUser()
+    if (user) router.push('/')
   }
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-extrabold text-ive-green mb-1">Spring IVE</h1>
+          <h1 className="text-3xl font-extrabold text-ive-green mb-1">Spring <span className="text-ive-amber">IVE</span></h1>
           <p className="text-base text-ive-text-muted">Integrated Value Environment</p>
         </div>
 
@@ -110,7 +119,7 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {showIntro && <IntroSlides onComplete={() => setShowIntro(false)} />}
+      {showIntro && <IntroSlides onComplete={() => { setShowIntro(false); localStorage.setItem('ive-intro-seen', '1') }} />}
     </div>
   )
 }

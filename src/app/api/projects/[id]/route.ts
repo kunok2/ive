@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getProject, updateProject, deleteProject, getProjectAssignments } from '@/lib/db'
+import { getProject, updateProject, deleteProject, getProjectAssignments, getProjectAccess } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { encrypt } from '@/lib/crypto'
 
@@ -9,13 +9,19 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   const { id } = await params
   const project = getProject(id)
-  if (!project || project.userId !== user.id) {
+  const access = project ? getProjectAccess(id, user.id) : null
+  if (!project || !access) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
   const assignedAgents = getProjectAssignments(id)
 
-  return NextResponse.json({ ...project, assignedAgents })
+  return NextResponse.json({
+    ...project,
+    accessToken: access === 'owner' ? project.accessToken : '', // 공유 사용자에게 토큰 숨김
+    assignedAgents,
+    shareRole: access === 'owner' ? null : access,
+  })
 }
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {

@@ -248,9 +248,38 @@ export default function AgentCard({ agent, onDelete, compact, assignedProject, o
             <div className={`w-2 h-2 rounded-full ${status.dot}`} />
             <span className="text-sm text-ive-text-muted">{status.label}</span>
           </div>
+          {collapsed && (
+            <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+              <button
+                onClick={handleTest}
+                disabled={testing}
+                className="w-7 h-7 rounded-lg bg-ive-bg-deep border border-ive-border-dark flex items-center justify-center text-ive-text-dim hover:text-ive-text hover:border-ive-green/30 transition-all disabled:opacity-50"
+                title="동작 확인"
+              >
+                {testing ? <i className="fa-solid fa-spinner fa-spin text-xs" /> : <i className="fa-solid fa-stethoscope text-xs" />}
+              </button>
+              {onDelete && (
+                <button
+                  onClick={() => onDelete(agent.id)}
+                  className="w-7 h-7 rounded-lg bg-ive-bg-deep border border-ive-red/20 flex items-center justify-center text-ive-red/40 hover:text-ive-red hover:bg-ive-red/10 hover:border-ive-red/40 transition-all"
+                  title="제거"
+                >
+                  <i className="fa-solid fa-trash-can text-xs" />
+                </button>
+              )}
+            </div>
+          )}
           <i className={`fa-solid fa-chevron-down text-xs text-ive-text-dim transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`} />
         </div>
       </div>
+
+      {/* 동작 확인 결과 — 접힌 상태에서도 표시 */}
+      {collapsed && testResult && (
+        <div className={`mx-3 mb-2 text-sm rounded-lg px-3 py-1.5 ${testResult.success ? 'text-ive-green bg-ive-green/10' : 'text-ive-red bg-ive-red/10'}`}>
+          <i className={`fa-solid ${testResult.success ? 'fa-circle-check' : 'fa-circle-xmark'} mr-1`} />
+          {testResult.message}
+        </div>
+      )}
 
       {!collapsed && <>
       {editing && (

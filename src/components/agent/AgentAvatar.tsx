@@ -45,14 +45,16 @@ function ToolBadge({ category, size }: { category: ToolCategory; size: 'sm' | 'm
 }
 
 export default function AgentAvatar({ avatar, size = 'md', className = '', toolBadge }: Props) {
+  const wh = sizeMap[size].split(' ').slice(0, 2).join(' ')
+
   // URL인 경우 (GitLab 아바타)
   if (avatar.startsWith('http')) {
     return (
-      <div className={`relative shrink-0 ${sizeMap[size].split(' ').slice(0, 2).join(' ')}`}>
+      <div className={`relative shrink-0 ${wh} ${className}`}>
         <img
           src={avatar}
           alt="avatar"
-          className={`${sizeMap[size].split(' ').slice(0, 2).join(' ')} rounded-lg object-cover bg-ive-bg-deep border border-ive-border ${className}`}
+          className={`w-full h-full rounded-lg object-cover bg-ive-bg-deep border border-ive-border`}
         />
         {toolBadge && <ToolBadge category={toolBadge} size={size} />}
       </div>
@@ -62,9 +64,9 @@ export default function AgentAvatar({ avatar, size = 'md', className = '', toolB
   // 기본 아바타 ID
   const av = DEFAULT_AVATARS.find(a => a.id === avatar) || DEFAULT_AVATARS[0]
   return (
-    <div className={`relative shrink-0 ${sizeMap[size].split(' ').slice(0, 2).join(' ')}`}>
+    <div className={`relative shrink-0 ${wh} ${className}`}>
       <div
-        className={`${sizeMap[size]} rounded-lg bg-ive-bg-deep border border-ive-border flex items-center justify-center shrink-0 ${className}`}
+        className={`w-full h-full ${sizeMap[size].split(' ').slice(2).join(' ')} rounded-lg bg-ive-bg-deep border border-ive-border flex items-center justify-center`}
         style={{ borderColor: `${av.color}40` }}
       >
         <i className={av.icon} style={{ color: av.color }} />

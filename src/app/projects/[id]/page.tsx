@@ -43,6 +43,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     )
   }
 
+  const isOwner = !project.shareRole
   const assignedAgents = project.assignedAgents || []
   const allAssignedAgentIds = new Set<string>()
   for (const p of state.projects) {
@@ -142,20 +143,27 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                 <div className="text-sm text-ive-text-muted mt-1 uppercase tracking-wider font-bold">대기</div>
               </div>
             </div>
-            <div className="flex gap-2 shrink-0">
-              <button
-                onClick={() => setShowEditProject(true)}
-                className="text-base font-black text-ive-text-muted border border-ive-border px-3 py-2 rounded-xl hover:border-ive-green/30 hover:text-ive-green transition-all bg-ive-bg/50"
-              >
-                <i className="fa-solid fa-pen-to-square mr-1" />수정
-              </button>
-              <button
-                onClick={() => setShowDeleteProject(true)}
-                className="text-base font-black text-ive-red/60 border border-ive-red/20 px-3 py-2 rounded-xl hover:bg-ive-red/10 transition-all"
-              >
-                <i className="fa-solid fa-trash-can" />
-              </button>
-            </div>
+            {isOwner ? (
+              <div className="flex gap-2 shrink-0">
+                <button
+                  onClick={() => setShowEditProject(true)}
+                  className="text-base font-black text-ive-text-muted border border-ive-border px-3 py-2 rounded-xl hover:border-ive-green/30 hover:text-ive-green transition-all bg-ive-bg/50"
+                >
+                  <i className="fa-solid fa-pen-to-square mr-1" />수정
+                </button>
+                <button
+                  onClick={() => setShowDeleteProject(true)}
+                  className="text-base font-black text-ive-red/60 border border-ive-red/20 px-3 py-2 rounded-xl hover:bg-ive-red/10 transition-all"
+                >
+                  <i className="fa-solid fa-trash-can" />
+                </button>
+              </div>
+            ) : (
+              <span className={`text-xs font-black px-2.5 py-1 rounded-full leading-none ${project.shareRole === 'editor' ? 'bg-ive-amber/15 text-ive-amber border border-ive-amber/30' : 'bg-ive-cyan/15 text-ive-cyan border border-ive-cyan/30'}`}>
+                <i className="fa-solid fa-share-nodes mr-1" />
+                {project.shareRole === 'editor' ? '편집 권한' : '뷰어 권한'}
+              </span>
+            )}
           </div>
         </div>
 
@@ -165,24 +173,20 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             <span className="w-1.5 h-1.5 rounded-full bg-ive-green" />
             배정된 개발자 ({assignedAgents.length})
           </h2>
-          <button
-            onClick={() => { setShowAssignAgent(true); setAssignError(''); setAssignToken('') }}
-            className="text-base font-bold text-ive-green bg-ive-green/10 px-4 py-2 rounded-xl active:scale-95 transition-all hover:bg-ive-green/15"
-          >
-            <i className="fa-solid fa-plus mr-1.5" />개발자 배정
-          </button>
+          {isOwner && (
+            <button
+              onClick={() => { setShowAssignAgent(true); setAssignError(''); setAssignToken('') }}
+              className="text-base font-bold text-ive-green bg-ive-green/10 px-4 py-2 rounded-xl active:scale-95 transition-all hover:bg-ive-green/15"
+            >
+              <i className="fa-solid fa-plus mr-1.5" />개발자 배정
+            </button>
+          )}
         </div>
 
         {assignedAgents.length === 0 ? (
-          <div className="text-center py-16 bg-ive-bg-card rounded-2xl border border-dashed border-ive-border-subtle group hover:border-ive-green/30 transition-all">
-            <i className="fa-solid fa-robot text-4xl text-ive-text-dim mb-4 block group-hover:scale-110 transition-transform" />
-            <p className="text-base text-ive-text-muted mb-4 font-medium">이 프로젝트에 배정된 개발자가 없습니다</p>
-            <button
-              onClick={() => { setShowAssignAgent(true); setAssignError(''); setAssignToken('') }}
-              className="inline-flex items-center gap-2 bg-ive-green-dark text-white font-black px-6 py-2.5 rounded-xl text-base shadow-lg shadow-ive-green/10"
-            >
-              <i className="fa-solid fa-plus" />개발자 배정하기
-            </button>
+          <div className="text-center py-16 bg-ive-bg-card rounded-2xl border border-dashed border-ive-border-subtle">
+            <i className="fa-solid fa-robot text-4xl text-ive-text-dim mb-4 block" />
+            <p className="text-base text-ive-text-muted font-medium">이 프로젝트에 배정된 개발자가 없습니다</p>
           </div>
         ) : (
           <div className="grid gap-3">
@@ -190,48 +194,48 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               <div key={pa.id} className="bg-ive-bg-card rounded-xl border border-ive-border-subtle overflow-hidden">
                 <div className="flex items-center gap-2 p-1">
                   <div className="flex-1 min-w-0">
-                    <AgentCard agent={pa.agent} compact onRemove={() => handleUnassignAgent(pa.agentId)} />
+                    <AgentCard agent={pa.agent} compact onRemove={isOwner ? () => handleUnassignAgent(pa.agentId) : undefined} />
                   </div>
                 </div>
-                {/* 하단 액션 바 */}
-                <div className="flex items-center gap-1 px-3 pb-2.5 pt-0">
-                  {/* 토큰 뱃지/편집 */}
-                  {editingTokenAgentId === pa.agentId ? (
-                    <div className="flex-1 flex items-center gap-1.5">
-                      <input
-                        type="text"
-                        autoComplete="off"
-                        data-1p-ignore
-                        value={editTokenValue}
-                        onChange={e => setEditTokenValue(e.target.value)}
-                        placeholder="Personal Access Token"
-                        className="flex-1 min-w-0 bg-ive-bg-input border border-ive-border rounded px-2 py-1 text-xs text-ive-text font-mono focus:outline-none focus:border-ive-green"
-                        style={{ WebkitTextSecurity: 'disc' } as React.CSSProperties}
-                        autoFocus
-                      />
-                      <button onClick={() => handleSaveToken(pa.agentId)} className="text-xs font-bold text-ive-green px-2 py-1 rounded hover:bg-ive-green/10">
-                        <i className="fa-solid fa-check" />
+                {/* 하단 액션 바 — 소유자만 토큰 편집 가능 */}
+                {isOwner && (
+                  <div className="flex items-center gap-1 px-3 pb-2.5 pt-0">
+                    {editingTokenAgentId === pa.agentId ? (
+                      <div className="flex-1 flex items-center gap-1.5">
+                        <input
+                          type="text"
+                          autoComplete="off"
+                          data-1p-ignore
+                          value={editTokenValue}
+                          onChange={e => setEditTokenValue(e.target.value)}
+                          placeholder="Personal Access Token"
+                          className="flex-1 min-w-0 bg-ive-bg-input border border-ive-border rounded px-2 py-1 text-xs text-ive-text font-mono focus:outline-none focus:border-ive-green"
+                          style={{ WebkitTextSecurity: 'disc' } as React.CSSProperties}
+                          autoFocus
+                        />
+                        <button onClick={() => handleSaveToken(pa.agentId)} className="text-xs font-bold text-ive-green px-2 py-1 rounded hover:bg-ive-green/10">
+                          <i className="fa-solid fa-check" />
+                        </button>
+                        <button onClick={() => setEditingTokenAgentId(null)} className="text-xs font-bold text-ive-text-dim px-2 py-1 rounded hover:bg-ive-bg-deep">
+                          <i className="fa-solid fa-xmark" />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => { setEditingTokenAgentId(pa.agentId); setEditTokenValue('') }}
+                        className={`text-xs font-bold px-2 py-1 rounded transition-colors ${
+                          pa.accessToken
+                            ? 'text-ive-cyan bg-ive-cyan/10 hover:bg-ive-cyan/20'
+                            : 'text-ive-text-dim hover:bg-ive-bg-deep hover:text-ive-text-muted'
+                        }`}
+                        title={pa.accessToken ? '개별 토큰 사용 중 (클릭하여 변경)' : '프로젝트 토큰 사용 중 (클릭하여 개별 토큰 지정)'}
+                      >
+                        <i className={`fa-solid fa-key mr-1 ${pa.accessToken ? '' : 'opacity-40'}`} />
+                        {pa.accessToken ? '개별 토큰' : '프로젝트 토큰'}
                       </button>
-                      <button onClick={() => setEditingTokenAgentId(null)} className="text-xs font-bold text-ive-text-dim px-2 py-1 rounded hover:bg-ive-bg-deep">
-                        <i className="fa-solid fa-xmark" />
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => { setEditingTokenAgentId(pa.agentId); setEditTokenValue('') }}
-                      className={`text-xs font-bold px-2 py-1 rounded transition-colors ${
-                        pa.accessToken
-                          ? 'text-ive-cyan bg-ive-cyan/10 hover:bg-ive-cyan/20'
-                          : 'text-ive-text-dim hover:bg-ive-bg-deep hover:text-ive-text-muted'
-                      }`}
-                      title={pa.accessToken ? '개별 토큰 사용 중 (클릭하여 변경)' : '프로젝트 토큰 사용 중 (클릭하여 개별 토큰 지정)'}
-                    >
-                      <i className={`fa-solid fa-key mr-1 ${pa.accessToken ? '' : 'opacity-40'}`} />
-                      {pa.accessToken ? '개별 토큰' : '프로젝트 토큰'}
-                    </button>
-                  )}
-
-                </div>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>

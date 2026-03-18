@@ -82,7 +82,7 @@ export default function RegisterPage() {
     <div className="min-h-screen flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-extrabold text-ive-green mb-1">Spring IVE</h1>
+          <h1 className="text-3xl font-extrabold text-ive-green mb-1">Spring <span className="text-ive-amber">IVE</span></h1>
           <p className="text-base text-ive-text-muted">새 계정 만들기</p>
         </div>
 

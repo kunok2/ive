@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
-import { getProject, getTodayExecutionsByProject, getYesterdayCompletedCount } from '@/lib/db'
+import { getProject, getTodayExecutionsByProject, getYesterdayCompletedCount, getProjectAccess } from '@/lib/db'
 
 export async function GET(
   req: NextRequest,
@@ -11,7 +11,7 @@ export async function GET(
 
   const { id } = await params
   const project = getProject(id)
-  if (!project || project.userId !== user.id) {
+  if (!project || !getProjectAccess(id, user.id)) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 

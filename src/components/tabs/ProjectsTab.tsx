@@ -16,7 +16,10 @@ export default function ProjectsTab({ editMode, onAdd }: Props) {
     <PullToRefresh onRefresh={refresh} className="min-h-screen pb-20">
       <main className="px-4 py-4 max-w-lg mx-auto">
         {state.loading ? (
-          <div className="text-center py-20 text-ive-text-muted text-base">불러오는 중...</div>
+          <div className="text-center py-20 text-ive-text-muted text-base">
+            <i className="fa-solid fa-circle-notch fa-spin text-2xl text-ive-green mb-3 block" />
+            프로젝트 불러오는 중...
+          </div>
         ) : state.projects.length === 0 ? (
           <div className="text-center py-20">
             <i className="fa-solid fa-folder-open text-4xl text-ive-text-dim mb-4 block" />

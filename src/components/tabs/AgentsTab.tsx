@@ -22,7 +22,12 @@ export default function AgentsTab({ onAdd }: { onAdd?: () => void }) {
   return (
     <PullToRefresh onRefresh={refreshAgents} className="min-h-screen pb-20">
       <main className="px-4 py-4 max-w-lg mx-auto">
-        {state.agents.length === 0 ? (
+        {state.loading ? (
+          <div className="text-center py-20 text-ive-text-muted text-base">
+            <i className="fa-solid fa-circle-notch fa-spin text-2xl text-ive-green mb-3 block" />
+            개발자 불러오는 중...
+          </div>
+        ) : state.agents.length === 0 ? (
           <div className="text-center py-20">
             <i className="fa-solid fa-robot text-4xl text-ive-text-dim mb-4 block" />
             <p className="text-base text-ive-text-muted mb-2">아직 등록된 개발자가 없습니다</p>

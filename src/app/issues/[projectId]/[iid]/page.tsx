@@ -361,14 +361,26 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
             <div className="text-center py-10 text-ive-text-dim text-sm">아직 활동 기록이 없습니다</div>
           ) : (
             <div className="space-y-1.5">
-              {notes.map(note => (
-                <div key={note.id} className={`rounded-lg px-3 py-2 ${note.system ? 'bg-white/[0.02]' : 'bg-ive-bg-card border border-ive-border-subtle'}`}>
+              {notes.map(note => {
+                const isBot = !note.system && note.body.includes('IVE(봇)')
+                return (
+                <div key={note.id} className={`rounded-lg px-3 py-2 ${
+                  note.system
+                    ? 'bg-white/[0.02]'
+                    : isBot
+                      ? 'bg-ive-bg-card border border-ive-border-subtle'
+                      : 'bg-ive-green/[0.06] border border-ive-green/20'
+                }`}>
                   <div className="flex items-center gap-2 mb-1">
-                    <span className={`text-xs font-bold ${note.system ? 'text-ive-text-dim' : 'text-ive-cyan'}`}>
+                    <span className={`text-xs font-bold ${
+                      note.system ? 'text-ive-text-dim' : isBot ? 'text-ive-cyan' : 'text-ive-green'
+                    }`}>
                       {note.system ? (
                         <><i className="fa-solid fa-gear mr-0.5" />시스템</>
+                      ) : isBot ? (
+                        <><i className="fa-solid fa-robot mr-0.5" />IVE 봇</>
                       ) : (
-                        <><i className="fa-solid fa-user mr-0.5" />{note.author}</>
+                        <><i className="fa-solid fa-user mr-0.5" />사용자</>
                       )}
                     </span>
                     <span className="text-xs text-ive-text-dim ml-auto">
@@ -379,7 +391,8 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                     {note.body.length > 500 ? <NoteBody body={note.body} /> : <MarkdownNote body={cleanNoteBody(note.body)} />}
                   </div>
                 </div>
-              ))}
+                )
+              })}
               <div ref={notesEndRef} />
             </div>
           )}

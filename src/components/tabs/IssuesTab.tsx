@@ -50,7 +50,7 @@ const BULK_ACTIONS: Record<string, { action: string; label: string; icon: string
 export default function IssuesTab() {
   const router = useRouter()
   const { state } = useStore()
-  const { activeTab, issuesProjectId, setIssuesProjectId, issuesFilter, setIssuesFilter } = useTab()
+  const { activeTab, setActiveTab, issuesProjectId, setIssuesProjectId, issuesFilter, setIssuesFilter } = useTab()
   const selectedProjectId = issuesProjectId ?? ''
   const filter = issuesFilter
   const [issues, setIssues] = useState<IveIssue[]>(() => {
@@ -112,6 +112,16 @@ export default function IssuesTab() {
     setSelected(new Set())
     setBulkProgress(null)
   }
+
+  // 선택된 프로젝트가 현재 목록에 없으면 초기화
+  useEffect(() => {
+    if (state.loading) return
+    if (selectedProjectId && !state.projects.some(p => p.id === selectedProjectId)) {
+      setSelectedProjectId('')
+      setIssues([])
+      sessionStorage.removeItem('issues-cache')
+    }
+  }, [state.projects, selectedProjectId, state.loading])
 
   // 프로젝트가 1개면 자동 선택
   useEffect(() => {
@@ -299,7 +309,19 @@ export default function IssuesTab() {
           </div>
         )}
 
-        {!selectedProjectId ? (
+        {state.projects.length === 0 && !state.loading ? (
+          <div className="text-center py-20">
+            <i className="fa-solid fa-folder-open text-4xl text-ive-text-dim mb-4 block" />
+            <p className="text-base text-ive-text-muted mb-2">등록된 프로젝트가 없습니다</p>
+            <p className="text-sm text-ive-text-dim mb-5">프로젝트를 먼저 추가해야 이슈를 관리할 수 있습니다</p>
+            <button
+              onClick={() => setActiveTab('projects')}
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-ive-green text-ive-bg-deep font-bold text-sm rounded-xl active:scale-95 transition-transform"
+            >
+              <i className="fa-solid fa-plus" />프로젝트 추가하기
+            </button>
+          </div>
+        ) : !selectedProjectId ? (
           <div className="text-center py-20">
             <i className="fa-solid fa-folder-open text-4xl text-ive-text-dim mb-4 block" />
             <p className="text-base text-ive-text-muted">프로젝트를 선택하세요</p>

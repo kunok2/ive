@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject } from '@/lib/db';
+import { getProject, getProjectAccess } from '@/lib/db';
+import { getCurrentUser } from '@/lib/auth';
 import { decrypt } from '@/lib/crypto';
 import { fetchAllProjectIssues, createIssue } from '@/lib/provider';
 
@@ -14,12 +15,6 @@ export async function GET(
   try {
     const decryptedToken = decrypt(project.accessToken);
     const issues = await fetchAllProjectIssues(project, decryptedToken);
-
-    // IVE 라벨 목록
-    const iveLabels = [
-      project.labelTarget, project.labelInProgress, project.labelFailDev,
-      project.labelDone,
-    ];
 
     // 각 이슈에 stage 정보 부여
     const stageMap: Record<string, string> = {
@@ -38,12 +33,9 @@ export async function GET(
           break;
         }
       }
-      // IVE 라벨이 하나도 없는 이슈는 "대기"로 분류
+      // IVE 라벨이 하나도 없는 이슈는 IVE 워크플로 대상이 아님
       if (stage === 'unknown') {
-        const hasIveLabel = issueLabels.some((l: string) => iveLabels.includes(l));
-        if (!hasIveLabel) {
-          stage = 'waiting';
-        }
+        stage = 'none';
       }
       return {
         iid: issue.iid,
@@ -69,9 +61,17 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   const { id: projectId } = await params;
   const project = getProject(projectId);
   if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+
+  const access = getProjectAccess(projectId, user.id);
+  if (!access || access === 'viewer') {
+    return NextResponse.json({ error: '작업 생성 권한이 없습니다.' }, { status: 403 });
+  }
 
   const { title, description, asDev } = await req.json();
   if (!title?.trim()) return NextResponse.json({ error: '제목을 입력하세요.' }, { status: 400 });
