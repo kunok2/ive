@@ -22,7 +22,7 @@ export default function MobileTabBar() {
     : baseTabs
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-ive-bg-card border-t border-ive-border">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-ive-bg-card border-t border-ive-border" aria-label="메인 네비게이션">
       <div className="flex justify-around items-start pt-2 h-16 max-w-lg mx-auto">
         {tabs.map(tab => (
           <button

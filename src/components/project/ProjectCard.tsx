@@ -174,23 +174,24 @@ export default function ProjectCard({ project }: Props) {
               )}
               {isOwner && (
                 <>
-                  <button onClick={toggleScanner} className="flex items-center gap-1 transition-all" title={project.scannerActive ? '일시정지' : '다시 시작'}>
-                    <span className={`h-6 px-2 rounded-full flex items-center gap-1 text-xs font-bold transition-all ${project.scannerActive ? 'bg-ive-bg-deep text-ive-green/60 hover:text-ive-green hover:bg-ive-green/10 border border-ive-border-dark' : 'bg-ive-red/10 text-ive-red border border-ive-red/30 hover:bg-ive-red/20 scale-105'}`}>
-                      {project.scannerActive ? <i className="fa-solid fa-pause text-[10px]" /> : <i className="fa-solid fa-play text-[10px] ml-px" />}
+                  <button onClick={toggleScanner} className="flex items-center gap-1 transition-all" title={project.scannerActive ? '스캐너 일시정지' : '스캐너 다시 시작'} aria-label={project.scannerActive ? '스캐너 일시정지' : '스캐너 다시 시작'}>
+                    <span className={`h-8 px-2.5 rounded-full flex items-center gap-1 text-xs font-bold transition-all ${project.scannerActive ? 'bg-ive-bg-deep text-ive-green/60 hover:text-ive-green hover:bg-ive-green/10 border border-ive-border-dark' : 'bg-ive-red/10 text-ive-red border border-ive-red/30 hover:bg-ive-red/20 scale-105'}`}>
+                      {project.scannerActive ? <i className="fa-solid fa-pause text-[11px]" /> : <i className="fa-solid fa-play text-[11px] ml-px" />}
                     </span>
                   </button>
-                  <button onClick={handleManualScan} disabled={scanning} className="flex items-center gap-1 transition-all disabled:opacity-30 disabled:cursor-not-allowed" title="지금 스캔 수행">
-                    <span className={`h-6 px-2 rounded-full flex items-center gap-1 text-xs font-bold transition-all ${scanning ? 'bg-ive-green/20 text-ive-green border border-ive-green/30' : 'bg-ive-bg-deep text-ive-green/60 hover:text-ive-green hover:bg-ive-green/10 border border-ive-border-dark'}`}>
-                      {scanning ? <i className="fa-solid fa-circle-notch fa-spin text-[10px]" /> : <i className="fa-solid fa-rocket text-[10px]" />}
+                  <button onClick={handleManualScan} disabled={scanning} className="flex items-center gap-1 transition-all disabled:opacity-30 disabled:cursor-not-allowed" title="지금 스캔 수행" aria-label="수동 스캔">
+                    <span className={`h-8 px-2.5 rounded-full flex items-center gap-1 text-xs font-bold transition-all ${scanning ? 'bg-ive-green/20 text-ive-green border border-ive-green/30' : 'bg-ive-bg-deep text-ive-green/60 hover:text-ive-green hover:bg-ive-green/10 border border-ive-border-dark'}`}>
+                      {scanning ? <i className="fa-solid fa-circle-notch fa-spin text-[11px]" /> : <i className="fa-solid fa-rocket text-[11px]" />}
                     </span>
                   </button>
                   <button
                     onClick={e => { e.preventDefault(); e.stopPropagation(); window.location.href = `/projects/${project.id}` }}
                     className="flex items-center transition-all"
-                    title="편집"
+                    title="프로젝트 설정"
+                    aria-label="프로젝트 설정"
                   >
-                    <span className="h-6 px-2 rounded-full flex items-center gap-1 text-xs font-bold bg-ive-bg-deep text-ive-text-dim hover:text-ive-text hover:bg-white/[0.05] border border-ive-border-dark transition-all">
-                      <i className="fa-solid fa-ellipsis text-[10px]" />
+                    <span className="h-8 px-2.5 rounded-full flex items-center gap-1 text-xs font-bold bg-ive-bg-deep text-ive-text-dim hover:text-ive-text hover:bg-white/[0.05] border border-ive-border-dark transition-all">
+                      <i className="fa-solid fa-ellipsis text-[11px]" />
                     </span>
                   </button>
                 </>

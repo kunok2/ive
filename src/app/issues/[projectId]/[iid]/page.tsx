@@ -254,6 +254,16 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
           <span className="text-xs text-ive-text-dim ml-auto shrink-0">
             {new Date(issue.updatedAt).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}
           </span>
+          {issue.webUrl && (
+            <button
+              onClick={() => window.open(issue.webUrl, '_blank')}
+              className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center bg-ive-bg-card text-ive-text-dim border border-ive-border-subtle hover:text-ive-cyan hover:border-ive-cyan/30 transition-all"
+              title="GitLab/GitHub에서 보기"
+              aria-label="원본 이슈 페이지 열기"
+            >
+              <i className="fa-solid fa-arrow-up-right-from-square text-xs" />
+            </button>
+          )}
         </div>
         {/* 제목 + 설명 토글 + 단계 변경 */}
         <div className="px-3 pb-2 max-w-lg mx-auto">
@@ -429,6 +439,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
               disabled={posting || !comment.trim()}
               className="shrink-0 w-10 h-10 rounded-xl bg-ive-green text-ive-bg-deep flex items-center justify-center active:scale-95 transition-all disabled:opacity-40"
               title="코멘트만 등록"
+              aria-label="코멘트 등록"
             >
               {posting ? <i className="fa-solid fa-circle-notch fa-spin" /> : <i className="fa-solid fa-paper-plane" />}
             </button>
@@ -436,10 +447,11 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
               <button
                 onClick={handleCommentAndRetry}
                 disabled={posting || !comment.trim()}
-                className="shrink-0 h-10 px-3 rounded-xl bg-ive-cyan text-ive-bg-deep flex items-center justify-center gap-1 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold"
-                title="코멘트 등록 + 재실행"
+                className="shrink-0 h-10 px-3 rounded-xl bg-ive-cyan text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold whitespace-nowrap"
+                title="코멘트 등록 후 AI가 다시 작업합니다"
+                aria-label="코멘트 등록 및 재실행"
               >
-                {posting ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-paper-plane" /><i className="fa-solid fa-play" /></>}
+                {posting ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-paper-plane" /><span>재실행</span></>}
               </button>
             )}
           </div>
