@@ -1,8 +1,25 @@
 'use client'
 
-import { useState, useRef, useCallback, use } from 'react'
+import { useState, useEffect, useRef, useCallback, use } from 'react'
 import { useRouter } from 'next/navigation'
 import LogViewer from '@/components/ui/LogViewer'
+import AgentAvatar from '@/components/agent/AgentAvatar'
+import type { ToolActivity } from '@/lib/tool-activity'
+
+function formatDuration(startedAt: string): string {
+  const s = Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000)
+  if (s < 60) return `${s}s`
+  if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`
+  return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`
+}
+
+interface ExecInfo {
+  issueIid: number
+  issueTitle: string
+  startedAt: string
+  agentName: string
+  agentAvatar: string
+}
 
 export default function ExecutionDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -10,7 +27,56 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
   const [killing, setKilling] = useState(false)
   const [lineCount, setLineCount] = useState(0)
   const [connected, setConnected] = useState(false)
+  const [execInfo, setExecInfo] = useState<ExecInfo | null>(null)
+  const [activity, setActivity] = useState<ToolActivity | null>(null)
+  const [tick, setTick] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
+
+  // 경과시간 갱신
+  useEffect(() => {
+    const timer = setInterval(() => setTick(t => t + 1), 1000)
+    return () => clearInterval(timer)
+  }, [])
+
+  // 실행 정보 가져오기
+  useEffect(() => {
+    fetch(`/api/executions/${id}/content`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.agentName) {
+          setExecInfo({
+            issueIid: data.issueIid,
+            issueTitle: data.issueTitle,
+            startedAt: data.startedAt,
+            agentName: data.agentName,
+            agentAvatar: data.agentAvatar,
+          })
+        }
+      })
+      .catch(() => {})
+  }, [id])
+
+  // 도구 활동 폴링
+  useEffect(() => {
+    if (!connected) return
+    const fetchActivity = async () => {
+      try {
+        const res = await fetch('/api/activities')
+        if (res.ok) {
+          const list: ToolActivity[] = await res.json()
+          // execInfo의 agentId로 매칭하기 어려우므로, agentName으로 매칭
+          // 또는 모든 활동 중 이 execution과 관련된 것을 찾기
+          if (list.length > 0) {
+            // 단일 실행 페이지이므로 가장 최근 활동 사용
+            setActivity(list[0])
+          }
+        }
+      } catch { /* ignore */ }
+    }
+    fetchActivity()
+    const timer = setInterval(fetchActivity, 2000)
+    return () => clearInterval(timer)
+  }, [connected])
 
   const handleKill = async () => {
     setKilling(true)
@@ -37,16 +103,46 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
           >
             <i className="fa-solid fa-arrow-left" />
           </button>
-          <div className="min-w-0">
-            <div className="text-base font-bold text-ive-green-pale truncate">
-              <i className="fa-solid fa-terminal mr-1.5 text-ive-green" />
-              Execution Trace
+          {execInfo ? (
+            <div className="flex items-center gap-2 min-w-0">
+              <AgentAvatar
+                avatar={execInfo.agentAvatar}
+                size="sm"
+                toolBadge={connected && activity ? activity.category : null}
+              />
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="text-sm font-black text-ive-green">#{execInfo.issueIid}</span>
+                  {execInfo.issueTitle && (
+                    <span className="text-sm text-ive-text font-semibold truncate">{execInfo.issueTitle}</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 text-xs text-ive-text-dim">
+                  <span className="font-bold">{execInfo.agentName}</span>
+                  {connected && activity && (
+                    <span className="text-[10px] bg-ive-bg-deep px-1.5 py-0.5 rounded font-mono truncate max-w-[140px]">
+                      {activity.tool === 'thinking' ? '생각 중...' : activity.tool}
+                    </span>
+                  )}
+                  <span className="font-mono font-bold text-ive-amber">
+                    {formatDuration(execInfo.startedAt)}
+                    {tick >= 0 ? '' : ''}
+                  </span>
+                </div>
+              </div>
             </div>
-            <div className="text-xs text-ive-text-dim font-mono truncate">{id}</div>
-          </div>
+          ) : (
+            <div className="min-w-0">
+              <div className="text-base font-bold text-ive-green-pale truncate">
+                <i className="fa-solid fa-terminal mr-1.5 text-ive-green" />
+                Execution Trace
+              </div>
+              <div className="text-xs text-ive-text-dim font-mono truncate">{id}</div>
+            </div>
+          )}
         </div>
-        {connected && (
-          <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
+          {connected && (
             <button
               onClick={handleKill}
               disabled={killing}
@@ -54,11 +150,11 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
             >
               {killing ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-skull-crossbones mr-1" />강제종료</>}
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
-      {/* 커스텀 로그 뷰어 */}
+      {/* 로그 뷰어 */}
       <div ref={containerRef} className="flex-1 min-h-0">
         <LogViewer
           sseUrl={`/api/executions/${id}/logs`}

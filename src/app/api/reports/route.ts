@@ -198,7 +198,7 @@ export async function GET(req: NextRequest) {
     })
 
     return {
-      projectId: pid, projectName: pExecs[0].projectName, projectColor: pExecs[0].projectColor, projectAvatarUrl: pExecs[0].projectAvatarUrl || '',
+      projectId: pid, projectName: pExecs[0].projectName, projectColor: pExecs[0].projectColor, projectAvatarUrl: pExecs[0].projectAvatarUrl || '', projectProvider: pExecs[0].projectProvider || 'gitlab',
       tasks: pExecs.length, success: pSuccess, failed: pFailed,
       totalDurationMin: Math.round(pDur * 10) / 10,
       avgDurationMin: pFinished > 0 ? Math.round((pDur / pFinished) * 10) / 10 : 0,

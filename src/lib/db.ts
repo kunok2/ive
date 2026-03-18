@@ -874,6 +874,7 @@ export interface ReportExecution {
   projectName: string
   projectColor: string
   projectAvatarUrl: string
+  projectProvider: string
   agentId: string
   agentName: string
   agentAvatar: string
@@ -892,7 +893,7 @@ export interface ReportExecution {
 
 export function getExecutionsInRange(userId: string, start: string, end: string): ReportExecution[] {
   const rows = getDb().prepare(`
-    SELECT te.id, te.project_id, p.name as project_name, p.color as project_color, p.avatar_url as project_avatar_url,
+    SELECT te.id, te.project_id, p.name as project_name, p.color as project_color, p.avatar_url as project_avatar_url, p.provider as project_provider,
            te.agent_id, a.name as agent_name, a.avatar as agent_avatar, a.cli_name,
            te.issue_iid, te.issue_title, te.status,
            te.started_at, te.ended_at, te.input_tokens, te.output_tokens, te.cost_usd, te.turns,
@@ -906,7 +907,7 @@ export function getExecutionsInRange(userId: string, start: string, end: string)
   `).all(userId, userId, start, end) as any[]
   return rows.map(r => ({
     id: r.id, projectId: r.project_id, projectName: r.project_name,
-    projectColor: r.project_color, projectAvatarUrl: r.project_avatar_url || '',
+    projectColor: r.project_color, projectAvatarUrl: r.project_avatar_url || '', projectProvider: r.project_provider || 'gitlab',
     agentId: r.agent_id, agentName: r.agent_name, agentAvatar: r.agent_avatar || 'av-01',
     cliName: r.cli_name, issueIid: r.issue_iid, issueTitle: r.issue_title,
     status: r.status, startedAt: r.started_at, endedAt: r.ended_at,

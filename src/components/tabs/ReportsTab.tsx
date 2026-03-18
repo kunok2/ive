@@ -37,7 +37,7 @@ interface AgentStat {
 }
 
 interface ProjectStat {
-  projectId: string; projectName: string; projectColor: string; projectAvatarUrl: string
+  projectId: string; projectName: string; projectColor: string; projectAvatarUrl: string; projectProvider: string
   tasks: number; success: number; failed: number
   totalDurationMin: number; avgDurationMin: number
   inputTokens: number; outputTokens: number; cost: number
@@ -705,7 +705,7 @@ export default function ReportsTab() {
                 icon="fa-folder"
                 data={data.byProject.map(p => {
                   const prev = data.prevByProject?.find(pp => pp.projectId === p.projectId)
-                  return { name: p.projectName, color: p.projectColor, tasks: p.tasks, cost: p.cost, prevTasks: prev?.tasks ?? 0, prevCost: prev?.cost ?? 0 }
+                  return { name: p.projectName, color: p.projectColor, avatarUrl: p.projectAvatarUrl, provider: p.projectProvider, tasks: p.tasks, cost: p.cost, prevTasks: prev?.tasks ?? 0, prevCost: prev?.cost ?? 0 }
                 })}
               />
             </section>
@@ -719,7 +719,7 @@ export default function ReportsTab() {
                 icon="fa-robot"
                 data={data.byAgent.map(a => {
                   const prev = data.prevByAgent?.find(pa => pa.agentId === a.agentId)
-                  return { name: a.agentName, color: '#22d3ee', avatar: a.agentAvatar, tasks: a.tasks, cost: a.cost, prevTasks: prev?.tasks ?? 0, prevCost: prev?.cost ?? 0 }
+                  return { name: a.agentName, color: '', avatar: a.agentAvatar, tasks: a.tasks, cost: a.cost, prevTasks: prev?.tasks ?? 0, prevCost: prev?.cost ?? 0 }
                 })}
               />
             </section>
@@ -742,9 +742,11 @@ export default function ReportsTab() {
                   <div key={p.projectId} className="bg-ive-bg-card border border-ive-border-subtle rounded-xl overflow-hidden">
                     <button onClick={() => toggleProject(p.projectId)} className="w-full px-3 py-2.5 flex items-center gap-2 text-left">
                       {p.projectAvatarUrl ? (
-                        <img src={p.projectAvatarUrl} alt="" className="w-6 h-6 rounded object-cover shrink-0" />
+                        <img src={p.projectAvatarUrl} alt="" className="w-6 h-6 rounded-md object-cover shrink-0" style={{ outline: `2px solid ${p.projectColor || '#4ade80'}50`, outlineOffset: '1px' }} />
                       ) : (
-                        <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: p.projectColor }} />
+                        <span className="w-6 h-6 rounded-md flex items-center justify-center shrink-0 bg-ive-bg-deep" style={{ outline: `1.5px solid ${p.projectColor || '#4ade80'}40`, outlineOffset: '0.5px' }}>
+                          <i className={`fa-brands ${p.projectProvider === 'github' ? 'fa-github' : 'fa-gitlab'} text-sm`} style={{ color: p.projectColor || '#4ade80' }} />
+                        </span>
                       )}
                       <span className="text-sm font-bold text-ive-text flex-1 truncate">{p.projectName}</span>
                       <span className="text-xs text-ive-text-dim">{p.tasks}건</span>

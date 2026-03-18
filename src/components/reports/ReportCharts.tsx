@@ -108,7 +108,7 @@ export function DailyTrendChart({ data, prevData, type }: {
 // ───────────── 프로젝트별 요약 (차트 X, 깔끔한 테이블) ─────────────
 
 interface CompareItem {
-  name: string; color: string; avatar?: string
+  name: string; color: string; avatar?: string; avatarUrl?: string; provider?: string
   tasks: number; cost: number; prevTasks: number; prevCost: number
 }
 
@@ -138,9 +138,13 @@ export function CompareTable({ title, data, icon }: { title: string; data: Compa
             <div className="flex items-center gap-1.5 min-w-0">
               {d.avatar ? (
                 <AgentAvatar avatar={d.avatar} size="sm" className="!w-4 !h-4 !text-[8px]" />
-              ) : (
-                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
-              )}
+              ) : d.avatarUrl ? (
+                <img src={d.avatarUrl} alt="" className="w-4 h-4 rounded object-cover shrink-0" style={{ outline: `1.5px solid ${d.color || '#4ade80'}60`, outlineOffset: '0.5px' }} />
+              ) : d.provider ? (
+                <span className="w-4 h-4 rounded flex items-center justify-center shrink-0 bg-ive-bg-deep" style={{ outline: `1px solid ${d.color || '#4ade80'}40`, outlineOffset: '0.5px' }}>
+                  <i className={`fa-brands ${d.provider === 'github' ? 'fa-github' : 'fa-gitlab'} text-[9px]`} style={{ color: d.color || '#4ade80' }} />
+                </span>
+              ) : null}
               <span className="text-xs font-bold text-ive-text truncate">{d.name}</span>
             </div>
             <span className="text-xs font-extrabold text-ive-text text-right">{d.tasks}</span>
