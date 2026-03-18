@@ -97,7 +97,7 @@ export default function LiveTracePanel({ agents, onKill }: Props) {
       {/* 현재 선택된 에이전트 내용 */}
       <div className="flex-1 flex flex-col min-h-0 p-3 gap-2">
         <div className="flex items-center justify-between shrink-0">
-          <div className="min-w-0">
+          <div className="min-w-0 truncate">
             <span className="text-sm font-black text-ive-green">#{current.execution!.issueIid}</span>
             {current.execution!.issueTitle && (
               <span className="text-sm text-ive-text ml-1.5 font-semibold">{current.execution!.issueTitle}</span>
