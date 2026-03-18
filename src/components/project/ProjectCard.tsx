@@ -162,8 +162,8 @@ export default function ProjectCard({ project }: Props) {
                 </span>
               )}
             </div>
-            <span onClick={e => { e.preventDefault(); e.stopPropagation(); window.open(project.repoUrl.replace(/\.git$/, ''), '_blank') }} className="text-sm text-ive-text-muted font-mono opacity-60 mb-1 break-all leading-tight hover:text-ive-green hover:opacity-100 transition-colors inline-block cursor-pointer">
-              {project.repoUrl}<i className="fa-solid fa-arrow-up-right-from-square text-xs ml-1 opacity-50" />
+            <span className="text-sm text-ive-text-muted font-mono opacity-60 mb-1 break-all leading-tight inline-block">
+              {project.repoUrl}<i onClick={e => { e.preventDefault(); e.stopPropagation(); window.open(project.repoUrl.replace(/\.git$/, ''), '_blank') }} className="fa-solid fa-arrow-up-right-from-square text-xs ml-1 opacity-50 cursor-pointer hover:text-ive-green hover:opacity-100 transition-colors p-1" />
             </span>
             <div className="flex items-center gap-2 mt-1">
               {project.lastCheckedAt && (
