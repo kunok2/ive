@@ -719,7 +719,7 @@ export default function ReportsTab() {
                 icon="fa-robot"
                 data={data.byAgent.map(a => {
                   const prev = data.prevByAgent?.find(pa => pa.agentId === a.agentId)
-                  return { name: a.agentName, color: '#22d3ee', tasks: a.tasks, cost: a.cost, prevTasks: prev?.tasks ?? 0, prevCost: prev?.cost ?? 0 }
+                  return { name: a.agentName, color: '#22d3ee', avatar: a.agentAvatar, tasks: a.tasks, cost: a.cost, prevTasks: prev?.tasks ?? 0, prevCost: prev?.cost ?? 0 }
                 })}
               />
             </section>
