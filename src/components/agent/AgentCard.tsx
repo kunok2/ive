@@ -358,60 +358,56 @@ export default function AgentCard({ agent, onDelete, compact, assignedProject, o
       </div>
 
       {/* 대시보드 통계 바 */}
-      <div className="flex items-stretch border-t border-ive-border-dark">
+      <div className="flex items-center border-t border-ive-border-dark">
         {/* 작업중 */}
         <button
           onClick={() => setExpandedPanel(expandedPanel === 'running' ? null : 'running')}
-          className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'running' ? 'bg-ive-amber/5' : 'hover:bg-white/[0.02]'}`}
+          className={`flex-1 py-2 px-2 flex items-center justify-center gap-1.5 transition-all ${expandedPanel === 'running' ? 'bg-ive-amber/5' : 'hover:bg-white/[0.02]'}`}
         >
-          <span className={`text-lg font-black leading-none ${runningCount > 0 ? 'text-ive-amber animate-pulse' : 'text-ive-text-dim'}`}>
+          <span className="text-xs text-ive-text-dim font-bold">작업중</span>
+          <span className={`text-sm font-black ${runningCount > 0 ? 'text-ive-amber animate-pulse' : 'text-ive-text-dim'}`}>
             {runningCount}
           </span>
-          <Sparkline data={snapshots.map(s => s.running)} width={40} height={12} color="amber" />
-          <span className="text-xs text-ive-text-dim font-bold">작업중</span>
+          <Sparkline data={snapshots.map(s => s.running)} width={32} height={12} color="amber" />
         </button>
 
         {/* 완료 */}
         <button
           onClick={() => setExpandedPanel(expandedPanel === 'done' ? null : 'done')}
-          className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'done' ? 'bg-ive-green/5' : 'hover:bg-white/[0.02]'}`}
+          className={`flex-1 py-2 px-2 flex items-center justify-center gap-1.5 transition-all ${expandedPanel === 'done' ? 'bg-ive-green/5' : 'hover:bg-white/[0.02]'}`}
         >
-          <div className="flex items-baseline gap-1">
-            <span className={`text-lg font-black leading-none ${completedCount > 0 ? 'text-ive-green' : 'text-ive-text-dim'}`}>
-              {completedCount}
-            </span>
-            {stats && yesterdayDiff !== 0 && (
-              <span className={`text-xs font-bold ${yesterdayDiff > 0 ? 'text-ive-green' : 'text-ive-red'}`}>
-                {yesterdayDiff > 0 ? '+' : ''}{yesterdayDiff}
-              </span>
-            )}
-          </div>
-          <Sparkline data={snapshots.map(s => s.completed)} width={40} height={12} color="green" />
           <span className="text-xs text-ive-text-dim font-bold">완료</span>
+          <span className={`text-sm font-black ${completedCount > 0 ? 'text-ive-green' : 'text-ive-text-dim'}`}>
+            {completedCount}
+          </span>
+          {stats && yesterdayDiff !== 0 && (
+            <span className={`text-xs font-bold ${yesterdayDiff > 0 ? 'text-ive-green' : 'text-ive-red'}`}>
+              {yesterdayDiff > 0 ? '+' : ''}{yesterdayDiff}
+            </span>
+          )}
+          <Sparkline data={snapshots.map(s => s.completed)} width={32} height={12} color="green" />
         </button>
 
         {/* 실패 */}
         <button
           onClick={() => setExpandedPanel(expandedPanel === 'failed' ? null : 'failed')}
-          className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'failed' ? 'bg-ive-red/5' : 'hover:bg-white/[0.02]'}`}
+          className={`flex-1 py-2 px-2 flex items-center justify-center gap-1.5 transition-all ${expandedPanel === 'failed' ? 'bg-ive-red/5' : 'hover:bg-white/[0.02]'}`}
         >
-          <span className={`text-lg font-black leading-none ${failedCount > 0 ? 'text-ive-red' : 'text-ive-text-dim'}`}>
+          <span className="text-xs text-ive-text-dim font-bold">실패</span>
+          <span className={`text-sm font-black ${failedCount > 0 ? 'text-ive-red' : 'text-ive-text-dim'}`}>
             {failedCount}
           </span>
-          <Sparkline data={snapshots.map(s => s.failed)} width={40} height={12} color="red" />
-          <span className="text-xs text-ive-text-dim font-bold">실패</span>
+          <Sparkline data={snapshots.map(s => s.failed)} width={32} height={12} color="red" />
         </button>
 
         {/* 통계 */}
         <button
           onClick={() => setExpandedPanel(expandedPanel === 'stats' ? null : 'stats')}
-          className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'stats' ? 'bg-ive-cyan/5' : 'hover:bg-white/[0.02]'}`}
+          className={`flex-1 py-2 px-2 flex items-center justify-center gap-1.5 transition-all ${expandedPanel === 'stats' ? 'bg-ive-cyan/5' : 'hover:bg-white/[0.02]'}`}
         >
-          <span className="text-lg leading-none">
-            <i className={`fa-solid fa-chart-bar ${expandedPanel === 'stats' ? 'text-ive-cyan' : 'text-ive-text-dim'}`} />
-          </span>
-          <Sparkline data={snapshots.map(s => s.costUsd)} width={40} height={12} color="cyan" />
           <span className="text-xs text-ive-text-dim font-bold">통계</span>
+          <i className={`fa-solid fa-chart-bar text-sm ${expandedPanel === 'stats' ? 'text-ive-cyan' : 'text-ive-text-dim'}`} />
+          <Sparkline data={snapshots.map(s => s.costUsd)} width={32} height={12} color="cyan" />
         </button>
       </div>
 
