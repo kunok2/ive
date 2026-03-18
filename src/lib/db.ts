@@ -752,6 +752,36 @@ export function getSnapshots(entityType: string, entityId: string, limit: number
   })).reverse()
 }
 
+export function getDailyAvgSnapshots(entityType: string, entityId: string, limit: number = 60): StatSnapshot[] {
+  const rows = getDb().prepare(`
+    SELECT
+      DATE(timestamp) as day,
+      ROUND(AVG(running), 2) as running,
+      ROUND(AVG(waiting), 2) as waiting,
+      ROUND(AVG(completed), 2) as completed,
+      ROUND(AVG(failed), 2) as failed,
+      ROUND(AVG(total_tokens), 2) as total_tokens,
+      ROUND(AVG(cost_usd), 6) as cost_usd
+    FROM stat_snapshots
+    WHERE entity_type = ? AND entity_id = ?
+    GROUP BY DATE(timestamp)
+    ORDER BY day DESC
+    LIMIT ?
+  `).all(entityType, entityId, limit) as any[]
+  return rows.map(r => ({
+    id: `avg-${r.day}`,
+    entityType,
+    entityId,
+    timestamp: r.day,
+    running: r.running,
+    waiting: r.waiting,
+    completed: r.completed,
+    failed: r.failed,
+    totalTokens: r.total_tokens,
+    costUsd: r.cost_usd,
+  })).reverse()
+}
+
 export function cleanOldSnapshots(retentionDays: number = 7) {
   const cutoff = new Date(Date.now() - retentionDays * 86400000).toISOString()
   getDb().prepare('DELETE FROM stat_snapshots WHERE timestamp < ?').run(cutoff)

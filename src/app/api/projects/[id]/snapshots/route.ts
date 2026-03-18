@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
-import { getProject, getSnapshots, getProjectAccess } from '@/lib/db'
+import { getProject, getSnapshots, getDailyAvgSnapshots, getProjectAccess } from '@/lib/db'
 
 export async function GET(
   req: NextRequest,
@@ -15,7 +15,10 @@ export async function GET(
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
+  const mode = req.nextUrl.searchParams.get('mode')
   const limit = project.sparklinePoints ?? 60
-  const snapshots = getSnapshots('project', id, limit)
+  const snapshots = mode === 'daily_avg'
+    ? getDailyAvgSnapshots('project', id, limit)
+    : getSnapshots('project', id, limit)
   return NextResponse.json(snapshots)
 }

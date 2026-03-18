@@ -56,7 +56,7 @@ export default function ProjectCard({ project }: Props) {
     try {
       const [statsRes, snapRes] = await Promise.all([
         fetch(`/api/projects/${project.id}/stats`),
-        fetch(`/api/projects/${project.id}/snapshots`),
+        fetch(`/api/projects/${project.id}/snapshots?mode=daily_avg`),
       ])
       if (statsRes.ok) setStats(await statsRes.json())
       if (snapRes.ok) setSnapshots(await snapRes.json())
