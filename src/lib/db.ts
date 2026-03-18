@@ -737,7 +737,7 @@ export function createSnapshot(s: StatSnapshot) {
   ).run(s.id, s.entityType, s.entityId, s.timestamp, s.running, s.waiting, s.completed, s.failed, s.totalTokens, s.costUsd)
 }
 
-export function getSnapshots(entityType: string, entityId: string, limit: number = 60): StatSnapshot[] {
+export function getSnapshots(entityType: 'project' | 'agent', entityId: string, limit: number = 60): StatSnapshot[] {
   const rows = getDb().prepare(`
     SELECT * FROM stat_snapshots
     WHERE entity_type = ? AND entity_id = ?
@@ -752,7 +752,7 @@ export function getSnapshots(entityType: string, entityId: string, limit: number
   })).reverse()
 }
 
-export function getDailyAvgSnapshots(entityType: string, entityId: string, limit: number = 60): StatSnapshot[] {
+export function getDailyAvgSnapshots(entityType: 'project' | 'agent', entityId: string, limit: number = 60): StatSnapshot[] {
   const rows = getDb().prepare(`
     SELECT
       DATE(timestamp) as day,
