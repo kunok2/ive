@@ -28,7 +28,7 @@ export default function HomePage() {
   const router = useRouter()
   const { state, logout, refreshUser } = useStore()
   const { activeTab } = useTab()
-  const { alert: showAlert } = useDialog()
+  const { alert: showAlert, confirm: showConfirm } = useDialog()
   const [showNewProject, setShowNewProject] = useState(false)
   const [showNewAgent, setShowNewAgent] = useState(false)
   const [editMode, setEditMode] = useState(false)
@@ -102,12 +102,17 @@ export default function HomePage() {
               onClick={() => setShowChangePassword(true)}
               className="w-8 h-8 rounded-full bg-ive-bg-card border border-ive-border-subtle flex items-center justify-center text-ive-text-dim hover:text-ive-text active:scale-95 transition-all"
               title="정보 열람 및 수정"
+              aria-label="내 정보"
             >
               <i className="fa-solid fa-user-gear text-sm" />
             </button>
             <button
-              onClick={async () => { await logout(); router.push('/login') }}
+              onClick={async () => {
+                const ok = await showConfirm({ title: '로그아웃', message: '로그아웃 하시겠습니까?', confirmText: '로그아웃', cancelText: '취소', variant: 'warning' })
+                if (ok) { await logout(); router.push('/login') }
+              }}
               className="w-8 h-8 rounded-full bg-ive-bg-card border border-ive-border-subtle flex items-center justify-center text-ive-text-dim hover:text-ive-text active:scale-95 transition-all"
+              aria-label="로그아웃"
             >
               <i className="fa-solid fa-right-from-bracket text-sm" />
             </button>

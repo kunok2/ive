@@ -139,9 +139,7 @@ export default function IntroSlides({ onComplete }: IntroSlidesProps) {
           )}
           <button
             onClick={goNext}
-            className={`flex-1 py-3 rounded-lg text-base font-bold text-white transition-colors ${
-              isLast ? 'bg-ive-green-dark active:bg-ive-green/80' : 'bg-ive-green-dark active:bg-ive-green/80'
-            }`}
+            className="flex-1 py-3 rounded-lg text-base font-bold text-white transition-colors bg-ive-green-dark active:bg-ive-green/80"
           >
             {isLast ? (
               <><i className="fa-solid fa-right-to-bracket mr-1.5" />시작하기</>

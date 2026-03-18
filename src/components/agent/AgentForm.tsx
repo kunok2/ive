@@ -113,7 +113,7 @@ export default function AgentForm({ onSuccess }: Props) {
                 <div>
                   <div className={`text-base font-bold ${disabled ? 'text-ive-text-dim' : cliName === t.value ? 'text-ive-green' : 'text-ive-text'}`}>
                     {t.label}
-                    {disabled && <span className="ml-2 text-sm font-normal text-ive-text-dim">(준비 중)</span>}
+                    {disabled && <span className="ml-2 text-sm font-normal text-ive-text-dim">(지원 예정)</span>}
                   </div>
                   <div className="text-base text-ive-text-muted">{t.desc}</div>
                 </div>
@@ -125,7 +125,7 @@ export default function AgentForm({ onSuccess }: Props) {
 
       {/* Agent 이름 */}
       <div>
-        <label className="block text-base font-semibold text-ive-text-muted mb-2">Agent 이름</label>
+        <label className="block text-base font-semibold text-ive-text-muted mb-2">Agent 이름 <span className="text-ive-red">*</span></label>
         <input
           type="text"
           value={name}

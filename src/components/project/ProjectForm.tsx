@@ -218,7 +218,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
 
       {/* 프로젝트 이름 */}
       <div>
-        <label className="block text-base font-semibold text-ive-text-muted mb-2">프로젝트 이름</label>
+        <label className="block text-base font-semibold text-ive-text-muted mb-2">프로젝트 이름 <span className="text-ive-red">*</span></label>
         <input
           type="text"
           value={name}
@@ -230,7 +230,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
 
       {/* 저장소 URL */}
       <div>
-        <label className="block text-base font-semibold text-ive-text-muted mb-2">저장소 URL</label>
+        <label className="block text-base font-semibold text-ive-text-muted mb-2">저장소 URL <span className="text-ive-red">*</span></label>
         <input
           type="url"
           value={repoUrl}
@@ -243,7 +243,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
       {/* 액세스 토큰 */}
       <div>
         <label className="block text-base font-semibold text-ive-text-muted mb-2">
-          Git 액세스 토큰 <span className="text-ive-text-dim font-normal">(Personal Access Token)</span>
+          Git 액세스 토큰 <span className="text-ive-red">*</span> <span className="text-ive-text-dim font-normal">(Personal Access Token)</span>
         </label>
         <input
           type="text"
