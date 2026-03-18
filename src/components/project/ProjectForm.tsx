@@ -162,9 +162,11 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
       labelDone: labelDone.trim(),
       showToolUsage,
       checkInterval: Number(checkInterval) || 10,
-      ...(existing
-        ? {}
-        : { lastCheckedAt: null, lastScannedIssueCount: null, scannerActive: false, lastError: null, lastErrorAt: null }),
+      lastCheckedAt: existing?.lastCheckedAt ?? null,
+      lastScannedIssueCount: existing?.lastScannedIssueCount ?? null,
+      scannerActive: existing?.scannerActive ?? false,
+      lastError: existing?.lastError ?? null,
+      lastErrorAt: existing?.lastErrorAt ?? null,
       sortOrder: existing?.sortOrder ?? 0,
       avatarUrl,
       snapshotInterval,
