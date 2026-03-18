@@ -76,6 +76,24 @@ body {
   40% { opacity: 1; transform: scale(1.2); }
 }
 
+@keyframes toast-in {
+  from { transform: translateY(100%) scale(0.95); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+@keyframes toast-out {
+  from { transform: translateY(0) scale(1); opacity: 1; }
+  to { transform: translateY(100%) scale(0.95); opacity: 0; }
+}
+
+.animate-toast-in {
+  animation: toast-in 0.35s cubic-bezier(0.21, 1.02, 0.73, 1) forwards;
+}
+
+.animate-toast-out {
+  animation: toast-out 0.3s ease-in forwards;
+}
+
 /* Firefox */
 * {
   scrollbar-width: thin;

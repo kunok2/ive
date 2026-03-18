@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import ConfirmModal from '@/components/ui/ConfirmModal'
+import { useToast } from '@/components/ui/Toast'
 
 interface MRInfo {
   iid: number
@@ -27,6 +28,7 @@ interface Props {
 
 export default function MRReviewSection({ projectId, issueIid }: Props) {
   const router = useRouter()
+  const { watchPipeline } = useToast()
   const [mr, setMr] = useState<MRInfo | null>(null)
   const [loading, setLoading] = useState(true)
   const [merging, setMerging] = useState(false)
@@ -60,6 +62,15 @@ export default function MRReviewSection({ projectId, issueIid }: Props) {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Merge failed')
       await fetchMR()
+      // 머지 성공 후 파이프라인 모니터링 시작
+      if (mr) {
+        watchPipeline({
+          projectId,
+          issueIid,
+          mrIid: mr.iid,
+          label: `!${mr.iid} ${mr.source_branch}`,
+        })
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : '머지 실패')
     } finally {
