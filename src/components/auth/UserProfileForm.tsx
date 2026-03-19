@@ -58,9 +58,18 @@ export default function UserProfileForm({ userId, email, name, avatar, onSuccess
         setCropFile(null)
         setActiveSection('none')
       } else {
-        const data = await res.json()
-        alert(data.error || '업로드 실패')
+        let errorMsg = '업로드 실패'
+        try {
+          const data = await res.json()
+          errorMsg = data.error || errorMsg
+        } catch {
+          if (res.status === 413) errorMsg = '파일이 너무 큽니다. 5MB 이하로 줄여주세요.'
+          else errorMsg = `업로드 실패 (${res.status})`
+        }
+        alert(errorMsg)
       }
+    } catch {
+      alert('네트워크 오류가 발생했습니다. 다시 시도해주세요.')
     } finally {
       setUploading(false)
     }
@@ -224,7 +233,9 @@ export default function UserProfileForm({ userId, email, name, avatar, onSuccess
                   const file = e.target.files?.[0]
                   if (!file) return
                   if (file.size > 5 * 1024 * 1024) {
-                    alert('파일 크기는 5MB 이하여야 합니다.')
+                    const sizeMB = (file.size / (1024 * 1024)).toFixed(1)
+                    alert(`파일 크기가 ${sizeMB}MB입니다. 5MB 이하여야 합니다.`)
+                    if (fileInputRef.current) fileInputRef.current.value = ''
                     return
                   }
                   setCropFile(file)

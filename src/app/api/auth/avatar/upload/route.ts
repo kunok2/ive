@@ -8,7 +8,12 @@ export async function POST(req: NextRequest) {
   const user = await getCurrentUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const formData = await req.formData()
+  let formData: FormData
+  try {
+    formData = await req.formData()
+  } catch {
+    return NextResponse.json({ error: '파일이 너무 크거나 형식이 올바르지 않습니다.' }, { status: 413 })
+  }
   const file = formData.get('file') as File | null
   if (!file) return NextResponse.json({ error: '파일을 선택해주세요.' }, { status: 400 })
 
