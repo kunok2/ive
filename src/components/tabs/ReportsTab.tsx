@@ -628,12 +628,10 @@ export default function ReportsTab() {
                             <div className="text-xs font-bold text-ive-text">{formatDuration(validWait[validWait.length - 1] ?? 0)}</div>
                             <div className="text-[10px] text-ive-text-dim">최근</div>
                           </div>
-                          {data.prevLifecycle.waitCount > 0 && (
-                            <div className="text-right shrink-0 ml-1">
-                              <div className="text-xs font-bold text-ive-text-dim">{formatDuration(data.prevLifecycle.waitAvg)}</div>
-                              <div className="text-[10px] text-ive-text-dim">이전 평균</div>
-                            </div>
-                          )}
+                          <div className="text-right shrink-0 ml-1">
+                            <div className="text-xs font-bold text-ive-text-dim">{data.prevLifecycle.waitCount > 0 ? formatDuration(data.prevLifecycle.waitAvg) : '-'}</div>
+                            <div className="text-[10px] text-ive-text-dim">이전 평균</div>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -673,12 +671,10 @@ export default function ReportsTab() {
                             <div className="text-xs font-bold text-ive-text">{formatDuration(validProc[validProc.length - 1] ?? 0)}</div>
                             <div className="text-[10px] text-ive-text-dim">최근</div>
                           </div>
-                          {data.prevLifecycle.procCount > 0 && (
-                            <div className="text-right shrink-0 ml-1">
-                              <div className="text-xs font-bold text-ive-text-dim">{formatDuration(data.prevLifecycle.procAvg)}</div>
-                              <div className="text-[10px] text-ive-text-dim">이전 평균</div>
-                            </div>
-                          )}
+                          <div className="text-right shrink-0 ml-1">
+                            <div className="text-xs font-bold text-ive-text-dim">{data.prevLifecycle.procCount > 0 ? formatDuration(data.prevLifecycle.procAvg) : '-'}</div>
+                            <div className="text-[10px] text-ive-text-dim">이전 평균</div>
+                          </div>
                         </div>
                       </div>
                     </div>
