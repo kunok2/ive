@@ -428,6 +428,42 @@ export async function fetchGitHubPRCheckRuns(project: Project, decryptedToken: s
 }
 
 /**
+ * 특정 브랜치(ref)의 최신 check runs를 조회합니다.
+ * 머지 후 타겟 브랜치의 CI 상태 조회에 사용됩니다.
+ */
+export async function fetchGitHubBranchCheckRuns(project: Project, decryptedToken: string, ref: string) {
+  const ownerRepo = getOwnerRepo(project.repoUrl);
+  if (!ownerRepo) return [];
+
+  const headers = getGitHubAuthHeaders(project, decryptedToken);
+
+  try {
+    const branchRes = await fetch(apiUrl(project, `/branches/${encodeURIComponent(ref)}`), { headers });
+    if (!branchRes.ok) return [];
+    const branchData = await branchRes.json();
+    const sha = branchData.commit?.sha;
+    if (!sha) return [];
+
+    const checksRes = await fetch(apiUrl(project, `/commits/${sha}/check-runs`), { headers });
+    if (!checksRes.ok) return [];
+    const checksData = await checksRes.json();
+
+    const runs = checksData.check_runs || [];
+    if (runs.length === 0) return [];
+
+    const allCompleted = runs.every((r: any) => r.status === 'completed');
+    const anyFailed = runs.some((r: any) => r.conclusion === 'failure');
+    let status = 'running';
+    if (allCompleted) status = anyFailed ? 'failed' : 'success';
+
+    return [{ id: 0, status, web_url: branchData.commit?.html_url, created_at: runs[0]?.started_at }];
+  } catch (err) {
+    console.error(`[GitHub] Error fetching check runs for branch ${ref}:`, err);
+    return [];
+  }
+}
+
+/**
  * 프로젝트의 IVE 관련 이슈를 모두 가져옵니다 (모든 IVE 레이블 대상).
  */
 export async function fetchAllIveIssues(project: Project, decryptedToken: string) {

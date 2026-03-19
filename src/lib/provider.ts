@@ -74,6 +74,12 @@ export function fetchMRPipelines(project: Project, token: string, mrIid: number)
     : gitlab.fetchGitLabMRPipelines(project, token, mrIid);
 }
 
+export function fetchBranchPipelines(project: Project, token: string, ref: string) {
+  return project.provider === 'github'
+    ? github.fetchGitHubBranchCheckRuns(project, token, ref)
+    : gitlab.fetchGitLabBranchPipelines(project, token, ref);
+}
+
 // Single issue fetch (for GET /issues/[iid])
 export async function fetchSingleIssue(project: Project, iid: number, token: string) {
   if (project.provider === 'github') {

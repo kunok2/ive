@@ -532,6 +532,29 @@ export async function fetchGitLabMRPipelines(project: Project, decryptedToken: s
 }
 
 /**
+ * 특정 브랜치(ref)의 최신 파이프라인을 조회합니다.
+ * 머지 후 타겟 브랜치의 배포 파이프라인 조회에 사용됩니다.
+ */
+export async function fetchGitLabBranchPipelines(project: Project, decryptedToken: string, ref: string) {
+  const projectPath = getProjectPath(project.repoUrl);
+  if (!projectPath) return [];
+
+  const headers = getAuthHeaders(project, decryptedToken);
+
+  try {
+    const res = await fetch(
+      apiUrl(project, `/pipelines?ref=${encodeURIComponent(ref)}&order_by=id&sort=desc&per_page=5`),
+      { headers }
+    );
+    if (!res.ok) return [];
+    return await res.json();
+  } catch (err) {
+    console.error(`[GitLab] Error fetching pipelines for ref ${ref}:`, err);
+    return [];
+  }
+}
+
+/**
  * 이슈를 생성합니다.
  */
 export async function createGitLabIssue(
