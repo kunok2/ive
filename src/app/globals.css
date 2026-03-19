@@ -108,9 +108,12 @@ body {
 
 @keyframes marquee {
   0% { transform: translateX(0); }
-  20% { transform: translateX(0); }
-  80% { transform: translateX(var(--marquee-distance)); }
-  100% { transform: translateX(var(--marquee-distance)); }
+  10% { transform: translateX(0); }
+  45% { transform: translateX(var(--marquee-distance)); }
+  55% { transform: translateX(var(--marquee-distance)); }
+  55.1% { transform: translateX(var(--marquee-reset)); }
+  90% { transform: translateX(0); }
+  100% { transform: translateX(0); }
 }
 
 .marquee-container {
@@ -124,7 +127,7 @@ body {
 }
 
 .marquee-content.scrolling {
-  animation: marquee 5s ease-in-out infinite alternate;
+  animation: marquee 10s linear infinite;
 }
 
 /* Firefox */
