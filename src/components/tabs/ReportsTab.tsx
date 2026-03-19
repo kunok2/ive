@@ -493,11 +493,11 @@ export default function ReportsTab() {
             <div className="grid grid-cols-3 gap-2">
               <SummaryCard label="작업" value={`${data.summary.totalTasks.toLocaleString()}건`} sub={`성공 ${data.summary.successCount.toLocaleString()}`} color="text-ive-green" diff={diffPct(data.summary.totalTasks, data.prevSummary.totalTasks)} />
               <SummaryCard label="성공률" value={`${data.summary.successRate}%`} sub={`실패 ${data.summary.failedCount.toLocaleString()}`} color="text-ive-cyan" diff={diffPt(data.summary.successRate, data.prevSummary.successRate)} />
-              <SummaryCard label="비용" value={`$${data.summary.totalCost.toFixed(2)}`} sub="" color="text-ive-amber" diff={diffPct(data.summary.totalCost, data.prevSummary.totalCost)} invertColor />
+              <SummaryCard label="비용" value={`$${data.summary.totalCost.toFixed(2)}`} sub={(() => { const d = data.summary.totalCost - data.prevSummary.totalCost; if (data.prevSummary.totalCost === 0 && data.summary.totalCost === 0) return ''; if (data.prevSummary.totalCost === 0) return '신규'; return `${d >= 0 ? '+' : '-'}$${Math.abs(d).toFixed(2)}` })()} color="text-ive-amber" diff={diffPct(data.summary.totalCost, data.prevSummary.totalCost)} invertColor />
             </div>
             <div className="mt-2 grid grid-cols-2 gap-2">
-              <SummaryCard label="총 소요시간" value={formatDuration(data.summary.totalDurationMin)} sub="" color="text-ive-text" diff={diffPct(data.summary.totalDurationMin, data.prevSummary.totalDurationMin)} invertColor />
-              <SummaryCard label="평균 소요시간" value={formatDuration(data.summary.avgDurationMin)} sub="" color="text-ive-text" diff={diffPct(data.summary.avgDurationMin, data.prevSummary.avgDurationMin)} invertColor />
+              <SummaryCard label="총 소요시간" value={formatDuration(data.summary.totalDurationMin)} sub={(() => { const d = data.summary.totalDurationMin - data.prevSummary.totalDurationMin; if (data.prevSummary.totalDurationMin === 0 && data.summary.totalDurationMin === 0) return ''; if (data.prevSummary.totalDurationMin === 0) return '신규'; return `${d >= 0 ? '+' : '-'}${formatDuration(Math.abs(d))}` })()} color="text-ive-text" diff={diffPct(data.summary.totalDurationMin, data.prevSummary.totalDurationMin)} invertColor />
+              <SummaryCard label="평균 소요시간" value={formatDuration(data.summary.avgDurationMin)} sub={(() => { const d = data.summary.avgDurationMin - data.prevSummary.avgDurationMin; if (data.prevSummary.avgDurationMin === 0 && data.summary.avgDurationMin === 0) return ''; if (data.prevSummary.avgDurationMin === 0) return '신규'; return `${d >= 0 ? '+' : '-'}${formatDuration(Math.abs(d))}` })()} color="text-ive-text" diff={diffPct(data.summary.avgDurationMin, data.prevSummary.avgDurationMin)} invertColor />
             </div>
           </section>
 
@@ -1058,12 +1058,14 @@ function SummaryCard({ label, value, sub, color, diff, invertColor }: {
   const diffColor = diff == null ? '' : invertColor
     ? (diff > 0 ? 'text-ive-red' : diff < 0 ? 'text-ive-green' : 'text-ive-text-dim')
     : (diff > 0 ? 'text-ive-green' : diff < 0 ? 'text-ive-red' : 'text-ive-text-dim')
+  const subColor = !sub || sub === '신규' ? 'text-ive-cyan' : !invertColor ? 'text-ive-text-dim'
+    : sub.startsWith('+') ? 'text-ive-red' : sub.startsWith('-') ? 'text-ive-green' : 'text-ive-text-dim'
   return (
     <div className="bg-ive-bg-card border border-ive-border-subtle rounded-xl px-3 py-2 text-center">
       <div className="text-xs text-ive-text-dim">{label}</div>
       <div className={`text-lg font-extrabold ${color}`}>{value}</div>
       <div className="flex items-center justify-center gap-1">
-        {sub && <span className="text-xs text-ive-text-dim">{sub}</span>}
+        {sub && <span className={`text-[10px] font-bold ${subColor}`}>{sub}</span>}
         {diff != null && (
           <span className={`text-[10px] font-bold ${diffColor}`}>
             {diff > 0 ? '+' : ''}{diff.toLocaleString()}%
