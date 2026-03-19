@@ -886,7 +886,8 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
       const mrLabel = isGitHub ? 'PR' : 'MR';
       // 대화 내용을 마크다운으로 정리 (최대 60000자)
       const conversationLog = conversationParts.join('\n\n').substring(0, 60000);
-      const completionNote = `## IVE(봇) 개발 완료\n\n${mrLabel}: ${mrUrl}\n소요 시간: ${durationStr}\n\n개발이 완료되었습니다. 리뷰 후 머지해주세요.\n\n<details>\n<summary>🤖 AI 작업 로그 (펼치기)</summary>\n\n${conversationLog}\n\n</details>`;
+      const mrLine = mrUrl ? `${mrLabel}: ${mrUrl}` : `${mrLabel}: 생성 실패 (권한 부족 또는 API 오류)`;
+      const completionNote = `## IVE(봇) 개발 완료\n\n${mrLine}\n소요 시간: ${durationStr}\n\n개발이 완료되었습니다. 리뷰 후 머지해주세요.\n\n<details>\n<summary>🤖 AI 작업 로그 (펼치기)</summary>\n\n${conversationLog}\n\n</details>`;
       if (isGitHub) {
         await addGitHubIssueComment(project, iid, token, completionNote);
       } else {

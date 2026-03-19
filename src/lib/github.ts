@@ -235,7 +235,11 @@ export async function createGitHubPR(project: Project, decryptedToken: string, p
         body: payload.description || '',
       }),
     });
-    if (!res.ok) throw new Error(`Create PR failed: ${res.statusText}`);
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      console.error(`[GitHub] PR creation failed (${res.status}):`, errBody);
+      throw new Error(errBody.message || `Create PR failed: ${res.statusText}`);
+    }
     const pr = await res.json();
     return normalizePR(pr);
   } catch (err) {
