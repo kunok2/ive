@@ -684,6 +684,10 @@ export function resetStuckExecutions() {
     console.log(`[DB] Reset stuck execution ${r.id}`)
   }
   if (stuckRows.length > 0) console.log(`[DB] Reset ${stuckRows.length} stuck execution(s).`)
+
+  // 서버 재기동 시 '개발중(dev)' 상태로 멈춘 이슈를 '대기(waiting)'로 복원
+  const stuckIssues = getDb().prepare("UPDATE issue_stages SET stage = 'waiting', updated_at = datetime('now') WHERE stage = 'dev'").run()
+  if (stuckIssues.changes > 0) console.log(`[DB] Reset ${stuckIssues.changes} stuck issue(s) from 'dev' to 'waiting'.`)
 }
 
 export function hasActiveExecution(projectId: string, issueIid: number): boolean {
