@@ -365,13 +365,15 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
 
   console.log(`[Scanner] processIssues: ${issues.length} issues, ${assignments.length} agents`);
   for (const issue of issues) {
-    // 이미 진행 중이거나 실행 중이면 스킵 (로컬 DB 기준)
+    // 이미 진행 중이거나 완료/실패 상태면 스킵 (로컬 DB 기준)
     const currentStage = getIssueStage(project.id, issue.iid);
     if (
       currentStage === 'dev' ||
+      currentStage === 'done' ||
+      currentStage === 'dev_fail' ||
       hasActiveExecution(project.id, issue.iid)
     ) {
-      console.log(`[Scanner] [SKIP-INPROG] Issue #${issue.iid} (stage: ${currentStage}, activeExec: ${hasActiveExecution(project.id, issue.iid)})`);
+      console.log(`[Scanner] [SKIP] Issue #${issue.iid} (stage: ${currentStage}, activeExec: ${hasActiveExecution(project.id, issue.iid)})`);
       continue;
     }
 
