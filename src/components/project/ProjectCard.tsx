@@ -31,6 +31,7 @@ function MarqueeText({ children, className }: { children: React.ReactNode; class
       const overflow = content.scrollWidth - container.clientWidth
       if (overflow > 0) {
         content.style.setProperty('--marquee-distance', `-${overflow}px`)
+        content.style.setProperty('--marquee-reset', `${container.clientWidth}px`)
         setScrolling(true)
       } else {
         setScrolling(false)
