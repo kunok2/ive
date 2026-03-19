@@ -141,23 +141,6 @@ export default function AgentForm({ onSuccess }: Props) {
         <AvatarSelector value={avatar} onChange={setAvatar} />
       </div>
 
-      {/* CLI 설치 경로 (관리자 설정) */}
-      <div>
-        <label className="block text-base font-semibold text-ive-text-muted mb-2">
-          <i className="fa-solid fa-folder mr-1" />설치 경로
-        </label>
-        <div className="w-full bg-ive-bg-deep border border-ive-border rounded-lg px-4 py-3 text-base font-mono truncate">
-          {currentCliPath ? (
-            <span className="text-ive-text">{currentCliPath}</span>
-          ) : (
-            <span className="text-ive-text-dim">관리자 설정 필요</span>
-          )}
-        </div>
-        <p className="text-sm text-ive-text-dim mt-1">
-          <i className="fa-solid fa-shield mr-1" />관리자가 설정한 경로가 자동 적용됩니다
-        </p>
-      </div>
-
       {/* 버전 (선택) */}
       <div>
         <label className="block text-base font-semibold text-ive-text-muted mb-2">
