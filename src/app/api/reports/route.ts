@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { getExecutionsInRange, getAllTokenPricing } from '@/lib/db'
 import { calcCost } from '@/lib/token-pricing'
+import { getKSTTodayString, utcISOToKSTDate, utcISOToKSTMonth } from '@/lib/date-utils'
 
 function getWeekRange(date: Date): { start: string; end: string } {
   const d = new Date(date)
@@ -49,9 +50,9 @@ function periodKeys(start: string, end: string, type: string): string[] {
   return keys
 }
 
-/** 날짜 → 버킷 키 변환 */
+/** UTC ISO 날짜 → KST 기준 버킷 키 변환 */
 function toBucketKey(dateStr: string, type: string): string {
-  return type === 'yearly' ? dateStr.slice(0, 7) : dateStr.slice(0, 10)
+  return type === 'yearly' ? utcISOToKSTMonth(dateStr) : utcISOToKSTDate(dateStr)
 }
 
 export async function GET(req: NextRequest) {
@@ -60,7 +61,7 @@ export async function GET(req: NextRequest) {
 
   const url = req.nextUrl
   const type = url.searchParams.get('type') || 'weekly'
-  const dateStr = url.searchParams.get('date') || new Date().toISOString().slice(0, 10)
+  const dateStr = url.searchParams.get('date') || getKSTTodayString()
   const date = new Date(dateStr)
 
   let range: { start: string; end: string }
@@ -235,7 +236,7 @@ export async function GET(req: NextRequest) {
 
   // Daily trend (extended with waitAvg, procAvg) — 전체 기간 버킷 채움
   const allKeys = periodKeys(range.start, range.end, type)
-  const todayKey = toBucketKey(new Date().toISOString(), type)
+  const todayKey = toBucketKey(getKSTTodayString(), type)
   type BucketData = { tasks: number; success: number; failed: number; cost: number; waitTimes: number[]; procTimes: number[] }
   const dayMap = new Map<string, BucketData>()
   for (const key of allKeys) dayMap.set(key, { tasks: 0, success: 0, failed: 0, cost: 0, waitTimes: [], procTimes: [] })

@@ -5,6 +5,7 @@ import { Project, ProjectAssignment, Agent, TaskExecution, StatSnapshot } from '
 import { useEffect, useState, useCallback } from 'react'
 import { useStore } from '@/lib/store'
 import { useDialog } from '@/components/ui/ConfirmDialog'
+import { getKSTTodayStartISO } from '@/lib/date-utils'
 import Sparkline from '@/components/ui/Sparkline'
 import ExecutionList from '@/components/execution/ExecutionList'
 import LiveTracePanel from '@/components/execution/LiveTracePanel'
@@ -129,8 +130,8 @@ export default function ProjectCard({ project }: Props) {
 
   const runningExecs = executions.filter(e => e.status === 'running')
   const doneExecs = executions.filter(e => e.status !== 'running')
-  const todayStr = new Date().toISOString().slice(0, 10)
-  const todayDoneExecs = doneExecs.filter(e => e.startedAt >= todayStr)
+  const todayStartISO = getKSTTodayStartISO()
+  const todayDoneExecs = doneExecs.filter(e => e.startedAt >= todayStartISO)
 
   const runningCount = stats?.running ?? 0
   const completedCount = stats?.completed ?? 0
