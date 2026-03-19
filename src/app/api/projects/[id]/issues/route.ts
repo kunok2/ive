@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAccess } from '@/lib/db';
+import { getProject, getProjectAccess, getIssueStages, setIssueStage } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { decrypt } from '@/lib/crypto';
 import { fetchAllProjectIssues, createIssue } from '@/lib/provider';
@@ -16,8 +16,11 @@ export async function GET(
     const decryptedToken = decrypt(project.accessToken);
     const issues = await fetchAllProjectIssues(project, decryptedToken);
 
-    // 각 이슈에 stage 정보 부여
-    const stageMap: Record<string, string> = {
+    // 로컬 DB에서 stage 맵 로드
+    const localStages = getIssueStages(projectId);
+
+    // 원격 레이블 → stage 매핑 (로컬에 없는 이슈의 초기 등록용)
+    const labelStageMap: Record<string, string> = {
       [project.labelTarget]: 'waiting',
       [project.labelInProgress]: 'dev',
       [project.labelFailDev]: 'dev_fail',
@@ -25,24 +28,30 @@ export async function GET(
     };
 
     const mapped = issues.map((issue: any) => {
-      let stage = 'unknown';
-      const issueLabels = issue.labels || [];
-      for (const label of issueLabels) {
-        if (stageMap[label]) {
-          stage = stageMap[label];
-          break;
+      // 1. 로컬 DB에 stage가 있으면 우선 사용
+      let stage: string | null = localStages.get(issue.iid) || null;
+
+      // 2. 로컬에 없으면 원격 레이블에서 판단 후 DB에 등록
+      if (!stage) {
+        const issueLabels = issue.labels || [];
+        for (const label of issueLabels) {
+          if (labelStageMap[label]) {
+            stage = labelStageMap[label];
+            break;
+          }
+        }
+        if (stage) {
+          // 원격 레이블 기반 stage를 로컬 DB에 등록
+          setIssueStage(projectId, issue.iid, stage as any);
         }
       }
-      // IVE 라벨이 하나도 없는 이슈는 IVE 워크플로 대상이 아님
-      if (stage === 'unknown') {
-        stage = 'none';
-      }
+
       return {
         iid: issue.iid,
         title: issue.title,
         description: issue.description,
         state: issue.state,
-        stage,
+        stage: stage || 'none',
         labels: issue.labels,
         createdAt: issue.created_at,
         updatedAt: issue.updated_at,
@@ -80,6 +89,12 @@ export async function POST(
     const decryptedToken = decrypt(project.accessToken);
     const labels = asDev ? [project.labelTarget] : [];
     const issue = await createIssue(project, decryptedToken, title.trim(), description?.trim() ?? '', labels);
+
+    // 이슈 생성 시 로컬 DB에 stage 등록
+    if (asDev && issue.iid) {
+      setIssueStage(projectId, issue.iid, 'waiting');
+    }
+
     return NextResponse.json(issue);
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : '이슈 생성 실패' }, { status: 500 });

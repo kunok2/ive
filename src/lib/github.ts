@@ -203,7 +203,7 @@ export async function fetchGitHubIssueNotes(project: Project, issueNumber: numbe
     return comments.map((c: any) => ({
       id: c.id,
       body: c.body,
-      author: { name: c.user?.login || 'unknown' },
+      author: { name: c.user?.login || 'unknown', avatar_url: c.user?.avatar_url || '' },
       system: false,
       created_at: c.created_at,
     }));
@@ -598,13 +598,35 @@ export async function createGitHubIssue(
 
   const headers = getGitHubAuthHeaders(project, decryptedToken);
 
+  // 레이블이 있으면 먼저 동기화 시도 후, 실제 존재하는 레이블만 사용
+  let validLabels = labels;
+  if (labels.length > 0) {
+    await ensureGitHubLabels(project, decryptedToken); // 내부에서 에러 catch됨
+    // 실제 존재하는 레이블만 필터링 (권한 부족으로 생성 실패했을 수 있으므로)
+    try {
+      const labelsRes = await fetch(apiUrl(project, '/labels?per_page=100'), { headers });
+      if (labelsRes.ok) {
+        const existing = (await labelsRes.json()).map((l: any) => l.name);
+        validLabels = labels.filter(l => existing.includes(l));
+      } else {
+        validLabels = [];
+      }
+    } catch {
+      validLabels = [];
+    }
+  }
+
   const res = await fetch(apiUrl(project, '/issues'), {
     method: 'POST',
     headers: { ...headers, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title, body: description, labels }),
+    body: JSON.stringify({ title, body: description, labels: validLabels }),
   });
 
-  if (!res.ok) throw new Error(`이슈 생성 실패: ${res.statusText}`);
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    console.error(`[GitHub] Issue creation failed (${res.status}):`, errBody);
+    throw new Error(errBody.message || `이슈 생성 실패: ${res.statusText}`);
+  }
   return normalizeIssue(await res.json());
 }
 

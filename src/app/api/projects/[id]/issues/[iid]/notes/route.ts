@@ -19,6 +19,7 @@ export async function GET(
       id: n.id,
       body: n.body,
       author: n.author?.name,
+      avatarUrl: n.author?.avatar_url || '',
       system: n.system,
       createdAt: n.created_at,
     }));

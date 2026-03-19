@@ -10,13 +10,14 @@ export default function AgentsTab({ onAdd }: { onAdd?: () => void }) {
   const { state, deleteAgent, refreshAgents } = useStore()
   const [deleteAgentId, setDeleteAgentId] = useState<string | null>(null)
 
-  function getAssignedProject(agentId: string): string | null {
+  function getAssignedProjects(agentId: string): { id: string; name: string; color: string; provider: string }[] {
+    const result: { id: string; name: string; color: string; provider: string }[] = []
     for (const project of state.projects) {
       if (project.assignedAgents?.some(pa => pa.agentId === agentId)) {
-        return project.name
+        result.push({ id: project.id, name: project.name, color: project.color, provider: project.provider })
       }
     }
-    return null
+    return result
   }
 
   return (
@@ -48,7 +49,7 @@ export default function AgentsTab({ onAdd }: { onAdd?: () => void }) {
                 key={agent.id}
                 agent={agent}
                 onDelete={(id) => setDeleteAgentId(id)}
-                assignedProject={getAssignedProject(agent.id)}
+                assignedProjects={getAssignedProjects(agent.id)}
               />
             ))}
           </div>

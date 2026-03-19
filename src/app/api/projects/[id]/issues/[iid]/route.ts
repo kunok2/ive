@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getProject } from '@/lib/db'
+import { getProject, getIssueStage, setIssueStage } from '@/lib/db'
 import { decrypt } from '@/lib/crypto'
 import { updateIssue, fetchSingleIssue } from '@/lib/provider'
 
@@ -48,26 +48,25 @@ export async function GET(
     const issue = await fetchSingleIssue(project, Number(iid), decryptedToken)
     if (!issue) return NextResponse.json({ error: '이슈를 찾을 수 없습니다' }, { status: 404 })
 
-    // stage 정보 부여
-    const stageMap: Record<string, string> = {
-      [project.labelTarget]: 'waiting',
-      [project.labelInProgress]: 'dev',
-      [project.labelFailDev]: 'dev_fail',
-      [project.labelDone]: 'done',
-    }
-    const iveLabels = [project.labelTarget, project.labelInProgress, project.labelFailDev, project.labelDone]
-
-    let stage = 'unknown'
-    const issueLabels = issue.labels || []
-    for (const label of issueLabels) {
-      if (stageMap[label]) {
-        stage = stageMap[label]
-        break
+    // 로컬 DB에서 stage 조회, 없으면 원격 레이블에서 판단 후 등록
+    let stage = getIssueStage(projectId, Number(iid))
+    if (!stage) {
+      const labelStageMap: Record<string, string> = {
+        [project.labelTarget]: 'waiting',
+        [project.labelInProgress]: 'dev',
+        [project.labelFailDev]: 'dev_fail',
+        [project.labelDone]: 'done',
       }
-    }
-    if (stage === 'unknown') {
-      const hasIveLabel = issueLabels.some((l: string) => iveLabels.includes(l))
-      if (!hasIveLabel) stage = 'waiting'
+      const issueLabels = issue.labels || []
+      for (const label of issueLabels) {
+        if (labelStageMap[label]) {
+          stage = labelStageMap[label] as any
+          break
+        }
+      }
+      if (stage) {
+        setIssueStage(projectId, Number(iid), stage)
+      }
     }
 
     return NextResponse.json({

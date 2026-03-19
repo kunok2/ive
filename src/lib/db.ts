@@ -294,6 +294,18 @@ function initSchema(db: Database.Database) {
     )
   `)
 
+  // issue_stages 테이블 — 로컬에서 이슈 상태 관리
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS issue_stages (
+      project_id TEXT NOT NULL,
+      issue_iid INTEGER NOT NULL,
+      stage TEXT NOT NULL DEFAULT 'waiting',
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (project_id, issue_iid),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    )
+  `)
+
   seedAdmin(db)
   seedTokenPricing(db)
 }
@@ -983,4 +995,31 @@ export function setSystemSettings(settings: Record<string, string>) {
     }
   })
   tx()
+}
+
+// ── Issue Stages (로컬 이슈 상태 관리) ──
+
+export type IssueStage = 'waiting' | 'dev' | 'dev_fail' | 'done'
+
+export function getIssueStage(projectId: string, issueIid: number): IssueStage | null {
+  const r = getDb().prepare('SELECT stage FROM issue_stages WHERE project_id = ? AND issue_iid = ?').get(projectId, issueIid) as any
+  return r ? r.stage as IssueStage : null
+}
+
+export function getIssueStages(projectId: string): Map<number, IssueStage> {
+  const rows = getDb().prepare('SELECT issue_iid, stage FROM issue_stages WHERE project_id = ?').all(projectId) as any[]
+  const map = new Map<number, IssueStage>()
+  for (const r of rows) map.set(r.issue_iid, r.stage as IssueStage)
+  return map
+}
+
+export function setIssueStage(projectId: string, issueIid: number, stage: IssueStage) {
+  getDb().prepare(`
+    INSERT INTO issue_stages (project_id, issue_iid, stage, updated_at) VALUES (?, ?, ?, datetime('now'))
+    ON CONFLICT(project_id, issue_iid) DO UPDATE SET stage = excluded.stage, updated_at = excluded.updated_at
+  `).run(projectId, issueIid, stage)
+}
+
+export function deleteIssueStage(projectId: string, issueIid: number) {
+  getDb().prepare('DELETE FROM issue_stages WHERE project_id = ? AND issue_iid = ?').run(projectId, issueIid)
 }

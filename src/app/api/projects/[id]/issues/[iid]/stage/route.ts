@@ -1,32 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject } from '@/lib/db';
+import { getProject, setIssueStage, type IssueStage } from '@/lib/db';
 import { decrypt } from '@/lib/crypto';
 import { updateIssueLabels } from '@/lib/provider';
 
-// 단계 전환 매핑
-// action: 사용자가 선택할 수 있는 액션명
-// from → to: 레이블 변경
+// stage → stage 전환 매핑
 interface StageTransition {
   action: string;
+  toStage: IssueStage;
   fromLabel: string;
   toLabel: string;
 }
 
 function getTransitions(project: any): Record<string, StageTransition[]> {
   return {
-    // 대기 상태에서는 수동 전환 없음 (자동 스캐너가 처리)
     waiting: [],
-    // 개발 중 → 강제로 되돌리기 가능
     dev: [
-      { action: 'cancel', fromLabel: project.labelInProgress, toLabel: project.labelTarget },
+      { action: 'cancel', toStage: 'waiting', fromLabel: project.labelInProgress, toLabel: project.labelTarget },
     ],
-    // 개발 실패 → 재시도(대기로) 가능
     dev_fail: [
-      { action: 'retry', fromLabel: project.labelFailDev, toLabel: project.labelTarget },
+      { action: 'retry', toStage: 'waiting', fromLabel: project.labelFailDev, toLabel: project.labelTarget },
     ],
-    // 완료 → 다시 열기
     done: [
-      { action: 'reopen', fromLabel: project.labelDone, toLabel: project.labelTarget },
+      { action: 'reopen', toStage: 'waiting', fromLabel: project.labelDone, toLabel: project.labelTarget },
     ],
   };
 }
@@ -55,6 +50,10 @@ export async function POST(
     return NextResponse.json({ error: '허용되지 않는 액션입니다.' }, { status: 400 });
   }
 
+  // 1. 로컬 DB에 stage 업데이트 (항상 성공)
+  setIssueStage(projectId, Number(iid), transition.toStage);
+
+  // 2. 원격 레이블 업데이트 (best-effort — 실패해도 무시)
   try {
     const decryptedToken = decrypt(project.accessToken);
     await updateIssueLabels(
@@ -64,8 +63,9 @@ export async function POST(
       [transition.toLabel],
       [transition.fromLabel]
     );
-    return NextResponse.json({ success: true, from: transition.fromLabel, to: transition.toLabel });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : '단계 변경 실패' }, { status: 500 });
+    console.warn(`[Stage] Remote label update failed for ${projectId}#${iid}:`, err instanceof Error ? err.message : err);
   }
+
+  return NextResponse.json({ success: true, stage: transition.toStage });
 }

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getProjectsByUser, createProject, getProjectAssignments, getSharedProjectsForUser } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { decrypt, encrypt } from '@/lib/crypto'
+import { ensureLabels } from '@/lib/provider'
 
 export async function GET() {
   const user = await getCurrentUser()
@@ -44,5 +45,11 @@ export async function POST(req: Request) {
     accessToken: encrypt(body.accessToken || '')
   }
   createProject(project)
+
+  // 레이블 동기화 (백그라운드 — 실패해도 프로젝트 생성은 완료)
+  ensureLabels(project, body.accessToken || '').catch(err =>
+    console.warn(`[ensureLabels] ${project.name}:`, err)
+  )
+
   return NextResponse.json(project, { status: 201 })
 }

@@ -25,6 +25,7 @@ interface Note {
   id: number
   body: string
   author: string
+  avatarUrl: string
   system: boolean
   createdAt: string
 }
@@ -393,7 +394,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                       : 'bg-ive-green/[0.06] border border-ive-green/20'
                 }`}>
                   <div className="flex items-center gap-2 mb-1">
-                    <span className={`text-xs font-bold ${
+                    <span className={`text-xs font-bold flex items-center gap-1 ${
                       note.system ? 'text-ive-text-dim' : isBot ? 'text-ive-cyan' : 'text-ive-green'
                     }`}>
                       {note.system ? (
@@ -401,7 +402,14 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                       ) : isBot ? (
                         <><i className="fa-solid fa-robot mr-0.5" />IVE 봇</>
                       ) : (
-                        <><i className="fa-solid fa-user mr-0.5" />사용자</>
+                        <>
+                          {note.avatarUrl ? (
+                            <img src={note.avatarUrl} alt="" className="w-4 h-4 rounded-full" />
+                          ) : (
+                            <i className="fa-solid fa-user" />
+                          )}
+                          {note.author}
+                        </>
                       )}
                     </span>
                     <span className="text-xs text-ive-text-dim ml-auto">
@@ -431,7 +439,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
               }}
               placeholder="코멘트..."
               rows={1}
-              className="flex-1 bg-ive-bg-card border border-ive-border rounded-xl px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-green/50"
+              className="flex-1 min-h-10 bg-ive-bg-card border border-ive-border rounded-xl px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-green/50"
               style={{ overflow: 'hidden' }}
             />
             <button

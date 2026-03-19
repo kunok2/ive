@@ -12,11 +12,18 @@ import type { ToolCategory } from '@/lib/tool-activity'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
+interface AssignedProject {
+  id: string
+  name: string
+  color: string
+  provider: string
+}
+
 interface Props {
   agent: Agent
   onDelete?: (id: string) => void
   compact?: boolean
-  assignedProject?: string | null
+  assignedProjects?: AssignedProject[]
   onRemove?: (id: string) => void
 }
 
@@ -47,7 +54,7 @@ const statusConfig = {
   offline: { label: '오프라인', dot: 'bg-ive-text-dim' },
 }
 
-export default function AgentCard({ agent, onDelete, compact, assignedProject, onRemove }: Props) {
+export default function AgentCard({ agent, onDelete, compact, assignedProjects, onRemove }: Props) {
   const { refreshAgents, updateAgent } = useStore()
   const cli = cliConfig[agent.cliName]
   const status = statusConfig[agent.status]
@@ -240,9 +247,14 @@ export default function AgentCard({ agent, onDelete, compact, assignedProject, o
       >
         <div className="flex items-center gap-2.5">
           <AgentAvatar avatar={agent.avatar} size="md" toolBadge={toolBadge} />
-          <div>
+          <div className="min-w-0">
             <div className="text-base font-bold text-ive-green-pale">{agent.name}</div>
             <div className="text-sm text-ive-text-muted">{cli.label} · {cli.desc}</div>
+            {collapsed && assignedProjects && assignedProjects.length > 0 && (
+              <div className="text-xs text-ive-text-dim mt-0.5 truncate">
+                {assignedProjects.map(p => p.name).join(', ')}
+              </div>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -322,19 +334,6 @@ export default function AgentCard({ agent, onDelete, compact, assignedProject, o
 
       {/* 정보 */}
       <div className="p-3 space-y-2">
-        <div className="flex items-center gap-2 text-base">
-          <span className="text-ive-text-muted"><i className="fa-solid fa-folder w-4 text-center" /> 경로</span>
-          <code className="flex-1 text-base text-ive-text-dim bg-ive-bg-deep px-2 py-0.5 rounded font-mono truncate">
-            {agent.cliPath}
-          </code>
-          <button
-            onClick={() => { setEditing(true); setEditName(agent.name); setEditAvatar(agent.avatar) }}
-            className="shrink-0 text-xs text-ive-text-dim hover:text-ive-text transition-colors"
-          >
-            <i className="fa-solid fa-pen text-[10px]" />
-          </button>
-        </div>
-
         {agent.cliVersion && (
           <div className="flex items-center gap-2 text-base">
             <span className="text-ive-text-muted"><i className="fa-solid fa-code-branch w-4 text-center" /> 버전</span>
@@ -348,12 +347,21 @@ export default function AgentCard({ agent, onDelete, compact, assignedProject, o
           <span className="text-xs text-ive-text-dim">(이슈당 최대 대화 횟수)</span>
         </div>
 
-        {assignedProject !== undefined && (
+        {assignedProjects !== undefined && (
           <div className="flex items-center gap-2 text-base">
-            <span className="text-ive-text-muted"><i className="fa-solid fa-plug w-4 text-center" /> 배정</span>
-            <span className={`font-semibold ${assignedProject ? 'text-ive-green' : 'text-ive-text-dim'}`}>
-              {assignedProject || '미배정'}
-            </span>
+            <span className="text-ive-text-muted shrink-0"><i className="fa-solid fa-plug w-4 text-center" /> 배정</span>
+            {assignedProjects.length === 0 ? (
+              <span className="font-semibold text-ive-text-dim">미배정</span>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {assignedProjects.map(p => (
+                  <span key={p.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-sm font-semibold bg-ive-bg-deep border border-ive-border-dark">
+                    <i className={`fa-brands ${p.provider === 'github' ? 'fa-github' : 'fa-gitlab'} text-xs`} style={{ color: p.color }} />
+                    <span className="text-ive-text">{p.name}</span>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

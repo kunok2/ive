@@ -19,11 +19,8 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
   const [repoUrl, setRepoUrl] = useState(existing?.repoUrl ?? '')
   const [accessToken, setAccessToken] = useState('')
 
-  // 이슈 레이블 설정 추가
+  // 이슈 레이블 설정 (대상 식별 레이블 1개만 사용자 입력, 나머지는 자동 파생)
   const [labelTarget, setLabelTarget] = useState(existing?.labelTarget ?? 'IVE')
-  const [labelInProgress, setLabelInProgress] = useState(existing?.labelInProgress ?? 'IVE(D)')
-  const [labelFailDev, setLabelFailDev] = useState(existing?.labelFailDev ?? 'IVE(F)')
-  const [labelDone, setLabelDone] = useState(existing?.labelDone ?? 'IVE(E)')
   
   // 작업 주기 설정 추가 (단위: 분)
   const [checkInterval, setCheckInterval] = useState(existing?.checkInterval ?? 10)
@@ -32,7 +29,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
   const [sparklinePoints, setSparklinePoints] = useState(existing?.sparklinePoints ?? 60)
   const [statsRetention, setStatsRetention] = useState(existing?.statsRetention ?? 7)
   const [showToolUsage, setShowToolUsage] = useState(existing?.showToolUsage ?? false)
-  const [showAdvanced, setShowAdvanced] = useState(false)
+
   const [showMonitoring, setShowMonitoring] = useState(false)
   const [avatarUrl, setAvatarUrl] = useState(existing?.avatarUrl ?? '')
   const [testStatus, setTestStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
@@ -158,9 +155,9 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
       gitUsername: '',
       accessToken: accessToken.trim() || (existing?.accessToken ?? ''),
       labelTarget: labelTarget.trim(),
-      labelInProgress: labelInProgress.trim(),
-      labelFailDev: labelFailDev.trim(),
-      labelDone: labelDone.trim(),
+      labelInProgress: `${labelTarget.trim()}(D)`,
+      labelFailDev: `${labelTarget.trim()}(F)`,
+      labelDone: `${labelTarget.trim()}(E)`,
       showToolUsage,
       checkInterval: Number(checkInterval) || 10,
       lastCheckedAt: existing?.lastCheckedAt ?? null,
@@ -349,64 +346,23 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
         </div>
       </div>
 
-      {/* 이슈 레이블 설정 (고급 설정 형식) */}
-      <div className="border-t border-ive-border-dark pt-2">
-        <button
-          type="button"
-          onClick={() => setShowAdvanced(!showAdvanced)}
-          className="flex items-center gap-1.5 text-base font-bold text-ive-green mb-3"
-        >
-          <i className={`fa-solid ${showAdvanced ? 'fa-chevron-down' : 'fa-chevron-right'} text-sm`} />
-          이슈 수명 주기 및 실패 레이블 설정
-        </button>
-
-        {showAdvanced && (
-          <div className="grid grid-cols-2 gap-x-3 gap-y-4 pb-2 animate-in fade-in slide-in-from-top-2">
-            <div>
-              <label className="block text-sm font-bold text-ive-text-muted mb-1.5 uppercase ml-1">대상 식별</label>
-              <input
-                type="text"
-                value={labelTarget}
-                onChange={e => setLabelTarget(e.target.value)}
-                placeholder="IVE"
-                className="w-full bg-ive-bg-deep border border-ive-border rounded-lg px-3 py-2 text-base text-ive-text focus:outline-none focus:border-ive-green font-bold"
-              />
-            </div>
-            <div className="opacity-0" /> {/* Spacer */}
-            
-            <div>
-              <label className="block text-sm font-bold text-ive-text-muted mb-1.5 uppercase ml-1">개발 단계 (D)</label>
-              <input
-                type="text"
-                value={labelInProgress}
-                onChange={e => setLabelInProgress(e.target.value)}
-                placeholder="IVE(D)"
-                className="w-full bg-ive-bg-deep border border-ive-border rounded-lg px-3 py-2 text-base text-ive-text focus:outline-none focus:border-ive-green font-bold"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-ive-red/70 mb-1.5 uppercase ml-1">실패 (F)</label>
-              <input
-                type="text"
-                value={labelFailDev}
-                onChange={e => setLabelFailDev(e.target.value)}
-                placeholder="IVE(F)"
-                className="w-full bg-ive-bg-deep border border-ive-red/20 rounded-lg px-3 py-2 text-base text-ive-text focus:outline-none focus:border-ive-red/50 font-bold"
-              />
-            </div>
-
-            <div className="col-span-2">
-              <label className="block text-sm font-bold text-ive-text-muted mb-1.5 uppercase ml-1">최종 완료 (E)</label>
-              <input
-                type="text"
-                value={labelDone}
-                onChange={e => setLabelDone(e.target.value)}
-                placeholder="IVE(E)"
-                className="w-full bg-ive-bg-deep border border-ive-border rounded-lg px-3 py-2 text-base text-ive-text focus:outline-none focus:border-ive-green font-bold"
-              />
-            </div>
-          </div>
-        )}
+      {/* IVE 대상 레이블 설정 */}
+      <div className="border-t border-ive-border-dark pt-3">
+        <label className="block text-sm font-bold text-ive-text-muted mb-1.5 uppercase ml-1">
+          <i className="fa-solid fa-tag mr-1.5 text-xs" />
+          IVE 대상 레이블
+        </label>
+        <input
+          type="text"
+          value={labelTarget}
+          onChange={e => setLabelTarget(e.target.value)}
+          placeholder="IVE"
+          className="w-full bg-ive-bg-deep border border-ive-border rounded-lg px-3 py-2 text-base text-ive-text focus:outline-none focus:border-ive-green font-bold"
+        />
+        <p className="text-xs text-ive-text-dim mt-1.5 ml-1 leading-relaxed">
+          이 레이블이 붙은 이슈만 IVE에서 관리됩니다. 이슈 생성 시 자동으로 부여되며,
+          원격 저장소에 레이블 쓰기 권한이 없어도 로컬 DB에서 상태를 추적합니다.
+        </p>
       </div>
 
       {/* 트레이스 설정 */}
