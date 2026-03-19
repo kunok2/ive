@@ -2,6 +2,7 @@ export interface User {
   id: string
   email: string
   name: string
+  avatar: string       // 아바타 ID ('av-01'~'av-20') 또는 'photo' (업로드 사진)
   isAdmin: boolean
   maxAgents: number    // 최대 생성 가능 에이전트 수 (0 = 무제한)
   maxTurns: number     // 에이전트 최대 턴 수 상한 (0 = 무제한)

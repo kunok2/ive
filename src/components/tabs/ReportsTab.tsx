@@ -89,7 +89,7 @@ interface PrevLifecycle {
   totalAvg: number; totalCount: number
 }
 interface PrevByItem { tasks: number; cost: number }
-interface PrevDaily { date: string; tasks: number; cost: number }
+interface PrevDaily { date: string; tasks: number; cost: number; waitAvg?: number | null; procAvg?: number | null }
 
 interface ReportData {
   period: { start: string; end: string; type: string }
@@ -622,7 +622,7 @@ export default function ReportsTab() {
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="flex-1 min-w-0">
-                            <Sparkline data={waitData} width="100%" height={24} color={trendDir === 'up' ? 'red' : trendDir === 'down' ? 'green' : 'cyan'} />
+                            <Sparkline data={waitData} bgData={data.prevDailyTrend.map(d => d.waitAvg ?? null)} width="100%" height={24} color={trendDir === 'up' ? 'red' : trendDir === 'down' ? 'green' : 'cyan'} />
                           </div>
                           <div className="text-right shrink-0">
                             <div className="text-xs font-bold text-ive-text">{formatDuration(validWait[validWait.length - 1] ?? 0)}</div>
@@ -667,7 +667,7 @@ export default function ReportsTab() {
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="flex-1 min-w-0">
-                            <Sparkline data={procData} width="100%" height={24} color={trendDir === 'up' ? 'red' : trendDir === 'down' ? 'green' : 'green'} />
+                            <Sparkline data={procData} bgData={data.prevDailyTrend.map(d => d.procAvg ?? null)} width="100%" height={24} color={trendDir === 'up' ? 'red' : trendDir === 'down' ? 'green' : 'green'} />
                           </div>
                           <div className="text-right shrink-0">
                             <div className="text-xs font-bold text-ive-text">{formatDuration(validProc[validProc.length - 1] ?? 0)}</div>

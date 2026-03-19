@@ -155,9 +155,9 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
       gitUsername: '',
       accessToken: accessToken.trim() || (existing?.accessToken ?? ''),
       labelTarget: labelTarget.trim(),
-      labelInProgress: `${labelTarget.trim()}(D)`,
-      labelFailDev: `${labelTarget.trim()}(F)`,
-      labelDone: `${labelTarget.trim()}(E)`,
+      labelInProgress: '',
+      labelFailDev: '',
+      labelDone: '',
       showToolUsage,
       checkInterval: Number(checkInterval) || 10,
       lastCheckedAt: existing?.lastCheckedAt ?? null,
@@ -190,26 +190,31 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
     <form onSubmit={handleSubmit} className="flex flex-col gap-5">
       {/* 프로젝트 색상 */}
       <div>
-        <label className="block text-base font-semibold text-ive-text-muted mb-2">프로젝트 색상</label>
-        <div className="flex gap-2 flex-wrap">
-          {PROJECT_COLORS.map(c => (
-            <button
-              key={c.value}
-              type="button"
-              onClick={() => setColor(c.value)}
-              className={`w-9 h-9 rounded-full border-2 transition-all flex items-center justify-center ${
-                color === c.value
-                  ? 'border-white scale-110 shadow-lg'
-                  : 'border-transparent opacity-60 hover:opacity-100'
-              }`}
-              style={{ backgroundColor: c.value }}
-              title={c.name}
-            >
-              {color === c.value && (
-                <i className="fa-solid fa-check text-xs" style={{ color: ['#fbbf24', '#a3e635', '#e0e0e0'].includes(c.value) ? '#000' : '#fff' }} />
-              )}
-            </button>
-          ))}
+        <label className="block text-base font-semibold text-ive-text-muted mb-2">구분 색상</label>
+        <div className="grid grid-cols-5 gap-1.5">
+          {PROJECT_COLORS.map(c => {
+            const selected = color === c.value
+            const isDark = !['#fbbf24', '#a3e635', '#e0e0e0'].includes(c.value)
+            return (
+              <button
+                key={c.value}
+                type="button"
+                onClick={() => setColor(c.value)}
+                className={`py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  selected
+                    ? 'ring-1 ring-offset-1 ring-offset-ive-bg-card'
+                    : 'opacity-50 hover:opacity-80'
+                }`}
+                style={{
+                  backgroundColor: selected ? c.value : `${c.value}18`,
+                  color: selected ? (isDark ? '#fff' : '#1a1a2e') : c.value,
+                  ...(selected ? { ringColor: c.value } : {}),
+                }}
+              >
+                {c.name}
+              </button>
+            )
+          })}
         </div>
       </div>
 

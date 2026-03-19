@@ -31,6 +31,7 @@ function initSchema(db: Database.Database) {
       email TEXT UNIQUE NOT NULL,
       password TEXT NOT NULL,
       name TEXT NOT NULL,
+      avatar TEXT NOT NULL DEFAULT 'av-01',
       is_admin INTEGER NOT NULL DEFAULT 0,
       max_agents INTEGER NOT NULL DEFAULT 1,
       max_turns INTEGER NOT NULL DEFAULT 20,
@@ -351,16 +352,20 @@ export function getUserByEmail(email: string): any {
 export function getUserById(id: string): User | null {
   const row = getDb().prepare('SELECT * FROM users WHERE id = ?').get(id) as any
   if (!row) return null
-  return { id: row.id, email: row.email, name: row.name, isAdmin: !!row.is_admin, maxAgents: row.max_agents ?? 0, maxTurns: row.max_turns ?? 0, createdAt: row.created_at }
+  return { id: row.id, email: row.email, name: row.name, avatar: row.avatar || 'av-01', isAdmin: !!row.is_admin, maxAgents: row.max_agents ?? 0, maxTurns: row.max_turns ?? 0, createdAt: row.created_at }
 }
 
 export function getAllUsers(): User[] {
   const rows = getDb().prepare('SELECT * FROM users ORDER BY created_at ASC').all() as any[]
-  return rows.map(r => ({ id: r.id, email: r.email, name: r.name, isAdmin: !!r.is_admin, maxAgents: r.max_agents ?? 0, maxTurns: r.max_turns ?? 0, createdAt: r.created_at }))
+  return rows.map(r => ({ id: r.id, email: r.email, name: r.name, avatar: r.avatar || 'av-01', isAdmin: !!r.is_admin, maxAgents: r.max_agents ?? 0, maxTurns: r.max_turns ?? 0, createdAt: r.created_at }))
 }
 
 export function deleteUser(id: string) {
   getDb().prepare('DELETE FROM users WHERE id = ?').run(id)
+}
+
+export function updateUserAvatar(id: string, avatar: string) {
+  getDb().prepare('UPDATE users SET avatar = ? WHERE id = ?').run(avatar, id)
 }
 
 export function createUser(u: any) {
@@ -789,6 +794,36 @@ export function getDailyAvgSnapshots(entityType: 'project' | 'agent', entityId: 
     entityType,
     entityId,
     timestamp: r.day,
+    running: r.running,
+    waiting: r.waiting,
+    completed: r.completed,
+    failed: r.failed,
+    totalTokens: r.total_tokens,
+    costUsd: r.cost_usd,
+  })).reverse()
+}
+
+export function getHourlyAvgSnapshots(entityType: 'project' | 'agent', entityId: string, limit: number = 60): StatSnapshot[] {
+  const rows = getDb().prepare(`
+    SELECT
+      STRFTIME('%Y-%m-%d %H:00', timestamp) as hour,
+      ROUND(AVG(running), 2) as running,
+      ROUND(AVG(waiting), 2) as waiting,
+      ROUND(AVG(completed), 2) as completed,
+      ROUND(AVG(failed), 2) as failed,
+      ROUND(AVG(total_tokens), 2) as total_tokens,
+      ROUND(AVG(cost_usd), 6) as cost_usd
+    FROM stat_snapshots
+    WHERE entity_type = ? AND entity_id = ?
+    GROUP BY STRFTIME('%Y-%m-%d %H', timestamp)
+    ORDER BY hour DESC
+    LIMIT ?
+  `).all(entityType, entityId, limit) as any[]
+  return rows.map(r => ({
+    id: `havg-${r.hour}`,
+    entityType,
+    entityId,
+    timestamp: r.hour,
     running: r.running,
     waiting: r.waiting,
     completed: r.completed,

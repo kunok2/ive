@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { User } from '@/types'
+import { User, DEFAULT_AVATARS } from '@/types'
 import { useDialog } from '@/components/ui/ConfirmDialog'
 import TerminalTab from './TerminalTab'
 import PullToRefresh from '@/components/ui/PullToRefresh'
@@ -166,6 +166,22 @@ function UsersPanel() {
         {users.map(u => (
           <div key={u.id} className="bg-ive-bg-card border border-ive-border-subtle rounded-xl px-4 py-3">
             <div className="flex items-center gap-3">
+              {(() => {
+                const av = DEFAULT_AVATARS.find(a => a.id === u.avatar)
+                return (
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 overflow-hidden"
+                    style={u.avatar !== 'photo' ? { backgroundColor: av ? `${av.color}20` : '#4ade8020' } : undefined}
+                  >
+                    {u.avatar === 'photo' ? (
+                      <img src={`/api/auth/avatar/image?id=${u.id}`} alt="" className="w-full h-full object-cover" />
+                    ) : av ? (
+                      <i className={`${av.icon} text-sm`} style={{ color: av.color }} />
+                    ) : (
+                      <i className="fa-solid fa-user text-sm text-ive-green" />
+                    )}
+                  </div>
+                )
+              })()}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-bold text-ive-text truncate">{u.name}</span>
@@ -712,9 +728,10 @@ function PricingPanel() {
                   type="number"
                   step="0.01"
                   min="0"
+
                   value={it.inputPrice}
                   onChange={e => updateItem(it.cliName, 'inputPrice', e.target.value)}
-                  className="w-full text-sm font-bold text-ive-cyan bg-ive-bg-input border border-ive-border rounded-lg px-2 py-1.5 focus:outline-none focus:border-ive-green"
+                  className="w-full text-sm font-bold text-ive-cyan bg-ive-bg-input border border-ive-border rounded-lg px-2 py-1.5 text-right focus:outline-none focus:border-ive-green"
                 />
               </div>
               <div className="flex-1">
@@ -723,9 +740,10 @@ function PricingPanel() {
                   type="number"
                   step="0.01"
                   min="0"
+
                   value={it.outputPrice}
                   onChange={e => updateItem(it.cliName, 'outputPrice', e.target.value)}
-                  className="w-full text-sm font-bold text-ive-amber bg-ive-bg-input border border-ive-border rounded-lg px-2 py-1.5 focus:outline-none focus:border-ive-green"
+                  className="w-full text-sm font-bold text-ive-amber bg-ive-bg-input border border-ive-border rounded-lg px-2 py-1.5 text-right focus:outline-none focus:border-ive-green"
                 />
               </div>
             </div>

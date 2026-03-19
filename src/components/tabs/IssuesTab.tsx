@@ -250,23 +250,36 @@ export default function IssuesTab() {
         const created = await res.json()
         setNewBody('')
         setShowAddForm(false)
-        // 생성된 이슈를 즉시 목록에 추가 (API 재조회 지연 방지)
+        // 생성된 이슈를 즉시 목록에 추가
+        const newIssue: IveIssue = {
+          iid: created.iid,
+          title: created.title,
+          state: created.state || 'opened',
+          stage: 'waiting',
+          labels: created.labels || [],
+          createdAt: created.created_at || new Date().toISOString(),
+          updatedAt: created.updated_at || new Date().toISOString(),
+          author: created.author?.name || '',
+        }
         setIssues(prev => {
-          const exists = prev.some(i => i.iid === created.iid)
-          if (exists) return prev
-          const newIssue: IveIssue = {
-            iid: created.iid,
-            title: created.title,
-            state: created.state || 'opened',
-            stage: 'waiting',
-            labels: created.labels || [],
-            createdAt: created.created_at || new Date().toISOString(),
-            updatedAt: created.updated_at || new Date().toISOString(),
-            author: created.author?.name || '',
-          }
+          if (prev.some(i => i.iid === created.iid)) return prev
           return [newIssue, ...prev]
         })
-        fetchIssues()
+        // 서버 재조회 시 새 이슈가 아직 없으면 병합
+        setTimeout(() => {
+          if (!selectedProjectId) return
+          fetch(`/api/projects/${selectedProjectId}/issues`)
+            .then(res => res.ok ? res.json() : null)
+            .then(data => {
+              if (!data) return
+              setIssues(() => {
+                const hasNew = data.some((i: IveIssue) => i.iid === created.iid)
+                if (hasNew) return data
+                return [newIssue, ...data]
+              })
+              sessionStorage.setItem('issues-cache', JSON.stringify({ projectId: selectedProjectId, issues: data }))
+            })
+        }, 1500)
       }
     } finally {
       setCreating(false)

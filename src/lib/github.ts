@@ -259,7 +259,7 @@ function normalizePR(pr: any): any {
     state: pr.merged_at ? 'merged' : pr.state === 'open' ? 'opened' : 'closed',
     source_branch: pr.head?.ref,
     target_branch: pr.base?.ref,
-    merge_status: pr.mergeable ? 'can_be_merged' : 'cannot_be_merged',
+    merge_status: pr.mergeable === false ? 'cannot_be_merged' : 'can_be_merged',
     has_conflicts: pr.mergeable === false,
     web_url: pr.html_url,
     changes_count: pr.changed_files,
@@ -472,9 +472,7 @@ export async function fetchAllIveIssues(project: Project, decryptedToken: string
   if (!ownerRepo) return [];
 
   const headers = getGitHubAuthHeaders(project, decryptedToken);
-  const allLabels = [
-    project.labelTarget, project.labelInProgress, project.labelFailDev, project.labelDone,
-  ];
+  const allLabels = [project.labelTarget];
 
   try {
     const results: any[] = [];

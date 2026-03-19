@@ -19,32 +19,18 @@ export async function GET(
     // 로컬 DB에서 stage 맵 로드
     const localStages = getIssueStages(projectId);
 
-    // 원격 레이블 → stage 매핑 (로컬에 없는 이슈의 초기 등록용)
-    const labelStageMap: Record<string, string> = {
-      [project.labelTarget]: 'waiting',
-      [project.labelInProgress]: 'dev',
-      [project.labelFailDev]: 'dev_fail',
-      [project.labelDone]: 'done',
-    };
-
     const mapped = issues.map((issue: any) => {
-      // 1. 로컬 DB에 stage가 있으면 우선 사용
+      // 로컬 DB에서 stage 조회 (상태는 로컬 DB로만 관리)
       const local = localStages.get(issue.iid);
       let stage: string | null = local?.stage || null;
       let failReason: string | null = local?.failReason || null;
 
-      // 2. 로컬에 없으면 원격 레이블에서 판단 후 DB에 등록
+      // 로컬에 없지만 IVE 레이블이 붙어있으면 waiting으로 등록
       if (!stage) {
         const issueLabels = issue.labels || [];
-        for (const label of issueLabels) {
-          if (labelStageMap[label]) {
-            stage = labelStageMap[label];
-            break;
-          }
-        }
-        if (stage) {
-          // 원격 레이블 기반 stage를 로컬 DB에 등록
-          setIssueStage(projectId, issue.iid, stage as any);
+        if (issueLabels.includes(project.labelTarget)) {
+          stage = 'waiting';
+          setIssueStage(projectId, issue.iid, 'waiting');
         }
       }
 

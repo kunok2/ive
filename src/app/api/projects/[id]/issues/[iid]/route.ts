@@ -48,24 +48,13 @@ export async function GET(
     const issue = await fetchSingleIssue(project, Number(iid), decryptedToken)
     if (!issue) return NextResponse.json({ error: '이슈를 찾을 수 없습니다' }, { status: 404 })
 
-    // 로컬 DB에서 stage 조회, 없으면 원격 레이블에서 판단 후 등록
+    // 로컬 DB에서 stage 조회 (상태는 로컬 DB로만 관리)
     let stage = getIssueStage(projectId, Number(iid))
     if (!stage) {
-      const labelStageMap: Record<string, string> = {
-        [project.labelTarget]: 'waiting',
-        [project.labelInProgress]: 'dev',
-        [project.labelFailDev]: 'dev_fail',
-        [project.labelDone]: 'done',
-      }
       const issueLabels = issue.labels || []
-      for (const label of issueLabels) {
-        if (labelStageMap[label]) {
-          stage = labelStageMap[label] as any
-          break
-        }
-      }
-      if (stage) {
-        setIssueStage(projectId, Number(iid), stage)
+      if (issueLabels.includes(project.labelTarget)) {
+        stage = 'waiting'
+        setIssueStage(projectId, Number(iid), 'waiting')
       }
     }
 

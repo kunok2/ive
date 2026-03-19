@@ -1,19 +1,28 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
+import { DEFAULT_AVATARS } from '@/types'
+import AvatarCropEditor from './AvatarCropEditor'
 
 interface Props {
+  userId: string
   email: string
   name: string
+  avatar: string
   onSuccess?: () => void
   onCancel?: () => void
   onEmailChanged?: () => void
+  onAvatarChanged?: () => void
 }
 
-type ActiveSection = 'none' | 'email' | 'password'
+type ActiveSection = 'none' | 'avatar' | 'email' | 'password'
 
-export default function UserProfileForm({ email, name, onSuccess, onCancel, onEmailChanged }: Props) {
+export default function UserProfileForm({ userId, email, name, avatar, onSuccess, onCancel, onEmailChanged, onAvatarChanged }: Props) {
   const [activeSection, setActiveSection] = useState<ActiveSection>('none')
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [photoTs, setPhotoTs] = useState(() => Date.now())
+  const [cropFile, setCropFile] = useState<File | null>(null)
 
   // 이메일 변경
   const [newEmail, setNewEmail] = useState('')
@@ -35,6 +44,27 @@ export default function UserProfileForm({ email, name, onSuccess, onCancel, onEm
   const [pwError, setPwError] = useState('')
   const [pwLoading, setPwLoading] = useState(false)
   const [pwSuccess, setPwSuccess] = useState(false)
+
+  // 크롭된 이미지 업로드
+  async function uploadCroppedImage(blob: Blob) {
+    setUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', new File([blob], 'avatar.png', { type: 'image/png' }))
+      const res = await fetch('/api/auth/avatar/upload', { method: 'POST', body: fd })
+      if (res.ok) {
+        setPhotoTs(Date.now())
+        onAvatarChanged?.()
+        setCropFile(null)
+        setActiveSection('none')
+      } else {
+        const data = await res.json()
+        alert(data.error || '업로드 실패')
+      }
+    } finally {
+      setUploading(false)
+    }
+  }
 
   // 이메일 인증 코드 전송
   async function handleEmailSendCode() {
@@ -136,19 +166,107 @@ export default function UserProfileForm({ email, name, onSuccess, onCancel, onEm
     )
   }
 
+  // 크롭 편집기 모드
+  if (cropFile) {
+    return (
+      <div className="flex flex-col gap-4">
+        <AvatarCropEditor
+          imageFile={cropFile}
+          onConfirm={(blob) => uploadCroppedImage(blob)}
+          onCancel={() => {
+            setCropFile(null)
+            if (fileInputRef.current) fileInputRef.current.value = ''
+          }}
+        />
+        {uploading && (
+          <div className="text-center text-sm text-ive-text-muted">
+            <i className="fa-solid fa-circle-notch fa-spin mr-1" />업로드 중...
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col gap-4">
-      {/* 사용자 정보 표시 */}
+      {/* 사용자 정보 + 아바타 */}
       <div className="bg-ive-bg-input rounded-lg px-4 py-3 border border-ive-border">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-ive-green/20 flex items-center justify-center">
-            <i className="fa-solid fa-user text-ive-green" />
-          </div>
+          <button
+            type="button"
+            onClick={() => setActiveSection(activeSection === 'avatar' ? 'none' : 'avatar')}
+            className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all hover:scale-110 overflow-hidden"
+            style={avatar !== 'photo' ? { backgroundColor: (() => { const av = DEFAULT_AVATARS.find(a => a.id === avatar); return av ? `${av.color}20` : undefined })() } : undefined}
+            title="아바타 변경"
+          >
+            {avatar === 'photo' ? (
+              <img src={`/api/auth/avatar/image?id=${userId}&t=${photoTs}`} alt="" className="w-full h-full object-cover" />
+            ) : (() => {
+              const av = DEFAULT_AVATARS.find(a => a.id === avatar)
+              return av ? <i className={`${av.icon} text-lg`} style={{ color: av.color }} /> : <i className="fa-solid fa-user text-ive-green" />
+            })()}
+          </button>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-bold text-ive-text truncate">{name}</p>
             <p className="text-xs text-ive-text-muted truncate">{email}</p>
           </div>
         </div>
+        {activeSection === 'avatar' && (
+          <div className="mt-3 pt-3 border-t border-ive-border">
+            {/* 사진 업로드 */}
+            <div className="mb-3">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (!file) return
+                  if (file.size > 5 * 1024 * 1024) {
+                    alert('파일 크기는 5MB 이하여야 합니다.')
+                    return
+                  }
+                  setCropFile(file)
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full py-2 rounded-lg text-sm font-semibold bg-ive-bg-deep border border-ive-border-subtle text-ive-text hover:border-ive-green transition-colors flex items-center justify-center gap-2"
+              >
+                <i className="fa-solid fa-camera text-ive-green" />
+                사진 업로드
+              </button>
+            </div>
+            <p className="text-xs font-bold text-ive-text-muted mb-2">또는 아이콘 선택</p>
+            <div className="grid grid-cols-5 gap-2">
+              {DEFAULT_AVATARS.map(av => (
+                <button
+                  key={av.id}
+                  type="button"
+                  onClick={async () => {
+                    const res = await fetch('/api/auth/avatar', {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ avatar: av.id }),
+                    })
+                    if (res.ok) {
+                      onAvatarChanged?.()
+                      setActiveSection('none')
+                    }
+                  }}
+                  className={`w-full aspect-square rounded-lg flex items-center justify-center transition-all ${
+                    avatar === av.id ? 'ring-2 ring-ive-green scale-110' : 'hover:scale-105 bg-ive-bg-deep'
+                  }`}
+                  style={avatar === av.id ? { backgroundColor: `${av.color}20` } : undefined}
+                >
+                  <i className={`${av.icon} text-lg`} style={{ color: av.color }} />
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 이메일 변경 섹션 */}

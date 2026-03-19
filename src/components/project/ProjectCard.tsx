@@ -9,6 +9,8 @@ import { getKSTTodayStartISO } from '@/lib/date-utils'
 import Sparkline from '@/components/ui/Sparkline'
 import ExecutionList from '@/components/execution/ExecutionList'
 import LiveTracePanel from '@/components/execution/LiveTracePanel'
+import AgentAvatar from '@/components/agent/AgentAvatar'
+import type { ToolActivity } from '@/lib/tool-activity'
 
 function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
@@ -52,6 +54,7 @@ export default function ProjectCard({ project }: Props) {
   const [executions, setExecutions] = useState<TaskExecution[]>([])
   const [killing, setKilling] = useState<string | null>(null)
   const [waitingIssues, setWaitingIssues] = useState<any[]>([])
+  const [activities, setActivities] = useState<Record<string, ToolActivity>>({})
 
   const fetchStats = useCallback(async () => {
     try {
@@ -73,9 +76,14 @@ export default function ProjectCard({ project }: Props) {
     return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVisible) }
   }, [fetchStats, stats?.running])
 
-  // 패널 열릴 때 실행 목록 로드
+  // 실행 목록 로드: 패널 열렸을 때 또는 running 건이 있을 때
   useEffect(() => {
-    if (!expandedPanel || expandedPanel === 'waiting') return
+    const needForPanel = expandedPanel === 'running' || expandedPanel === 'done'
+    const needForSummary = (stats?.running ?? 0) > 0 && !expandedPanel
+    if (!needForPanel && !needForSummary) {
+      setExecutions([])
+      return
+    }
     const fetchExecs = async () => {
       try {
         const res = await fetch(`/api/projects/${project.id}/executions`)
@@ -85,7 +93,7 @@ export default function ProjectCard({ project }: Props) {
     fetchExecs()
     const timer = setInterval(fetchExecs, 5000)
     return () => clearInterval(timer)
-  }, [expandedPanel, project.id])
+  }, [expandedPanel, project.id, stats?.running])
 
   // 대기 패널 열릴 때 대기 이슈 목록 로드
   useEffect(() => {
@@ -139,10 +147,29 @@ export default function ProjectCard({ project }: Props) {
   const totalDone = completedCount + failedCount
   const yesterdayDiff = stats ? totalDone - stats.yesterdayCompleted : 0
 
+  // activities 폴링 (running 중일 때만)
+  useEffect(() => {
+    if (runningCount === 0) return
+    const fetchActivities = async () => {
+      try {
+        const res = await fetch('/api/activities')
+        if (res.ok) {
+          const list: ToolActivity[] = await res.json()
+          const map: Record<string, ToolActivity> = {}
+          for (const a of list) map[a.agentId] = a
+          setActivities(map)
+        }
+      } catch { /* ignore */ }
+    }
+    fetchActivities()
+    const timer = setInterval(fetchActivities, 2000)
+    return () => clearInterval(timer)
+  }, [runningCount])
+
   return (
     <div
-      className={`bg-ive-bg-card rounded-xl border shadow-sm overflow-hidden transition-colors duration-200 flex flex-col ${expandedPanel ? 'border-ive-cyan/30 h-[calc(100vh-160px)]' : 'border-ive-border-subtle hover:border-ive-green/30'}`}
-      style={{ borderLeftWidth: '3px', borderLeftColor: project.color || '#4ade80' }}
+      className={`rounded-xl border shadow-sm overflow-hidden transition-colors duration-200 flex flex-col relative ${expandedPanel ? 'border-ive-cyan/30 h-[calc(100vh-160px)]' : 'border-ive-border-subtle hover:border-ive-green/30'}`}
+      style={{ background: `linear-gradient(135deg, ${project.color || '#4ade80'}08 0%, transparent 40%), var(--color-ive-bg-card, #121e14)` }}
     >
       <Link href={`/projects/${project.id}`} className="block p-4 active:bg-white/[0.03] transition-colors group">
         <div className="flex items-start gap-3">
@@ -277,6 +304,29 @@ export default function ProjectCard({ project }: Props) {
           <span className="text-xs text-ive-text-dim font-bold">토큰</span>
         </div>
       </div>
+
+      {/* 진행 중 작업 요약 (패널 펼치지 않았을 때, running 있을 때만) */}
+      {runningExecs.length > 0 && !expandedPanel && (
+        <div className="border-t border-ive-amber/15 px-3 py-1.5 space-y-1">
+          {runningExecs.map(ex => {
+            const agent = (project.assignedAgents ?? []).find(pa => pa.agentId === ex.agentId)?.agent
+            const activity = agent ? activities[agent.id] : undefined
+            return (
+              <div key={ex.id} className="flex items-center gap-1.5 text-xs">
+                {agent && (
+                  <AgentAvatar
+                    avatar={agent.avatar}
+                    size="sm"
+                    toolBadge={activity?.category ?? null}
+                  />
+                )}
+                {agent && <span className="text-ive-amber/70 font-bold shrink-0">{agent.name}</span>}
+                <span className="text-ive-text-muted truncate">#{ex.issueIid} {ex.issueTitle || ''}</span>
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       {/* 작업 현황 패널 */}
       {expandedPanel === 'running' && (

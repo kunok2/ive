@@ -15,6 +15,7 @@ import AgentForm from '@/components/agent/AgentForm'
 import Modal from '@/components/ui/Modal'
 import { useDialog } from '@/components/ui/ConfirmDialog'
 import UserProfileForm from '@/components/auth/UserProfileForm'
+import { DEFAULT_AVATARS } from '@/types'
 
 const subtitle: Record<string, string> = {
   projects: '프로젝트',
@@ -33,6 +34,7 @@ export default function HomePage() {
   const [showNewAgent, setShowNewAgent] = useState(false)
   const [editMode, setEditMode] = useState(false)
   const [showChangePassword, setShowChangePassword] = useState(false)
+  const [avatarTs, setAvatarTs] = useState(() => Date.now())
 
   useEffect(() => {
     if (state.authChecked && !state.user) {
@@ -59,13 +61,12 @@ export default function HomePage() {
             </div>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="text-sm text-ive-text-muted mr-1">{state.user.name}</span>
-
+            {/* 탭별 추가 버튼 */}
             {activeTab === 'projects' && (
               <>
                 <button
                   onClick={() => setShowNewProject(true)}
-                  className="w-8 h-8 rounded-full bg-ive-green flex items-center justify-center text-ive-bg-deep active:scale-95 transition-transform"
+                  className="w-8 h-8 rounded-full bg-ive-green flex items-center justify-center text-ive-bg-deep hover:brightness-110 active:scale-95 transition-all"
                 >
                   <i className="fa-solid fa-plus text-sm" />
                 </button>
@@ -92,19 +93,30 @@ export default function HomePage() {
                   }
                   setShowNewAgent(true)
                 }}
-                className="w-8 h-8 rounded-full bg-ive-green flex items-center justify-center text-ive-bg-deep active:scale-95 transition-transform"
+                className="w-8 h-8 rounded-full bg-ive-green flex items-center justify-center text-ive-bg-deep hover:brightness-110 active:scale-95 transition-all"
               >
                 <i className="fa-solid fa-plus text-sm" />
               </button>
             )}
 
+            {/* 구분자 - 탭별 버튼이 있을 때만 표시 */}
+            {(activeTab === 'projects' || activeTab === 'agents') && (
+              <span className="text-ive-border-subtle mx-0.5">|</span>
+            )}
+
+            {/* 아바타 + 이름 + 로그아웃 */}
             <button
               onClick={() => setShowChangePassword(true)}
-              className="w-8 h-8 rounded-full bg-ive-bg-card border border-ive-border-subtle flex items-center justify-center text-ive-text-dim hover:text-ive-text active:scale-95 transition-all"
-              title="정보 열람 및 수정"
-              aria-label="내 정보"
+              className="w-8 h-8 rounded-full flex items-center justify-center overflow-hidden transition-all hover:scale-110 active:scale-95"
+              style={state.user!.avatar !== 'photo' ? { backgroundColor: (() => { const av = DEFAULT_AVATARS.find(a => a.id === state.user!.avatar); return av ? `${av.color}20` : '#4ade8020' })() } : undefined}
+              title={state.user!.name}
             >
-              <i className="fa-solid fa-user-gear text-sm" />
+              {state.user!.avatar === 'photo' ? (
+                <img src={`/api/auth/avatar/image?id=${state.user!.id}&t=${avatarTs}`} alt="" className="w-full h-full object-cover" />
+              ) : (() => {
+                const av = DEFAULT_AVATARS.find(a => a.id === state.user!.avatar)
+                return av ? <i className={`${av.icon} text-sm`} style={{ color: av.color }} /> : <i className="fa-solid fa-user text-sm text-ive-green" />
+              })()}
             </button>
             <button
               onClick={async () => {
@@ -146,7 +158,7 @@ export default function HomePage() {
         <AgentForm onSuccess={() => setShowNewAgent(false)} />
       </Modal>
       <Modal open={showChangePassword} onClose={() => setShowChangePassword(false)} title="내 정보">
-        <UserProfileForm email={state.user.email} name={state.user.name} onSuccess={() => setShowChangePassword(false)} onCancel={() => setShowChangePassword(false)} onEmailChanged={() => refreshUser()} />
+        <UserProfileForm userId={state.user.id} email={state.user.email} name={state.user.name} avatar={state.user.avatar} onSuccess={() => setShowChangePassword(false)} onCancel={() => setShowChangePassword(false)} onEmailChanged={() => refreshUser()} onAvatarChanged={() => { setAvatarTs(Date.now()); refreshUser() }} />
       </Modal>
     </>
   )

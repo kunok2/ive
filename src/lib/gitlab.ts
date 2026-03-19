@@ -404,10 +404,7 @@ export async function fetchAllIveIssues(project: Project, decryptedToken: string
   if (!projectPath) return [];
 
   const headers = getAuthHeaders(project, decryptedToken);
-  const allLabels = [
-    project.labelTarget, project.labelInProgress, project.labelFailDev,
-    project.labelDone,
-  ];
+  const allLabels = [project.labelTarget];
 
   try {
     const results: any[] = [];

@@ -145,20 +145,34 @@ export async function GET(req: NextRequest) {
     cost: Math.round(aExecs.reduce((s, e) => s + calcCost(pricingMap, e.cliName, e.inputTokens, e.outputTokens), 0) * 100) / 100,
   }))
 
-  // 이전 기간 일별 트렌드 — 전체 기간 버킷 채움
+  // 이전 기간 일별 트렌드 — 전체 기간 버킷 채움 (waitAvg, procAvg 포함)
   const prevAllKeys = periodKeys(prevRange.start, prevRange.end, type)
-  const prevDayMap = new Map<string, { tasks: number; cost: number }>()
-  for (const key of prevAllKeys) prevDayMap.set(key, { tasks: 0, cost: 0 })
+  const prevDayMap = new Map<string, { tasks: number; cost: number; waitTimes: number[]; procTimes: number[] }>()
+  for (const key of prevAllKeys) prevDayMap.set(key, { tasks: 0, cost: 0, waitTimes: [], procTimes: [] })
   for (const e of prevExecs) {
     const key = toBucketKey(e.startedAt, type)
-    if (!prevDayMap.has(key)) prevDayMap.set(key, { tasks: 0, cost: 0 })
+    if (!prevDayMap.has(key)) prevDayMap.set(key, { tasks: 0, cost: 0, waitTimes: [], procTimes: [] })
     const d = prevDayMap.get(key)!
     d.tasks++
     d.cost += calcCost(pricingMap, e.cliName, e.inputTokens, e.outputTokens)
+    if ((e.status === 'success' || e.status === 'failed') && e.endedAt) {
+      const proc = durationMin(e.startedAt, e.endedAt)
+      if (proc > 0) d.procTimes.push(proc)
+      if (e.issueCreatedAt) {
+        const wait = durationMin(e.issueCreatedAt, e.startedAt)
+        if (wait >= 0) d.waitTimes.push(wait)
+      }
+    }
   }
   const prevDailyTrend = prevAllKeys.map(key => {
     const d = prevDayMap.get(key)!
-    return { date: key, tasks: d.tasks, cost: Math.round(d.cost * 100) / 100 }
+    return {
+      date: key,
+      tasks: d.tasks,
+      cost: Math.round(d.cost * 100) / 100,
+      waitAvg: d.waitTimes.length > 0 ? Math.round(d.waitTimes.reduce((a, b) => a + b, 0) / d.waitTimes.length * 10) / 10 : null,
+      procAvg: d.procTimes.length > 0 ? Math.round(d.procTimes.reduce((a, b) => a + b, 0) / d.procTimes.length * 10) / 10 : null,
+    }
   })
 
   // By project
