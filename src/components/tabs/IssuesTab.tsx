@@ -246,8 +246,25 @@ export default function IssuesTab() {
         body: JSON.stringify({ title, description, asDev: true }),
       })
       if (res.ok) {
+        const created = await res.json()
         setNewBody('')
         setShowAddForm(false)
+        // 생성된 이슈를 즉시 목록에 추가 (API 재조회 지연 방지)
+        setIssues(prev => {
+          const exists = prev.some(i => i.iid === created.iid)
+          if (exists) return prev
+          const newIssue: IveIssue = {
+            iid: created.iid,
+            title: created.title,
+            state: created.state || 'opened',
+            stage: 'waiting',
+            labels: created.labels || [],
+            createdAt: created.created_at || new Date().toISOString(),
+            updatedAt: created.updated_at || new Date().toISOString(),
+            author: created.author?.name || '',
+          }
+          return [newIssue, ...prev]
+        })
         fetchIssues()
       }
     } finally {
