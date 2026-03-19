@@ -2,6 +2,7 @@ import Database from 'better-sqlite3'
 import path from 'path'
 import bcrypt from 'bcryptjs'
 import { User, Project, Agent, ProjectAssignment, TaskExecution, TaskStatus, StatSnapshot, TokenPricing, ProjectShare, ShareRole } from '@/types'
+import { getKSTTodayStartISO, getKSTYesterdayStartISO, kstDateToUTCISO } from './date-utils'
 import { startScanner } from './scanner'
 
 declare global {
@@ -692,40 +693,38 @@ export function getLatestExecutionsByAgent(agentId: string, limit: number = 20):
 }
 
 export function getTodayExecutionsByProject(projectId: string): TaskExecution[] {
-  const today = new Date().toISOString().slice(0, 10)
+  const todayStartISO = getKSTTodayStartISO()
   const rows = getDb().prepare(`
     SELECT te.*, a.name AS agent_name
     FROM task_executions te
     LEFT JOIN agents a ON a.id = te.agent_id
     WHERE te.project_id = ? AND te.started_at >= ?
     ORDER BY te.started_at DESC
-  `).all(projectId, today) as any[]
+  `).all(projectId, todayStartISO) as any[]
   return rows.map(mapExecution)
 }
 
 export function getTodayExecutionsByAgent(agentId: string): TaskExecution[] {
-  const today = new Date().toISOString().slice(0, 10)
+  const todayStartISO = getKSTTodayStartISO()
   const rows = getDb().prepare(`
     SELECT te.*, a.name AS agent_name
     FROM task_executions te
     LEFT JOIN agents a ON a.id = te.agent_id
     WHERE te.agent_id = ? AND te.started_at >= ?
     ORDER BY te.started_at DESC
-  `).all(agentId, today) as any[]
+  `).all(agentId, todayStartISO) as any[]
   return rows.map(mapExecution)
 }
 
 export function getYesterdayCompletedCount(entityType: 'project' | 'agent', entityId: string): number {
-  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10)
-  const today = new Date().toISOString().slice(0, 10)
-  const now = new Date()
-  const yesterdaySameTime = new Date(now.getTime() - 86400000).toISOString()
+  const yesterdayStartISO = getKSTYesterdayStartISO()
+  const todayStartISO = getKSTTodayStartISO()
   const col = entityType === 'project' ? 'project_id' : 'agent_id'
   const r = getDb().prepare(`
     SELECT COUNT(*) as cnt FROM task_executions
     WHERE ${col} = ? AND status IN ('success', 'failed')
     AND started_at >= ? AND started_at < ?
-  `).get(entityId, yesterday, yesterdaySameTime) as { cnt: number }
+  `).get(entityId, yesterdayStartISO, todayStartISO) as { cnt: number }
   return r.cnt
 }
 
@@ -922,6 +921,9 @@ export interface ReportExecution {
 }
 
 export function getExecutionsInRange(userId: string, start: string, end: string): ReportExecution[] {
+  // start/end는 KST 날짜(YYYY-MM-DD) → KST 자정의 UTC ISO로 변환하여 비교
+  const startISO = kstDateToUTCISO(start)
+  const endISO = kstDateToUTCISO(end)
   const rows = getDb().prepare(`
     SELECT te.id, te.project_id, p.name as project_name, p.color as project_color, p.avatar_url as project_avatar_url, p.provider as project_provider,
            te.agent_id, a.name as agent_name, a.avatar as agent_avatar, a.cli_name,
@@ -934,7 +936,7 @@ export function getExecutionsInRange(userId: string, start: string, end: string)
     WHERE (p.user_id = ? OR EXISTS (SELECT 1 FROM project_shares ps WHERE ps.project_id = p.id AND ps.user_id = ?))
       AND te.started_at >= ? AND te.started_at < ?
     ORDER BY te.started_at ASC
-  `).all(userId, userId, start, end) as any[]
+  `).all(userId, userId, startISO, endISO) as any[]
   return rows.map(r => ({
     id: r.id, projectId: r.project_id, projectName: r.project_name,
     projectColor: r.project_color, projectAvatarUrl: r.project_avatar_url || '', projectProvider: r.project_provider || 'gitlab',

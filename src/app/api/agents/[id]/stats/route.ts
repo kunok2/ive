@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { getAgent, getTodayExecutionsByAgent, getLatestExecutionsByAgent, getYesterdayCompletedCount } from '@/lib/db'
+import { getKSTTodayStart } from '@/lib/date-utils'
 
 export async function GET(
   req: NextRequest,
@@ -47,7 +48,7 @@ export async function GET(
 
   // 건/h
   const now = new Date()
-  const todayStart = new Date(now.toISOString().slice(0, 10))
+  const todayStart = getKSTTodayStart(now)
   const hoursElapsed = Math.max(0.5, (now.getTime() - todayStart.getTime()) / 3600000)
   const tasksPerHour = (completed.length + failed.length) / hoursElapsed
 

@@ -3,6 +3,7 @@ import {
   createSnapshot, cleanOldSnapshots, cleanOldExecutions,
   getSystemSetting
 } from './db'
+import { getKSTTodayStartISO } from './date-utils'
 
 let collectorStarted = false
 
@@ -37,7 +38,7 @@ export function startStatsCollector() {
 function collectSnapshots() {
   const db = getDb()
   const now = new Date().toISOString()
-  const today = now.slice(0, 10)
+  const todayStartISO = getKSTTodayStartISO()
 
   const projects = getAllProjects()
 
@@ -59,7 +60,7 @@ function collectSnapshots() {
         COALESCE(SUM(cost_usd), 0) as cost_usd
       FROM task_executions
       WHERE project_id = ? AND started_at >= ? AND status != 'running'
-    `).get(project.id, today) as { completed: number; failed: number; total_tokens: number; cost_usd: number }
+    `).get(project.id, todayStartISO) as { completed: number; failed: number; total_tokens: number; cost_usd: number }
 
     createSnapshot({
       id: `snap-p-${project.id}-${Date.now()}`,
@@ -97,7 +98,7 @@ function collectSnapshots() {
           COALESCE(SUM(cost_usd), 0) as cost_usd
         FROM task_executions
         WHERE agent_id = ? AND started_at >= ? AND status != 'running'
-      `).get(agent.id, today) as { completed: number; failed: number; total_tokens: number; cost_usd: number }
+      `).get(agent.id, todayStartISO) as { completed: number; failed: number; total_tokens: number; cost_usd: number }
 
       createSnapshot({
         id: `snap-a-${agent.id}-${Date.now()}`,

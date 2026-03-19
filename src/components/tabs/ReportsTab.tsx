@@ -7,6 +7,7 @@ import PullToRefresh from '@/components/ui/PullToRefresh'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 import Sparkline from '@/components/ui/Sparkline'
 import { DailyTrendChart, CompareTable } from '@/components/reports/ReportCharts'
+import { getKSTTodayString } from '@/lib/date-utils'
 
 const REPORT_STATE_KEY = 'ive-report-state'
 
@@ -174,7 +175,7 @@ export default function ReportsTab() {
   const saved = typeof window !== 'undefined' ? loadReportState() : null
 
   const [type, setType] = useState<ReportType>(() => (saved?.type as ReportType) || 'weekly')
-  const [date, setDate] = useState(() => (saved?.date as string) || new Date().toISOString().slice(0, 10))
+  const [date, setDate] = useState(() => (saved?.date as string) || getKSTTodayString())
   const [data, setData] = useState<ReportData | null>(null)
   const [loading, setLoading] = useState(false)
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(() => new Set((saved?.expandedProjects as string[]) || []))

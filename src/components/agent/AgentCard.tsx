@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Agent, CliName, TaskExecution, StatSnapshot } from '@/types'
 import { useStore } from '@/lib/store'
+import { getKSTTodayStartISO } from '@/lib/date-utils'
 import Sparkline from '@/components/ui/Sparkline'
 import ExecutionList from '@/components/execution/ExecutionList'
 import ExecutionStats from '@/components/execution/ExecutionStats'
@@ -226,9 +227,9 @@ export default function AgentCard({ agent, onDelete, compact, assignedProject, o
   const runningExecs = executions.filter(e => e.status === 'running')
   const doneExecs = executions.filter(e => e.status === 'success')
   const failedExecs = executions.filter(e => e.status === 'failed')
-  const todayStr = new Date().toISOString().slice(0, 10)
-  const todayDoneExecs = doneExecs.filter(e => e.startedAt >= todayStr)
-  const todayFailedExecs = failedExecs.filter(e => e.startedAt >= todayStr)
+  const todayStartISO = getKSTTodayStartISO()
+  const todayDoneExecs = doneExecs.filter(e => e.startedAt >= todayStartISO)
+  const todayFailedExecs = failedExecs.filter(e => e.startedAt >= todayStartISO)
 
   return (
     <div className={`bg-ive-bg-card rounded-xl border overflow-hidden transition-colors duration-200 ${expandedPanel ? 'border-ive-cyan/30' : 'border-ive-border-subtle'}`}>
