@@ -219,6 +219,9 @@ function initSchema(db: Database.Database) {
       db.exec("ALTER TABLE users ADD COLUMN max_agents INTEGER NOT NULL DEFAULT 1")
       db.exec("ALTER TABLE users ADD COLUMN max_turns INTEGER NOT NULL DEFAULT 20")
     }
+    if (!tableInfo.some((col: any) => col.name === 'avatar')) {
+      db.exec("ALTER TABLE users ADD COLUMN avatar TEXT NOT NULL DEFAULT 'av-01'")
+    }
   } catch (e) { console.error("Migration failed for users:", e) }
 
   try {

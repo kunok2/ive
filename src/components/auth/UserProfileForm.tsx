@@ -265,6 +265,9 @@ export default function UserProfileForm({ userId, email, name, avatar, onSuccess
                     if (res.ok) {
                       onAvatarChanged?.()
                       setActiveSection('none')
+                    } else {
+                      const data = await res.json().catch(() => ({}))
+                      alert(data.error || '아바타 저장에 실패했습니다.')
                     }
                   }}
                   className={`w-full aspect-square rounded-lg flex items-center justify-center transition-all ${

@@ -11,6 +11,11 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: '아바타를 선택해주세요.' }, { status: 400 })
   }
 
-  updateUserAvatar(user.id, avatar)
+  try {
+    updateUserAvatar(user.id, avatar)
+  } catch (e) {
+    console.error('아바타 업데이트 오류:', e)
+    return NextResponse.json({ error: '아바타 저장에 실패했습니다.' }, { status: 500 })
+  }
   return NextResponse.json({ ok: true })
 }
