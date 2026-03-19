@@ -406,7 +406,7 @@ export default function ReportsTab() {
                 lines.push({
                   icon: taskPct > 0 ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down',
                   color: taskPct > 0 ? 'text-ive-green' : 'text-ive-red',
-                  text: `${periodLabel} 작업량이 ${prevLabel} 대비 ${Math.abs(taskPct)}% ${taskPct > 0 ? '증가' : '감소'}했습니다.`,
+                  text: `${periodLabel} 작업량이 ${prevLabel} 대비 ${Math.abs(taskPct).toLocaleString()}% ${taskPct > 0 ? '증가' : '감소'}했습니다.`,
                 })
               } else {
                 lines.push({ icon: 'fa-equals', color: 'text-ive-text-dim', text: `${periodLabel} 작업량은 ${prevLabel}과 비슷한 수준입니다.` })
@@ -422,7 +422,7 @@ export default function ReportsTab() {
                 lines.push({
                   icon: costPct > 0 ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down',
                   color: costPct > 0 ? 'text-ive-red' : 'text-ive-green',
-                  text: `비용이 ${prevLabel} 대비 ${Math.abs(costPct)}% ${costPct > 0 ? '증가' : '절감'}되었습니다. ($${ps.totalCost.toFixed(2)} → $${s.totalCost.toFixed(2)})`,
+                  text: `비용이 ${prevLabel} 대비 ${Math.abs(costPct).toLocaleString()}% ${costPct > 0 ? '증가' : '절감'}되었습니다. ($${ps.totalCost.toFixed(2)} → $${s.totalCost.toFixed(2)})`,
                 })
               }
             }
@@ -446,7 +446,7 @@ export default function ReportsTab() {
                 lines.push({
                   icon: wPct > 0 ? 'fa-clock' : 'fa-bolt',
                   color: wPct > 0 ? 'text-ive-red' : 'text-ive-green',
-                  text: `평균 대기시간이 ${prevLabel} 대비 ${Math.abs(wPct)}% ${wPct > 0 ? '늘어났습니다' : '단축되었습니다'}. (${formatDuration(plc.waitAvg)} → ${formatDuration(lc.waitAvg)})`,
+                  text: `평균 대기시간이 ${prevLabel} 대비 ${Math.abs(wPct).toLocaleString()}% ${wPct > 0 ? '늘어났습니다' : '단축되었습니다'}. (${formatDuration(plc.waitAvg)} → ${formatDuration(lc.waitAvg)})`,
                 })
               }
             }
@@ -458,7 +458,7 @@ export default function ReportsTab() {
                 lines.push({
                   icon: pPct > 0 ? 'fa-hourglass-half' : 'fa-forward-fast',
                   color: pPct > 0 ? 'text-ive-red' : 'text-ive-green',
-                  text: `평균 수행시간이 ${prevLabel} 대비 ${Math.abs(pPct)}% ${pPct > 0 ? '늘어났습니다' : '단축되었습니다'}.`,
+                  text: `평균 수행시간이 ${prevLabel} 대비 ${Math.abs(pPct).toLocaleString()}% ${pPct > 0 ? '늘어났습니다' : '단축되었습니다'}.`,
                 })
               }
             }
@@ -519,7 +519,7 @@ export default function ReportsTab() {
                     if (isNew) return <span className="text-[9px] font-bold px-1 py-0.5 rounded text-ive-cyan bg-ive-cyan/10">NEW</span>
                     if (diff == null) return null
                     const color = diff > 0 ? 'text-ive-red bg-ive-red/10' : diff < 0 ? 'text-ive-green bg-ive-green/10' : 'text-ive-text-dim bg-white/5'
-                    return <span className={`text-[9px] font-bold px-1 py-0.5 rounded ${color}`}>{diff > 0 ? '+' : ''}{diff}%</span>
+                    return <span className={`text-[9px] font-bold px-1 py-0.5 rounded ${color}`}>{diff > 0 ? '+' : ''}{diff.toLocaleString()}%</span>
                   }
                   return (
                     <div className={`grid gap-2 ${cols === 3 ? 'grid-cols-3' : cols === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
@@ -613,7 +613,7 @@ export default function ReportsTab() {
                           </span>
                           {prevDiff != null && (
                             <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${prevDiff > 0 ? 'text-ive-red bg-ive-red/10' : prevDiff < 0 ? 'text-ive-green bg-ive-green/10' : 'text-ive-text-dim bg-white/5'}`}>
-                              vs 이전 {prevDiff > 0 ? '+' : ''}{prevDiff}%
+                              vs 이전 {prevDiff > 0 ? '+' : ''}{prevDiff.toLocaleString()}%
                             </span>
                           )}
                           {prevDiff == null && data.lifecycle.waitCount > 0 && data.prevLifecycle.waitCount === 0 && (
@@ -658,7 +658,7 @@ export default function ReportsTab() {
                           </span>
                           {prevDiff != null && (
                             <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${prevDiff > 0 ? 'text-ive-red bg-ive-red/10' : prevDiff < 0 ? 'text-ive-green bg-ive-green/10' : 'text-ive-text-dim bg-white/5'}`}>
-                              vs 이전 {prevDiff > 0 ? '+' : ''}{prevDiff}%
+                              vs 이전 {prevDiff > 0 ? '+' : ''}{prevDiff.toLocaleString()}%
                             </span>
                           )}
                           {prevDiff == null && data.lifecycle.procCount > 0 && data.prevLifecycle.procCount === 0 && (
@@ -751,9 +751,9 @@ export default function ReportsTab() {
                       )}
                       <span className="text-sm font-bold text-ive-text flex-1 truncate">{p.projectName}</span>
                       <span className="text-xs text-ive-text-dim">{p.tasks}건</span>
-                      {taskDiff != null && <span className={`text-[10px] font-bold ${taskDiff > 0 ? 'text-ive-green' : taskDiff < 0 ? 'text-ive-red' : 'text-ive-text-dim'}`}>{taskDiff > 0 ? '+' : ''}{taskDiff}%</span>}
+                      {taskDiff != null && <span className={`text-[10px] font-bold ${taskDiff > 0 ? 'text-ive-green' : taskDiff < 0 ? 'text-ive-red' : 'text-ive-text-dim'}`}>{taskDiff > 0 ? '+' : ''}{taskDiff.toLocaleString()}%</span>}
                       <span className="text-xs text-ive-amber">${p.cost.toFixed(2)}</span>
-                      {costDiff != null && <span className={`text-[10px] font-bold ${costDiff > 0 ? 'text-ive-red' : costDiff < 0 ? 'text-ive-green' : 'text-ive-text-dim'}`}>{costDiff > 0 ? '+' : ''}{costDiff}%</span>}
+                      {costDiff != null && <span className={`text-[10px] font-bold ${costDiff > 0 ? 'text-ive-red' : costDiff < 0 ? 'text-ive-green' : 'text-ive-text-dim'}`}>{costDiff > 0 ? '+' : ''}{costDiff.toLocaleString()}%</span>}
                       <i className={`fa-solid fa-chevron-${expandedProjects.has(p.projectId) ? 'up' : 'down'} text-xs text-ive-text-dim`} />
                     </button>
                     {expandedProjects.has(p.projectId) && (
@@ -827,9 +827,9 @@ export default function ReportsTab() {
                       <AgentAvatar avatar={a.agentAvatar} size="sm" className="!w-6 !h-6 !text-sm" />
                       <span className="text-sm font-bold text-ive-text flex-1 truncate">{a.agentName}</span>
                       <span className="text-xs text-ive-text-dim">{a.tasks}건</span>
-                      {taskDiff != null && <span className={`text-[10px] font-bold ${taskDiff > 0 ? 'text-ive-green' : taskDiff < 0 ? 'text-ive-red' : 'text-ive-text-dim'}`}>{taskDiff > 0 ? '+' : ''}{taskDiff}%</span>}
+                      {taskDiff != null && <span className={`text-[10px] font-bold ${taskDiff > 0 ? 'text-ive-green' : taskDiff < 0 ? 'text-ive-red' : 'text-ive-text-dim'}`}>{taskDiff > 0 ? '+' : ''}{taskDiff.toLocaleString()}%</span>}
                       <span className="text-xs text-ive-amber">${a.cost.toFixed(2)}</span>
-                      {costDiff != null && <span className={`text-[10px] font-bold ${costDiff > 0 ? 'text-ive-red' : costDiff < 0 ? 'text-ive-green' : 'text-ive-text-dim'}`}>{costDiff > 0 ? '+' : ''}{costDiff}%</span>}
+                      {costDiff != null && <span className={`text-[10px] font-bold ${costDiff > 0 ? 'text-ive-red' : costDiff < 0 ? 'text-ive-green' : 'text-ive-text-dim'}`}>{costDiff > 0 ? '+' : ''}{costDiff.toLocaleString()}%</span>}
                       <i className={`fa-solid fa-chevron-${expandedAgents.has(a.agentId) ? 'up' : 'down'} text-xs text-ive-text-dim`} />
                     </button>
                     {expandedAgents.has(a.agentId) && (
@@ -1070,7 +1070,7 @@ function SummaryCard({ label, value, sub, color, diff, invertColor }: {
         {sub && <span className="text-xs text-ive-text-dim">{sub}</span>}
         {diff != null && (
           <span className={`text-[10px] font-bold ${diffColor}`}>
-            {diff > 0 ? '+' : ''}{diff}%
+            {diff > 0 ? '+' : ''}{diff.toLocaleString()}%
           </span>
         )}
       </div>

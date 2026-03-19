@@ -444,7 +444,7 @@ export async function GET(req: NextRequest) {
     if (taskFirst > 0) {
       const taskChange = ((taskSecond - taskFirst) / taskFirst) * 100
       if (Math.abs(taskChange) >= 10) {
-        insights.push(`작업 건수가 ${taskChange > 0 ? '증가' : '감소'} 추세입니다 (${taskChange > 0 ? '+' : ''}${Math.round(taskChange)}%)`)
+        insights.push(`작업 건수가 ${taskChange > 0 ? '증가' : '감소'} 추세입니다 (${taskChange > 0 ? '+' : ''}${Math.round(taskChange).toLocaleString()}%)`)
       }
     }
 
@@ -454,7 +454,7 @@ export async function GET(req: NextRequest) {
     if (costFirst > 0) {
       const costChange = ((costSecond - costFirst) / costFirst) * 100
       if (Math.abs(costChange) >= 10) {
-        insights.push(`비용이 ${costChange > 0 ? '증가' : '감소'} 추세입니다 (${costChange > 0 ? '+' : ''}${Math.round(costChange)}%)`)
+        insights.push(`비용이 ${costChange > 0 ? '증가' : '감소'} 추세입니다 (${costChange > 0 ? '+' : ''}${Math.round(costChange).toLocaleString()}%)`)
       }
     }
 
@@ -467,7 +467,7 @@ export async function GET(req: NextRequest) {
       if (wFirst > 0) {
         const wChange = ((wSecond - wFirst) / wFirst) * 100
         if (Math.abs(wChange) >= 10) {
-          insights.push(`평균 대기시간이 ${wChange > 0 ? '늘어나고' : '줄어들고'} 있습니다 (${wChange > 0 ? '+' : ''}${Math.round(wChange)}%)`)
+          insights.push(`평균 대기시간이 ${wChange > 0 ? '늘어나고' : '줄어들고'} 있습니다 (${wChange > 0 ? '+' : ''}${Math.round(wChange).toLocaleString()}%)`)
         }
       }
     }
@@ -481,7 +481,7 @@ export async function GET(req: NextRequest) {
       if (pFirst > 0) {
         const pChange = ((pSecond - pFirst) / pFirst) * 100
         if (Math.abs(pChange) >= 10) {
-          insights.push(`평균 수행시간이 ${pChange > 0 ? '늘어나고' : '줄어들고'} 있습니다 (${pChange > 0 ? '+' : ''}${Math.round(pChange)}%)`)
+          insights.push(`평균 수행시간이 ${pChange > 0 ? '늘어나고' : '줄어들고'} 있습니다 (${pChange > 0 ? '+' : ''}${Math.round(pChange).toLocaleString()}%)`)
         }
       }
     }
@@ -506,7 +506,7 @@ export async function GET(req: NextRequest) {
         if (pcFirst > 0) {
           const pcChange = ((pcSecond - pcFirst) / pcFirst) * 100
           if (Math.abs(pcChange) >= 30) {
-            insights.push(`${pt.projectName} 프로젝트 비용이 ${pcChange > 0 ? '급증' : '급감'}했습니다 (${pcChange > 0 ? '+' : ''}${Math.round(pcChange)}%)`)
+            insights.push(`${pt.projectName} 프로젝트 비용이 ${pcChange > 0 ? '급증' : '급감'}했습니다 (${pcChange > 0 ? '+' : ''}${Math.round(pcChange).toLocaleString()}%)`)
           }
         }
       }
@@ -524,7 +524,7 @@ export async function GET(req: NextRequest) {
         if (atFirst > 0) {
           const atChange = ((atSecond - atFirst) / atFirst) * 100
           if (Math.abs(atChange) >= 30) {
-            insights.push(`${at.agentName} 작업자의 작업량이 ${atChange > 0 ? '증가' : '감소'}했습니다 (${atChange > 0 ? '+' : ''}${Math.round(atChange)}%)`)
+            insights.push(`${at.agentName} 작업자의 작업량이 ${atChange > 0 ? '증가' : '감소'}했습니다 (${atChange > 0 ? '+' : ''}${Math.round(atChange).toLocaleString()}%)`)
           }
         }
       }
