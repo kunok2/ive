@@ -70,7 +70,7 @@ export function DailyTrendChart({ data, prevData, type }: {
     <div className="bg-ive-bg-card border border-ive-border-subtle rounded-xl p-3 space-y-2">
       {/* 요약 한 줄 */}
       <div className="flex items-center gap-3">
-        <span className="text-xs font-bold text-ive-text">건수 {totalCur}건</span>
+        <span className="text-xs font-bold text-ive-text">건수 {totalCur.toLocaleString()}건</span>
         <Badge value={pctChange(totalCur, totalPrev)} />
         <span className="text-xs font-bold text-ive-amber ml-auto">${costCur.toFixed(2)}</span>
         <Badge value={pctChange(costCur, costPrev)} invert />
@@ -147,7 +147,7 @@ export function CompareTable({ title, data, icon }: { title: string; data: Compa
               ) : null}
               <span className="text-xs font-bold text-ive-text truncate">{d.name}</span>
             </div>
-            <span className="text-xs font-extrabold text-ive-text text-right">{d.tasks}</span>
+            <span className="text-xs font-extrabold text-ive-text text-right">{d.tasks.toLocaleString()}</span>
             <div className="flex justify-end">
               <Badge value={taskDiff} />
             </div>
@@ -161,7 +161,7 @@ export function CompareTable({ title, data, icon }: { title: string; data: Compa
       {/* 합계 */}
       <div className="grid grid-cols-[1fr_60px_50px_60px_50px] items-center px-3 py-2 bg-ive-bg-deep/50 border-t border-ive-border-dark">
         <span className="text-xs font-bold text-ive-text-dim">합계</span>
-        <span className="text-xs font-extrabold text-ive-text text-right">{data.reduce((s, d) => s + d.tasks, 0)}</span>
+        <span className="text-xs font-extrabold text-ive-text text-right">{data.reduce((s, d) => s + d.tasks, 0).toLocaleString()}</span>
         <div className="flex justify-end">
           <Badge value={pctChange(data.reduce((s, d) => s + d.tasks, 0), data.reduce((s, d) => s + d.prevTasks, 0))} />
         </div>

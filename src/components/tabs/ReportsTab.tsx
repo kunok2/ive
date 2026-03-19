@@ -412,7 +412,7 @@ export default function ReportsTab() {
                 lines.push({ icon: 'fa-equals', color: 'text-ive-text-dim', text: `${periodLabel} 작업량은 ${prevLabel}과 비슷한 수준입니다.` })
               }
             } else if (s.totalTasks > 0) {
-              lines.push({ icon: 'fa-sparkles', color: 'text-ive-cyan', text: `${prevLabel}에는 실행이 없었으나 ${periodLabel}에 ${s.totalTasks}건이 처리되었습니다.` })
+              lines.push({ icon: 'fa-sparkles', color: 'text-ive-cyan', text: `${prevLabel}에는 실행이 없었으나 ${periodLabel}에 ${s.totalTasks.toLocaleString()}건이 처리되었습니다.` })
             }
 
             // 비용 변화
@@ -491,8 +491,8 @@ export default function ReportsTab() {
           <section>
             <div className="text-xs font-bold text-ive-text-dim mb-2 uppercase tracking-wider">전체 요약</div>
             <div className="grid grid-cols-3 gap-2">
-              <SummaryCard label="작업" value={`${data.summary.totalTasks}건`} sub={`성공 ${data.summary.successCount}`} color="text-ive-green" diff={diffPct(data.summary.totalTasks, data.prevSummary.totalTasks)} />
-              <SummaryCard label="성공률" value={`${data.summary.successRate}%`} sub={`실패 ${data.summary.failedCount}`} color="text-ive-cyan" diff={diffPt(data.summary.successRate, data.prevSummary.successRate)} />
+              <SummaryCard label="작업" value={`${data.summary.totalTasks.toLocaleString()}건`} sub={`성공 ${data.summary.successCount.toLocaleString()}`} color="text-ive-green" diff={diffPct(data.summary.totalTasks, data.prevSummary.totalTasks)} />
+              <SummaryCard label="성공률" value={`${data.summary.successRate}%`} sub={`실패 ${data.summary.failedCount.toLocaleString()}`} color="text-ive-cyan" diff={diffPt(data.summary.successRate, data.prevSummary.successRate)} />
               <SummaryCard label="비용" value={`$${data.summary.totalCost.toFixed(2)}`} sub={`${formatTokens(data.summary.totalInputTokens + data.summary.totalOutputTokens)} tok`} color="text-ive-amber" diff={diffPct(data.summary.totalCost, data.prevSummary.totalCost)} invertColor />
             </div>
             <div className="mt-2 grid grid-cols-2 gap-2">
@@ -579,9 +579,9 @@ export default function ReportsTab() {
                 })()}
                 {/* 재시도 */}
                 <div className="flex justify-center gap-4 text-[10px] text-ive-text-dim">
-                  <span>이슈 {data.lifecycle.uniqueIssues}건</span>
-                  <span>평균 {data.lifecycle.avgAttempts}회 시도</span>
-                  <span>재시도율 {data.lifecycle.retryRate}%</span>
+                  <span>이슈 {data.lifecycle.uniqueIssues.toLocaleString()}건</span>
+                  <span>평균 {data.lifecycle.avgAttempts.toLocaleString()}회 시도</span>
+                  <span>재시도율 {data.lifecycle.retryRate.toLocaleString()}%</span>
                 </div>
               </div>
             </section>
@@ -750,7 +750,7 @@ export default function ReportsTab() {
                         </span>
                       )}
                       <span className="text-sm font-bold text-ive-text flex-1 truncate">{p.projectName}</span>
-                      <span className="text-xs text-ive-text-dim">{p.tasks}건</span>
+                      <span className="text-xs text-ive-text-dim">{p.tasks.toLocaleString()}건</span>
                       {taskDiff != null && <span className={`text-[10px] font-bold ${taskDiff > 0 ? 'text-ive-green' : taskDiff < 0 ? 'text-ive-red' : 'text-ive-text-dim'}`}>{taskDiff > 0 ? '+' : ''}{taskDiff.toLocaleString()}%</span>}
                       <span className="text-xs text-ive-amber">${p.cost.toFixed(2)}</span>
                       {costDiff != null && <span className={`text-[10px] font-bold ${costDiff > 0 ? 'text-ive-red' : costDiff < 0 ? 'text-ive-green' : 'text-ive-text-dim'}`}>{costDiff > 0 ? '+' : ''}{costDiff.toLocaleString()}%</span>}
@@ -759,8 +759,8 @@ export default function ReportsTab() {
                     {expandedProjects.has(p.projectId) && (
                       <div className="px-3 pb-3 border-t border-ive-border-dark">
                         <div className="grid grid-cols-3 gap-1 mt-2 text-center">
-                          <MiniStat label="성공" value={p.success} color="text-ive-green" />
-                          <MiniStat label="실패" value={p.failed} color="text-ive-red" />
+                          <MiniStat label="성공" value={p.success.toLocaleString()} color="text-ive-green" />
+                          <MiniStat label="실패" value={p.failed.toLocaleString()} color="text-ive-red" />
                           <MiniStat label="비용" value={`$${p.cost.toFixed(2)}`} color="text-ive-amber" />
                         </div>
                         <div className="grid grid-cols-2 gap-1 mt-1 text-center">
@@ -793,7 +793,7 @@ export default function ReportsTab() {
                               <div key={a.agentId} className="flex items-center gap-2 bg-ive-bg-deep rounded-lg px-2 py-1.5">
                                 <AgentAvatar avatar={a.agentAvatar} size="sm" className="!w-5 !h-5 !text-xs" />
                                 <span className="text-xs font-bold text-ive-text flex-1 truncate">{a.agentName}</span>
-                                <span className="text-xs text-ive-green">{a.success}<span className="text-ive-text-dim">/{a.tasks}</span></span>
+                                <span className="text-xs text-ive-green">{a.success.toLocaleString()}<span className="text-ive-text-dim">/{a.tasks.toLocaleString()}</span></span>
                                 <span className="text-xs text-ive-amber">${a.cost.toFixed(2)}</span>
                               </div>
                             ))}
@@ -826,7 +826,7 @@ export default function ReportsTab() {
                     <button onClick={() => toggleAgent(a.agentId)} className="w-full px-3 py-2.5 flex items-center gap-2 text-left">
                       <AgentAvatar avatar={a.agentAvatar} size="sm" className="!w-6 !h-6 !text-sm" />
                       <span className="text-sm font-bold text-ive-text flex-1 truncate">{a.agentName}</span>
-                      <span className="text-xs text-ive-text-dim">{a.tasks}건</span>
+                      <span className="text-xs text-ive-text-dim">{a.tasks.toLocaleString()}건</span>
                       {taskDiff != null && <span className={`text-[10px] font-bold ${taskDiff > 0 ? 'text-ive-green' : taskDiff < 0 ? 'text-ive-red' : 'text-ive-text-dim'}`}>{taskDiff > 0 ? '+' : ''}{taskDiff.toLocaleString()}%</span>}
                       <span className="text-xs text-ive-amber">${a.cost.toFixed(2)}</span>
                       {costDiff != null && <span className={`text-[10px] font-bold ${costDiff > 0 ? 'text-ive-red' : costDiff < 0 ? 'text-ive-green' : 'text-ive-text-dim'}`}>{costDiff > 0 ? '+' : ''}{costDiff.toLocaleString()}%</span>}
@@ -835,14 +835,14 @@ export default function ReportsTab() {
                     {expandedAgents.has(a.agentId) && (
                       <div className="px-3 pb-3 border-t border-ive-border-dark">
                         <div className="grid grid-cols-3 gap-1 mt-2 text-center">
-                          <MiniStat label="성공" value={a.success} color="text-ive-green" />
-                          <MiniStat label="실패" value={a.failed} color="text-ive-red" />
+                          <MiniStat label="성공" value={a.success.toLocaleString()} color="text-ive-green" />
+                          <MiniStat label="실패" value={a.failed.toLocaleString()} color="text-ive-red" />
                           <MiniStat label="비용" value={`$${a.cost.toFixed(2)}`} color="text-ive-amber" />
                         </div>
                         <div className="grid grid-cols-3 gap-1 mt-1 text-center">
                           <MiniStat label="총시간" value={formatDuration(a.totalDurationMin)} color="text-ive-text-muted" />
                           <MiniStat label="평균" value={formatDuration(a.avgDurationMin)} color="text-ive-text-muted" />
-                          <MiniStat label="평균턴" value={a.avgTurns} color="text-ive-text-muted" />
+                          <MiniStat label="평균턴" value={a.avgTurns.toLocaleString()} color="text-ive-text-muted" />
                         </div>
                         <div className="text-xs text-ive-text-dim mt-1 text-center">
                           입력 {formatTokens(a.inputTokens)} / 출력 {formatTokens(a.outputTokens)} 토큰
@@ -909,7 +909,7 @@ export default function ReportsTab() {
           {data.resolvedIssues && data.resolvedIssues.length > 0 && (
             <section>
               <div className="text-xs font-bold text-ive-text-dim mb-2 uppercase tracking-wider">
-                처리된 이슈 ({data.resolvedIssues.length}건)
+                처리된 이슈 ({data.resolvedIssues.length.toLocaleString()}건)
               </div>
 
               {/* 필터 바 */}
@@ -1016,10 +1016,10 @@ export default function ReportsTab() {
                           <span>{formatDuration(issue.durationMin)}</span>
                           <span className="text-ive-amber">${issue.cost.toFixed(2)}</span>
                           {issue.turns > 0 && (
-                            <span className="text-ive-text-dim">{issue.turns}턴</span>
+                            <span className="text-ive-text-dim">{issue.turns.toLocaleString()}턴</span>
                           )}
                           {issue.attempts > 1 && (
-                            <span className="text-ive-red">{issue.attempts}회 시도</span>
+                            <span className="text-ive-red">{issue.attempts.toLocaleString()}회 시도</span>
                           )}
                         </div>
                       </div>
@@ -1035,7 +1035,7 @@ export default function ReportsTab() {
                 {visibleCount < filteredIssues.length && (
                   <div className="text-center text-xs text-ive-text-dim py-3">
                     <i className="fa-solid fa-circle-notch fa-spin mr-1" />
-                    {filteredIssues.length - visibleCount}건 더 있음
+                    {(filteredIssues.length - visibleCount).toLocaleString()}건 더 있음
                   </div>
                 )}
               </div>

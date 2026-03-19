@@ -505,7 +505,7 @@ export async function GET(req: NextRequest) {
     const srSecond = avgArr(secondHalf, d => d.tasks! > 0 ? (d.success! / d.tasks!) * 100 : 0)
     const srDiff = srSecond - srFirst
     if (Math.abs(srDiff) >= 5) {
-      insights.push(`성공률이 ${srDiff > 0 ? '개선' : '하락'}되고 있습니다 (${srDiff > 0 ? '+' : ''}${Math.round(srDiff)}%p)`)
+      insights.push(`성공률이 ${srDiff > 0 ? '개선' : '하락'}되고 있습니다 (${srDiff > 0 ? '+' : ''}${Math.round(srDiff).toLocaleString()}%p)`)
     }
 
     // 프로젝트별 주요 변화
