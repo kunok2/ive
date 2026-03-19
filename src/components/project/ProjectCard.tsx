@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { Project, ProjectAssignment, Agent, TaskExecution, StatSnapshot } from '@/types'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useStore } from '@/lib/store'
 import { useDialog } from '@/components/ui/ConfirmDialog'
 import { getKSTTodayStartISO } from '@/lib/date-utils'
@@ -16,6 +16,39 @@ function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
   return String(n)
+}
+
+function MarqueeText({ children, className }: { children: React.ReactNode; className?: string }) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLSpanElement>(null)
+  const [scrolling, setScrolling] = useState(false)
+
+  useEffect(() => {
+    const container = containerRef.current
+    const content = contentRef.current
+    if (!container || !content) return
+    const check = () => {
+      const overflow = content.scrollWidth - container.clientWidth
+      if (overflow > 0) {
+        content.style.setProperty('--marquee-distance', `-${overflow}px`)
+        setScrolling(true)
+      } else {
+        setScrolling(false)
+      }
+    }
+    check()
+    const ro = new ResizeObserver(check)
+    ro.observe(container)
+    return () => ro.disconnect()
+  }, [children])
+
+  return (
+    <div ref={containerRef} className="marquee-container min-w-0">
+      <span ref={contentRef} className={`marquee-content ${scrolling ? 'scrolling' : ''} ${className ?? ''}`}>
+        {children}
+      </span>
+    </div>
+  )
 }
 
 interface Props {
@@ -321,7 +354,7 @@ export default function ProjectCard({ project }: Props) {
                   />
                 )}
                 {agent && <span className="text-ive-amber/70 font-bold shrink-0">{agent.name}</span>}
-                <span className="text-ive-text-muted truncate">#{ex.issueIid} {ex.issueTitle || ''}</span>
+                <MarqueeText className="text-ive-text-muted">#{ex.issueIid} {ex.issueTitle || ''}</MarqueeText>
               </div>
             )
           })}

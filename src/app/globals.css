@@ -106,6 +106,27 @@ body {
   animation: toast-out 0.3s ease-in forwards;
 }
 
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  20% { transform: translateX(0); }
+  80% { transform: translateX(var(--marquee-distance)); }
+  100% { transform: translateX(var(--marquee-distance)); }
+}
+
+.marquee-container {
+  overflow: hidden;
+  position: relative;
+}
+
+.marquee-content {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.marquee-content.scrolling {
+  animation: marquee 5s ease-in-out infinite alternate;
+}
+
 /* Firefox */
 * {
   scrollbar-width: thin;
