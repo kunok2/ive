@@ -28,6 +28,7 @@ export default function AvatarCropEditor({ imageFile, onConfirm, onCancel }: Pro
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const imgRef = useRef<HTMLImageElement | null>(null)
   const [loaded, setLoaded] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [scale, setScale] = useState(1)
   const [offset, setOffset] = useState({ x: 0, y: 0 })
   const [bgColor, setBgColor] = useState('#1a1a2e')
@@ -47,7 +48,11 @@ export default function AvatarCropEditor({ imageFile, onConfirm, onCancel }: Pro
         x: (VIEW_SIZE - img.width * initScale) / 2,
         y: (VIEW_SIZE - img.height * initScale) / 2,
       })
+      setLoadError(null)
       setLoaded(true)
+    }
+    img.onerror = () => {
+      setLoadError('이미지를 로드할 수 없습니다. 다른 파일을 선택해주세요.')
     }
     img.src = URL.createObjectURL(imageFile)
     return () => URL.revokeObjectURL(img.src)
@@ -58,7 +63,8 @@ export default function AvatarCropEditor({ imageFile, onConfirm, onCancel }: Pro
     const canvas = canvasRef.current
     const img = imgRef.current
     if (!canvas || !img) return
-    const ctx = canvas.getContext('2d')!
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
     ctx.clearRect(0, 0, VIEW_SIZE, VIEW_SIZE)
 
     // 원형 클리핑
@@ -128,40 +134,70 @@ export default function AvatarCropEditor({ imageFile, onConfirm, onCancel }: Pro
 
   // 확인 - 크롭 결과를 Blob으로 반환
   const handleConfirm = () => {
-    const img = imgRef.current
-    if (!img) return
-    const outCanvas = document.createElement('canvas')
-    outCanvas.width = CANVAS_SIZE
-    outCanvas.height = CANVAS_SIZE
-    const ctx = outCanvas.getContext('2d')!
+    try {
+      const img = imgRef.current
+      if (!img) return
+      const outCanvas = document.createElement('canvas')
+      outCanvas.width = CANVAS_SIZE
+      outCanvas.height = CANVAS_SIZE
+      const ctx = outCanvas.getContext('2d')
+      if (!ctx) {
+        alert('캔버스를 초기화할 수 없습니다. 브라우저를 새로고침해주세요.')
+        return
+      }
 
-    // 원형 클리핑
-    ctx.beginPath()
-    ctx.arc(CANVAS_SIZE / 2, CANVAS_SIZE / 2, CANVAS_SIZE / 2, 0, Math.PI * 2)
-    ctx.clip()
+      // 원형 클리핑
+      ctx.beginPath()
+      ctx.arc(CANVAS_SIZE / 2, CANVAS_SIZE / 2, CANVAS_SIZE / 2, 0, Math.PI * 2)
+      ctx.clip()
 
-    // 배경색
-    ctx.fillStyle = bgColor
-    ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE)
+      // 배경색
+      ctx.fillStyle = bgColor
+      ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE)
 
-    // VIEW_SIZE → CANVAS_SIZE 비율
-    const ratio = CANVAS_SIZE / VIEW_SIZE
-    ctx.drawImage(
-      img,
-      offset.x * ratio,
-      offset.y * ratio,
-      img.width * scale * ratio,
-      img.height * scale * ratio,
-    )
+      // VIEW_SIZE → CANVAS_SIZE 비율
+      const ratio = CANVAS_SIZE / VIEW_SIZE
+      ctx.drawImage(
+        img,
+        offset.x * ratio,
+        offset.y * ratio,
+        img.width * scale * ratio,
+        img.height * scale * ratio,
+      )
 
-    outCanvas.toBlob((blob) => {
-      if (blob) onConfirm(blob)
-    }, 'image/png', 1)
+      outCanvas.toBlob((blob) => {
+        if (!blob) {
+          alert('이미지 처리에 실패했습니다. 다시 시도해주세요.')
+          return
+        }
+        onConfirm(blob)
+      }, 'image/png', 1)
+    } catch {
+      alert('이미지 처리 중 오류가 발생했습니다. 다시 시도해주세요.')
+    }
   }
 
   // 줌 슬라이더
   const minScale = imgRef.current ? VIEW_SIZE / Math.max(imgRef.current.width, imgRef.current.height) * 0.5 : 0.1
   const maxScale = 5
+
+  if (loadError) {
+    return (
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-full text-center py-6">
+          <i className="fa-solid fa-circle-exclamation text-ive-red text-2xl mb-2" />
+          <p className="text-sm text-ive-red font-semibold">{loadError}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="w-full py-2 rounded-lg text-sm font-semibold text-ive-text-dim bg-ive-bg-card border border-ive-border-subtle"
+        >
+          돌아가기
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col items-center gap-3">
