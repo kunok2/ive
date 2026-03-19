@@ -115,15 +115,16 @@ export default function IssuesTab() {
     setBulkProgress(null)
   }
 
-  // 선택된 프로젝트가 현재 목록에 없으면 초기화
+  // 선택된 프로젝트가 현재 목록에 없으면 초기화 (로그아웃 시에는 유지)
   useEffect(() => {
     if (state.loading) return
+    if (!state.user) return
     if (selectedProjectId && !state.projects.some(p => p.id === selectedProjectId)) {
       setSelectedProjectId('')
       setIssues([])
       sessionStorage.removeItem('issues-cache')
     }
-  }, [state.projects, selectedProjectId, state.loading])
+  }, [state.projects, selectedProjectId, state.loading, state.user])
 
   // 프로젝트가 1개면 자동 선택
   useEffect(() => {
