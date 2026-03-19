@@ -29,7 +29,9 @@ export async function GET(
 
     const mapped = issues.map((issue: any) => {
       // 1. 로컬 DB에 stage가 있으면 우선 사용
-      let stage: string | null = localStages.get(issue.iid) || null;
+      const local = localStages.get(issue.iid);
+      let stage: string | null = local?.stage || null;
+      let failReason: string | null = local?.failReason || null;
 
       // 2. 로컬에 없으면 원격 레이블에서 판단 후 DB에 등록
       if (!stage) {
@@ -52,6 +54,7 @@ export async function GET(
         description: issue.description,
         state: issue.state,
         stage: stage || 'none',
+        failReason,
         labels: issue.labels,
         createdAt: issue.created_at,
         updatedAt: issue.updated_at,

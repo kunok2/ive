@@ -47,10 +47,7 @@ export async function ensureGitHubLabels(project: Project, decryptedToken: strin
 
   const headers = getGitHubAuthHeaders(project, decryptedToken);
   const labelsToEnsure = [
-    { name: project.labelTarget, color: '34d399', description: 'IVE Target Issue' },
-    { name: project.labelInProgress, color: '22d3ee', description: 'IVE Development in Progress' },
-    { name: project.labelFailDev, color: 'ef4444', description: 'IVE Development Failed' },
-    { name: project.labelDone, color: 'a3e635', description: 'IVE Completed' },
+    { name: project.labelTarget, color: '34d399', description: 'IVE 관리 대상 이슈' },
   ];
 
   try {

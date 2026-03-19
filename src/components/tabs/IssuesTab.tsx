@@ -11,6 +11,7 @@ interface IveIssue {
   iid: number
   title: string
   stage: string
+  failReason?: string | null
   state: string
   labels: string[]
   createdAt: string
@@ -426,9 +427,15 @@ export default function IssuesTab() {
                   }`}
                 >
                   {tab.label}
-                  {tab.key === 'all' && issues.length > 0 && (
-                    <span className="ml-1 text-xs opacity-60">{issues.length}</span>
-                  )}
+                  {(() => {
+                    const count = tab.key === 'all' ? issues.length
+                      : tab.key === 'waiting' ? issues.filter(i => i.stage === 'waiting').length
+                      : tab.key === 'active' ? issues.filter(i => i.stage === 'dev').length
+                      : tab.key === 'failed' ? issues.filter(i => i.stage === 'dev_fail').length
+                      : tab.key === 'done' ? issues.filter(i => i.stage === 'done').length
+                      : 0
+                    return count > 0 ? <span className="ml-1 text-xs opacity-60">{count}</span> : null
+                  })()}
                 </button>
               ))}
             </div>
@@ -632,6 +639,12 @@ export default function IssuesTab() {
                           {stageInfo.label}
                         </span>
                       </div>
+                      {issue.stage === 'dev_fail' && issue.failReason && (
+                        <div className="mb-1.5 px-2 py-1 rounded-lg bg-ive-red/10 border border-ive-red/20 text-xs text-ive-red">
+                          <i className="fa-solid fa-triangle-exclamation mr-1" />
+                          {issue.failReason}
+                        </div>
+                      )}
                       <div className="flex items-center gap-3 text-xs text-ive-text-dim">
                         <span>
                           <i className="fa-solid fa-user mr-1" />

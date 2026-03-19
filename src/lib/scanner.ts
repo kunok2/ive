@@ -329,8 +329,8 @@ export async function scanProject(project: Project, force: boolean = false) {
 
     // 로컬 DB에 waiting 상태인데 원격 레이블로는 못 찾은 이슈도 포함
     const localStages = getIssueStages(project.id);
-    for (const [iid, stage] of localStages) {
-      if (stage === 'waiting' && !issueMap.has(iid)) {
+    for (const [iid, info] of localStages) {
+      if (info.stage === 'waiting' && !issueMap.has(iid)) {
         try {
           const issue = await fetchSingleIssue(project, iid, decryptedToken);
           if (issue && issue.state !== 'closed') {
@@ -365,12 +365,13 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
 
   console.log(`[Scanner] processIssues: ${issues.length} issues, ${assignments.length} agents`);
   for (const issue of issues) {
-    // 이미 진행 중이거나 실행 중이면 스킵
+    // 이미 진행 중이거나 실행 중이면 스킵 (로컬 DB 기준)
+    const currentStage = getIssueStage(project.id, issue.iid);
     if (
-      issue.labels.includes(project.labelInProgress) ||
+      currentStage === 'dev' ||
       hasActiveExecution(project.id, issue.iid)
     ) {
-      console.log(`[Scanner] [SKIP-INPROG] Issue #${issue.iid} (labels: ${issue.labels.join(',')}, activeExec: ${hasActiveExecution(project.id, issue.iid)})`);
+      console.log(`[Scanner] [SKIP-INPROG] Issue #${issue.iid} (stage: ${currentStage}, activeExec: ${hasActiveExecution(project.id, issue.iid)})`);
       continue;
     }
 
@@ -402,15 +403,8 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
       busyAgentIds.add(availableAgent.id);
       console.log(`[Scanner] [ASSIGN] Project: ${project.name}, Issue: #${issue.iid}, Agent: ${availableAgent.name}${agentToken !== decryptedToken ? ' (자체 토큰)' : ''}`);
 
-      // 레이블 변경: 대기 → 개발 중 (로컬 DB + 원격 best-effort)
+      // 상태 변경: 대기 → 개발 중 (로컬 DB)
       setIssueStage(project.id, issue.iid, 'dev');
-      try {
-        if (project.provider === 'github') {
-          await updateGitHubIssueLabels(project, issue.iid, decryptedToken, [project.labelInProgress], [project.labelTarget]);
-        } else {
-          await updateGitLabIssueLabels(project, issue.iid, decryptedToken, [project.labelInProgress], [project.labelTarget]);
-        }
-      } catch (e) { console.warn(`[Scanner] Remote label update failed:`, e); }
 
       // 비동기로 태스크 실행 (개발자별 토큰 우선)
       executeTask(project, issue, availableAgent, agentToken)
@@ -587,13 +581,6 @@ async function executeTask(
       log(`${iterationCount}차 실행이지만 새로운 사용자 지시가 없어 스킵합니다.`, 'system');
       // 라벨을 done 상태로 복원 (진행중 → 완료)
       setIssueStage(project.id, iid, 'done');
-      try {
-        if (project.provider === 'github') {
-          await updateGitHubIssueLabels(project, iid, token, [project.labelDone], [project.labelInProgress]);
-        } else {
-          await updateGitLabIssueLabels(project, iid, token, [project.labelDone], [project.labelInProgress]);
-        }
-      } catch (e) { console.warn(`[Scanner] Remote label update failed:`, e); }
       // 이슈에 스킵 사유 코멘트 남기기 (best-effort)
       try {
         const skipComment = `IVE(봇): 이전 작업이 완료된 후 새로운 사용자 지시가 없어 추가 작업을 수행하지 않았습니다. 추가 작업이 필요하면 이 이슈에 코멘트로 지시를 남겨주세요.`;
@@ -836,7 +823,31 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
     if (diffResult.trim()) {
       log("변경사항 감지. 커밋 및 푸시 중...", 'system');
       await exec(`git commit -m "fix: resolve #${iid} - ${issue.title}"`, { cwd: workspacePath });
-      await exec(`git push -f origin ${branchName}`, { cwd: workspacePath });
+      try {
+        await exec(`git push -f origin ${branchName}`, { cwd: workspacePath });
+      } catch (pushErr: any) {
+        const pushMsg = pushErr.message || String(pushErr);
+        const isPermission = pushMsg.includes('403') || pushMsg.includes('denied') || pushMsg.includes('Permission') || pushMsg.includes('protected');
+        log(`push 실패: ${pushMsg}`, 'error');
+        // 이슈에 push 실패 사유 코멘트 (best-effort)
+        const pushFailReason = isPermission ? 'Push 권한 없음' : `Push 실패: ${pushMsg.substring(0, 100)}`;
+        const pushFailNote = isPermission
+          ? `## IVE(봇) Push 권한 없음\n\n코드 수정은 완료했으나, 이 저장소에 push 권한이 없어 브랜치를 생성할 수 없습니다.\n토큰 계정에 저장소 쓰기(write) 권한을 부여하거나, fork 방식을 사용해주세요.\n\n소요 시간: ${durationStr}`
+          : `## IVE(봇) Push 실패\n\n코드 수정은 완료했으나 push에 실패했습니다: ${pushMsg}\n\n소요 시간: ${durationStr}`;
+        setIssueStage(project.id, iid, 'dev_fail', pushFailReason);
+        try {
+          if (isGitHub) {
+            await addGitHubIssueComment(project, iid, token, pushFailNote);
+          } else {
+            await addGitLabIssueComment(project, iid, token, pushFailNote);
+          }
+        } catch (e) { console.warn(`[Scanner] Remote comment/label update failed:`, e); }
+        updateExecutionStatus(executionId, 'failed', new Date().toISOString());
+        updateAgentStatus(agent.id, 'available');
+        logStream.end();
+        try { if (fs.existsSync(workspacePath)) fs.rmSync(workspacePath, { recursive: true, force: true }); } catch {}
+        return;
+      }
 
       // MR/PR 생성 또는 업데이트
       let mrUrl = "";
@@ -883,15 +894,7 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
         await addGitLabSpentTime(project, iid, token, durationStr);
       }
 
-      // 개발 완료: labelInProgress → labelDone
       setIssueStage(project.id, iid, 'done');
-      try {
-        if (isGitHub) {
-          await updateGitHubIssueLabels(project, iid, token, [project.labelDone], [project.labelInProgress]);
-        } else {
-          await updateGitLabIssueLabels(project, iid, token, [project.labelDone], [project.labelInProgress]);
-        }
-      } catch (e) { console.warn(`[Scanner] Remote label update failed:`, e); }
       log("작업 완료.", 'system');
       updateExecutionStatus(executionId, 'success', new Date().toISOString());
     } else {
@@ -906,15 +909,7 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
           await addGitLabSpentTime(project, iid, token, durationStr);
         }
       } catch (e) { console.warn(`[Scanner] Remote comment failed:`, e); }
-      // 개발 완료: labelInProgress → labelDone
       setIssueStage(project.id, iid, 'done');
-      try {
-        if (isGitHub) {
-          await updateGitHubIssueLabels(project, iid, token, [project.labelDone], [project.labelInProgress]);
-        } else {
-          await updateGitLabIssueLabels(project, iid, token, [project.labelDone], [project.labelInProgress]);
-        }
-      } catch (e) { console.warn(`[Scanner] Remote label update failed:`, e); }
       updateExecutionStatus(executionId, 'success', new Date().toISOString());
     }
 
@@ -922,16 +917,14 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
     log(`오류 발생: ${err.message}`, 'error');
     const errorLog = conversationParts.join('\n\n').substring(0, 60000);
     const errorNote = `## IVE(봇) 실행 오류\n오류가 발생했습니다: ${err.message}\n\n<details>\n<summary>🤖 AI 작업 로그 (펼치기)</summary>\n\n${errorLog}\n\n</details>`;
-    setIssueStage(project.id, iid, 'dev_fail');
+    setIssueStage(project.id, iid, 'dev_fail', (err.message || '알 수 없는 오류').substring(0, 200));
     try {
       if (isGitHub) {
         await addGitHubIssueComment(project, iid, token, errorNote);
-        await updateGitHubIssueLabels(project, iid, token, [project.labelFailDev], [project.labelInProgress]);
       } else {
         await addGitLabIssueComment(project, iid, token, errorNote);
-        await updateGitLabIssueLabels(project, iid, token, [project.labelFailDev], [project.labelInProgress]);
       }
-    } catch (e) { console.warn(`[Scanner] Remote label update failed:`, e); }
+    } catch (e) { console.warn(`[Scanner] Remote comment failed:`, e); }
     updateExecutionStatus(executionId, 'failed', new Date().toISOString());
   } finally {
     // 에이전트 상태를 'available'로 복원

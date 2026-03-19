@@ -300,11 +300,16 @@ function initSchema(db: Database.Database) {
       project_id TEXT NOT NULL,
       issue_iid INTEGER NOT NULL,
       stage TEXT NOT NULL DEFAULT 'waiting',
+      fail_reason TEXT DEFAULT NULL,
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       PRIMARY KEY (project_id, issue_iid),
       FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
     )
   `)
+  // fail_reason 컬럼 마이그레이션
+  try {
+    db.exec(`ALTER TABLE issue_stages ADD COLUMN fail_reason TEXT DEFAULT NULL`)
+  } catch { /* 이미 존재 */ }
 
   seedAdmin(db)
   seedTokenPricing(db)
@@ -1006,18 +1011,32 @@ export function getIssueStage(projectId: string, issueIid: number): IssueStage |
   return r ? r.stage as IssueStage : null
 }
 
-export function getIssueStages(projectId: string): Map<number, IssueStage> {
-  const rows = getDb().prepare('SELECT issue_iid, stage FROM issue_stages WHERE project_id = ?').all(projectId) as any[]
-  const map = new Map<number, IssueStage>()
-  for (const r of rows) map.set(r.issue_iid, r.stage as IssueStage)
+export function getIssueStages(projectId: string): Map<number, { stage: IssueStage; failReason: string | null }> {
+  let rows: any[]
+  try {
+    rows = getDb().prepare('SELECT issue_iid, stage, fail_reason FROM issue_stages WHERE project_id = ?').all(projectId) as any[]
+  } catch {
+    // fail_reason 컬럼이 아직 없는 경우 fallback
+    rows = getDb().prepare('SELECT issue_iid, stage FROM issue_stages WHERE project_id = ?').all(projectId) as any[]
+  }
+  const map = new Map<number, { stage: IssueStage; failReason: string | null }>()
+  for (const r of rows) map.set(r.issue_iid, { stage: r.stage as IssueStage, failReason: r?.fail_reason || null })
   return map
 }
 
-export function setIssueStage(projectId: string, issueIid: number, stage: IssueStage) {
-  getDb().prepare(`
-    INSERT INTO issue_stages (project_id, issue_iid, stage, updated_at) VALUES (?, ?, ?, datetime('now'))
-    ON CONFLICT(project_id, issue_iid) DO UPDATE SET stage = excluded.stage, updated_at = excluded.updated_at
-  `).run(projectId, issueIid, stage)
+export function setIssueStage(projectId: string, issueIid: number, stage: IssueStage, failReason?: string) {
+  try {
+    getDb().prepare(`
+      INSERT INTO issue_stages (project_id, issue_iid, stage, fail_reason, updated_at) VALUES (?, ?, ?, ?, datetime('now'))
+      ON CONFLICT(project_id, issue_iid) DO UPDATE SET stage = excluded.stage, fail_reason = excluded.fail_reason, updated_at = excluded.updated_at
+    `).run(projectId, issueIid, stage, stage === 'dev_fail' ? (failReason || null) : null)
+  } catch {
+    // fail_reason 컬럼이 아직 없는 경우 fallback
+    getDb().prepare(`
+      INSERT INTO issue_stages (project_id, issue_iid, stage, updated_at) VALUES (?, ?, ?, datetime('now'))
+      ON CONFLICT(project_id, issue_iid) DO UPDATE SET stage = excluded.stage, updated_at = excluded.updated_at
+    `).run(projectId, issueIid, stage)
+  }
 }
 
 export function deleteIssueStage(projectId: string, issueIid: number) {
