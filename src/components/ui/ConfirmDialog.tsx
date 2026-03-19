@@ -116,7 +116,7 @@ function DialogOverlay({
       className="fixed inset-0 z-[60] flex items-center justify-center p-4"
       onClick={(e) => { if (e.target === backdropRef.current) onClose(false) }}
     >
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm pointer-events-none" />
       <div className="relative w-full max-w-sm bg-ive-bg-card border border-ive-border rounded-2xl shadow-2xl animate-slide-up overflow-hidden">
         <div className="px-5 pt-5 pb-4">
           <div className="flex items-start gap-3">

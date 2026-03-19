@@ -36,7 +36,7 @@ export default function ConfirmModal({
       className="fixed inset-0 z-[60] flex items-center justify-center p-4"
       onClick={e => { if (e.target === backdropRef.current) onClose() }}
     >
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm pointer-events-none" />
       <div className="relative w-full max-w-sm bg-ive-bg-card border border-ive-border rounded-2xl animate-slide-up">
         <div className="px-5 pt-5 pb-4 text-center">
           <div className={`w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center ${danger ? 'bg-ive-red/15' : 'bg-ive-green/15'}`}>
