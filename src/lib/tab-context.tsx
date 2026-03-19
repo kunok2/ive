@@ -1,6 +1,7 @@
 'use client'
 
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react'
+import { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from 'react'
+import { useStore } from '@/lib/store'
 
 export type TabKey = 'projects' | 'issues' | 'agents' | 'reports' | 'admin'
 
@@ -23,6 +24,9 @@ const TabContext = createContext<{
 })
 
 export function TabProvider({ children }: { children: ReactNode }) {
+  const { state: { user } } = useStore()
+  const userIdRef = useRef<string | null>(null)
+
   const [activeTab, setActiveTabState] = useState<TabKey>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('ive-active-tab')
@@ -40,9 +44,26 @@ export function TabProvider({ children }: { children: ReactNode }) {
     }
     return null
   })
+
+  // 사용자 변경 시 해당 사용자의 마지막 선택 프로젝트 복원
+  useEffect(() => {
+    if (user && user.id !== userIdRef.current) {
+      userIdRef.current = user.id
+      const saved = localStorage.getItem(`ive-issues-project-${user.id}`)
+      if (saved) {
+        setIssuesProjectIdState(saved)
+      }
+    } else if (!user) {
+      userIdRef.current = null
+    }
+  }, [user])
+
   const setIssuesProjectId = useCallback((id: string) => {
     setIssuesProjectIdState(id)
     localStorage.setItem('ive-issues-project', id)
+    if (userIdRef.current) {
+      localStorage.setItem(`ive-issues-project-${userIdRef.current}`, id)
+    }
   }, [])
   const [issuesFilter, setIssuesFilterState] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -58,7 +79,7 @@ export function TabProvider({ children }: { children: ReactNode }) {
   const navigateToIssues = useCallback((projectId: string) => {
     setIssuesProjectId(projectId)
     setActiveTab('issues')
-  }, [])
+  }, [setIssuesProjectId, setActiveTab])
 
   return (
     <TabContext.Provider value={{
