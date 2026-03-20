@@ -49,7 +49,7 @@ const BULK_ACTIONS: Record<string, { action: string; label: string; icon: string
   ],
 }
 
-export default function IssuesTab() {
+export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   const router = useRouter()
   const { confirm } = useDialog()
   const { state } = useStore()
@@ -74,7 +74,13 @@ export default function IssuesTab() {
   const [bulkProgress, setBulkProgress] = useState<{ total: number; done: number; failed: number } | null>(null)
   const cancelRef = useRef(false)
   const [showAddForm, setShowAddForm] = useState(false)
-  const [newBody, setNewBody] = useState('')
+  const [newBody, setNewBody] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const pid = issuesProjectId ?? ''
+      if (pid) return localStorage.getItem(`ive-issue-draft-${pid}`) || ''
+    }
+    return ''
+  })
   const [creating, setCreating] = useState(false)
   const [closing, setClosing] = useState<number | null>(null)
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>(() => {
@@ -152,6 +158,34 @@ export default function IssuesTab() {
   useEffect(() => {
     if (activeTab === 'issues' && selectedProjectId) fetchIssues()
   }, [activeTab])
+
+  // 탑바 추가 버튼 클릭 시 폼 열기
+  useEffect(() => {
+    if (addTrigger && addTrigger > 0 && selectedProjectId) {
+      setShowAddForm(true)
+    }
+  }, [addTrigger])
+
+  // 이슈 편집 내용 로컬스토리지 실시간 저장
+  useEffect(() => {
+    if (!selectedProjectId) return
+    if (newBody) {
+      localStorage.setItem(`ive-issue-draft-${selectedProjectId}`, newBody)
+    } else {
+      localStorage.removeItem(`ive-issue-draft-${selectedProjectId}`)
+    }
+  }, [newBody, selectedProjectId])
+
+  // 프로젝트 변경 시 해당 프로젝트의 임시저장 내용 복원
+  useEffect(() => {
+    if (selectedProjectId) {
+      const draft = localStorage.getItem(`ive-issue-draft-${selectedProjectId}`)
+      setNewBody(draft || '')
+      if (draft) setShowAddForm(true)
+    } else {
+      setNewBody('')
+    }
+  }, [selectedProjectId])
 
   const filtered = issues.filter(issue => {
     if (filter === 'all') return true
@@ -249,6 +283,7 @@ export default function IssuesTab() {
       if (res.ok) {
         const created = await res.json()
         setNewBody('')
+        localStorage.removeItem(`ive-issue-draft-${selectedProjectId}`)
         setShowAddForm(false)
         // 생성된 이슈를 즉시 목록에 추가
         const newIssue: IveIssue = {
@@ -396,15 +431,6 @@ export default function IssuesTab() {
                     <div className="text-lg font-black text-ive-green-light">{issues.length}</div>
                     <div className="text-xs text-ive-text-dim">이슈</div>
                   </div>
-                  {canEdit && !bulkMode && (
-                    <button
-                      onClick={() => setShowAddForm(true)}
-                      className="w-9 h-9 rounded-full bg-ive-green/20 border border-ive-green/30 flex items-center justify-center text-ive-green hover:bg-ive-green/30 transition-all"
-                      title="이슈 추가"
-                    >
-                      <i className="fa-solid fa-plus text-sm" />
-                    </button>
-                  )}
                   {canEdit && issues.length > 0 && !bulkMode && (
                     <button
                       onClick={() => setBulkMode(true)}
@@ -475,11 +501,11 @@ export default function IssuesTab() {
                   <span className="text-sm font-bold text-ive-green">
                     <i className="fa-solid fa-plus mr-1" />새 이슈 추가
                   </span>
-                  <button onClick={() => { setShowAddForm(false); setNewBody('') }} className="text-xs text-ive-text-dim hover:text-ive-text font-bold px-2 py-1 rounded-lg hover:bg-white/5 transition-all">
+                  <button onClick={() => { setShowAddForm(false); setNewBody(''); localStorage.removeItem(`ive-issue-draft-${selectedProjectId}`) }} className="text-xs text-ive-text-dim hover:text-ive-text font-bold px-2 py-1 rounded-lg hover:bg-white/5 transition-all">
                     취소
                   </button>
                 </div>
-                <p className="text-xs text-ive-text-dim mb-1.5"><i className="fa-solid fa-info-circle mr-1" />첫 줄 = 제목, 두 번째 줄부터 = 본문</p>
+                <p className="text-xs text-ive-text-dim mb-1.5"><i className="fa-solid fa-info-circle mr-1" />첫 줄 = 제목, 두 번째 줄부터 = 본문{newBody && <span className="ml-2 text-ive-green/60"><i className="fa-solid fa-floppy-disk mr-0.5" />자동 저장됨</span>}</p>
                 <textarea
                   value={newBody}
                   onChange={e => setNewBody(e.target.value)}
