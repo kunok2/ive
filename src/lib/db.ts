@@ -595,6 +595,13 @@ export function unassignAgentFromProject(projectId: string, agentId: string) {
   getDb().prepare('DELETE FROM project_assignments WHERE project_id = ? AND agent_id = ?').run(projectId, agentId)
 }
 
+export function countActiveExecutionsByProject(projectId: string): number {
+  const r = getDb().prepare(
+    "SELECT COUNT(*) as cnt FROM task_executions WHERE project_id = ? AND status = 'running'"
+  ).get(projectId) as { cnt: number }
+  return r.cnt
+}
+
 export function countActiveExecutionsByAgent(agentId: string): number {
   const r = getDb().prepare(
     "SELECT COUNT(*) as cnt FROM task_executions WHERE agent_id = ? AND status = 'running'"

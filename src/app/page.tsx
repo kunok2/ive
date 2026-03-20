@@ -32,7 +32,6 @@ export default function HomePage() {
   const { alert: showAlert, confirm: showConfirm } = useDialog()
   const [showNewProject, setShowNewProject] = useState(false)
   const [showNewAgent, setShowNewAgent] = useState(false)
-  const [editMode, setEditMode] = useState(false)
   const [showChangePassword, setShowChangePassword] = useState(false)
   const [avatarTs, setAvatarTs] = useState(() => Date.now())
 
@@ -63,24 +62,12 @@ export default function HomePage() {
           <div className="flex items-center gap-1.5">
             {/* 탭별 추가 버튼 */}
             {activeTab === 'projects' && (
-              <>
-                <button
-                  onClick={() => setShowNewProject(true)}
-                  className="w-8 h-8 rounded-full bg-ive-green flex items-center justify-center text-ive-bg-deep hover:brightness-110 active:scale-95 transition-all"
-                >
-                  <i className="fa-solid fa-plus text-sm" />
-                </button>
-                {state.projects.length > 1 && (
-                  <button
-                    onClick={() => setEditMode(v => !v)}
-                    className={`w-8 h-8 rounded-full flex items-center justify-center active:scale-95 transition-all ${
-                      editMode ? 'bg-ive-amber text-ive-bg-deep' : 'bg-ive-bg-card border border-ive-border-subtle text-ive-text-dim hover:text-ive-text'
-                    }`}
-                  >
-                    <i className={`fa-solid ${editMode ? 'fa-check' : 'fa-sort'} text-sm`} />
-                  </button>
-                )}
-              </>
+              <button
+                onClick={() => setShowNewProject(true)}
+                className="w-8 h-8 rounded-full bg-ive-green flex items-center justify-center text-ive-bg-deep hover:brightness-110 active:scale-95 transition-all"
+              >
+                <i className="fa-solid fa-plus text-sm" />
+              </button>
             )}
 
             {activeTab === 'agents' && (
@@ -133,7 +120,7 @@ export default function HomePage() {
       </header>
 
       <div style={{ display: activeTab === 'projects' ? 'block' : 'none' }}>
-        <ProjectsTab editMode={editMode} onAdd={() => setShowNewProject(true)} />
+        <ProjectsTab onAdd={() => setShowNewProject(true)} />
       </div>
       <div style={{ display: activeTab === 'agents' ? 'block' : 'none' }}>
         <AgentsTab onAdd={() => setShowNewAgent(true)} />

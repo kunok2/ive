@@ -4,13 +4,8 @@ import { useStore } from '@/lib/store'
 import ProjectCard from '@/components/project/ProjectCard'
 import PullToRefresh from '@/components/ui/PullToRefresh'
 
-interface Props {
-  editMode: boolean
-  onAdd?: () => void
-}
-
-export default function ProjectsTab({ editMode, onAdd }: Props) {
-  const { state, reorderProject, refresh } = useStore()
+export default function ProjectsTab({ onAdd }: { onAdd?: () => void }) {
+  const { state, refresh } = useStore()
 
   return (
     <PullToRefresh onRefresh={refresh} className="min-h-screen pb-20">
@@ -36,30 +31,8 @@ export default function ProjectsTab({ editMode, onAdd }: Props) {
           </div>
         ) : (
           <div className="flex flex-col gap-3">
-            {state.projects.map((project, idx) => (
-              <div key={project.id} className="flex items-stretch gap-2">
-                {editMode && (
-                  <div className="flex flex-col justify-center gap-1 shrink-0">
-                    <button
-                      onClick={() => reorderProject(project.id, 'up')}
-                      disabled={idx === 0}
-                      className="w-8 h-8 rounded-lg bg-ive-bg-card border border-ive-border-subtle flex items-center justify-center text-ive-text-dim hover:text-ive-green hover:border-ive-green/40 disabled:opacity-20 disabled:cursor-not-allowed transition-all"
-                    >
-                      <i className="fa-solid fa-chevron-up text-xs" />
-                    </button>
-                    <button
-                      onClick={() => reorderProject(project.id, 'down')}
-                      disabled={idx === state.projects.length - 1}
-                      className="w-8 h-8 rounded-lg bg-ive-bg-card border border-ive-border-subtle flex items-center justify-center text-ive-text-dim hover:text-ive-green hover:border-ive-green/40 disabled:opacity-20 disabled:cursor-not-allowed transition-all"
-                    >
-                      <i className="fa-solid fa-chevron-down text-xs" />
-                    </button>
-                  </div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <ProjectCard project={project} />
-                </div>
-              </div>
+            {state.projects.map(project => (
+              <ProjectCard key={project.id} project={project} />
             ))}
           </div>
         )}

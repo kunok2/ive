@@ -5,6 +5,7 @@ import { User, Project, Agent, ProjectAssignment } from '@/types'
 
 interface ProjectWithAgents extends Project {
   assignedAgents: (ProjectAssignment & { agent: Agent })[]
+  runningCount?: number       // 현재 실행 중인 작업 수
   shareRole?: string | null  // null=소유자, 'viewer', 'editor'
 }
 
@@ -56,7 +57,6 @@ const StoreContext = createContext<{
   assignAgentToProject: (projectId: string, agentId: string, accessToken?: string) => Promise<void>
   unassignAgentFromProject: (projectId: string, agentId: string) => Promise<void>
   updateAgentToken: (projectId: string, agentId: string, accessToken: string) => Promise<void>
-  reorderProject: (projectId: string, direction: 'up' | 'down') => Promise<void>
   scanProjectNow: (id: string) => Promise<void>
 }>({
   state: { user: null, projects: [], agents: [], loading: true, authChecked: false },
@@ -73,7 +73,6 @@ const StoreContext = createContext<{
   assignAgentToProject: async () => {},
   unassignAgentFromProject: async () => {},
   updateAgentToken: async () => {},
-  reorderProject: async () => {},
   scanProjectNow: async () => {},
 })
 
@@ -103,6 +102,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const res = await fetch('/api/projects')
     if (res.ok) {
       const data = await res.json()
+      // 작업 중인 프로젝트를 위로 정렬 (running > 0 우선, 그 다음 sortOrder)
+      data.sort((a: any, b: any) => {
+        const aRunning = a.runningCount ?? 0
+        const bRunning = b.runningCount ?? 0
+        if (aRunning > 0 && bRunning === 0) return -1
+        if (aRunning === 0 && bRunning > 0) return 1
+        return (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
+      })
       dispatch({ type: 'SET_PROJECTS', projects: data })
     } else {
       dispatch({ type: 'SET_PROJECTS', projects: [] })
@@ -113,6 +120,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const res = await fetch('/api/agents')
     if (res.ok) {
       const data = await res.json()
+      // busy 에이전트를 위로 정렬
+      data.sort((a: any, b: any) => {
+        if (a.status === 'busy' && b.status !== 'busy') return -1
+        if (a.status !== 'busy' && b.status === 'busy') return 1
+        return 0
+      })
       dispatch({ type: 'SET_AGENTS', agents: data })
     } else {
       dispatch({ type: 'SET_AGENTS', agents: [] })
@@ -246,27 +259,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     await refresh()
   }, [refresh])
 
-  const reorderProject = useCallback(async (projectId: string, direction: 'up' | 'down') => {
-    const projects = [...state.projects].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
-    const idx = projects.findIndex(p => p.id === projectId)
-    if (idx < 0) return
-    const swapIdx = direction === 'up' ? idx - 1 : idx + 1
-    if (swapIdx < 0 || swapIdx >= projects.length) return
-
-    const orders = projects.map((p, i) => {
-      if (i === idx) return { id: p.id, sortOrder: swapIdx }
-      if (i === swapIdx) return { id: p.id, sortOrder: idx }
-      return { id: p.id, sortOrder: i }
-    })
-
-    await fetch('/api/projects/reorder', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ orders }),
-    })
-    await refresh()
-  }, [state.projects, refresh])
-
   const scanProjectNow = useCallback(async (id: string) => {
     const res = await fetch(`/api/projects/${id}/scan`, { method: 'POST' })
     if (res.ok) {
@@ -283,7 +275,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       addProject, updateProject, deleteProject,
       refreshAgents, addAgent, updateAgent, deleteAgent,
       assignAgentToProject, unassignAgentFromProject, updateAgentToken,
-      reorderProject, scanProjectNow,
+      scanProjectNow,
     }}>
       {children}
     </StoreContext.Provider>
