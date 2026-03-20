@@ -38,6 +38,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       merged_at: mr.merged_at,
       merged_by: mr.merged_by,
       diff_refs: mr.diff_refs,
+      projectName: project.name,
     },
   })
 }

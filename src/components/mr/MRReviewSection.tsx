@@ -19,6 +19,7 @@ interface MRInfo {
   created_at: string
   merged_at: string | null
   merged_by: { name: string } | null
+  projectName?: string
 }
 
 interface Props {
@@ -68,7 +69,7 @@ export default function MRReviewSection({ projectId, issueIid }: Props) {
           projectId,
           issueIid,
           mrIid: mr.iid,
-          label: `!${mr.iid} ${mr.source_branch}`,
+          label: `${mr.projectName ? `[${mr.projectName}] ` : ''}!${mr.iid} ${mr.source_branch}`,
         })
       }
     } catch (err) {
