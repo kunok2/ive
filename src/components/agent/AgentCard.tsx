@@ -446,6 +446,22 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
           </button>
 
           <button
+            onClick={() => {
+              setEditing(prev => !prev)
+              setEditName(agent.name)
+              setEditAvatar(agent.avatar)
+            }}
+            className={`text-base py-1.5 px-3 rounded border transition-colors ${
+              editing
+                ? 'text-ive-green border-ive-green/40 bg-ive-green/10'
+                : 'text-ive-text-dim border-ive-border active:bg-white/5'
+            }`}
+            title="이름/아바타 편집"
+          >
+            <i className="fa-solid fa-pen" />
+          </button>
+
+          <button
             onClick={handleTest}
             disabled={testing}
             className="text-base text-ive-text-dim py-1.5 px-3 rounded border border-ive-border active:bg-white/5 transition-colors disabled:opacity-50"
