@@ -1078,18 +1078,19 @@ export function getIssueStages(projectId: string): Map<number, { stage: IssueSta
   return map
 }
 
-export function setIssueStage(projectId: string, issueIid: number, stage: IssueStage, failReason?: string) {
+export function setIssueStage(projectId: string, issueIid: number, stage: IssueStage, failReason?: string, updatedAt?: string) {
+  const ts = updatedAt || new Date().toISOString();
   try {
     getDb().prepare(`
-      INSERT INTO issue_stages (project_id, issue_iid, stage, fail_reason, updated_at) VALUES (?, ?, ?, ?, datetime('now'))
+      INSERT INTO issue_stages (project_id, issue_iid, stage, fail_reason, updated_at) VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(project_id, issue_iid) DO UPDATE SET stage = excluded.stage, fail_reason = excluded.fail_reason, updated_at = excluded.updated_at
-    `).run(projectId, issueIid, stage, stage === 'dev_fail' ? (failReason || null) : null)
+    `).run(projectId, issueIid, stage, stage === 'dev_fail' ? (failReason || null) : null, ts)
   } catch {
     // fail_reason 컬럼이 아직 없는 경우 fallback
     getDb().prepare(`
-      INSERT INTO issue_stages (project_id, issue_iid, stage, updated_at) VALUES (?, ?, ?, datetime('now'))
+      INSERT INTO issue_stages (project_id, issue_iid, stage, updated_at) VALUES (?, ?, ?, ?)
       ON CONFLICT(project_id, issue_iid) DO UPDATE SET stage = excluded.stage, updated_at = excluded.updated_at
-    `).run(projectId, issueIid, stage)
+    `).run(projectId, issueIid, stage, ts)
   }
 }
 

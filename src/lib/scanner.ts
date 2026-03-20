@@ -373,8 +373,12 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
     if (currentStage === 'done' && issue.state === 'opened') {
       const localUpdatedAt = getIssueStageUpdatedAt(project.id, issue.iid);
       const remoteUpdatedAt = issue.updated_at;
-      if (localUpdatedAt && remoteUpdatedAt && new Date(remoteUpdatedAt) > new Date(localUpdatedAt)) {
-        console.log(`[Scanner] [REOPEN] Issue #${issue.iid} reopened (remote: ${remoteUpdatedAt} > local: ${localUpdatedAt}). Resetting to waiting.`);
+      // 봇 자체 활동(코멘트, MR 생성 등)이 원격 updated_at를 갱신하므로
+      // 최소 120초 이상 차이가 나야 진정한 사용자 활동으로 판단
+      const REOPEN_BUFFER_MS = 120_000;
+      if (localUpdatedAt && remoteUpdatedAt &&
+          (new Date(remoteUpdatedAt).getTime() - new Date(localUpdatedAt).getTime()) > REOPEN_BUFFER_MS) {
+        console.log(`[Scanner] [REOPEN] Issue #${issue.iid} reopened (remote: ${remoteUpdatedAt} > local: ${localUpdatedAt}, diff > ${REOPEN_BUFFER_MS}ms). Resetting to waiting.`);
         setIssueStage(project.id, issue.iid, 'waiting');
         // waiting으로 변경 후 아래 로직에서 에이전트 배정 진행
       } else {
@@ -595,8 +599,6 @@ async function executeTask(
     // 2차 이상 실행인데 사용자 피드백(지시)이 없으면 실행하지 않음
     if (iterationCount > 1 && !latestFeedback) {
       log(`${iterationCount}차 실행이지만 새로운 사용자 지시가 없어 스킵합니다.`, 'system');
-      // 라벨을 done 상태로 복원 (진행중 → 완료)
-      setIssueStage(project.id, iid, 'done');
       // 이슈에 스킵 사유 코멘트 남기기 (best-effort)
       try {
         const skipComment = `IVE(봇): 이전 작업이 완료된 후 새로운 사용자 지시가 없어 추가 작업을 수행하지 않았습니다. 추가 작업이 필요하면 이 이슈에 코멘트로 지시를 남겨주세요.`;
@@ -606,6 +608,14 @@ async function executeTask(
           await addGitLabIssueComment(project, iid, token, skipComment);
         }
       } catch (e) { console.warn(`[Scanner] Skip comment failed:`, e); }
+      // 코멘트 게시 후 원격 이슈의 updated_at를 가져와서 로컬에 동기화
+      // → 봇 자체 코멘트로 인한 리오픈 오감지 방지
+      let syncTimestamp: string | undefined;
+      try {
+        const freshIssue = await fetchSingleIssue(project, iid, token);
+        if (freshIssue?.updated_at) syncTimestamp = freshIssue.updated_at;
+      } catch (e) { /* ignore */ }
+      setIssueStage(project.id, iid, 'done', undefined, syncTimestamp);
       updateExecutionStatus(executionId, 'success', new Date().toISOString());
       updateAgentStatus(agent.id, 'available');
       logStream.end();
@@ -911,7 +921,14 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
         await addGitLabSpentTime(project, iid, token, durationStr);
       }
 
-      setIssueStage(project.id, iid, 'done');
+      // 원격 이슈의 updated_at를 가져와서 로컬에 동기화
+      // → 봇 자체 활동(코멘트, MR, spent time)으로 인한 리오픈 오감지 방지
+      let syncTimestamp: string | undefined;
+      try {
+        const freshIssue = await fetchSingleIssue(project, iid, token);
+        if (freshIssue?.updated_at) syncTimestamp = freshIssue.updated_at;
+      } catch (e) { /* ignore */ }
+      setIssueStage(project.id, iid, 'done', undefined, syncTimestamp);
       log("작업 완료.", 'system');
       updateExecutionStatus(executionId, 'success', new Date().toISOString());
     } else {
@@ -926,7 +943,13 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
           await addGitLabSpentTime(project, iid, token, durationStr);
         }
       } catch (e) { console.warn(`[Scanner] Remote comment failed:`, e); }
-      setIssueStage(project.id, iid, 'done');
+      // 원격 이슈의 updated_at를 가져와서 로컬에 동기화
+      let syncTs: string | undefined;
+      try {
+        const freshIssue = await fetchSingleIssue(project, iid, token);
+        if (freshIssue?.updated_at) syncTs = freshIssue.updated_at;
+      } catch (e) { /* ignore */ }
+      setIssueStage(project.id, iid, 'done', undefined, syncTs);
       updateExecutionStatus(executionId, 'success', new Date().toISOString());
     }
 
