@@ -371,7 +371,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
             <button
               type="button"
               onClick={() => setProjectDropdownOpen(v => !v)}
-              className="w-full bg-ive-bg-card border border-ive-border-subtle rounded-xl px-4 py-3 text-left flex items-center justify-between focus:outline-none focus:border-ive-green/50 transition-colors"
+              className="w-full appearance-none bg-none bg-ive-bg-card border border-ive-border-subtle rounded-xl px-4 py-3 text-left flex items-center justify-between focus:outline-none focus:border-ive-green/50 transition-colors"
             >
               <span className={`text-base font-bold ${selectedProjectId ? 'text-ive-text' : 'text-ive-text-dim'}`}>
                 {selectedProject?.name || '프로젝트 선택'}

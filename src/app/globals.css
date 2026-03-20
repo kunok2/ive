@@ -44,6 +44,12 @@ body {
   input[type="number"] {
     -moz-appearance: textfield;
   }
+  /* Android Chrome에서 button 요소의 기본 배경 그라디언트/오버레이 제거 */
+  button {
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: none;
+  }
 }
 
 @keyframes slide-up {
