@@ -13,6 +13,10 @@ const tooltipStyle = {
   labelStyle: { color: '#9ca3af', fontWeight: 700, marginBottom: 4 },
 }
 
+function formatCost(n: number): string {
+  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
 function pctChange(cur: number, prev: number): number | 'new' | null {
   if (prev === 0) return cur > 0 ? 'new' : null
   return Math.round(((cur - prev) / prev) * 100)
@@ -26,7 +30,7 @@ function Badge({ value, invert }: { value: number | 'new' | null; invert?: boole
     : (value > 0 ? 'text-ive-green bg-ive-green/10' : value < 0 ? 'text-ive-red bg-ive-red/10' : 'text-ive-text-dim bg-white/5')
   return (
     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${color}`}>
-      {value > 0 ? '+' : ''}{value}%
+      {value > 0 ? '+' : ''}{value.toLocaleString()}%
     </span>
   )
 }
@@ -72,7 +76,7 @@ export function DailyTrendChart({ data, prevData, type }: {
       <div className="flex items-center gap-3">
         <span className="text-xs font-bold text-ive-text">건수 {totalCur.toLocaleString()}건</span>
         <Badge value={pctChange(totalCur, totalPrev)} />
-        <span className="text-xs font-bold text-ive-amber ml-auto">${costCur.toFixed(2)}</span>
+        <span className="text-xs font-bold text-ive-amber ml-auto">${formatCost(costCur)}</span>
         <Badge value={pctChange(costCur, costPrev)} invert />
       </div>
 
@@ -151,7 +155,7 @@ export function CompareTable({ title, data, icon }: { title: string; data: Compa
             <div className="flex justify-end">
               <Badge value={taskDiff} />
             </div>
-            <span className="text-xs font-extrabold text-ive-amber text-right">${d.cost.toFixed(2)}</span>
+            <span className="text-xs font-extrabold text-ive-amber text-right">${formatCost(d.cost)}</span>
             <div className="flex justify-end">
               <Badge value={costDiff} invert />
             </div>
@@ -165,7 +169,7 @@ export function CompareTable({ title, data, icon }: { title: string; data: Compa
         <div className="flex justify-end">
           <Badge value={pctChange(data.reduce((s, d) => s + d.tasks, 0), data.reduce((s, d) => s + d.prevTasks, 0))} />
         </div>
-        <span className="text-xs font-extrabold text-ive-amber text-right">${data.reduce((s, d) => s + d.cost, 0).toFixed(2)}</span>
+        <span className="text-xs font-extrabold text-ive-amber text-right">${formatCost(data.reduce((s, d) => s + d.cost, 0))}</span>
         <div className="flex justify-end">
           <Badge value={pctChange(data.reduce((s, d) => s + d.cost, 0), data.reduce((s, d) => s + d.prevCost, 0))} invert />
         </div>
