@@ -15,6 +15,7 @@ import {
   getLastCompletedAt,
   getSystemSetting,
   getIssueStage,
+  getIssueStageUpdatedAt,
   getIssueStages,
   setIssueStage
 } from "./db";
@@ -367,7 +368,20 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
   for (const issue of issues) {
     // 이미 진행 중이거나 완료/실패 상태면 스킵 (로컬 DB 기준)
     const currentStage = getIssueStage(project.id, issue.iid);
-    if (
+
+    // done 상태인데 원격에서 다시 opened 된 경우 → reopened 감지
+    if (currentStage === 'done' && issue.state === 'opened') {
+      const localUpdatedAt = getIssueStageUpdatedAt(project.id, issue.iid);
+      const remoteUpdatedAt = issue.updated_at;
+      if (localUpdatedAt && remoteUpdatedAt && new Date(remoteUpdatedAt) > new Date(localUpdatedAt)) {
+        console.log(`[Scanner] [REOPEN] Issue #${issue.iid} reopened (remote: ${remoteUpdatedAt} > local: ${localUpdatedAt}). Resetting to waiting.`);
+        setIssueStage(project.id, issue.iid, 'waiting');
+        // waiting으로 변경 후 아래 로직에서 에이전트 배정 진행
+      } else {
+        console.log(`[Scanner] [SKIP] Issue #${issue.iid} (stage: done, not reopened after IVE processing)`);
+        continue;
+      }
+    } else if (
       currentStage === 'dev' ||
       currentStage === 'done' ||
       currentStage === 'dev_fail' ||

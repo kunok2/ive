@@ -1053,6 +1053,11 @@ export function getIssueStage(projectId: string, issueIid: number): IssueStage |
   return r ? r.stage as IssueStage : null
 }
 
+export function getIssueStageUpdatedAt(projectId: string, issueIid: number): string | null {
+  const r = getDb().prepare('SELECT updated_at FROM issue_stages WHERE project_id = ? AND issue_iid = ?').get(projectId, issueIid) as any
+  return r ? r.updated_at : null
+}
+
 export function getIssueStages(projectId: string): Map<number, { stage: IssueStage; failReason: string | null }> {
   let rows: any[]
   try {
