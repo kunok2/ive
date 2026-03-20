@@ -28,10 +28,11 @@ const subtitle: Record<string, string> = {
 export default function HomePage() {
   const router = useRouter()
   const { state, logout, refreshUser } = useStore()
-  const { activeTab } = useTab()
+  const { activeTab, issuesProjectId } = useTab()
   const { alert: showAlert, confirm: showConfirm } = useDialog()
   const [showNewProject, setShowNewProject] = useState(false)
   const [showNewAgent, setShowNewAgent] = useState(false)
+  const [issueAddTrigger, setIssueAddTrigger] = useState(0)
   const [showChangePassword, setShowChangePassword] = useState(false)
   const [avatarTs, setAvatarTs] = useState(() => Date.now())
 
@@ -86,8 +87,24 @@ export default function HomePage() {
               </button>
             )}
 
+            {activeTab === 'issues' && issuesProjectId && (() => {
+              const proj = state.projects.find(p => p.id === issuesProjectId)
+              const canEdit = proj ? !proj.shareRole || proj.shareRole === 'editor' : false
+              return canEdit ? (
+                <button
+                  onClick={() => setIssueAddTrigger(t => t + 1)}
+                  className="w-8 h-8 rounded-full bg-ive-green flex items-center justify-center text-ive-bg-deep hover:brightness-110 active:scale-95 transition-all"
+                >
+                  <i className="fa-solid fa-plus text-sm" />
+                </button>
+              ) : null
+            })()}
+
             {/* 구분자 - 탭별 버튼이 있을 때만 표시 */}
-            {(activeTab === 'projects' || activeTab === 'agents') && (
+            {(activeTab === 'projects' || activeTab === 'agents' || (activeTab === 'issues' && issuesProjectId && (() => {
+              const proj = state.projects.find(p => p.id === issuesProjectId)
+              return proj ? !proj.shareRole || proj.shareRole === 'editor' : false
+            })())) && (
               <span className="text-ive-border-subtle mx-0.5">|</span>
             )}
 
@@ -126,7 +143,7 @@ export default function HomePage() {
         <AgentsTab onAdd={() => setShowNewAgent(true)} />
       </div>
       <div style={{ display: activeTab === 'issues' ? 'block' : 'none' }}>
-        <IssuesTab />
+        <IssuesTab addTrigger={issueAddTrigger} />
       </div>
       <div style={{ display: activeTab === 'reports' ? 'block' : 'none' }}>
         <ReportsTab />
