@@ -463,12 +463,12 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
       let hasNewUserFeedback = false;
       try {
         const notes = await fetchNotes(project, issue.iid, decryptedToken);
-        const botCompletions = notes.filter((n: any) => n.body.includes("IVE(봇)"));
+        const botCompletions = notes.filter((n: any) => n.body.includes("<!-- ive-bot -->") || n.body.includes("IVE(봇)"));
         if (botCompletions.length > 0) {
           const lastBotNoteId = botCompletions[botCompletions.length - 1].id;
           const userNotes = notes.filter((n: any) =>
             !n.system &&
-            !n.body.includes("IVE(봇)") &&
+            !n.body.includes("<!-- ive-bot -->") || n.body.includes("IVE(봇)") &&
             !n.body.includes("착수") &&
             !n.body.includes("작업을 시작") &&
             !n.body.includes("이슈 해결") &&
@@ -658,13 +658,13 @@ async function executeTask(
     const notes = project.provider === 'github'
       ? await fetchGitHubIssueNotes(project, iid, token)
       : await fetchGitLabIssueNotes(project, iid, token);
-    const botCompletions = notes.filter((n: any) => n.body.includes("IVE(봇)"));
+    const botCompletions = notes.filter((n: any) => n.body.includes("<!-- ive-bot -->") || n.body.includes("IVE(봇)"));
     const iterationCount = botCompletions.length + 1;
 
     // 사용자 코멘트 추출 (시스템/봇 노트/봇 착수 코멘트 제외)
     const userNotes = notes.filter((n: any) =>
       !n.system &&
-      !n.body.includes("IVE(봇)") &&
+      !n.body.includes("<!-- ive-bot -->") || n.body.includes("IVE(봇)") &&
       !n.body.includes("착수") &&
       !n.body.includes("작업을 시작") &&
       !n.body.includes("이슈 해결")
@@ -693,7 +693,7 @@ async function executeTask(
           body = body.replace(/<details>[\s\S]*?<\/details>/gi, "[작업 로그 생략]");
           // 너무 긴 노트는 잘라냄
           if (body.length > 800) body = body.substring(0, 800) + "\n...(이하 생략)";
-          const role = n.body.includes("IVE(봇)") || n.body.includes("착수") ? "🤖 봇" : `👤 ${n.author?.name || "사용자"}`;
+          const role = n.body.includes("<!-- ive-bot -->") || n.body.includes("IVE(봇)") || n.body.includes("착수") ? "🤖 봇" : `👤 ${n.author?.name || "사용자"}`;
           return `**${role}** (${n.created_at}):\n${body}`;
         });
       iterationContext = "\n## 이슈 대화 히스토리:\n" + conversationNotes.join('\n\n---\n\n');
@@ -1059,8 +1059,8 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
         // 이슈에 push 실패 사유 코멘트 (best-effort)
         const pushFailReason = isPermission ? 'Push 권한 없음' : `Push 실패: ${pushMsg.substring(0, 100)}`;
         const pushFailNote = isPermission
-          ? `## IVE(봇) Push 권한 없음\n\n코드 수정은 완료했으나, 이 저장소에 push 권한이 없어 브랜치를 생성할 수 없습니다.\n토큰 계정에 저장소 쓰기(write) 권한을 부여하거나, fork 방식을 사용해주세요.\n\n소요 시간: ${durationStr}`
-          : `## IVE(봇) Push 실패\n\n코드 수정은 완료했으나 push에 실패했습니다: ${pushMsg}\n\n소요 시간: ${durationStr}`;
+          ? `<!-- ive-bot -->\n## ${agent.name} Push 권한 없음\n\n코드 수정은 완료했으나, 이 저장소에 push 권한이 없어 브랜치를 생성할 수 없습니다.\n토큰 계정에 저장소 쓰기(write) 권한을 부여하거나, fork 방식을 사용해주세요.\n\n소요 시간: ${durationStr}`
+          : `<!-- ive-bot -->\n## ${agent.name} Push 실패\n\n코드 수정은 완료했으나 push에 실패했습니다: ${pushMsg}\n\n소요 시간: ${durationStr}`;
         setIssueStage(project.id, iid, 'dev_fail', pushFailReason);
         try {
           if (isGitHub) {
@@ -1122,7 +1122,7 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
       // 대화 내용을 마크다운으로 정리 (최대 60000자)
       const conversationLog = conversationParts.join('\n\n').substring(0, 60000);
       const mrLine = mrUrl ? `${mrLabel}: ${mrUrl}` : `${mrLabel}: 생성 실패 (권한 부족 또는 API 오류)`;
-      const completionNote = `## IVE(봇) 개발 완료\n\n${mrLine}\n소요 시간: ${durationStr}\n\n개발이 완료되었습니다. 리뷰 후 머지해주세요.\n\n<details>\n<summary>🤖 AI 작업 로그 (펼치기)</summary>\n\n${conversationLog}\n\n</details>`;
+      const completionNote = `<!-- ive-bot -->\n## ${agent.name} 개발 완료\n\n${mrLine}\n소요 시간: ${durationStr}\n\n개발이 완료되었습니다. 리뷰 후 머지해주세요.\n\n<details>\n<summary>🤖 AI 작업 로그 (펼치기)</summary>\n\n${conversationLog}\n\n</details>`;
       if (isGitHub) {
         await addGitHubIssueComment(project, iid, token, completionNote);
       } else {
@@ -1145,7 +1145,7 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
     } else {
       log("코드 변경사항 없음. 작업 완료로 처리.", 'system');
       const noChangeLog = conversationParts.join('\n\n').substring(0, 60000);
-      const noChangeNote = `## IVE(봇) 개발 완료\n\n코드 변경 없이 작업을 완료했습니다.\n소요 시간: ${durationStr}\n\n<details>\n<summary>🤖 AI 작업 로그 (펼치기)</summary>\n\n${noChangeLog}\n\n</details>`;
+      const noChangeNote = `<!-- ive-bot -->\n## ${agent.name} 개발 완료\n\n코드 변경 없이 작업을 완료했습니다.\n소요 시간: ${durationStr}\n\n<details>\n<summary>🤖 AI 작업 로그 (펼치기)</summary>\n\n${noChangeLog}\n\n</details>`;
       try {
         if (isGitHub) {
           await addGitHubIssueComment(project, iid, token, noChangeNote);
@@ -1169,7 +1169,7 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
   } catch (err: any) {
     log(`오류 발생: ${err.message}`, 'error');
     const errorLog = conversationParts.join('\n\n').substring(0, 60000);
-    const errorNote = `## IVE(봇) 실행 오류\n오류가 발생했습니다: ${err.message}\n\n<details>\n<summary>🤖 AI 작업 로그 (펼치기)</summary>\n\n${errorLog}\n\n</details>`;
+    const errorNote = `<!-- ive-bot -->\n## ${agent.name} 실행 오류\n오류가 발생했습니다: ${err.message}\n\n<details>\n<summary>🤖 AI 작업 로그 (펼치기)</summary>\n\n${errorLog}\n\n</details>`;
     setIssueStage(project.id, iid, 'dev_fail', (err.message || '알 수 없는 오류').substring(0, 200));
     try {
       if (isGitHub) {
