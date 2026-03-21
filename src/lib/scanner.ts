@@ -804,18 +804,18 @@ curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.git
 - GitLab API: ${gitlabBaseUrl}/api/v4
 - Project: ${projectPath} (encoded: ${encodedProjectPath})
 - Issue IID: ${iid}
-- 인증: 환경변수 GITLAB_TOKEN 사용 (PRIVATE-TOKEN 헤더)
+- 인증: 환경변수 IVE_GITLAB_TOKEN 사용 (PRIVATE-TOKEN 헤더)
 
 ### 사용 가능한 GitLab API 예시:
 \`\`\`bash
 # 이슈에 코멘트 달기
-curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" -X POST "${gitlabBaseUrl}/api/v4/projects/${encodedProjectPath}/issues/${iid}/notes" --data-urlencode "body=코멘트 내용"
+curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" -X POST "${gitlabBaseUrl}/api/v4/projects/${encodedProjectPath}/issues/${iid}/notes" --data-urlencode "body=코멘트 내용"
 
 # 이슈 정보 조회
-curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/projects/${encodedProjectPath}/issues/${iid}"
+curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/projects/${encodedProjectPath}/issues/${iid}"
 
 # 이슈 코멘트 목록
-curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/projects/${encodedProjectPath}/issues/${iid}/notes"
+curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/projects/${encodedProjectPath}/issues/${iid}/notes"
 \`\`\``;
     }
 
@@ -878,7 +878,9 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
         spawnEnv = {
           ...process.env,
           OPENCODE_CONFIG_CONTENT: JSON.stringify(opencodeConfig),
-          GITLAB_TOKEN: token, GITLAB_API_TOKEN: token,
+          // GITLAB_TOKEN은 OpenCode가 GitLab AI provider로 자동 감지하므로 제외
+          // 대신 IVE_GITLAB_TOKEN으로 전달 (프롬프트에서 이 변수명 사용)
+          IVE_GITLAB_TOKEN: token,
           GITHUB_TOKEN: token,
         };
       } else {
@@ -1031,9 +1033,7 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
       };
 
       child.stdout.on('data', (data: Buffer) => {
-        const raw = data.toString();
-        if (isOpenCode) console.log(`[Task #${iid}][stdout-raw] ${raw.substring(0, 200)}`);
-        stdoutBuffer += raw;
+        stdoutBuffer += data.toString();
         const lines = stdoutBuffer.split('\n');
         stdoutBuffer = lines.pop() || ''; // 마지막 불완전한 줄 보관
         for (const line of lines) {
