@@ -11,6 +11,7 @@ export async function GET() {
     claude: settings['cli.claude.path'] || '/usr/local/bin/claude',
     gemini: settings['cli.gemini.path'] || '/usr/local/bin/gemini',
     codex: settings['cli.codex.path'] || '/usr/local/bin/codex',
+    opencode: settings['cli.opencode.path'] || '/usr/local/bin/opencode',
   }
   return NextResponse.json(paths)
 }
