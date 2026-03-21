@@ -60,26 +60,40 @@ function formatOpenCodeEvent(event: any, showToolUsage: boolean = false): string
   const ts = new Date().toTimeString().slice(0, 8);
   switch (event.type) {
     case 'text': {
-      const content = event.content ?? event.text ?? '';
+      // OpenCode 1.x: content is in event.part.text
+      const content = event.part?.text ?? event.content ?? event.text ?? '';
       if (!content.trim()) return null;
       return `[${ts}] ${content}`;
     }
     case 'tool_use': {
       if (!showToolUsage) return null;
-      const toolName = event.tool ?? event.name ?? '';
-      const input = event.input ?? event.args ?? {};
+      // OpenCode 1.x: tool name is in event.part.tool, input in event.part.state.input
+      const toolName = event.part?.tool ?? event.tool ?? event.name ?? '';
+      const input = event.part?.state?.input ?? event.input ?? event.args ?? {};
       const summary = formatToolInput(toolName, input);
       return `[${ts}] \x1b[1;34m[Tool] ${toolName}\x1b[0m ${summary}`;
     }
+    case 'step_finish': {
+      // OpenCode 1.x: completion is step_finish with reason='stop'
+      if (event.part?.reason !== 'stop') return null;
+      const tokens = event.part?.tokens ?? {};
+      const inputT = tokens.input ?? 0;
+      const outputT = tokens.output ?? 0;
+      const cost = event.part?.cost ?? 0;
+      const meta: string[] = [];
+      if (inputT || outputT) meta.push(`입력 ${Number(inputT).toLocaleString()} + 출력 ${Number(outputT).toLocaleString()} 토큰`);
+      if (cost) meta.push(`비용 $${Number(cost).toFixed(4)}`);
+      const metaStr = meta.length > 0 ? `\x1b[90m(${meta.join(' | ')})\x1b[0m ` : '';
+      return `[${ts}] \x1b[1;32m[완료]\x1b[0m ${metaStr}`;
+    }
     case 'session.status': {
+      // Legacy format fallback
       const meta: string[] = [];
       const inputT = event.inputTokens ?? event.input_tokens ?? event.tokens?.input ?? 0;
       const outputT = event.outputTokens ?? event.output_tokens ?? event.tokens?.output ?? 0;
       const cost = event.cost ?? event.costUsd ?? event.cost_usd ?? 0;
-      const turns = event.turns ?? event.numTurns ?? event.num_turns ?? 0;
       if (inputT || outputT) meta.push(`입력 ${Number(inputT).toLocaleString()} + 출력 ${Number(outputT).toLocaleString()} 토큰`);
       if (cost) meta.push(`비용 $${Number(cost).toFixed(4)}`);
-      if (turns) meta.push(`${turns}턴`);
       const metaStr = meta.length > 0 ? `\x1b[90m(${meta.join(' | ')})\x1b[0m ` : '';
       return `[${ts}] \x1b[1;32m[완료]\x1b[0m ${metaStr}`;
     }
@@ -95,25 +109,35 @@ function formatOpenCodeEvent(event: any, showToolUsage: boolean = false): string
 function formatOpenCodeEventMarkdown(event: any): string | null {
   switch (event.type) {
     case 'text': {
-      const content = event.content ?? event.text ?? '';
+      const content = event.part?.text ?? event.content ?? event.text ?? '';
       return content.trim() || null;
     }
     case 'tool_use': {
-      const toolName = event.tool ?? event.name ?? '';
-      const summary = formatToolInputMarkdown(toolName, event.input ?? event.args ?? {});
+      const toolName = event.part?.tool ?? event.tool ?? event.name ?? '';
+      const summary = formatToolInputMarkdown(toolName, event.part?.state?.input ?? event.input ?? event.args ?? {});
       return `> **🔧 ${toolName}** ${summary}`;
     }
+    case 'step_finish': {
+      if (event.part?.reason !== 'stop') return null;
+      const tokens = event.part?.tokens ?? {};
+      const inputT = tokens.input ?? 0;
+      const outputT = tokens.output ?? 0;
+      const cost = event.part?.cost ?? 0;
+      const meta: string[] = [];
+      if (cost) meta.push(`비용: $${Number(cost).toFixed(4)}`);
+      if (inputT || outputT) meta.push(`토큰: ${(Number(inputT) + Number(outputT)).toLocaleString()}`);
+      return `\n---\n**📊 실행 결과** ${meta.join(' | ')}`;
+    }
     case 'session.status': {
+      // Legacy format fallback
       const meta: string[] = [];
       const inputT = event.inputTokens ?? event.input_tokens ?? event.tokens?.input ?? 0;
       const outputT = event.outputTokens ?? event.output_tokens ?? event.tokens?.output ?? 0;
       const cost = event.cost ?? event.costUsd ?? event.cost_usd ?? 0;
-      const turns = event.turns ?? event.numTurns ?? event.num_turns ?? 0;
       const model = event.model ?? event.modelId ?? event.model_id ?? '';
       if (model) meta.push(`모델: ${model}`);
       if (cost) meta.push(`비용: $${Number(cost).toFixed(4)}`);
       if (inputT || outputT) meta.push(`토큰: ${(Number(inputT) + Number(outputT)).toLocaleString()}`);
-      if (turns) meta.push(`턴: ${turns}`);
       return `\n---\n**📊 실행 결과** ${meta.join(' | ')}`;
     }
     default:
@@ -937,18 +961,31 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
           if (formatted) logStream.write(formatted + '\n');
           const md = formatOpenCodeEventMarkdown(event);
           if (md) conversationParts.push(md);
-          // 도구 활동 추적
+          // 도구 활동 추적 (OpenCode 1.x: tool info is in event.part)
           if (event.type === 'tool_use') {
-            const toolName = event.tool ?? event.name ?? '';
+            const toolName = event.part?.tool ?? event.tool ?? event.name ?? '';
             if (toolName) {
-              const detail = formatToolInput(toolName, event.input ?? event.args ?? {});
+              const detail = formatToolInput(toolName, event.part?.state?.input ?? event.input ?? event.args ?? {});
               setToolActivity(executionId, agent.id, toolName, detail);
             }
           } else if (event.type === 'text') {
             setThinking(executionId, agent.id);
             assistantTurnCount++;
+          } else if (event.type === 'step_start') {
+            setThinking(executionId, agent.id);
           }
-          // 완료 이벤트에서 토큰/비용 추출
+          // 토큰/비용 누적 (OpenCode 1.x: step_finish에 per-step 토큰 포함)
+          if (event.type === 'step_finish') {
+            const tokens = event.part?.tokens ?? {};
+            const iT = tokens.input ?? 0;
+            const oT = tokens.output ?? 0;
+            const cost = event.part?.cost ?? 0;
+            totalInputTokens += Number(iT);
+            totalOutputTokens += Number(oT);
+            totalCostUsd += Number(cost);
+            if (event.part?.reason === 'stop') totalTurns = assistantTurnCount;
+          }
+          // Legacy session.status 이벤트 처리 (구버전 호환)
           if (event.type === 'session.status') {
             const iT = event.inputTokens ?? event.input_tokens ?? event.tokens?.input ?? 0;
             const oT = event.outputTokens ?? event.output_tokens ?? event.tokens?.output ?? 0;
