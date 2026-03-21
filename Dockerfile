@@ -40,6 +40,9 @@ COPY next.config.mjs ./
 # Claude Code CLI 설치
 RUN npm install -g @anthropic-ai/claude-code
 
+# OpenCode CLI 설치
+RUN npm install -g opencode-ai
+
 # non-root 사용자 생성 (Claude Code의 root 제한 우회)
 RUN useradd -m -s /bin/bash ive \
     && mkdir -p data/logs workspaces /home/ive/.claude \
