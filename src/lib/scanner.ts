@@ -319,9 +319,10 @@ export async function scanProject(project: Project, force: boolean = false) {
     const fetchIssues = project.provider === 'github' ? fetchGitHubIssues : fetchGitLabIssues;
     const remoteIssues = await fetchIssues(project, decryptedToken, project.labelTarget);
 
-    // 원격에서 가져온 이슈를 Map으로 (iid → issue)
+    // 원격에서 가져온 이슈를 Map으로 (iid → issue), closed 이슈 제외
     const issueMap = new Map<number, any>();
     for (const issue of remoteIssues) {
+      if (issue.state === 'closed') continue;
       issueMap.set(issue.iid, issue);
       if (!getIssueStage(project.id, issue.iid)) {
         setIssueStage(project.id, issue.iid, 'waiting');
@@ -364,35 +365,73 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
   let waitingCount = 0;
   const busyAgentIds = new Set<string>();
 
+  // 이슈에서 labelTarget이 있고 labelDone/labelInProgress가 없는 것만 진짜 대기 대상
+  const fetchNotes = project.provider === 'github' ? fetchGitHubIssueNotes : fetchGitLabIssueNotes;
+
   console.log(`[Scanner] processIssues: ${issues.length} issues, ${assignments.length} agents`);
   for (const issue of issues) {
-    // 이미 진행 중이거나 완료/실패 상태면 스킵 (로컬 DB 기준)
+    // 이미 진행 중인 실행이 있으면 무조건 스킵
+    if (hasActiveExecution(project.id, issue.iid)) {
+      console.log(`[Scanner] [SKIP] Issue #${issue.iid} (activeExec: true)`);
+      continue;
+    }
+
     const currentStage = getIssueStage(project.id, issue.iid);
 
-    // done 상태인데 원격에서 다시 opened 된 경우 → reopened 감지
-    if (currentStage === 'done' && issue.state === 'opened') {
-      const localUpdatedAt = getIssueStageUpdatedAt(project.id, issue.iid);
-      const remoteUpdatedAt = issue.updated_at;
-      // 봇 자체 활동(코멘트, MR 생성 등)이 원격 updated_at를 갱신하므로
-      // 최소 120초 이상 차이가 나야 진정한 사용자 활동으로 판단
-      const REOPEN_BUFFER_MS = 120_000;
-      if (localUpdatedAt && remoteUpdatedAt &&
-          (new Date(remoteUpdatedAt).getTime() - new Date(localUpdatedAt).getTime()) > REOPEN_BUFFER_MS) {
-        console.log(`[Scanner] [REOPEN] Issue #${issue.iid} reopened (remote: ${remoteUpdatedAt} > local: ${localUpdatedAt}, diff > ${REOPEN_BUFFER_MS}ms). Resetting to waiting.`);
-        setIssueStage(project.id, issue.iid, 'waiting');
-        // waiting으로 변경 후 아래 로직에서 에이전트 배정 진행
-      } else {
-        console.log(`[Scanner] [SKIP] Issue #${issue.iid} (stage: done, not reopened after IVE processing)`);
+    // dev 상태: 실행 중이어야 하나 activeExec가 없음 → 위에서 이미 체크됨, 여기 도달하면 고착 상태
+    if (currentStage === 'dev') {
+      console.log(`[Scanner] [SKIP] Issue #${issue.iid} (stage: dev, no active exec — will be reset on restart)`);
+      continue;
+    }
+
+    // done/dev_fail 상태: 이슈의 레이블을 확인하여 사용자가 재작업을 요청했는지 판단
+    if (currentStage === 'done' || currentStage === 'dev_fail') {
+      const issueLabels: string[] = issue.labels || [];
+
+      // labelDone이나 labelFailDev가 달려있으면 → 사용자가 재작업 요청하지 않은 것
+      const hasDoneLabel = issueLabels.includes(project.labelDone);
+      const hasFailLabel = issueLabels.includes(project.labelFailDev);
+      const hasInProgressLabel = issueLabels.includes(project.labelInProgress);
+
+      if (hasDoneLabel || hasFailLabel || hasInProgressLabel) {
+        console.log(`[Scanner] [SKIP] Issue #${issue.iid} (stage: ${currentStage}, status label present: done=${hasDoneLabel}, fail=${hasFailLabel}, wip=${hasInProgressLabel})`);
         continue;
       }
-    } else if (
-      currentStage === 'dev' ||
-      currentStage === 'done' ||
-      currentStage === 'dev_fail' ||
-      hasActiveExecution(project.id, issue.iid)
-    ) {
-      console.log(`[Scanner] [SKIP] Issue #${issue.iid} (stage: ${currentStage}, activeExec: ${hasActiveExecution(project.id, issue.iid)})`);
-      continue;
+
+      // labelTarget만 있고 다른 상태 레이블이 없음 → 사용자가 레이블을 수동 변경하여 재작업 요청한 것
+      // 추가 확인: 이슈 노트에서 마지막 봇 완료 이후 사용자 코멘트가 있는지 확인
+      let hasNewUserFeedback = false;
+      try {
+        const notes = await fetchNotes(project, issue.iid, decryptedToken);
+        const botCompletions = notes.filter((n: any) => n.body.includes("IVE(봇)"));
+        if (botCompletions.length > 0) {
+          const lastBotNoteId = botCompletions[botCompletions.length - 1].id;
+          const userNotes = notes.filter((n: any) =>
+            !n.system &&
+            !n.body.includes("IVE(봇)") &&
+            !n.body.includes("착수") &&
+            !n.body.includes("작업을 시작") &&
+            !n.body.includes("이슈 해결") &&
+            n.id > lastBotNoteId
+          );
+          hasNewUserFeedback = userNotes.length > 0;
+        } else {
+          // 봇 완료 기록이 없는데 done/dev_fail → 수동으로 상태 변경된 케이스, 재작업 가능
+          hasNewUserFeedback = true;
+        }
+      } catch (e) {
+        console.warn(`[Scanner] Failed to fetch notes for Issue #${issue.iid}:`, e);
+      }
+
+      if (!hasNewUserFeedback) {
+        console.log(`[Scanner] [SKIP] Issue #${issue.iid} (stage: ${currentStage}, labelTarget present but no new user feedback)`);
+        continue;
+      }
+
+      // 사용자가 labelTarget을 다시 달고 피드백도 남김 → 재작업 진행
+      console.log(`[Scanner] [REOPEN] Issue #${issue.iid} (stage: ${currentStage}, labelTarget re-added with user feedback). Resetting to waiting.`);
+      setIssueStage(project.id, issue.iid, 'waiting');
+      // waiting으로 변경 후 아래 로직에서 에이전트 배정 진행
     }
 
     // 가용 에이전트 중 가장 오래 쉰 에이전트 선택 (라운드로빈)
@@ -425,6 +464,15 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
 
       // 상태 변경: 대기 → 개발 중 (로컬 DB)
       setIssueStage(project.id, issue.iid, 'dev');
+
+      // 레이블 업데이트: labelTarget 제거, labelInProgress 추가
+      try {
+        const updateLabels = project.provider === 'github' ? updateGitHubIssueLabels : updateGitLabIssueLabels;
+        await updateLabels(project, issue.iid, agentToken,
+          [project.labelInProgress],
+          [project.labelTarget, project.labelDone, project.labelFailDev]
+        );
+      } catch (e) { console.warn(`[Scanner] Label update failed for Issue #${issue.iid}:`, e); }
 
       // 비동기로 태스크 실행 (개발자별 토큰 우선)
       executeTask(project, issue, availableAgent, agentToken)
@@ -599,23 +647,16 @@ async function executeTask(
     // 2차 이상 실행인데 사용자 피드백(지시)이 없으면 실행하지 않음
     if (iterationCount > 1 && !latestFeedback) {
       log(`${iterationCount}차 실행이지만 새로운 사용자 지시가 없어 스킵합니다.`, 'system');
-      // 이슈에 스킵 사유 코멘트 남기기 (best-effort)
+      // 코멘트를 남기지 않음 → 봇 코멘트가 updated_at를 변경하여 재실행 악순환을 유발하기 때문
+      // 레이블을 다시 done 상태로 복원
       try {
-        const skipComment = `IVE(봇): 이전 작업이 완료된 후 새로운 사용자 지시가 없어 추가 작업을 수행하지 않았습니다. 추가 작업이 필요하면 이 이슈에 코멘트로 지시를 남겨주세요.`;
-        if (project.provider === 'github') {
-          await addGitHubIssueComment(project, iid, token, skipComment);
-        } else {
-          await addGitLabIssueComment(project, iid, token, skipComment);
-        }
-      } catch (e) { console.warn(`[Scanner] Skip comment failed:`, e); }
-      // 코멘트 게시 후 원격 이슈의 updated_at를 가져와서 로컬에 동기화
-      // → 봇 자체 코멘트로 인한 리오픈 오감지 방지
-      let syncTimestamp: string | undefined;
-      try {
-        const freshIssue = await fetchSingleIssue(project, iid, token);
-        if (freshIssue?.updated_at) syncTimestamp = freshIssue.updated_at;
-      } catch (e) { /* ignore */ }
-      setIssueStage(project.id, iid, 'done', undefined, syncTimestamp);
+        const updateLabels = isGitHub ? updateGitHubIssueLabels : updateGitLabIssueLabels;
+        await updateLabels(project, iid, token,
+          [project.labelDone],
+          [project.labelTarget, project.labelInProgress, project.labelFailDev]
+        );
+      } catch (e) { console.warn(`[Scanner] Label update (skip) failed:`, e); }
+      setIssueStage(project.id, iid, 'done');
       updateExecutionStatus(executionId, 'success', new Date().toISOString());
       updateAgentStatus(agent.id, 'available');
       logStream.end();
@@ -867,7 +908,15 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
           } else {
             await addGitLabIssueComment(project, iid, token, pushFailNote);
           }
-        } catch (e) { console.warn(`[Scanner] Remote comment/label update failed:`, e); }
+        } catch (e) { console.warn(`[Scanner] Remote comment failed:`, e); }
+        // 레이블 업데이트: labelInProgress 제거, labelFailDev 추가
+        try {
+          const updateLabels = isGitHub ? updateGitHubIssueLabels : updateGitLabIssueLabels;
+          await updateLabels(project, iid, token,
+            [project.labelFailDev],
+            [project.labelTarget, project.labelInProgress]
+          );
+        } catch (e) { console.warn(`[Scanner] Label update (push-fail) failed:`, e); }
         updateExecutionStatus(executionId, 'failed', new Date().toISOString());
         updateAgentStatus(agent.id, 'available');
         logStream.end();
@@ -921,14 +970,16 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
         await addGitLabSpentTime(project, iid, token, durationStr);
       }
 
-      // 원격 이슈의 updated_at를 가져와서 로컬에 동기화
-      // → 봇 자체 활동(코멘트, MR, spent time)으로 인한 리오픈 오감지 방지
-      let syncTimestamp: string | undefined;
+      // 레이블 업데이트: labelInProgress 제거, labelDone 추가, labelTarget도 제거 (안전장치)
       try {
-        const freshIssue = await fetchSingleIssue(project, iid, token);
-        if (freshIssue?.updated_at) syncTimestamp = freshIssue.updated_at;
-      } catch (e) { /* ignore */ }
-      setIssueStage(project.id, iid, 'done', undefined, syncTimestamp);
+        const updateLabels = isGitHub ? updateGitHubIssueLabels : updateGitLabIssueLabels;
+        await updateLabels(project, iid, token,
+          [project.labelDone],
+          [project.labelTarget, project.labelInProgress, project.labelFailDev]
+        );
+      } catch (e) { console.warn(`[Scanner] Label update (done) failed:`, e); }
+
+      setIssueStage(project.id, iid, 'done');
       log("작업 완료.", 'system');
       updateExecutionStatus(executionId, 'success', new Date().toISOString());
     } else {
@@ -943,13 +994,15 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
           await addGitLabSpentTime(project, iid, token, durationStr);
         }
       } catch (e) { console.warn(`[Scanner] Remote comment failed:`, e); }
-      // 원격 이슈의 updated_at를 가져와서 로컬에 동기화
-      let syncTs: string | undefined;
+      // 레이블 업데이트: labelInProgress 제거, labelDone 추가
       try {
-        const freshIssue = await fetchSingleIssue(project, iid, token);
-        if (freshIssue?.updated_at) syncTs = freshIssue.updated_at;
-      } catch (e) { /* ignore */ }
-      setIssueStage(project.id, iid, 'done', undefined, syncTs);
+        const updateLabels = isGitHub ? updateGitHubIssueLabels : updateGitLabIssueLabels;
+        await updateLabels(project, iid, token,
+          [project.labelDone],
+          [project.labelTarget, project.labelInProgress, project.labelFailDev]
+        );
+      } catch (e) { console.warn(`[Scanner] Label update (done/no-change) failed:`, e); }
+      setIssueStage(project.id, iid, 'done');
       updateExecutionStatus(executionId, 'success', new Date().toISOString());
     }
 
@@ -965,6 +1018,14 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
         await addGitLabIssueComment(project, iid, token, errorNote);
       }
     } catch (e) { console.warn(`[Scanner] Remote comment failed:`, e); }
+    // 레이블 업데이트: labelInProgress 제거, labelFailDev 추가
+    try {
+      const updateLabels = isGitHub ? updateGitHubIssueLabels : updateGitLabIssueLabels;
+      await updateLabels(project, iid, token,
+        [project.labelFailDev],
+        [project.labelTarget, project.labelInProgress]
+      );
+    } catch (e) { console.warn(`[Scanner] Label update (error) failed:`, e); }
     updateExecutionStatus(executionId, 'failed', new Date().toISOString());
   } finally {
     // 에이전트 상태를 'available'로 복원
