@@ -198,15 +198,18 @@ function UsersPanel() {
                     <span className="text-[10px] font-bold bg-ive-green/15 text-ive-green px-1.5 py-0.5 rounded-full">관리자</span>
                   )}
                 </div>
-                <div className="text-xs text-ive-text-dim truncate">{u.email}</div>
-                <div className="flex items-center flex-wrap gap-x-2 gap-y-0.5 text-xs text-ive-text-dim mt-0.5">
-                  <span>가입: {new Date(u.createdAt).toLocaleDateString('ko-KR')}</span>
+                <div className="flex items-center gap-x-2 text-xs text-ive-text-dim truncate">
+                  <span className="truncate">{u.email}</span>
+                  <span className="shrink-0">· {new Date(u.createdAt).toLocaleDateString('ko-KR')}</span>
+                </div>
+                <div className="flex items-center gap-x-2 text-xs mt-0.5">
                   <span className="inline-flex items-center text-ive-cyan">
-                    <i className="fa-solid fa-robot mr-0.5" /><span className="hidden sm:inline">개발자 </span>{u.maxAgents || '∞'}
+                    <i className="fa-solid fa-robot mr-0.5" />{u.maxAgents || '∞'}
                   </span>
                   <span className="inline-flex items-center text-ive-amber">
-                    <i className="fa-solid fa-repeat mr-0.5" /><span className="hidden sm:inline">턴 </span>{u.maxTurns || '∞'}
+                    <i className="fa-solid fa-repeat mr-0.5" />{u.maxTurns || '∞'}
                   </span>
+                  <span className="text-ive-text-dim">|</span>
                   {(u.allowedClis || []).map(cli => (
                     <span key={cli} className="inline-flex items-center text-ive-green">
                       <i className={`${cli === 'claude' ? 'fa-solid fa-atom' : 'fa-solid fa-terminal'} mr-0.5`} />{cli}
