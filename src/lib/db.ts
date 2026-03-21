@@ -243,6 +243,9 @@ function initSchema(db: Database.Database) {
     if (!tableInfo.some((col: any) => col.name === 'issue_created_at')) {
       db.exec("ALTER TABLE task_executions ADD COLUMN issue_created_at TEXT")
     }
+    if (!tableInfo.some((col: any) => col.name === 'model_name')) {
+      db.exec("ALTER TABLE task_executions ADD COLUMN model_name TEXT")
+    }
   } catch (e) { console.error("Migration failed for task_executions:", e) }
 
   // 프로젝트 모니터링 설정
@@ -652,6 +655,7 @@ function mapExecution(r: any): TaskExecution {
   return {
     id: r.id, projectId: r.project_id, agentId: r.agent_id,
     issueIid: r.issue_iid, issueTitle: r.issue_title ?? undefined,
+    modelName: r.model_name ?? undefined,
     status: r.status, startedAt: r.started_at, endedAt: r.ended_at,
     logPath: r.log_path, pid: r.pid ?? undefined,
     agentName: r.agent_name ?? undefined,
@@ -675,9 +679,14 @@ export function updateExecutionStatus(id: string, status: TaskStatus, endedAt?: 
   }
 }
 
-export function updateExecutionTokens(id: string, inputTokens: number, outputTokens: number, costUsd: number, turns: number = 0) {
-  getDb().prepare('UPDATE task_executions SET input_tokens = ?, output_tokens = ?, cost_usd = ?, turns = ? WHERE id = ?')
-    .run(inputTokens, outputTokens, costUsd, turns, id)
+export function updateExecutionTokens(id: string, inputTokens: number, outputTokens: number, costUsd: number, turns: number = 0, modelName?: string) {
+  if (modelName) {
+    getDb().prepare('UPDATE task_executions SET input_tokens = ?, output_tokens = ?, cost_usd = ?, turns = ?, model_name = ? WHERE id = ?')
+      .run(inputTokens, outputTokens, costUsd, turns, modelName, id)
+  } else {
+    getDb().prepare('UPDATE task_executions SET input_tokens = ?, output_tokens = ?, cost_usd = ?, turns = ? WHERE id = ?')
+      .run(inputTokens, outputTokens, costUsd, turns, id)
+  }
 }
 
 export function getExecution(id: string): TaskExecution | null {
@@ -921,6 +930,11 @@ export function getAllTokenPricing(): TokenPricing[] {
 
 export function getTokenPricingByCli(cliName: string): TokenPricing | null {
   const r = getDb().prepare('SELECT * FROM token_pricing WHERE cli_name = ?').get(cliName) as any
+  return r ? mapPricing(r) : null
+}
+
+export function getTokenPricingByModel(modelName: string): TokenPricing | null {
+  const r = getDb().prepare('SELECT * FROM token_pricing WHERE LOWER(model_name) = LOWER(?) LIMIT 1').get(modelName) as any
   return r ? mapPricing(r) : null
 }
 

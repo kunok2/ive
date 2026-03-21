@@ -135,6 +135,7 @@ export interface TaskExecution {
   logPath: string
   pid?: number
   agentName?: string
+  modelName?: string
   inputTokens: number
   outputTokens: number
   costUsd: number

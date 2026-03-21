@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Agent, CliName, TaskExecution, StatSnapshot } from '@/types'
 import { useStore } from '@/lib/store'
 import { getKSTTodayStartISO } from '@/lib/date-utils'
@@ -79,6 +79,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
   const [chatHistory, setChatHistory] = useState<{ role: 'user' | 'agent'; text: string }[]>([])
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
+  const chatInputRef = useRef<HTMLInputElement>(null)
   const [expandedPanel, _setExpandedPanel] = useState<'running' | 'done' | 'failed' | 'stats' | null>(() => {
     if (typeof window === 'undefined') return null
     const saved = sessionStorage.getItem(`ac-panel-${agent.id}`)
@@ -190,6 +191,12 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
       setChatLoading(false)
     }
   }
+
+  useEffect(() => {
+    if (!chatLoading && showInterview) {
+      chatInputRef.current?.focus()
+    }
+  }, [chatLoading, showInterview])
 
   const handleKill = async (id: string) => {
     setKilling(id)
@@ -552,6 +559,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
             </div>
             <div className="border-t border-ive-border-dark p-2 flex gap-2">
               <input
+                ref={chatInputRef}
                 type="text"
                 value={chatInput}
                 onChange={e => setChatInput(e.target.value)}

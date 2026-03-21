@@ -49,21 +49,9 @@ import fs from "fs";
 import path from "path";
 import { promisify } from "util";
 import { setToolActivity, setThinking, clearActivity } from "./tool-activity";
+import { calcCostFromDb } from "./token-pricing";
 
 const exec = promisify(require('child_process').exec);
-
-// CLI별 토큰 단가 (USD per 1M tokens) — cost_usd가 제공되지 않을 때 사용
-const TOKEN_PRICING: Record<string, { input: number; output: number }> = {
-  claude:    { input: 3.0,  output: 15.0 },   // Sonnet 기본
-  gemini:    { input: 1.25, output: 5.0 },     // Gemini 2.0 Flash
-  codex:     { input: 2.5,  output: 10.0 },    // GPT-4.1 mini
-  opencode:  { input: 3.0,  output: 15.0 },   // Claude Sonnet 기준
-}
-
-function estimateCost(cliName: string, inputTokens: number, outputTokens: number): number {
-  const pricing = TOKEN_PRICING[cliName] || TOKEN_PRICING.claude
-  return (inputTokens * pricing.input + outputTokens * pricing.output) / 1_000_000
-}
 
 /**
  * OpenCode run --format json 이벤트를 읽기 좋은 로그 텍스트로 변환
@@ -121,6 +109,8 @@ function formatOpenCodeEventMarkdown(event: any): string | null {
       const outputT = event.outputTokens ?? event.output_tokens ?? event.tokens?.output ?? 0;
       const cost = event.cost ?? event.costUsd ?? event.cost_usd ?? 0;
       const turns = event.turns ?? event.numTurns ?? event.num_turns ?? 0;
+      const model = event.model ?? event.modelId ?? event.model_id ?? '';
+      if (model) meta.push(`모델: ${model}`);
       if (cost) meta.push(`비용: $${Number(cost).toFixed(4)}`);
       if (inputT || outputT) meta.push(`토큰: ${(Number(inputT) + Number(outputT)).toLocaleString()}`);
       if (turns) meta.push(`턴: ${turns}`);
@@ -186,7 +176,8 @@ function formatStreamEvent(event: any, showToolUsage: boolean = false): string |
     case 'system': {
       // system 이벤트 중 의미 있는 메시지만 출력 (JSON 덤프 방지)
       if (event.subtype === 'init' || event.subtype === 'session') {
-        return `[${ts}] \x1b[1;36m[시작]\x1b[0m 세션 초기화`;
+        const model = event.model ?? event.modelId ?? '';
+        return `[${ts}] \x1b[1;36m[시작]\x1b[0m 세션 초기화${model ? ` \x1b[90m(${model})\x1b[0m` : ''}`;
       }
       // task_notification 등 내부 이벤트는 메타만 간략히
       if (event.subtype === 'task_notification') {
@@ -231,6 +222,8 @@ function formatStreamEventMarkdown(event: any): string | null {
       const inputTokens = event.input_tokens ?? event.inputTokens ?? event.usage?.input_tokens;
       const outputTokens = event.output_tokens ?? event.outputTokens ?? event.usage?.output_tokens;
       const turns = event.num_turns ?? event.numTurns;
+      const model = event.model ?? event.modelId ?? event.model_id ?? '';
+      if (model) info.push(`모델: ${model}`);
       if (cost) info.push(`비용: $${Number(cost).toFixed(4)}`);
       if (duration) info.push(`소요: ${(Number(duration) / 1000).toFixed(1)}s`);
       if (tokens) info.push(`토큰: ${Number(tokens).toLocaleString()}`);
@@ -931,8 +924,13 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
       let totalCostUsd = 0;
       let totalTurns = 0;
       let assistantTurnCount = 0;
+      let detectedModel = '';
 
       const processEvent = (event: any) => {
+        // 모델명 캡처 (어떤 이벤트든 model 필드가 있으면 저장)
+        const eventModel = event.model ?? event.modelId ?? event.model_id ?? '';
+        if (eventModel && !detectedModel) detectedModel = eventModel;
+
         if (isOpenCode) {
           // opencode 이벤트 처리
           const formatted = formatOpenCodeEvent(event, project.showToolUsage);
@@ -1032,8 +1030,8 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
         if (totalInputTokens || totalOutputTokens || totalCostUsd || finalTurns) {
           const finalCost = totalCostUsd > 0
             ? totalCostUsd
-            : estimateCost(agent.cliName, totalInputTokens, totalOutputTokens);
-          updateExecutionTokens(executionId, totalInputTokens, totalOutputTokens, finalCost, finalTurns);
+            : calcCostFromDb(agent.cliName, totalInputTokens, totalOutputTokens, detectedModel || undefined);
+          updateExecutionTokens(executionId, totalInputTokens, totalOutputTokens, finalCost, finalTurns, detectedModel || undefined);
         }
         if (code === 0) resolve();
         else reject(new Error(`Agent CLI exited with code ${code}`));

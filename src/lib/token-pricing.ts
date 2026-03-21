@@ -1,10 +1,16 @@
-import { getAllTokenPricing, upsertTokenPricing } from './db'
+import { getAllTokenPricing, upsertTokenPricing, getTokenPricingByModel } from './db'
 import { TokenPricing } from '@/types'
 
-/** DB에서 CLI별 단가를 조회하여 비용 계산 */
-export function calcCostFromDb(cliName: string, inputTokens: number, outputTokens: number): number {
-  const all = getAllTokenPricing()
-  const pricing = all.find(p => p.cliName === cliName) ?? all[0]
+/** DB에서 모델명 우선, CLI명 차순으로 단가를 조회하여 비용 계산 */
+export function calcCostFromDb(cliName: string, inputTokens: number, outputTokens: number, modelName?: string): number {
+  let pricing: TokenPricing | null = null
+  if (modelName) {
+    pricing = getTokenPricingByModel(modelName)
+  }
+  if (!pricing) {
+    const all = getAllTokenPricing()
+    pricing = all.find(p => p.cliName === cliName) ?? all[0] ?? null
+  }
   if (!pricing) return 0
   return (inputTokens * pricing.inputPrice + outputTokens * pricing.outputPrice) / 1_000_000
 }
