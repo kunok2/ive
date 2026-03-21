@@ -54,9 +54,10 @@ const exec = promisify(require('child_process').exec);
 
 // CLI별 토큰 단가 (USD per 1M tokens) — cost_usd가 제공되지 않을 때 사용
 const TOKEN_PRICING: Record<string, { input: number; output: number }> = {
-  claude:  { input: 3.0,  output: 15.0 },   // Sonnet 기본
-  gemini:  { input: 1.25, output: 5.0 },     // Gemini 2.0 Flash
-  codex:   { input: 2.5,  output: 10.0 },    // GPT-4.1 mini
+  claude:    { input: 3.0,  output: 15.0 },   // Sonnet 기본
+  gemini:    { input: 1.25, output: 5.0 },     // Gemini 2.0 Flash
+  codex:     { input: 2.5,  output: 10.0 },    // GPT-4.1 mini
+  opencode:  { input: 3.0,  output: 15.0 },   // Claude Sonnet 기준
 }
 
 function estimateCost(cliName: string, inputTokens: number, outputTokens: number): number {

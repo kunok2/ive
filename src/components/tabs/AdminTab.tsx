@@ -433,6 +433,7 @@ const SETTING_GROUPS: SettingGroup[] = [
     key: 'cli_paths', label: 'CLI 경로', icon: 'fa-solid fa-terminal',
     fields: [
       { key: 'cli.claude.path', label: 'Claude Code 경로', type: 'text', placeholder: '/usr/local/bin/claude', defaultValue: '/usr/local/bin/claude' },
+      { key: 'cli.opencode.path', label: 'OpenCode 경로', type: 'text', placeholder: '/usr/local/bin/opencode', defaultValue: '/usr/local/bin/opencode' },
       { key: 'cli.gemini.path', label: 'Gemini CLI 경로', type: 'text', placeholder: '/usr/local/bin/gemini', defaultValue: '/usr/local/bin/gemini' },
       { key: 'cli.codex.path', label: 'Codex CLI 경로', type: 'text', placeholder: '/usr/local/bin/codex', defaultValue: '/usr/local/bin/codex' },
     ],

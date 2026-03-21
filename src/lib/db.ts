@@ -65,7 +65,7 @@ function initSchema(db: Database.Database) {
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
       name TEXT NOT NULL,
-      cli_name TEXT NOT NULL CHECK(cli_name IN ('claude', 'gemini', 'codex')),
+      cli_name TEXT NOT NULL CHECK(cli_name IN ('claude', 'gemini', 'codex', 'opencode')),
       cli_path TEXT NOT NULL,
       cli_version TEXT NOT NULL DEFAULT '',
       max_turns INTEGER NOT NULL DEFAULT 200,
@@ -315,6 +315,36 @@ function initSchema(db: Database.Database) {
     db.exec(`ALTER TABLE issue_stages ADD COLUMN fail_reason TEXT DEFAULT NULL`)
   } catch { /* 이미 존재 */ }
 
+  // agents.cli_name CHECK constraint에 opencode 추가 — 테이블 재생성
+  try {
+    const sql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='agents'").get() as any
+    if (sql && sql.sql && !sql.sql.includes("'opencode'")) {
+      db.exec(`
+        PRAGMA foreign_keys = OFF;
+        CREATE TABLE agents_new (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          name TEXT NOT NULL,
+          cli_name TEXT NOT NULL CHECK(cli_name IN ('claude', 'gemini', 'codex', 'opencode')),
+          cli_path TEXT NOT NULL,
+          cli_version TEXT NOT NULL DEFAULT '',
+          max_turns INTEGER NOT NULL DEFAULT 200,
+          status TEXT NOT NULL DEFAULT 'available' CHECK(status IN ('available', 'busy', 'offline')),
+          snapshot_interval INTEGER NOT NULL DEFAULT 1,
+          sparkline_points INTEGER NOT NULL DEFAULT 60,
+          stats_retention INTEGER NOT NULL DEFAULT 7,
+          avatar TEXT NOT NULL DEFAULT 'av-01',
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        INSERT INTO agents_new SELECT id, user_id, name, cli_name, cli_path, cli_version, max_turns, status, snapshot_interval, sparkline_points, stats_retention, avatar, created_at FROM agents;
+        DROP TABLE agents;
+        ALTER TABLE agents_new RENAME TO agents;
+        PRAGMA foreign_keys = ON;
+      `)
+    }
+  } catch (e) { console.error('[DB] agents migration failed:', e) }
+
   seedAdmin(db)
   seedTokenPricing(db)
 }
@@ -324,6 +354,7 @@ function seedTokenPricing(db: Database.Database) {
     { id: 'tp-claude', cli: 'claude', model: 'Claude Sonnet 4.6', input: 3.00, output: 15.00 },
     { id: 'tp-gemini', cli: 'gemini', model: 'Gemini 2.5 Pro', input: 1.25, output: 10.00 },
     { id: 'tp-codex', cli: 'codex', model: 'GPT-4.1', input: 2.00, output: 8.00 },
+    { id: 'tp-opencode', cli: 'opencode', model: 'Claude Sonnet 4.6', input: 3.00, output: 15.00 },
   ]
   const stmt = db.prepare('INSERT OR IGNORE INTO token_pricing (id, cli_name, model_name, input_price, output_price) VALUES (?, ?, ?, ?, ?)')
   for (const d of defaults) {

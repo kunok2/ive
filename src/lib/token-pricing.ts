@@ -39,6 +39,8 @@ const LATEST_PRICING: { cliName: string; modelName: string; input: number; outpu
   { cliName: 'gemini', modelName: 'Gemini 2.5 Pro', input: 1.25, output: 10.00 },
   // OpenAI
   { cliName: 'codex', modelName: 'GPT-4.1', input: 2.00, output: 8.00 },
+  // OpenCode
+  { cliName: 'opencode', modelName: 'Claude Sonnet 4.6', input: 3.00, output: 15.00 },
 ]
 
 /** 최신 단가로 DB를 업데이트하고 결과 반환 */

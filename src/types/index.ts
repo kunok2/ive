@@ -68,7 +68,7 @@ export interface Project {
   createdAt: string
 }
 
-export type CliName = 'claude' | 'gemini' | 'codex'
+export type CliName = 'claude' | 'gemini' | 'codex' | 'opencode'
 export type AgentStatus = 'available' | 'busy' | 'offline'
 
 // 기본 아바타 20종 (FontAwesome 아이콘 + 색상)

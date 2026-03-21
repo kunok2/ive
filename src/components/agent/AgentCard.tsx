@@ -46,6 +46,7 @@ const cliConfig: Record<CliName, { label: string; icon: string; color: string; d
   claude: { label: 'Claude Code', icon: 'fa-solid fa-atom', color: 'text-ive-amber', desc: 'Anthropic' },
   gemini: { label: 'Gemini CLI', icon: 'fa-brands fa-google', color: 'text-ive-cyan', desc: 'Google' },
   codex: { label: 'Codex CLI', icon: 'fa-solid fa-brain', color: 'text-ive-green-light', desc: 'OpenAI' },
+  opencode: { label: 'OpenCode', icon: 'fa-solid fa-terminal', color: 'text-ive-cyan', desc: 'sst.dev' },
 }
 
 const statusConfig = {
