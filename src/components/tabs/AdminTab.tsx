@@ -105,13 +105,21 @@ function UsersPanel() {
   }
 
   async function handleToggleAdmin(userId: string, currentAdmin: boolean) {
+    const newAdmin = !currentAdmin
+    const body: any = { userId, isAdmin: newAdmin }
+    // 관리자로 지정 시 모든 CLI 허용
+    if (newAdmin) body.allowedClis = ['claude', 'opencode']
     const res = await fetch('/api/admin/users', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, isAdmin: !currentAdmin }),
+      body: JSON.stringify(body),
     })
     if (res.ok) {
-      setUsers(prev => prev.map(u => u.id === userId ? { ...u, isAdmin: !currentAdmin } : u))
+      setUsers(prev => prev.map(u => u.id === userId ? {
+        ...u,
+        isAdmin: newAdmin,
+        ...(newAdmin ? { allowedClis: ['claude', 'opencode'] as User['allowedClis'] } : {}),
+      } : u))
     } else {
       const data = await res.json()
       await alert({ message: data.error || '권한 변경 실패', variant: 'error' })
