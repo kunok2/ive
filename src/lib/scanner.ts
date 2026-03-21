@@ -1031,7 +1031,9 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
       };
 
       child.stdout.on('data', (data: Buffer) => {
-        stdoutBuffer += data.toString();
+        const raw = data.toString();
+        if (isOpenCode) console.log(`[Task #${iid}][stdout-raw] ${raw.substring(0, 200)}`);
+        stdoutBuffer += raw;
         const lines = stdoutBuffer.split('\n');
         stdoutBuffer = lines.pop() || ''; // 마지막 불완전한 줄 보관
         for (const line of lines) {
