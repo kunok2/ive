@@ -44,11 +44,22 @@ body {
   input[type="number"] {
     -moz-appearance: textfield;
   }
-  /* Android Chrome에서 button 요소의 기본 배경 그라디언트/오버레이 제거 */
-  button {
+  /* Android Chrome에서 기본 배경 그라디언트/오버레이 제거 */
+  button, select, [role="button"] {
     -webkit-appearance: none;
     appearance: none;
     background: none;
+    background-image: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* Android에서 input/textarea의 기본 배경색 제거 */
+  input, textarea, select {
+    -webkit-appearance: none;
+    appearance: none;
+    background-color: inherit;
+  }
+  /* Android 터치 하이라이트 전역 제거 */
+  a, div[onclick], [role="button"] {
     -webkit-tap-highlight-color: transparent;
   }
 }
