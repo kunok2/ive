@@ -190,12 +190,12 @@ function UsersPanel() {
                   )}
                 </div>
                 <div className="text-xs text-ive-text-dim truncate">{u.email}</div>
-                <div className="flex items-center gap-2 text-xs text-ive-text-dim mt-0.5">
+                <div className="flex items-center flex-wrap gap-x-2 gap-y-0.5 text-xs text-ive-text-dim mt-0.5">
                   <span>가입: {new Date(u.createdAt).toLocaleDateString('ko-KR')}</span>
-                  <span className="text-ive-cyan">
+                  <span className="inline-flex items-center text-ive-cyan">
                     <i className="fa-solid fa-robot mr-0.5" /><span className="hidden sm:inline">개발자 </span>{u.maxAgents || '∞'}
                   </span>
-                  <span className="text-ive-amber">
+                  <span className="inline-flex items-center text-ive-amber">
                     <i className="fa-solid fa-repeat mr-0.5" /><span className="hidden sm:inline">턴 </span>{u.maxTurns || '∞'}
                   </span>
                 </div>
