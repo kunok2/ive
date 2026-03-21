@@ -12,10 +12,16 @@ export default function MarqueeText({ children, className }: { children: React.R
     const content = contentRef.current
     if (!container || !content) return
     const check = () => {
-      const overflow = content.scrollWidth - container.clientWidth
-      if (overflow > 0) {
-        content.style.setProperty('--marquee-distance', `-${overflow}px`)
-        content.style.setProperty('--marquee-reset', `${container.clientWidth}px`)
+      // measure only the first copy (original text)
+      const firstChild = content.children[0] as HTMLElement | undefined
+      if (!firstChild) return
+      const textWidth = firstChild.scrollWidth
+      const viewWidth = container.clientWidth
+      if (textWidth > viewWidth) {
+        // scroll distance = text width + gap so the second copy lands exactly at the start
+        const gap = 80
+        const scrollDist = textWidth + gap
+        content.style.setProperty('--marquee-scroll', `-${scrollDist}px`)
         setScrolling(true)
       } else {
         setScrolling(false)
@@ -30,7 +36,8 @@ export default function MarqueeText({ children, className }: { children: React.R
   return (
     <div ref={containerRef} className="marquee-container min-w-0">
       <span ref={contentRef} className={`marquee-content ${scrolling ? 'scrolling' : ''} ${className ?? ''}`}>
-        {children}
+        <span className="marquee-segment">{children}</span>
+        {scrolling && <span className="marquee-segment marquee-gap">{children}</span>}
       </span>
     </div>
   )
