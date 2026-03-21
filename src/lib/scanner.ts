@@ -836,12 +836,22 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
       let args: string[];
       let spawnEnv: Record<string, string | undefined>;
 
+      // MCP 설정 로드 (시스템 전체 설정)
+      const mcpConfigRaw = getSystemSetting('mcp.config');
+      let mcpServers: Record<string, any> | null = null;
+      if (mcpConfigRaw) {
+        try { mcpServers = JSON.parse(mcpConfigRaw); } catch { /* 잘못된 JSON 무시 */ }
+      }
+
       if (isOpenCode) {
         // opencode run --format json "prompt"
-        // max-turns와 permissions는 OPENCODE_CONFIG_CONTENT 환경변수로 전달
-        const opencodeConfig = JSON.stringify({
-          agent: { coder: { steps: agent.maxTurns || 200, permission: 'allow' } }
-        });
+        // max-turns, permissions, MCP는 OPENCODE_CONFIG_CONTENT 환경변수로 전달
+        const opencodeConfig: any = {
+          agent: { coder: { steps: agent.maxTurns || 200, permission: 'allow' } },
+          compaction: { auto: true },
+        };
+        if (mcpServers) opencodeConfig.mcp = mcpServers;
+
         args = [
           ...cliParts.slice(1),
           'run',
@@ -850,12 +860,37 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
         ];
         spawnEnv = {
           ...process.env,
-          OPENCODE_CONFIG_CONTENT: opencodeConfig,
+          OPENCODE_CONFIG_CONTENT: JSON.stringify(opencodeConfig),
           GITLAB_TOKEN: token, GITLAB_API_TOKEN: token,
           GITHUB_TOKEN: token,
         };
       } else {
         // Claude Code: claude --dangerously-skip-permissions --output-format stream-json ...
+        // MCP는 workspace .mcp.json 파일로 주입
+        if (mcpServers) {
+          // opencode 포맷 → Claude Code .mcp.json 포맷으로 변환
+          const claudeMcp: Record<string, any> = {};
+          for (const [name, cfg] of Object.entries(mcpServers)) {
+            if (cfg.type === 'local' && Array.isArray(cfg.command) && cfg.command.length > 0) {
+              claudeMcp[name] = {
+                command: cfg.command[0],
+                args: cfg.command.slice(1),
+                ...(cfg.environment ? { env: cfg.environment } : {}),
+              };
+            } else if (cfg.type === 'remote' && cfg.url) {
+              claudeMcp[name] = { url: cfg.url, ...(cfg.headers ? { headers: cfg.headers } : {}) };
+            }
+          }
+          if (Object.keys(claudeMcp).length > 0) {
+            try {
+              fs.writeFileSync(
+                path.join(workspacePath, '.mcp.json'),
+                JSON.stringify({ mcpServers: claudeMcp }, null, 2)
+              );
+            } catch { /* 파일 쓰기 실패 시 무시 */ }
+          }
+        }
+
         const allowedTools = ['Read', 'Edit', 'Write', 'Grep', 'Glob', 'Bash', 'WebFetch'];
         args = [
           ...cliParts.slice(1),

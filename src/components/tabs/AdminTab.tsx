@@ -425,7 +425,7 @@ interface SettingGroup {
   key: string
   label: string
   icon: string
-  fields: { key: string; label: string; type: 'text' | 'password' | 'number'; placeholder?: string; defaultValue?: string }[]
+  fields: { key: string; label: string; type: 'text' | 'password' | 'number' | 'textarea'; placeholder?: string; defaultValue?: string; rows?: number }[]
 }
 
 const SETTING_GROUPS: SettingGroup[] = [
@@ -452,6 +452,18 @@ const SETTING_GROUPS: SettingGroup[] = [
     fields: [
       { key: 'retention.executions_days', label: '실행 기록 보관 (일)', type: 'number', placeholder: '365 — 보고서 원본 데이터. 이 기간이 지난 실행 기록과 로그 파일이 자동 삭제됩니다.' },
       { key: 'retention.snapshots_days', label: '스냅샷 보관 (일)', type: 'number', placeholder: '7 — 프로젝트 카드 스파크라인용. 짧게 유지해도 보고서에는 영향 없습니다.' },
+    ],
+  },
+  {
+    key: 'mcp', label: 'MCP 서버', icon: 'fa-solid fa-plug',
+    fields: [
+      {
+        key: 'mcp.config',
+        label: 'MCP 서버 설정 (JSON)',
+        type: 'textarea',
+        rows: 8,
+        placeholder: `{\n  "github": {\n    "type": "local",\n    "command": ["npx", "-y", "@modelcontextprotocol/server-github"],\n    "environment": { "GITHUB_TOKEN": "ghp_xxx" }\n  }\n}`,
+      },
     ],
   },
 ]
@@ -565,13 +577,23 @@ function SettingsPanel() {
               {group.fields.map(field => (
                 <div key={field.key}>
                   <label className="block text-xs font-bold text-ive-text-muted mb-1">{field.label}</label>
-                  <input
-                    type={field.type}
-                    value={settings[field.key] || ''}
-                    onChange={e => updateSetting(field.key, e.target.value)}
-                    placeholder={field.placeholder}
-                    className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green/50"
-                  />
+                  {field.type === 'textarea' ? (
+                    <textarea
+                      value={settings[field.key] || ''}
+                      onChange={e => updateSetting(field.key, e.target.value)}
+                      placeholder={field.placeholder}
+                      rows={field.rows ?? 5}
+                      className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green/50 font-mono resize-y"
+                    />
+                  ) : (
+                    <input
+                      type={field.type}
+                      value={settings[field.key] || ''}
+                      onChange={e => updateSetting(field.key, e.target.value)}
+                      placeholder={field.placeholder}
+                      className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green/50"
+                    />
+                  )}
                 </div>
               ))}
 
