@@ -76,6 +76,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   const [editDesc, setEditDesc] = useState('')
   const [saving, setSaving] = useState(false)
   const notesEndRef = useRef<HTMLDivElement>(null)
+  const postingRef = useRef(false)
 
   const fetchIssue = useCallback(async () => {
     const res = await fetch(`/api/projects/${projectId}/issues/${iid}`)
@@ -142,7 +143,8 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   }
 
   async function handlePostComment() {
-    if (!comment.trim()) return
+    if (!comment.trim() || postingRef.current) return
+    postingRef.current = true
     setPosting(true)
     try {
       const res = await fetch(`/api/projects/${projectId}/issues/${iid}/notes`, {
@@ -155,13 +157,15 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
         await fetchNotes()
       }
     } finally {
+      postingRef.current = false
       setPosting(false)
     }
   }
 
   // 코멘트 작성 + 상태를 대기로 변경 (재실행 트리거)
   async function handleCommentAndRetry() {
-    if (!comment.trim()) return
+    if (!comment.trim() || postingRef.current) return
+    postingRef.current = true
     setPosting(true)
     try {
       // 1. 코멘트 등록
@@ -184,6 +188,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
       await fetchIssue()
       await fetchNotes()
     } finally {
+      postingRef.current = false
       setPosting(false)
     }
   }
