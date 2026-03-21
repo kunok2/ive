@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getAgent } from '@/lib/db'
+import { getAgent, getSystemSetting } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { existsSync } from 'fs'
 import { spawn } from 'child_process'
@@ -19,9 +19,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: '질문을 입력해주세요' }, { status: 400 })
   }
 
-  if (!existsSync(agent.cliPath)) {
+  // CLI 경로: 시스템 설정 우선
+  const cliPath = getSystemSetting(`cli.${agent.cliName}.path`) || agent.cliPath
+
+  if (!existsSync(cliPath)) {
     return NextResponse.json({
-      error: `CLI 파일을 찾을 수 없습니다: ${agent.cliPath}`,
+      error: `CLI 파일을 찾을 수 없습니다: ${cliPath}`,
     }, { status: 400 })
   }
 
@@ -30,15 +33,28 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const prompt = `${systemPrompt}\n\n면접관: ${question}`
 
+  const isOpenCode = agent.cliName === 'opencode'
+
   try {
-    const cliParts = agent.cliPath.split(' ')
+    const cliParts = cliPath.split(' ')
     const mainCmd = cliParts[0]
-    const args = [
-      ...cliParts.slice(1),
-      '--output-format', 'text',
-      '--max-turns', '1',
-      '-p', prompt,
-    ]
+    let args: string[]
+
+    if (isOpenCode) {
+      // opencode run "prompt" — 기본 포맷(텍스트) 사용
+      args = [
+        ...cliParts.slice(1),
+        'run',
+        prompt,
+      ]
+    } else {
+      args = [
+        ...cliParts.slice(1),
+        '--output-format', 'text',
+        '--max-turns', '1',
+        '-p', prompt,
+      ]
+    }
 
     const answer = await new Promise<string>((resolve, reject) => {
       let stdout = ''

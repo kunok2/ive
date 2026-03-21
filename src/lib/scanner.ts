@@ -66,6 +66,72 @@ function estimateCost(cliName: string, inputTokens: number, outputTokens: number
 }
 
 /**
+ * OpenCode run --format json 이벤트를 읽기 좋은 로그 텍스트로 변환
+ */
+function formatOpenCodeEvent(event: any, showToolUsage: boolean = false): string | null {
+  const ts = new Date().toTimeString().slice(0, 8);
+  switch (event.type) {
+    case 'text': {
+      const content = event.content ?? event.text ?? '';
+      if (!content.trim()) return null;
+      return `[${ts}] ${content}`;
+    }
+    case 'tool_use': {
+      if (!showToolUsage) return null;
+      const toolName = event.tool ?? event.name ?? '';
+      const input = event.input ?? event.args ?? {};
+      const summary = formatToolInput(toolName, input);
+      return `[${ts}] \x1b[1;34m[Tool] ${toolName}\x1b[0m ${summary}`;
+    }
+    case 'session.status': {
+      const meta: string[] = [];
+      const inputT = event.inputTokens ?? event.input_tokens ?? event.tokens?.input ?? 0;
+      const outputT = event.outputTokens ?? event.output_tokens ?? event.tokens?.output ?? 0;
+      const cost = event.cost ?? event.costUsd ?? event.cost_usd ?? 0;
+      const turns = event.turns ?? event.numTurns ?? event.num_turns ?? 0;
+      if (inputT || outputT) meta.push(`입력 ${Number(inputT).toLocaleString()} + 출력 ${Number(outputT).toLocaleString()} 토큰`);
+      if (cost) meta.push(`비용 $${Number(cost).toFixed(4)}`);
+      if (turns) meta.push(`${turns}턴`);
+      const metaStr = meta.length > 0 ? `\x1b[90m(${meta.join(' | ')})\x1b[0m ` : '';
+      return `[${ts}] \x1b[1;32m[완료]\x1b[0m ${metaStr}`;
+    }
+    case 'session.error': {
+      const msg = event.error ?? event.message ?? '알 수 없는 오류';
+      return `[${ts}] \x1b[1;31m[오류]\x1b[0m ${msg}`;
+    }
+    default:
+      return null;
+  }
+}
+
+function formatOpenCodeEventMarkdown(event: any): string | null {
+  switch (event.type) {
+    case 'text': {
+      const content = event.content ?? event.text ?? '';
+      return content.trim() || null;
+    }
+    case 'tool_use': {
+      const toolName = event.tool ?? event.name ?? '';
+      const summary = formatToolInputMarkdown(toolName, event.input ?? event.args ?? {});
+      return `> **🔧 ${toolName}** ${summary}`;
+    }
+    case 'session.status': {
+      const meta: string[] = [];
+      const inputT = event.inputTokens ?? event.input_tokens ?? event.tokens?.input ?? 0;
+      const outputT = event.outputTokens ?? event.output_tokens ?? event.tokens?.output ?? 0;
+      const cost = event.cost ?? event.costUsd ?? event.cost_usd ?? 0;
+      const turns = event.turns ?? event.numTurns ?? event.num_turns ?? 0;
+      if (cost) meta.push(`비용: $${Number(cost).toFixed(4)}`);
+      if (inputT || outputT) meta.push(`토큰: ${(Number(inputT) + Number(outputT)).toLocaleString()}`);
+      if (turns) meta.push(`턴: ${turns}`);
+      return `\n---\n**📊 실행 결과** ${meta.join(' | ')}`;
+    }
+    default:
+      return null;
+  }
+}
+
+/**
  * Claude CLI stream-json 이벤트를 읽기 좋은 로그 텍스트로 변환
  */
 function extractMeta(event: any, usage?: any): string | null {
@@ -762,31 +828,58 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
     }
 
     const startTime = Date.now();
+    const isOpenCode = agent.cliName === 'opencode';
     await new Promise<void>((resolve, reject) => {
       const cliParts = resolvedCliPath.split(' ');
       const mainCmd = cliParts[0];
-      const allowedTools = ['Read', 'Edit', 'Write', 'Grep', 'Glob', 'Bash', 'WebFetch'];
-      const args = [
-        ...cliParts.slice(1),
-        '--dangerously-skip-permissions',
-        '--output-format', 'stream-json',
-        '--verbose',
-        '--max-turns', String(agent.maxTurns || 200),
-        '--allowedTools', ...allowedTools,
-        '-p', prompt
-      ];
 
-      log(`CMD: ${mainCmd} ${args.slice(0, -2).join(' ')} [prompt omitted]`, 'system');
+      let args: string[];
+      let spawnEnv: Record<string, string | undefined>;
+
+      if (isOpenCode) {
+        // opencode run --format json "prompt"
+        // max-turns와 permissions는 OPENCODE_CONFIG_CONTENT 환경변수로 전달
+        const opencodeConfig = JSON.stringify({
+          agent: { coder: { steps: agent.maxTurns || 200, permission: 'allow' } }
+        });
+        args = [
+          ...cliParts.slice(1),
+          'run',
+          '--format', 'json',
+          prompt,
+        ];
+        spawnEnv = {
+          ...process.env,
+          OPENCODE_CONFIG_CONTENT: opencodeConfig,
+          GITLAB_TOKEN: token, GITLAB_API_TOKEN: token,
+          GITHUB_TOKEN: token,
+        };
+      } else {
+        // Claude Code: claude --dangerously-skip-permissions --output-format stream-json ...
+        const allowedTools = ['Read', 'Edit', 'Write', 'Grep', 'Glob', 'Bash', 'WebFetch'];
+        args = [
+          ...cliParts.slice(1),
+          '--dangerously-skip-permissions',
+          '--output-format', 'stream-json',
+          '--verbose',
+          '--max-turns', String(agent.maxTurns || 200),
+          '--allowedTools', ...allowedTools,
+          '-p', prompt,
+        ];
+        spawnEnv = {
+          ...process.env,
+          GITLAB_TOKEN: token, GITLAB_API_TOKEN: token,
+          GITHUB_TOKEN: token,
+        };
+      }
+
+      log(`CMD: ${mainCmd} ${args.slice(0, isOpenCode ? -1 : -2).join(' ')} [prompt omitted]`, 'system');
       log(`CWD: ${workspacePath}`, 'system');
 
       const child = spawn(mainCmd, args, {
         cwd: workspacePath,
         stdio: ['ignore', 'pipe', 'pipe'],
-        env: {
-          ...process.env,
-          GITLAB_TOKEN: token, GITLAB_API_TOKEN: token,
-          GITHUB_TOKEN: token,
-        },
+        env: spawnEnv as NodeJS.ProcessEnv,
         detached: true,  // 새 프로세스 그룹 생성 → kill -pgid로 전체 종료 가능
       });
 
@@ -796,13 +889,76 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
         log(`PID: ${child.pid} (PGID: -${child.pid})`, 'system');
       }
 
-      // stream-json 포맷을 파싱하여 사람이 읽을 수 있는 로그로 변환
+      // stream-json / opencode --format json 포맷을 파싱하여 사람이 읽을 수 있는 로그로 변환
       let stdoutBuffer = '';
       let totalInputTokens = 0;
       let totalOutputTokens = 0;
       let totalCostUsd = 0;
       let totalTurns = 0;
       let assistantTurnCount = 0;
+
+      const processEvent = (event: any) => {
+        if (isOpenCode) {
+          // opencode 이벤트 처리
+          const formatted = formatOpenCodeEvent(event, project.showToolUsage);
+          if (formatted) logStream.write(formatted + '\n');
+          const md = formatOpenCodeEventMarkdown(event);
+          if (md) conversationParts.push(md);
+          // 도구 활동 추적
+          if (event.type === 'tool_use') {
+            const toolName = event.tool ?? event.name ?? '';
+            if (toolName) {
+              const detail = formatToolInput(toolName, event.input ?? event.args ?? {});
+              setToolActivity(executionId, agent.id, toolName, detail);
+            }
+          } else if (event.type === 'text') {
+            setThinking(executionId, agent.id);
+            assistantTurnCount++;
+          }
+          // 완료 이벤트에서 토큰/비용 추출
+          if (event.type === 'session.status') {
+            const iT = event.inputTokens ?? event.input_tokens ?? event.tokens?.input ?? 0;
+            const oT = event.outputTokens ?? event.output_tokens ?? event.tokens?.output ?? 0;
+            const cost = event.cost ?? event.costUsd ?? event.cost_usd ?? 0;
+            const turns = event.turns ?? event.numTurns ?? event.num_turns ?? 0;
+            totalInputTokens += Number(iT);
+            totalOutputTokens += Number(oT);
+            totalCostUsd += Number(cost);
+            totalTurns = Math.max(totalTurns, Number(turns));
+          }
+        } else {
+          // Claude Code 이벤트 처리
+          const formatted = formatStreamEvent(event, project.showToolUsage);
+          if (formatted) logStream.write(formatted + '\n');
+          const md = formatStreamEventMarkdown(event);
+          if (md) conversationParts.push(md);
+          // 도구 활동 추적
+          if (event.type === 'assistant') {
+            const parts = event.message?.content || [];
+            let foundTool = false;
+            for (const part of parts) {
+              if (part.type === 'tool_use' && part.name) {
+                const detail = formatToolInput(part.name, part.input || '');
+                setToolActivity(executionId, agent.id, part.name, detail);
+                foundTool = true;
+              }
+            }
+            if (!foundTool) setThinking(executionId, agent.id);
+            assistantTurnCount++;
+          }
+          // 토큰/비용/턴 누적
+          if (event.type === 'result') {
+            const iT = event.input_tokens ?? event.inputTokens ?? event.usage?.input_tokens ?? 0;
+            const oT = event.output_tokens ?? event.outputTokens ?? event.usage?.output_tokens ?? 0;
+            const cost = event.cost_usd ?? event.costUsd ?? event.cost ?? 0;
+            const turns = event.num_turns ?? event.numTurns ?? 0;
+            totalInputTokens += Number(iT);
+            totalOutputTokens += Number(oT);
+            totalCostUsd += Number(cost);
+            totalTurns = Math.max(totalTurns, Number(turns));
+          }
+        }
+      };
 
       child.stdout.on('data', (data: Buffer) => {
         stdoutBuffer += data.toString();
@@ -812,36 +968,7 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
           if (!line.trim()) continue;
           try {
             const event = JSON.parse(line);
-            const formatted = formatStreamEvent(event, project.showToolUsage);
-            if (formatted) logStream.write(formatted + '\n');
-            // 이슈 노트용 마크다운 수집
-            const md = formatStreamEventMarkdown(event);
-            if (md) conversationParts.push(md);
-            // 도구 활동 추적
-            if (event.type === 'assistant') {
-              const parts = event.message?.content || [];
-              let foundTool = false;
-              for (const part of parts) {
-                if (part.type === 'tool_use' && part.name) {
-                  const detail = formatToolInput(part.name, part.input || '');
-                  setToolActivity(executionId, agent.id, part.name, detail);
-                  foundTool = true;
-                }
-              }
-              if (!foundTool) setThinking(executionId, agent.id);
-              assistantTurnCount++;
-            }
-            // 토큰/비용/턴 누적
-            if (event.type === 'result') {
-              const iT = event.input_tokens ?? event.inputTokens ?? event.usage?.input_tokens ?? 0;
-              const oT = event.output_tokens ?? event.outputTokens ?? event.usage?.output_tokens ?? 0;
-              const cost = event.cost_usd ?? event.costUsd ?? event.cost ?? 0;
-              const turns = event.num_turns ?? event.numTurns ?? 0;
-              totalInputTokens += Number(iT);
-              totalOutputTokens += Number(oT);
-              totalCostUsd += Number(cost);
-              totalTurns = Math.max(totalTurns, Number(turns));
-            }
+            processEvent(event);
           } catch {
             logStream.write(line + '\n');
           }
@@ -857,8 +984,7 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
         if (stdoutBuffer.trim()) {
           try {
             const event = JSON.parse(stdoutBuffer);
-            const formatted = formatStreamEvent(event, project.showToolUsage);
-            if (formatted) logStream.write(formatted + '\n');
+            processEvent(event);
           } catch {
             logStream.write(stdoutBuffer + '\n');
           }
