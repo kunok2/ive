@@ -6,6 +6,7 @@ import { TaskExecution, Agent } from '@/types'
 import type { ToolActivity } from '@/lib/tool-activity'
 import LogViewer from '@/components/ui/LogViewer'
 import AgentAvatar from '@/components/agent/AgentAvatar'
+import MarqueeText from '@/components/ui/MarqueeText'
 
 function formatDuration(startedAt: string): string {
   const s = Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000)
@@ -88,7 +89,7 @@ export default function LiveTracePanel({ agents, onKill }: Props) {
                 size="sm"
                 toolBadge={activity?.category ?? null}
               />
-              <span className="truncate">{tab.agent.name}</span>
+              <span className="truncate min-w-0 flex-1"><MarqueeText className="text-sm">{tab.agent.name}</MarqueeText></span>
             </button>
           )
         })}
@@ -97,11 +98,13 @@ export default function LiveTracePanel({ agents, onKill }: Props) {
       {/* 현재 선택된 에이전트 내용 */}
       <div className="flex-1 flex flex-col min-h-0 p-3 gap-2">
         <div className="flex items-center justify-between shrink-0">
-          <div className="min-w-0 truncate">
-            <span className="text-sm font-black text-ive-green">#{current.execution!.issueIid}</span>
-            {current.execution!.issueTitle && (
-              <span className="text-sm text-ive-text ml-1.5 font-semibold">{current.execution!.issueTitle}</span>
-            )}
+          <div className="min-w-0 flex-1">
+            <MarqueeText className="text-sm font-semibold text-ive-text">
+              <span className="font-black text-ive-green">#{current.execution!.issueIid}</span>
+              {current.execution!.issueTitle && (
+                <span className="ml-1.5">{current.execution!.issueTitle}</span>
+              )}
+            </MarqueeText>
           </div>
           <div className="flex items-center gap-2 shrink-0 ml-2">
             {(() => {
