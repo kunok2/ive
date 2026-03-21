@@ -71,7 +71,7 @@ function UsersPanel() {
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [editingLimits, setEditingLimits] = useState<string | null>(null)
-  const [limitValues, setLimitValues] = useState<{ maxAgents: number; maxTurns: number }>({ maxAgents: 0, maxTurns: 0 })
+  const [limitValues, setLimitValues] = useState<{ maxAgents: number; maxTurns: number; allowedClis: string[] }>({ maxAgents: 0, maxTurns: 0, allowedClis: ['opencode'] })
 
   async function fetchUsers() {
     const res = await fetch('/api/admin/users')
@@ -122,6 +122,7 @@ function UsersPanel() {
     if (editingLimits === u.id) {
       // 닫기 — 변경 사항 확인
       const changed = limitValues.maxAgents !== u.maxAgents || limitValues.maxTurns !== u.maxTurns
+        || JSON.stringify([...limitValues.allowedClis].sort()) !== JSON.stringify([...(u.allowedClis || [])].sort())
       if (changed) {
         const ok = await confirm({
           title: '변경 사항 저장',
@@ -138,7 +139,7 @@ function UsersPanel() {
       setEditingLimits(null)
     } else {
       setEditingLimits(u.id)
-      setLimitValues({ maxAgents: u.maxAgents, maxTurns: u.maxTurns })
+      setLimitValues({ maxAgents: u.maxAgents, maxTurns: u.maxTurns, allowedClis: u.allowedClis || ['opencode'] })
     }
   }
 
@@ -146,10 +147,10 @@ function UsersPanel() {
     const res = await fetch('/api/admin/users', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, maxAgents: limitValues.maxAgents, maxTurns: limitValues.maxTurns }),
+      body: JSON.stringify({ userId, maxAgents: limitValues.maxAgents, maxTurns: limitValues.maxTurns, allowedClis: limitValues.allowedClis }),
     })
     if (res.ok) {
-      setUsers(prev => prev.map(u => u.id === userId ? { ...u, maxAgents: limitValues.maxAgents, maxTurns: limitValues.maxTurns } : u))
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, maxAgents: limitValues.maxAgents, maxTurns: limitValues.maxTurns, allowedClis: limitValues.allowedClis as User['allowedClis'] } : u))
       setEditingLimits(null)
     } else {
       const data = await res.json()
@@ -198,6 +199,11 @@ function UsersPanel() {
                   <span className="inline-flex items-center text-ive-amber">
                     <i className="fa-solid fa-repeat mr-0.5" /><span className="hidden sm:inline">턴 </span>{u.maxTurns || '∞'}
                   </span>
+                  {(u.allowedClis || []).map(cli => (
+                    <span key={cli} className="inline-flex items-center text-ive-green">
+                      <i className={`${cli === 'claude' ? 'fa-solid fa-atom' : 'fa-solid fa-terminal'} mr-0.5`} />{cli}
+                    </span>
+                  ))}
                 </div>
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
@@ -264,6 +270,33 @@ function UsersPanel() {
                         className="px-2 py-1.5 text-ive-text-muted hover:text-ive-cyan text-xs font-black">+</button>
                     </div>
                     <span className="text-[10px] text-ive-text-dim">0 = 무제한</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <label className="text-xs font-bold text-ive-text-muted w-24 shrink-0">
+                    <i className="fa-solid fa-terminal mr-1" />CLI 도구
+                  </label>
+                  <div className="flex gap-2 flex-1">
+                    {[{ value: 'claude', label: 'Claude Code', icon: 'fa-solid fa-atom' }, { value: 'opencode', label: 'OpenCode', icon: 'fa-solid fa-terminal' }].map(cli => {
+                      const checked = limitValues.allowedClis.includes(cli.value)
+                      return (
+                        <button
+                          key={cli.value}
+                          type="button"
+                          onClick={() => setLimitValues(v => ({
+                            ...v,
+                            allowedClis: checked
+                              ? v.allowedClis.filter(c => c !== cli.value)
+                              : [...v.allowedClis, cli.value],
+                          }))}
+                          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+                            checked ? 'bg-ive-green/10 border-ive-green text-ive-green' : 'bg-ive-bg-deep border-ive-border-subtle text-ive-text-dim'
+                          }`}
+                        >
+                          <i className={cli.icon} />{cli.label}
+                        </button>
+                      )
+                    })}
                   </div>
                 </div>
                 <div className="flex gap-2">

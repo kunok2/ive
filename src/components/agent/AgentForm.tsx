@@ -21,8 +21,12 @@ export default function AgentForm({ onSuccess }: Props) {
   const currentAgentCount = state.agents.length
   const limitReached = userMaxAgents > 0 && currentAgentCount >= userMaxAgents
 
-  const [cliName, setCliName] = useState<CliName>('claude')
-  const [name, setName] = useState(cliTools[0].defaultName)
+  const allowedClis = state.user?.allowedClis || ['opencode']
+  const availableTools = cliTools.filter(t => allowedClis.includes(t.value))
+  const defaultCli = (availableTools[0]?.value ?? 'opencode') as CliName
+
+  const [cliName, setCliName] = useState<CliName>(defaultCli)
+  const [name, setName] = useState(availableTools[0]?.defaultName ?? 'Agent')
   const [avatar, setAvatar] = useState<string>(() => DEFAULT_AVATARS[Math.floor(Math.random() * DEFAULT_AVATARS.length)].id)
   const [cliPaths, setCliPaths] = useState<Record<string, string>>({})
   const [cliVersion, setCliVersion] = useState('')
@@ -92,7 +96,7 @@ export default function AgentForm({ onSuccess }: Props) {
       <div>
         <label className="block text-base font-semibold text-ive-text-muted mb-2">CLI 도구</label>
         <div className="flex flex-col gap-2">
-          {cliTools.map(t => (
+          {availableTools.map(t => (
             <button
               key={t.value}
               type="button"

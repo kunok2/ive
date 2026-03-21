@@ -222,6 +222,11 @@ function initSchema(db: Database.Database) {
     if (!tableInfo.some((col: any) => col.name === 'avatar')) {
       db.exec("ALTER TABLE users ADD COLUMN avatar TEXT NOT NULL DEFAULT 'av-01'")
     }
+    if (!tableInfo.some((col: any) => col.name === 'allowed_clis')) {
+      db.exec("ALTER TABLE users ADD COLUMN allowed_clis TEXT NOT NULL DEFAULT 'opencode'")
+      // 기존 관리자 계정은 모든 CLI 허용
+      db.exec("UPDATE users SET allowed_clis = 'claude,opencode' WHERE is_admin = 1")
+    }
   } catch (e) { console.error("Migration failed for users:", e) }
 
   try {
@@ -367,15 +372,16 @@ function seedTokenPricing(db: Database.Database) {
 function seedAdmin(db: Database.Database) {
   const exists = db.prepare('SELECT id FROM users WHERE email = ?').get('admin@ive.local')
   if (!exists) {
-    db.prepare('INSERT INTO users (id, email, password, name, is_admin, max_agents, max_turns) VALUES (?, ?, ?, ?, 1, 0, 0)').run(
+    db.prepare('INSERT INTO users (id, email, password, name, is_admin, max_agents, max_turns, allowed_clis) VALUES (?, ?, ?, ?, 1, 0, 0, ?)').run(
       'user-admin',
       'admin@ive.local',
       bcrypt.hashSync('admin', 10),
-      '관리자'
+      '관리자',
+      'claude,opencode'
     )
   } else {
-    // 기존 admin 계정에 is_admin + 무제한 보장
-    db.prepare('UPDATE users SET is_admin = 1, max_agents = 0, max_turns = 0 WHERE email = ?').run('admin@ive.local')
+    // 기존 admin 계정에 is_admin + 무제한 + 모든 CLI 보장
+    db.prepare('UPDATE users SET is_admin = 1, max_agents = 0, max_turns = 0, allowed_clis = ? WHERE email = ?').run('claude,opencode', 'admin@ive.local')
   }
 }
 
@@ -385,15 +391,29 @@ export function getUserByEmail(email: string): any {
   return getDb().prepare('SELECT * FROM users WHERE email = ?').get(email)
 }
 
+function parseAllowedClis(raw: string | null | undefined): string[] {
+  if (!raw) return ['opencode']
+  return raw.split(',').map(s => s.trim()).filter(Boolean)
+}
+
+function mapUser(r: any): User {
+  return {
+    id: r.id, email: r.email, name: r.name, avatar: r.avatar || 'av-01',
+    isAdmin: !!r.is_admin, maxAgents: r.max_agents ?? 0, maxTurns: r.max_turns ?? 0,
+    allowedClis: parseAllowedClis(r.allowed_clis) as User['allowedClis'],
+    createdAt: r.created_at,
+  }
+}
+
 export function getUserById(id: string): User | null {
   const row = getDb().prepare('SELECT * FROM users WHERE id = ?').get(id) as any
   if (!row) return null
-  return { id: row.id, email: row.email, name: row.name, avatar: row.avatar || 'av-01', isAdmin: !!row.is_admin, maxAgents: row.max_agents ?? 0, maxTurns: row.max_turns ?? 0, createdAt: row.created_at }
+  return mapUser(row)
 }
 
 export function getAllUsers(): User[] {
   const rows = getDb().prepare('SELECT * FROM users ORDER BY created_at ASC').all() as any[]
-  return rows.map(r => ({ id: r.id, email: r.email, name: r.name, avatar: r.avatar || 'av-01', isAdmin: !!r.is_admin, maxAgents: r.max_agents ?? 0, maxTurns: r.max_turns ?? 0, createdAt: r.created_at }))
+  return rows.map(mapUser)
 }
 
 export function deleteUser(id: string) {

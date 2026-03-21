@@ -27,7 +27,7 @@ export async function PATCH(req: Request) {
   const user = await getCurrentUser()
   if (!user?.isAdmin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const { userId, isAdmin, maxAgents, maxTurns } = await req.json()
+  const { userId, isAdmin, maxAgents, maxTurns, allowedClis } = await req.json()
   if (!userId) return NextResponse.json({ error: '사용자 ID가 필요합니다' }, { status: 400 })
 
   if (typeof isAdmin === 'boolean') {
@@ -39,6 +39,10 @@ export async function PATCH(req: Request) {
   }
   if (typeof maxTurns === 'number') {
     getDb().prepare('UPDATE users SET max_turns = ? WHERE id = ?').run(maxTurns, userId)
+  }
+  if (Array.isArray(allowedClis)) {
+    const cliStr = allowedClis.filter(Boolean).join(',') || 'opencode'
+    getDb().prepare('UPDATE users SET allowed_clis = ? WHERE id = ?').run(cliStr, userId)
   }
   return NextResponse.json({ success: true })
 }

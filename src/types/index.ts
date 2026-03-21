@@ -6,6 +6,7 @@ export interface User {
   isAdmin: boolean
   maxAgents: number    // 최대 생성 가능 에이전트 수 (0 = 무제한)
   maxTurns: number     // 에이전트 최대 턴 수 상한 (0 = 무제한)
+  allowedClis: CliName[]  // 사용 가능한 CLI 도구 목록
   createdAt: string
 }
 
