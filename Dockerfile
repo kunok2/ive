@@ -19,6 +19,10 @@ FROM node:22-slim
 
 RUN apt-get update && apt-get install -y \
     python3 make g++ git \
+    curl wget jq unzip zip \
+    ripgrep fd-find tree \
+    procps psmisc \
+    netcat-openbsd dnsutils \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
