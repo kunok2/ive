@@ -781,18 +781,18 @@ ${latestFeedback}
 - GitHub API: https://api.github.com
 - Repository: ${ownerRepo}
 - Issue Number: ${iid}
-- 인증: 환경변수 GITHUB_TOKEN 사용 (Authorization: Bearer 헤더)
+- 인증: 환경변수 IVE_GITHUB_TOKEN 사용 (Authorization: Bearer 헤더)
 
 ### 사용 가능한 GitHub API 예시:
 \`\`\`bash
 # 이슈에 코멘트 달기
-curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" -X POST "https://api.github.com/repos/${ownerRepo}/issues/${iid}/comments" -d '{"body":"코멘트 내용"}'
+curl -s -H "Authorization: Bearer $IVE_GITHUB_TOKEN" -H "Accept: application/vnd.github+json" -X POST "https://api.github.com/repos/${ownerRepo}/issues/${iid}/comments" -d '{"body":"코멘트 내용"}'
 
 # 이슈 정보 조회
-curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${ownerRepo}/issues/${iid}"
+curl -s -H "Authorization: Bearer $IVE_GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${ownerRepo}/issues/${iid}"
 
 # 이슈 코멘트 목록
-curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${ownerRepo}/issues/${iid}/comments"
+curl -s -H "Authorization: Bearer $IVE_GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${ownerRepo}/issues/${iid}/comments"
 \`\`\``;
     } else {
       const gitlabBaseUrl = `${repoUrlParsed.protocol}//${repoUrlParsed.host}`;
@@ -881,7 +881,8 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
           // GITLAB_TOKEN은 OpenCode가 GitLab AI provider로 자동 감지하므로 제외
           // 대신 IVE_GITLAB_TOKEN으로 전달 (프롬프트에서 이 변수명 사용)
           IVE_GITLAB_TOKEN: token,
-          GITHUB_TOKEN: token,
+          // GITHUB_TOKEN도 OpenCode가 GitHub Copilot으로 자동 감지하므로 제외
+          IVE_GITHUB_TOKEN: token,
         };
       } else {
         // Claude Code: claude --dangerously-skip-permissions --output-format stream-json ...
