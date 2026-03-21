@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { Project, ProjectAssignment, Agent, TaskExecution, StatSnapshot } from '@/types'
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useStore } from '@/lib/store'
 import { useDialog } from '@/components/ui/ConfirmDialog'
 import { getKSTTodayStartISO } from '@/lib/date-utils'
@@ -10,6 +10,7 @@ import Sparkline from '@/components/ui/Sparkline'
 import ExecutionList from '@/components/execution/ExecutionList'
 import LiveTracePanel from '@/components/execution/LiveTracePanel'
 import AgentAvatar from '@/components/agent/AgentAvatar'
+import MarqueeText from '@/components/ui/MarqueeText'
 import type { ToolActivity } from '@/lib/tool-activity'
 
 function formatTokens(n: number): string {
@@ -18,39 +19,6 @@ function formatTokens(n: number): string {
   return String(n)
 }
 
-function MarqueeText({ children, className }: { children: React.ReactNode; className?: string }) {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const contentRef = useRef<HTMLSpanElement>(null)
-  const [scrolling, setScrolling] = useState(false)
-
-  useEffect(() => {
-    const container = containerRef.current
-    const content = contentRef.current
-    if (!container || !content) return
-    const check = () => {
-      const overflow = content.scrollWidth - container.clientWidth
-      if (overflow > 0) {
-        content.style.setProperty('--marquee-distance', `-${overflow}px`)
-        content.style.setProperty('--marquee-reset', `${container.clientWidth}px`)
-        setScrolling(true)
-      } else {
-        setScrolling(false)
-      }
-    }
-    check()
-    const ro = new ResizeObserver(check)
-    ro.observe(container)
-    return () => ro.disconnect()
-  }, [children])
-
-  return (
-    <div ref={containerRef} className="marquee-container min-w-0">
-      <span ref={contentRef} className={`marquee-content ${scrolling ? 'scrolling' : ''} ${className ?? ''}`}>
-        {children}
-      </span>
-    </div>
-  )
-}
 
 interface Props {
   project: Project & { assignedAgents?: (ProjectAssignment & { agent: Agent })[]; shareRole?: string | null }
@@ -403,7 +371,7 @@ export default function ProjectCard({ project }: Props) {
                         대기
                       </span>
                     </div>
-                    <div className="text-sm text-ive-text font-semibold truncate">{issue.title}</div>
+                    <MarqueeText className="text-sm text-ive-text font-semibold">{issue.title}</MarqueeText>
                     <div className="flex items-center gap-3 text-xs text-ive-text-dim mt-1">
                       {issue.author && (
                         <span><i className="fa-solid fa-user mr-0.5" />{issue.author}</span>

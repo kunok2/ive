@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { TaskExecution } from '@/types'
+import MarqueeText from '@/components/ui/MarqueeText'
 
 function formatDuration(startedAt: string, endedAt?: string): string {
   const start = new Date(startedAt).getTime()
@@ -87,7 +88,9 @@ export default function ExecutionList({ executions, showAgent = true, onKill, ki
           </div>
 
           {ex.issueTitle && (
-            <div className="text-sm text-ive-text font-semibold truncate mb-1">{ex.issueTitle}</div>
+            <div className="mb-1">
+              <MarqueeText className="text-sm text-ive-text font-semibold">{ex.issueTitle}</MarqueeText>
+            </div>
           )}
 
           <div className="flex items-center gap-3 text-xs text-ive-text-dim">
