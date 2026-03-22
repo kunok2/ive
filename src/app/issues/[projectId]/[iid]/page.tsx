@@ -276,21 +276,27 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
         <div className="px-3 pb-2 max-w-lg mx-auto">
           {editMode ? (
             <div className="space-y-2">
-              <input
-                type="text"
-                value={editTitle}
-                onChange={e => setEditTitle(e.target.value)}
-                className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-1.5 text-sm font-bold text-ive-text focus:outline-none focus:border-ive-green"
-                placeholder="제목"
-                autoFocus
-              />
-              <textarea
-                value={editDesc}
-                onChange={e => setEditDesc(e.target.value)}
-                className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-1.5 text-sm text-ive-text resize-none focus:outline-none focus:border-ive-green"
-                placeholder="설명 (선택)"
-                rows={4}
-              />
+              <div className="flex gap-2 items-center">
+                <input
+                  type="text"
+                  value={editTitle}
+                  onChange={e => setEditTitle(e.target.value)}
+                  className="flex-1 bg-ive-bg-input border border-ive-border rounded-lg px-3 py-1.5 text-sm font-bold text-ive-text focus:outline-none focus:border-ive-green"
+                  placeholder="제목"
+                  autoFocus
+                />
+                <VoiceInputButton onResult={text => setEditTitle(prev => prev ? prev + ' ' + text : text)} />
+              </div>
+              <div className="flex gap-2 items-end">
+                <textarea
+                  value={editDesc}
+                  onChange={e => setEditDesc(e.target.value)}
+                  className="flex-1 bg-ive-bg-input border border-ive-border rounded-lg px-3 py-1.5 text-sm text-ive-text resize-none focus:outline-none focus:border-ive-green"
+                  placeholder="설명 (선택)"
+                  rows={4}
+                />
+                <VoiceInputButton onResult={text => setEditDesc(prev => prev ? prev + ' ' + text : text)} />
+              </div>
               <div className="flex gap-2">
                 <button
                   onClick={handleSaveEdit}

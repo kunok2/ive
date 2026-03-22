@@ -501,24 +501,24 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                   </button>
                 </div>
                 <p className="text-xs text-ive-text-dim mb-1.5"><i className="fa-solid fa-info-circle mr-1" />첫 줄 = 제목, 두 번째 줄부터 = 본문{newBody && <span className="ml-2 text-ive-green/60"><i className="fa-solid fa-floppy-disk mr-0.5" />자동 저장됨</span>}</p>
-                <textarea
-                  value={newBody}
-                  onChange={e => setNewBody(e.target.value)}
-                  placeholder="이슈 제목을 입력하세요&#10;&#10;본문 내용을 여기에 작성합니다 (선택)"
-                  rows={4}
-                  className="w-full mb-2 bg-ive-bg-deep border border-ive-border-dark rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-green/50"
-                  autoFocus
-                />
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-end mb-2">
+                  <textarea
+                    value={newBody}
+                    onChange={e => setNewBody(e.target.value)}
+                    placeholder="이슈 제목을 입력하세요&#10;&#10;본문 내용을 여기에 작성합니다 (선택)"
+                    rows={4}
+                    className="flex-1 bg-ive-bg-deep border border-ive-border-dark rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-green/50"
+                    autoFocus
+                  />
                   <VoiceInputButton onResult={text => setNewBody(prev => prev ? prev + ' ' + text : text)} />
-                  <button
-                    onClick={handleCreateIssue}
-                    disabled={creating || !newBody.split('\n')[0].trim()}
-                    className="flex-1 py-2 rounded-lg bg-ive-green text-ive-bg-deep text-sm font-bold transition-all active:scale-[0.98] disabled:opacity-40"
-                  >
-                    {creating ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />생성 중...</> : <><i className="fa-solid fa-paper-plane mr-1" />이슈 생성</>}
-                  </button>
                 </div>
+                <button
+                  onClick={handleCreateIssue}
+                  disabled={creating || !newBody.split('\n')[0].trim()}
+                  className="w-full py-2 rounded-lg bg-ive-green text-ive-bg-deep text-sm font-bold transition-all active:scale-[0.98] disabled:opacity-40"
+                >
+                  {creating ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />생성 중...</> : <><i className="fa-solid fa-paper-plane mr-1" />이슈 생성</>}
+                </button>
               </div>
             )}
 
