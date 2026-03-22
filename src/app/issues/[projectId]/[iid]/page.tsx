@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import MobileTabBar from '@/components/layout/MobileTabBar'
 import { useDialog } from '@/components/ui/ConfirmDialog'
 import MRReviewSection from '@/components/mr/MRReviewSection'
+import VoiceInputButton from '@/components/ui/VoiceInputButton'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
@@ -447,6 +448,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
               className="flex-1 min-h-10 bg-ive-bg-card border border-ive-border rounded-xl px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-green/50"
               style={{ overflow: 'hidden' }}
             />
+            <VoiceInputButton onResult={text => setComment(prev => prev ? prev + ' ' + text : text)} />
             <button
               onClick={handlePostComment}
               disabled={posting || !comment.trim()}
