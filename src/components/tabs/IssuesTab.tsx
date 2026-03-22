@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import { useStore } from '@/lib/store'
 import { useTab } from '@/lib/tab-context'
 import PullToRefresh from '@/components/ui/PullToRefresh'
-import VoiceInputButton from '@/components/ui/VoiceInputButton'
 import { useDialog } from '@/components/ui/ConfirmDialog'
 
 interface IveIssue {
@@ -510,7 +509,6 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                     className="flex-1 bg-ive-bg-deep border border-ive-border-dark rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-green/50"
                     autoFocus
                   />
-                  <VoiceInputButton onResult={text => setNewBody(prev => prev ? prev + ' ' + text : text)} />
                 </div>
                 <button
                   onClick={handleCreateIssue}
