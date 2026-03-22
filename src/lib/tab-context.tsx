@@ -12,6 +12,8 @@ const TabContext = createContext<{
   setIssuesProjectId: (id: string) => void
   issuesFilter: string
   setIssuesFilter: (filter: string) => void
+  issuesSort: string
+  setIssuesSort: (sort: string) => void
   navigateToIssues: (projectId: string) => void
 }>({
   activeTab: 'projects',
@@ -20,6 +22,8 @@ const TabContext = createContext<{
   setIssuesProjectId: () => {},
   issuesFilter: 'all',
   setIssuesFilter: () => {},
+  issuesSort: 'newest',
+  setIssuesSort: () => {},
   navigateToIssues: () => {},
 })
 
@@ -45,13 +49,35 @@ export function TabProvider({ children }: { children: ReactNode }) {
     return null
   })
 
-  // 사용자 변경 시 해당 사용자의 마지막 선택 프로젝트 복원
+  const [issuesFilter, setIssuesFilterState] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('ive-issues-filter') || 'all'
+    }
+    return 'all'
+  })
+
+  const [issuesSort, setIssuesSortState] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('ive-issues-sort') || 'newest'
+    }
+    return 'newest'
+  })
+
+  // 사용자 변경 시 해당 사용자의 마지막 선택값 복원 (프로젝트, 필터, 정렬)
   useEffect(() => {
     if (user && user.id !== userIdRef.current) {
       userIdRef.current = user.id
-      const saved = localStorage.getItem(`ive-issues-project-${user.id}`)
-      if (saved) {
-        setIssuesProjectIdState(saved)
+      const savedProject = localStorage.getItem(`ive-issues-project-${user.id}`)
+      if (savedProject) {
+        setIssuesProjectIdState(savedProject)
+      }
+      const savedFilter = localStorage.getItem(`ive-issues-filter-${user.id}`)
+      if (savedFilter) {
+        setIssuesFilterState(savedFilter)
+      }
+      const savedSort = localStorage.getItem(`ive-issues-sort-${user.id}`)
+      if (savedSort) {
+        setIssuesSortState(savedSort)
       }
     } else if (!user) {
       userIdRef.current = null
@@ -65,15 +91,21 @@ export function TabProvider({ children }: { children: ReactNode }) {
       localStorage.setItem(`ive-issues-project-${userIdRef.current}`, id)
     }
   }, [])
-  const [issuesFilter, setIssuesFilterState] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('ive-issues-filter') || 'all'
-    }
-    return 'all'
-  })
+
   const setIssuesFilter = useCallback((filter: string) => {
     setIssuesFilterState(filter)
     localStorage.setItem('ive-issues-filter', filter)
+    if (userIdRef.current) {
+      localStorage.setItem(`ive-issues-filter-${userIdRef.current}`, filter)
+    }
+  }, [])
+
+  const setIssuesSort = useCallback((sort: string) => {
+    setIssuesSortState(sort)
+    localStorage.setItem('ive-issues-sort', sort)
+    if (userIdRef.current) {
+      localStorage.setItem(`ive-issues-sort-${userIdRef.current}`, sort)
+    }
   }, [])
 
   const navigateToIssues = useCallback((projectId: string) => {
@@ -86,6 +118,7 @@ export function TabProvider({ children }: { children: ReactNode }) {
       activeTab, setActiveTab,
       issuesProjectId, setIssuesProjectId,
       issuesFilter, setIssuesFilter,
+      issuesSort, setIssuesSort,
       navigateToIssues,
     }}>
       {children}

@@ -53,9 +53,10 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   const router = useRouter()
   const { confirm } = useDialog()
   const { state } = useStore()
-  const { activeTab, setActiveTab, issuesProjectId, setIssuesProjectId, issuesFilter, setIssuesFilter } = useTab()
+  const { activeTab, setActiveTab, issuesProjectId, setIssuesProjectId, issuesFilter, setIssuesFilter, issuesSort, setIssuesSort } = useTab()
   const selectedProjectId = issuesProjectId ?? ''
   const filter = issuesFilter
+  const sortOrder = issuesSort as 'newest' | 'oldest'
   const [issues, setIssues] = useState<IveIssue[]>(() => {
     if (typeof window !== 'undefined') {
       const cached = sessionStorage.getItem('issues-cache')
@@ -83,12 +84,6 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   })
   const [creating, setCreating] = useState(false)
   const [closing, setClosing] = useState<number | null>(null)
-  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>(() => {
-    if (typeof window !== 'undefined') {
-      return (localStorage.getItem('ive-issues-sort') as 'newest' | 'oldest') || 'newest'
-    }
-    return 'newest'
-  })
 
   const setSelectedProjectId = (id: string) => setIssuesProjectId(id)
   const setFilter = (f: string) => setIssuesFilter(f)
@@ -484,8 +479,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
               <button
                 onClick={() => {
                   const next = sortOrder === 'newest' ? 'oldest' : 'newest'
-                  setSortOrder(next)
-                  localStorage.setItem('ive-issues-sort', next)
+                  setIssuesSort(next)
                 }}
                 className="text-xs font-bold text-ive-text-dim hover:text-ive-text flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-white/5 transition-all"
               >
