@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useStore } from '@/lib/store'
 import { useTab } from '@/lib/tab-context'
 import PullToRefresh from '@/components/ui/PullToRefresh'
+import VoiceInputButton from '@/components/ui/VoiceInputButton'
 import { useDialog } from '@/components/ui/ConfirmDialog'
 
 interface IveIssue {
@@ -508,13 +509,16 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                   className="w-full mb-2 bg-ive-bg-deep border border-ive-border-dark rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-green/50"
                   autoFocus
                 />
-                <button
-                  onClick={handleCreateIssue}
-                  disabled={creating || !newBody.split('\n')[0].trim()}
-                  className="w-full py-2 rounded-lg bg-ive-green text-ive-bg-deep text-sm font-bold transition-all active:scale-[0.98] disabled:opacity-40"
-                >
-                  {creating ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />생성 중...</> : <><i className="fa-solid fa-paper-plane mr-1" />이슈 생성</>}
-                </button>
+                <div className="flex gap-2">
+                  <VoiceInputButton onResult={text => setNewBody(prev => prev ? prev + ' ' + text : text)} />
+                  <button
+                    onClick={handleCreateIssue}
+                    disabled={creating || !newBody.split('\n')[0].trim()}
+                    className="flex-1 py-2 rounded-lg bg-ive-green text-ive-bg-deep text-sm font-bold transition-all active:scale-[0.98] disabled:opacity-40"
+                  >
+                    {creating ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />생성 중...</> : <><i className="fa-solid fa-paper-plane mr-1" />이슈 생성</>}
+                  </button>
+                </div>
               </div>
             )}
 
