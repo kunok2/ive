@@ -24,7 +24,6 @@ import { fetchSingleIssue } from "./provider";
 import {
   ensureGitLabLabels,
   fetchGitLabIssues,
-  updateGitLabIssueLabels,
   addGitLabIssueComment,
   fetchGitLabIssueNotes,
   addGitLabSpentTime,
@@ -35,7 +34,6 @@ import {
 import {
   ensureGitHubLabels,
   fetchGitHubIssues,
-  updateGitHubIssueLabels,
   addGitHubIssueComment,
   fetchGitHubIssueNotes,
   createGitHubPR,
@@ -449,7 +447,6 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
   let waitingCount = 0;
   const busyAgentIds = new Set<string>();
 
-  // 이슈에서 labelTarget이 있고 labelDone/labelInProgress가 없는 것만 진짜 대기 대상
   const fetchNotes = project.provider === 'github' ? fetchGitHubIssueNotes : fetchGitLabIssueNotes;
 
   console.log(`[Scanner] processIssues: ${issues.length} issues, ${assignments.length} agents`);
@@ -468,22 +465,8 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
       continue;
     }
 
-    // done/dev_fail 상태: 이슈의 레이블을 확인하여 사용자가 재작업을 요청했는지 판단
+    // done/dev_fail 상태: 이슈 노트에서 마지막 봇 완료 이후 사용자 코멘트가 있는지 확인하여 재작업 판단
     if (currentStage === 'done' || currentStage === 'dev_fail') {
-      const issueLabels: string[] = issue.labels || [];
-
-      // labelDone이나 labelFailDev가 달려있으면 → 사용자가 재작업 요청하지 않은 것
-      const hasDoneLabel = issueLabels.includes(project.labelDone);
-      const hasFailLabel = issueLabels.includes(project.labelFailDev);
-      const hasInProgressLabel = issueLabels.includes(project.labelInProgress);
-
-      if (hasDoneLabel || hasFailLabel || hasInProgressLabel) {
-        console.log(`[Scanner] [SKIP] Issue #${issue.iid} (stage: ${currentStage}, status label present: done=${hasDoneLabel}, fail=${hasFailLabel}, wip=${hasInProgressLabel})`);
-        continue;
-      }
-
-      // labelTarget만 있고 다른 상태 레이블이 없음 → 사용자가 레이블을 수동 변경하여 재작업 요청한 것
-      // 추가 확인: 이슈 노트에서 마지막 봇 완료 이후 사용자 코멘트가 있는지 확인
       let hasNewUserFeedback = false;
       try {
         const notes = await fetchNotes(project, issue.iid, decryptedToken);
@@ -492,7 +475,8 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
           const lastBotNoteId = botCompletions[botCompletions.length - 1].id;
           const userNotes = notes.filter((n: any) =>
             !n.system &&
-            !n.body.includes("<!-- ive-bot -->") || n.body.includes("IVE(봇)") &&
+            !n.body.includes("<!-- ive-bot -->") &&
+            !n.body.includes("IVE(봇)") &&
             !n.body.includes("착수") &&
             !n.body.includes("작업을 시작") &&
             !n.body.includes("이슈 해결") &&
@@ -548,15 +532,6 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
 
       // 상태 변경: 대기 → 개발 중 (로컬 DB)
       setIssueStage(project.id, issue.iid, 'dev');
-
-      // 레이블 업데이트: labelTarget 제거, labelInProgress 추가
-      try {
-        const updateLabels = project.provider === 'github' ? updateGitHubIssueLabels : updateGitLabIssueLabels;
-        await updateLabels(project, issue.iid, agentToken,
-          [project.labelInProgress],
-          [project.labelTarget, project.labelDone, project.labelFailDev]
-        );
-      } catch (e) { console.warn(`[Scanner] Label update failed for Issue #${issue.iid}:`, e); }
 
       // 비동기로 태스크 실행 (개발자별 토큰 우선)
       executeTask(project, issue, availableAgent, agentToken)
@@ -688,7 +663,8 @@ async function executeTask(
     // 사용자 코멘트 추출 (시스템/봇 노트/봇 착수 코멘트 제외)
     const userNotes = notes.filter((n: any) =>
       !n.system &&
-      !n.body.includes("<!-- ive-bot -->") || n.body.includes("IVE(봇)") &&
+      !n.body.includes("<!-- ive-bot -->") &&
+      !n.body.includes("IVE(봇)") &&
       !n.body.includes("착수") &&
       !n.body.includes("작업을 시작") &&
       !n.body.includes("이슈 해결")
@@ -732,14 +708,6 @@ async function executeTask(
     if (iterationCount > 1 && !latestFeedback) {
       log(`${iterationCount}차 실행이지만 새로운 사용자 지시가 없어 스킵합니다.`, 'system');
       // 코멘트를 남기지 않음 → 봇 코멘트가 updated_at를 변경하여 재실행 악순환을 유발하기 때문
-      // 레이블을 다시 done 상태로 복원
-      try {
-        const updateLabels = isGitHub ? updateGitHubIssueLabels : updateGitLabIssueLabels;
-        await updateLabels(project, iid, token,
-          [project.labelDone],
-          [project.labelTarget, project.labelInProgress, project.labelFailDev]
-        );
-      } catch (e) { console.warn(`[Scanner] Label update (skip) failed:`, e); }
       setIssueStage(project.id, iid, 'done');
       updateExecutionStatus(executionId, 'success', new Date().toISOString());
       updateAgentStatus(agent.id, 'available');
@@ -1109,14 +1077,6 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
             await addGitLabIssueComment(project, iid, token, pushFailNote);
           }
         } catch (e) { console.warn(`[Scanner] Remote comment failed:`, e); }
-        // 레이블 업데이트: labelInProgress 제거, labelFailDev 추가
-        try {
-          const updateLabels = isGitHub ? updateGitHubIssueLabels : updateGitLabIssueLabels;
-          await updateLabels(project, iid, token,
-            [project.labelFailDev],
-            [project.labelTarget, project.labelInProgress]
-          );
-        } catch (e) { console.warn(`[Scanner] Label update (push-fail) failed:`, e); }
         updateExecutionStatus(executionId, 'failed', new Date().toISOString());
         updateAgentStatus(agent.id, 'available');
         logStream.end();
@@ -1170,15 +1130,6 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
         await addGitLabSpentTime(project, iid, token, durationStr);
       }
 
-      // 레이블 업데이트: labelInProgress 제거, labelDone 추가, labelTarget도 제거 (안전장치)
-      try {
-        const updateLabels = isGitHub ? updateGitHubIssueLabels : updateGitLabIssueLabels;
-        await updateLabels(project, iid, token,
-          [project.labelDone],
-          [project.labelTarget, project.labelInProgress, project.labelFailDev]
-        );
-      } catch (e) { console.warn(`[Scanner] Label update (done) failed:`, e); }
-
       setIssueStage(project.id, iid, 'done');
       log("작업 완료.", 'system');
       updateExecutionStatus(executionId, 'success', new Date().toISOString());
@@ -1194,14 +1145,6 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
           await addGitLabSpentTime(project, iid, token, durationStr);
         }
       } catch (e) { console.warn(`[Scanner] Remote comment failed:`, e); }
-      // 레이블 업데이트: labelInProgress 제거, labelDone 추가
-      try {
-        const updateLabels = isGitHub ? updateGitHubIssueLabels : updateGitLabIssueLabels;
-        await updateLabels(project, iid, token,
-          [project.labelDone],
-          [project.labelTarget, project.labelInProgress, project.labelFailDev]
-        );
-      } catch (e) { console.warn(`[Scanner] Label update (done/no-change) failed:`, e); }
       setIssueStage(project.id, iid, 'done');
       updateExecutionStatus(executionId, 'success', new Date().toISOString());
     }
@@ -1218,14 +1161,6 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
         await addGitLabIssueComment(project, iid, token, errorNote);
       }
     } catch (e) { console.warn(`[Scanner] Remote comment failed:`, e); }
-    // 레이블 업데이트: labelInProgress 제거, labelFailDev 추가
-    try {
-      const updateLabels = isGitHub ? updateGitHubIssueLabels : updateGitLabIssueLabels;
-      await updateLabels(project, iid, token,
-        [project.labelFailDev],
-        [project.labelTarget, project.labelInProgress]
-      );
-    } catch (e) { console.warn(`[Scanner] Label update (error) failed:`, e); }
     updateExecutionStatus(executionId, 'failed', new Date().toISOString());
   } finally {
     // 에이전트 상태를 'available'로 복원
