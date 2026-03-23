@@ -148,7 +148,7 @@ export default function MRReviewSection({ projectId, issueIid }: Props) {
           {isMerged && mr.merged_at && (
             <div className="text-xs text-ive-text-dim mb-3">
               {mr.merged_by?.name && <span>{mr.merged_by.name}이(가) </span>}
-              {new Date(mr.merged_at).toLocaleString('ko-KR')}에 머지됨
+              {new Date(mr.merged_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}에 머지됨
             </div>
           )}
 
