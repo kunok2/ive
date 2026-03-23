@@ -12,7 +12,6 @@ build:
     - deploy
   script:
     - DOCKER_BUILDKIT=1 docker build --no-cache -t $IMAGE_NAME:latest -t $IMAGE_NAME:$CI_COMMIT_SHORT_SHA .
-    - docker compose --project-directory /home/ubuntu/ive -f /ive-deploy/docker-compose.yml up -d spring-ive
   only:
     - main
 
