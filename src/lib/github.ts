@@ -54,7 +54,7 @@ export async function ensureGitHubLabels(project: Project, decryptedToken: strin
     // 전체 레이블 조회
     const res = await fetch(apiUrl(project, '/labels?per_page=100'), { headers });
     if (!res.ok) {
-      if (res.status === 401) throw new Error('인증 정보가 유효하지 않거나 만료되었습니다.');
+      if (res.status === 401) throw new Error('인증 정보가 유효하지 않거나 만료되었습니다. GitHub Personal Access Token을 확인해주세요.');
       throw new Error(`Failed to fetch labels: ${res.statusText}`);
     }
     const existingLabels: any[] = await res.json();
@@ -91,7 +91,7 @@ export async function fetchGitHubIssues(project: Project, decryptedToken: string
       { headers }
     );
     if (!res.ok) {
-      if (res.status === 401) throw new Error('인증 정보가 유효하지 않거나 만료되었습니다.');
+      if (res.status === 401) throw new Error('인증 정보가 유효하지 않거나 만료되었습니다. GitHub Personal Access Token을 확인해주세요.');
       if (res.status === 404) throw new Error('프로젝트를 찾을 수 없습니다. 저장소 주소를 확인하세요.');
       if (res.status === 403) throw new Error('접근 권한이 없습니다. 인증 정보를 확인하세요.');
       throw new Error(`GitHub API 오류 (${res.status}): ${res.statusText}`);

@@ -76,7 +76,7 @@ export async function ensureGitLabLabels(project: Project, decryptedToken: strin
     const res = await fetch(apiUrl(project, '/labels'), { headers });
 
     if (!res.ok) {
-      if (res.status === 401) throw new Error('인증 정보가 유효하지 않거나 만료되었습니다.');
+      if (res.status === 401) throw new Error('인증 정보가 유효하지 않거나 만료되었습니다. GitLab Personal Access Token을 확인해주세요.');
       throw new Error(`Failed to fetch labels: ${res.statusText}`);
     }
     const existingLabels: any[] = await res.json();

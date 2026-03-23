@@ -111,6 +111,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
       })
       dispatch({ type: 'SET_PROJECTS', projects: data })
+    } else if (res.status === 401) {
+      // 세션 만료: 사용자 상태 초기화 → 로그인 페이지로 리다이렉트
+      sessionStorage.setItem('ive-session-expired', '1')
+      dispatch({ type: 'SET_USER', user: null })
     } else {
       dispatch({ type: 'SET_PROJECTS', projects: [] })
     }
@@ -127,6 +131,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return 0
       })
       dispatch({ type: 'SET_AGENTS', agents: data })
+    } else if (res.status === 401) {
+      sessionStorage.setItem('ive-session-expired', '1')
+      dispatch({ type: 'SET_USER', user: null })
     } else {
       dispatch({ type: 'SET_AGENTS', agents: [] })
     }

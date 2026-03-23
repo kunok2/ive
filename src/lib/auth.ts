@@ -53,5 +53,24 @@ export async function getCurrentUser(): Promise<User | null> {
   const payload = verifyToken(token)
   if (!payload) return null
 
+  // 슬라이딩 세션: 토큰 수명의 절반이 지났으면 자동 갱신
+  try {
+    const decoded = jwt.decode(token) as { exp?: number; iat?: number } | null
+    if (decoded?.exp && decoded?.iat) {
+      const now = Math.floor(Date.now() / 1000)
+      const halfLife = (decoded.exp - decoded.iat) / 2
+      if (decoded.exp - now < halfLife) {
+        const newToken = signToken(payload.userId)
+        cookieStore.set(COOKIE_NAME, newToken, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          maxAge: TOKEN_MAX_AGE,
+          path: '/',
+        })
+      }
+    }
+  } catch { /* 갱신 실패 시 기존 토큰으로 계속 진행 */ }
+
   return getUserById(payload.userId)
 }
