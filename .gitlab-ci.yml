@@ -5,13 +5,14 @@ stages:
 variables:
   IMAGE_NAME: dazzlepf/spring-ive
 
-# 로컬 이미지 빌드 (Watchtower가 이미지 변경 감지 → 컨테이너 자동 재시작)
+# 이미지 빌드 + 컨테이너 재생성
 build:
   stage: build
   tags:
     - deploy
   script:
-    - DOCKER_BUILDKIT=1 docker build -t $IMAGE_NAME:latest -t $IMAGE_NAME:$CI_COMMIT_SHORT_SHA .
+    - DOCKER_BUILDKIT=1 docker build --no-cache -t $IMAGE_NAME:latest -t $IMAGE_NAME:$CI_COMMIT_SHORT_SHA .
+    - docker compose -f /ive-deploy/docker-compose.yml up -d spring-ive
   only:
     - main
 
