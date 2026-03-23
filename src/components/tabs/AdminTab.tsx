@@ -198,10 +198,8 @@ function UsersPanel() {
                     <span className="text-[10px] font-bold bg-ive-green/15 text-ive-green px-1.5 py-0.5 rounded-full">관리자</span>
                   )}
                 </div>
-                <div className="flex items-center gap-x-2 text-xs text-ive-text-dim truncate">
-                  <span className="truncate">{u.email}</span>
-                  <span className="shrink-0">· {new Date(u.createdAt).toLocaleDateString('ko-KR')}</span>
-                </div>
+                <div className="text-xs text-ive-text-dim break-all">{u.email}</div>
+                <div className="text-xs text-ive-text-dim">{new Date(u.createdAt).toLocaleDateString('ko-KR')} 가입</div>
                 <div className="flex items-center gap-x-2 text-xs mt-0.5">
                   <span className="inline-flex items-center text-ive-cyan">
                     <i className="fa-solid fa-robot mr-0.5" />{u.maxAgents || '∞'}
