@@ -435,7 +435,11 @@ export async function scanProject(project: Project, force: boolean = false) {
     updateProjectLastChecked(project.id, now.toISOString(), issueCount);
     
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    let msg = err instanceof Error ? err.message : String(err);
+    // 인증 관련 에러에 조치 안내 추가
+    if (msg.includes('인증 정보가 유효하지 않거나 만료') || msg.includes('인증 실패')) {
+      msg = `Git 액세스 토큰 인증 실패 — 프로젝트 설정에서 토큰을 확인하거나 새로 발급하여 교체해주세요.`;
+    }
     console.warn(`[Scanner] Error scanning project ${project.name}: ${msg}`);
     updateProjectError(project.id, msg);
   }

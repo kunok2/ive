@@ -16,10 +16,16 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [showChangePassword, setShowChangePassword] = useState(false)
   const [showIntro, setShowIntro] = useState(false)
+  const [sessionExpired, setSessionExpired] = useState(false)
 
   useEffect(() => {
     if (!localStorage.getItem('ive-intro-seen')) {
       setShowIntro(true)
+    }
+    // 세션 만료로 리다이렉트된 경우 메시지 표시
+    if (typeof window !== 'undefined' && sessionStorage.getItem('ive-session-expired')) {
+      setSessionExpired(true)
+      sessionStorage.removeItem('ive-session-expired')
     }
   }, [])
 
@@ -56,6 +62,12 @@ export default function LoginPage() {
           <h1 className="text-3xl font-extrabold text-ive-green mb-1">Spring <span className="text-ive-amber">IVE</span></h1>
           <p className="text-base text-ive-text-muted">Integrated Value Environment</p>
         </div>
+
+        {sessionExpired && (
+          <div className="mb-4 text-base text-ive-amber bg-ive-amber/10 border border-ive-amber/20 rounded-lg px-3 py-2">
+            <i className="fa-solid fa-clock mr-1.5" />로그인 세션이 만료되었습니다. 다시 로그인해주세요.
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div>
