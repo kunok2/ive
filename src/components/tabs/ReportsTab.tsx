@@ -276,6 +276,16 @@ export default function ReportsTab() {
     setDate(d.toISOString().slice(0, 10))
   }
 
+  function goToToday() {
+    setDate(getKSTTodayString())
+  }
+
+  function isCurrentPeriod(): boolean {
+    if (!data) return false
+    const today = getKSTTodayString()
+    return today >= data.period.start && today < data.period.end
+  }
+
   function toggleProject(id: string) {
     setExpandedProjects(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next })
   }
@@ -378,9 +388,19 @@ export default function ReportsTab() {
             <button onClick={() => navigate(-1)} className="w-8 h-8 flex items-center justify-center text-ive-text-dim hover:text-ive-text">
               <i className="fa-solid fa-chevron-left" />
             </button>
-            <span className="text-sm font-bold text-ive-text">
-              {data ? formatPeriodLabel(type, data.period.start, data.period.end) : '...'}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold text-ive-text">
+                {data ? formatPeriodLabel(type, data.period.start, data.period.end) : '...'}
+              </span>
+              {!isCurrentPeriod() && (
+                <button
+                  onClick={goToToday}
+                  className="px-2 py-0.5 text-[11px] font-bold rounded-md bg-ive-green/20 text-ive-green hover:bg-ive-green/30 transition-colors"
+                >
+                  오늘
+                </button>
+              )}
+            </div>
             <button onClick={() => navigate(1)} className="w-8 h-8 flex items-center justify-center text-ive-text-dim hover:text-ive-text">
               <i className="fa-solid fa-chevron-right" />
             </button>
