@@ -350,27 +350,35 @@ export async function GET(req: NextRequest) {
     const key = `${e.projectId}:${e.issueIid}`
     issueAttemptMap.set(key, (issueAttemptMap.get(key) || 0) + 1)
   }
+  // 이슈별 현재 시도 번호를 추적하는 카운터
+  const issueAttemptCounter = new Map<string, number>()
   const resolvedIssues = type === 'weekly'
     ? execs
       .filter(e => e.status === 'success' || e.status === 'failed')
-      .map(e => ({
-        issueIid: e.issueIid,
-        issueTitle: e.issueTitle ?? `#${e.issueIid}`,
-        projectId: e.projectId,
-        projectName: e.projectName,
-        projectColor: e.projectColor,
-        agentName: e.agentName,
-        agentAvatar: e.agentAvatar,
-        status: e.status as 'success' | 'failed',
-        startedAt: e.startedAt,
-        durationMin: Math.round(durationMin(e.startedAt, e.endedAt) * 10) / 10,
-        cost: Math.round(calcCost(pricingMap, e.cliName, e.inputTokens, e.outputTokens) * 100) / 100,
-        waitMin: e.issueCreatedAt
-          ? Math.round(durationMin(e.issueCreatedAt, e.startedAt) * 10) / 10
-          : null,
-        turns: e.turns,
-        attempts: issueAttemptMap.get(`${e.projectId}:${e.issueIid}`) || 1,
-      }))
+      .map(e => {
+        const key = `${e.projectId}:${e.issueIid}`
+        const attemptNo = (issueAttemptCounter.get(key) || 0) + 1
+        issueAttemptCounter.set(key, attemptNo)
+        return {
+          issueIid: e.issueIid,
+          issueTitle: e.issueTitle ?? `#${e.issueIid}`,
+          projectId: e.projectId,
+          projectName: e.projectName,
+          projectColor: e.projectColor,
+          agentName: e.agentName,
+          agentAvatar: e.agentAvatar,
+          status: e.status as 'success' | 'failed',
+          startedAt: e.startedAt,
+          durationMin: Math.round(durationMin(e.startedAt, e.endedAt) * 10) / 10,
+          cost: Math.round(calcCost(pricingMap, e.cliName, e.inputTokens, e.outputTokens) * 100) / 100,
+          waitMin: e.issueCreatedAt
+            ? Math.round(durationMin(e.issueCreatedAt, e.startedAt) * 10) / 10
+            : null,
+          turns: e.turns,
+          attempts: issueAttemptMap.get(key) || 1,
+          attemptNo,
+        }
+      })
     : undefined
 
   // 이슈 생애주기 집계
