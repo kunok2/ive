@@ -244,7 +244,7 @@ export default function ProjectCard({ project }: Props) {
             <i className="fa-solid fa-triangle-exclamation mr-1.5" />
             <span className="font-bold">오류:</span> {project.lastError}
             {project.lastErrorAt && (
-              <span className="text-ive-red/50 ml-1.5 text-xs">({new Date(project.lastErrorAt).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })})</span>
+              <span className="text-ive-red/50 ml-1.5 text-xs">({new Date(project.lastErrorAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })})</span>
             )}
           </div>
         )}
@@ -377,7 +377,7 @@ export default function ProjectCard({ project }: Props) {
                         <span><i className="fa-solid fa-user mr-0.5" />{issue.author}</span>
                       )}
                       <span>
-                        {new Date(issue.createdAt).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })}
+                        {new Date(issue.createdAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })}
                       </span>
                     </div>
                   </div>

@@ -688,7 +688,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                         <span>
                           <i className="fa-solid fa-calendar-day mr-1" />
                           {new Date(issue.updatedAt).toLocaleString('ko-KR', {
-                            month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
+                            timeZone: 'Asia/Seoul', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
                           })}
                         </span>
                         {canEdit && !bulkMode && (
