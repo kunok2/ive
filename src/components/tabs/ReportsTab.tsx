@@ -69,7 +69,7 @@ interface AgentTrend {
 interface ResolvedIssue {
   issueIid: number; issueTitle: string; projectId: string; projectName: string; projectColor: string
   agentName: string; agentAvatar: string; status: 'success' | 'failed'; startedAt: string; durationMin: number; cost: number
-  waitMin: number | null; turns: number; attempts: number
+  waitMin: number | null; turns: number; attempts: number; attemptNo: number
 }
 
 interface Lifecycle {
@@ -1039,7 +1039,7 @@ export default function ReportsTab() {
                             <span className="text-ive-text-dim">{issue.turns.toLocaleString()}턴</span>
                           )}
                           {issue.attempts > 1 && (
-                            <span className="text-ive-red">{issue.attempts.toLocaleString()}회 시도</span>
+                            <span className="text-ive-red">{issue.attemptNo}/{issue.attempts}회</span>
                           )}
                         </div>
                       </div>
