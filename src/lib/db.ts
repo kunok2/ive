@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3'
 import path from 'path'
 import bcrypt from 'bcryptjs'
-import { User, Project, Agent, ProjectAssignment, TaskExecution, TaskStatus, StatSnapshot, TokenPricing, ProjectShare, ShareRole } from '@/types'
+import { User, Project, Agent, ProjectAssignment, TaskExecution, TaskStatus, StatSnapshot, TokenPricing, ProjectShare, ShareRole, ReportSchedule, ReportSendLog, UserActivityLog, ActivityCategory } from '@/types'
 import { getKSTTodayStartISO, getKSTYesterdayStartISO, kstDateToUTCISO } from './date-utils'
 import { startScanner } from './scanner'
 
@@ -322,6 +322,57 @@ function initSchema(db: Database.Database) {
   try {
     db.exec(`ALTER TABLE issue_stages ADD COLUMN fail_reason TEXT DEFAULT NULL`)
   } catch { /* 이미 존재 */ }
+
+  // 보고서 스케줄 테이블
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS report_schedules (
+      id TEXT PRIMARY KEY,
+      report_type TEXT NOT NULL CHECK(report_type IN ('weekly', 'monthly', 'yearly')),
+      enabled INTEGER NOT NULL DEFAULT 1,
+      recipients TEXT NOT NULL DEFAULT '[]',
+      send_day INTEGER NOT NULL DEFAULT 1,
+      send_hour INTEGER NOT NULL DEFAULT 9,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `)
+
+  // 보고서 발송 이력 테이블
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS report_send_logs (
+      id TEXT PRIMARY KEY,
+      schedule_id TEXT NOT NULL,
+      report_type TEXT NOT NULL,
+      period_start TEXT NOT NULL,
+      period_end TEXT NOT NULL,
+      recipient_email TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('success', 'failed')),
+      error_message TEXT,
+      sent_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (schedule_id) REFERENCES report_schedules(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_report_send_logs_schedule ON report_send_logs(schedule_id, period_start, period_end);
+    CREATE INDEX IF NOT EXISTS idx_report_send_logs_sent_at ON report_send_logs(sent_at);
+  `)
+
+  // 사용자 활동 로그 테이블
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS user_activity_logs (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      category TEXT NOT NULL CHECK(category IN ('auth', 'project', 'agent', 'execution', 'admin', 'settings')),
+      action TEXT NOT NULL,
+      detail TEXT NOT NULL DEFAULT '',
+      target_type TEXT,
+      target_id TEXT,
+      ip_address TEXT,
+      user_agent TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `)
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_activity_logs_user ON user_activity_logs(user_id, created_at)`)
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_activity_logs_created ON user_activity_logs(created_at)`)
 
   // agents.cli_name CHECK constraint에 opencode 추가 — 테이블 재생성 (구문별 개별 실행)
   try {
@@ -1160,4 +1211,203 @@ export function setIssueStage(projectId: string, issueIid: number, stage: IssueS
 
 export function deleteIssueStage(projectId: string, issueIid: number) {
   getDb().prepare('DELETE FROM issue_stages WHERE project_id = ? AND issue_iid = ?').run(projectId, issueIid)
+}
+
+// ── Report Schedules (보고서 스케줄) ──
+
+function mapReportSchedule(r: any): ReportSchedule {
+  return {
+    id: r.id,
+    reportType: r.report_type,
+    enabled: !!r.enabled,
+    recipients: JSON.parse(r.recipients || '[]'),
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  }
+}
+
+export function getAllReportSchedules(): ReportSchedule[] {
+  return (getDb().prepare('SELECT * FROM report_schedules ORDER BY report_type ASC').all() as any[]).map(mapReportSchedule)
+}
+
+export function getReportSchedule(id: string): ReportSchedule | null {
+  const r = getDb().prepare('SELECT * FROM report_schedules WHERE id = ?').get(id) as any
+  return r ? mapReportSchedule(r) : null
+}
+
+export function getReportScheduleByType(reportType: string): ReportSchedule | null {
+  const r = getDb().prepare('SELECT * FROM report_schedules WHERE report_type = ?').get(reportType) as any
+  return r ? mapReportSchedule(r) : null
+}
+
+export function upsertReportSchedule(s: ReportSchedule) {
+  getDb().prepare(`
+    INSERT INTO report_schedules (id, report_type, enabled, recipients, send_day, send_hour, created_at, updated_at)
+    VALUES (?, ?, ?, ?, 1, 9, ?, datetime('now'))
+    ON CONFLICT(id) DO UPDATE SET
+      enabled = excluded.enabled,
+      recipients = excluded.recipients,
+      updated_at = datetime('now')
+  `).run(s.id, s.reportType, s.enabled ? 1 : 0, JSON.stringify(s.recipients), s.createdAt || new Date().toISOString())
+}
+
+export function deleteReportSchedule(id: string) {
+  getDb().prepare('DELETE FROM report_schedules WHERE id = ?').run(id)
+}
+
+// ── Report Send Logs (보고서 발송 이력) ──
+
+function mapReportSendLog(r: any): ReportSendLog {
+  return {
+    id: r.id,
+    scheduleId: r.schedule_id,
+    reportType: r.report_type,
+    periodStart: r.period_start,
+    periodEnd: r.period_end,
+    recipientEmail: r.recipient_email,
+    status: r.status,
+    errorMessage: r.error_message,
+    sentAt: r.sent_at,
+  }
+}
+
+export function createReportSendLog(log: ReportSendLog) {
+  getDb().prepare(
+    'INSERT INTO report_send_logs (id, schedule_id, report_type, period_start, period_end, recipient_email, status, error_message, sent_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(log.id, log.scheduleId, log.reportType, log.periodStart, log.periodEnd, log.recipientEmail, log.status, log.errorMessage || null, log.sentAt)
+}
+
+export function getReportSendLogs(limit: number = 50, offset: number = 0): ReportSendLog[] {
+  return (getDb().prepare('SELECT * FROM report_send_logs ORDER BY sent_at DESC LIMIT ? OFFSET ?').all(limit, offset) as any[]).map(mapReportSendLog)
+}
+
+export function getReportSendLogCount(): number {
+  return (getDb().prepare('SELECT COUNT(*) as cnt FROM report_send_logs').get() as { cnt: number }).cnt
+}
+
+/** 중복발송 체크: 동일 스케줄의 동일 기간에 성공 발송 이력이 있는지 확인 */
+export function hasAlreadySent(scheduleId: string, periodStart: string, periodEnd: string, recipientEmail: string): boolean {
+  const r = getDb().prepare(
+    "SELECT id FROM report_send_logs WHERE schedule_id = ? AND period_start = ? AND period_end = ? AND recipient_email = ? AND status = 'success' LIMIT 1"
+  ).get(scheduleId, periodStart, periodEnd, recipientEmail)
+  return !!r
+}
+
+/** 전체 보고서 통계 데이터 조회 (모든 프로젝트/에이전트) */
+export function getGlobalExecutionsInRange(start: string, end: string): ReportExecution[] {
+  const startISO = kstDateToUTCISO(start)
+  const endISO = kstDateToUTCISO(end)
+  const rows = getDb().prepare(`
+    SELECT te.id, te.project_id, p.name as project_name, p.color as project_color, p.avatar_url as project_avatar_url, p.provider as project_provider,
+           te.agent_id, a.name as agent_name, a.avatar as agent_avatar, a.cli_name,
+           te.issue_iid, te.issue_title, te.status,
+           te.started_at, te.ended_at, te.input_tokens, te.output_tokens, te.cost_usd, te.turns,
+           te.issue_created_at
+    FROM task_executions te
+    JOIN projects p ON p.id = te.project_id
+    JOIN agents a ON a.id = te.agent_id
+    WHERE te.started_at >= ? AND te.started_at < ?
+    ORDER BY te.started_at ASC
+  `).all(startISO, endISO) as any[]
+  return rows.map(r => ({
+    id: r.id, projectId: r.project_id, projectName: r.project_name,
+    projectColor: r.project_color, projectAvatarUrl: r.project_avatar_url || '', projectProvider: r.project_provider || 'gitlab',
+    agentId: r.agent_id, agentName: r.agent_name, agentAvatar: r.agent_avatar || 'av-01',
+    cliName: r.cli_name, issueIid: r.issue_iid, issueTitle: r.issue_title,
+    status: r.status, startedAt: r.started_at, endedAt: r.ended_at,
+    inputTokens: r.input_tokens ?? 0, outputTokens: r.output_tokens ?? 0,
+    costUsd: r.cost_usd ?? 0, turns: r.turns ?? 0,
+    issueCreatedAt: r.issue_created_at ?? null,
+  }))
+}
+
+// ── User Activity Logs (사용자 활동 로그) ──
+
+function mapActivityLog(r: any): UserActivityLog {
+  return {
+    id: r.id,
+    userId: r.user_id,
+    userName: r.user_name ?? undefined,
+    userEmail: r.user_email ?? undefined,
+    category: r.category as ActivityCategory,
+    action: r.action,
+    detail: r.detail || '',
+    targetType: r.target_type ?? undefined,
+    targetId: r.target_id ?? undefined,
+    ipAddress: r.ip_address ?? undefined,
+    userAgent: r.user_agent ?? undefined,
+    createdAt: r.created_at,
+  }
+}
+
+export function createActivityLog(log: {
+  userId: string
+  category: ActivityCategory
+  action: string
+  detail: string
+  targetType?: string
+  targetId?: string
+  ipAddress?: string
+  userAgent?: string
+}) {
+  const id = `al-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  getDb().prepare(
+    `INSERT INTO user_activity_logs (id, user_id, category, action, detail, target_type, target_id, ip_address, user_agent)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(id, log.userId, log.category, log.action, log.detail, log.targetType ?? null, log.targetId ?? null, log.ipAddress ?? null, log.userAgent ?? null)
+  return id
+}
+
+export function getActivityLogs(opts: {
+  limit?: number
+  offset?: number
+  userId?: string
+  category?: string
+  startDate?: string
+  endDate?: string
+}): { logs: UserActivityLog[]; total: number } {
+  const conditions: string[] = []
+  const params: any[] = []
+
+  if (opts.userId) {
+    conditions.push('al.user_id = ?')
+    params.push(opts.userId)
+  }
+  if (opts.category) {
+    conditions.push('al.category = ?')
+    params.push(opts.category)
+  }
+  if (opts.startDate) {
+    conditions.push('al.created_at >= ?')
+    params.push(opts.startDate)
+  }
+  if (opts.endDate) {
+    conditions.push('al.created_at < ?')
+    params.push(opts.endDate)
+  }
+
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
+
+  const countRow = getDb().prepare(`SELECT COUNT(*) as cnt FROM user_activity_logs al ${where}`).get(...params) as { cnt: number }
+
+  const limit = opts.limit || 50
+  const offset = opts.offset || 0
+  const rows = getDb().prepare(`
+    SELECT al.*, u.name as user_name, u.email as user_email
+    FROM user_activity_logs al
+    LEFT JOIN users u ON al.user_id = u.id
+    ${where}
+    ORDER BY al.created_at DESC
+    LIMIT ? OFFSET ?
+  `).all(...params, limit, offset) as any[]
+
+  return { logs: rows.map(mapActivityLog), total: countRow.cnt }
+}
+
+export function cleanOldActivityLogs(retentionDays: number = 90) {
+  const cutoff = new Date(Date.now() - retentionDays * 86400000).toISOString()
+  const result = getDb().prepare('DELETE FROM user_activity_logs WHERE created_at < ?').run(cutoff)
+  if (result.changes > 0) {
+    console.log(`[Cleanup] Purged ${result.changes} activity logs (retention: ${retentionDays}d)`)
+  }
 }

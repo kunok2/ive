@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getAgentsByUser, createAgent, getUserById, getSystemSetting } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
+import { logActivity } from '@/lib/activity'
 
 export async function GET() {
   const user = await getCurrentUser()
@@ -41,5 +42,6 @@ export async function POST(req: Request) {
 
   const agent = { ...body, userId: user.id, cliPath }
   createAgent(agent)
+  logActivity({ userId: user.id, category: 'agent', action: 'create_agent', detail: `개발자 생성: ${body.name} (${cliName})`, targetType: 'agent', targetId: agent.id, req })
   return NextResponse.json(agent, { status: 201 })
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { getSystemSettings, setSystemSettings } from '@/lib/db'
+import { logActivity } from '@/lib/activity'
 
 export async function GET() {
   const user = await getCurrentUser()
@@ -20,5 +21,6 @@ export async function POST(req: Request) {
   }
 
   setSystemSettings(settings)
+  logActivity({ userId: user.id, category: 'admin', action: 'update_settings', detail: `시스템 설정 변경 (${Object.keys(settings).length}개 항목)`, req })
   return NextResponse.json({ success: true })
 }

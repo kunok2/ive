@@ -1,6 +1,6 @@
 import {
   getDb, getAllProjects, getAgentsByUser,
-  createSnapshot, cleanOldSnapshots, cleanOldExecutions,
+  createSnapshot, cleanOldSnapshots, cleanOldExecutions, cleanOldActivityLogs,
   getSystemSetting
 } from './db'
 import { getKSTTodayStartISO } from './date-utils'
@@ -27,6 +27,7 @@ export function startStatsCollector() {
       const execDays = Number(getSystemSetting('retention.executions_days')) || 365
       cleanOldSnapshots(snapshotDays)
       cleanOldExecutions(execDays)
+      cleanOldActivityLogs(90)
     } catch (e) {
       console.warn('[StatsCollector] Cleanup error:', (e as Error).message)
     }

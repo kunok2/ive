@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getCurrentUser, verifyPassword, setAuthCookie } from '@/lib/auth'
 import { getUserByEmail, getDb } from '@/lib/db'
 import { getVerificationCode, clearVerificationCode } from '@/app/api/auth/send-code/route'
+import { logActivity } from '@/lib/activity'
 
 export async function POST(req: Request) {
   const { newEmail, currentPassword, code } = await req.json()
@@ -46,6 +47,7 @@ export async function POST(req: Request) {
   // 이메일 업데이트
   getDb().prepare('UPDATE users SET email = ? WHERE id = ?').run(newEmail, user.id)
   clearVerificationCode(newEmail)
+  logActivity({ userId: user.id, category: 'settings', action: 'change_email', detail: `이메일 변경: ${loggedInUser.email} → ${newEmail}`, req })
 
   // JWT 토큰 재발급 (세션 유지)
   await setAuthCookie(user.id)

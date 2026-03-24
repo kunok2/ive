@@ -175,3 +175,45 @@ export interface TokenPricing {
   outputPrice: number  // $/1M tokens
   updatedAt: string
 }
+
+export type ReportType = 'weekly' | 'monthly' | 'yearly'
+
+export interface ReportSchedule {
+  id: string
+  reportType: ReportType
+  enabled: boolean
+  recipients: string[]       // 수신자 이메일 목록
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ReportSendLog {
+  id: string
+  scheduleId: string
+  reportType: ReportType
+  periodStart: string        // 보고서 기간 시작 (YYYY-MM-DD)
+  periodEnd: string          // 보고서 기간 종료 (YYYY-MM-DD)
+  recipientEmail: string
+  status: 'success' | 'failed'
+  errorMessage?: string | null
+  sentAt: string
+}
+
+// 사용자 활동 로그 카테고리
+export type ActivityCategory = 'auth' | 'project' | 'agent' | 'execution' | 'admin' | 'settings'
+
+// 사용자 활동 로그
+export interface UserActivityLog {
+  id: string
+  userId: string
+  userName?: string
+  userEmail?: string
+  category: ActivityCategory
+  action: string       // 예: 'login', 'create_project', 'delete_agent' 등
+  detail: string       // 사람이 읽을 수 있는 상세 설명
+  targetType?: string  // 대상 엔티티 타입 (project, agent, user 등)
+  targetId?: string    // 대상 엔티티 ID
+  ipAddress?: string   // 접속 IP
+  userAgent?: string   // 브라우저 UA
+  createdAt: string
+}

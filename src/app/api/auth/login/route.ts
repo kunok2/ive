@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getUserByEmail } from '@/lib/db'
 import { verifyPassword, setAuthCookie } from '@/lib/auth'
+import { logActivity } from '@/lib/activity'
 
 export async function POST(req: Request) {
   const { email, password } = await req.json()
@@ -20,6 +21,7 @@ export async function POST(req: Request) {
   }
 
   await setAuthCookie(user.id)
+  logActivity({ userId: user.id, category: 'auth', action: 'login', detail: `로그인 (${email})`, req })
 
   return NextResponse.json({ id: user.id, email: user.email, name: user.name })
 }

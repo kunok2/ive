@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
-import { getAllUsers, deleteUser, getDb } from '@/lib/db'
+import { getAllUsers, deleteUser, getDb, getUserById } from '@/lib/db'
+import { logActivity } from '@/lib/activity'
 
 export async function GET() {
   const user = await getCurrentUser()
@@ -18,7 +19,9 @@ export async function DELETE(req: Request) {
   if (!userId) return NextResponse.json({ error: '사용자 ID가 필요합니다' }, { status: 400 })
   if (userId === user.id) return NextResponse.json({ error: '본인은 삭제할 수 없습니다' }, { status: 400 })
 
+  const targetUser = getUserById(userId)
   deleteUser(userId)
+  logActivity({ userId: user.id, category: 'admin', action: 'delete_user', detail: `사용자 삭제: ${targetUser?.name || userId}`, targetType: 'user', targetId: userId, req })
   return NextResponse.json({ success: true })
 }
 
@@ -44,5 +47,12 @@ export async function PATCH(req: Request) {
     const cliStr = allowedClis.filter(Boolean).join(',') || 'opencode'
     getDb().prepare('UPDATE users SET allowed_clis = ? WHERE id = ?').run(cliStr, userId)
   }
+  const changes: string[] = []
+  if (typeof isAdmin === 'boolean') changes.push(`관리자=${isAdmin ? '지정' : '해제'}`)
+  if (typeof maxAgents === 'number') changes.push(`최대개발자=${maxAgents}`)
+  if (typeof maxTurns === 'number') changes.push(`최대턴=${maxTurns}`)
+  if (Array.isArray(allowedClis)) changes.push(`CLI=${allowedClis.join(',')}`)
+  const targetUser = getUserById(userId)
+  logActivity({ userId: user.id, category: 'admin', action: 'update_user', detail: `사용자 설정 변경 (${targetUser?.name || userId}): ${changes.join(', ')}`, targetType: 'user', targetId: userId, req })
   return NextResponse.json({ success: true })
 }
