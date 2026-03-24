@@ -119,7 +119,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
     try {
       const [statsRes, snapRes] = await Promise.all([
         fetch(`/api/agents/${agent.id}/stats`),
-        fetch(`/api/agents/${agent.id}/snapshots`),
+        fetch(`/api/agents/${agent.id}/snapshots?mode=daily_avg`),
       ])
       if (statsRes.ok) setStats(await statsRes.json())
       if (snapRes.ok) setSnapshots(await snapRes.json())
