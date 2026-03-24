@@ -79,10 +79,10 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
   }
 
   // 개발자별 집계 (에이전트 소유자 기준)
-  const byDeveloper = new Map<string, { name: string; cli: string; total: number; success: number; failed: number; cost: number }>()
+  const byDeveloper = new Map<string, { name: string; agent: string; total: number; success: number; failed: number; cost: number }>()
   for (const e of executions) {
     const devKey = e.developerName || e.agentName
-    const d = byDeveloper.get(devKey) || { name: devKey, cli: e.cliName, total: 0, success: 0, failed: 0, cost: 0 }
+    const d = byDeveloper.get(devKey) || { name: devKey, agent: e.agentName, total: 0, success: 0, failed: 0, cost: 0 }
     d.total++
     if (e.status === 'success') d.success++
     if (e.status === 'failed') d.failed++
@@ -102,14 +102,14 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
     .sort((a, b) => b.total - a.total)
     .map(p => `
       <tr>
-        <td style="padding:8px 12px;border-bottom:1px solid #2a2f3e;">
+        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">
           <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color};margin-right:6px;vertical-align:middle;"></span>
-          <strong style="color:#e0e0e0;">${esc(p.name || '(이름없음)')}</strong>
+          <strong style="color:#111827;">${esc(p.name || '(이름없음)')}</strong>
         </td>
-        <td style="padding:8px 12px;border-bottom:1px solid #2a2f3e;text-align:center;">${p.total}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #2a2f3e;text-align:center;color:#4ade80;">${p.success}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #2a2f3e;text-align:center;color:#f87171;">${p.failed}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #2a2f3e;text-align:right;">$${p.cost.toFixed(2)}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;color:#111827;">${p.total}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;color:#16a34a;font-weight:600;">${p.success}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;color:#dc2626;font-weight:600;">${p.failed}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#111827;">$${p.cost.toFixed(2)}</td>
       </tr>
     `).join('')
 
@@ -117,11 +117,14 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
     .sort((a, b) => b.total - a.total)
     .map(d => `
       <tr>
-        <td style="padding:8px 12px;border-bottom:1px solid #2a2f3e;">${esc(d.name)} <span style="color:#666;font-size:11px;">(${d.cli})</span></td>
-        <td style="padding:8px 12px;border-bottom:1px solid #2a2f3e;text-align:center;">${d.total}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #2a2f3e;text-align:center;color:#4ade80;">${d.success}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #2a2f3e;text-align:center;color:#f87171;">${d.failed}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #2a2f3e;text-align:right;">$${d.cost.toFixed(2)}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#111827;">
+          <strong>${esc(d.name)}</strong>
+          <span style="color:#6b7280;font-size:11px;"> (${esc(d.agent)})</span>
+        </td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;color:#111827;">${d.total}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;color:#16a34a;font-weight:600;">${d.success}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;color:#dc2626;font-weight:600;">${d.failed}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#111827;">$${d.cost.toFixed(2)}</td>
       </tr>
     `).join('')
 
@@ -129,53 +132,53 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
 <!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"></head>
-<body style="margin:0;padding:0;background:#0d1117;color:#e0e0e0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<body style="margin:0;padding:0;background:#ffffff;color:#111827;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
   <div style="max-width:600px;margin:0 auto;padding:24px;">
     <!-- 헤더 -->
-    <div style="text-align:center;margin-bottom:24px;">
-      <h1 style="color:#4ade80;font-size:22px;margin:0 0 4px;">Spring IVE</h1>
-      <h2 style="color:#e0e0e0;font-size:16px;margin:0 0 8px;">${label} 보고서</h2>
-      ${projectNames.length > 0 ? `<p style="color:#c9d1d9;font-size:13px;margin:0 0 4px;font-weight:600;">${projectNames.map(n => esc(n)).join(', ')}</p>` : ''}
-      <p style="color:#9ca3af;font-size:13px;margin:0;">${periodStart} ~ ${periodEndDisplay}</p>
+    <div style="text-align:center;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #16a34a;">
+      <h1 style="color:#16a34a;font-size:22px;margin:0 0 4px;">Spring IVE</h1>
+      <h2 style="color:#111827;font-size:16px;margin:0 0 8px;">${label} 보고서</h2>
+      ${projectNames.length > 0 ? `<p style="color:#374151;font-size:13px;margin:0 0 4px;font-weight:600;">${projectNames.map(n => esc(n)).join(', ')}</p>` : ''}
+      <p style="color:#6b7280;font-size:13px;margin:0;">${periodStart} ~ ${periodEndDisplay}</p>
     </div>
 
     <!-- 요약 카드 -->
-    <div style="background:#161b22;border:1px solid #2a2f3e;border-radius:12px;padding:20px;margin-bottom:20px;">
+    <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:20px;margin-bottom:20px;">
       <table width="100%" cellpadding="0" cellspacing="0">
         <tr>
           <td style="text-align:center;padding:8px;">
-            <div style="font-size:28px;font-weight:800;color:#e0e0e0;">${total}</div>
-            <div style="font-size:11px;color:#9ca3af;margin-top:2px;">총 작업</div>
+            <div style="font-size:28px;font-weight:800;color:#111827;">${total}</div>
+            <div style="font-size:11px;color:#6b7280;margin-top:2px;">총 작업</div>
           </td>
           <td style="text-align:center;padding:8px;">
-            <div style="font-size:28px;font-weight:800;color:#4ade80;">${success}</div>
-            <div style="font-size:11px;color:#9ca3af;margin-top:2px;">성공</div>
+            <div style="font-size:28px;font-weight:800;color:#16a34a;">${success}</div>
+            <div style="font-size:11px;color:#6b7280;margin-top:2px;">성공</div>
           </td>
           <td style="text-align:center;padding:8px;">
-            <div style="font-size:28px;font-weight:800;color:#f87171;">${failed}</div>
-            <div style="font-size:11px;color:#9ca3af;margin-top:2px;">실패</div>
+            <div style="font-size:28px;font-weight:800;color:#dc2626;">${failed}</div>
+            <div style="font-size:11px;color:#6b7280;margin-top:2px;">실패</div>
           </td>
           ${running > 0 ? `
           <td style="text-align:center;padding:8px;">
-            <div style="font-size:28px;font-weight:800;color:#22d3ee;">${running}</div>
-            <div style="font-size:11px;color:#9ca3af;margin-top:2px;">진행중</div>
+            <div style="font-size:28px;font-weight:800;color:#0891b2;">${running}</div>
+            <div style="font-size:11px;color:#6b7280;margin-top:2px;">진행중</div>
           </td>` : ''}
         </tr>
       </table>
-      <div style="margin-top:16px;padding-top:16px;border-top:1px solid #2a2f3e;">
+      <div style="margin-top:16px;padding-top:16px;border-top:1px solid #e5e7eb;">
         <table width="100%" cellpadding="0" cellspacing="0">
           <tr>
             <td style="text-align:center;padding:4px;">
-              <div style="font-size:18px;font-weight:700;color:#22d3ee;">${successRate}%</div>
-              <div style="font-size:11px;color:#9ca3af;">성공률</div>
+              <div style="font-size:18px;font-weight:700;color:#0891b2;">${successRate}%</div>
+              <div style="font-size:11px;color:#6b7280;">성공률</div>
             </td>
             <td style="text-align:center;padding:4px;">
-              <div style="font-size:18px;font-weight:700;color:#fbbf24;">${formatTokens(totalTokens)}</div>
-              <div style="font-size:11px;color:#9ca3af;">총 토큰</div>
+              <div style="font-size:18px;font-weight:700;color:#d97706;">${formatTokens(totalTokens)}</div>
+              <div style="font-size:11px;color:#6b7280;">총 토큰</div>
             </td>
             <td style="text-align:center;padding:4px;">
-              <div style="font-size:18px;font-weight:700;color:#fb923c;">$${totalCost.toFixed(2)}</div>
-              <div style="font-size:11px;color:#9ca3af;">총 비용</div>
+              <div style="font-size:18px;font-weight:700;color:#ea580c;">$${totalCost.toFixed(2)}</div>
+              <div style="font-size:11px;color:#6b7280;">총 비용</div>
             </td>
           </tr>
         </table>
@@ -184,16 +187,16 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
 
     ${byProject.size > 0 ? `
     <!-- 프로젝트별 -->
-    <div style="background:#161b22;border:1px solid #2a2f3e;border-radius:12px;padding:16px;margin-bottom:20px;">
-      <h3 style="color:#e0e0e0;font-size:14px;margin:0 0 12px;font-weight:700;">프로젝트별 현황</h3>
-      <table width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;">
+    <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:20px;">
+      <h3 style="color:#111827;font-size:14px;margin:0 0 12px;font-weight:700;">프로젝트별 현황</h3>
+      <table width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;color:#111827;">
         <thead>
-          <tr style="color:#9ca3af;font-size:11px;">
-            <th style="padding:6px 12px;text-align:left;border-bottom:1px solid #2a2f3e;">프로젝트</th>
-            <th style="padding:6px 12px;text-align:center;border-bottom:1px solid #2a2f3e;">전체</th>
-            <th style="padding:6px 12px;text-align:center;border-bottom:1px solid #2a2f3e;">성공</th>
-            <th style="padding:6px 12px;text-align:center;border-bottom:1px solid #2a2f3e;">실패</th>
-            <th style="padding:6px 12px;text-align:right;border-bottom:1px solid #2a2f3e;">비용</th>
+          <tr style="color:#6b7280;font-size:11px;">
+            <th style="padding:6px 12px;text-align:left;border-bottom:1px solid #e5e7eb;">프로젝트</th>
+            <th style="padding:6px 12px;text-align:center;border-bottom:1px solid #e5e7eb;">전체</th>
+            <th style="padding:6px 12px;text-align:center;border-bottom:1px solid #e5e7eb;">성공</th>
+            <th style="padding:6px 12px;text-align:center;border-bottom:1px solid #e5e7eb;">실패</th>
+            <th style="padding:6px 12px;text-align:right;border-bottom:1px solid #e5e7eb;">비용</th>
           </tr>
         </thead>
         <tbody>${projectRows}</tbody>
@@ -203,16 +206,16 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
 
     ${byDeveloper.size > 0 ? `
     <!-- 개발자별 -->
-    <div style="background:#161b22;border:1px solid #2a2f3e;border-radius:12px;padding:16px;margin-bottom:20px;">
-      <h3 style="color:#e0e0e0;font-size:14px;margin:0 0 12px;font-weight:700;">개발자별 현황</h3>
-      <table width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;">
+    <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:20px;">
+      <h3 style="color:#111827;font-size:14px;margin:0 0 12px;font-weight:700;">개발자별 현황</h3>
+      <table width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;color:#111827;">
         <thead>
-          <tr style="color:#9ca3af;font-size:11px;">
-            <th style="padding:6px 12px;text-align:left;border-bottom:1px solid #2a2f3e;">개발자</th>
-            <th style="padding:6px 12px;text-align:center;border-bottom:1px solid #2a2f3e;">전체</th>
-            <th style="padding:6px 12px;text-align:center;border-bottom:1px solid #2a2f3e;">성공</th>
-            <th style="padding:6px 12px;text-align:center;border-bottom:1px solid #2a2f3e;">실패</th>
-            <th style="padding:6px 12px;text-align:right;border-bottom:1px solid #2a2f3e;">비용</th>
+          <tr style="color:#6b7280;font-size:11px;">
+            <th style="padding:6px 12px;text-align:left;border-bottom:1px solid #e5e7eb;">개발자</th>
+            <th style="padding:6px 12px;text-align:center;border-bottom:1px solid #e5e7eb;">전체</th>
+            <th style="padding:6px 12px;text-align:center;border-bottom:1px solid #e5e7eb;">성공</th>
+            <th style="padding:6px 12px;text-align:center;border-bottom:1px solid #e5e7eb;">실패</th>
+            <th style="padding:6px 12px;text-align:right;border-bottom:1px solid #e5e7eb;">비용</th>
           </tr>
         </thead>
         <tbody>${developerRows}</tbody>
@@ -221,22 +224,22 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
     ` : ''}
 
     ${total === 0 ? `
-    <div style="background:#161b22;border:1px solid #2a2f3e;border-radius:12px;padding:32px;text-align:center;margin-bottom:20px;">
-      <p style="color:#9ca3af;font-size:14px;margin:0;">해당 기간에 실행된 작업이 없습니다.</p>
+    <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:32px;text-align:center;margin-bottom:20px;">
+      <p style="color:#6b7280;font-size:14px;margin:0;">해당 기간에 실행된 작업이 없습니다.</p>
     </div>
     ` : ''}
 
     ${total > 0 ? `
     <!-- 총평 -->
-    <div style="background:#161b22;border:1px solid #2a2f3e;border-radius:12px;padding:20px;margin-bottom:20px;">
-      <h3 style="color:#e0e0e0;font-size:14px;margin:0 0 12px;font-weight:700;">📋 총평</h3>
-      <p style="color:#c9d1d9;font-size:13px;line-height:1.6;margin:0;">${summary}</p>
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:20px;margin-bottom:20px;">
+      <h3 style="color:#14532d;font-size:14px;margin:0 0 12px;font-weight:700;">📋 총평</h3>
+      <p style="color:#166534;font-size:13px;line-height:1.8;margin:0;">${summary}</p>
     </div>
     ` : ''}
 
     <!-- 푸터 -->
-    <div style="text-align:center;padding-top:16px;border-top:1px solid #2a2f3e;">
-      <p style="color:#666;font-size:11px;margin:0;">이 메일은 Spring IVE에서 자동 발송되었습니다.</p>
+    <div style="text-align:center;padding-top:16px;border-top:1px solid #e5e7eb;">
+      <p style="color:#9ca3af;font-size:11px;margin:0;">이 메일은 Spring IVE에서 자동 발송되었습니다.</p>
     </div>
   </div>
 </body>
@@ -253,7 +256,7 @@ function generateSummary(
   successRate: number,
   totalCost: number,
   byProject: Map<string, { name: string; total: number; success: number; failed: number; cost: number }>,
-  byDeveloper: Map<string, { name: string; total: number; success: number; failed: number; cost: number }>
+  byDeveloper: Map<string, { name: string; agent: string; total: number; success: number; failed: number; cost: number }>
 ): string {
   const parts: string[] = []
 
