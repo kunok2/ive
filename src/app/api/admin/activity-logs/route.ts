@@ -12,7 +12,13 @@ export async function GET(req: NextRequest) {
   const userId = sp.get('userId') || undefined
   const category = sp.get('category') || undefined
   const startDate = sp.get('startDate') || undefined
-  const endDate = sp.get('endDate') || undefined
+  let endDate = sp.get('endDate') || undefined
+  // endDate가 날짜만(YYYY-MM-DD) 전달된 경우 해당 날짜를 포함하도록 다음 날로 조정
+  if (endDate && /^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+    const d = new Date(endDate + 'T00:00:00Z')
+    d.setUTCDate(d.getUTCDate() + 1)
+    endDate = d.toISOString().slice(0, 10)
+  }
 
   const result = getActivityLogs({ limit, offset, userId, category, startDate, endDate })
   return NextResponse.json(result)

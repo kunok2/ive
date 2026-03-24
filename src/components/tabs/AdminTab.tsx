@@ -1254,6 +1254,20 @@ const CATEGORY_META: Record<string, { label: string; icon: string; color: string
   settings: { label: '설정', icon: 'fa-solid fa-gear', color: 'text-purple-400' },
 }
 
+function getDateStr(daysAgo: number) {
+  const d = new Date()
+  d.setDate(d.getDate() - daysAgo)
+  return d.toISOString().slice(0, 10)
+}
+
+const DATE_PRESETS: { label: string; days: number | null }[] = [
+  { label: '오늘', days: 0 },
+  { label: '7일', days: 7 },
+  { label: '30일', days: 30 },
+  { label: '90일', days: 90 },
+  { label: '전체', days: null },
+]
+
 function ActivityPanel() {
   const [logs, setLogs] = useState<UserActivityLog[]>([])
   const [total, setTotal] = useState(0)
@@ -1261,6 +1275,9 @@ function ActivityPanel() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [filterCategory, setFilterCategory] = useState<string>('')
   const [filterUserId, setFilterUserId] = useState<string>('')
+  const [filterStartDate, setFilterStartDate] = useState<string>(getDateStr(30))
+  const [filterEndDate, setFilterEndDate] = useState<string>(getDateStr(0))
+  const [activePreset, setActivePreset] = useState<number | null>(30)
   const [users, setUsers] = useState<User[]>([])
   const offsetRef = useRef(0)
   const PAGE_SIZE = 30
@@ -1278,6 +1295,8 @@ function ActivityPanel() {
     sp.set('offset', String(offsetRef.current))
     if (filterCategory) sp.set('category', filterCategory)
     if (filterUserId) sp.set('userId', filterUserId)
+    if (filterStartDate) sp.set('startDate', filterStartDate)
+    if (filterEndDate) sp.set('endDate', filterEndDate)
 
     try {
       const res = await fetch(`/api/admin/activity-logs?${sp}`)
@@ -1294,7 +1313,7 @@ function ActivityPanel() {
       setLoading(false)
       setLoadingMore(false)
     }
-  }, [filterCategory, filterUserId])
+  }, [filterCategory, filterUserId, filterStartDate, filterEndDate])
 
   useEffect(() => { fetchLogs(true) }, [fetchLogs])
 
@@ -1315,7 +1334,7 @@ function ActivityPanel() {
   return (
     <main className="px-4 py-4 max-w-lg mx-auto">
       {/* 필터 */}
-      <div className="flex gap-2 mb-3">
+      <div className="flex gap-2 mb-2">
         <select
           value={filterCategory}
           onChange={e => setFilterCategory(e.target.value)}
@@ -1338,7 +1357,50 @@ function ActivityPanel() {
         </select>
       </div>
 
-      <div className="text-xs text-ive-text-dim mb-3">총 {total}건</div>
+      {/* 기간 프리셋 */}
+      <div className="flex gap-1 mb-2">
+        {DATE_PRESETS.map(p => (
+          <button
+            key={p.label}
+            onClick={() => {
+              setActivePreset(p.days)
+              if (p.days === null) {
+                setFilterStartDate('')
+                setFilterEndDate('')
+              } else {
+                setFilterStartDate(getDateStr(p.days))
+                setFilterEndDate(getDateStr(0))
+              }
+            }}
+            className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
+              activePreset === p.days
+                ? 'bg-ive-green/20 text-ive-green border border-ive-green/40'
+                : 'bg-ive-bg-card border border-ive-border-subtle text-ive-text-dim active:scale-[0.96]'
+            }`}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+
+      {/* 일자 범위 직접 입력 */}
+      <div className="flex items-center gap-1.5 mb-3">
+        <input
+          type="date"
+          value={filterStartDate}
+          onChange={e => { setFilterStartDate(e.target.value); setActivePreset(-1) }}
+          className="flex-1 bg-ive-bg-input border border-ive-border rounded-lg px-2 py-1.5 text-[11px] text-ive-text focus:outline-none focus:border-ive-green/50"
+        />
+        <span className="text-[10px] text-ive-text-dim">~</span>
+        <input
+          type="date"
+          value={filterEndDate}
+          onChange={e => { setFilterEndDate(e.target.value); setActivePreset(-1) }}
+          className="flex-1 bg-ive-bg-input border border-ive-border rounded-lg px-2 py-1.5 text-[11px] text-ive-text focus:outline-none focus:border-ive-green/50"
+        />
+      </div>
+
+      <div className="text-xs text-ive-text-dim mb-3">총 {total}건{filterStartDate && filterEndDate ? ` (${filterStartDate} ~ ${filterEndDate})` : filterStartDate ? ` (${filterStartDate} ~)` : filterEndDate ? ` (~ ${filterEndDate})` : ''}</div>
 
       {/* 로그 목록 */}
       <div className="space-y-1.5">
