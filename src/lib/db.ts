@@ -1089,6 +1089,7 @@ export interface ReportExecution {
   agentName: string
   agentAvatar: string
   cliName: string
+  developerName: string
   issueIid: number
   issueTitle: string | null
   status: string
@@ -1108,12 +1109,14 @@ export function getExecutionsInRange(userId: string, start: string, end: string)
   const rows = getDb().prepare(`
     SELECT te.id, te.project_id, p.name as project_name, p.color as project_color, p.avatar_url as project_avatar_url, p.provider as project_provider,
            te.agent_id, a.name as agent_name, a.avatar as agent_avatar, a.cli_name,
+           u.name as developer_name,
            te.issue_iid, te.issue_title, te.status,
            te.started_at, te.ended_at, te.input_tokens, te.output_tokens, te.cost_usd, te.turns,
            te.issue_created_at
     FROM task_executions te
     JOIN projects p ON p.id = te.project_id
     JOIN agents a ON a.id = te.agent_id
+    LEFT JOIN users u ON u.id = a.user_id
     WHERE (p.user_id = ? OR EXISTS (SELECT 1 FROM project_shares ps WHERE ps.project_id = p.id AND ps.user_id = ?))
       AND te.started_at >= ? AND te.started_at < ?
     ORDER BY te.started_at ASC
@@ -1122,7 +1125,8 @@ export function getExecutionsInRange(userId: string, start: string, end: string)
     id: r.id, projectId: r.project_id, projectName: r.project_name,
     projectColor: r.project_color, projectAvatarUrl: r.project_avatar_url || '', projectProvider: r.project_provider || 'gitlab',
     agentId: r.agent_id, agentName: r.agent_name, agentAvatar: r.agent_avatar || 'av-01',
-    cliName: r.cli_name, issueIid: r.issue_iid, issueTitle: r.issue_title,
+    cliName: r.cli_name, developerName: r.developer_name || r.agent_name,
+    issueIid: r.issue_iid, issueTitle: r.issue_title,
     status: r.status, startedAt: r.started_at, endedAt: r.ended_at,
     inputTokens: r.input_tokens ?? 0, outputTokens: r.output_tokens ?? 0,
     costUsd: r.cost_usd ?? 0, turns: r.turns ?? 0,
@@ -1300,12 +1304,14 @@ export function getGlobalExecutionsInRange(start: string, end: string): ReportEx
   const rows = getDb().prepare(`
     SELECT te.id, te.project_id, p.name as project_name, p.color as project_color, p.avatar_url as project_avatar_url, p.provider as project_provider,
            te.agent_id, a.name as agent_name, a.avatar as agent_avatar, a.cli_name,
+           u.name as developer_name,
            te.issue_iid, te.issue_title, te.status,
            te.started_at, te.ended_at, te.input_tokens, te.output_tokens, te.cost_usd, te.turns,
            te.issue_created_at
     FROM task_executions te
     JOIN projects p ON p.id = te.project_id
     JOIN agents a ON a.id = te.agent_id
+    LEFT JOIN users u ON u.id = a.user_id
     WHERE te.started_at >= ? AND te.started_at < ?
     ORDER BY te.started_at ASC
   `).all(startISO, endISO) as any[]
@@ -1313,7 +1319,8 @@ export function getGlobalExecutionsInRange(start: string, end: string): ReportEx
     id: r.id, projectId: r.project_id, projectName: r.project_name,
     projectColor: r.project_color, projectAvatarUrl: r.project_avatar_url || '', projectProvider: r.project_provider || 'gitlab',
     agentId: r.agent_id, agentName: r.agent_name, agentAvatar: r.agent_avatar || 'av-01',
-    cliName: r.cli_name, issueIid: r.issue_iid, issueTitle: r.issue_title,
+    cliName: r.cli_name, developerName: r.developer_name || r.agent_name,
+    issueIid: r.issue_iid, issueTitle: r.issue_title,
     status: r.status, startedAt: r.started_at, endedAt: r.ended_at,
     inputTokens: r.input_tokens ?? 0, outputTokens: r.output_tokens ?? 0,
     costUsd: r.cost_usd ?? 0, turns: r.turns ?? 0,

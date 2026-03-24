@@ -78,25 +78,33 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
     byProject.set(e.projectId, p)
   }
 
-  // 에이전트별 집계
-  const byAgent = new Map<string, { name: string; cli: string; total: number; success: number; failed: number; cost: number }>()
+  // 개발자별 집계 (에이전트 소유자 기준)
+  const byDeveloper = new Map<string, { name: string; cli: string; total: number; success: number; failed: number; cost: number }>()
   for (const e of executions) {
-    const a = byAgent.get(e.agentId) || { name: e.agentName, cli: e.cliName, total: 0, success: 0, failed: 0, cost: 0 }
-    a.total++
-    if (e.status === 'success') a.success++
-    if (e.status === 'failed') a.failed++
-    a.cost += e.costUsd
-    byAgent.set(e.agentId, a)
+    const devKey = e.developerName || e.agentName
+    const d = byDeveloper.get(devKey) || { name: devKey, cli: e.cliName, total: 0, success: 0, failed: 0, cost: 0 }
+    d.total++
+    if (e.status === 'success') d.success++
+    if (e.status === 'failed') d.failed++
+    d.cost += e.costUsd
+    byDeveloper.set(devKey, d)
   }
 
   const successRate = total > 0 ? ((success / total) * 100).toFixed(1) : '0.0'
+
+  // 총평 생성
+  const summary = generateSummary(label, total, success, failed, running, parseFloat(successRate), totalCost, byProject, byDeveloper)
+
+  // 프로젝트 이름 목록 (헤더 표시용)
+  const projectNames = Array.from(byProject.values()).map(p => p.name).filter(Boolean)
 
   const projectRows = Array.from(byProject.values())
     .sort((a, b) => b.total - a.total)
     .map(p => `
       <tr>
         <td style="padding:8px 12px;border-bottom:1px solid #2a2f3e;">
-          <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color};margin-right:6px;"></span>${esc(p.name)}
+          <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color};margin-right:6px;vertical-align:middle;"></span>
+          <strong style="color:#e0e0e0;">${esc(p.name || '(이름없음)')}</strong>
         </td>
         <td style="padding:8px 12px;border-bottom:1px solid #2a2f3e;text-align:center;">${p.total}</td>
         <td style="padding:8px 12px;border-bottom:1px solid #2a2f3e;text-align:center;color:#4ade80;">${p.success}</td>
@@ -105,15 +113,15 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
       </tr>
     `).join('')
 
-  const agentRows = Array.from(byAgent.values())
+  const developerRows = Array.from(byDeveloper.values())
     .sort((a, b) => b.total - a.total)
-    .map(a => `
+    .map(d => `
       <tr>
-        <td style="padding:8px 12px;border-bottom:1px solid #2a2f3e;">${esc(a.name)} <span style="color:#666;font-size:11px;">(${a.cli})</span></td>
-        <td style="padding:8px 12px;border-bottom:1px solid #2a2f3e;text-align:center;">${a.total}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #2a2f3e;text-align:center;color:#4ade80;">${a.success}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #2a2f3e;text-align:center;color:#f87171;">${a.failed}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #2a2f3e;text-align:right;">$${a.cost.toFixed(2)}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #2a2f3e;">${esc(d.name)} <span style="color:#666;font-size:11px;">(${d.cli})</span></td>
+        <td style="padding:8px 12px;border-bottom:1px solid #2a2f3e;text-align:center;">${d.total}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #2a2f3e;text-align:center;color:#4ade80;">${d.success}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #2a2f3e;text-align:center;color:#f87171;">${d.failed}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #2a2f3e;text-align:right;">$${d.cost.toFixed(2)}</td>
       </tr>
     `).join('')
 
@@ -127,6 +135,7 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
     <div style="text-align:center;margin-bottom:24px;">
       <h1 style="color:#4ade80;font-size:22px;margin:0 0 4px;">Spring IVE</h1>
       <h2 style="color:#e0e0e0;font-size:16px;margin:0 0 8px;">${label} 보고서</h2>
+      ${projectNames.length > 0 ? `<p style="color:#c9d1d9;font-size:13px;margin:0 0 4px;font-weight:600;">${projectNames.map(n => esc(n)).join(', ')}</p>` : ''}
       <p style="color:#9ca3af;font-size:13px;margin:0;">${periodStart} ~ ${periodEndDisplay}</p>
     </div>
 
@@ -192,21 +201,21 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
     </div>
     ` : ''}
 
-    ${byAgent.size > 0 ? `
-    <!-- 에이전트별 -->
+    ${byDeveloper.size > 0 ? `
+    <!-- 개발자별 -->
     <div style="background:#161b22;border:1px solid #2a2f3e;border-radius:12px;padding:16px;margin-bottom:20px;">
-      <h3 style="color:#e0e0e0;font-size:14px;margin:0 0 12px;font-weight:700;">에이전트별 현황</h3>
+      <h3 style="color:#e0e0e0;font-size:14px;margin:0 0 12px;font-weight:700;">개발자별 현황</h3>
       <table width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;">
         <thead>
           <tr style="color:#9ca3af;font-size:11px;">
-            <th style="padding:6px 12px;text-align:left;border-bottom:1px solid #2a2f3e;">에이전트</th>
+            <th style="padding:6px 12px;text-align:left;border-bottom:1px solid #2a2f3e;">개발자</th>
             <th style="padding:6px 12px;text-align:center;border-bottom:1px solid #2a2f3e;">전체</th>
             <th style="padding:6px 12px;text-align:center;border-bottom:1px solid #2a2f3e;">성공</th>
             <th style="padding:6px 12px;text-align:center;border-bottom:1px solid #2a2f3e;">실패</th>
             <th style="padding:6px 12px;text-align:right;border-bottom:1px solid #2a2f3e;">비용</th>
           </tr>
         </thead>
-        <tbody>${agentRows}</tbody>
+        <tbody>${developerRows}</tbody>
       </table>
     </div>
     ` : ''}
@@ -217,6 +226,14 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
     </div>
     ` : ''}
 
+    ${total > 0 ? `
+    <!-- 총평 -->
+    <div style="background:#161b22;border:1px solid #2a2f3e;border-radius:12px;padding:20px;margin-bottom:20px;">
+      <h3 style="color:#e0e0e0;font-size:14px;margin:0 0 12px;font-weight:700;">📋 총평</h3>
+      <p style="color:#c9d1d9;font-size:13px;line-height:1.6;margin:0;">${summary}</p>
+    </div>
+    ` : ''}
+
     <!-- 푸터 -->
     <div style="text-align:center;padding-top:16px;border-top:1px solid #2a2f3e;">
       <p style="color:#666;font-size:11px;margin:0;">이 메일은 Spring IVE에서 자동 발송되었습니다.</p>
@@ -224,6 +241,65 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
   </div>
 </body>
 </html>`
+}
+
+/** 총평 텍스트 생성 */
+function generateSummary(
+  label: string,
+  total: number,
+  success: number,
+  failed: number,
+  running: number,
+  successRate: number,
+  totalCost: number,
+  byProject: Map<string, { name: string; total: number; success: number; failed: number; cost: number }>,
+  byDeveloper: Map<string, { name: string; total: number; success: number; failed: number; cost: number }>
+): string {
+  const parts: string[] = []
+
+  // 기본 요약
+  parts.push(`이번 ${label} 기간 동안 총 <strong>${total}건</strong>의 작업이 수행되었습니다.`)
+
+  // 성공률 평가
+  if (successRate >= 90) {
+    parts.push(`성공률 <strong>${successRate}%</strong>로 매우 안정적인 운영 상태입니다.`)
+  } else if (successRate >= 70) {
+    parts.push(`성공률 <strong>${successRate}%</strong>로 양호한 수준이나, 실패 작업(${failed}건)에 대한 점검이 권장됩니다.`)
+  } else if (total > 0) {
+    parts.push(`성공률이 <strong>${successRate}%</strong>로 낮은 편입니다. 실패 작업(${failed}건)에 대한 원인 분석이 필요합니다.`)
+  }
+
+  // 프로젝트별 하이라이트
+  const projects = Array.from(byProject.values()).sort((a, b) => b.total - a.total)
+  if (projects.length > 0) {
+    const topProject = projects[0]
+    parts.push(`가장 활발한 프로젝트는 <strong>${esc(topProject.name)}</strong>(${topProject.total}건)입니다.`)
+
+    const failedProjects = projects.filter(p => p.failed > 0)
+    if (failedProjects.length > 0) {
+      const failedNames = failedProjects.map(p => `${esc(p.name)}(${p.failed}건)`).join(', ')
+      parts.push(`실패가 발생한 프로젝트: ${failedNames}.`)
+    }
+  }
+
+  // 개발자별 하이라이트
+  const developers = Array.from(byDeveloper.values()).sort((a, b) => b.total - a.total)
+  if (developers.length > 1) {
+    const topDev = developers[0]
+    parts.push(`가장 많은 작업을 수행한 개발자는 <strong>${esc(topDev.name)}</strong>(${topDev.total}건)입니다.`)
+  }
+
+  // 비용 요약
+  if (totalCost > 0) {
+    parts.push(`총 비용은 <strong>$${totalCost.toFixed(2)}</strong>이 소요되었습니다.`)
+  }
+
+  // 진행중 작업
+  if (running > 0) {
+    parts.push(`현재 진행 중인 작업이 ${running}건 있습니다.`)
+  }
+
+  return parts.join(' ')
 }
 
 function esc(s: string): string {
