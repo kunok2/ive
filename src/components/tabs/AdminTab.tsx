@@ -1,18 +1,18 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
-import { User, DEFAULT_AVATARS } from '@/types'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { User, UserActivityLog, DEFAULT_AVATARS } from '@/types'
 import { useDialog } from '@/components/ui/ConfirmDialog'
 import TerminalTab from './TerminalTab'
 import PullToRefresh from '@/components/ui/PullToRefresh'
 
-type SubTab = 'users' | 'mail' | 'settings' | 'pricing' | 'cli'
+type SubTab = 'users' | 'mail' | 'settings' | 'pricing' | 'activity' | 'cli'
 
 export default function AdminTab() {
   const [subTab, setSubTab] = useState<SubTab>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('ive-admin-subtab')
-      if (saved && ['users', 'mail', 'settings', 'pricing', 'cli'].includes(saved)) return saved as SubTab
+      if (saved && ['users', 'mail', 'settings', 'pricing', 'activity', 'cli'].includes(saved)) return saved as SubTab
     }
     return 'users'
   })
@@ -31,6 +31,7 @@ export default function AdminTab() {
     { key: 'mail', icon: 'fa-solid fa-envelope', label: '메일' },
     { key: 'settings', icon: 'fa-solid fa-gear', label: '설정' },
     { key: 'pricing', icon: 'fa-solid fa-coins', label: '단가' },
+    { key: 'activity', icon: 'fa-solid fa-clock-rotate-left', label: '활동' },
     { key: 'cli', icon: 'fa-solid fa-terminal', label: 'CLI' },
   ]
 
@@ -59,6 +60,7 @@ export default function AdminTab() {
       {subTab === 'mail' && <MailPanel key={refreshKey} />}
       {subTab === 'settings' && <SettingsPanel key={refreshKey} />}
       {subTab === 'pricing' && <PricingPanel key={refreshKey} />}
+      {subTab === 'activity' && <ActivityPanel key={refreshKey} />}
       {subTab === 'cli' && <TerminalTab />}
     </PullToRefresh>
   )
@@ -328,7 +330,62 @@ function UsersPanel() {
 }
 
 // ── Mail Panel ──
+type MailSubView = 'broadcast' | 'reports' | 'logs'
+
+interface ReportScheduleState {
+  id: string; reportType: string; enabled: boolean
+  recipients: string[]
+}
+
+interface SendLogEntry {
+  id: string; scheduleId: string; reportType: string
+  periodStart: string; periodEnd: string; recipientEmail: string
+  status: string; errorMessage?: string | null; sentAt: string
+}
+
+const REPORT_TYPE_OPTIONS = [
+  { value: 'weekly', label: '주간', icon: 'fa-solid fa-calendar-week', schedule: '매주 월요일 09:00' },
+  { value: 'monthly', label: '월간', icon: 'fa-solid fa-calendar', schedule: '매월 1일 09:00' },
+  { value: 'yearly', label: '연간', icon: 'fa-solid fa-calendar-check', schedule: '매년 1월 1일 09:00' },
+]
+
 function MailPanel() {
+  const [view, setView] = useState<MailSubView>('broadcast')
+
+  const views: { key: MailSubView; label: string; icon: string }[] = [
+    { key: 'broadcast', label: '메일발송', icon: 'fa-solid fa-paper-plane' },
+    { key: 'reports', label: '보고서', icon: 'fa-solid fa-file-lines' },
+    { key: 'logs', label: '발송이력', icon: 'fa-solid fa-clock-rotate-left' },
+  ]
+
+  return (
+    <main className="px-4 py-4 max-w-lg mx-auto">
+      {/* 서브뷰 토글 */}
+      <div className="flex gap-1.5 mb-4">
+        {views.map(v => (
+          <button
+            key={v.key}
+            onClick={() => setView(v.key)}
+            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
+              view === v.key
+                ? 'bg-ive-green/15 text-ive-green border border-ive-green/30'
+                : 'bg-ive-bg-card text-ive-text-dim border border-ive-border-subtle'
+            }`}
+          >
+            <i className={`${v.icon} mr-1`} />{v.label}
+          </button>
+        ))}
+      </div>
+
+      {view === 'broadcast' && <BroadcastView />}
+      {view === 'reports' && <ReportScheduleView />}
+      {view === 'logs' && <SendLogView />}
+    </main>
+  )
+}
+
+// ── 일반 메일 발송 (기존 기능) ──
+function BroadcastView() {
   const { confirm, alert } = useDialog()
   const [users, setUsers] = useState<User[]>([])
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -392,7 +449,7 @@ function MailPanel() {
   }
 
   return (
-    <main className="px-4 py-4 max-w-lg mx-auto">
+    <>
       {/* 수신자 선택 */}
       <div className="mb-4">
         <div className="flex items-center justify-between mb-2">
@@ -457,7 +514,346 @@ function MailPanel() {
       >
         {sending ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />발송 중...</> : <><i className="fa-solid fa-paper-plane mr-1" />메일 발송</>}
       </button>
-    </main>
+    </>
+  )
+}
+
+// ── 보고서 스케줄 관리 ──
+function ReportScheduleView() {
+  const { confirm, alert } = useDialog()
+  const [schedules, setSchedules] = useState<ReportScheduleState[]>([])
+  const [users, setUsers] = useState<User[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState<string | null>(null)
+  const [sending, setSending] = useState<string | null>(null)
+  const [editing, setEditing] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState<Partial<ReportScheduleState>>({})
+
+  async function fetchData() {
+    try {
+      const [sRes, uRes] = await Promise.all([
+        fetch('/api/admin/reports/schedules'),
+        fetch('/api/admin/users'),
+      ])
+      if (sRes.ok) setSchedules(await sRes.json())
+      if (uRes.ok) setUsers(await uRes.json())
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { fetchData() }, [])
+
+  function startEdit(s: ReportScheduleState) {
+    setEditing(s.id)
+    setEditForm({ ...s })
+  }
+
+  function cancelEdit() {
+    setEditing(null)
+    setEditForm({})
+  }
+
+  function toggleRecipient(email: string) {
+    setEditForm(prev => {
+      const list = prev.recipients || []
+      return {
+        ...prev,
+        recipients: list.includes(email)
+          ? list.filter(e => e !== email)
+          : [...list, email],
+      }
+    })
+  }
+
+  function toggleAllRecipients() {
+    const allEmails = users.map(u => u.email)
+    setEditForm(prev => {
+      const current = prev.recipients || []
+      return {
+        ...prev,
+        recipients: current.length === allEmails.length ? [] : allEmails,
+      }
+    })
+  }
+
+  async function handleSave(reportType: string) {
+    const form = editForm
+    setSaving(reportType)
+    try {
+      const res = await fetch('/api/admin/reports/schedules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: `rs-${reportType}`,
+          reportType,
+          enabled: form.enabled ?? true,
+          recipients: form.recipients || [],
+        }),
+      })
+      if (res.ok) {
+        await fetchData()
+        setEditing(null)
+      } else {
+        const data = await res.json()
+        await alert({ message: data.error || '저장 실패', variant: 'error' })
+      }
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  async function handleSendNow(reportType: string) {
+    const ok = await confirm({
+      title: '즉시 발송',
+      message: `${REPORT_TYPE_OPTIONS.find(o => o.value === reportType)?.label} 보고서를 지금 즉시 발송하시겠습니까?`,
+      confirmText: '발송',
+      variant: 'warning',
+    })
+    if (!ok) return
+
+    setSending(reportType)
+    try {
+      const res = await fetch('/api/admin/reports/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reportType, force: true }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        await alert({
+          title: '발송 완료',
+          message: `발송 ${data.sent}건 성공${data.failed > 0 ? `, ${data.failed}건 실패` : ''}${data.skipped > 0 ? `, ${data.skipped}건 건너뜀` : ''}`,
+          variant: data.failed > 0 ? 'error' : 'success',
+        })
+      } else {
+        await alert({ message: data.error || '발송 실패', variant: 'error' })
+      }
+    } finally {
+      setSending(null)
+    }
+  }
+
+  if (loading) return <div className="text-center py-10 text-ive-text-dim">불러오는 중...</div>
+
+  // 3종류 보고서에 대해 각각 카드 표시
+  return (
+    <div className="space-y-3">
+      <div className="text-xs text-ive-text-dim mb-1">
+        보고서 자동 발송 스케줄을 설정합니다. 중복발송은 자동으로 차단됩니다.
+      </div>
+
+      {REPORT_TYPE_OPTIONS.map(opt => {
+        const schedule = schedules.find(s => s.reportType === opt.value)
+        const isEditing = editing === `rs-${opt.value}`
+        const form = isEditing ? editForm : null
+
+        return (
+          <div key={opt.value} className="bg-ive-bg-card border border-ive-border-subtle rounded-xl overflow-hidden">
+            {/* 헤더 */}
+            <div className="px-4 py-3 flex items-center gap-2">
+              <i className={`${opt.icon} text-sm ${schedule?.enabled ? 'text-ive-green' : 'text-ive-text-dim'}`} />
+              <span className="text-sm font-bold text-ive-text flex-1">{opt.label} 보고서</span>
+              {schedule ? (
+                <div className="flex items-center gap-1.5">
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${schedule.enabled ? 'bg-ive-green/15 text-ive-green' : 'bg-white/5 text-ive-text-dim'}`}>
+                    {schedule.enabled ? '활성' : '비활성'}
+                  </span>
+                  <span className="text-[10px] text-ive-text-dim">{schedule.recipients.length}명</span>
+                  <button
+                    onClick={() => handleSendNow(opt.value)}
+                    disabled={!schedule?.recipients.length || sending === opt.value}
+                    className="w-7 h-7 rounded-lg bg-ive-cyan/10 text-ive-cyan flex items-center justify-center text-xs active:scale-95 disabled:opacity-40"
+                    title="즉시 발송"
+                  >
+                    {sending === opt.value ? <i className="fa-solid fa-circle-notch fa-spin" /> : <i className="fa-solid fa-paper-plane" />}
+                  </button>
+                  <button
+                    onClick={() => isEditing ? cancelEdit() : startEdit(schedule)}
+                    className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs active:scale-95 ${isEditing ? 'bg-ive-amber/15 text-ive-amber' : 'bg-ive-bg-deep text-ive-text-dim'}`}
+                  >
+                    <i className={`fa-solid ${isEditing ? 'fa-xmark' : 'fa-pen'}`} />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => {
+                    const newSchedule: ReportScheduleState = {
+                      id: `rs-${opt.value}`, reportType: opt.value, enabled: true,
+                      recipients: [],
+                    }
+                    setSchedules(prev => [...prev, newSchedule])
+                    startEdit(newSchedule)
+                  }}
+                  className="text-xs font-bold text-ive-cyan"
+                >
+                  <i className="fa-solid fa-plus mr-1" />설정
+                </button>
+              )}
+            </div>
+
+            {/* 편집 패널 */}
+            {isEditing && form && (
+              <div className="px-4 pb-4 border-t border-ive-border-dark space-y-3 pt-3 animate-in fade-in slide-in-from-top-1">
+                {/* 활성화 토글 */}
+                <div className="flex items-center gap-3">
+                  <label className="text-xs font-bold text-ive-text-muted w-20 shrink-0">상태</label>
+                  <button
+                    onClick={() => setEditForm(prev => ({ ...prev, enabled: !prev.enabled }))}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+                      form.enabled ? 'bg-ive-green/10 border-ive-green text-ive-green' : 'bg-ive-bg-deep border-ive-border-subtle text-ive-text-dim'
+                    }`}
+                  >
+                    {form.enabled ? '활성' : '비활성'}
+                  </button>
+                </div>
+
+                {/* 발송 시점 (고정) */}
+                <div className="flex items-center gap-3">
+                  <label className="text-xs font-bold text-ive-text-muted w-20 shrink-0">발송 시점</label>
+                  <span className="text-xs text-ive-cyan font-bold">{opt.schedule} KST</span>
+                  <span className="text-[10px] text-ive-text-dim">
+                    (지난 {opt.label} 보고서 자동 발송)
+                  </span>
+                </div>
+
+                {/* 수신자 */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs font-bold text-ive-text-muted">수신자</label>
+                    <button onClick={toggleAllRecipients} className="text-[10px] text-ive-cyan font-bold">
+                      {(form.recipients || []).length === users.length ? '전체 해제' : '전체 선택'}
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {users.map(u => (
+                      <button
+                        key={u.id}
+                        onClick={() => toggleRecipient(u.email)}
+                        className={`text-[11px] px-2 py-1 rounded-full font-bold transition-all ${
+                          (form.recipients || []).includes(u.email)
+                            ? 'bg-ive-green/20 text-ive-green border border-ive-green/30'
+                            : 'bg-ive-bg-deep text-ive-text-dim border border-ive-border-subtle'
+                        }`}
+                      >
+                        {u.name}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-ive-text-dim mt-1">{(form.recipients || []).length}명 선택</p>
+                </div>
+
+                {/* 저장/취소 */}
+                <div className="flex gap-2">
+                  <button onClick={cancelEdit}
+                    className="flex-1 py-2 rounded-lg text-xs font-bold bg-ive-bg-deep text-ive-text-dim border border-ive-border-subtle active:scale-[0.98]">
+                    취소
+                  </button>
+                  <button onClick={() => handleSave(opt.value)}
+                    disabled={saving === opt.value}
+                    className="flex-1 py-2 rounded-lg text-xs font-bold bg-ive-green-dark text-white active:scale-[0.98] disabled:opacity-40">
+                    {saving === opt.value ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />저장 중</> : '저장'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* 요약 정보 (편집 중 아닐 때) */}
+            {!isEditing && schedule && schedule.recipients.length > 0 && (
+              <div className="px-4 pb-3 text-[11px] text-ive-text-dim">
+                {opt.schedule} KST | {schedule.recipients.slice(0, 3).join(', ')}
+                {schedule.recipients.length > 3 && ` 외 ${schedule.recipients.length - 3}명`}
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── 발송 이력 조회 ──
+function SendLogView() {
+  const [logs, setLogs] = useState<SendLogEntry[]>([])
+  const [total, setTotal] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(0)
+  const PAGE_SIZE = 20
+
+  async function fetchLogs(p: number = 0) {
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/admin/reports/logs?limit=${PAGE_SIZE}&offset=${p * PAGE_SIZE}`)
+      if (res.ok) {
+        const data = await res.json()
+        setLogs(data.logs)
+        setTotal(data.total)
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { fetchLogs(page) }, [page])
+
+  const totalPages = Math.ceil(total / PAGE_SIZE)
+
+  if (loading && logs.length === 0) return <div className="text-center py-10 text-ive-text-dim">불러오는 중...</div>
+
+  if (total === 0) {
+    return (
+      <div className="text-center py-10">
+        <i className="fa-solid fa-inbox text-3xl text-ive-text-dim mb-3 block" />
+        <p className="text-sm text-ive-text-dim">발송 이력이 없습니다.</p>
+      </div>
+    )
+  }
+
+  const typeLabel = (t: string) => t === 'weekly' ? '주간' : t === 'monthly' ? '월간' : '연간'
+
+  return (
+    <div>
+      <div className="text-xs text-ive-text-dim mb-3">총 {total}건의 발송 이력</div>
+
+      <div className="space-y-1.5">
+        {logs.map(log => (
+          <div key={log.id} className="bg-ive-bg-card border border-ive-border-subtle rounded-lg px-3 py-2.5">
+            <div className="flex items-center gap-2">
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${log.status === 'success' ? 'bg-ive-green' : 'bg-ive-red'}`} />
+              <span className="text-xs font-bold text-ive-text">{typeLabel(log.reportType)}</span>
+              <span className="text-[10px] text-ive-text-dim flex-1 truncate">{log.recipientEmail}</span>
+              <span className={`text-[10px] font-bold ${log.status === 'success' ? 'text-ive-green' : 'text-ive-red'}`}>
+                {log.status === 'success' ? '성공' : '실패'}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 mt-1 text-[10px] text-ive-text-dim">
+              <span>{log.periodStart} ~ {log.periodEnd}</span>
+              <span className="ml-auto">{new Date(log.sentAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}</span>
+            </div>
+            {log.errorMessage && (
+              <div className="mt-1 text-[10px] text-ive-red bg-ive-red/5 rounded px-2 py-1 break-all">
+                {log.errorMessage}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* 페이지네이션 */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2 mt-4">
+          <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
+            className="w-8 h-8 rounded-lg bg-ive-bg-deep text-ive-text-dim text-xs disabled:opacity-30">
+            <i className="fa-solid fa-chevron-left" />
+          </button>
+          <span className="text-xs text-ive-text-dim">{page + 1} / {totalPages}</span>
+          <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}
+            className="w-8 h-8 rounded-lg bg-ive-bg-deep text-ive-text-dim text-xs disabled:opacity-30">
+            <i className="fa-solid fa-chevron-right" />
+          </button>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -843,6 +1239,160 @@ function PricingPanel() {
           }
         </button>
       </div>
+    </main>
+  )
+}
+
+// ── Activity Panel (사용자 활동 로그) ──
+
+const CATEGORY_META: Record<string, { label: string; icon: string; color: string }> = {
+  auth: { label: '인증', icon: 'fa-solid fa-right-to-bracket', color: 'text-ive-cyan' },
+  project: { label: '프로젝트', icon: 'fa-solid fa-folder', color: 'text-ive-green' },
+  agent: { label: '개발자', icon: 'fa-solid fa-robot', color: 'text-ive-amber' },
+  execution: { label: '실행', icon: 'fa-solid fa-play', color: 'text-blue-400' },
+  admin: { label: '관리', icon: 'fa-solid fa-shield', color: 'text-ive-red' },
+  settings: { label: '설정', icon: 'fa-solid fa-gear', color: 'text-purple-400' },
+}
+
+function ActivityPanel() {
+  const [logs, setLogs] = useState<UserActivityLog[]>([])
+  const [total, setTotal] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [filterCategory, setFilterCategory] = useState<string>('')
+  const [filterUserId, setFilterUserId] = useState<string>('')
+  const [users, setUsers] = useState<User[]>([])
+  const offsetRef = useRef(0)
+  const PAGE_SIZE = 30
+
+  useEffect(() => {
+    fetch('/api/admin/users').then(r => r.json()).then(setUsers).catch(() => {})
+  }, [])
+
+  const fetchLogs = useCallback(async (reset: boolean = true) => {
+    if (reset) { setLoading(true); offsetRef.current = 0 }
+    else setLoadingMore(true)
+
+    const sp = new URLSearchParams()
+    sp.set('limit', String(PAGE_SIZE))
+    sp.set('offset', String(offsetRef.current))
+    if (filterCategory) sp.set('category', filterCategory)
+    if (filterUserId) sp.set('userId', filterUserId)
+
+    try {
+      const res = await fetch(`/api/admin/activity-logs?${sp}`)
+      if (res.ok) {
+        const data = await res.json()
+        if (reset) {
+          setLogs(data.logs)
+        } else {
+          setLogs(prev => [...prev, ...data.logs])
+        }
+        setTotal(data.total)
+      }
+    } finally {
+      setLoading(false)
+      setLoadingMore(false)
+    }
+  }, [filterCategory, filterUserId])
+
+  useEffect(() => { fetchLogs(true) }, [fetchLogs])
+
+  function handleLoadMore() {
+    offsetRef.current += PAGE_SIZE
+    fetchLogs(false)
+  }
+
+  function formatTime(iso: string) {
+    try {
+      const d = new Date(iso + (iso.endsWith('Z') ? '' : 'Z'))
+      return d.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+    } catch { return iso }
+  }
+
+  if (loading) return <div className="text-center py-10 text-ive-text-dim">불러오는 중...</div>
+
+  return (
+    <main className="px-4 py-4 max-w-lg mx-auto">
+      {/* 필터 */}
+      <div className="flex gap-2 mb-3">
+        <select
+          value={filterCategory}
+          onChange={e => setFilterCategory(e.target.value)}
+          className="flex-1 bg-ive-bg-input border border-ive-border rounded-lg px-2.5 py-2 text-xs text-ive-text focus:outline-none focus:border-ive-green/50"
+        >
+          <option value="">전체 카테고리</option>
+          {Object.entries(CATEGORY_META).map(([k, v]) => (
+            <option key={k} value={k}>{v.label}</option>
+          ))}
+        </select>
+        <select
+          value={filterUserId}
+          onChange={e => setFilterUserId(e.target.value)}
+          className="flex-1 bg-ive-bg-input border border-ive-border rounded-lg px-2.5 py-2 text-xs text-ive-text focus:outline-none focus:border-ive-green/50"
+        >
+          <option value="">전체 사용자</option>
+          {users.map(u => (
+            <option key={u.id} value={u.id}>{u.name}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="text-xs text-ive-text-dim mb-3">총 {total}건</div>
+
+      {/* 로그 목록 */}
+      <div className="space-y-1.5">
+        {logs.map(log => {
+          const meta = CATEGORY_META[log.category] || CATEGORY_META.auth
+          return (
+            <div key={log.id} className="bg-ive-bg-card border border-ive-border-subtle rounded-xl px-3 py-2.5">
+              <div className="flex items-start gap-2">
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5 bg-ive-bg-deep`}>
+                  <i className={`${meta.icon} text-[10px] ${meta.color}`} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${meta.color} bg-ive-bg-deep`}>{meta.label}</span>
+                    <span className="text-[10px] text-ive-text-dim">{formatTime(log.createdAt)}</span>
+                  </div>
+                  <div className="text-xs text-ive-text leading-relaxed">{log.detail}</div>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-[10px] text-ive-text-muted">
+                      <i className="fa-solid fa-user mr-0.5" />{log.userName || '알 수 없음'}
+                    </span>
+                    {log.ipAddress && log.ipAddress !== '0.0.0.0' && (
+                      <span className="text-[10px] text-ive-text-dim">
+                        <i className="fa-solid fa-globe mr-0.5" />{log.ipAddress}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {logs.length === 0 && (
+        <div className="text-center py-10 text-ive-text-dim text-sm">
+          <i className="fa-solid fa-clock-rotate-left text-2xl mb-2 block opacity-30" />
+          기록된 활동이 없습니다
+        </div>
+      )}
+
+      {/* 더 보기 */}
+      {logs.length < total && (
+        <button
+          onClick={handleLoadMore}
+          disabled={loadingMore}
+          className="w-full mt-3 py-2.5 rounded-lg text-xs font-bold bg-ive-bg-card border border-ive-border-subtle text-ive-text-dim active:scale-[0.98] transition-all disabled:opacity-40"
+        >
+          {loadingMore
+            ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />불러오는 중...</>
+            : <><i className="fa-solid fa-chevron-down mr-1" />더 보기 ({logs.length}/{total})</>
+          }
+        </button>
+      )}
     </main>
   )
 }

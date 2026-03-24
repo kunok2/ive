@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getUserByEmail, createUser } from '@/lib/db'
 import { hashPassword, setAuthCookie } from '@/lib/auth'
 import { getVerificationCode, clearVerificationCode } from '../send-code/route'
+import { logActivity } from '@/lib/activity'
 
 export async function POST(req: Request) {
   const { email, name, password, code } = await req.json()
@@ -31,6 +32,7 @@ export async function POST(req: Request) {
   createUser({ id, email, name, password: passwordHash })
   clearVerificationCode(email)
   await setAuthCookie(id)
+  logActivity({ userId: id, category: 'auth', action: 'register', detail: `회원가입 (${email})`, req })
 
   return NextResponse.json({ id, email, name }, { status: 201 })
 }

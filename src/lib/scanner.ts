@@ -42,6 +42,7 @@ import {
 } from "./github";
 import { Project, Agent } from "@/types";
 import { startStatsCollector } from "./stats-collector";
+import { startReportScheduler } from "./report-scheduler";
 import { spawn } from "child_process";
 import fs from "fs";
 import path from "path";
@@ -329,6 +330,9 @@ export function startScanner() {
 
   // 통계 수집기 시작
   startStatsCollector();
+
+  // 보고서 자동 발송 스케줄러 시작
+  startReportScheduler();
 }
 
 export function stopScanner() {

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getProject, updateProject, deleteProject, getProjectAssignments, getProjectAccess } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { encrypt } from '@/lib/crypto'
+import { logActivity } from '@/lib/activity'
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser()
@@ -39,6 +40,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   }
   
   updateProject(updatedProject)
+  logActivity({ userId: user.id, category: 'project', action: 'update_project', detail: `프로젝트 수정: ${body.name || id}`, targetType: 'project', targetId: id, req })
   return NextResponse.json({ ...updatedProject })
 }
 
@@ -47,6 +49,8 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { id } = await params
+  const project = getProject(id)
   deleteProject(id, user.id)
+  logActivity({ userId: user.id, category: 'project', action: 'delete_project', detail: `프로젝트 삭제: ${project?.name || id}`, targetType: 'project', targetId: id, req: _req })
   return NextResponse.json({ success: true })
 }

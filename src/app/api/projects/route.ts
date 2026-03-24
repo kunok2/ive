@@ -3,6 +3,7 @@ import { getProjectsByUser, createProject, getProjectAssignments, getSharedProje
 import { getCurrentUser } from '@/lib/auth'
 import { decrypt, encrypt } from '@/lib/crypto'
 import { ensureLabels } from '@/lib/provider'
+import { logActivity } from '@/lib/activity'
 
 export async function GET() {
   const user = await getCurrentUser()
@@ -47,6 +48,7 @@ export async function POST(req: Request) {
     accessToken: encrypt(body.accessToken || '')
   }
   createProject(project)
+  logActivity({ userId: user.id, category: 'project', action: 'create_project', detail: `프로젝트 생성: ${body.name}`, targetType: 'project', targetId: project.id, req })
 
   // 레이블 동기화 (백그라운드 — 실패해도 프로젝트 생성은 완료)
   ensureLabels(project, body.accessToken || '').catch(err =>

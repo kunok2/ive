@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getCurrentUser, hashPassword, verifyPassword } from '@/lib/auth'
 import { getUserByEmail, getDb } from '@/lib/db'
 import { getVerificationCode, clearVerificationCode } from '@/app/api/auth/send-code/route'
+import { logActivity } from '@/lib/activity'
 
 export async function POST(req: Request) {
   const { email, currentPassword, newPassword, code } = await req.json()
@@ -45,6 +46,7 @@ export async function POST(req: Request) {
   const newHash = await hashPassword(newPassword)
   getDb().prepare('UPDATE users SET password = ? WHERE id = ?').run(newHash, user.id)
   clearVerificationCode(targetEmail)
+  logActivity({ userId: user.id, category: 'auth', action: 'change_password', detail: '비밀번호 변경', req })
 
   return NextResponse.json({ success: true })
 }
