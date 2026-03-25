@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import ConfirmModal from '@/components/ui/ConfirmModal'
 import { useToast } from '@/components/ui/Toast'
 
@@ -29,6 +30,8 @@ interface Props {
 
 export default function MRReviewSection({ projectId, issueIid }: Props) {
   const router = useRouter()
+  const t = useTranslations('mr')
+  const td = useTranslations('dialog')
   const { watchPipeline } = useToast()
   const [mr, setMr] = useState<MRInfo | null>(null)
   const [loading, setLoading] = useState(true)
@@ -63,7 +66,6 @@ export default function MRReviewSection({ projectId, issueIid }: Props) {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Merge failed')
       await fetchMR()
-      // 머지 성공 후 파이프라인 모니터링 시작
       if (mr) {
         watchPipeline({
           projectId,
@@ -73,7 +75,7 @@ export default function MRReviewSection({ projectId, issueIid }: Props) {
         })
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : '머지 실패')
+      setError(err instanceof Error ? err.message : 'Merge failed')
     } finally {
       setMerging(false)
     }
@@ -99,7 +101,7 @@ export default function MRReviewSection({ projectId, issueIid }: Props) {
       <div className="mt-6 bg-ive-bg-card rounded-xl border border-ive-border-subtle overflow-hidden">
         <div className="px-4 py-3 border-b border-ive-border-dark flex items-center gap-2">
           <i className="fa-solid fa-code-merge text-ive-cyan" />
-          <span className="text-sm font-bold text-ive-text tracking-wider">작업결과 반영</span>
+          <span className="text-sm font-bold text-ive-text tracking-wider">{t('workResult')}</span>
         </div>
 
         <div className="p-4">
@@ -120,20 +122,20 @@ export default function MRReviewSection({ projectId, issueIid }: Props) {
           <div className="flex items-center gap-2 mb-4">
             {isMerged ? (
               <span className="inline-flex items-center gap-1 text-xs font-bold bg-ive-purple/15 text-purple-300 px-2 py-1 rounded-full">
-                <i className="fa-solid fa-code-merge" /> 머지 완료
+                <i className="fa-solid fa-code-merge" /> {t('mergeComplete')}
               </span>
             ) : hasConflicts ? (
               <span className="inline-flex items-center gap-1 text-xs font-bold bg-ive-red/15 text-ive-red px-2 py-1 rounded-full">
-                <i className="fa-solid fa-triangle-exclamation" /> 충돌 발생
+                <i className="fa-solid fa-triangle-exclamation" /> {t('conflict')}
               </span>
             ) : (
               <span className="inline-flex items-center gap-1 text-xs font-bold bg-ive-green/15 text-ive-green px-2 py-1 rounded-full">
-                <i className="fa-solid fa-circle-check" /> 머지 가능
+                <i className="fa-solid fa-circle-check" /> {t('readyToMerge')}
               </span>
             )}
             {mr.changes_count && (
               <span className="text-xs text-ive-text-dim">
-                변경 파일 {mr.changes_count}개
+                {t('changedFiles', { count: mr.changes_count })}
               </span>
             )}
           </div>
@@ -147,8 +149,8 @@ export default function MRReviewSection({ projectId, issueIid }: Props) {
           {/* 머지 완료 정보 */}
           {isMerged && mr.merged_at && (
             <div className="text-xs text-ive-text-dim mb-3">
-              {mr.merged_by?.name && <span>{mr.merged_by.name}이(가) </span>}
-              {new Date(mr.merged_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}에 머지됨
+              {mr.merged_by?.name && <span>{t('mergedBy', { name: mr.merged_by.name, date: new Date(mr.merged_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) })}</span>}
+              {!mr.merged_by?.name && <span>{new Date(mr.merged_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}</span>}
             </div>
           )}
 
@@ -158,7 +160,7 @@ export default function MRReviewSection({ projectId, issueIid }: Props) {
               onClick={() => router.push(`/issues/${projectId}/${issueIid}/mr`)}
               className="flex-1 text-sm font-bold text-ive-cyan bg-ive-cyan/10 px-3 py-2.5 rounded-xl active:scale-[0.98] transition-all hover:bg-ive-cyan/15"
             >
-              <i className="fa-solid fa-code mr-1.5" />코드 리뷰
+              <i className="fa-solid fa-code mr-1.5" />{t('codeReview')}
             </button>
             {!isMerged && (
               <button
@@ -171,11 +173,11 @@ export default function MRReviewSection({ projectId, issueIid }: Props) {
                 }`}
               >
                 {merging ? (
-                  <><i className="fa-solid fa-spinner fa-spin mr-1.5" />머지 중...</>
+                  <><i className="fa-solid fa-spinner fa-spin mr-1.5" />{t('merging')}</>
                 ) : hasConflicts ? (
-                  <><i className="fa-solid fa-ban mr-1.5" />머지 불가</>
+                  <><i className="fa-solid fa-ban mr-1.5" />{t('cannotMerge')}</>
                 ) : (
-                  <><i className="fa-solid fa-code-merge mr-1.5" />머지</>
+                  <><i className="fa-solid fa-code-merge mr-1.5" />{t('merge')}</>
                 )}
               </button>
             )}
@@ -187,9 +189,9 @@ export default function MRReviewSection({ projectId, issueIid }: Props) {
         open={showMergeConfirm}
         onClose={() => setShowMergeConfirm(false)}
         onConfirm={handleMerge}
-        title="MR 머지 확인"
-        message={`!${mr?.iid} ${mr?.source_branch} → ${mr?.target_branch}\n\n이 MR을 머지할까요?`}
-        confirmLabel="머지"
+        title={td('mrMergeTitle')}
+        message={td('mrMergeConfirm', { iid: mr?.iid ?? 0, source: mr?.source_branch ?? '', target: mr?.target_branch ?? '' })}
+        confirmLabel={t('merge')}
       />
     </>
   )

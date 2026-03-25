@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { DEFAULT_AVATARS } from '@/types'
 import PullToRefresh from '@/components/ui/PullToRefresh'
 import AgentAvatar from '@/components/agent/AgentAvatar'
@@ -124,11 +125,19 @@ const PROJ_SORT_DIR = 'ive-report-proj-sort-dir'
 const AGENT_SORT_KEY = 'ive-report-agent-sort'
 const AGENT_SORT_DIR = 'ive-report-agent-sort-dir'
 
+let _fmtDur: ((key: string, params?: Record<string, unknown>) => string) | null = null
+
 function formatDuration(min: number): string {
-  if (min < 60) return `${min.toFixed(1)}분`
+  if (_fmtDur) {
+    if (min < 60) return _fmtDur('minuteUnit', { value: min.toFixed(1) })
+    const h = Math.floor(min / 60)
+    const m = Math.round(min % 60)
+    return _fmtDur('hourMinuteUnit', { h, m })
+  }
+  if (min < 60) return `${min.toFixed(1)}m`
   const h = Math.floor(min / 60)
   const m = Math.round(min % 60)
-  return `${h}시간 ${m}분`
+  return `${h}h ${m}m`
 }
 
 function formatCost(n: number): string {
@@ -146,7 +155,7 @@ function formatDate(dateStr: string): string {
   return `${d.getMonth() + 1}.${d.getDate()}`
 }
 
-function formatPeriodLabel(type: ReportType, start: string, end: string): string {
+function formatPeriodLabel(type: ReportType, start: string, end: string, t?: (key: string, params?: Record<string, unknown>) => string): string {
   const s = new Date(start)
   const e = new Date(end)
   e.setDate(e.getDate() - 1)
@@ -154,12 +163,10 @@ function formatPeriodLabel(type: ReportType, start: string, end: string): string
     return `${s.getFullYear()}.${formatDate(start)} ~ ${formatDate(e.toISOString().slice(0, 10))}`
   }
   if (type === 'monthly') {
-    return `${s.getFullYear()}년 ${s.getMonth() + 1}월`
+    return t ? t('yearMonth', { year: s.getFullYear(), month: s.getMonth() + 1 }) : `${s.getFullYear()}년 ${s.getMonth() + 1}월`
   }
-  return `${s.getFullYear()}년`
+  return t ? t('yearUnit', { year: s.getFullYear() }) : `${s.getFullYear()}년`
 }
-
-const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토']
 
 /** 퍼센트 변동 (이전 대비). 이전값 0이면 비교 불가 */
 function diffPct(cur: number, prev: number): number | null {
@@ -174,6 +181,9 @@ function diffPt(cur: number, prev: number): number | null {
 
 export default function ReportsTab() {
   const router = useRouter()
+  const t = useTranslations('report')
+  const tc = useTranslations('common')
+  _fmtDur = t as any
 
   // sessionStorage에서 이전 상태 복원
   const saved = typeof window !== 'undefined' ? loadReportState() : null
@@ -372,15 +382,15 @@ export default function ReportsTab() {
       <div className="sticky top-[57px] z-30 bg-ive-bg-deep border-b border-ive-border-dark">
         <div className="px-4 py-3 max-w-lg mx-auto">
           <div className="flex gap-1 mb-2">
-            {(['weekly', 'monthly', 'yearly'] as ReportType[]).map(t => (
+            {(['weekly', 'monthly', 'yearly'] as ReportType[]).map(rt => (
               <button
-                key={t}
-                onClick={() => setType(t)}
+                key={rt}
+                onClick={() => setType(rt)}
                 className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                  type === t ? 'bg-ive-green text-ive-bg-deep' : 'bg-ive-bg-card text-ive-text-dim'
+                  type === rt ? 'bg-ive-green text-ive-bg-deep' : 'bg-ive-bg-card text-ive-text-dim'
                 }`}
               >
-                {t === 'weekly' ? '주간' : t === 'monthly' ? '월간' : '연간'}
+                {t(rt)}
               </button>
             ))}
           </div>
@@ -390,14 +400,14 @@ export default function ReportsTab() {
             </button>
             <div className="flex items-center gap-2">
               <span className="text-sm font-bold text-ive-text">
-                {data ? formatPeriodLabel(type, data.period.start, data.period.end) : '...'}
+                {data ? formatPeriodLabel(type, data.period.start, data.period.end, t as any) : '...'}
               </span>
               {!isCurrentPeriod() && (
                 <button
                   onClick={goToToday}
                   className="px-2 py-0.5 text-[11px] font-bold rounded-md bg-ive-green/20 text-ive-green hover:bg-ive-green/30 transition-colors"
                 >
-                  오늘
+                  {t('today')}
                 </button>
               )}
             </div>
@@ -410,7 +420,7 @@ export default function ReportsTab() {
 
       {loading && (
         <div className="text-center py-10 text-ive-text-dim">
-          <i className="fa-solid fa-circle-notch fa-spin mr-1" />불러오는 중...
+          <i className="fa-solid fa-circle-notch fa-spin mr-1" />{tc('loading')}
         </div>
       )}
 
@@ -419,8 +429,8 @@ export default function ReportsTab() {
           {/* 총평 */}
           {(() => {
             const s = data.summary, ps = data.prevSummary, lc = data.lifecycle, plc = data.prevLifecycle
-            const periodLabel = type === 'weekly' ? '이번 주' : type === 'monthly' ? '이번 달' : '올해'
-            const prevLabel = type === 'weekly' ? '지난주' : type === 'monthly' ? '지난달' : '작년'
+            const periodLabel = type === 'weekly' ? t('thisWeek') : type === 'monthly' ? t('thisMonth') : t('thisYear')
+            const prevLabel = type === 'weekly' ? t('lastWeek') : type === 'monthly' ? t('lastMonth') : t('lastYear')
             const lines: { icon: string; color: string; text: string }[] = []
 
             // 작업량 변화
@@ -430,13 +440,15 @@ export default function ReportsTab() {
                 lines.push({
                   icon: taskPct > 0 ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down',
                   color: taskPct > 0 ? 'text-ive-green' : 'text-ive-red',
-                  text: `${periodLabel} 작업량이 ${prevLabel} 대비 ${Math.abs(taskPct).toLocaleString()}% ${taskPct > 0 ? '증가' : '감소'}했습니다.`,
+                  text: taskPct > 0
+                    ? t('taskIncreased', { period: periodLabel, prev: prevLabel, pct: Math.abs(taskPct).toLocaleString() })
+                    : t('taskDecreased', { period: periodLabel, prev: prevLabel, pct: Math.abs(taskPct).toLocaleString() }),
                 })
               } else {
-                lines.push({ icon: 'fa-equals', color: 'text-ive-text-dim', text: `${periodLabel} 작업량은 ${prevLabel}과 비슷한 수준입니다.` })
+                lines.push({ icon: 'fa-equals', color: 'text-ive-text-dim', text: t('taskSimilar', { period: periodLabel, prev: prevLabel }) })
               }
             } else if (s.totalTasks > 0) {
-              lines.push({ icon: 'fa-sparkles', color: 'text-ive-cyan', text: `${prevLabel}에는 실행이 없었으나 ${periodLabel}에 ${s.totalTasks.toLocaleString()}건이 처리되었습니다.` })
+              lines.push({ icon: 'fa-sparkles', color: 'text-ive-cyan', text: t('taskNewPeriod', { prev: prevLabel, period: periodLabel, count: s.totalTasks.toLocaleString() }) })
             }
 
             // 비용 변화
@@ -446,7 +458,9 @@ export default function ReportsTab() {
                 lines.push({
                   icon: costPct > 0 ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down',
                   color: costPct > 0 ? 'text-ive-red' : 'text-ive-green',
-                  text: `비용이 ${prevLabel} 대비 ${Math.abs(costPct).toLocaleString()}% ${costPct > 0 ? '증가' : '절감'}되었습니다. ($${formatCost(ps.totalCost)} → $${formatCost(s.totalCost)})`,
+                  text: costPct > 0
+                    ? t('costIncreased', { prev: prevLabel, pct: Math.abs(costPct).toLocaleString(), prevCost: formatCost(ps.totalCost), curCost: formatCost(s.totalCost) })
+                    : t('costDecreased', { prev: prevLabel, pct: Math.abs(costPct).toLocaleString(), prevCost: formatCost(ps.totalCost), curCost: formatCost(s.totalCost) }),
                 })
               }
             }
@@ -458,7 +472,9 @@ export default function ReportsTab() {
                 lines.push({
                   icon: srDiff > 0 ? 'fa-circle-check' : 'fa-circle-exclamation',
                   color: srDiff > 0 ? 'text-ive-green' : 'text-ive-red',
-                  text: `성공률이 ${prevLabel} ${ps.successRate.toFixed(0)}%에서 ${s.successRate.toFixed(0)}%로 ${srDiff > 0 ? '개선' : '하락'}했습니다.`,
+                  text: srDiff > 0
+                    ? t('successRateImprovedLocal', { prev: prevLabel, prevRate: ps.successRate.toFixed(0), curRate: s.successRate.toFixed(0) })
+                    : t('successRateDeclinedLocal', { prev: prevLabel, prevRate: ps.successRate.toFixed(0), curRate: s.successRate.toFixed(0) }),
                 })
               }
             }
@@ -470,7 +486,9 @@ export default function ReportsTab() {
                 lines.push({
                   icon: wPct > 0 ? 'fa-clock' : 'fa-bolt',
                   color: wPct > 0 ? 'text-ive-red' : 'text-ive-green',
-                  text: `평균 대기시간이 ${prevLabel} 대비 ${Math.abs(wPct).toLocaleString()}% ${wPct > 0 ? '늘어났습니다' : '단축되었습니다'}. (${formatDuration(plc.waitAvg)} → ${formatDuration(lc.waitAvg)})`,
+                  text: wPct > 0
+                    ? t('waitTimeIncreased', { prev: prevLabel, pct: Math.abs(wPct).toLocaleString(), prevDuration: formatDuration(plc.waitAvg), curDuration: formatDuration(lc.waitAvg) })
+                    : t('waitTimeDecreased', { prev: prevLabel, pct: Math.abs(wPct).toLocaleString(), prevDuration: formatDuration(plc.waitAvg), curDuration: formatDuration(lc.waitAvg) }),
                 })
               }
             }
@@ -482,21 +500,23 @@ export default function ReportsTab() {
                 lines.push({
                   icon: pPct > 0 ? 'fa-hourglass-half' : 'fa-forward-fast',
                   color: pPct > 0 ? 'text-ive-red' : 'text-ive-green',
-                  text: `평균 수행시간이 ${prevLabel} 대비 ${Math.abs(pPct).toLocaleString()}% ${pPct > 0 ? '늘어났습니다' : '단축되었습니다'}.`,
+                  text: pPct > 0
+                    ? t('procTimeIncreased', { prev: prevLabel, pct: Math.abs(pPct).toLocaleString() })
+                    : t('procTimeDecreased', { prev: prevLabel, pct: Math.abs(pPct).toLocaleString() }),
                 })
               }
             }
 
             if (lines.length === 0 && s.totalTasks === 0) return null
             if (lines.length === 0) {
-              lines.push({ icon: 'fa-check', color: 'text-ive-green', text: `${periodLabel}은 ${prevLabel}과 비교하여 전반적으로 안정적인 수준입니다.` })
+              lines.push({ icon: 'fa-check', color: 'text-ive-green', text: t('stableOverallLocal', { period: periodLabel, prev: prevLabel }) })
             }
 
             return (
               <section className="bg-gradient-to-r from-ive-bg-card to-ive-bg-deep border border-ive-border-subtle rounded-xl p-3">
                 <div className="flex items-center gap-1.5 mb-2">
                   <i className="fa-solid fa-comment-dots text-ive-amber text-sm" />
-                  <span className="text-xs font-bold text-ive-text">총평</span>
+                  <span className="text-xs font-bold text-ive-text">{t('commentary')}</span>
                   <span className="text-[10px] text-ive-text-dim">vs {prevLabel}</span>
                 </div>
                 <div className="space-y-1.5">
@@ -513,22 +533,22 @@ export default function ReportsTab() {
 
           {/* Summary Cards */}
           <section>
-            <div className="text-xs font-bold text-ive-text-dim mb-2 uppercase tracking-wider">전체 요약</div>
+            <div className="text-xs font-bold text-ive-text-dim mb-2 uppercase tracking-wider">{t('overallSummary')}</div>
             <div className="grid grid-cols-3 gap-2">
-              <SummaryCard label="작업" value={`${data.summary.totalTasks.toLocaleString()}건`} sub={`성공 ${data.summary.successCount.toLocaleString()}`} color="text-ive-green" diff={diffPct(data.summary.totalTasks, data.prevSummary.totalTasks)} />
-              <SummaryCard label="성공률" value={`${data.summary.successRate.toFixed(1)}%`} sub={`실패 ${data.summary.failedCount.toLocaleString()}`} color="text-ive-cyan" diff={diffPt(data.summary.successRate, data.prevSummary.successRate)} />
-              <SummaryCard label="비용" value={`$${formatCost(data.summary.totalCost)}`} sub={(() => { const d = data.summary.totalCost - data.prevSummary.totalCost; if (data.prevSummary.totalCost === 0 && data.summary.totalCost === 0) return ''; if (data.prevSummary.totalCost === 0) return '신규'; return `${d >= 0 ? '+' : '-'}$${formatCost(Math.abs(d))}` })()} color="text-ive-amber" diff={diffPct(data.summary.totalCost, data.prevSummary.totalCost)} invertColor />
+              <SummaryCard label={t('taskLabel')} value={t('itemsUnit', { count: data.summary.totalTasks.toLocaleString() })} sub={t('successCountSub', { count: data.summary.successCount.toLocaleString() })} color="text-ive-green" diff={diffPct(data.summary.totalTasks, data.prevSummary.totalTasks)} />
+              <SummaryCard label={t('successRateLabel')} value={`${data.summary.successRate.toFixed(1)}%`} sub={t('failedCountSub', { count: data.summary.failedCount.toLocaleString() })} color="text-ive-cyan" diff={diffPt(data.summary.successRate, data.prevSummary.successRate)} />
+              <SummaryCard label={t('costLabel')} value={`$${formatCost(data.summary.totalCost)}`} sub={(() => { const d = data.summary.totalCost - data.prevSummary.totalCost; if (data.prevSummary.totalCost === 0 && data.summary.totalCost === 0) return ''; if (data.prevSummary.totalCost === 0) return t('newBadgeLabel'); return `${d >= 0 ? '+' : '-'}$${formatCost(Math.abs(d))}` })()} color="text-ive-amber" diff={diffPct(data.summary.totalCost, data.prevSummary.totalCost)} invertColor />
             </div>
             <div className="mt-2 grid grid-cols-2 gap-2">
-              <SummaryCard label="총 소요시간" value={formatDuration(data.summary.totalDurationMin)} sub={(() => { const d = data.summary.totalDurationMin - data.prevSummary.totalDurationMin; if (data.prevSummary.totalDurationMin === 0 && data.summary.totalDurationMin === 0) return ''; if (data.prevSummary.totalDurationMin === 0) return '신규'; return `${d >= 0 ? '+' : '-'}${formatDuration(Math.abs(d))}` })()} color="text-ive-text" diff={diffPct(data.summary.totalDurationMin, data.prevSummary.totalDurationMin)} invertColor />
-              <SummaryCard label="평균 소요시간" value={formatDuration(data.summary.avgDurationMin)} sub={(() => { const d = data.summary.avgDurationMin - data.prevSummary.avgDurationMin; if (data.prevSummary.avgDurationMin === 0 && data.summary.avgDurationMin === 0) return ''; if (data.prevSummary.avgDurationMin === 0) return '신규'; return `${d >= 0 ? '+' : '-'}${formatDuration(Math.abs(d))}` })()} color="text-ive-text" diff={diffPct(data.summary.avgDurationMin, data.prevSummary.avgDurationMin)} invertColor />
+              <SummaryCard label={t('totalDuration')} value={formatDuration(data.summary.totalDurationMin)} sub={(() => { const d = data.summary.totalDurationMin - data.prevSummary.totalDurationMin; if (data.prevSummary.totalDurationMin === 0 && data.summary.totalDurationMin === 0) return ''; if (data.prevSummary.totalDurationMin === 0) return t('newBadgeLabel'); return `${d >= 0 ? '+' : '-'}${formatDuration(Math.abs(d))}` })()} color="text-ive-text" diff={diffPct(data.summary.totalDurationMin, data.prevSummary.totalDurationMin)} invertColor />
+              <SummaryCard label={t('avgDuration')} value={formatDuration(data.summary.avgDurationMin)} sub={(() => { const d = data.summary.avgDurationMin - data.prevSummary.avgDurationMin; if (data.prevSummary.avgDurationMin === 0 && data.summary.avgDurationMin === 0) return ''; if (data.prevSummary.avgDurationMin === 0) return t('newBadgeLabel'); return `${d >= 0 ? '+' : '-'}${formatDuration(Math.abs(d))}` })()} color="text-ive-text" diff={diffPct(data.summary.avgDurationMin, data.prevSummary.avgDurationMin)} invertColor />
             </div>
           </section>
 
           {/* Lifecycle */}
           {data.lifecycle.procCount > 0 && (
             <section>
-              <div className="text-xs font-bold text-ive-text-dim mb-2 uppercase tracking-wider">이슈 생애주기</div>
+              <div className="text-xs font-bold text-ive-text-dim mb-2 uppercase tracking-wider">{t('issueLifecycle')}</div>
               <div className="bg-ive-bg-card border border-ive-border-subtle rounded-xl p-3 space-y-3">
                 {/* 단계별 평균/최대 + 이전 비교 */}
                 {(() => {
@@ -549,32 +569,32 @@ export default function ReportsTab() {
                     <div className={`grid gap-2 ${cols === 3 ? 'grid-cols-3' : cols === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
                       {hasWait && (
                         <div className="text-center">
-                          <div className="text-[10px] text-ive-text-dim">생성→배정</div>
+                          <div className="text-[10px] text-ive-text-dim">{t('createToAssign')}</div>
                           <div className="text-sm font-extrabold text-ive-cyan">{formatDuration(data.lifecycle.waitAvg)}</div>
-                          <div className="text-[10px] text-ive-text-dim">최대 {formatDuration(data.lifecycle.waitMax)}</div>
+                          <div className="text-[10px] text-ive-text-dim">{t('max')} {formatDuration(data.lifecycle.waitMax)}</div>
                           <div className="mt-0.5">
                             <DiffBadge diff={waitDiff} isNew={waitDiff == null && data.lifecycle.waitCount > 0 && prev.waitCount === 0} />
-                            {prev.waitCount > 0 && <div className="text-[9px] text-ive-text-dim mt-0.5">이전 {formatDuration(prev.waitAvg)}</div>}
+                            {prev.waitCount > 0 && <div className="text-[9px] text-ive-text-dim mt-0.5">{t('prevDuration', { duration: formatDuration(prev.waitAvg) })}</div>}
                           </div>
                         </div>
                       )}
                       <div className="text-center">
-                        <div className="text-[10px] text-ive-text-dim">처리시간</div>
+                        <div className="text-[10px] text-ive-text-dim">{t('processTime')}</div>
                         <div className="text-sm font-extrabold text-ive-green">{formatDuration(data.lifecycle.procAvg)}</div>
-                        <div className="text-[10px] text-ive-text-dim">최대 {formatDuration(data.lifecycle.procMax)}</div>
+                        <div className="text-[10px] text-ive-text-dim">{t('max')} {formatDuration(data.lifecycle.procMax)}</div>
                         <div className="mt-0.5">
                           <DiffBadge diff={procDiff} isNew={procDiff == null && data.lifecycle.procCount > 0 && prev.procCount === 0} />
-                          {prev.procCount > 0 && <div className="text-[9px] text-ive-text-dim mt-0.5">이전 {formatDuration(prev.procAvg)}</div>}
+                          {prev.procCount > 0 && <div className="text-[9px] text-ive-text-dim mt-0.5">{t('prevDuration', { duration: formatDuration(prev.procAvg) })}</div>}
                         </div>
                       </div>
                       {hasTotal && (
                         <div className="text-center">
-                          <div className="text-[10px] text-ive-text-dim">총 소요</div>
+                          <div className="text-[10px] text-ive-text-dim">{t('totalTime')}</div>
                           <div className="text-sm font-extrabold text-ive-text">{formatDuration(data.lifecycle.totalAvg)}</div>
-                          <div className="text-[10px] text-ive-text-dim">최대 {formatDuration(data.lifecycle.totalMax)}</div>
+                          <div className="text-[10px] text-ive-text-dim">{t('max')} {formatDuration(data.lifecycle.totalMax)}</div>
                           <div className="mt-0.5">
                             <DiffBadge diff={totalDiff} isNew={totalDiff == null && data.lifecycle.totalCount > 0 && prev.totalCount === 0} />
-                            {prev.totalCount > 0 && <div className="text-[9px] text-ive-text-dim mt-0.5">이전 {formatDuration(prev.totalAvg)}</div>}
+                            {prev.totalCount > 0 && <div className="text-[9px] text-ive-text-dim mt-0.5">{t('prevDuration', { duration: formatDuration(prev.totalAvg) })}</div>}
                           </div>
                         </div>
                       )}
@@ -594,18 +614,18 @@ export default function ReportsTab() {
                         {otherPct > 0 && <div className="bg-ive-amber/40" style={{ width: `${otherPct}%` }} />}
                       </div>
                       <div className="flex justify-between mt-1 text-[9px] text-ive-text-dim">
-                        <span>대기 {waitPct}%</span>
-                        <span>처리 {procPct}%</span>
-                        {otherPct > 0 && <span>기타 {otherPct}%</span>}
+                        <span>{t('waitPct', { pct: waitPct })}</span>
+                        <span>{t('procPct', { pct: procPct })}</span>
+                        {otherPct > 0 && <span>{t('otherPct', { pct: otherPct })}</span>}
                       </div>
                     </div>
                   )
                 })()}
                 {/* 재시도 */}
                 <div className="flex justify-center gap-4 text-[10px] text-ive-text-dim">
-                  <span>이슈 {data.lifecycle.uniqueIssues.toLocaleString()}건</span>
-                  <span>평균 {data.lifecycle.avgAttempts.toFixed(1)}회 시도</span>
-                  <span>재시도율 {data.lifecycle.retryRate.toFixed(1)}%</span>
+                  <span>{t('issueCount', { count: data.lifecycle.uniqueIssues.toLocaleString() })}</span>
+                  <span>{t('avgAttempts', { count: data.lifecycle.avgAttempts.toFixed(1) })}</span>
+                  <span>{t('retryRateLabel', { rate: data.lifecycle.retryRate.toFixed(1) })}</span>
                 </div>
               </div>
             </section>
@@ -615,7 +635,7 @@ export default function ReportsTab() {
           {data.dailyTrend.length >= 2 && (data.dailyTrend.some(d => d.waitAvg !== null) || data.dailyTrend.some(d => d.procAvg !== null)) && (
             <section>
               <div className="text-xs font-bold text-ive-text-dim mb-2 uppercase tracking-wider">
-                대기/수행시간 평균 트렌드
+                {t('waitProcAvgTrend')}
               </div>
               <div className="bg-ive-bg-card border border-ive-border-subtle rounded-xl p-3 space-y-3">
                 {data.dailyTrend.some(d => d.waitAvg !== null) && (() => {
@@ -631,13 +651,13 @@ export default function ReportsTab() {
                     <div className="flex items-center gap-3">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="text-xs font-bold text-ive-cyan">대기시간</span>
+                          <span className="text-xs font-bold text-ive-cyan">{t('waitTime')}</span>
                           <span className={`text-[10px] font-bold ${trendDir === 'up' ? 'text-ive-red' : trendDir === 'down' ? 'text-ive-green' : 'text-ive-text-dim'}`}>
-                            {trendDir === 'up' ? '증가 ↑' : trendDir === 'down' ? '감소 ↓' : '안정 →'}
+                            {trendDir === 'up' ? t('trendUp') : trendDir === 'down' ? t('trendDown') : t('trendStable')}
                           </span>
                           {prevDiff != null && (
                             <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${prevDiff > 0 ? 'text-ive-red bg-ive-red/10' : prevDiff < 0 ? 'text-ive-green bg-ive-green/10' : 'text-ive-text-dim bg-white/5'}`}>
-                              vs 이전 {prevDiff > 0 ? '+' : ''}{prevDiff.toLocaleString()}%
+                              {t('vsPrev')} {prevDiff > 0 ? '+' : ''}{prevDiff.toLocaleString()}%
                             </span>
                           )}
                           {prevDiff == null && data.lifecycle.waitCount > 0 && data.prevLifecycle.waitCount === 0 && (
@@ -650,11 +670,11 @@ export default function ReportsTab() {
                           </div>
                           <div className="text-right shrink-0">
                             <div className="text-xs font-bold text-ive-text">{formatDuration(validWait[validWait.length - 1] ?? 0)}</div>
-                            <div className="text-[10px] text-ive-text-dim">최근</div>
+                            <div className="text-[10px] text-ive-text-dim">{t('recent')}</div>
                           </div>
                           <div className="text-right shrink-0 ml-1">
                             <div className="text-xs font-bold text-ive-text-dim">{data.prevLifecycle.waitCount > 0 ? formatDuration(data.prevLifecycle.waitAvg) : '-'}</div>
-                            <div className="text-[10px] text-ive-text-dim">이전 평균</div>
+                            <div className="text-[10px] text-ive-text-dim">{t('prevAvg')}</div>
                           </div>
                         </div>
                       </div>
@@ -674,13 +694,13 @@ export default function ReportsTab() {
                     <div className="flex items-center gap-3">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="text-xs font-bold text-ive-green">수행시간</span>
+                          <span className="text-xs font-bold text-ive-green">{t('procTime')}</span>
                           <span className={`text-[10px] font-bold ${trendDir === 'up' ? 'text-ive-red' : trendDir === 'down' ? 'text-ive-green' : 'text-ive-text-dim'}`}>
-                            {trendDir === 'up' ? '증가 ↑' : trendDir === 'down' ? '감소 ↓' : '안정 →'}
+                            {trendDir === 'up' ? t('trendUp') : trendDir === 'down' ? t('trendDown') : t('trendStable')}
                           </span>
                           {prevDiff != null && (
                             <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${prevDiff > 0 ? 'text-ive-red bg-ive-red/10' : prevDiff < 0 ? 'text-ive-green bg-ive-green/10' : 'text-ive-text-dim bg-white/5'}`}>
-                              vs 이전 {prevDiff > 0 ? '+' : ''}{prevDiff.toLocaleString()}%
+                              {t('vsPrev')} {prevDiff > 0 ? '+' : ''}{prevDiff.toLocaleString()}%
                             </span>
                           )}
                           {prevDiff == null && data.lifecycle.procCount > 0 && data.prevLifecycle.procCount === 0 && (
@@ -693,11 +713,11 @@ export default function ReportsTab() {
                           </div>
                           <div className="text-right shrink-0">
                             <div className="text-xs font-bold text-ive-text">{formatDuration(validProc[validProc.length - 1] ?? 0)}</div>
-                            <div className="text-[10px] text-ive-text-dim">최근</div>
+                            <div className="text-[10px] text-ive-text-dim">{t('recent')}</div>
                           </div>
                           <div className="text-right shrink-0 ml-1">
                             <div className="text-xs font-bold text-ive-text-dim">{data.prevLifecycle.procCount > 0 ? formatDuration(data.prevLifecycle.procAvg) : '-'}</div>
-                            <div className="text-[10px] text-ive-text-dim">이전 평균</div>
+                            <div className="text-[10px] text-ive-text-dim">{t('prevAvg')}</div>
                           </div>
                         </div>
                       </div>
@@ -712,7 +732,7 @@ export default function ReportsTab() {
           {data.dailyTrend.length > 0 && (
             <section>
               <div className="text-xs font-bold text-ive-text-dim mb-2 uppercase tracking-wider">
-                {type === 'yearly' ? '월별' : '일별'} 추이
+                {t('dailyTrend', { label: type === 'yearly' ? t('monthlyLabel') : t('dailyLabel') })}
               </div>
               <DailyTrendChart data={data.dailyTrend} prevData={data.prevDailyTrend} type={type} />
             </section>
@@ -722,7 +742,7 @@ export default function ReportsTab() {
           {data.byProject.length > 0 && (
             <section>
               <CompareTable
-                title="프로젝트별"
+                title={t('byProject')}
                 icon="fa-folder"
                 data={data.byProject.map(p => {
                   const prev = data.prevByProject?.find(pp => pp.projectId === p.projectId)
@@ -736,7 +756,7 @@ export default function ReportsTab() {
           {data.byAgent.length > 0 && (
             <section>
               <CompareTable
-                title="작업자별"
+                title={t('byAgent')}
                 icon="fa-robot"
                 data={data.byAgent.map(a => {
                   const prev = data.prevByAgent?.find(pa => pa.agentId === a.agentId)
@@ -750,8 +770,8 @@ export default function ReportsTab() {
           {data.byProject.length > 0 && (
             <section>
               <div className="flex items-center justify-between mb-2">
-                <div className="text-xs font-bold text-ive-text-dim uppercase tracking-wider">프로젝트별</div>
-                <SortButtons sortKey={projectSortKey} sortDir={projectSortDir} onToggle={(k) => toggleSectionSort(projectSortKey, projectSortDir, setProjectSortKey, setProjectSortDir, k, PROJ_SORT_KEY, PROJ_SORT_DIR)} />
+                <div className="text-xs font-bold text-ive-text-dim uppercase tracking-wider">{t('byProject')}</div>
+                <SortButtons sortKey={projectSortKey} sortDir={projectSortDir} onToggle={(k) => toggleSectionSort(projectSortKey, projectSortDir, setProjectSortKey, setProjectSortDir, k, PROJ_SORT_KEY, PROJ_SORT_DIR)} countLabel={t('countLabel')} costLabel={t('costSmall')} />
               </div>
               <div className="space-y-2">
                 {sortedProjects().map(p => {
@@ -770,7 +790,7 @@ export default function ReportsTab() {
                         </span>
                       )}
                       <span className="text-sm font-bold text-ive-text flex-1 truncate">{p.projectName}</span>
-                      <span className="text-xs text-ive-text-dim">{p.tasks.toLocaleString()}건</span>
+                      <span className="text-xs text-ive-text-dim">{t('itemsUnit', { count: p.tasks.toLocaleString() })}</span>
                       {taskDiff != null && <span className={`text-[10px] font-bold ${taskDiff > 0 ? 'text-ive-green' : taskDiff < 0 ? 'text-ive-red' : 'text-ive-text-dim'}`}>{taskDiff > 0 ? '+' : ''}{taskDiff.toLocaleString()}%</span>}
                       <span className="text-xs text-ive-amber">${formatCost(p.cost)}</span>
                       {costDiff != null && <span className={`text-[10px] font-bold ${costDiff > 0 ? 'text-ive-red' : costDiff < 0 ? 'text-ive-green' : 'text-ive-text-dim'}`}>{costDiff > 0 ? '+' : ''}{costDiff.toLocaleString()}%</span>}
@@ -779,28 +799,28 @@ export default function ReportsTab() {
                     {expandedProjects.has(p.projectId) && (
                       <div className="px-3 pb-3 border-t border-ive-border-dark">
                         <div className="grid grid-cols-3 gap-1 mt-2 text-center">
-                          <MiniStat label="성공" value={p.success.toLocaleString()} color="text-ive-green" />
-                          <MiniStat label="실패" value={p.failed.toLocaleString()} color="text-ive-red" />
-                          <MiniStat label="비용" value={`$${formatCost(p.cost)}`} color="text-ive-amber" />
+                          <MiniStat label={t('success')} value={p.success.toLocaleString()} color="text-ive-green" />
+                          <MiniStat label={t('failed')} value={p.failed.toLocaleString()} color="text-ive-red" />
+                          <MiniStat label={t('costLabel')} value={`$${formatCost(p.cost)}`} color="text-ive-amber" />
                         </div>
                         <div className="grid grid-cols-2 gap-1 mt-1 text-center">
-                          <MiniStat label="총시간" value={formatDuration(p.totalDurationMin)} color="text-ive-text-muted" />
-                          <MiniStat label="평균" value={formatDuration(p.avgDurationMin)} color="text-ive-text-muted" />
+                          <MiniStat label={t('totalLabel')} value={formatDuration(p.totalDurationMin)} color="text-ive-text-muted" />
+                          <MiniStat label={t('avgLabel')} value={formatDuration(p.avgDurationMin)} color="text-ive-text-muted" />
                         </div>
                         <div className="text-xs text-ive-text-dim mt-1 text-center">
-                          입력 {formatTokens(p.inputTokens)} / 출력 {formatTokens(p.outputTokens)} 토큰
+                          {t('inputOutputTokens', { input: formatTokens(p.inputTokens), output: formatTokens(p.outputTokens) })}
                         </div>
                         {/* 프로젝트별 건수/비용 추이 */}
                         {pt && pt.daily.length >= 2 && (
                           <div className="mt-2 bg-ive-bg-deep rounded-lg p-2">
-                            <div className="text-[10px] font-bold text-ive-text-dim mb-1.5">건수/비용 추이</div>
+                            <div className="text-[10px] font-bold text-ive-text-dim mb-1.5">{t('countCostTrend')}</div>
                             <div className="grid grid-cols-2 gap-2">
                               <div className="flex items-center gap-1.5">
-                                <span className="text-[10px] text-ive-text-dim shrink-0">건수</span>
+                                <span className="text-[10px] text-ive-text-dim shrink-0">{t('countLabel')}</span>
                                 <Sparkline data={pt.daily.map(d => d.tasks)} width={100} height={20} color="auto" />
                               </div>
                               <div className="flex items-center gap-1.5">
-                                <span className="text-[10px] text-ive-text-dim shrink-0">비용</span>
+                                <span className="text-[10px] text-ive-text-dim shrink-0">{t('costSmall')}</span>
                                 <Sparkline data={pt.daily.map(d => d.cost)} width={100} height={20} color="amber" />
                               </div>
                             </div>
@@ -808,7 +828,7 @@ export default function ReportsTab() {
                         )}
                         {p.byAgent.length > 0 && (
                           <div className="mt-2 space-y-1">
-                            <div className="text-xs font-bold text-ive-text-dim">작업자</div>
+                            <div className="text-xs font-bold text-ive-text-dim">{t('workers')}</div>
                             {p.byAgent.map(a => (
                               <div key={a.agentId} className="flex items-center gap-2 bg-ive-bg-deep rounded-lg px-2 py-1.5">
                                 <AgentAvatar avatar={a.agentAvatar} size="sm" className="!w-5 !h-5 !text-xs" />
@@ -832,8 +852,8 @@ export default function ReportsTab() {
           {data.byAgent.length > 0 && (
             <section>
               <div className="flex items-center justify-between mb-2">
-                <div className="text-xs font-bold text-ive-text-dim uppercase tracking-wider">작업자별</div>
-                <SortButtons sortKey={agentSortKey} sortDir={agentSortDir} onToggle={(k) => toggleSectionSort(agentSortKey, agentSortDir, setAgentSortKey, setAgentSortDir, k, AGENT_SORT_KEY, AGENT_SORT_DIR)} />
+                <div className="text-xs font-bold text-ive-text-dim uppercase tracking-wider">{t('byAgent')}</div>
+                <SortButtons sortKey={agentSortKey} sortDir={agentSortDir} onToggle={(k) => toggleSectionSort(agentSortKey, agentSortDir, setAgentSortKey, setAgentSortDir, k, AGENT_SORT_KEY, AGENT_SORT_DIR)} countLabel={t('countLabel')} costLabel={t('costSmall')} />
               </div>
               <div className="space-y-2">
                 {sortedAgents().map(a => {
@@ -846,7 +866,7 @@ export default function ReportsTab() {
                     <button onClick={() => toggleAgent(a.agentId)} className="w-full px-3 py-2.5 flex items-center gap-2 text-left">
                       <AgentAvatar avatar={a.agentAvatar} size="sm" className="!w-6 !h-6 !text-sm" />
                       <span className="text-sm font-bold text-ive-text flex-1 truncate">{a.agentName}</span>
-                      <span className="text-xs text-ive-text-dim">{a.tasks.toLocaleString()}건</span>
+                      <span className="text-xs text-ive-text-dim">{t('itemsUnit', { count: a.tasks.toLocaleString() })}</span>
                       {taskDiff != null && <span className={`text-[10px] font-bold ${taskDiff > 0 ? 'text-ive-green' : taskDiff < 0 ? 'text-ive-red' : 'text-ive-text-dim'}`}>{taskDiff > 0 ? '+' : ''}{taskDiff.toLocaleString()}%</span>}
                       <span className="text-xs text-ive-amber">${formatCost(a.cost)}</span>
                       {costDiff != null && <span className={`text-[10px] font-bold ${costDiff > 0 ? 'text-ive-red' : costDiff < 0 ? 'text-ive-green' : 'text-ive-text-dim'}`}>{costDiff > 0 ? '+' : ''}{costDiff.toLocaleString()}%</span>}
@@ -855,29 +875,29 @@ export default function ReportsTab() {
                     {expandedAgents.has(a.agentId) && (
                       <div className="px-3 pb-3 border-t border-ive-border-dark">
                         <div className="grid grid-cols-3 gap-1 mt-2 text-center">
-                          <MiniStat label="성공" value={a.success.toLocaleString()} color="text-ive-green" />
-                          <MiniStat label="실패" value={a.failed.toLocaleString()} color="text-ive-red" />
-                          <MiniStat label="비용" value={`$${formatCost(a.cost)}`} color="text-ive-amber" />
+                          <MiniStat label={t('success')} value={a.success.toLocaleString()} color="text-ive-green" />
+                          <MiniStat label={t('failed')} value={a.failed.toLocaleString()} color="text-ive-red" />
+                          <MiniStat label={t('costLabel')} value={`$${formatCost(a.cost)}`} color="text-ive-amber" />
                         </div>
                         <div className="grid grid-cols-3 gap-1 mt-1 text-center">
-                          <MiniStat label="총시간" value={formatDuration(a.totalDurationMin)} color="text-ive-text-muted" />
-                          <MiniStat label="평균" value={formatDuration(a.avgDurationMin)} color="text-ive-text-muted" />
-                          <MiniStat label="평균턴" value={a.avgTurns.toFixed(1)} color="text-ive-text-muted" />
+                          <MiniStat label={t('totalLabel')} value={formatDuration(a.totalDurationMin)} color="text-ive-text-muted" />
+                          <MiniStat label={t('avgLabel')} value={formatDuration(a.avgDurationMin)} color="text-ive-text-muted" />
+                          <MiniStat label={t('avgTurnsLabel')} value={a.avgTurns.toFixed(1)} color="text-ive-text-muted" />
                         </div>
                         <div className="text-xs text-ive-text-dim mt-1 text-center">
-                          입력 {formatTokens(a.inputTokens)} / 출력 {formatTokens(a.outputTokens)} 토큰
+                          {t('inputOutputTokens', { input: formatTokens(a.inputTokens), output: formatTokens(a.outputTokens) })}
                         </div>
                         {/* 작업자별 건수/비용 추이 */}
                         {at && at.daily.length >= 2 && (
                           <div className="mt-2 bg-ive-bg-deep rounded-lg p-2">
-                            <div className="text-[10px] font-bold text-ive-text-dim mb-1.5">건수/비용 추이</div>
+                            <div className="text-[10px] font-bold text-ive-text-dim mb-1.5">{t('countCostTrend')}</div>
                             <div className="grid grid-cols-2 gap-2">
                               <div className="flex items-center gap-1.5">
-                                <span className="text-[10px] text-ive-text-dim shrink-0">건수</span>
+                                <span className="text-[10px] text-ive-text-dim shrink-0">{t('countLabel')}</span>
                                 <Sparkline data={at.daily.map(d => d.tasks)} width={100} height={20} color="auto" />
                               </div>
                               <div className="flex items-center gap-1.5">
-                                <span className="text-[10px] text-ive-text-dim shrink-0">비용</span>
+                                <span className="text-[10px] text-ive-text-dim shrink-0">{t('costSmall')}</span>
                                 <Sparkline data={at.daily.map(d => d.cost)} width={100} height={20} color="amber" />
                               </div>
                             </div>
@@ -901,8 +921,8 @@ export default function ReportsTab() {
               >
                 <div className="flex items-center gap-2">
                   <i className="fa-solid fa-lightbulb text-ive-amber text-sm" />
-                  <span className="text-xs font-bold text-ive-text">추이 분석</span>
-                  <span className="text-[10px] text-ive-text-dim">{data.insights.length}건</span>
+                  <span className="text-xs font-bold text-ive-text">{t('trendAnalysis')}</span>
+                  <span className="text-[10px] text-ive-text-dim">{t('itemsUnit', { count: data.insights.length })}</span>
                 </div>
                 <i className={`fa-solid fa-chevron-${showInsights ? 'up' : 'down'} text-xs text-ive-text-dim`} />
               </button>
@@ -929,7 +949,7 @@ export default function ReportsTab() {
           {data.resolvedIssues && data.resolvedIssues.length > 0 && (
             <section>
               <div className="text-xs font-bold text-ive-text-dim mb-2 uppercase tracking-wider">
-                처리된 이슈 ({data.resolvedIssues.length.toLocaleString()}건)
+                {t('resolvedIssues', { count: data.resolvedIssues.length.toLocaleString() })}
               </div>
 
               {/* 필터 바 */}
@@ -937,7 +957,7 @@ export default function ReportsTab() {
                 <div className="flex gap-2">
                   {/* 상태 필터 */}
                   <div className="flex gap-1">
-                    {([['all', '전체'], ['success', '성공'], ['failed', '실패']] as [IssueFilter, string][]).map(([val, label]) => (
+                    {([['all', t('allFilter')], ['success', t('successFilter')], ['failed', t('failedFilter')]] as [IssueFilter, string][]).map(([val, label]) => (
                       <button
                         key={val}
                         onClick={() => setIssueFilter(val)}
@@ -958,7 +978,7 @@ export default function ReportsTab() {
                       value={issueProjectFilter}
                       onChange={setIssueProjectFilter}
                       options={[
-                        { value: 'all', label: '전체 프로젝트' },
+                        { value: 'all', label: t('allProjects') },
                         ...uniqueProjects.map(p => ({ value: p.id, label: p.name, color: p.color })),
                       ]}
                     />
@@ -972,7 +992,7 @@ export default function ReportsTab() {
                     type="text"
                     value={issueKeyword}
                     onChange={e => setIssueKeyword(e.target.value)}
-                    placeholder="이슈 검색 (번호, 제목, 작업자...)"
+                    placeholder={t('searchPlaceholder')}
                     className="w-full text-xs bg-ive-bg-card border border-ive-border-subtle rounded-lg pl-7 pr-7 py-1.5 text-ive-text placeholder-ive-text-dim focus:outline-none focus:border-ive-green/50"
                   />
                   {issueKeyword && (
@@ -987,8 +1007,8 @@ export default function ReportsTab() {
 
                 {/* 정렬 */}
                 <div className="flex items-center gap-1">
-                  <span className="text-[10px] text-ive-text-dim mr-0.5">정렬</span>
-                  {([['date', '일자'], ['iid', '번호'], ['wait', '대기'], ['duration', '시간'], ['cost', '비용']] as [IssueSortKey, string][]).map(([key, label]) => (
+                  <span className="text-[10px] text-ive-text-dim mr-0.5">{t('sortLabel')}</span>
+                  {([['date', t('sortDate')], ['iid', t('sortIid')], ['wait', t('sortWait')], ['duration', t('sortDuration')], ['cost', t('sortCost')]] as [IssueSortKey, string][]).map(([key, label]) => (
                     <button
                       key={key}
                       onClick={() => changeSort(key)}
@@ -1031,15 +1051,15 @@ export default function ReportsTab() {
                             {issue.agentName}
                           </span>
                           {issue.waitMin != null && (
-                            <span className="text-ive-cyan">대기 {formatDuration(issue.waitMin)}</span>
+                            <span className="text-ive-cyan">{t('waitLabel')} {formatDuration(issue.waitMin)}</span>
                           )}
                           <span>{formatDuration(issue.durationMin)}</span>
                           <span className="text-ive-amber">${formatCost(issue.cost)}</span>
                           {issue.turns > 0 && (
-                            <span className="text-ive-text-dim">{issue.turns.toLocaleString()}턴</span>
+                            <span className="text-ive-text-dim">{t('turnsUnit', { count: issue.turns.toLocaleString() })}</span>
                           )}
                           {issue.attempts > 1 && (
-                            <span className="text-ive-red">{issue.attemptNo}/{issue.attempts}회</span>
+                            <span className="text-ive-red">{t('attemptRatio', { current: issue.attemptNo, total: issue.attempts })}</span>
                           )}
                         </div>
                       </div>
@@ -1049,13 +1069,13 @@ export default function ReportsTab() {
                 ))}
                 {filteredIssues.length === 0 && (
                   <div className="text-center text-xs text-ive-text-dim py-4">
-                    필터 조건에 맞는 이슈가 없습니다.
+                    {t('noFilterMatch')}
                   </div>
                 )}
                 {visibleCount < filteredIssues.length && (
                   <div className="text-center text-xs text-ive-text-dim py-3">
                     <i className="fa-solid fa-circle-notch fa-spin mr-1" />
-                    {(filteredIssues.length - visibleCount).toLocaleString()}건 더 있음
+                    {t('moreItems', { count: (filteredIssues.length - visibleCount).toLocaleString() })}
                   </div>
                 )}
               </div>
@@ -1066,7 +1086,7 @@ export default function ReportsTab() {
           {data.summary.totalTasks === 0 && (
             <div className="text-center py-16 text-ive-text-dim">
               <i className="fa-solid fa-chart-bar text-3xl mb-3 block opacity-30" />
-              <p className="text-sm">해당 기간에 실행된 작업이 없습니다.</p>
+              <p className="text-sm">{t('noExecutions')}</p>
             </div>
           )}
         </main>
@@ -1082,7 +1102,7 @@ function SummaryCard({ label, value, sub, color, diff, invertColor }: {
   const diffColor = diff == null ? '' : invertColor
     ? (diff > 0 ? 'text-ive-red' : diff < 0 ? 'text-ive-green' : 'text-ive-text-dim')
     : (diff > 0 ? 'text-ive-green' : diff < 0 ? 'text-ive-red' : 'text-ive-text-dim')
-  const subColor = !sub || sub === '신규' ? 'text-ive-cyan' : !invertColor ? 'text-ive-text-dim'
+  const subColor = !sub || (!sub.startsWith('+') && !sub.startsWith('-')) ? 'text-ive-cyan' : !invertColor ? 'text-ive-text-dim'
     : sub.startsWith('+') ? 'text-ive-red' : sub.startsWith('-') ? 'text-ive-green' : 'text-ive-text-dim'
   return (
     <div className="bg-ive-bg-card border border-ive-border-subtle rounded-xl px-3 py-2 text-center">
@@ -1163,13 +1183,14 @@ function CustomSelect({ value, onChange, options }: {
   )
 }
 
-function SortButtons({ sortKey, sortDir, onToggle }: {
+function SortButtons({ sortKey, sortDir, onToggle, countLabel, costLabel }: {
   sortKey: SectionSortKey; sortDir: SectionSortDir
   onToggle: (key: SectionSortKey) => void
+  countLabel?: string; costLabel?: string
 }) {
   return (
     <div className="flex items-center gap-1">
-      {([['tasks', '건수'], ['cost', '비용']] as [SectionSortKey, string][]).map(([key, label]) => (
+      {([['tasks', countLabel || 'Count'], ['cost', costLabel || 'Cost']] as [SectionSortKey, string][]).map(([key, label]) => (
         <button
           key={key}
           onClick={() => onToggle(key)}

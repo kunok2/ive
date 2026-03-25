@@ -16,20 +16,20 @@ import Modal from '@/components/ui/Modal'
 import { useDialog } from '@/components/ui/ConfirmDialog'
 import UserProfileForm from '@/components/auth/UserProfileForm'
 import { DEFAULT_AVATARS } from '@/types'
-
-const subtitle: Record<string, string> = {
-  projects: '프로젝트',
-  agents: '개발자',
-  issues: '작업',
-  reports: '보고서',
-  admin: '관리',
-}
+import LanguageSwitcher from '@/components/ui/LanguageSwitcher'
+import { useTranslations } from 'next-intl'
 
 export default function HomePage() {
   const router = useRouter()
   const { state, logout, refreshUser } = useStore()
   const { activeTab, issuesProjectId } = useTab()
   const { alert: showAlert, confirm: showConfirm } = useDialog()
+  const tn = useTranslations('nav')
+  const tc = useTranslations('common')
+  const td = useTranslations('dialog')
+  const ta = useTranslations('agent')
+  const tp = useTranslations('project')
+  const tAuth = useTranslations('auth')
   const [showNewProject, setShowNewProject] = useState(false)
   const [showNewAgent, setShowNewAgent] = useState(false)
   const [issueAddTrigger, setIssueAddTrigger] = useState(0)
@@ -43,7 +43,7 @@ export default function HomePage() {
   }, [state.authChecked, state.user, router])
 
   if (!state.authChecked || !state.user) {
-    return <div className="min-h-screen flex items-center justify-center text-ive-text-muted text-base">불러오는 중...</div>
+    return <div className="min-h-screen flex items-center justify-center text-ive-text-muted text-base">{tc('loading')}</div>
   }
 
   return (
@@ -57,7 +57,7 @@ export default function HomePage() {
                 <span className="text-orange-400">IVE</span>
 
               </h1>
-              <p className="text-xs text-ive-text-dim mt-0.5">{subtitle[activeTab]}</p>
+              <p className="text-xs text-ive-text-dim mt-0.5">{tn(activeTab as 'projects' | 'agents' | 'issues' | 'reports' | 'admin')}</p>
             </div>
           </div>
           <div className="flex items-center gap-1.5">
@@ -76,7 +76,7 @@ export default function HomePage() {
                 onClick={async () => {
                   const maxAgents = state.user?.maxAgents || 0
                   if (maxAgents > 0 && state.agents.length >= maxAgents) {
-                    await showAlert({ title: '제한 초과', message: `최대 ${maxAgents}개의 개발자만 생성할 수 있습니다.\n관리자에게 문의하세요.`, variant: 'error' })
+                    await showAlert({ title: td('limitExceededTitle'), message: ta('limitExceeded', { max: maxAgents }), variant: 'error' })
                     return
                   }
                   setShowNewAgent(true)
@@ -122,13 +122,14 @@ export default function HomePage() {
                 return av ? <i className={`${av.icon} text-sm`} style={{ color: av.color }} /> : <i className="fa-solid fa-user text-sm text-ive-green" />
               })()}
             </button>
+            <LanguageSwitcher />
             <button
               onClick={async () => {
-                const ok = await showConfirm({ title: '로그아웃', message: '로그아웃 하시겠습니까?', confirmText: '로그아웃', cancelText: '취소', variant: 'warning' })
+                const ok = await showConfirm({ title: td('logoutTitle'), message: td('logoutMessage'), confirmText: tAuth('logout'), cancelText: tc('cancel'), variant: 'warning' })
                 if (ok) { await logout(); router.push('/login') }
               }}
               className="w-8 h-8 rounded-full bg-ive-bg-card border border-ive-border-subtle flex items-center justify-center text-ive-text-dim hover:text-ive-text active:scale-95 transition-all"
-              aria-label="로그아웃"
+              aria-label={tAuth('logout')}
             >
               <i className="fa-solid fa-right-from-bracket text-sm" />
             </button>
@@ -155,13 +156,13 @@ export default function HomePage() {
       )}
       <MobileTabBar />
 
-      <Modal open={showNewProject} onClose={() => setShowNewProject(false)} title="새 프로젝트">
+      <Modal open={showNewProject} onClose={() => setShowNewProject(false)} title={tp('newProject')}>
         <ProjectForm onSuccess={() => setShowNewProject(false)} />
       </Modal>
-      <Modal open={showNewAgent} onClose={() => setShowNewAgent(false)} title="개발자 추가">
+      <Modal open={showNewAgent} onClose={() => setShowNewAgent(false)} title={ta('addDeveloper')}>
         <AgentForm onSuccess={() => setShowNewAgent(false)} />
       </Modal>
-      <Modal open={showChangePassword} onClose={() => setShowChangePassword(false)} title="내 정보">
+      <Modal open={showChangePassword} onClose={() => setShowChangePassword(false)} title={tAuth('myInfo')}>
         <UserProfileForm userId={state.user.id} email={state.user.email} name={state.user.name} avatar={state.user.avatar} onSuccess={() => setShowChangePassword(false)} onCancel={() => setShowChangePassword(false)} onEmailChanged={() => refreshUser()} onAvatarChanged={() => { setAvatarTs(Date.now()); refreshUser() }} />
       </Modal>
     </>

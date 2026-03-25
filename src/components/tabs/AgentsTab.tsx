@@ -5,10 +5,13 @@ import { useStore } from '@/lib/store'
 import AgentCard from '@/components/agent/AgentCard'
 import ConfirmModal from '@/components/ui/ConfirmModal'
 import PullToRefresh from '@/components/ui/PullToRefresh'
+import { useTranslations } from 'next-intl'
 
 export default function AgentsTab({ onAdd }: { onAdd?: () => void }) {
   const { state, deleteAgent, refreshAgents } = useStore()
   const [deleteAgentId, setDeleteAgentId] = useState<string | null>(null)
+  const t = useTranslations('agent')
+  const tCommon = useTranslations('common')
 
   function getAssignedProjects(agentId: string): { id: string; name: string; color: string; provider: string }[] {
     const result: { id: string; name: string; color: string; provider: string }[] = []
@@ -26,19 +29,19 @@ export default function AgentsTab({ onAdd }: { onAdd?: () => void }) {
         {state.loading ? (
           <div className="text-center py-20 text-ive-text-muted text-base">
             <i className="fa-solid fa-circle-notch fa-spin text-2xl text-ive-green mb-3 block" />
-            개발자 불러오는 중...
+            {t('loadingAgents')}
           </div>
         ) : state.agents.length === 0 ? (
           <div className="text-center py-20">
             <i className="fa-solid fa-robot text-4xl text-ive-text-dim mb-4 block" />
-            <p className="text-base text-ive-text-muted mb-2">아직 등록된 개발자가 없습니다</p>
-            <p className="text-sm text-ive-text-dim mb-5">Claude, Gemini, Codex 등 AI CLI를 개발자로 등록하세요</p>
+            <p className="text-base text-ive-text-muted mb-2">{t('noAgents')}</p>
+            <p className="text-sm text-ive-text-dim mb-5">{t('noAgentsHint')}</p>
             {onAdd && (
               <button
                 onClick={onAdd}
                 className="inline-flex items-center gap-2 px-5 py-2.5 bg-ive-green text-ive-bg-deep font-bold text-sm rounded-xl active:scale-95 transition-transform"
               >
-                <i className="fa-solid fa-plus" />개발자 추가
+                <i className="fa-solid fa-plus" />{t('addDeveloper')}
               </button>
             )}
           </div>
@@ -65,9 +68,9 @@ export default function AgentsTab({ onAdd }: { onAdd?: () => void }) {
             setDeleteAgentId(null)
           }
         }}
-        title="개발자 삭제"
-        message="이 개발자를 삭제하면 배정된 프로젝트에서도 해제됩니다. 삭제하시겠습니까?"
-        confirmLabel="삭제"
+        title={t('deleteAgent')}
+        message={t('deleteAgentConfirm')}
+        confirmLabel={tCommon('delete')}
         danger
       />
     </PullToRefresh>

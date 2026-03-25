@@ -6,6 +6,8 @@ import Link from 'next/link'
 import ChangePasswordForm from '@/components/auth/ChangePasswordForm'
 import IntroSlides from '@/components/auth/IntroSlides'
 import { useStore } from '@/lib/store'
+import { useTranslations } from 'next-intl'
+import LanguageSwitcher from '@/components/ui/LanguageSwitcher'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -17,6 +19,7 @@ export default function LoginPage() {
   const [showChangePassword, setShowChangePassword] = useState(false)
   const [showIntro, setShowIntro] = useState(false)
   const [sessionExpired, setSessionExpired] = useState(false)
+  const tAuth = useTranslations('auth')
 
   useEffect(() => {
     if (!localStorage.getItem('ive-intro-seen')) {
@@ -65,13 +68,13 @@ export default function LoginPage() {
 
         {sessionExpired && (
           <div className="mb-4 text-base text-ive-amber bg-ive-amber/10 border border-ive-amber/20 rounded-lg px-3 py-2">
-            <i className="fa-solid fa-clock mr-1.5" />로그인 세션이 만료되었습니다. 다시 로그인해주세요.
+            <i className="fa-solid fa-clock mr-1.5" />{tAuth('sessionExpired')}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div>
-            <label className="block text-base font-semibold text-ive-text-muted mb-1.5">이메일</label>
+            <label className="block text-base font-semibold text-ive-text-muted mb-1.5">{tAuth('email')}</label>
             <input
               type="email"
               value={email}
@@ -83,7 +86,7 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <label className="block text-base font-semibold text-ive-text-muted mb-1.5">비밀번호</label>
+            <label className="block text-base font-semibold text-ive-text-muted mb-1.5">{tAuth('password')}</label>
             <input
               type="password"
               value={password}
@@ -106,29 +109,30 @@ export default function LoginPage() {
             disabled={loading}
             className="w-full bg-ive-green-dark text-white font-bold py-3 rounded-lg text-base active:bg-ive-green/80 transition-colors disabled:opacity-50"
           >
-            {loading ? (<><i className="fa-solid fa-spinner fa-spin mr-1.5" />로그인 중...</>) : (<><i className="fa-solid fa-right-to-bracket mr-1.5" />로그인</>)}
+            {loading ? (<><i className="fa-solid fa-spinner fa-spin mr-1.5" />{tAuth('loggingIn')}</>) : (<><i className="fa-solid fa-right-to-bracket mr-1.5" />{tAuth('login')}</>)}
           </button>
         </form>
 
         <div className="flex justify-center gap-4 mt-6 text-base text-ive-text-muted">
-          <Link href="/register" className="text-ive-green font-semibold">회원가입</Link>
-          <button onClick={() => setShowChangePassword(true)} className="text-ive-cyan font-semibold">비밀번호 변경</button>
+          <Link href="/register" className="text-ive-green font-semibold">{tAuth('register')}</Link>
+          <button onClick={() => setShowChangePassword(true)} className="text-ive-cyan font-semibold">{tAuth('changePassword')}</button>
         </div>
 
         {showChangePassword && (
           <div className="mt-6 bg-ive-bg-card border border-ive-border-subtle rounded-xl p-4">
-            <h3 className="text-sm font-bold text-ive-text mb-3">비밀번호 변경</h3>
+            <h3 className="text-sm font-bold text-ive-text mb-3">{tAuth('changePassword')}</h3>
             <ChangePasswordForm onSuccess={() => setShowChangePassword(false)} onCancel={() => setShowChangePassword(false)} />
           </div>
         )}
 
-        <div className="mt-4 text-center">
+        <div className="mt-4 flex items-center justify-center gap-3">
           <button
             onClick={() => setShowIntro(true)}
             className="text-sm text-ive-text-muted hover:text-ive-green transition-colors"
           >
-            <i className="fa-solid fa-circle-info mr-1" />Spring IVE가 처음이신가요?
+            <i className="fa-solid fa-circle-info mr-1" />{tAuth('introPrompt')}
           </button>
+          <LanguageSwitcher />
         </div>
       </div>
 

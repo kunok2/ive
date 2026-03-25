@@ -24,16 +24,16 @@ export function detectProvider(url: string): Provider {
 }
 
 export const PROJECT_COLORS = [
-  { name: '초록', value: '#4ade80' },
-  { name: '청록', value: '#22d3ee' },
-  { name: '파랑', value: '#60a5fa' },
-  { name: '보라', value: '#a78bfa' },
-  { name: '분홍', value: '#f472b6' },
-  { name: '빨강', value: '#f87171' },
-  { name: '주황', value: '#fb923c' },
-  { name: '노랑', value: '#fbbf24' },
-  { name: '라임', value: '#a3e635' },
-  { name: '흰색', value: '#e0e0e0' },
+  { name: 'green', value: '#4ade80' },
+  { name: 'cyan', value: '#22d3ee' },
+  { name: 'blue', value: '#60a5fa' },
+  { name: 'purple', value: '#a78bfa' },
+  { name: 'pink', value: '#f472b6' },
+  { name: 'red', value: '#f87171' },
+  { name: 'orange', value: '#fb923c' },
+  { name: 'yellow', value: '#fbbf24' },
+  { name: 'lime', value: '#a3e635' },
+  { name: 'white', value: '#e0e0e0' },
 ] as const
 
 export type ProjectColor = typeof PROJECT_COLORS[number]['value']

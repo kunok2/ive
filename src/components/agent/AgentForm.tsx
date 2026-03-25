@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useTranslations } from 'next-intl'
 import { CliName, DEFAULT_AVATARS } from '@/types'
 import { useStore } from '@/lib/store'
 import { AvatarSelector } from '@/components/agent/AgentAvatar'
@@ -9,17 +10,19 @@ interface Props {
   onSuccess?: () => void
 }
 
-const cliTools: { value: CliName; label: string; icon: string; desc: string; defaultName: string }[] = [
-  { value: 'claude', label: 'Claude Code', icon: 'fa-solid fa-atom', desc: 'Anthropic의 AI 코딩 CLI', defaultName: 'Claude' },
-  { value: 'opencode', label: 'OpenCode', icon: 'fa-solid fa-terminal', desc: 'sst.dev의 오픈소스 AI 코딩 CLI', defaultName: 'OpenCode' },
-]
-
 export default function AgentForm({ onSuccess }: Props) {
+  const t = useTranslations('agent')
+  const tc = useTranslations('common')
   const { addAgent, state } = useStore()
   const userMaxAgents = state.user?.maxAgents || 0
   const userMaxTurns = state.user?.maxTurns || 0
   const currentAgentCount = state.agents.length
   const limitReached = userMaxAgents > 0 && currentAgentCount >= userMaxAgents
+
+  const cliTools: { value: CliName; label: string; icon: string; desc: string; defaultName: string }[] = [
+    { value: 'claude', label: 'Claude Code', icon: 'fa-solid fa-atom', desc: t('claudeDesc'), defaultName: 'Claude' },
+    { value: 'opencode', label: 'OpenCode', icon: 'fa-solid fa-terminal', desc: t('opencodeDesc'), defaultName: 'OpenCode' },
+  ]
 
   const allowedClis = state.user?.allowedClis || ['opencode']
   const availableTools = cliTools.filter(t => allowedClis.includes(t.value))
@@ -60,11 +63,11 @@ export default function AgentForm({ onSuccess }: Props) {
     setError('')
 
     if (!name.trim()) {
-      setError('Agent 이름을 입력해주세요')
+      setError(t('nameRequired'))
       return
     }
     if (!currentCliPath) {
-      setError('관리자가 CLI 경로를 설정하지 않았습니다. 관리자에게 문의하세요.')
+      setError(t('cliPathMissing'))
       return
     }
 
@@ -84,7 +87,7 @@ export default function AgentForm({ onSuccess }: Props) {
       })
       onSuccess?.()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Agent 생성 실패')
+      setError(err instanceof Error ? err.message : t('createFailed'))
     } finally {
       setLoading(false)
     }
@@ -94,7 +97,7 @@ export default function AgentForm({ onSuccess }: Props) {
     <form onSubmit={handleSubmit} className="flex flex-col gap-5">
       {/* CLI 도구 선택 */}
       <div>
-        <label className="block text-base font-semibold text-ive-text-muted mb-2">CLI 도구</label>
+        <label className="block text-base font-semibold text-ive-text-muted mb-2">{t('cliTool')}</label>
         <div className="flex flex-col gap-2">
           {availableTools.map(t => (
             <button
@@ -121,32 +124,32 @@ export default function AgentForm({ onSuccess }: Props) {
 
       {/* Agent 이름 */}
       <div>
-        <label className="block text-base font-semibold text-ive-text-muted mb-2">Agent 이름 <span className="text-ive-red">*</span></label>
+        <label className="block text-base font-semibold text-ive-text-muted mb-2">{t('agentName')} <span className="text-ive-red">*</span></label>
         <input
           type="text"
           value={name}
           onChange={e => setName(e.target.value)}
-          placeholder="개발 Agent #1"
+          placeholder={t('agentNamePlaceholder')}
           className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-base text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green"
         />
       </div>
 
       {/* 아바타 선택 */}
       <div>
-        <label className="block text-base font-semibold text-ive-text-muted mb-2">아바타</label>
+        <label className="block text-base font-semibold text-ive-text-muted mb-2">{t('avatar')}</label>
         <AvatarSelector value={avatar} onChange={setAvatar} />
       </div>
 
       {/* 버전 (선택) */}
       <div>
         <label className="block text-base font-semibold text-ive-text-muted mb-2">
-          <i className="fa-solid fa-code-branch mr-1" />버전 <span className="text-ive-text-dim font-normal">(선택)</span>
+          <i className="fa-solid fa-code-branch mr-1" />{t('versionOptional')}
         </label>
         <input
           type="text"
           value={cliVersion}
           onChange={e => setCliVersion(e.target.value)}
-          placeholder="예: 2.1.69"
+          placeholder={t('versionPlaceholder')}
           className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-base text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green font-mono"
         />
       </div>
@@ -154,7 +157,7 @@ export default function AgentForm({ onSuccess }: Props) {
       {/* Max Turns */}
       <div>
         <label className="block text-base font-semibold text-ive-text-muted mb-2">
-          <i className="fa-solid fa-repeat mr-1" />최대 턴 수
+          <i className="fa-solid fa-repeat mr-1" />{t('maxTurns')}
         </label>
         <div className="flex items-center gap-1.5">
           <div className="flex items-center border border-ive-border rounded-lg overflow-hidden bg-ive-bg-input shrink-0">
@@ -189,14 +192,14 @@ export default function AgentForm({ onSuccess }: Props) {
           className="flex items-center gap-1.5 text-base font-bold text-ive-cyan mb-3"
         >
           <i className={`fa-solid ${showMonitoring ? 'fa-chevron-down' : 'fa-chevron-right'} text-sm`} />
-          모니터링 설정
+          {t('monitoring')}
         </button>
 
         {showMonitoring && (
           <div className="space-y-4 pb-2 animate-in fade-in slide-in-from-top-2">
             <div>
               <label className="block text-sm font-bold text-ive-text-muted mb-1.5 ml-1">
-                스냅샷 수집 간격 <span className="text-ive-text-dim font-normal">(분)</span>
+                {t('snapshotInterval')} <span className="text-ive-text-dim font-normal">({tc('minutes')})</span>
               </label>
               <div className="flex items-center gap-2">
                 <div className="flex bg-ive-bg-input border border-ive-border rounded-lg overflow-hidden">
@@ -216,7 +219,7 @@ export default function AgentForm({ onSuccess }: Props) {
 
             <div>
               <label className="block text-sm font-bold text-ive-text-muted mb-1.5 ml-1">
-                스파크라인 표시 건수
+                {t('sparklinePoints')}
               </label>
               <div className="flex items-center gap-2">
                 <div className="flex bg-ive-bg-input border border-ive-border rounded-lg overflow-hidden">
@@ -236,7 +239,7 @@ export default function AgentForm({ onSuccess }: Props) {
 
             <div>
               <label className="block text-sm font-bold text-ive-text-muted mb-1.5 ml-1">
-                데이터 보관 기간 <span className="text-ive-text-dim font-normal">(일)</span>
+                {t('dataRetention')} <span className="text-ive-text-dim font-normal">({tc('days')})</span>
               </label>
               <div className="flex items-center gap-2">
                 <div className="flex bg-ive-bg-input border border-ive-border rounded-lg overflow-hidden">
@@ -260,7 +263,7 @@ export default function AgentForm({ onSuccess }: Props) {
       {limitReached && (
         <div className="text-sm text-ive-amber bg-ive-amber/10 rounded-lg px-3 py-2">
           <i className="fa-solid fa-triangle-exclamation mr-1" />
-          최대 {userMaxAgents}개의 개발자만 생성할 수 있습니다. (현재 {currentAgentCount}개)
+          {t('limitExceededCurrent', { max: userMaxAgents, current: currentAgentCount })}
         </div>
       )}
 
@@ -275,7 +278,7 @@ export default function AgentForm({ onSuccess }: Props) {
         disabled={loading || limitReached}
         className="w-full bg-ive-green-dark text-white font-bold py-3 rounded-lg text-base active:bg-ive-green/80 transition-colors mt-2 disabled:opacity-50"
       >
-        {loading ? (<><i className="fa-solid fa-spinner fa-spin mr-1.5" />생성 중...</>) : (<><i className="fa-solid fa-robot mr-1.5" />Agent 추가</>)}
+        {loading ? (<><i className="fa-solid fa-spinner fa-spin mr-1.5" />{tc('creating')}</>) : (<><i className="fa-solid fa-robot mr-1.5" />{t('addAgent')}</>)}
       </button>
     </form>
   )

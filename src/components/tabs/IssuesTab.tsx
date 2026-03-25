@@ -6,6 +6,7 @@ import { useStore } from '@/lib/store'
 import { useTab } from '@/lib/tab-context'
 import PullToRefresh from '@/components/ui/PullToRefresh'
 import { useDialog } from '@/components/ui/ConfirmDialog'
+import { useTranslations } from 'next-intl'
 
 interface IveIssue {
   iid: number
@@ -19,41 +20,47 @@ interface IveIssue {
   author: string
 }
 
-const STAGE_INFO: Record<string, { label: string; color: string; icon: string }> = {
-  waiting:    { label: '대기',     color: 'bg-ive-green/20 text-ive-green border-ive-green/30', icon: 'fa-clock' },
-  dev:        { label: '개발 중',  color: 'bg-ive-cyan/20 text-ive-cyan border-ive-cyan/30', icon: 'fa-code' },
-  dev_fail:   { label: '개발 실패', color: 'bg-ive-red/20 text-ive-red border-ive-red/30', icon: 'fa-circle-xmark' },
-  done:       { label: '완료',     color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30', icon: 'fa-circle-check' },
-  unknown:    { label: '알 수 없음', color: 'bg-white/10 text-ive-text-dim border-white/20', icon: 'fa-question' },
-}
-
-const FILTER_TABS = [
-  { key: 'all', label: '전체' },
-  { key: 'waiting', label: '대기' },
-  { key: 'active', label: '진행' },
-  { key: 'failed', label: '실패' },
-  { key: 'done', label: '완료' },
-]
-
-// 벌크 액션 정의
-const BULK_ACTIONS: Record<string, { action: string; label: string; icon: string; danger?: boolean }[]> = {
-  waiting: [],
-  dev: [
-    { action: 'cancel', label: '대기로', icon: 'fa-rotate-left', danger: true },
-  ],
-  dev_fail: [
-    { action: 'retry', label: '대기로 (재시도)', icon: 'fa-rotate' },
-  ],
-  done: [
-    { action: 'reopen', label: '대기로 (다시 열기)', icon: 'fa-rotate' },
-  ],
-}
-
 export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   const router = useRouter()
   const { confirm } = useDialog()
   const { state } = useStore()
   const { activeTab, setActiveTab, issuesProjectId, setIssuesProjectId, issuesFilter, setIssuesFilter, issuesSort, setIssuesSort } = useTab()
+  const tStage = useTranslations('stage')
+  const tFilter = useTranslations('filter')
+  const tIssue = useTranslations('issue')
+  const tSort = useTranslations('sort')
+  const tProject = useTranslations('project')
+  const tCommon = useTranslations('common')
+
+  const STAGE_INFO: Record<string, { label: string; color: string; icon: string }> = useMemo(() => ({
+    waiting:    { label: tStage('waiting'),   color: 'bg-ive-green/20 text-ive-green border-ive-green/30', icon: 'fa-clock' },
+    dev:        { label: tStage('dev'),       color: 'bg-ive-cyan/20 text-ive-cyan border-ive-cyan/30', icon: 'fa-code' },
+    dev_fail:   { label: tStage('dev_fail'),  color: 'bg-ive-red/20 text-ive-red border-ive-red/30', icon: 'fa-circle-xmark' },
+    done:       { label: tStage('done'),      color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30', icon: 'fa-circle-check' },
+    unknown:    { label: tStage('unknown'),   color: 'bg-white/10 text-ive-text-dim border-white/20', icon: 'fa-question' },
+  }), [tStage])
+
+  const FILTER_TABS = useMemo(() => [
+    { key: 'all', label: tFilter('all') },
+    { key: 'waiting', label: tFilter('waiting') },
+    { key: 'active', label: tFilter('active') },
+    { key: 'failed', label: tFilter('failed') },
+    { key: 'done', label: tFilter('done') },
+  ], [tFilter])
+
+  const BULK_ACTIONS: Record<string, { action: string; label: string; icon: string; danger?: boolean }[]> = useMemo(() => ({
+    waiting: [],
+    dev: [
+      { action: 'cancel', label: tIssue('toWaiting'), icon: 'fa-rotate-left', danger: true },
+    ],
+    dev_fail: [
+      { action: 'retry', label: tIssue('retryToWaiting'), icon: 'fa-rotate' },
+    ],
+    done: [
+      { action: 'reopen', label: tIssue('reopenToWaiting'), icon: 'fa-rotate' },
+    ],
+  }), [tIssue])
+
   const selectedProjectId = issuesProjectId ?? ''
   const filter = issuesFilter
   const sortOrder = issuesSort as 'newest' | 'oldest'
@@ -90,7 +97,6 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
 
   const listRef = useRef<HTMLDivElement | null>(null)
 
-  // 스크롤 위치 복원
   useEffect(() => {
     const saved = sessionStorage.getItem('issues-scroll')
     if (saved) {
@@ -117,7 +123,6 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     setBulkProgress(null)
   }
 
-  // 선택된 프로젝트가 현재 목록에 없으면 초기화 (로그아웃 시에는 유지)
   useEffect(() => {
     if (state.loading) return
     if (!state.user) return
@@ -128,7 +133,6 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     }
   }, [state.projects, selectedProjectId, state.loading, state.user])
 
-  // 프로젝트가 1개면 자동 선택
   useEffect(() => {
     if (state.projects.length === 1 && !selectedProjectId) {
       setSelectedProjectId(state.projects[0].id)
@@ -149,19 +153,16 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
 
   useEffect(() => { fetchIssues() }, [fetchIssues])
 
-  // 탭 전환 시 자동 새로고침
   useEffect(() => {
     if (activeTab === 'issues' && selectedProjectId) fetchIssues()
   }, [activeTab])
 
-  // 탑바 추가 버튼 클릭 시 폼 열기
   useEffect(() => {
     if (addTrigger && addTrigger > 0 && selectedProjectId) {
       setShowAddForm(true)
     }
   }, [addTrigger])
 
-  // 이슈 편집 내용 로컬스토리지 실시간 저장
   useEffect(() => {
     if (!selectedProjectId) return
     if (newBody) {
@@ -171,7 +172,6 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     }
   }, [newBody, selectedProjectId])
 
-  // 프로젝트 변경 시 해당 프로젝트의 임시저장 내용 복원
   useEffect(() => {
     if (selectedProjectId) {
       const draft = localStorage.getItem(`ive-issue-draft-${selectedProjectId}`)
@@ -194,7 +194,6 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
   })
 
-  // 선택된 이슈들의 공통 stage 기반 벌크 액션 계산
   const getAvailableBulkActions = () => {
     if (selected.size === 0) return []
     const selectedIssues = issues.filter(i => selected.has(i.iid))
@@ -215,10 +214,10 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     const isClose = action === 'close'
     if (isClose) {
       const ok = await confirm({
-        title: '이슈 일괄 닫기',
-        message: `선택한 ${selectedIssues.length}개 이슈를 모두 닫으시겠습니까?`,
-        confirmText: '닫기',
-        cancelText: '취소',
+        title: tIssue('bulkCloseTitle'),
+        message: tIssue('bulkCloseConfirm', { count: selectedIssues.length }),
+        confirmText: tCommon('close'),
+        cancelText: tCommon('cancel'),
         variant: 'warning',
       })
       if (!ok) return
@@ -247,7 +246,6 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
       setBulkProgress({ total: selectedIssues.length, done: done + failed, failed })
     }
 
-    // 완료 후 새로고침
     fetchIssues()
     setTimeout(() => {
       exitBulkMode()
@@ -280,7 +278,6 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
         setNewBody('')
         localStorage.removeItem(`ive-issue-draft-${selectedProjectId}`)
         setShowAddForm(false)
-        // 생성된 이슈를 즉시 목록에 추가
         const newIssue: IveIssue = {
           iid: created.iid,
           title: created.title,
@@ -295,7 +292,6 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
           if (prev.some(i => i.iid === created.iid)) return prev
           return [newIssue, ...prev]
         })
-        // 서버 재조회 시 새 이슈가 아직 없으면 병합
         setTimeout(() => {
           if (!selectedProjectId) return
           fetch(`/api/projects/${selectedProjectId}/issues`)
@@ -320,10 +316,10 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     e.stopPropagation()
     if (closing) return
     const ok = await confirm({
-      title: '이슈 닫기',
-      message: `#${iid} 이슈를 닫으시겠습니까?`,
-      confirmText: '닫기',
-      cancelText: '취소',
+      title: tIssue('closeIssue'),
+      message: tIssue('closeIssueConfirm', { iid }),
+      confirmText: tCommon('close'),
+      cancelText: tCommon('cancel'),
       variant: 'warning',
     })
     if (!ok) return
@@ -339,14 +335,12 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   }
 
   const selectedProject = state.projects.find(p => p.id === selectedProjectId)
-  // 소유자 또는 편집자만 이슈 추가/닫기/일괄수정 가능
   const canEdit = selectedProject ? !selectedProject.shareRole || selectedProject.shareRole === 'editor' : false
   const bulkActions = getAvailableBulkActions()
   const stages = selectedStages()
   const [projectDropdownOpen, setProjectDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
-  // 드롭다운 바깥 클릭 시 닫기
   useEffect(() => {
     if (!projectDropdownOpen) return
     const handler = (e: MouseEvent) => {
@@ -369,7 +363,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
               className="w-full appearance-none bg-none bg-ive-bg-card border border-ive-border-subtle rounded-xl px-4 py-3 text-left flex items-center justify-between focus:outline-none focus:border-ive-green/50 transition-colors"
             >
               <span className={`text-base font-bold ${selectedProjectId ? 'text-ive-text' : 'text-ive-text-dim'}`}>
-                {selectedProject?.name || '프로젝트 선택'}
+                {selectedProject?.name || tProject('selectProject')}
               </span>
               <i className={`fa-solid fa-chevron-down text-xs text-ive-text-dim transition-transform ${projectDropdownOpen ? 'rotate-180' : ''}`} />
             </button>
@@ -396,19 +390,19 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
         {state.projects.length === 0 && !state.loading ? (
           <div className="text-center py-20">
             <i className="fa-solid fa-folder-open text-4xl text-ive-text-dim mb-4 block" />
-            <p className="text-base text-ive-text-muted mb-2">등록된 프로젝트가 없습니다</p>
-            <p className="text-sm text-ive-text-dim mb-5">프로젝트를 먼저 추가해야 이슈를 관리할 수 있습니다</p>
+            <p className="text-base text-ive-text-muted mb-2">{tProject('noRegisteredProjects')}</p>
+            <p className="text-sm text-ive-text-dim mb-5">{tProject('addProjectFirst')}</p>
             <button
               onClick={() => setActiveTab('projects')}
               className="inline-flex items-center gap-2 px-5 py-2.5 bg-ive-green text-ive-bg-deep font-bold text-sm rounded-xl active:scale-95 transition-transform"
             >
-              <i className="fa-solid fa-plus" />프로젝트 추가하기
+              <i className="fa-solid fa-plus" />{tProject('addProjectAction')}
             </button>
           </div>
         ) : !selectedProjectId ? (
           <div className="text-center py-20">
             <i className="fa-solid fa-folder-open text-4xl text-ive-text-dim mb-4 block" />
-            <p className="text-base text-ive-text-muted">프로젝트를 선택하세요</p>
+            <p className="text-base text-ive-text-muted">{tProject('selectAProject')}</p>
           </div>
         ) : (
           <>
@@ -424,13 +418,13 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                 <div className="flex items-center gap-2 shrink-0">
                   <div className="text-center">
                     <div className="text-lg font-black text-ive-green-light">{issues.length}</div>
-                    <div className="text-xs text-ive-text-dim">이슈</div>
+                    <div className="text-xs text-ive-text-dim">{tIssue('issues')}</div>
                   </div>
                   {canEdit && issues.length > 0 && !bulkMode && (
                     <button
                       onClick={() => setBulkMode(true)}
                       className="w-9 h-9 rounded-full bg-ive-bg-deep border border-ive-border-subtle flex items-center justify-center text-ive-text-dim hover:text-ive-text hover:border-ive-green/30 transition-all"
-                      title="일괄 수정"
+                      title={tIssue('bulkEdit')}
                     >
                       <i className="fa-solid fa-list-check text-sm" />
                     </button>
@@ -440,7 +434,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                       onClick={fetchIssues}
                       disabled={loading}
                       className="w-9 h-9 rounded-full bg-ive-bg-deep border border-ive-border-subtle flex items-center justify-center text-ive-text-dim hover:text-ive-green hover:border-ive-green/30 transition-all disabled:opacity-40"
-                      title="새로고침"
+                      title={tCommon('refresh')}
                     >
                       <i className={`fa-solid fa-arrows-rotate text-sm ${loading ? 'fa-spin' : ''}`} />
                     </button>
@@ -484,7 +478,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                 className="text-xs font-bold text-ive-text-dim hover:text-ive-text flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-white/5 transition-all"
               >
                 <i className={`fa-solid ${sortOrder === 'newest' ? 'fa-arrow-down-wide-short' : 'fa-arrow-up-wide-short'}`} />
-                {sortOrder === 'newest' ? '최신순' : '오래된순'}
+                {sortOrder === 'newest' ? tSort('newest') : tSort('oldest')}
               </button>
             </div>
 
@@ -493,18 +487,18 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
               <div className="mb-3 bg-ive-bg-card border border-ive-green/30 rounded-xl p-3">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-bold text-ive-green">
-                    <i className="fa-solid fa-plus mr-1" />새 이슈 추가
+                    <i className="fa-solid fa-plus mr-1" />{tIssue('addNewIssue')}
                   </span>
                   <button onClick={() => { setShowAddForm(false); setNewBody(''); localStorage.removeItem(`ive-issue-draft-${selectedProjectId}`) }} className="text-xs text-ive-text-dim hover:text-ive-text font-bold px-2 py-1 rounded-lg hover:bg-white/5 transition-all">
-                    취소
+                    {tCommon('cancel')}
                   </button>
                 </div>
-                <p className="text-xs text-ive-text-dim mb-1.5"><i className="fa-solid fa-info-circle mr-1" />첫 줄 = 제목, 두 번째 줄부터 = 본문{newBody && <span className="ml-2 text-ive-green/60"><i className="fa-solid fa-floppy-disk mr-0.5" />자동 저장됨</span>}</p>
+                <p className="text-xs text-ive-text-dim mb-1.5"><i className="fa-solid fa-info-circle mr-1" />{tIssue('firstLineTitle')}{newBody && <span className="ml-2 text-ive-green/60"><i className="fa-solid fa-floppy-disk mr-0.5" />{tIssue('autoSaved')}</span>}</p>
                 <div className="flex gap-2 items-end mb-2">
                   <textarea
                     value={newBody}
                     onChange={e => setNewBody(e.target.value)}
-                    placeholder="이슈 제목을 입력하세요&#10;&#10;본문 내용을 여기에 작성합니다 (선택)"
+                    placeholder={`${tIssue('titlePlaceholder')}\n\n${tIssue('bodyPlaceholder')}`}
                     rows={4}
                     className="flex-1 bg-ive-bg-deep border border-ive-border-dark rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-green/50"
                     autoFocus
@@ -515,7 +509,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                   disabled={creating || !newBody.split('\n')[0].trim()}
                   className="w-full py-2 rounded-lg bg-ive-green text-ive-bg-deep text-sm font-bold transition-all active:scale-[0.98] disabled:opacity-40"
                 >
-                  {creating ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />생성 중...</> : <><i className="fa-solid fa-paper-plane mr-1" />이슈 생성</>}
+                  {creating ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />{tCommon('creating')}</> : <><i className="fa-solid fa-paper-plane mr-1" />{tIssue('createIssue')}</>}
                 </button>
               </div>
             )}
@@ -537,7 +531,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                       }
                     </button>
                     <span className="text-sm font-bold text-ive-text">
-                      {selected.size > 0 ? `${selected.size}개 선택` : '이슈를 선택하세요'}
+                      {selected.size > 0 ? tIssue('selected', { count: selected.size }) : tIssue('selectIssues')}
                     </span>
                     {selected.size > 0 && stages.size === 1 && (
                       <span className={`text-xs font-bold px-1.5 py-0.5 rounded border ${(STAGE_INFO[[...stages][0]] || STAGE_INFO.unknown).color}`}>
@@ -545,11 +539,11 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                       </span>
                     )}
                     {selected.size > 0 && stages.size > 1 && (
-                      <span className="text-xs text-ive-amber font-bold">여러 단계 혼합</span>
+                      <span className="text-xs text-ive-amber font-bold">{tIssue('mixedStages')}</span>
                     )}
                   </div>
                   <button onClick={exitBulkMode} className="text-xs text-ive-text-dim hover:text-ive-text font-bold px-2 py-1 rounded-lg hover:bg-white/5 transition-all">
-                    취소
+                    {tCommon('cancel')}
                   </button>
                 </div>
 
@@ -558,13 +552,13 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                   <div className="mb-2">
                     <div className="flex items-center justify-between text-xs mb-1">
                       <span className="text-ive-text-muted font-bold">
-                        {cancelRef.current ? '취소됨' : bulkProgress.done === bulkProgress.total ? '완료' : '처리 중...'}
+                        {cancelRef.current ? tIssue('cancelled') : bulkProgress.done === bulkProgress.total ? tIssue('completed') : tCommon('processing')}
                         {' '}{bulkProgress.done}/{bulkProgress.total}
-                        {bulkProgress.failed > 0 && <span className="text-ive-red ml-1">(실패 {bulkProgress.failed})</span>}
+                        {bulkProgress.failed > 0 && <span className="text-ive-red ml-1">({tIssue('failed')} {bulkProgress.failed})</span>}
                       </span>
                       {bulkProgress.done < bulkProgress.total && !cancelRef.current && (
                         <button onClick={handleCancel} className="text-ive-red font-bold hover:underline">
-                          중단
+                          {tIssue('stop')}
                         </button>
                       )}
                     </div>
@@ -582,12 +576,12 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                   <div className="flex gap-2 flex-wrap">
                     {stages.size > 1 ? (
                       <>
-                        <span className="text-xs text-ive-amber py-1">같은 단계의 이슈만 선택하면 일괄 변경할 수 있습니다</span>
+                        <span className="text-xs text-ive-amber py-1">{tIssue('sameStageHint')}</span>
                         <button
                           onClick={() => handleBulkAction('close')}
                           className="text-xs font-bold px-3 py-1.5 rounded-lg border text-ive-red/80 border-ive-red/30 bg-ive-bg-deep hover:bg-ive-red/10 transition-all active:scale-95"
                         >
-                          <i className="fa-solid fa-xmark mr-1" />닫기 ({selected.size})
+                          <i className="fa-solid fa-xmark mr-1" />{tCommon('close')} ({selected.size})
                         </button>
                       </>
                     ) : (
@@ -609,7 +603,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                           onClick={() => handleBulkAction('close')}
                           className="text-xs font-bold px-3 py-1.5 rounded-lg border text-ive-red/80 border-ive-red/30 bg-ive-bg-deep hover:bg-ive-red/10 transition-all active:scale-95"
                         >
-                          <i className="fa-solid fa-xmark mr-1" />닫기 ({selected.size})
+                          <i className="fa-solid fa-xmark mr-1" />{tCommon('close')} ({selected.size})
                         </button>
                       </>
                     )}
@@ -626,12 +620,12 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
       {selectedProjectId && (
         <div className="flex-1 min-h-0 overflow-y-auto pb-20 custom-scrollbar" data-scroll-container="issues-list">
             {loading && issues.length === 0 ? (
-              <div className="text-center py-20 text-ive-text-muted">이슈 불러오는 중...</div>
+              <div className="text-center py-20 text-ive-text-muted">{tIssue('loadingIssues')}</div>
             ) : filtered.length === 0 ? (
               <div className="text-center py-20 bg-ive-bg/50 rounded-2xl border border-dashed border-ive-border-subtle">
                 <i className="fa-solid fa-inbox text-4xl text-ive-text-dim mb-4 block" />
                 <p className="text-base text-ive-text-muted">
-                  {issues.length === 0 ? 'IVE 이슈가 없습니다' : '해당 필터에 맞는 이슈가 없습니다'}
+                  {issues.length === 0 ? tIssue('noIveIssues') : tIssue('noFilterMatch')}
                 </p>
               </div>
             ) : (
@@ -696,9 +690,9 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                             onClick={(e) => handleCloseIssue(e, issue.iid)}
                             disabled={closing === issue.iid}
                             className="ml-auto text-xs font-bold text-ive-text-dim hover:text-ive-red border border-ive-border-subtle hover:border-ive-red/30 px-2 py-0.5 rounded-lg transition-all active:scale-95 disabled:opacity-40"
-                            title="이슈 닫기"
+                            title={tIssue('closeIssue')}
                           >
-                            {closing === issue.iid ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-xmark mr-0.5" />닫기</>}
+                            {closing === issue.iid ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-xmark mr-0.5" />{tCommon('close')}</>}
                           </button>
                         )}
                       </div>

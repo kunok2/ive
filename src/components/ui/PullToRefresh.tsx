@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef, useState, useCallback, type ReactNode } from 'react'
+import { useTranslations } from 'next-intl'
 
 interface Props {
   onRefresh: () => Promise<void>
@@ -13,6 +14,7 @@ export default function PullToRefresh({ onRefresh, children, className }: Props)
   const [refreshing, setRefreshing] = useState(false)
   const touchStartY = useRef(0)
   const pulling = useRef(false)
+  const t = useTranslations('pull')
 
   const onTouchStart = useCallback((e: React.TouchEvent) => {
     if (window.scrollY <= 0 && !refreshing) {
@@ -51,7 +53,7 @@ export default function PullToRefresh({ onRefresh, children, className }: Props)
       >
         <i className={`fa-solid fa-arrows-rotate text-ive-green ${refreshing ? 'fa-spin' : ''}`} style={{ transform: `rotate(${pullY * 4}deg)` }} />
         <span className="ml-2 text-xs text-ive-text-dim font-bold">
-          {refreshing ? '조회 중...' : pullY >= 50 ? '놓으면 조회' : '당겨서 새로고침'}
+          {refreshing ? t('loading') : pullY >= 50 ? t('releaseToRefresh') : t('pullToRefresh')}
         </span>
       </div>
       {children}

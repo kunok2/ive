@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { User, UserActivityLog, DEFAULT_AVATARS } from '@/types'
 import { useDialog } from '@/components/ui/ConfirmDialog'
 import TerminalTab from './TerminalTab'
@@ -9,6 +10,8 @@ import PullToRefresh from '@/components/ui/PullToRefresh'
 type SubTab = 'users' | 'mail' | 'settings' | 'pricing' | 'activity' | 'cli'
 
 export default function AdminTab() {
+  const t = useTranslations('admin')
+  const tc = useTranslations('common')
   const [subTab, setSubTab] = useState<SubTab>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('ive-admin-subtab')
@@ -27,12 +30,12 @@ export default function AdminTab() {
   }, [])
 
   const subTabs: { key: SubTab; icon: string; label: string }[] = [
-    { key: 'users', icon: 'fa-solid fa-users', label: '사용자' },
-    { key: 'mail', icon: 'fa-solid fa-envelope', label: '메일' },
-    { key: 'settings', icon: 'fa-solid fa-gear', label: '설정' },
-    { key: 'pricing', icon: 'fa-solid fa-coins', label: '단가' },
-    { key: 'activity', icon: 'fa-solid fa-clock-rotate-left', label: '활동' },
-    { key: 'cli', icon: 'fa-solid fa-terminal', label: 'CLI' },
+    { key: 'users', icon: 'fa-solid fa-users', label: t('users') },
+    { key: 'mail', icon: 'fa-solid fa-envelope', label: t('mail') },
+    { key: 'settings', icon: 'fa-solid fa-gear', label: t('settings') },
+    { key: 'pricing', icon: 'fa-solid fa-coins', label: t('pricing') },
+    { key: 'activity', icon: 'fa-solid fa-clock-rotate-left', label: t('activity') },
+    { key: 'cli', icon: 'fa-solid fa-terminal', label: t('cli') },
   ]
 
   return (
@@ -68,6 +71,9 @@ export default function AdminTab() {
 
 // ── Users Panel ──
 function UsersPanel() {
+  const t = useTranslations('admin')
+  const tc = useTranslations('common')
+  const ta = useTranslations('agent')
   const { confirm, alert } = useDialog()
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
@@ -85,9 +91,9 @@ function UsersPanel() {
 
   async function handleDelete(userId: string, userName: string) {
     const ok = await confirm({
-      title: '사용자 삭제',
-      message: `"${userName}" 사용자를 삭제하시겠습니까?\n관련 프로젝트, 에이전트 등 모든 데이터가 함께 삭제됩니다.`,
-      confirmText: '삭제',
+      title: t('deleteUser'),
+      message: t('deleteUserConfirm', { name: userName }),
+      confirmText: tc('delete'),
       variant: 'danger',
     })
     if (!ok) return
@@ -101,7 +107,7 @@ function UsersPanel() {
       setUsers(prev => prev.filter(u => u.id !== userId))
     } else {
       const data = await res.json()
-      await alert({ message: data.error || '삭제 실패', variant: 'error' })
+      await alert({ message: data.error || tc('deleteFailed'), variant: 'error' })
     }
     setDeleting(null)
   }
@@ -124,7 +130,7 @@ function UsersPanel() {
       } : u))
     } else {
       const data = await res.json()
-      await alert({ message: data.error || '권한 변경 실패', variant: 'error' })
+      await alert({ message: data.error || t('permissionChangeFailed'), variant: 'error' })
     }
   }
 
@@ -135,10 +141,10 @@ function UsersPanel() {
         || JSON.stringify([...limitValues.allowedClis].sort()) !== JSON.stringify([...(u.allowedClis || [])].sort())
       if (changed) {
         const ok = await confirm({
-          title: '변경 사항 저장',
-          message: '수정된 제한 설정을 저장하시겠습니까?',
-          confirmText: '저장',
-          cancelText: '버리기',
+          title: t('saveChanges'),
+          message: t('saveChangesConfirm'),
+          confirmText: tc('save'),
+          cancelText: t('discard'),
           variant: 'warning',
         })
         if (ok) {
@@ -164,15 +170,15 @@ function UsersPanel() {
       setEditingLimits(null)
     } else {
       const data = await res.json()
-      await alert({ message: data.error || '저장 실패', variant: 'error' })
+      await alert({ message: data.error || tc('saveFailed'), variant: 'error' })
     }
   }
 
-  if (loading) return <div className="text-center py-10 text-ive-text-dim">불러오는 중...</div>
+  if (loading) return <div className="text-center py-10 text-ive-text-dim">{tc('loading')}</div>
 
   return (
     <main className="px-4 py-4 max-w-lg mx-auto">
-      <div className="text-xs text-ive-text-dim mb-3">총 {users.length}명</div>
+      <div className="text-xs text-ive-text-dim mb-3">{t('totalUsersCount', { count: users.length })}</div>
       <div className="space-y-2">
         {users.map(u => (
           <div key={u.id} className="bg-ive-bg-card border border-ive-border-subtle rounded-xl px-4 py-3">
@@ -197,11 +203,11 @@ function UsersPanel() {
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-bold text-ive-text truncate">{u.name}</span>
                   {u.isAdmin && (
-                    <span className="text-[10px] font-bold bg-ive-green/15 text-ive-green px-1.5 py-0.5 rounded-full">관리자</span>
+                    <span className="text-[10px] font-bold bg-ive-green/15 text-ive-green px-1.5 py-0.5 rounded-full">{t('adminBadge')}</span>
                   )}
                 </div>
                 <div className="text-xs text-ive-text-dim break-all">{u.email}</div>
-                <div className="text-xs text-ive-text-dim">{new Date(u.createdAt).toLocaleDateString('ko-KR')} 가입</div>
+                <div className="text-xs text-ive-text-dim">{new Date(u.createdAt).toLocaleDateString('ko-KR')} {t('joined')}</div>
                 <div className="flex items-center gap-x-2 text-xs mt-0.5">
                   <span className="inline-flex items-center text-ive-cyan">
                     <i className="fa-solid fa-robot mr-0.5" />{u.maxAgents || '∞'}
@@ -223,7 +229,7 @@ function UsersPanel() {
                   className={`w-8 h-8 rounded-lg flex items-center justify-center active:scale-95 transition-all ${
                     editingLimits === u.id ? 'bg-ive-cyan/15 text-ive-cyan' : 'bg-ive-bg-deep text-ive-text-dim'
                   }`}
-                  title="제한 설정"
+                  title={t('limitSettings')}
                 >
                   <i className="fa-solid fa-gauge text-xs" />
                 </button>
@@ -232,7 +238,7 @@ function UsersPanel() {
                   className={`w-8 h-8 rounded-lg flex items-center justify-center active:scale-95 transition-all ${
                     u.isAdmin ? 'bg-ive-green/15 text-ive-green' : 'bg-ive-bg-deep text-ive-text-dim'
                   }`}
-                  title={u.isAdmin ? '관리자 해제' : '관리자 지정'}
+                  title={u.isAdmin ? t('revokeAdmin') : t('grantAdmin')}
                 >
                   <i className="fa-solid fa-shield text-xs" />
                 </button>
@@ -251,7 +257,7 @@ function UsersPanel() {
               <div className="mt-3 pt-3 border-t border-ive-border-dark space-y-3 animate-in fade-in slide-in-from-top-1">
                 <div className="flex items-center gap-3">
                   <label className="text-xs font-bold text-ive-text-muted w-24 shrink-0">
-                    <i className="fa-solid fa-robot mr-1" />최대 개발자
+                    <i className="fa-solid fa-robot mr-1" />{t('maxDevelopers')}
                   </label>
                   <div className="flex items-center gap-1.5 flex-1">
                     <div className="flex bg-ive-bg-input border border-ive-border rounded-lg overflow-hidden">
@@ -263,12 +269,12 @@ function UsersPanel() {
                       <button type="button" onClick={() => setLimitValues(v => ({ ...v, maxAgents: v.maxAgents + 1 }))}
                         className="px-2 py-1.5 text-ive-text-muted hover:text-ive-cyan text-xs font-black">+</button>
                     </div>
-                    <span className="text-[10px] text-ive-text-dim">0 = 무제한</span>
+                    <span className="text-[10px] text-ive-text-dim">{t('unlimited')}</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
                   <label className="text-xs font-bold text-ive-text-muted w-24 shrink-0">
-                    <i className="fa-solid fa-repeat mr-1" />최대 턴 수
+                    <i className="fa-solid fa-repeat mr-1" />{t('maxTurns')}
                   </label>
                   <div className="flex items-center gap-1.5 flex-1">
                     <div className="flex bg-ive-bg-input border border-ive-border rounded-lg overflow-hidden">
@@ -280,12 +286,12 @@ function UsersPanel() {
                       <button type="button" onClick={() => setLimitValues(v => ({ ...v, maxTurns: v.maxTurns + 10 }))}
                         className="px-2 py-1.5 text-ive-text-muted hover:text-ive-cyan text-xs font-black">+</button>
                     </div>
-                    <span className="text-[10px] text-ive-text-dim">0 = 무제한</span>
+                    <span className="text-[10px] text-ive-text-dim">{t('unlimited')}</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
                   <label className="text-xs font-bold text-ive-text-muted w-24 shrink-0">
-                    <i className="fa-solid fa-terminal mr-1" />CLI 도구
+                    <i className="fa-solid fa-terminal mr-1" />{t('cliTools')}
                   </label>
                   <div className="flex gap-2 flex-1">
                     {[{ value: 'claude', label: 'Claude Code', icon: 'fa-solid fa-atom' }, { value: 'opencode', label: 'OpenCode', icon: 'fa-solid fa-terminal' }].map(cli => {
@@ -313,11 +319,11 @@ function UsersPanel() {
                 <div className="flex gap-2">
                   <button onClick={() => setEditingLimits(null)}
                     className="flex-1 py-2 rounded-lg text-xs font-bold bg-ive-bg-deep text-ive-text-dim border border-ive-border-subtle active:scale-[0.98]">
-                    취소
+                    {tc('cancel')}
                   </button>
                   <button onClick={() => saveLimits(u.id)}
                     className="flex-1 py-2 rounded-lg text-xs font-bold bg-ive-green-dark text-white active:scale-[0.98]">
-                    저장
+                    {tc('save')}
                   </button>
                 </div>
               </div>
@@ -343,19 +349,20 @@ interface SendLogEntry {
   status: string; errorMessage?: string | null; sentAt: string
 }
 
-const REPORT_TYPE_OPTIONS = [
-  { value: 'weekly', label: '주간', icon: 'fa-solid fa-calendar-week', schedule: '매주 월요일 09:00' },
-  { value: 'monthly', label: '월간', icon: 'fa-solid fa-calendar', schedule: '매월 1일 09:00' },
-  { value: 'yearly', label: '연간', icon: 'fa-solid fa-calendar-check', schedule: '매년 1월 1일 09:00' },
+const REPORT_TYPE_OPTIONS_STATIC = [
+  { value: 'weekly', labelKey: 'weekly' as const, icon: 'fa-solid fa-calendar-week', scheduleKey: 'scheduleWeekly' as const },
+  { value: 'monthly', labelKey: 'monthly' as const, icon: 'fa-solid fa-calendar', scheduleKey: 'scheduleMonthly' as const },
+  { value: 'yearly', labelKey: 'yearly' as const, icon: 'fa-solid fa-calendar-check', scheduleKey: 'scheduleYearly' as const },
 ]
 
 function MailPanel() {
+  const t = useTranslations('admin')
   const [view, setView] = useState<MailSubView>('broadcast')
 
   const views: { key: MailSubView; label: string; icon: string }[] = [
-    { key: 'broadcast', label: '메일발송', icon: 'fa-solid fa-paper-plane' },
-    { key: 'reports', label: '보고서', icon: 'fa-solid fa-file-lines' },
-    { key: 'logs', label: '발송이력', icon: 'fa-solid fa-clock-rotate-left' },
+    { key: 'broadcast', label: t('mailSend'), icon: 'fa-solid fa-paper-plane' },
+    { key: 'reports', label: t('reportLabel'), icon: 'fa-solid fa-file-lines' },
+    { key: 'logs', label: t('sendHistory'), icon: 'fa-solid fa-clock-rotate-left' },
   ]
 
   return (
@@ -386,6 +393,8 @@ function MailPanel() {
 
 // ── 일반 메일 발송 (기존 기능) ──
 function BroadcastView() {
+  const t = useTranslations('admin')
+  const tc = useTranslations('common')
   const { confirm, alert } = useDialog()
   const [users, setUsers] = useState<User[]>([])
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -416,15 +425,15 @@ function BroadcastView() {
 
   async function handleSend() {
     if (!subject.trim() || !body.trim()) {
-      await alert({ message: '제목과 내용을 입력해주세요.', variant: 'info' })
+      await alert({ message: t('subjectContentRequired'), variant: 'info' })
       return
     }
     const targets = selectedIds.size > 0 ? Array.from(selectedIds) : undefined
     if (!targets) {
       const ok = await confirm({
-        title: '전체 발송',
-        message: '전체 사용자에게 메일을 발송합니다. 계속하시겠습니까?',
-        confirmText: '발송',
+        title: t('sendToAll'),
+        message: t('sendToAllConfirm'),
+        confirmText: t('send'),
         variant: 'warning',
       })
       if (!ok) return
@@ -441,7 +450,7 @@ function BroadcastView() {
       if (res.ok) {
         setResult({ sent: data.sent, failed: data.failed })
       } else {
-        await alert({ message: data.error || '발송 실패', variant: 'error' })
+        await alert({ message: data.error || t('sendFailed'), variant: 'error' })
       }
     } finally {
       setSending(false)
@@ -453,9 +462,9 @@ function BroadcastView() {
       {/* 수신자 선택 */}
       <div className="mb-4">
         <div className="flex items-center justify-between mb-2">
-          <label className="text-sm font-bold text-ive-text-muted">수신자</label>
+          <label className="text-sm font-bold text-ive-text-muted">{t('recipients')}</label>
           <button onClick={toggleAll} className="text-xs text-ive-cyan font-bold">
-            {selectedIds.size === users.length ? '전체 해제' : '전체 선택'}
+            {selectedIds.size === users.length ? t('unselectAll') : t('selectAll')}
           </button>
         </div>
         <div className="flex flex-wrap gap-1.5">
@@ -474,36 +483,36 @@ function BroadcastView() {
           ))}
         </div>
         <p className="text-xs text-ive-text-dim mt-1">
-          {selectedIds.size === 0 ? '선택 없음 = 전체 발송' : `${selectedIds.size}명 선택`}
+          {selectedIds.size === 0 ? t('noSelectionAllSend') : t('selectedCount', { count: selectedIds.size })}
         </p>
       </div>
 
       {/* 제목 */}
       <div className="mb-3">
-        <label className="block text-sm font-bold text-ive-text-muted mb-1">제목</label>
+        <label className="block text-sm font-bold text-ive-text-muted mb-1">{t('subject')}</label>
         <input
           value={subject}
           onChange={e => setSubject(e.target.value)}
-          placeholder="메일 제목"
+          placeholder={t('subjectPlaceholder')}
           className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2.5 text-sm text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green"
         />
       </div>
 
       {/* 본문 */}
       <div className="mb-4">
-        <label className="block text-sm font-bold text-ive-text-muted mb-1">내용 (HTML 가능)</label>
+        <label className="block text-sm font-bold text-ive-text-muted mb-1">{t('contentHtml')}</label>
         <textarea
           value={body}
           onChange={e => setBody(e.target.value)}
           rows={6}
-          placeholder="메일 본문..."
+          placeholder={t('contentPlaceholder')}
           className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2.5 text-sm text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green resize-none"
         />
       </div>
 
       {result && (
         <div className={`mb-3 text-sm rounded-lg px-3 py-2 ${result.failed ? 'bg-ive-amber/10 text-ive-amber' : 'bg-ive-green/10 text-ive-green'}`}>
-          발송 완료: {result.sent}건 성공{result.failed > 0 && `, ${result.failed}건 실패`}
+          {t('sendComplete', { sent: result.sent })}{result.failed > 0 && t('sendCompleteFailed', { failed: result.failed })}
         </div>
       )}
 
@@ -512,7 +521,7 @@ function BroadcastView() {
         disabled={sending || !subject.trim() || !body.trim()}
         className="w-full bg-ive-green-dark text-white font-bold py-3 rounded-lg text-sm active:scale-[0.98] transition-all disabled:opacity-40"
       >
-        {sending ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />발송 중...</> : <><i className="fa-solid fa-paper-plane mr-1" />메일 발송</>}
+        {sending ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />{t('sending')}</> : <><i className="fa-solid fa-paper-plane mr-1" />{t('mailSend')}</>}
       </button>
     </>
   )
@@ -520,6 +529,9 @@ function BroadcastView() {
 
 // ── 보고서 스케줄 관리 ──
 function ReportScheduleView() {
+  const t = useTranslations('admin')
+  const tc = useTranslations('common')
+  const tr = useTranslations('report')
   const { confirm, alert } = useDialog()
   const [schedules, setSchedules] = useState<ReportScheduleState[]>([])
   const [users, setUsers] = useState<User[]>([])
@@ -596,7 +608,7 @@ function ReportScheduleView() {
         setEditing(null)
       } else {
         const data = await res.json()
-        await alert({ message: data.error || '저장 실패', variant: 'error' })
+        await alert({ message: data.error || tc('saveFailed'), variant: 'error' })
       }
     } finally {
       setSaving(null)
@@ -604,10 +616,11 @@ function ReportScheduleView() {
   }
 
   async function handleSendNow(reportType: string) {
+    const label = tr(reportType as any)
     const ok = await confirm({
-      title: '즉시 발송',
-      message: `${REPORT_TYPE_OPTIONS.find(o => o.value === reportType)?.label} 보고서를 지금 즉시 발송하시겠습니까?`,
-      confirmText: '발송',
+      title: t('sendNow'),
+      message: t('sendNowConfirm', { label }),
+      confirmText: t('send'),
       variant: 'warning',
     })
     if (!ok) return
@@ -622,28 +635,29 @@ function ReportScheduleView() {
       const data = await res.json()
       if (res.ok) {
         await alert({
-          title: '발송 완료',
-          message: `발송 ${data.sent}건 성공${data.failed > 0 ? `, ${data.failed}건 실패` : ''}${data.skipped > 0 ? `, ${data.skipped}건 건너뜀` : ''}`,
+          title: t('sendComplete', { sent: data.sent }),
+          message: `${t('sendResult', { sent: data.sent })}${data.failed > 0 ? t('sendResultFailed', { failed: data.failed }) : ''}${data.skipped > 0 ? t('sendResultSkipped', { skipped: data.skipped }) : ''}`,
           variant: data.failed > 0 ? 'error' : 'success',
         })
       } else {
-        await alert({ message: data.error || '발송 실패', variant: 'error' })
+        await alert({ message: data.error || t('sendFailed'), variant: 'error' })
       }
     } finally {
       setSending(null)
     }
   }
 
-  if (loading) return <div className="text-center py-10 text-ive-text-dim">불러오는 중...</div>
+  if (loading) return <div className="text-center py-10 text-ive-text-dim">{tc('loading')}</div>
 
   // 3종류 보고서에 대해 각각 카드 표시
   return (
     <div className="space-y-3">
       <div className="text-xs text-ive-text-dim mb-1">
-        보고서 자동 발송 스케줄을 설정합니다. 중복발송은 자동으로 차단됩니다.
+        {t('reportScheduleDesc')}
       </div>
 
-      {REPORT_TYPE_OPTIONS.map(opt => {
+      {REPORT_TYPE_OPTIONS_STATIC.map(opt => {
+        const optLabel = tr(opt.labelKey)
         const schedule = schedules.find(s => s.reportType === opt.value)
         const isEditing = editing === `rs-${opt.value}`
         const form = isEditing ? editForm : null
@@ -653,18 +667,18 @@ function ReportScheduleView() {
             {/* 헤더 */}
             <div className="px-4 py-3 flex items-center gap-2">
               <i className={`${opt.icon} text-sm ${schedule?.enabled ? 'text-ive-green' : 'text-ive-text-dim'}`} />
-              <span className="text-sm font-bold text-ive-text flex-1">{opt.label} 보고서</span>
+              <span className="text-sm font-bold text-ive-text flex-1">{t('reportCard', { label: optLabel })}</span>
               {schedule ? (
                 <div className="flex items-center gap-1.5">
                   <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${schedule.enabled ? 'bg-ive-green/15 text-ive-green' : 'bg-white/5 text-ive-text-dim'}`}>
-                    {schedule.enabled ? '활성' : '비활성'}
+                    {schedule.enabled ? t('active') : t('inactive')}
                   </span>
-                  <span className="text-[10px] text-ive-text-dim">{schedule.recipients.length}명</span>
+                  <span className="text-[10px] text-ive-text-dim">{t('personsCount', { count: schedule.recipients.length })}</span>
                   <button
                     onClick={() => handleSendNow(opt.value)}
                     disabled={!schedule?.recipients.length || sending === opt.value}
                     className="w-7 h-7 rounded-lg bg-ive-cyan/10 text-ive-cyan flex items-center justify-center text-xs active:scale-95 disabled:opacity-40"
-                    title="즉시 발송"
+                    title={t('sendNow')}
                   >
                     {sending === opt.value ? <i className="fa-solid fa-circle-notch fa-spin" /> : <i className="fa-solid fa-paper-plane" />}
                   </button>
@@ -687,7 +701,7 @@ function ReportScheduleView() {
                   }}
                   className="text-xs font-bold text-ive-cyan"
                 >
-                  <i className="fa-solid fa-plus mr-1" />설정
+                  <i className="fa-solid fa-plus mr-1" />{t('setup')}
                 </button>
               )}
             </div>
@@ -697,32 +711,32 @@ function ReportScheduleView() {
               <div className="px-4 pb-4 border-t border-ive-border-dark space-y-3 pt-3 animate-in fade-in slide-in-from-top-1">
                 {/* 활성화 토글 */}
                 <div className="flex items-center gap-3">
-                  <label className="text-xs font-bold text-ive-text-muted w-20 shrink-0">상태</label>
+                  <label className="text-xs font-bold text-ive-text-muted w-20 shrink-0">{t('status')}</label>
                   <button
                     onClick={() => setEditForm(prev => ({ ...prev, enabled: !prev.enabled }))}
                     className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${
                       form.enabled ? 'bg-ive-green/10 border-ive-green text-ive-green' : 'bg-ive-bg-deep border-ive-border-subtle text-ive-text-dim'
                     }`}
                   >
-                    {form.enabled ? '활성' : '비활성'}
+                    {form.enabled ? t('active') : t('inactive')}
                   </button>
                 </div>
 
                 {/* 발송 시점 (고정) */}
                 <div className="flex items-center gap-3">
-                  <label className="text-xs font-bold text-ive-text-muted w-20 shrink-0">발송 시점</label>
-                  <span className="text-xs text-ive-cyan font-bold">{opt.schedule} KST</span>
+                  <label className="text-xs font-bold text-ive-text-muted w-20 shrink-0">{t('sendTime')}</label>
+                  <span className="text-xs text-ive-cyan font-bold">{t(opt.scheduleKey)} KST</span>
                   <span className="text-[10px] text-ive-text-dim">
-                    (지난 {opt.label} 보고서 자동 발송)
+                    {t('sendTimeDesc', { label: optLabel })}
                   </span>
                 </div>
 
                 {/* 수신자 */}
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <label className="text-xs font-bold text-ive-text-muted">수신자</label>
+                    <label className="text-xs font-bold text-ive-text-muted">{t('recipients')}</label>
                     <button onClick={toggleAllRecipients} className="text-[10px] text-ive-cyan font-bold">
-                      {(form.recipients || []).length === users.length ? '전체 해제' : '전체 선택'}
+                      {(form.recipients || []).length === users.length ? t('unselectAll') : t('selectAll')}
                     </button>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
@@ -740,19 +754,19 @@ function ReportScheduleView() {
                       </button>
                     ))}
                   </div>
-                  <p className="text-[10px] text-ive-text-dim mt-1">{(form.recipients || []).length}명 선택</p>
+                  <p className="text-[10px] text-ive-text-dim mt-1">{t('selectedCount', { count: (form.recipients || []).length })}</p>
                 </div>
 
                 {/* 저장/취소 */}
                 <div className="flex gap-2">
                   <button onClick={cancelEdit}
                     className="flex-1 py-2 rounded-lg text-xs font-bold bg-ive-bg-deep text-ive-text-dim border border-ive-border-subtle active:scale-[0.98]">
-                    취소
+                    {tc('cancel')}
                   </button>
                   <button onClick={() => handleSave(opt.value)}
                     disabled={saving === opt.value}
                     className="flex-1 py-2 rounded-lg text-xs font-bold bg-ive-green-dark text-white active:scale-[0.98] disabled:opacity-40">
-                    {saving === opt.value ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />저장 중</> : '저장'}
+                    {saving === opt.value ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />{t('saving')}</> : tc('save')}
                   </button>
                 </div>
               </div>
@@ -761,8 +775,8 @@ function ReportScheduleView() {
             {/* 요약 정보 (편집 중 아닐 때) */}
             {!isEditing && schedule && schedule.recipients.length > 0 && (
               <div className="px-4 pb-3 text-[11px] text-ive-text-dim">
-                {opt.schedule} KST | {schedule.recipients.slice(0, 3).join(', ')}
-                {schedule.recipients.length > 3 && ` 외 ${schedule.recipients.length - 3}명`}
+                {t(opt.scheduleKey)} KST | {schedule.recipients.slice(0, 3).join(', ')}
+                {schedule.recipients.length > 3 && ` +${schedule.recipients.length - 3}`}
               </div>
             )}
           </div>
@@ -774,6 +788,9 @@ function ReportScheduleView() {
 
 // ── 발송 이력 조회 ──
 function SendLogView() {
+  const t = useTranslations('admin')
+  const tc = useTranslations('common')
+  const tr = useTranslations('report')
   const [logs, setLogs] = useState<SendLogEntry[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -798,22 +815,22 @@ function SendLogView() {
 
   const totalPages = Math.ceil(total / PAGE_SIZE)
 
-  if (loading && logs.length === 0) return <div className="text-center py-10 text-ive-text-dim">불러오는 중...</div>
+  if (loading && logs.length === 0) return <div className="text-center py-10 text-ive-text-dim">{tc('loading')}</div>
 
   if (total === 0) {
     return (
       <div className="text-center py-10">
         <i className="fa-solid fa-inbox text-3xl text-ive-text-dim mb-3 block" />
-        <p className="text-sm text-ive-text-dim">발송 이력이 없습니다.</p>
+        <p className="text-sm text-ive-text-dim">{t('noSendHistory')}</p>
       </div>
     )
   }
 
-  const typeLabel = (t: string) => t === 'weekly' ? '주간' : t === 'monthly' ? '월간' : '연간'
+  const typeLabel = (type: string) => tr(type as any)
 
   return (
     <div>
-      <div className="text-xs text-ive-text-dim mb-3">총 {total}건의 발송 이력</div>
+      <div className="text-xs text-ive-text-dim mb-3">{t('totalSendLogs', { count: total })}</div>
 
       <div className="space-y-1.5">
         {logs.map(log => (
@@ -823,7 +840,7 @@ function SendLogView() {
               <span className="text-xs font-bold text-ive-text">{typeLabel(log.reportType)}</span>
               <span className="text-[10px] text-ive-text-dim flex-1 truncate">{log.recipientEmail}</span>
               <span className={`text-[10px] font-bold ${log.status === 'success' ? 'text-ive-green' : 'text-ive-red'}`}>
-                {log.status === 'success' ? '성공' : '실패'}
+                {log.status === 'success' ? t('statusSuccess') : t('statusFailed')}
               </span>
             </div>
             <div className="flex items-center gap-2 mt-1 text-[10px] text-ive-text-dim">
@@ -868,36 +885,36 @@ interface SettingGroup {
 
 const SETTING_GROUPS: SettingGroup[] = [
   {
-    key: 'cli_paths', label: 'CLI 경로', icon: 'fa-solid fa-terminal',
+    key: 'cli_paths', label: 'cliPathLabel', icon: 'fa-solid fa-terminal',
     fields: [
-      { key: 'cli.claude.path', label: 'Claude Code 경로', type: 'text', placeholder: '/usr/local/bin/claude', defaultValue: '/usr/local/bin/claude' },
-      { key: 'cli.opencode.path', label: 'OpenCode 경로', type: 'text', placeholder: '/usr/local/bin/opencode', defaultValue: '/usr/local/bin/opencode' },
+      { key: 'cli.claude.path', label: 'Claude Code', type: 'text', placeholder: '/usr/local/bin/claude', defaultValue: '/usr/local/bin/claude' },
+      { key: 'cli.opencode.path', label: 'OpenCode', type: 'text', placeholder: '/usr/local/bin/opencode', defaultValue: '/usr/local/bin/opencode' },
     ],
   },
   {
-    key: 'mail', label: 'SMTP 메일', icon: 'fa-solid fa-envelope',
+    key: 'mail', label: 'smtpMail', icon: 'fa-solid fa-envelope',
     fields: [
-      { key: 'mail.smtp_host', label: 'SMTP 호스트', type: 'text', placeholder: 'smtp.gmail.com' },
-      { key: 'mail.smtp_port', label: 'SMTP 포트', type: 'text', placeholder: '587' },
-      { key: 'mail.smtp_user', label: 'SMTP 계정', type: 'text', placeholder: 'user@gmail.com' },
-      { key: 'mail.smtp_password', label: 'SMTP 비밀번호', type: 'password', placeholder: '앱 비밀번호' },
-      { key: 'mail.from_name', label: '발신자 이름', type: 'text', placeholder: 'IVE' },
-      { key: 'mail.domain', label: '메일 도메인', type: 'text', placeholder: 'example.com' },
+      { key: 'mail.smtp_host', label: 'SMTP Host', type: 'text', placeholder: 'smtp.gmail.com' },
+      { key: 'mail.smtp_port', label: 'SMTP Port', type: 'text', placeholder: '587' },
+      { key: 'mail.smtp_user', label: 'SMTP User', type: 'text', placeholder: 'user@gmail.com' },
+      { key: 'mail.smtp_password', label: 'SMTP Password', type: 'password', placeholder: 'App Password' },
+      { key: 'mail.from_name', label: 'From Name', type: 'text', placeholder: 'IVE' },
+      { key: 'mail.domain', label: 'Mail Domain', type: 'text', placeholder: 'example.com' },
     ],
   },
   {
-    key: 'retention', label: '데이터 보관', icon: 'fa-solid fa-database',
+    key: 'retention', label: 'dataRetention', icon: 'fa-solid fa-database',
     fields: [
-      { key: 'retention.executions_days', label: '실행 기록 보관 (일)', type: 'number', placeholder: '365 — 보고서 원본 데이터. 이 기간이 지난 실행 기록과 로그 파일이 자동 삭제됩니다.' },
-      { key: 'retention.snapshots_days', label: '스냅샷 보관 (일)', type: 'number', placeholder: '7 — 프로젝트 카드 스파크라인용. 짧게 유지해도 보고서에는 영향 없습니다.' },
+      { key: 'retention.executions_days', label: 'Execution Retention (days)', type: 'number', placeholder: '365' },
+      { key: 'retention.snapshots_days', label: 'Snapshot Retention (days)', type: 'number', placeholder: '7' },
     ],
   },
   {
-    key: 'mcp', label: 'MCP 서버', icon: 'fa-solid fa-plug',
+    key: 'mcp', label: 'mcpServer', icon: 'fa-solid fa-plug',
     fields: [
       {
         key: 'mcp.config',
-        label: 'MCP 서버 설정 (JSON)',
+        label: 'MCP Config (JSON)',
         type: 'textarea',
         rows: 8,
         placeholder: `{\n  "github": {\n    "type": "local",\n    "command": ["npx", "-y", "@modelcontextprotocol/server-github"],\n    "environment": { "GITHUB_TOKEN": "ghp_xxx" }\n  }\n}`,
@@ -907,6 +924,8 @@ const SETTING_GROUPS: SettingGroup[] = [
 ]
 
 function SettingsPanel() {
+  const t = useTranslations('admin')
+  const tc = useTranslations('common')
   const { alert } = useDialog()
   const [settings, setSettings] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
@@ -953,14 +972,14 @@ function SettingsPanel() {
         setTimeout(() => setSaved(false), 2000)
       } else {
         const data = await res.json()
-        await alert({ message: data.error || '저장 실패', variant: 'error' })
+        await alert({ message: data.error || tc('saveFailed'), variant: 'error' })
       }
     } finally { setSaving(false) }
   }
 
   async function handleTestMail() {
     if (!testEmail) {
-      await alert({ message: '수신 주소를 입력해주세요', variant: 'error' })
+      await alert({ message: t('recipientPlaceholder'), variant: 'error' })
       return
     }
     setTesting(true)
@@ -979,21 +998,21 @@ function SettingsPanel() {
       })
       const data = await res.json()
       if (res.ok) {
-        await alert({ title: '발송 성공', message: `${testEmail}로 테스트 메일을 발송했습니다.`, variant: 'success' })
+        await alert({ title: t('sendSuccess'), message: t('testMailSent', { email: testEmail }), variant: 'success' })
       } else {
-        await alert({ message: data.error || '발송 실패', variant: 'error' })
+        await alert({ message: data.error || t('sendFailed'), variant: 'error' })
       }
     } catch {
-      await alert({ message: '테스트 실패', variant: 'error' })
+      await alert({ message: t('testFailed'), variant: 'error' })
     } finally { setTesting(false) }
   }
 
-  if (loading) return <div className="text-center py-10 text-ive-text-dim">불러오는 중...</div>
+  if (loading) return <div className="text-center py-10 text-ive-text-dim">{tc('loading')}</div>
 
   return (
     <main className="px-4 py-4 max-w-lg mx-auto space-y-3">
       <div className="text-xs text-ive-text-dim mb-1">
-        시스템 설정은 DB에 저장되며 즉시 적용됩니다.
+        {t('systemSettingsDesc')}
       </div>
 
       {SETTING_GROUPS.map(group => (
@@ -1003,7 +1022,7 @@ function SettingsPanel() {
             className="w-full px-4 py-3 flex items-center gap-2 text-left hover:bg-white/[0.02]"
           >
             <i className={`${group.icon} text-sm text-ive-text-dim`} />
-            <span className="text-sm font-bold text-ive-text flex-1">{group.label}</span>
+            <span className="text-sm font-bold text-ive-text flex-1">{t(group.label as any)}</span>
             <span className="text-xs text-ive-text-dim">
               {group.fields.filter(f => settings[f.key]).length}/{group.fields.length}
             </span>
@@ -1042,7 +1061,7 @@ function SettingsPanel() {
                     type="text"
                     value={testEmail}
                     onChange={e => setTestEmail(e.target.value)}
-                    placeholder="수신 주소 입력"
+                    placeholder={t('recipientPlaceholder')}
                     className="flex-1 bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green/50"
                   />
                   <button
@@ -1051,8 +1070,8 @@ function SettingsPanel() {
                     className="px-4 py-2 rounded-lg text-xs font-bold bg-ive-bg-deep border border-ive-border-subtle text-ive-cyan active:scale-[0.98] transition-all disabled:opacity-40 whitespace-nowrap"
                   >
                     {testing
-                      ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />발송중</>
-                      : <><i className="fa-solid fa-paper-plane mr-1" />테스트</>
+                      ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />{t('testSending')}</>
+                      : <><i className="fa-solid fa-paper-plane mr-1" />{t('test')}</>
                     }
                   </button>
                 </div>
@@ -1070,10 +1089,10 @@ function SettingsPanel() {
         }`}
       >
         {saving
-          ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />저장 중...</>
+          ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />{t('saving')}</>
           : saved
-            ? <><i className="fa-solid fa-check mr-1" />저장됨</>
-            : <><i className="fa-solid fa-floppy-disk mr-1" />저장</>
+            ? <><i className="fa-solid fa-check mr-1" />{t('saved')}</>
+            : <><i className="fa-solid fa-floppy-disk mr-1" />{tc('save')}</>
         }
       </button>
     </main>
@@ -1093,6 +1112,8 @@ const CLI_ICONS: Record<string, string> = {
 }
 
 function PricingPanel() {
+  const t = useTranslations('admin')
+  const tc = useTranslations('common')
   const { alert } = useDialog()
   const [items, setItems] = useState<PricingItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -1133,7 +1154,7 @@ function PricingPanel() {
         setTimeout(() => setSaved(false), 2000)
       } else {
         const data = await res.json()
-        await alert({ message: data.error || '저장 실패', variant: 'error' })
+        await alert({ message: data.error || tc('saveFailed'), variant: 'error' })
       }
     } finally { setSaving(false) }
   }
@@ -1149,21 +1170,21 @@ function PricingPanel() {
       if (res.ok) {
         setItems(await res.json())
         setSaved(false)
-        await alert({ title: '갱신 완료', message: '최신 단가가 적용되었습니다.', variant: 'success' })
+        await alert({ title: t('fetchComplete'), message: t('latestPricingApplied'), variant: 'success' })
       } else {
         const data = await res.json()
-        await alert({ message: data.error || '갱신 실패', variant: 'error' })
+        await alert({ message: data.error || t('fetchFailed'), variant: 'error' })
       }
     } finally { setFetching(false) }
   }
 
-  if (loading) return <div className="text-center py-10 text-ive-text-dim">불러오는 중...</div>
+  if (loading) return <div className="text-center py-10 text-ive-text-dim">{tc('loading')}</div>
 
   return (
     <main className="px-4 py-4 max-w-lg mx-auto">
       <div className="flex items-center justify-between mb-3">
         <div className="text-xs text-ive-text-dim">
-          토큰 단가 ($/1M tokens) — 보고서 비용 산출에 사용됩니다
+          {t('pricingDesc')}
         </div>
       </div>
 
@@ -1177,12 +1198,12 @@ function PricingPanel() {
                 value={it.modelName}
                 onChange={e => updateItem(it.cliName, 'modelName', e.target.value)}
                 className="flex-1 text-xs text-ive-text-muted bg-transparent border-b border-ive-border-dark focus:border-ive-green focus:outline-none px-1 py-0.5 text-right"
-                placeholder="모델명"
+                placeholder={t('modelName')}
               />
             </div>
             <div className="flex gap-3">
               <div className="flex-1">
-                <div className="text-[10px] text-ive-text-dim mb-0.5">입력 (Input)</div>
+                <div className="text-[10px] text-ive-text-dim mb-0.5">{t('input')}</div>
                 <input
                   type="number"
                   step="0.01"
@@ -1194,7 +1215,7 @@ function PricingPanel() {
                 />
               </div>
               <div className="flex-1">
-                <div className="text-[10px] text-ive-text-dim mb-0.5">출력 (Output)</div>
+                <div className="text-[10px] text-ive-text-dim mb-0.5">{t('output')}</div>
                 <input
                   type="number"
                   step="0.01"
@@ -1207,7 +1228,7 @@ function PricingPanel() {
               </div>
             </div>
             <div className="text-[10px] text-ive-text-dim mt-1.5 text-right">
-              수정: {new Date(it.updatedAt).toLocaleDateString('ko-KR')}
+              {t('modified')}: {new Date(it.updatedAt).toLocaleDateString('ko-KR')}
             </div>
           </div>
         ))}
@@ -1220,8 +1241,8 @@ function PricingPanel() {
           className="flex-1 py-2.5 rounded-lg text-xs font-bold bg-ive-bg-card border border-ive-border-subtle text-ive-cyan active:scale-[0.98] transition-all disabled:opacity-40"
         >
           {fetching
-            ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />갱신 중...</>
-            : <><i className="fa-solid fa-rotate mr-1" />최신 단가 적용</>
+            ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />{t('fetching')}</>
+            : <><i className="fa-solid fa-rotate mr-1" />{t('applyLatestPricing')}</>
           }
         </button>
         <button
@@ -1232,10 +1253,10 @@ function PricingPanel() {
           }`}
         >
           {saving
-            ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />저장 중...</>
+            ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />{t('saving')}</>
             : saved
-              ? <><i className="fa-solid fa-check mr-1" />저장됨</>
-              : <><i className="fa-solid fa-floppy-disk mr-1" />저장</>
+              ? <><i className="fa-solid fa-check mr-1" />{t('saved')}</>
+              : <><i className="fa-solid fa-floppy-disk mr-1" />{tc('save')}</>
           }
         </button>
       </div>
@@ -1245,13 +1266,13 @@ function PricingPanel() {
 
 // ── Activity Panel (사용자 활동 로그) ──
 
-const CATEGORY_META: Record<string, { label: string; icon: string; color: string }> = {
-  auth: { label: '인증', icon: 'fa-solid fa-right-to-bracket', color: 'text-ive-cyan' },
-  project: { label: '프로젝트', icon: 'fa-solid fa-folder', color: 'text-ive-green' },
-  agent: { label: '개발자', icon: 'fa-solid fa-robot', color: 'text-ive-amber' },
-  execution: { label: '실행', icon: 'fa-solid fa-play', color: 'text-blue-400' },
-  admin: { label: '관리', icon: 'fa-solid fa-shield', color: 'text-ive-red' },
-  settings: { label: '설정', icon: 'fa-solid fa-gear', color: 'text-purple-400' },
+const CATEGORY_META: Record<string, { labelKey: string; icon: string; color: string }> = {
+  auth: { labelKey: 'categoryAuth', icon: 'fa-solid fa-right-to-bracket', color: 'text-ive-cyan' },
+  project: { labelKey: 'categoryProject', icon: 'fa-solid fa-folder', color: 'text-ive-green' },
+  agent: { labelKey: 'categoryAgent', icon: 'fa-solid fa-robot', color: 'text-ive-amber' },
+  execution: { labelKey: 'categoryExecution', icon: 'fa-solid fa-play', color: 'text-blue-400' },
+  admin: { labelKey: 'categoryAdmin', icon: 'fa-solid fa-shield', color: 'text-ive-red' },
+  settings: { labelKey: 'categorySettings', icon: 'fa-solid fa-gear', color: 'text-purple-400' },
 }
 
 function getDateStr(daysAgo: number) {
@@ -1260,15 +1281,17 @@ function getDateStr(daysAgo: number) {
   return d.toISOString().slice(0, 10)
 }
 
-const DATE_PRESETS: { label: string; days: number | null }[] = [
-  { label: '오늘', days: 0 },
-  { label: '7일', days: 7 },
-  { label: '30일', days: 30 },
-  { label: '90일', days: 90 },
-  { label: '전체', days: null },
+const DATE_PRESETS: { labelKey: string; days: number | null }[] = [
+  { labelKey: 'dateToday', days: 0 },
+  { labelKey: 'dateDays7', days: 7 },
+  { labelKey: 'dateDays30', days: 30 },
+  { labelKey: 'dateDays90', days: 90 },
+  { labelKey: 'dateAll', days: null },
 ]
 
 function ActivityPanel() {
+  const t = useTranslations('admin')
+  const tc = useTranslations('common')
   const [logs, setLogs] = useState<UserActivityLog[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -1329,7 +1352,7 @@ function ActivityPanel() {
     } catch { return iso }
   }
 
-  if (loading) return <div className="text-center py-10 text-ive-text-dim">불러오는 중...</div>
+  if (loading) return <div className="text-center py-10 text-ive-text-dim">{tc('loading')}</div>
 
   return (
     <main className="px-4 py-4 max-w-lg mx-auto">
@@ -1340,9 +1363,9 @@ function ActivityPanel() {
           onChange={e => setFilterCategory(e.target.value)}
           className="flex-1 bg-ive-bg-input border border-ive-border rounded-lg px-2.5 py-2 text-xs text-ive-text focus:outline-none focus:border-ive-green/50"
         >
-          <option value="">전체 카테고리</option>
+          <option value="">{t('allCategories')}</option>
           {Object.entries(CATEGORY_META).map(([k, v]) => (
-            <option key={k} value={k}>{v.label}</option>
+            <option key={k} value={k}>{t(v.labelKey as any)}</option>
           ))}
         </select>
         <select
@@ -1350,7 +1373,7 @@ function ActivityPanel() {
           onChange={e => setFilterUserId(e.target.value)}
           className="flex-1 bg-ive-bg-input border border-ive-border rounded-lg px-2.5 py-2 text-xs text-ive-text focus:outline-none focus:border-ive-green/50"
         >
-          <option value="">전체 사용자</option>
+          <option value="">{t('allUsers')}</option>
           {users.map(u => (
             <option key={u.id} value={u.id}>{u.name}</option>
           ))}
@@ -1361,7 +1384,7 @@ function ActivityPanel() {
       <div className="flex gap-1 mb-2">
         {DATE_PRESETS.map(p => (
           <button
-            key={p.label}
+            key={p.labelKey}
             onClick={() => {
               setActivePreset(p.days)
               if (p.days === null) {
@@ -1378,7 +1401,7 @@ function ActivityPanel() {
                 : 'bg-ive-bg-card border border-ive-border-subtle text-ive-text-dim active:scale-[0.96]'
             }`}
           >
-            {p.label}
+            {t(p.labelKey as any)}
           </button>
         ))}
       </div>
@@ -1400,7 +1423,7 @@ function ActivityPanel() {
         />
       </div>
 
-      <div className="text-xs text-ive-text-dim mb-3">총 {total}건{filterStartDate && filterEndDate ? ` (${filterStartDate} ~ ${filterEndDate})` : filterStartDate ? ` (${filterStartDate} ~)` : filterEndDate ? ` (~ ${filterEndDate})` : ''}</div>
+      <div className="text-xs text-ive-text-dim mb-3">{filterStartDate && filterEndDate ? t('totalCountRange', { count: total, start: filterStartDate, end: filterEndDate }) : filterStartDate ? t('totalCountStartOnly', { count: total, start: filterStartDate }) : filterEndDate ? t('totalCountEndOnly', { count: total, end: filterEndDate }) : t('totalCount', { count: total })}</div>
 
       {/* 로그 목록 */}
       <div className="space-y-1.5">
@@ -1414,13 +1437,13 @@ function ActivityPanel() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 mb-0.5">
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${meta.color} bg-ive-bg-deep`}>{meta.label}</span>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${meta.color} bg-ive-bg-deep`}>{t(meta.labelKey as any)}</span>
                     <span className="text-[10px] text-ive-text-dim">{formatTime(log.createdAt)}</span>
                   </div>
                   <div className="text-xs text-ive-text leading-relaxed">{log.detail}</div>
                   <div className="flex items-center gap-2 mt-1">
                     <span className="text-[10px] text-ive-text-muted">
-                      <i className="fa-solid fa-user mr-0.5" />{log.userName || '알 수 없음'}
+                      <i className="fa-solid fa-user mr-0.5" />{log.userName || t('unknown')}
                     </span>
                     {log.ipAddress && log.ipAddress !== '0.0.0.0' && (
                       <span className="text-[10px] text-ive-text-dim">
@@ -1438,7 +1461,7 @@ function ActivityPanel() {
       {logs.length === 0 && (
         <div className="text-center py-10 text-ive-text-dim text-sm">
           <i className="fa-solid fa-clock-rotate-left text-2xl mb-2 block opacity-30" />
-          기록된 활동이 없습니다
+          {t('noActivityRecords')}
         </div>
       )}
 
@@ -1450,8 +1473,8 @@ function ActivityPanel() {
           className="w-full mt-3 py-2.5 rounded-lg text-xs font-bold bg-ive-bg-card border border-ive-border-subtle text-ive-text-dim active:scale-[0.98] transition-all disabled:opacity-40"
         >
           {loadingMore
-            ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />불러오는 중...</>
-            : <><i className="fa-solid fa-chevron-down mr-1" />더 보기 ({logs.length}/{total})</>
+            ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />{tc('loading')}</>
+            : <><i className="fa-solid fa-chevron-down mr-1" />{t('loadMore', { current: logs.length, total })}</>
           }
         </button>
       )}

@@ -4,9 +4,8 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid, ComposedChart, Line, Area, Cell,
 } from 'recharts'
+import { useTranslations } from 'next-intl'
 import AgentAvatar from '@/components/agent/AgentAvatar'
-
-const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토']
 
 const tooltipStyle = {
   contentStyle: { background: '#1a1f2e', border: '1px solid #2a2f3e', borderRadius: 8, fontSize: 11, padding: '8px 12px' },
@@ -46,10 +45,11 @@ interface PrevDaily { date: string; tasks: number; cost: number }
 export function DailyTrendChart({ data, prevData, type }: {
   data: DailyTrend[]; prevData: PrevDaily[]; type: string
 }) {
+  const t = useTranslations('report')
+  const DAY_LABELS = t.raw('dayLabels') as string[]
   const merged = data.map((d, i) => {
     let label: string
     if (type === 'yearly') {
-      // d.date = "YYYY-MM"
       label = `${parseInt(d.date.slice(5, 7))}월`
     } else {
       const dt = new Date(d.date)
@@ -74,7 +74,7 @@ export function DailyTrendChart({ data, prevData, type }: {
     <div className="bg-ive-bg-card border border-ive-border-subtle rounded-xl p-3 space-y-2">
       {/* 요약 한 줄 */}
       <div className="flex items-center gap-3">
-        <span className="text-xs font-bold text-ive-text">건수 {totalCur.toLocaleString()}건</span>
+        <span className="text-xs font-bold text-ive-text">{t('count')} {totalCur.toLocaleString()}</span>
         <Badge value={pctChange(totalCur, totalPrev)} />
         <span className="text-xs font-bold text-ive-amber ml-auto">${formatCost(costCur)}</span>
         <Badge value={pctChange(costCur, costPrev)} invert />
@@ -88,22 +88,21 @@ export function DailyTrendChart({ data, prevData, type }: {
           <YAxis yAxisId="cost" orientation="right" tick={{ fill: '#92702a', fontSize: 9 }} axisLine={false} tickLine={false} width={30} tickFormatter={v => `$${v}`} />
           <Tooltip {...tooltipStyle} />
           {/* 이전 기간 건수 — 회색 영역 */}
-          <Area yAxisId="tasks" dataKey="prevTasks" name="이전 건수" fill="#6b7280" fillOpacity={0.12} stroke="#6b7280" strokeDasharray="3 3" strokeWidth={1} dot={false} />
+          <Area yAxisId="tasks" dataKey="prevTasks" name={t('prevCount')} fill="#6b7280" fillOpacity={0.12} stroke="#6b7280" strokeDasharray="3 3" strokeWidth={1} dot={false} />
           {/* 현재 건수 — 스택 바 */}
-          <Bar yAxisId="tasks" dataKey="success" stackId="cur" name="성공" fill="#34d399" />
-          <Bar yAxisId="tasks" dataKey="failed" stackId="cur" name="실패" fill="#f87171" radius={[2, 2, 0, 0]} />
-          {/* 비용 라인 */}
-          <Line yAxisId="cost" dataKey="cost" name="비용" stroke="#fbbf24" strokeWidth={2} dot={{ r: 2, fill: '#fbbf24' }} />
-          <Line yAxisId="cost" dataKey="prevCost" name="이전 비용" stroke="#92702a" strokeDasharray="4 3" dot={false} strokeWidth={1} />
+          <Bar yAxisId="tasks" dataKey="success" stackId="cur" name={t('success')} fill="#34d399" />
+          <Bar yAxisId="tasks" dataKey="failed" stackId="cur" name={t('failed')} fill="#f87171" radius={[2, 2, 0, 0]} />
+          <Line yAxisId="cost" dataKey="cost" name={t('cost')} stroke="#fbbf24" strokeWidth={2} dot={{ r: 2, fill: '#fbbf24' }} />
+          <Line yAxisId="cost" dataKey="prevCost" name={t('prevCost')} stroke="#92702a" strokeDasharray="4 3" dot={false} strokeWidth={1} />
         </ComposedChart>
       </ResponsiveContainer>
 
       {/* 범례 */}
       <div className="flex items-center justify-center gap-3 text-[10px] text-ive-text-dim">
-        <span><span className="inline-block w-2 h-2 rounded-sm bg-[#34d399] mr-0.5" />성공</span>
-        <span><span className="inline-block w-2 h-2 rounded-sm bg-[#f87171] mr-0.5" />실패</span>
-        <span><span className="inline-block w-3 h-0.5 bg-[#fbbf24] mr-0.5 align-middle" />비용</span>
-        <span><span className="inline-block w-3 h-2 bg-[#6b7280]/20 border border-[#6b7280]/40 mr-0.5 align-middle" />이전</span>
+        <span><span className="inline-block w-2 h-2 rounded-sm bg-[#34d399] mr-0.5" />{t('success')}</span>
+        <span><span className="inline-block w-2 h-2 rounded-sm bg-[#f87171] mr-0.5" />{t('failed')}</span>
+        <span><span className="inline-block w-3 h-0.5 bg-[#fbbf24] mr-0.5 align-middle" />{t('cost')}</span>
+        <span><span className="inline-block w-3 h-2 bg-[#6b7280]/20 border border-[#6b7280]/40 mr-0.5 align-middle" />{t('lastWeek')}</span>
       </div>
     </div>
   )
@@ -117,6 +116,7 @@ interface CompareItem {
 }
 
 export function CompareTable({ title, data, icon }: { title: string; data: CompareItem[]; icon: string }) {
+  const t = useTranslations('report')
   if (data.length === 0) return null
 
   return (
@@ -128,10 +128,10 @@ export function CompareTable({ title, data, icon }: { title: string; data: Compa
       {/* 헤더 */}
       <div className="grid grid-cols-[1fr_60px_50px_60px_50px] px-3 py-1.5 text-[10px] font-bold text-ive-text-dim border-b border-ive-border-dark/50">
         <span></span>
-        <span className="text-right">건수</span>
-        <span className="text-right">변동</span>
-        <span className="text-right">비용</span>
-        <span className="text-right">변동</span>
+        <span className="text-right">{t('count')}</span>
+        <span className="text-right">{t('change')}</span>
+        <span className="text-right">{t('cost')}</span>
+        <span className="text-right">{t('change')}</span>
       </div>
       {/* 행 */}
       {data.map((d, i) => {

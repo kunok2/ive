@@ -1,6 +1,7 @@
 'use client'
 
 import { ReactNode, useEffect, useRef, useState, createContext, useContext, useCallback } from 'react'
+import { useTranslations } from 'next-intl'
 
 // ── Types ──
 interface DialogOptions {
@@ -82,6 +83,8 @@ function DialogOverlay({
   onClose: (result: boolean) => void
 }) {
   const backdropRef = useRef<HTMLDivElement>(null)
+  const tDialog = useTranslations('dialog')
+  const tCommon = useTranslations('common')
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -125,7 +128,7 @@ function DialogOverlay({
             </div>
             <div className="flex-1 min-w-0">
               <h3 className="text-base font-bold text-ive-text mb-1">
-                {isConfirm ? (opts as DialogOptions).title : ((opts as AlertOptions).title || '알림')}
+                {isConfirm ? (opts as DialogOptions).title : ((opts as AlertOptions).title || tDialog('notification'))}
               </h3>
               <div className="text-sm text-ive-text-muted whitespace-pre-line">
                 {opts.message}
@@ -140,14 +143,14 @@ function DialogOverlay({
                 onClick={() => onClose(false)}
                 className="flex-1 py-2.5 rounded-lg text-sm font-bold bg-ive-bg-deep text-ive-text-dim border border-ive-border-subtle active:scale-[0.98] transition-all"
               >
-                {(opts as DialogOptions).cancelText || '취소'}
+                {(opts as DialogOptions).cancelText || tCommon('cancel')}
               </button>
               <button
                 onClick={() => onClose(true)}
                 className={`flex-1 py-2.5 rounded-lg text-sm font-bold active:scale-[0.98] transition-all ${confirmBtnClass[variant] || confirmBtnClass.info}`}
                 autoFocus
               >
-                {(opts as DialogOptions).confirmText || '확인'}
+                {(opts as DialogOptions).confirmText || tCommon('confirm')}
               </button>
             </>
           ) : (
@@ -156,7 +159,7 @@ function DialogOverlay({
               className="flex-1 py-2.5 rounded-lg text-sm font-bold bg-ive-green-dark text-white active:scale-[0.98] transition-all"
               autoFocus
             >
-              확인
+              {tCommon('confirm')}
             </button>
           )}
         </div>

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useStore } from '@/lib/store'
+import { useTranslations } from 'next-intl'
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -18,6 +19,8 @@ export default function RegisterPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [sendingCode, setSendingCode] = useState(false)
+  const tAuth = useTranslations('auth')
+  const tc = useTranslations('common')
 
   // 재발송 쿨다운 타이머
   useEffect(() => {
@@ -27,7 +30,7 @@ export default function RegisterPage() {
   }, [cooldown])
 
   async function handleSendCode() {
-    if (!email) { setError('이메일을 입력해주세요.'); return }
+    if (!email) { setError(tAuth('emailRequired')); return }
     setError('')
     setSendingCode(true)
     try {
@@ -41,7 +44,7 @@ export default function RegisterPage() {
       setCodeSent(true)
       setCooldown(60)
     } catch {
-      setError('인증 메일 전송에 실패했습니다.')
+      setError(tAuth('verificationEmailFailed'))
     } finally {
       setSendingCode(false)
     }
@@ -51,11 +54,11 @@ export default function RegisterPage() {
     e.preventDefault()
     setError('')
     if (!codeSent || !code) {
-      setError('이메일 인증을 완료해주세요.')
+      setError(tAuth('completeEmailVerification'))
       return
     }
     if (password !== passwordConfirm) {
-      setError('비밀번호가 일치하지 않습니다.')
+      setError(tAuth('passwordMismatch'))
       return
     }
     setLoading(true)
@@ -83,24 +86,24 @@ export default function RegisterPage() {
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-extrabold text-ive-green mb-1">Spring <span className="text-ive-amber">IVE</span></h1>
-          <p className="text-base text-ive-text-muted">새 계정 만들기</p>
+          <p className="text-base text-ive-text-muted">{tAuth('createAccount')}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4" autoComplete="off">
           <div>
-            <label className="block text-base font-semibold text-ive-text-muted mb-1.5">이름</label>
+            <label className="block text-base font-semibold text-ive-text-muted mb-1.5">{tAuth('name')}</label>
             <input
               type="text"
               value={name}
               onChange={e => setName(e.target.value)}
-              placeholder="홍길동"
+              placeholder={tAuth('namePlaceholder')}
               required
               className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-base text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green"
             />
           </div>
 
           <div>
-            <label className="block text-base font-semibold text-ive-text-muted mb-1.5">이메일</label>
+            <label className="block text-base font-semibold text-ive-text-muted mb-1.5">{tAuth('email')}</label>
             <div className="flex gap-2">
               <input
                 type="email"
@@ -118,35 +121,35 @@ export default function RegisterPage() {
                 disabled={sendingCode || cooldown > 0 || !email}
                 className="shrink-0 w-20 py-3 rounded-lg text-sm font-bold bg-ive-green-dark text-white active:bg-ive-green/80 transition-colors disabled:opacity-40 text-center"
               >
-                {sendingCode ? '전송 중...' : cooldown > 0 ? `${cooldown}초` : codeSent ? '재발송' : '인증'}
+                {sendingCode ? tAuth('sendingCode') : cooldown > 0 ? `${cooldown}초` : codeSent ? tAuth('resend') : tAuth('verify')}
               </button>
             </div>
           </div>
 
           {codeSent && (
             <div>
-              <label className="block text-base font-semibold text-ive-text-muted mb-1.5">인증 코드</label>
+              <label className="block text-base font-semibold text-ive-text-muted mb-1.5">{tAuth('verificationCode')}</label>
               <input
                 type="text"
                 value={code}
                 onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                placeholder="6자리 숫자"
+                placeholder={tAuth('sixDigits')}
                 required
                 maxLength={6}
                 inputMode="numeric"
                 className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-base text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green tracking-[0.3em] text-center font-mono"
               />
-              <p className="text-xs text-ive-text-dim mt-1">이메일로 발송된 6자리 코드를 입력하세요 (10분 유효)</p>
+              <p className="text-xs text-ive-text-dim mt-1">{tAuth('emailCodeHint')} ({tAuth('codeValidityHint')})</p>
             </div>
           )}
 
           <div>
-            <label className="block text-base font-semibold text-ive-text-muted mb-1.5">비밀번호</label>
+            <label className="block text-base font-semibold text-ive-text-muted mb-1.5">{tAuth('password')}</label>
             <input
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
-              placeholder="6자 이상"
+              placeholder={tAuth('minSixChars')}
               required
               minLength={6}
               autoComplete="new-password"
@@ -155,12 +158,12 @@ export default function RegisterPage() {
           </div>
 
           <div>
-            <label className="block text-base font-semibold text-ive-text-muted mb-1.5">비밀번호 확인</label>
+            <label className="block text-base font-semibold text-ive-text-muted mb-1.5">{tAuth('passwordConfirm')}</label>
             <input
               type="password"
               value={passwordConfirm}
               onChange={e => setPasswordConfirm(e.target.value)}
-              placeholder="비밀번호 재입력"
+              placeholder={tAuth('reenterPassword')}
               required
               minLength={6}
               autoComplete="new-password"
@@ -171,7 +174,7 @@ export default function RegisterPage() {
               }`}
             />
             {passwordConfirm && password !== passwordConfirm && (
-              <p className="text-xs text-ive-red mt-1">비밀번호가 일치하지 않습니다.</p>
+              <p className="text-xs text-ive-red mt-1">{tAuth('passwordMismatch')}</p>
             )}
           </div>
 
@@ -184,13 +187,13 @@ export default function RegisterPage() {
             disabled={loading || !codeSent || !code}
             className="w-full bg-ive-green-dark text-white font-bold py-3 rounded-lg text-base active:bg-ive-green/80 transition-colors disabled:opacity-50"
           >
-            {loading ? '생성 중...' : '회원가입'}
+            {loading ? tc('creating') : tAuth('register')}
           </button>
         </form>
 
         <p className="text-center text-base text-ive-text-muted mt-6">
-          이미 계정이 있으신가요?{' '}
-          <Link href="/login" className="text-ive-green font-semibold">로그인</Link>
+          {tAuth('alreadyHaveAccount')}{' '}
+          <Link href="/login" className="text-ive-green font-semibold">{tAuth('login')}</Link>
         </p>
       </div>
     </div>

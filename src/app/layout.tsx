@@ -1,4 +1,6 @@
 import type { Metadata, Viewport } from "next";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale, getMessages } from "next-intl/server";
 import { StoreProvider } from "@/lib/store";
 import { TabProvider } from "@/lib/tab-context";
 import { DialogProvider } from "@/components/ui/ConfirmDialog";
@@ -24,20 +26,25 @@ export const viewport: Viewport = {
   themeColor: "#0e160e",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const locale = await getLocale();
+  const messages = await getMessages();
+
   return (
-    <html lang="ko">
+    <html lang={locale}>
       <head>
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
         <link rel="apple-touch-icon" href="/icon-192.svg" />
       </head>
       <body>
         <PWARegister />
-        <StoreProvider><TabProvider><DialogProvider><ToastProvider>{children}</ToastProvider></DialogProvider></TabProvider></StoreProvider>
+        <NextIntlClientProvider locale={locale} messages={messages}>
+          <StoreProvider><TabProvider><DialogProvider><ToastProvider>{children}</ToastProvider></DialogProvider></TabProvider></StoreProvider>
+        </NextIntlClientProvider>
       </body>
     </html>
   );

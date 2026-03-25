@@ -9,6 +9,7 @@ import ProjectForm from '@/components/project/ProjectForm'
 import MobileTabBar from '@/components/layout/MobileTabBar'
 import Modal from '@/components/ui/Modal'
 import ConfirmModal from '@/components/ui/ConfirmModal'
+import { useTranslations } from 'next-intl'
 
 export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -23,20 +24,23 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   // 토큰 편집 중인 에이전트
   const [editingTokenAgentId, setEditingTokenAgentId] = useState<string | null>(null)
   const [editTokenValue, setEditTokenValue] = useState('')
+  const tc = useTranslations('common')
+  const tp = useTranslations('project')
+  const ts = useTranslations('stage')
 
   const project = state.projects.find(p => p.id === id)
 
   if (state.loading) {
-    return <div className="min-h-screen flex items-center justify-center text-ive-text-muted text-base">불러오는 중...</div>
+    return <div className="min-h-screen flex items-center justify-center text-ive-text-muted text-base">{tc('loading')}</div>
   }
 
   if (!project) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <p className="text-ive-text-muted mb-4">프로젝트를 찾을 수 없습니다</p>
+          <p className="text-ive-text-muted mb-4">{tp('notFound')}</p>
           <Link href="/" className="text-ive-green text-base font-semibold">
-            <i className="fa-solid fa-arrow-left mr-1" />홈으로
+            <i className="fa-solid fa-arrow-left mr-1" />{tc('home')}
           </Link>
         </div>
       </div>
@@ -64,7 +68,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       await assignAgentToProject(id, agentId, assignToken.trim() || undefined)
       setAssignToken('')
     } catch (err) {
-      setAssignError(err instanceof Error ? err.message : '개발자 배정 실패')
+      setAssignError(err instanceof Error ? err.message : tp('assignFailed'))
     }
   }
 
@@ -73,7 +77,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     try {
       await unassignAgentFromProject(id, agentId)
     } catch (err) {
-      setAssignError(err instanceof Error ? err.message : '개발자 해제 실패')
+      setAssignError(err instanceof Error ? err.message : tp('unassignFailed'))
     }
   }
 
@@ -89,7 +93,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       <header className="sticky top-0 z-40 bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark shadow-sm">
         <div className="flex items-center gap-3 px-4 py-3 max-w-lg mx-auto">
           <Link href="/" className="text-ive-green text-base font-semibold p-1 hover:bg-ive-green/5 rounded">
-            <i className="fa-solid fa-arrow-left mr-1" />뒤로
+            <i className="fa-solid fa-arrow-left mr-1" />{tc('back')}
           </Link>
           <h1 className="text-lg font-bold text-ive-green-pale flex-1 truncate">{project.name}</h1>
         </div>
@@ -134,13 +138,13 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             <div className="flex items-center gap-4">
               <div className="text-center">
                 <div className={`text-xl font-black leading-none ${assignedAgents.length > 0 ? 'text-ive-green-light' : 'text-ive-text-dim'}`}>{assignedAgents.length}</div>
-                <div className="text-sm text-ive-text-muted mt-1 uppercase tracking-wider font-bold">개발자</div>
+                <div className="text-sm text-ive-text-muted mt-1 uppercase tracking-wider font-bold">{tp('developers')}</div>
               </div>
               <div className="text-center">
                 <div className={`text-xl font-black leading-none ${(project.lastScannedIssueCount ?? 0) > 0 ? 'text-ive-cyan' : 'text-ive-text-dim'}`}>
                   {project.lastScannedIssueCount ?? 0}
                 </div>
-                <div className="text-sm text-ive-text-muted mt-1 uppercase tracking-wider font-bold">대기</div>
+                <div className="text-sm text-ive-text-muted mt-1 uppercase tracking-wider font-bold">{ts('waiting')}</div>
               </div>
             </div>
             {isOwner ? (
@@ -149,7 +153,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                   onClick={() => setShowEditProject(true)}
                   className="text-base font-black text-ive-text-muted border border-ive-border px-3 py-2 rounded-xl hover:border-ive-green/30 hover:text-ive-green transition-all bg-ive-bg/50"
                 >
-                  <i className="fa-solid fa-pen-to-square mr-1" />수정
+                  <i className="fa-solid fa-pen-to-square mr-1" />{tc('edit')}
                 </button>
                 <button
                   onClick={() => setShowDeleteProject(true)}
@@ -161,7 +165,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             ) : (
               <span className={`text-xs font-black px-2.5 py-1 rounded-full leading-none ${project.shareRole === 'editor' ? 'bg-ive-amber/15 text-ive-amber border border-ive-amber/30' : 'bg-ive-cyan/15 text-ive-cyan border border-ive-cyan/30'}`}>
                 <i className="fa-solid fa-share-nodes mr-1" />
-                {project.shareRole === 'editor' ? '편집 권한' : '뷰어 권한'}
+                {project.shareRole === 'editor' ? tp('editPermission') : tp('viewerPermission')}
               </span>
             )}
           </div>
@@ -171,14 +175,14 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         <div className="flex items-center justify-between mb-4 px-1">
           <h2 className="text-base font-black text-ive-text uppercase tracking-widest flex items-center gap-2">
             <span className="w-1.5 h-1.5 rounded-full bg-ive-green" />
-            배정된 개발자 ({assignedAgents.length})
+            {tp('assignedAgents', { count: assignedAgents.length })}
           </h2>
           {isOwner && (
             <button
               onClick={() => { setShowAssignAgent(true); setAssignError(''); setAssignToken('') }}
               className="text-base font-bold text-ive-green bg-ive-green/10 px-4 py-2 rounded-xl active:scale-95 transition-all hover:bg-ive-green/15"
             >
-              <i className="fa-solid fa-plus mr-1.5" />개발자 배정
+              <i className="fa-solid fa-plus mr-1.5" />{tp('assignAgent')}
             </button>
           )}
         </div>
@@ -186,7 +190,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         {assignedAgents.length === 0 ? (
           <div className="text-center py-16 bg-ive-bg-card rounded-2xl border border-dashed border-ive-border-subtle">
             <i className="fa-solid fa-robot text-4xl text-ive-text-dim mb-4 block" />
-            <p className="text-base text-ive-text-muted font-medium">이 프로젝트에 배정된 개발자가 없습니다</p>
+            <p className="text-base text-ive-text-muted font-medium">{tp('noAssignedAgents')}</p>
           </div>
         ) : (
           <div className="grid gap-3">
@@ -228,10 +232,10 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                             ? 'text-ive-cyan bg-ive-cyan/10 hover:bg-ive-cyan/20'
                             : 'text-ive-text-dim hover:bg-ive-bg-deep hover:text-ive-text-muted'
                         }`}
-                        title={pa.accessToken ? '개별 토큰 사용 중 (클릭하여 변경)' : '프로젝트 토큰 사용 중 (클릭하여 개별 토큰 지정)'}
+                        title={pa.accessToken ? tp('individualTokenInUse') : tp('projectTokenInUse')}
                       >
                         <i className={`fa-solid fa-key mr-1 ${pa.accessToken ? '' : 'opacity-40'}`} />
-                        {pa.accessToken ? '개별 토큰' : '프로젝트 토큰'}
+                        {pa.accessToken ? tp('individualTokenLabel') : tp('projectTokenLabel')}
                       </button>
                     )}
                   </div>
@@ -249,24 +253,24 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       </main>
 
       {/* 모달들 */}
-      <Modal open={showEditProject} onClose={() => setShowEditProject(false)} title="프로젝트 설정">
+      <Modal open={showEditProject} onClose={() => setShowEditProject(false)} title={tp('projectSettings')}>
         <ProjectForm existing={project} onSuccess={() => setShowEditProject(false)} />
       </Modal>
 
-      <Modal open={showAssignAgent} onClose={() => setShowAssignAgent(false)} title="개발자 배정">
+      <Modal open={showAssignAgent} onClose={() => setShowAssignAgent(false)} title={tp('assignAgent')}>
         <div className="space-y-3">
           {availableAgents.length === 0 ? (
             <div className="text-center py-8 text-ive-text-muted">
               <i className="fa-solid fa-robot text-3xl text-ive-text-dim mb-3 block" />
-              <p className="text-base">배정 가능한 개발자가 없습니다</p>
-              <p className="text-sm text-ive-text-dim mt-1">새 개발자를 등록하거나, 다른 프로젝트에서 해제하세요</p>
+              <p className="text-base">{tp('noAvailableAgents')}</p>
+              <p className="text-sm text-ive-text-dim mt-1">{tp('noAvailableAgentsHint')}</p>
             </div>
           ) : (
             <>
               {/* 개별 토큰 입력 (선택사항) */}
               <div className="bg-ive-bg rounded-xl p-3 border border-ive-border-subtle">
                 <label className="block text-xs font-bold text-ive-text-muted mb-1.5">
-                  <i className="fa-solid fa-key mr-1 text-ive-cyan" />개별 액세스 토큰 <span className="text-ive-text-dim font-normal">(선택)</span>
+                  <i className="fa-solid fa-key mr-1 text-ive-cyan" />{tp('individualToken')}
                 </label>
                 <input
                   type="text"
@@ -274,11 +278,11 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                   data-1p-ignore
                   value={assignToken}
                   onChange={e => setAssignToken(e.target.value)}
-                  placeholder="미입력 시 프로젝트 토큰 사용"
+                  placeholder={tp('individualTokenPlaceholder')}
                   className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text font-mono placeholder:text-ive-text-dim focus:outline-none focus:border-ive-cyan"
                   style={{ WebkitTextSecurity: 'disc' } as React.CSSProperties}
                 />
-                <p className="text-xs text-ive-text-dim mt-1">이 개발자에게 별도 토큰(임시사번)을 부여합니다.</p>
+                <p className="text-xs text-ive-text-dim mt-1">{tp('individualTokenHint')}</p>
               </div>
 
               {availableAgents.map(agent => (
@@ -290,7 +294,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                     onClick={() => handleAssignAgent(agent.id)}
                     className="shrink-0 text-base font-bold text-ive-green bg-ive-green/10 px-3 py-1.5 rounded-lg hover:bg-ive-green/20 transition-colors"
                   >
-                    <i className="fa-solid fa-plus mr-1" />배정
+                    <i className="fa-solid fa-plus mr-1" />{tp('assign')}
                   </button>
                 </div>
               ))}
@@ -308,9 +312,9 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         open={showDeleteProject}
         onClose={() => setShowDeleteProject(false)}
         onConfirm={handleDeleteProject}
-        title="프로젝트 삭제"
-        message="정말 이 프로젝트를 삭제하시겠습니까? 배정된 개발자와 실행 기록이 모두 사라집니다."
-        confirmLabel="영구 삭제"
+        title={tp('deleteProject')}
+        message={tp('deleteProjectConfirm')}
+        confirmLabel={tp('permanentDelete')}
         danger
       />
 

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Project, PROJECT_COLORS, ProjectColor, detectProvider, ShareRole } from '@/types'
 import { useStore } from '@/lib/store'
+import { useTranslations } from 'next-intl'
 
 interface Props {
   existing?: Project
@@ -13,6 +14,9 @@ interface Props {
 export default function ProjectForm({ existing, onSuccess }: Props) {
   const router = useRouter()
   const { addProject, updateProject } = useStore()
+  const t = useTranslations('project')
+  const tc = useTranslations('common')
+  const ta = useTranslations('agent')
 
   const [color, setColor] = useState<ProjectColor>(existing?.color ?? '#4ade80')
   const [name, setName] = useState(existing?.name ?? '')
@@ -80,12 +84,12 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
       })
       if (!res.ok) {
         const data = await res.json()
-        setShareError(data.error || '공유 추가 실패')
+        setShareError(data.error || t('shareAddFailed'))
       } else {
         setSelectedUserId('')
         fetchShares()
       }
-    } catch { setShareError('서버 오류') }
+    } catch { setShareError(tc('serverError')) }
     finally { setShareLoading(false) }
   }
 
@@ -138,7 +142,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
       }
     } catch {
       setTestStatus('error')
-      setTestResult({ error: '서버 연결에 실패했습니다' })
+      setTestResult({ error: t('connectionFailedServer') })
     }
   }
 
@@ -190,7 +194,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
     <form onSubmit={handleSubmit} className="flex flex-col gap-5">
       {/* 프로젝트 색상 */}
       <div>
-        <label className="block text-base font-semibold text-ive-text-muted mb-2">구분 색상</label>
+        <label className="block text-base font-semibold text-ive-text-muted mb-2">{t('distinguishColor')}</label>
         <div className="grid grid-cols-5 gap-1.5">
           {PROJECT_COLORS.map(c => {
             const selected = color === c.value
@@ -220,19 +224,19 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
 
       {/* 프로젝트 이름 */}
       <div>
-        <label className="block text-base font-semibold text-ive-text-muted mb-2">프로젝트 이름 <span className="text-ive-red">*</span></label>
+        <label className="block text-base font-semibold text-ive-text-muted mb-2">{t('projectName')} <span className="text-ive-red">*</span></label>
         <input
           type="text"
           value={name}
           onChange={e => setName(e.target.value)}
-          placeholder="나의 AI 프로젝트"
+          placeholder={t('projectNamePlaceholder')}
           className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-base text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green"
         />
       </div>
 
       {/* 저장소 URL */}
       <div>
-        <label className="block text-base font-semibold text-ive-text-muted mb-2">저장소 URL <span className="text-ive-red">*</span></label>
+        <label className="block text-base font-semibold text-ive-text-muted mb-2">{t('repoUrl')} <span className="text-ive-red">*</span></label>
         <input
           type="url"
           value={repoUrl}
@@ -245,7 +249,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
       {/* 액세스 토큰 */}
       <div>
         <label className="block text-base font-semibold text-ive-text-muted mb-2">
-          Git 액세스 토큰 <span className="text-ive-red">*</span> <span className="text-ive-text-dim font-normal">(Personal Access Token)</span>
+          {t('gitAccessToken')} <span className="text-ive-red">*</span> <span className="text-ive-text-dim font-normal">{t('personalAccessToken')}</span>
         </label>
         <input
           type="text"
@@ -255,12 +259,12 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
           data-form-type="other"
           value={accessToken}
           onChange={e => setAccessToken(e.target.value)}
-          placeholder={existing ? '변경 시에만 입력' : 'ghp_xxxxxxxxxxxx'}
+          placeholder={existing ? t('changeOnlyInput') : 'ghp_xxxxxxxxxxxx'}
           className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-base text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green font-mono"
           style={{ WebkitTextSecurity: 'disc' } as React.CSSProperties}
         />
         <p className="text-sm text-ive-text-dim mt-1">
-          <i className="fa-solid fa-lock mr-1" />이슈 목록 조회 및 작업 완료 보고를 위해 필요합니다. 암호화되어 저장됩니다.
+          <i className="fa-solid fa-lock mr-1" />{t('tokenHint')}
         </p>
       </div>
 
@@ -273,9 +277,9 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
           className="w-full py-2.5 rounded-lg text-sm font-bold border transition-all disabled:opacity-40 bg-ive-bg-card border-ive-border-subtle text-ive-text-muted hover:border-ive-green hover:text-ive-green"
         >
           {testStatus === 'loading' ? (
-            <><i className="fa-solid fa-circle-notch fa-spin mr-1.5" />연결 확인 중...</>
+            <><i className="fa-solid fa-circle-notch fa-spin mr-1.5" />{t('testingConnection')}</>
           ) : (
-            <><i className="fa-solid fa-plug mr-1.5" />연결 테스트</>
+            <><i className="fa-solid fa-plug mr-1.5" />{t('testConnection')}</>
           )}
         </button>
 
@@ -287,17 +291,17 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
               ) : (
                 <i className="fa-solid fa-circle-check" />
               )}
-              연결 성공
+              {t('connectionSuccess')}
             </div>
             <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-ive-text-muted">
-              <span className="text-ive-text-dim">프로젝트</span>
+              <span className="text-ive-text-dim">{t('project')}</span>
               <span className="font-bold text-ive-text">{testResult.name}</span>
-              <span className="text-ive-text-dim">경로</span>
+              <span className="text-ive-text-dim">{t('path')}</span>
               <span className="font-mono text-xs text-ive-text">{testResult.fullPath}</span>
-              <span className="text-ive-text-dim">기본 브랜치</span>
+              <span className="text-ive-text-dim">{t('defaultBranch')}</span>
               <span className="font-bold text-ive-text">{testResult.defaultBranch}</span>
-              <span className="text-ive-text-dim">열린 이슈</span>
-              <span className="font-bold text-ive-text">{testResult.openIssuesCount}개</span>
+              <span className="text-ive-text-dim">{t('openIssues')}</span>
+              <span className="font-bold text-ive-text">{testResult.openIssuesCount}{tc('items')}</span>
             </div>
           </div>
         )}
@@ -314,7 +318,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
       {/* 작업 확인 주기 */}
       <div>
         <label className="block text-base font-semibold text-ive-text-muted mb-2">
-          작업 확인 주기 <span className="text-ive-text-dim font-normal">(단위: 분)</span>
+          {t('checkInterval')} <span className="text-ive-text-dim font-normal">{t('checkIntervalUnit')}</span>
         </label>
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2">
@@ -355,7 +359,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
       <div className="border-t border-ive-border-dark pt-3">
         <label className="block text-sm font-bold text-ive-text-muted mb-1.5 uppercase ml-1">
           <i className="fa-solid fa-tag mr-1.5 text-xs" />
-          IVE 대상 레이블
+          {t('targetLabel')}
         </label>
         <input
           type="text"
@@ -365,8 +369,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
           className="w-full bg-ive-bg-deep border border-ive-border rounded-lg px-3 py-2 text-base text-ive-text focus:outline-none focus:border-ive-green font-bold"
         />
         <p className="text-xs text-ive-text-dim mt-1.5 ml-1 leading-relaxed">
-          이 레이블이 붙은 이슈만 IVE에서 관리됩니다. 이슈 생성 시 자동으로 부여되며,
-          원격 저장소에 레이블 쓰기 권한이 없어도 로컬 DB에서 상태를 추적합니다.
+          {t('targetLabelHint')}
         </p>
       </div>
 
@@ -375,7 +378,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
         <label className="flex items-center justify-between cursor-pointer">
           <span className="text-base font-bold text-ive-text-muted">
             <i className="fa-solid fa-wrench mr-1.5 text-sm" />
-            트레이스에 툴 사용 표시
+            {t('showToolUsage')}
           </span>
           <button
             type="button"
@@ -385,7 +388,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
             <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${showToolUsage ? 'left-[1.375rem]' : 'left-0.5'}`} />
           </button>
         </label>
-        <p className="text-xs text-ive-text-dim mt-1 ml-6">에이전트 실행 로그에 Read, Edit, Bash 등 툴 호출 내역을 포함합니다</p>
+        <p className="text-xs text-ive-text-dim mt-1 ml-6">{t('showToolUsageHint')}</p>
       </div>
 
       {/* 모니터링 설정 */}
@@ -396,14 +399,14 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
           className="flex items-center gap-1.5 text-base font-bold text-ive-cyan mb-3"
         >
           <i className={`fa-solid ${showMonitoring ? 'fa-chevron-down' : 'fa-chevron-right'} text-sm`} />
-          모니터링 설정
+          {ta('monitoring')}
         </button>
 
         {showMonitoring && (
           <div className="space-y-4 pb-2 animate-in fade-in slide-in-from-top-2">
             <div>
               <label className="block text-sm font-bold text-ive-text-muted mb-1.5 ml-1">
-                스냅샷 수집 간격 <span className="text-ive-text-dim font-normal">(분)</span>
+                {ta('snapshotInterval')} <span className="text-ive-text-dim font-normal">({tc('minutes')})</span>
               </label>
               <div className="flex items-center gap-2">
                 <div className="flex bg-ive-bg-input border border-ive-border rounded-lg overflow-hidden">
@@ -423,7 +426,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
 
             <div>
               <label className="block text-sm font-bold text-ive-text-muted mb-1.5 ml-1">
-                스파크라인 표시 건수
+                {ta('sparklinePoints')}
               </label>
               <div className="flex items-center gap-2">
                 <div className="flex bg-ive-bg-input border border-ive-border rounded-lg overflow-hidden">
@@ -443,7 +446,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
 
             <div>
               <label className="block text-sm font-bold text-ive-text-muted mb-1.5 ml-1">
-                데이터 보관 기간 <span className="text-ive-text-dim font-normal">(일)</span>
+                {ta('dataRetention')} <span className="text-ive-text-dim font-normal">({tc('days')})</span>
               </label>
               <div className="flex items-center gap-2">
                 <div className="flex bg-ive-bg-input border border-ive-border rounded-lg overflow-hidden">
@@ -474,7 +477,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
           >
             <i className={`fa-solid ${showSharing ? 'fa-chevron-down' : 'fa-chevron-right'} text-sm`} />
             <i className="fa-solid fa-share-nodes mr-0.5" />
-            프로젝트 공유
+            {t('shareProject')}
             {shares.length > 0 && <span className="text-xs font-black bg-ive-purple/20 text-ive-purple px-1.5 py-0.5 rounded-full">{shares.length}</span>}
           </button>
 
@@ -495,18 +498,18 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
                           type="button"
                           onClick={() => handleChangeShareRole(s.id, 'viewer')}
                           className={`px-2 py-1 text-xs font-black transition-all ${s.role === 'viewer' ? 'bg-ive-cyan/15 text-ive-cyan' : 'text-ive-text-dim hover:text-ive-text'}`}
-                        >뷰어</button>
+                        >{t('viewer')}</button>
                         <button
                           type="button"
                           onClick={() => handleChangeShareRole(s.id, 'editor')}
                           className={`px-2 py-1 text-xs font-black transition-all border-l border-ive-border ${s.role === 'editor' ? 'bg-ive-amber/15 text-ive-amber' : 'text-ive-text-dim hover:text-ive-text'}`}
-                        >편집자</button>
+                        >{t('editor')}</button>
                       </div>
                       <button
                         type="button"
                         onClick={() => handleRemoveShare(s.id)}
                         className="text-ive-red/60 hover:text-ive-red transition-colors p-1"
-                        title="공유 해제"
+                        title={t('unshare')}
                       >
                         <i className="fa-solid fa-xmark" />
                       </button>
@@ -524,12 +527,12 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
                       type="button"
                       onClick={() => setShareRole('viewer')}
                       className={`flex-1 py-2 text-sm font-black transition-all ${shareRole === 'viewer' ? 'bg-ive-cyan/15 text-ive-cyan' : 'text-ive-text-dim hover:text-ive-text'}`}
-                    >뷰어</button>
+                    >{t('viewer')}</button>
                     <button
                       type="button"
                       onClick={() => setShareRole('editor')}
                       className={`flex-1 py-2 text-sm font-black transition-all border-l border-ive-border ${shareRole === 'editor' ? 'bg-ive-amber/15 text-ive-amber' : 'text-ive-text-dim hover:text-ive-text'}`}
-                    >편집자</button>
+                    >{t('editor')}</button>
                   </div>
                   {/* 사용자 목록 — 클릭하면 바로 추가 */}
                   <div className="space-y-1">
@@ -553,7 +556,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
                 </div>
               ) : (
                 <p className="text-xs text-ive-text-dim">
-                  <i className="fa-solid fa-users-slash mr-1" />추가할 수 있는 사용자가 없습니다
+                  <i className="fa-solid fa-users-slash mr-1" />{t('noUsersToAdd')}
                 </p>
               )}
               {shareError && (
@@ -561,7 +564,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
               )}
               <p className="text-xs text-ive-text-dim">
                 <i className="fa-solid fa-info-circle mr-1" />
-                <b>뷰어</b>: 프로젝트 현황·보고서 조회만 가능 / <b>편집자</b>: 작업 생성도 가능
+                {t('shareRoleHint')}
               </p>
             </div>
           )}
@@ -574,7 +577,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
         className="w-full bg-ive-green-dark text-white font-black py-4 rounded-xl text-base active:shadow-inner active:opacity-90 transition-all mt-2 shadow-lg shadow-ive-green/10"
       >
         <i className={`fa-solid ${existing ? 'fa-check' : 'fa-plus'} mr-2`} />
-        {existing ? '설정 변경 완료' : '프로젝트 생성하기'}
+        {existing ? t('settingsUpdated') : t('createProject')}
       </button>
     </form>
   )

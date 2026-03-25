@@ -1,14 +1,17 @@
 'use client'
 
 import { useState } from 'react'
+import { useTranslations } from 'next-intl'
 
 interface Props {
-  email?: string  // 로그인 상태에서는 email prop 전달
+  email?: string
   onSuccess?: () => void
   onCancel?: () => void
 }
 
 export default function ChangePasswordForm({ email, onSuccess, onCancel }: Props) {
+  const t = useTranslations('auth')
+  const tc = useTranslations('common')
   const [inputEmail, setInputEmail] = useState(email || '')
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -23,7 +26,7 @@ export default function ChangePasswordForm({ email, onSuccess, onCancel }: Props
   const targetEmail = email || inputEmail
 
   async function handleSendCode() {
-    if (!targetEmail) { setError('이메일을 입력해주세요.'); return }
+    if (!targetEmail) { setError(t('emailRequired')); return }
     setError('')
     setSendingCode(true)
     try {
@@ -44,11 +47,11 @@ export default function ChangePasswordForm({ email, onSuccess, onCancel }: Props
     e.preventDefault()
     setError('')
     if (newPassword !== newPasswordConfirm) {
-      setError('새 비밀번호가 일치하지 않습니다.')
+      setError(t('newPasswordMismatch'))
       return
     }
     if (!code.trim()) {
-      setError('인증 코드를 입력해주세요.')
+      setError(t('verificationCodeRequired'))
       return
     }
     setLoading(true)
@@ -71,7 +74,7 @@ export default function ChangePasswordForm({ email, onSuccess, onCancel }: Props
     return (
       <div className="text-center py-6">
         <i className="fa-solid fa-circle-check text-ive-green text-3xl mb-3" />
-        <p className="text-sm text-ive-text font-bold">비밀번호가 변경되었습니다.</p>
+        <p className="text-sm text-ive-text font-bold">{t('passwordChanged')}</p>
       </div>
     )
   }
@@ -80,7 +83,7 @@ export default function ChangePasswordForm({ email, onSuccess, onCancel }: Props
     <form onSubmit={handleSubmit} className="flex flex-col gap-3">
       {/* 이메일 + 인증 버튼 */}
       <div>
-        <label className="block text-sm font-semibold text-ive-text-muted mb-1">이메일</label>
+        <label className="block text-sm font-semibold text-ive-text-muted mb-1">{t('email')}</label>
         <div className="flex gap-2">
           <input
             type="email"
@@ -98,7 +101,7 @@ export default function ChangePasswordForm({ email, onSuccess, onCancel }: Props
               codeSent ? 'bg-ive-green/15 text-ive-green' : 'bg-ive-cyan/15 text-ive-cyan'
             }`}
           >
-            {sendingCode ? <i className="fa-solid fa-circle-notch fa-spin" /> : codeSent ? '재전송' : '인증'}
+            {sendingCode ? <i className="fa-solid fa-circle-notch fa-spin" /> : codeSent ? t('resend') : t('verify')}
           </button>
         </div>
       </div>
@@ -106,22 +109,22 @@ export default function ChangePasswordForm({ email, onSuccess, onCancel }: Props
       {/* 인증 코드 입력 */}
       {codeSent && (
         <div>
-          <label className="block text-sm font-semibold text-ive-text-muted mb-1">인증 코드</label>
+          <label className="block text-sm font-semibold text-ive-text-muted mb-1">{t('verificationCode')}</label>
           <input
             type="text"
             value={code}
             onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-            placeholder="6자리 숫자"
+            placeholder={t('sixDigits')}
             maxLength={6}
             required
             className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2.5 text-sm text-ive-text font-mono tracking-widest text-center focus:outline-none focus:border-ive-green"
           />
-          <p className="text-xs text-ive-text-dim mt-1">이메일로 전송된 6자리 코드를 입력하세요.</p>
+          <p className="text-xs text-ive-text-dim mt-1">{t('emailCodeHint')}</p>
         </div>
       )}
 
       <div>
-        <label className="block text-sm font-semibold text-ive-text-muted mb-1">현재 비밀번호</label>
+        <label className="block text-sm font-semibold text-ive-text-muted mb-1">{t('currentPassword')}</label>
         <input
           type="password"
           value={currentPassword}
@@ -131,19 +134,19 @@ export default function ChangePasswordForm({ email, onSuccess, onCancel }: Props
         />
       </div>
       <div>
-        <label className="block text-sm font-semibold text-ive-text-muted mb-1">새 비밀번호</label>
+        <label className="block text-sm font-semibold text-ive-text-muted mb-1">{t('newPassword')}</label>
         <input
           type="password"
           value={newPassword}
           onChange={e => setNewPassword(e.target.value)}
           required
           minLength={6}
-          placeholder="6자 이상"
+          placeholder={t('minSixChars')}
           className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2.5 text-sm text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green"
         />
       </div>
       <div>
-        <label className="block text-sm font-semibold text-ive-text-muted mb-1">새 비밀번호 확인</label>
+        <label className="block text-sm font-semibold text-ive-text-muted mb-1">{t('newPasswordConfirm')}</label>
         <input
           type="password"
           value={newPasswordConfirm}
@@ -155,18 +158,18 @@ export default function ChangePasswordForm({ email, onSuccess, onCancel }: Props
           }`}
         />
         {newPasswordConfirm && newPassword !== newPasswordConfirm && (
-          <p className="text-xs text-ive-red mt-1">비밀번호가 일치하지 않습니다.</p>
+          <p className="text-xs text-ive-red mt-1">{t('passwordMismatch')}</p>
         )}
       </div>
       {error && <div className="text-sm text-ive-red bg-ive-red/10 rounded-lg px-3 py-2"><i className="fa-solid fa-circle-exclamation mr-1" />{error}</div>}
       <div className="flex gap-2">
         {onCancel && (
           <button type="button" onClick={onCancel} className="flex-1 py-2.5 rounded-lg text-sm font-bold text-ive-text-dim bg-ive-bg-card border border-ive-border-subtle">
-            취소
+            {tc('cancel')}
           </button>
         )}
         <button type="submit" disabled={loading || !codeSent || code.length < 6} className="flex-1 py-2.5 rounded-lg text-sm font-bold bg-ive-green-dark text-white disabled:opacity-50">
-          {loading ? '변경 중...' : '비밀번호 변경'}
+          {loading ? t('changingPassword') : t('changePassword')}
         </button>
       </div>
     </form>

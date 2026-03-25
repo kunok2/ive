@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import LogViewer from '@/components/ui/LogViewer'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 import type { ToolActivity } from '@/lib/tool-activity'
+import { useTranslations } from 'next-intl'
 
 function formatDuration(startedAt: string): string {
   const s = Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000)
@@ -31,6 +32,8 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
   const [activity, setActivity] = useState<ToolActivity | null>(null)
   const [tick, setTick] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
+  const tc = useTranslations('common')
+  const te = useTranslations('execution')
 
   // 경과시간 갱신
   useEffect(() => {
@@ -121,7 +124,7 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
                   <span className="font-bold">{execInfo.agentName}</span>
                   {connected && activity && (
                     <span className="text-[10px] bg-ive-bg-deep px-1.5 py-0.5 rounded font-mono truncate max-w-[140px]">
-                      {activity.tool === 'thinking' ? '생각 중...' : activity.tool}
+                      {activity.tool === 'thinking' ? te('thinking') : activity.tool}
                     </span>
                   )}
                   <span className="font-mono font-bold text-ive-amber">
@@ -148,7 +151,7 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
               disabled={killing}
               className="text-xs font-bold text-ive-red/70 border border-ive-red/30 px-3 py-1.5 rounded-lg bg-ive-bg-deep hover:bg-ive-red/10 transition-colors disabled:opacity-40"
             >
-              {killing ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-skull-crossbones mr-1" />강제종료</>}
+              {killing ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-skull-crossbones mr-1" />{te('forceStop')}</>}
             </button>
           )}
         </div>
@@ -175,14 +178,14 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
           <span className="text-ive-text-dim/30">|</span>
           <span className={connected ? 'text-ive-green' : 'text-ive-text-dim'}>
             <i className={`fa-solid ${connected ? 'fa-circle' : 'fa-circle-xmark'} mr-1`} />
-            {connected ? '연결됨' : '종료됨'}
+            {connected ? te('connected') : te('terminated')}
           </span>
         </div>
         <button
           onClick={scrollToBottom}
           className="text-xs px-2 py-1 rounded border transition-colors text-ive-text-dim border-ive-border-dark hover:text-ive-green hover:border-ive-green/30"
         >
-          <i className="fa-solid fa-arrow-down mr-1" />하단으로
+          <i className="fa-solid fa-arrow-down mr-1" />{tc('scrollToBottom')}
         </button>
       </div>
     </div>

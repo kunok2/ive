@@ -7,6 +7,7 @@ import { useDialog } from '@/components/ui/ConfirmDialog'
 import MRReviewSection from '@/components/mr/MRReviewSection'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { useTranslations } from 'next-intl'
 
 interface IssueDetail {
   iid: number
@@ -30,14 +31,6 @@ interface Note {
   createdAt: string
 }
 
-const STAGE_INFO: Record<string, { label: string; color: string; icon: string; bg: string }> = {
-  waiting:    { label: '대기',     color: 'text-ive-green',    icon: 'fa-clock',              bg: 'bg-ive-green/10' },
-  dev:        { label: '개발 중',  color: 'text-ive-cyan',     icon: 'fa-code',               bg: 'bg-ive-cyan/10' },
-  dev_fail:   { label: '개발 실패', color: 'text-ive-red',     icon: 'fa-circle-xmark',       bg: 'bg-ive-red/10' },
-  done:       { label: '완료',     color: 'text-emerald-400', icon: 'fa-circle-check',       bg: 'bg-emerald-500/10' },
-  unknown:    { label: '알 수 없음', color: 'text-ive-text-dim', icon: 'fa-question',         bg: 'bg-white/5' },
-}
-
 interface StageAction {
   action: string
   label: string
@@ -45,23 +38,35 @@ interface StageAction {
   danger?: boolean
 }
 
-const STAGE_ACTIONS: Record<string, StageAction[]> = {
-  waiting: [],
-  dev: [
-    { action: 'cancel', label: '개발 취소 (대기로)', icon: 'fa-rotate-left', danger: true },
-  ],
-  dev_fail: [
-    { action: 'retry', label: '재시도 (대기로)', icon: 'fa-rotate' },
-  ],
-  done: [
-    { action: 'reopen', label: '다시 열기 (대기로)', icon: 'fa-rotate' },
-  ],
-}
-
 export default function IssueDetailPage({ params }: { params: Promise<{ projectId: string; iid: string }> }) {
   const { projectId, iid } = use(params)
   const router = useRouter()
   const { confirm } = useDialog()
+  const tc = useTranslations('common')
+  const tStage = useTranslations('stage')
+  const tIssue = useTranslations('issue')
+  const tAuth = useTranslations('auth')
+
+  const STAGE_INFO: Record<string, { label: string; color: string; icon: string; bg: string }> = {
+    waiting:    { label: tStage('waiting'),   color: 'text-ive-green',    icon: 'fa-clock',              bg: 'bg-ive-green/10' },
+    dev:        { label: tStage('dev'),       color: 'text-ive-cyan',     icon: 'fa-code',               bg: 'bg-ive-cyan/10' },
+    dev_fail:   { label: tStage('dev_fail'),  color: 'text-ive-red',     icon: 'fa-circle-xmark',       bg: 'bg-ive-red/10' },
+    done:       { label: tStage('done'),      color: 'text-emerald-400', icon: 'fa-circle-check',       bg: 'bg-emerald-500/10' },
+    unknown:    { label: tStage('unknown'),   color: 'text-ive-text-dim', icon: 'fa-question',         bg: 'bg-white/5' },
+  }
+
+  const STAGE_ACTIONS: Record<string, StageAction[]> = {
+    waiting: [],
+    dev: [
+      { action: 'cancel', label: tIssue('cancelToDev'), icon: 'fa-rotate-left', danger: true },
+    ],
+    dev_fail: [
+      { action: 'retry', label: tIssue('retryToWaiting'), icon: 'fa-rotate' },
+    ],
+    done: [
+      { action: 'reopen', label: tIssue('reopenToWaiting'), icon: 'fa-rotate' },
+    ],
+  }
   const [issue, setIssue] = useState<IssueDetail | null>(null)
   const [notes, setNotes] = useState<Note[]>([])
   const [loading, setLoading] = useState(true)
@@ -121,10 +126,10 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
 
   async function handleCloseIssue() {
     const ok = await confirm({
-      title: '이슈 닫기',
-      message: `#${iid} 이슈를 닫으시겠습니까?`,
-      confirmText: '닫기',
-      cancelText: '취소',
+      title: tIssue('closeIssue'),
+      message: tIssue('closeIssueConfirm', { iid }),
+      confirmText: tc('close'),
+      cancelText: tc('cancel'),
       variant: 'warning',
     })
     if (!ok) return
@@ -219,16 +224,16 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   }
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center text-ive-text-muted">불러오는 중...</div>
+    return <div className="min-h-screen flex items-center justify-center text-ive-text-muted">{tc('loading')}</div>
   }
 
   if (!issue) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <p className="text-ive-text-muted mb-4">이슈를 찾을 수 없습니다</p>
+          <p className="text-ive-text-muted mb-4">{tIssue('notFound')}</p>
           <button onClick={() => router.back()} className="text-ive-green font-semibold">
-            <i className="fa-solid fa-arrow-left mr-1" />돌아가기
+            <i className="fa-solid fa-arrow-left mr-1" />{tAuth('goBack')}
           </button>
         </div>
       </div>
@@ -252,8 +257,8 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
             <i className={`fa-solid ${stageInfo.icon} mr-0.5`} />{stageInfo.label}
           </span>
           {iterationCount > 0 && (
-            <span className="text-xs font-bold px-1.5 py-0.5 rounded border bg-ive-cyan/10 text-ive-cyan border-ive-cyan/20 shrink-0" title={`${iterationCount}회 작업 완료`}>
-              <i className="fa-solid fa-repeat mr-0.5" />{iterationCount}차
+            <span className="text-xs font-bold px-1.5 py-0.5 rounded border bg-ive-cyan/10 text-ive-cyan border-ive-cyan/20 shrink-0" title={tIssue('iterationCount', { count: iterationCount })}>
+              <i className="fa-solid fa-repeat mr-0.5" />{tIssue('iterationLabel', { count: iterationCount })}
             </span>
           )}
           <span className="text-xs text-ive-text-dim shrink-0"><i className="fa-solid fa-user mr-0.5" />{issue.author}</span>
@@ -264,8 +269,8 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
             <button
               onClick={() => window.open(issue.webUrl, '_blank')}
               className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center bg-ive-bg-card text-ive-text-dim border border-ive-border-subtle hover:text-ive-cyan hover:border-ive-cyan/30 transition-all"
-              title="GitLab/GitHub에서 보기"
-              aria-label="원본 이슈 페이지 열기"
+              title={tIssue('viewOnRemote')}
+              aria-label={tIssue('openOriginal')}
             >
               <i className="fa-solid fa-arrow-up-right-from-square text-xs" />
             </button>
@@ -281,7 +286,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                   value={editTitle}
                   onChange={e => setEditTitle(e.target.value)}
                   className="flex-1 bg-ive-bg-input border border-ive-border rounded-lg px-3 py-1.5 text-sm font-bold text-ive-text focus:outline-none focus:border-ive-green"
-                  placeholder="제목"
+                  placeholder={tIssue('title')}
                   autoFocus
                 />
               </div>
@@ -290,7 +295,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                   value={editDesc}
                   onChange={e => setEditDesc(e.target.value)}
                   className="flex-1 bg-ive-bg-input border border-ive-border rounded-lg px-3 py-1.5 text-sm text-ive-text resize-none focus:outline-none focus:border-ive-green"
-                  placeholder="설명 (선택)"
+                  placeholder={tIssue('descriptionOptional')}
                   rows={4}
                 />
               </div>
@@ -300,13 +305,13 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                   disabled={saving || !editTitle.trim()}
                   className="flex-1 text-xs font-bold text-ive-green border border-ive-green/30 py-1.5 rounded-lg hover:bg-ive-green/10 transition-colors disabled:opacity-40"
                 >
-                  {saving ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-check mr-1" />저장</>}
+                  {saving ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-check mr-1" />{tc('save')}</>}
                 </button>
                 <button
                   onClick={() => setEditMode(false)}
                   className="flex-1 text-xs font-bold text-ive-text-dim border border-ive-border py-1.5 rounded-lg hover:bg-ive-bg-deep transition-colors"
                 >
-                  취소
+                  {tc('cancel')}
                 </button>
               </div>
             </div>
@@ -318,12 +323,12 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                   <button
                     onClick={startEdit}
                     className="w-7 h-7 rounded-lg flex items-center justify-center bg-ive-bg-card text-ive-text-dim border border-ive-border-subtle hover:text-ive-green hover:border-ive-green/30 transition-all"
-                    title="수정"
+                    title={tc('edit')}
                   >
                     <i className="fa-solid fa-pen text-xs" />
                   </button>
                   {issue.description && (
-                    <button onClick={() => setShowDesc(!showDesc)} className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all ${showDesc ? 'bg-ive-green/10 text-ive-green' : 'bg-ive-bg-card text-ive-text-dim border border-ive-border-subtle'}`} title="설명 보기">
+                    <button onClick={() => setShowDesc(!showDesc)} className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all ${showDesc ? 'bg-ive-green/10 text-ive-green' : 'bg-ive-bg-card text-ive-text-dim border border-ive-border-subtle'}`} title={tIssue('viewDescription')}>
                       <i className={`fa-solid fa-file-lines text-xs`} />
                     </button>
                   )}
@@ -346,7 +351,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                     disabled={isClosing || stageChanging}
                     className="h-7 px-2 rounded-lg text-xs font-bold border text-ive-red/80 border-ive-red/30 bg-ive-bg-card hover:bg-ive-red/10 transition-all active:scale-95 disabled:opacity-40"
                   >
-                    {isClosing ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-xmark mr-0.5" />닫기</>}
+                    {isClosing ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-xmark mr-0.5" />{tc('close')}</>}
                   </button>
                 </div>
               </div>
@@ -372,24 +377,24 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
 
           <div className="py-1.5 pr-2 flex items-center justify-between mt-2 sticky top-0 z-10 bg-ive-bg-deep/95 backdrop-blur-sm">
             <span className="text-xs font-bold text-ive-text-dim uppercase tracking-widest">
-              <i className="fa-solid fa-comments mr-1" />활동 기록
+              <i className="fa-solid fa-comments mr-1" />{tIssue('activityLog')}
               {!notesLoading && <span className="ml-1 opacity-50">({notes.length})</span>}
             </span>
             {notes.length > 0 && (
               <button
                 onClick={() => notesEndRef.current?.scrollIntoView({ behavior: 'smooth' })}
                 className="text-xs font-bold text-ive-text-dim hover:text-ive-green border border-ive-border-subtle hover:border-ive-green/30 px-2 py-0.5 rounded-lg transition-all"
-                title="마지막 노트로 이동"
+                title={tIssue('lastNoteTooltip')}
               >
-                <i className="fa-solid fa-angles-down mr-1" />마지막
+                <i className="fa-solid fa-angles-down mr-1" />{tIssue('last')}
               </button>
             )}
           </div>
 
           {notesLoading ? (
-            <div className="text-center py-10 text-ive-text-dim text-sm">노트 불러오는 중...</div>
+            <div className="text-center py-10 text-ive-text-dim text-sm">{tIssue('loadingNotes')}</div>
           ) : notes.length === 0 ? (
-            <div className="text-center py-10 text-ive-text-dim text-sm">아직 활동 기록이 없습니다</div>
+            <div className="text-center py-10 text-ive-text-dim text-sm">{tIssue('noActivity')}</div>
           ) : (
             <div className="space-y-1.5">
               {notes.map(note => {
@@ -407,9 +412,9 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                       note.system ? 'text-ive-text-dim' : isBot ? 'text-ive-cyan' : 'text-ive-green'
                     }`}>
                       {note.system ? (
-                        <><i className="fa-solid fa-gear mr-0.5" />시스템</>
+                        <><i className="fa-solid fa-gear mr-0.5" />{tIssue('system')}</>
                       ) : isBot ? (
-                        <><i className="fa-solid fa-robot mr-0.5" />IVE 봇</>
+                        <><i className="fa-solid fa-robot mr-0.5" />{tIssue('iveBot')}</>
                       ) : (
                         <>
                           {note.avatarUrl ? (
@@ -446,7 +451,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                 e.target.style.height = 'auto'
                 e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
               }}
-              placeholder="코멘트..."
+              placeholder={tIssue('commentPlaceholder')}
               rows={1}
               className="flex-1 min-h-10 bg-ive-bg-card border border-ive-border rounded-xl px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-green/50"
               style={{ overflow: 'hidden' }}
@@ -455,8 +460,8 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
               onClick={handlePostComment}
               disabled={posting || !comment.trim()}
               className="shrink-0 w-10 h-10 rounded-xl bg-ive-green text-ive-bg-deep flex items-center justify-center active:scale-95 transition-all disabled:opacity-40"
-              title="코멘트만 등록"
-              aria-label="코멘트 등록"
+              title={tIssue('postCommentOnly')}
+              aria-label={tIssue('postComment')}
             >
               {posting ? <i className="fa-solid fa-circle-notch fa-spin" /> : <i className="fa-solid fa-paper-plane" />}
             </button>
@@ -465,10 +470,10 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                 onClick={handleCommentAndRetry}
                 disabled={posting || !comment.trim()}
                 className="shrink-0 h-10 px-3 rounded-xl bg-ive-cyan text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold whitespace-nowrap"
-                title="코멘트 등록 후 AI가 다시 작업합니다"
-                aria-label="코멘트 등록 및 재실행"
+                title={tIssue('postAndRetryHint')}
+                aria-label={tIssue('postAndRetry')}
               >
-                {posting ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-paper-plane" /><span>재실행</span></>}
+                {posting ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-paper-plane" /><span>{tIssue('rerun')}</span></>}
               </button>
             )}
           </div>
@@ -536,6 +541,8 @@ function MarkdownNote({ body }: { body: string }) {
 // 긴 노트를 접었다 펼 수 있는 컴포넌트
 function NoteBody({ body }: { body: string }) {
   const [expanded, setExpanded] = useState(false)
+  const tc = useTranslations('common')
+  const tIssue = useTranslations('issue')
   const cleaned = cleanNoteBody(body)
   const display = expanded ? cleaned : cleaned.slice(0, 500) + '...'
   return (
@@ -545,7 +552,7 @@ function NoteBody({ body }: { body: string }) {
         onClick={() => setExpanded(!expanded)}
         className="block mt-1 text-xs text-ive-green hover:underline"
       >
-        {expanded ? '접기' : '전체 보기'}
+        {expanded ? tc('collapse') : tIssue('viewAll')}
       </button>
     </>
   )
