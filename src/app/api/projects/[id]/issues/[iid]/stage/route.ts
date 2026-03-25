@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getProject, setIssueStage, type IssueStage } from '@/lib/db';
+import { decrypt } from '@/lib/crypto';
+import { reopenIssue, fetchSingleIssue } from '@/lib/provider';
 
 // 허용되는 stage 전환
 const TRANSITIONS: Record<string, { action: string; toStage: IssueStage }[]> = {
@@ -36,6 +38,20 @@ export async function POST(
   const transition = available.find(t => t.action === action);
   if (!transition) {
     return NextResponse.json({ error: '허용되지 않는 액션입니다.' }, { status: 400 });
+  }
+
+  // 대기로 되돌릴 때 닫힌 이슈는 다시 열기
+  if (transition.toStage === 'waiting') {
+    try {
+      const token = decrypt(project.accessToken);
+      const issue = await fetchSingleIssue(project, Number(iid), token);
+      const issueState = issue?.state;
+      if (issueState === 'closed') {
+        await reopenIssue(project, Number(iid), token);
+      }
+    } catch (err) {
+      console.error(`[Stage] 이슈 #${iid} 다시 열기 실패:`, err);
+    }
   }
 
   // 로컬 DB에 stage 업데이트

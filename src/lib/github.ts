@@ -555,6 +555,25 @@ export async function closeGitHubIssue(project: Project, issueNumber: number, de
 }
 
 /**
+ * GitHub 이슈를 다시 엽니다.
+ */
+export async function reopenGitHubIssue(project: Project, issueNumber: number, decryptedToken: string) {
+  const ownerRepo = getOwnerRepo(project.repoUrl);
+  if (!ownerRepo) throw new Error('Invalid repo URL');
+
+  const headers = getGitHubAuthHeaders(project, decryptedToken);
+
+  const res = await fetch(apiUrl(project, `/issues/${issueNumber}`), {
+    method: 'PATCH',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ state: 'open' }),
+  });
+
+  if (!res.ok) throw new Error(`이슈 다시 열기 실패: ${res.statusText}`);
+  return normalizeIssue(await res.json());
+}
+
+/**
  * 이슈 제목/설명을 수정합니다.
  */
 export async function updateGitHubIssue(

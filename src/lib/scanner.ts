@@ -20,7 +20,7 @@ import {
   setIssueStage
 } from "./db";
 import { decrypt } from "./crypto";
-import { fetchSingleIssue } from "./provider";
+import { fetchSingleIssue, reopenIssue } from "./provider";
 import {
   ensureGitLabLabels,
   fetchGitLabIssues,
@@ -506,6 +506,17 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
 
       // 사용자가 labelTarget을 다시 달고 피드백도 남김 → 재작업 진행
       console.log(`[Scanner] [REOPEN] Issue #${issue.iid} (stage: ${currentStage}, labelTarget re-added with user feedback). Resetting to waiting.`);
+
+      // 닫힌 이슈는 다시 열기
+      if (issue.state === 'closed') {
+        try {
+          await reopenIssue(project, issue.iid, decryptedToken);
+          console.log(`[Scanner] [REOPEN] Issue #${issue.iid} reopened on remote.`);
+        } catch (err) {
+          console.error(`[Scanner] Issue #${issue.iid} 원격 이슈 다시 열기 실패:`, err);
+        }
+      }
+
       setIssueStage(project.id, issue.iid, 'waiting');
       // waiting으로 변경 후 아래 로직에서 에이전트 배정 진행
     }
