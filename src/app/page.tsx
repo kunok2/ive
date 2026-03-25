@@ -108,7 +108,8 @@ export default function HomePage() {
               <span className="text-ive-border-subtle mx-0.5">|</span>
             )}
 
-            {/* 아바타 + 이름 + 로그아웃 */}
+            {/* 언어 + 아바타 + 로그아웃 */}
+            <LanguageSwitcher />
             <button
               onClick={() => setShowChangePassword(true)}
               className="w-8 h-8 rounded-full flex items-center justify-center overflow-hidden transition-all hover:scale-110 active:scale-95"
@@ -122,7 +123,6 @@ export default function HomePage() {
                 return av ? <i className={`${av.icon} text-sm`} style={{ color: av.color }} /> : <i className="fa-solid fa-user text-sm text-ive-green" />
               })()}
             </button>
-            <LanguageSwitcher />
             <button
               onClick={async () => {
                 const ok = await showConfirm({ title: td('logoutTitle'), message: td('logoutMessage'), confirmText: tAuth('logout'), cancelText: tc('cancel'), variant: 'warning' })
