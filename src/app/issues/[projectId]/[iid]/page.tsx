@@ -74,7 +74,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   const [comment, setComment] = useState('')
   const [posting, setPosting] = useState(false)
   const [stageChanging, setStageChanging] = useState(false)
-  const [showDesc, setShowDesc] = useState(false)
+  const [showDesc, setShowDesc] = useState(true)
   const [isClosing, setIsClosing] = useState(false)
   const [editMode, setEditMode] = useState(false)
   const [editTitle, setEditTitle] = useState('')
@@ -356,8 +356,8 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                 </div>
               </div>
               {showDesc && issue.description && (
-                <div className="mt-1.5 text-sm text-ive-text-muted bg-ive-bg-card rounded-lg p-2.5 whitespace-pre-wrap break-words leading-relaxed max-h-[30vh] overflow-y-auto">
-                  {issue.description}
+                <div className="mt-1.5 text-sm text-ive-text-muted bg-ive-bg-card rounded-lg p-2.5 break-words leading-relaxed max-h-[30vh] overflow-y-auto">
+                  <MarkdownNote body={cleanNoteBody(issue.description)} />
                 </div>
               )}
             </>
