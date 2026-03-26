@@ -134,6 +134,12 @@ export default function LoginPage() {
           </button>
           <LanguageSwitcher />
         </div>
+
+        <div className="mt-6 flex justify-center">
+          <a href="https://www.producthunt.com/products/spring-ive?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-spring-ive" target="_blank" rel="noopener noreferrer">
+            <img alt="Spring IVE on Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1107541&theme=dark&t=1774503857741" />
+          </a>
+        </div>
       </div>
 
       {showIntro && <IntroSlides onComplete={() => { setShowIntro(false); localStorage.setItem('ive-intro-seen', '1') }} />}
