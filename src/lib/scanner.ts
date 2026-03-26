@@ -193,7 +193,7 @@ function formatStreamEvent(event: any, showToolUsage: boolean = false): string |
     case 'result': {
       const meta = extractMeta(event, event.usage) || '';
       const metaStr = meta ? `\x1b[90m${meta}\x1b[0m ` : '';
-      return `[${ts}] \x1b[1;32m[완료]\x1b[0m ${metaStr}${event.result ? '\n' + event.result : ''}`;
+      return `[${ts}] \x1b[1;32m[완료]\x1b[0m ${metaStr}`;
     }
     case 'system': {
       // system 이벤트 중 의미 있는 메시지만 출력 (JSON 덤프 방지)
@@ -251,7 +251,7 @@ function formatStreamEventMarkdown(event: any): string | null {
       if (tokens) info.push(`토큰: ${Number(tokens).toLocaleString()}`);
       else if (inputTokens || outputTokens) info.push(`토큰: ${(Number(inputTokens||0) + Number(outputTokens||0)).toLocaleString()}`);
       if (turns) info.push(`턴: ${turns}`);
-      return `\n---\n**📊 실행 결과** ${info.join(' | ')}${event.result ? '\n\n' + event.result : ''}`;
+      return `\n---\n**📊 실행 결과** ${info.join(' | ')}`;
     }
     default:
       return null;
