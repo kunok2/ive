@@ -8,9 +8,16 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   const { id: projectId } = await params;
   const project = getProject(projectId);
   if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+
+  if (!getProjectAccess(projectId, user.id)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
 
   try {
     const decryptedToken = decrypt(project.accessToken);

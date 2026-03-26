@@ -1,9 +1,20 @@
+import crypto from 'crypto'
 import { NextResponse } from 'next/server'
 import { getUserByEmail } from '@/lib/db'
 import { sendVerificationEmail } from '@/lib/mail'
 
 // 인증 코드 저장 (메모리) — {email: {code, expiresAt}}
 const verificationCodes = new Map<string, { code: string; expiresAt: number }>()
+
+// 만료된 인증 코드 주기적 정리 (메모리 누수 방지)
+setInterval(() => {
+  const now = Date.now()
+  for (const [email, entry] of verificationCodes) {
+    if (now > entry.expiresAt) {
+      verificationCodes.delete(email)
+    }
+  }
+}, 60_000)
 
 export function getVerificationCode(email: string) {
   const entry = verificationCodes.get(email)
@@ -41,8 +52,8 @@ export async function POST(req: Request) {
     }
   }
 
-  // 6자리 숫자 코드 생성
-  const code = Math.floor(100000 + Math.random() * 900000).toString()
+  // 암호학적으로 안전한 6자리 숫자 코드 생성
+  const code = String(crypto.randomInt(100000, 999999))
   verificationCodes.set(email, { code, expiresAt: Date.now() + 10 * 60 * 1000 }) // 10분
 
   try {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, setIssueStage, type IssueStage } from '@/lib/db';
+import { getProject, getProjectAccess, setIssueStage, type IssueStage } from '@/lib/db';
+import { getCurrentUser } from '@/lib/auth';
 import { decrypt } from '@/lib/crypto';
 import { reopenIssue, fetchSingleIssue } from '@/lib/provider';
 
@@ -21,9 +22,17 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; iid: string }> }
 ) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   const { id: projectId, iid } = await params;
   const project = getProject(projectId);
   if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+
+  const access = getProjectAccess(projectId, user.id);
+  if (!access || access === 'viewer') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
 
   const { stage, action } = await req.json();
   if (!stage || !action) {

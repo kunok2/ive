@@ -146,8 +146,12 @@ function renderMdSegment(seg: MdSegment, key: number) {
       return <code key={key} className="px-1.5 py-0.5 rounded bg-white/10 text-ive-cyan font-mono text-[0.9em]">{seg.text}</code>
     case 'strikethrough':
       return <span key={key} className="line-through text-ive-text-dim">{seg.text}</span>
-    case 'link':
-      return <a key={key} href={seg.href} target="_blank" rel="noopener noreferrer" className="text-ive-blue underline hover:text-ive-cyan">{seg.text}</a>
+    case 'link': {
+      const isSafeHref = seg.href && /^https?:\/\//.test(seg.href)
+      return isSafeHref
+        ? <a key={key} href={seg.href} target="_blank" rel="noopener noreferrer" className="text-ive-blue underline hover:text-ive-cyan">{seg.text}</a>
+        : <span key={key} className="text-ive-blue underline">{seg.text}</span>
+    }
     default:
       return <span key={key}>{seg.text}</span>
   }
