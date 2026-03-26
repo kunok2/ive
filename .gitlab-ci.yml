@@ -1,30 +1,17 @@
 stages:
   - build
-  - deploy
   - publish
 
 variables:
   IMAGE_NAME: dazzlepf/spring-ive
-  DEPLOY_COMPOSE_FILE: /ive-deploy/docker-compose.yml
-  DEPLOY_PROJECT_DIR: /home/ubuntu/ive
 
-# 이미지 빌드
+# 이미지 빌드 → Watchtower가 30초 내 자동 배포
 build:
   stage: build
   tags:
     - deploy
   script:
     - DOCKER_BUILDKIT=1 docker build --no-cache -t $IMAGE_NAME:latest -t $IMAGE_NAME:$CI_COMMIT_SHORT_SHA .
-  only:
-    - main
-
-# 컨테이너 재생성 (새 이미지로 자동 교체)
-deploy:
-  stage: deploy
-  tags:
-    - deploy
-  script:
-    - docker compose -f $DEPLOY_COMPOSE_FILE --project-directory $DEPLOY_PROJECT_DIR up -d --force-recreate ive
   only:
     - main
 
