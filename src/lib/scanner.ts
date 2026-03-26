@@ -746,7 +746,10 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
 - 수정 완료 후 git add로 변경 사항을 스테이징하세요.
 - git commit/push는 하지 마세요.
 - 작업 진행 중 중요한 발견이나 질문이 있으면 이슈에 코멘트를 남기세요.
-- 작업 시작 시 간단한 착수 코멘트를 이슈에 남기세요.`;
+- 작업 시작 시 간단한 착수 코멘트를 이슈에 남기세요.
+- 아주 꼼꼼히 충분한 시간을 가지고 정확히 문제를 해결하세요.
+- 의도한 기능이 동작하지 않을 이유가 0이 될 때까지 검토 또 검토하세요.
+- 화면 설계 시에는 가급적 텍스트아트로 작업의 결과를 제공하세요.`;
 
     // 5. 에이전트 CLI 실행 (시스템 설정의 CLI 경로 우선 사용)
     const systemCliPath = getSystemSetting(`cli.${agent.cliName}.path`);
