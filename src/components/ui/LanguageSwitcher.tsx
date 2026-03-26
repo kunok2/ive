@@ -26,6 +26,11 @@ export default function LanguageSwitcher() {
   function switchLocale(newLocale: Locale) {
     if (newLocale === locale) { setOpen(false); return }
     document.cookie = `NEXT_LOCALE=${newLocale};path=/;max-age=31536000`
+    fetch('/api/settings/locale', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ locale: newLocale }),
+    }).catch(() => {})
     setOpen(false)
     startTransition(() => {
       router.refresh()
