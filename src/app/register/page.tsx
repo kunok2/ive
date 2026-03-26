@@ -121,7 +121,7 @@ export default function RegisterPage() {
                 disabled={sendingCode || cooldown > 0 || !email}
                 className="shrink-0 w-20 py-3 rounded-lg text-sm font-bold bg-ive-green-dark text-white active:bg-ive-green/80 transition-colors disabled:opacity-40 text-center"
               >
-                {sendingCode ? tAuth('sendingCode') : cooldown > 0 ? `${cooldown}초` : codeSent ? tAuth('resend') : tAuth('verify')}
+                {sendingCode ? tAuth('sendingCode') : cooldown > 0 ? `${cooldown}s` : codeSent ? tAuth('resend') : tAuth('verify')}
               </button>
             </div>
           </div>
