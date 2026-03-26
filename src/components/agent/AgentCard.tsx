@@ -11,6 +11,7 @@ import AgentAvatar, { AvatarSelector } from '@/components/agent/AgentAvatar'
 import type { ToolCategory } from '@/lib/tool-activity'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { useTranslations } from 'next-intl'
 
 interface AssignedProject {
   id: string
@@ -49,14 +50,15 @@ const cliConfig: Record<CliName, { label: string; icon: string; color: string; d
   opencode: { label: 'OpenCode', icon: 'fa-solid fa-terminal', color: 'text-ive-cyan', desc: 'sst.dev' },
 }
 
-const statusConfig = {
-  available: { label: '대기', dot: 'bg-ive-green' },
-  busy: { label: '작업 중', dot: 'bg-ive-amber' },
-  offline: { label: '오프라인', dot: 'bg-ive-text-dim' },
-}
-
 export default function AgentCard({ agent, onDelete, compact, assignedProjects, onRemove }: Props) {
   const { refreshAgents, updateAgent } = useStore()
+  const t = useTranslations('agent')
+  const tc = useTranslations('common')
+  const statusConfig = {
+    available: { label: t('statusAvailable'), dot: 'bg-ive-green' },
+    busy: { label: t('statusBusy'), dot: 'bg-ive-amber' },
+    offline: { label: t('statusOffline'), dot: 'bg-ive-text-dim' },
+  }
   const cli = cliConfig[agent.cliName]
   const status = statusConfig[agent.status]
   const [collapsed, setCollapsed] = useState(() => {
@@ -155,13 +157,13 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
       const res = await fetch(`/api/agents/${agent.id}/test`, { method: 'POST' })
       const data = await res.json()
       if (data.success) {
-        setTestResult({ success: true, message: data.version || '정상 동작' })
+        setTestResult({ success: true, message: data.version || t('normalOperation') })
         refreshAgents()
       } else {
-        setTestResult({ success: false, message: data.error || '연결 실패' })
+        setTestResult({ success: false, message: data.error || t('connectionFailed') })
       }
     } catch {
-      setTestResult({ success: false, message: '네트워크 오류' })
+      setTestResult({ success: false, message: tc('networkError') })
     } finally {
       setTesting(false)
     }
@@ -183,10 +185,10 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
       if (res.ok) {
         setChatHistory(prev => [...prev, { role: 'agent', text: data.answer }])
       } else {
-        setChatHistory(prev => [...prev, { role: 'agent', text: `⚠ ${data.error || '응답 실패'}` }])
+        setChatHistory(prev => [...prev, { role: 'agent', text: `⚠ ${data.error || t('responseFailed')}` }])
       }
     } catch {
-      setChatHistory(prev => [...prev, { role: 'agent', text: '⚠ 네트워크 오류' }])
+      setChatHistory(prev => [...prev, { role: 'agent', text: `⚠ ${tc('networkError')}` }])
     } finally {
       setChatLoading(false)
     }
@@ -223,7 +225,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
             <button
               onClick={(e) => { e.stopPropagation(); onRemove(agent.id) }}
               className="ml-1 w-6 h-6 rounded-md bg-ive-bg-deep border border-ive-red/20 text-ive-red/40 hover:bg-ive-red/10 hover:text-ive-red hover:border-ive-red/40 flex items-center justify-center transition-all"
-              title="배정 해제"
+              title={t('unassign')}
             >
               <i className="fa-solid fa-xmark text-xs" />
             </button>
@@ -276,7 +278,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
                 onClick={handleTest}
                 disabled={testing}
                 className="w-7 h-7 rounded-lg bg-ive-bg-deep border border-ive-border-dark flex items-center justify-center text-ive-text-dim hover:text-ive-text hover:border-ive-green/30 transition-all disabled:opacity-50"
-                title="동작 확인"
+                title={t('checkOperation')}
               >
                 {testing ? <i className="fa-solid fa-spinner fa-spin text-xs" /> : <i className="fa-solid fa-stethoscope text-xs" />}
               </button>
@@ -284,7 +286,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
                 <button
                   onClick={() => onDelete(agent.id)}
                   className="w-7 h-7 rounded-lg bg-ive-bg-deep border border-ive-red/20 flex items-center justify-center text-ive-red/40 hover:text-ive-red hover:bg-ive-red/10 hover:border-ive-red/40 transition-all"
-                  title="제거"
+                  title={tc('remove')}
                 >
                   <i className="fa-solid fa-trash-can text-xs" />
                 </button>
@@ -307,7 +309,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
       {editing && (
         <div className="p-3 border-b border-ive-border-dark bg-ive-bg-deep/50 space-y-3">
           <div>
-            <label className="block text-xs font-bold text-ive-text-muted mb-1">이름</label>
+            <label className="block text-xs font-bold text-ive-text-muted mb-1">{t('nameLabel')}</label>
             <input
               type="text"
               value={editName}
@@ -317,7 +319,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-ive-text-muted mb-1">아바타</label>
+            <label className="block text-xs font-bold text-ive-text-muted mb-1">{t('avatar')}</label>
             <AvatarSelector value={editAvatar} onChange={setEditAvatar} />
           </div>
           <div className="flex gap-2">
@@ -328,13 +330,13 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
               }}
               className="flex-1 text-sm font-bold text-ive-green border border-ive-green/30 py-1.5 rounded-lg hover:bg-ive-green/10 transition-colors"
             >
-              <i className="fa-solid fa-check mr-1" />저장
+              <i className="fa-solid fa-check mr-1" />{tc('save')}
             </button>
             <button
               onClick={() => setEditing(false)}
               className="flex-1 text-sm font-bold text-ive-text-dim border border-ive-border py-1.5 rounded-lg hover:bg-ive-bg-deep transition-colors"
             >
-              취소
+              {tc('cancel')}
             </button>
           </div>
         </div>
@@ -344,22 +346,22 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
       <div className="p-3 space-y-2">
         {agent.cliVersion && (
           <div className="flex items-center gap-2 text-base">
-            <span className="text-ive-text-muted"><i className="fa-solid fa-code-branch w-4 text-center" /> 버전</span>
+            <span className="text-ive-text-muted"><i className="fa-solid fa-code-branch w-4 text-center" /> {t('version')}</span>
             <span className="text-ive-text font-semibold">{agent.cliVersion}</span>
           </div>
         )}
 
         <div className="flex items-center gap-2 text-base">
-          <span className="text-ive-text-muted"><i className="fa-solid fa-repeat w-4 text-center" /> 최대 턴</span>
+          <span className="text-ive-text-muted"><i className="fa-solid fa-repeat w-4 text-center" /> {t('maxTurns')}</span>
           <span className="text-ive-text font-semibold">{agent.maxTurns}</span>
-          <span className="text-xs text-ive-text-dim">(이슈당 최대 대화 횟수)</span>
+          <span className="text-xs text-ive-text-dim">({t('maxTurnsHint')})</span>
         </div>
 
         {assignedProjects !== undefined && (
           <div className="flex items-center gap-2 text-base">
-            <span className="text-ive-text-muted shrink-0"><i className="fa-solid fa-plug w-4 text-center" /> 배정</span>
+            <span className="text-ive-text-muted shrink-0"><i className="fa-solid fa-plug w-4 text-center" /> {t('assigned')}</span>
             {assignedProjects.length === 0 ? (
-              <span className="font-semibold text-ive-text-dim">미배정</span>
+              <span className="font-semibold text-ive-text-dim">{t('notAssigned')}</span>
             ) : (
               <div className="flex flex-wrap gap-1.5">
                 {assignedProjects.map(p => (
@@ -385,7 +387,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
             {runningCount}
           </span>
           <Sparkline data={snapshots.map(s => s.running)} width={40} height={12} color="amber" />
-          <span className="text-xs text-ive-text-dim font-bold">작업중</span>
+          <span className="text-xs text-ive-text-dim font-bold">{t('workingLabel')}</span>
         </button>
 
         {/* 완료 */}
@@ -404,7 +406,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
             )}
           </div>
           <Sparkline data={snapshots.map(s => s.completed)} width={40} height={12} color="green" />
-          <span className="text-xs text-ive-text-dim font-bold">완료</span>
+          <span className="text-xs text-ive-text-dim font-bold">{t('completedLabel')}</span>
         </button>
 
         {/* 실패 */}
@@ -416,7 +418,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
             {failedCount}
           </span>
           <Sparkline data={snapshots.map(s => s.failed)} width={40} height={12} color="red" />
-          <span className="text-xs text-ive-text-dim font-bold">실패</span>
+          <span className="text-xs text-ive-text-dim font-bold">{t('failedLabel')}</span>
         </button>
 
         {/* 통계 */}
@@ -426,7 +428,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
         >
           <i className={`fa-solid fa-chart-bar text-sm ${expandedPanel === 'stats' ? 'text-ive-cyan' : 'text-ive-text-dim'}`} />
           <Sparkline data={snapshots.map(s => s.costUsd)} width={40} height={12} color="cyan" />
-          <span className="text-xs text-ive-text-dim font-bold">통계</span>
+          <span className="text-xs text-ive-text-dim font-bold">{t('statsLabel')}</span>
         </button>
       </div>
 
@@ -438,7 +440,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
               if (!showInterview) {
                 setShowInterview(true)
                 if (chatHistory.length === 0) {
-                  setChatHistory([{ role: 'agent', text: `안녕하세요, ${agent.name}입니다. 무엇이든 물어보세요!` }])
+                  setChatHistory([{ role: 'agent', text: t('interviewGreeting', { name: agent.name }) }])
                 }
               } else {
                 setShowInterview(false)
@@ -450,7 +452,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
                 : 'text-ive-cyan border-ive-cyan/30 active:bg-ive-cyan/10'
             }`}
           >
-            <i className="fa-solid fa-comments mr-1" /> 인터뷰
+            <i className="fa-solid fa-comments mr-1" /> {t('interview')}
           </button>
 
           <button
@@ -464,7 +466,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
                 ? 'text-ive-green border-ive-green/40 bg-ive-green/10'
                 : 'text-ive-text-dim border-ive-border active:bg-white/5'
             }`}
-            title="이름/아바타 편집"
+            title={t('editNameAvatar')}
           >
             <i className="fa-solid fa-pen" />
           </button>
@@ -473,7 +475,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
             onClick={handleTest}
             disabled={testing}
             className="text-base text-ive-text-dim py-1.5 px-3 rounded border border-ive-border active:bg-white/5 transition-colors disabled:opacity-50"
-            title="동작 확인"
+            title={t('checkOperation')}
           >
             {testing ? <i className="fa-solid fa-spinner fa-spin" /> : <i className="fa-solid fa-stethoscope" />}
           </button>
@@ -482,7 +484,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
             <button
               onClick={() => onDelete(agent.id)}
               className="text-base text-ive-red/60 py-1.5 px-3 rounded border border-ive-red/20 active:bg-ive-red/10 transition-colors"
-              title="제거"
+              title={tc('remove')}
             >
               <i className="fa-solid fa-trash-can" />
             </button>
@@ -552,7 +554,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
                 <div className="flex gap-2 justify-start">
                   <AgentAvatar avatar={agent.avatar} size="sm" className="shrink-0 mt-0.5" />
                   <div className="bg-ive-bg-card text-ive-text-dim border border-ive-border-subtle rounded-xl px-3 py-2 text-sm">
-                    <i className="fa-solid fa-ellipsis fa-beat-fade" /> 생각 중...
+                    <i className="fa-solid fa-ellipsis fa-beat-fade" /> {t('thinking')}
                   </div>
                 </div>
               )}
@@ -564,7 +566,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
                 value={chatInput}
                 onChange={e => setChatInput(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleInterview()}
-                placeholder="질문을 입력하세요..."
+                placeholder={t('questionPlaceholder')}
                 className="flex-1 bg-ive-bg-input border border-ive-border rounded-lg px-3 py-1.5 text-sm text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green"
                 disabled={chatLoading}
               />
@@ -585,7 +587,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
         <div className="border-t border-ive-amber/20">
           <div className="px-3 py-2 bg-ive-bg-deep/50 border-b border-ive-border-dark">
             <span className="text-xs font-bold text-ive-amber uppercase tracking-widest">
-              <i className="fa-solid fa-gear fa-spin mr-1" />진행 중 ({runningExecs.length})
+              <i className="fa-solid fa-gear fa-spin mr-1" />{t('inProgress', { count: runningExecs.length })}
             </span>
           </div>
           <div className="max-h-[50vh] overflow-y-auto" data-scroll-container>
@@ -599,7 +601,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
         <div className="border-t border-ive-green/20">
           <div className="px-3 py-2 bg-ive-bg-deep/50 border-b border-ive-border-dark">
             <span className="text-xs font-bold text-ive-green uppercase tracking-widest">
-              <i className="fa-solid fa-circle-check mr-1" />금일 완료 ({todayDoneExecs.length})
+              <i className="fa-solid fa-circle-check mr-1" />{t('completedToday', { count: todayDoneExecs.length })}
             </span>
           </div>
           <div className="max-h-[50vh] overflow-y-auto" data-scroll-container>
@@ -613,7 +615,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
         <div className="border-t border-ive-red/20">
           <div className="px-3 py-2 bg-ive-bg-deep/50 border-b border-ive-border-dark">
             <span className="text-xs font-bold text-ive-red uppercase tracking-widest">
-              <i className="fa-solid fa-circle-xmark mr-1" />금일 실패 ({todayFailedExecs.length})
+              <i className="fa-solid fa-circle-xmark mr-1" />{t('failedToday', { count: todayFailedExecs.length })}
             </span>
           </div>
           <div className="max-h-[50vh] overflow-y-auto" data-scroll-container>
@@ -627,7 +629,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
         <div className="border-t border-ive-cyan/20">
           <div className="px-3 py-2 bg-ive-bg-deep/50 border-b border-ive-border-dark">
             <span className="text-xs font-bold text-ive-cyan uppercase tracking-widest">
-              <i className="fa-solid fa-chart-bar mr-1" />성과 통계 (최근 20건 기준)
+              <i className="fa-solid fa-chart-bar mr-1" />{t('performanceStats')}
             </span>
           </div>
           <ExecutionStats
@@ -645,4 +647,4 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
   )
 }
 
-export { cliConfig, statusConfig }
+export { cliConfig }

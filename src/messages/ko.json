@@ -189,7 +189,12 @@
     "checkOperation": "동작 확인",
     "normalOperation": "정상 동작",
     "connectionFailed": "연결 실패",
-    "responseFailed": "응답 실패"
+    "responseFailed": "응답 실패",
+    "nameLabel": "이름",
+    "workingLabel": "작업중",
+    "completedLabel": "완료",
+    "failedLabel": "실패",
+    "statsLabel": "통계"
   },
   "project": {
     "newProject": "새 프로젝트",
@@ -259,7 +264,19 @@
     "individualTokenInUse": "개별 토큰 사용 중 (클릭하여 변경)",
     "projectTokenInUse": "프로젝트 토큰 사용 중 (클릭하여 개별 토큰 지정)",
     "individualTokenLabel": "개별 토큰",
-    "projectTokenLabel": "프로젝트 토큰"
+    "projectTokenLabel": "프로젝트 토큰",
+    "scanError": "스캔 실행 중 오류가 발생했습니다.",
+    "shareEditor": "참조·편집",
+    "shareViewer": "참조·뷰어",
+    "workingLabel": "작업중",
+    "waitingLabel": "대기",
+    "completedLabel": "완료",
+    "tokensLabel": "토큰",
+    "waitingIssuesTitle": "대기 중 이슈 ({count})",
+    "noWaitingIssues": "대기 중인 이슈가 없습니다",
+    "waitingBadge": "대기",
+    "todayRecords": "금일 수행기록 ({count})",
+    "errorLabel": "오류:"
   },
   "issue": {
     "issues": "이슈",
@@ -454,6 +471,7 @@
     "todayThroughput": "금일 처리량",
     "itemsPerHour": "건/h",
     "noRecords": "해당 기록이 없습니다",
+    "failed": "실패",
     "running": "실행 중",
     "completed": "완료",
     "forceStop": "강제종료",

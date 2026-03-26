@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { TaskExecution } from '@/types'
 import MarqueeText from '@/components/ui/MarqueeText'
+import { useTranslations } from 'next-intl'
 
 function formatDuration(startedAt: string, endedAt?: string): string {
   const start = new Date(startedAt).getTime()
@@ -31,6 +32,7 @@ interface Props {
 export default function ExecutionList({ executions, showAgent = true, onKill, killing, scrollKey }: Props) {
   const router = useRouter()
   const listRef = useRef<HTMLDivElement>(null)
+  const te = useTranslations('execution')
 
   // 마운트 시 저장된 스크롤 위치 복원
   useEffect(() => {
@@ -56,7 +58,7 @@ export default function ExecutionList({ executions, showAgent = true, onKill, ki
     return (
       <div className="text-center py-10 text-ive-text-dim text-sm">
         <i className="fa-solid fa-inbox text-2xl mb-2 block" />
-        해당 기록이 없습니다
+        {te('noRecords')}
       </div>
     )
   }
@@ -83,7 +85,7 @@ export default function ExecutionList({ executions, showAgent = true, onKill, ki
               ex.status === 'success' ? 'bg-ive-green/20 text-ive-green' :
               'bg-ive-red/20 text-ive-red'
             }`}>
-              {ex.status === 'running' ? '실행 중' : ex.status === 'success' ? '완료' : '실패'}
+              {ex.status === 'running' ? te('running') : ex.status === 'success' ? te('completed') : te('failed')}
             </span>
           </div>
 
@@ -98,7 +100,7 @@ export default function ExecutionList({ executions, showAgent = true, onKill, ki
               {formatDuration(ex.startedAt, ex.endedAt)}
             </span>
             {ex.turns > 0 && (
-              <span><i className="fa-solid fa-rotate mr-0.5" />{ex.turns}턴</span>
+              <span><i className="fa-solid fa-rotate mr-0.5" />{ex.turns} {te('turns')}</span>
             )}
             {(ex.inputTokens + ex.outputTokens > 0) && (
               <span>{formatTokens(ex.inputTokens + ex.outputTokens)} tok</span>
@@ -117,7 +119,7 @@ export default function ExecutionList({ executions, showAgent = true, onKill, ki
               >
                 {killing === ex.id
                   ? <i className="fa-solid fa-circle-notch fa-spin" />
-                  : <><i className="fa-solid fa-skull-crossbones mr-1" />강제종료</>
+                  : <><i className="fa-solid fa-skull-crossbones mr-1" />{te('forceStop')}</>
                 }
               </button>
             </div>

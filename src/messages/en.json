@@ -189,7 +189,12 @@
     "checkOperation": "Check Operation",
     "normalOperation": "Normal Operation",
     "connectionFailed": "Connection Failed",
-    "responseFailed": "Response Failed"
+    "responseFailed": "Response Failed",
+    "nameLabel": "Name",
+    "workingLabel": "Working",
+    "completedLabel": "Done",
+    "failedLabel": "Failed",
+    "statsLabel": "Stats"
   },
   "project": {
     "newProject": "New Project",
@@ -259,7 +264,19 @@
     "individualTokenInUse": "Individual token in use (click to change)",
     "projectTokenInUse": "Using project token (click to set individual token)",
     "individualTokenLabel": "Individual Token",
-    "projectTokenLabel": "Project Token"
+    "projectTokenLabel": "Project Token",
+    "scanError": "An error occurred while scanning.",
+    "shareEditor": "Shared · Editor",
+    "shareViewer": "Shared · Viewer",
+    "workingLabel": "Working",
+    "waitingLabel": "Waiting",
+    "completedLabel": "Done",
+    "tokensLabel": "Tokens",
+    "waitingIssuesTitle": "Waiting Issues ({count})",
+    "noWaitingIssues": "No waiting issues",
+    "waitingBadge": "Waiting",
+    "todayRecords": "Today's Records ({count})",
+    "errorLabel": "Error:"
   },
   "issue": {
     "issues": "Issues",
@@ -454,6 +471,7 @@
     "todayThroughput": "Today's Throughput",
     "itemsPerHour": "/hr",
     "noRecords": "No records found",
+    "failed": "Failed",
     "running": "Running",
     "completed": "Completed",
     "forceStop": "Force Stop",

@@ -12,6 +12,7 @@ import LiveTracePanel from '@/components/execution/LiveTracePanel'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 import MarqueeText from '@/components/ui/MarqueeText'
 import type { ToolActivity } from '@/lib/tool-activity'
+import { useTranslations } from 'next-intl'
 
 function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
@@ -40,6 +41,7 @@ export default function ProjectCard({ project }: Props) {
   const isOwner = !project.shareRole
   const { updateProject, scanProjectNow } = useStore()
   const { alert: showAlert } = useDialog()
+  const tp = useTranslations('project')
   const [scanning, setScanning] = useState(false)
   const [expandedPanel, _setExpandedPanel] = useState<'running' | 'done' | 'waiting' | null>(() => {
     if (typeof window === 'undefined') return null
@@ -124,7 +126,7 @@ export default function ProjectCard({ project }: Props) {
     if (scanning) return
     setScanning(true)
     try { await scanProjectNow(project.id) }
-    catch (err) { showAlert({ message: err instanceof Error ? err.message : '스캔 실행 중 오류가 발생했습니다.', variant: 'error' }) }
+    catch (err) { showAlert({ message: err instanceof Error ? err.message : tp('scanError'), variant: 'error' }) }
     finally { setScanning(false) }
   }
 
@@ -188,7 +190,7 @@ export default function ProjectCard({ project }: Props) {
               {project.shareRole && (
                 <span className={`shrink-0 text-[10px] font-black px-1.5 py-0.5 rounded-full leading-none flex items-center gap-0.5 ${project.shareRole === 'editor' ? 'bg-ive-amber/15 text-ive-amber border border-ive-amber/30' : 'bg-ive-cyan/15 text-ive-cyan border border-ive-cyan/30'}`}>
                   <i className="fa-solid fa-share-nodes" />
-                  {project.shareRole === 'editor' ? '참조·편집' : '참조·뷰어'}
+                  {project.shareRole === 'editor' ? tp('shareEditor') : tp('shareViewer')}
                 </span>
               )}
             </div>
@@ -204,12 +206,12 @@ export default function ProjectCard({ project }: Props) {
               )}
               {isOwner && (
                 <>
-                  <button onClick={toggleScanner} className="flex items-center gap-1 transition-all" title={project.scannerActive ? '스캐너 일시정지' : '스캐너 다시 시작'} aria-label={project.scannerActive ? '스캐너 일시정지' : '스캐너 다시 시작'}>
+                  <button onClick={toggleScanner} className="flex items-center gap-1 transition-all" title={project.scannerActive ? tp('pauseScanner') : tp('resumeScanner')} aria-label={project.scannerActive ? tp('pauseScanner') : tp('resumeScanner')}>
                     <span className={`h-8 px-2.5 rounded-full flex items-center gap-1 text-xs font-bold transition-all ${project.scannerActive ? 'bg-ive-bg-deep text-ive-green/60 hover:text-ive-green hover:bg-ive-green/10 border border-ive-border-dark' : 'bg-ive-red/10 text-ive-red border border-ive-red/30 hover:bg-ive-red/20 scale-105'}`}>
                       {project.scannerActive ? <i className="fa-solid fa-pause text-[11px]" /> : <i className="fa-solid fa-play text-[11px] ml-px" />}
                     </span>
                   </button>
-                  <button onClick={handleManualScan} disabled={scanning} className="flex items-center gap-1 transition-all disabled:opacity-30 disabled:cursor-not-allowed" title="지금 스캔 수행" aria-label="수동 스캔">
+                  <button onClick={handleManualScan} disabled={scanning} className="flex items-center gap-1 transition-all disabled:opacity-30 disabled:cursor-not-allowed" title={tp('scanNow')} aria-label={tp('manualScan')}>
                     <span className={`h-8 px-2.5 rounded-full flex items-center gap-1 text-xs font-bold transition-all ${scanning ? 'bg-ive-green/20 text-ive-green border border-ive-green/30' : 'bg-ive-bg-deep text-ive-green/60 hover:text-ive-green hover:bg-ive-green/10 border border-ive-border-dark'}`}>
                       {scanning ? <i className="fa-solid fa-circle-notch fa-spin text-[11px]" /> : <i className="fa-solid fa-rocket text-[11px]" />}
                     </span>
@@ -217,8 +219,8 @@ export default function ProjectCard({ project }: Props) {
                   <button
                     onClick={e => { e.preventDefault(); e.stopPropagation(); window.location.href = `/projects/${project.id}` }}
                     className="flex items-center transition-all"
-                    title="프로젝트 설정"
-                    aria-label="프로젝트 설정"
+                    title={tp('projectSettings')}
+                    aria-label={tp('projectSettings')}
                   >
                     <span className="h-8 px-2.5 rounded-full flex items-center gap-1 text-xs font-bold bg-ive-bg-deep text-ive-text-dim hover:text-ive-text hover:bg-white/[0.05] border border-ive-border-dark transition-all">
                       <i className="fa-solid fa-ellipsis text-[11px]" />
@@ -242,7 +244,7 @@ export default function ProjectCard({ project }: Props) {
         {project.lastError && (
           <div className="mt-3 mx-0 bg-ive-red/10 border border-ive-red/20 rounded-lg px-3 py-2 text-sm text-ive-red/80">
             <i className="fa-solid fa-triangle-exclamation mr-1.5" />
-            <span className="font-bold">오류:</span> {project.lastError}
+            <span className="font-bold">{tp('errorLabel')}</span> {project.lastError}
             {project.lastErrorAt && (
               <span className="text-ive-red/50 ml-1.5 text-xs">({new Date(project.lastErrorAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })})</span>
             )}
@@ -263,7 +265,7 @@ export default function ProjectCard({ project }: Props) {
             </span>
           </div>
           <Sparkline data={snapshots.map(s => s.running)} width={40} height={12} color="amber" />
-          <span className="text-xs text-ive-text-dim font-bold">작업중</span>
+          <span className="text-xs text-ive-text-dim font-bold">{tp('workingLabel')}</span>
         </button>
 
         {/* 대기 */}
@@ -275,7 +277,7 @@ export default function ProjectCard({ project }: Props) {
             {stats?.waiting ?? 0}
           </span>
           <Sparkline data={snapshots.map(s => s.waiting)} width={40} height={12} color="cyan" />
-          <span className="text-xs text-ive-text-dim font-bold">대기</span>
+          <span className="text-xs text-ive-text-dim font-bold">{tp('waitingLabel')}</span>
         </button>
 
         {/* 완료 (금일) */}
@@ -294,7 +296,7 @@ export default function ProjectCard({ project }: Props) {
             )}
           </div>
           <Sparkline data={snapshots.map(s => s.completed + s.failed)} width={40} height={12} />
-          <span className="text-xs text-ive-text-dim font-bold">완료</span>
+          <span className="text-xs text-ive-text-dim font-bold">{tp('completedLabel')}</span>
         </button>
 
         {/* 토큰 */}
@@ -303,7 +305,7 @@ export default function ProjectCard({ project }: Props) {
             {formatTokens(stats?.totalTokens ?? 0)}
           </span>
           <Sparkline data={snapshots.map(s => s.totalTokens)} width={40} height={12} />
-          <span className="text-xs text-ive-text-dim font-bold">토큰</span>
+          <span className="text-xs text-ive-text-dim font-bold">{tp('tokensLabel')}</span>
         </div>
       </div>
 
@@ -348,14 +350,14 @@ export default function ProjectCard({ project }: Props) {
         <div className="flex-1 flex flex-col min-h-0 border-t border-ive-cyan/20">
           <div className="px-3 py-2 bg-ive-bg-deep/50 border-b border-ive-border-dark shrink-0">
             <span className="text-xs font-bold text-ive-cyan uppercase tracking-widest">
-              <i className="fa-solid fa-clock mr-1" />대기 중 이슈 ({waitingIssues.length})
+              <i className="fa-solid fa-clock mr-1" />{tp('waitingIssuesTitle', { count: waitingIssues.length })}
             </span>
           </div>
           <div className="flex-1 overflow-y-auto">
             {waitingIssues.length === 0 ? (
               <div className="text-center py-10 text-ive-text-dim text-sm">
                 <i className="fa-solid fa-inbox text-2xl mb-2 block" />
-                대기 중인 이슈가 없습니다
+                {tp('noWaitingIssues')}
               </div>
             ) : (
               <div className="space-y-2 p-3">
@@ -368,7 +370,7 @@ export default function ProjectCard({ project }: Props) {
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-sm font-black text-ive-cyan">#{issue.iid}</span>
                       <span className="text-xs font-bold text-ive-cyan/70 bg-ive-cyan/10 border border-ive-cyan/20 px-1.5 py-0.5 rounded shrink-0">
-                        대기
+                        {tp('waitingBadge')}
                       </span>
                     </div>
                     <MarqueeText className="text-sm text-ive-text font-semibold">{issue.title}</MarqueeText>
@@ -393,7 +395,7 @@ export default function ProjectCard({ project }: Props) {
         <div className="flex-1 flex flex-col min-h-0 border-t border-ive-green/20">
           <div className="px-3 py-2 bg-ive-bg-deep/50 border-b border-ive-border-dark shrink-0">
             <span className="text-xs font-bold text-ive-green uppercase tracking-widest">
-              <i className="fa-solid fa-clock-rotate-left mr-1" />금일 수행기록 ({todayDoneExecs.length})
+              <i className="fa-solid fa-clock-rotate-left mr-1" />{tp('todayRecords', { count: todayDoneExecs.length })}
             </span>
           </div>
           <div className="flex-1 overflow-y-auto" data-scroll-container>
