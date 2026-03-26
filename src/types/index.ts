@@ -51,9 +51,6 @@ export interface Project {
   accessToken: string       // token 모드: PAT / basic 모드: 비밀번호
   color: ProjectColor       // 프로젝트 구분 색상
   labelTarget: string      // 대상 이슈 레이블 (예: IVE)
-  labelInProgress: string  // 진행 중 레이블 (예: IVE(D))
-  labelFailDev: string     // 개발 실패 (예: IVE(F))
-  labelDone: string        // 완료 레이블 (예: IVE(E))
   showToolUsage: boolean   // 트레이스에 툴 사용 표시 여부
   checkInterval: number    // 체크 간격 (분)
   lastCheckedAt: string | null // 마지막 체크 시간

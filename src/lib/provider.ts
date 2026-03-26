@@ -36,11 +36,6 @@ export function reopenIssue(project: Project, iid: number, token: string) {
     : gitlab.reopenGitLabIssue(project, iid, token);
 }
 
-export function updateIssueLabels(project: Project, iid: number, token: string, add: string[], remove: string[]) {
-  return project.provider === 'github'
-    ? github.updateGitHubIssueLabels(project, iid, token, add, remove)
-    : gitlab.updateGitLabIssueLabels(project, iid, token, add, remove);
-}
 
 export function fetchIssueNotes(project: Project, iid: number, token: string) {
   return project.provider === 'github'

@@ -15,12 +15,11 @@ import {
   getLastCompletedAt,
   getSystemSetting,
   getIssueStage,
-  getIssueStageUpdatedAt,
   getIssueStages,
   setIssueStage
 } from "./db";
 import { decrypt } from "./crypto";
-import { fetchSingleIssue, reopenIssue } from "./provider";
+import { fetchSingleIssue } from "./provider";
 import {
   ensureGitLabLabels,
   fetchGitLabIssues,
@@ -455,8 +454,6 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
   let waitingCount = 0;
   const busyAgentIds = new Set<string>();
 
-  const fetchNotes = project.provider === 'github' ? fetchGitHubIssueNotes : fetchGitLabIssueNotes;
-
   console.log(`[Scanner] processIssues: ${issues.length} issues, ${assignments.length} agents`);
   for (const issue of issues) {
     // 이미 진행 중인 실행이 있으면 무조건 스킵
@@ -473,52 +470,10 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
       continue;
     }
 
-    // done/dev_fail 상태: 이슈 노트에서 마지막 봇 완료 이후 사용자 코멘트가 있는지 확인하여 재작업 판단
+    // done/dev_fail 상태: 완료된 이슈는 스킵. 재작업이 필요하면 사용자가 UI에서 "대기"로 변경.
     if (currentStage === 'done' || currentStage === 'dev_fail') {
-      let hasNewUserFeedback = false;
-      try {
-        const notes = await fetchNotes(project, issue.iid, decryptedToken);
-        const botCompletions = notes.filter((n: any) => n.body.includes("<!-- ive-bot -->") || n.body.includes("IVE(봇)"));
-        if (botCompletions.length > 0) {
-          const lastBotNoteId = botCompletions[botCompletions.length - 1].id;
-          const userNotes = notes.filter((n: any) =>
-            !n.system &&
-            !n.body.includes("<!-- ive-bot -->") &&
-            !n.body.includes("IVE(봇)") &&
-            !n.body.includes("착수") &&
-            !n.body.includes("작업을 시작") &&
-            !n.body.includes("이슈 해결") &&
-            n.id > lastBotNoteId
-          );
-          hasNewUserFeedback = userNotes.length > 0;
-        } else {
-          // 봇 완료 기록이 없는데 done/dev_fail → 수동으로 상태 변경된 케이스, 재작업 가능
-          hasNewUserFeedback = true;
-        }
-      } catch (e) {
-        console.warn(`[Scanner] Failed to fetch notes for Issue #${issue.iid}:`, e);
-      }
-
-      if (!hasNewUserFeedback) {
-        console.log(`[Scanner] [SKIP] Issue #${issue.iid} (stage: ${currentStage}, labelTarget present but no new user feedback)`);
-        continue;
-      }
-
-      // 사용자가 labelTarget을 다시 달고 피드백도 남김 → 재작업 진행
-      console.log(`[Scanner] [REOPEN] Issue #${issue.iid} (stage: ${currentStage}, labelTarget re-added with user feedback). Resetting to waiting.`);
-
-      // 닫힌 이슈는 다시 열기
-      if (issue.state === 'closed') {
-        try {
-          await reopenIssue(project, issue.iid, decryptedToken);
-          console.log(`[Scanner] [REOPEN] Issue #${issue.iid} reopened on remote.`);
-        } catch (err) {
-          console.error(`[Scanner] Issue #${issue.iid} 원격 이슈 다시 열기 실패:`, err);
-        }
-      }
-
-      setIssueStage(project.id, issue.iid, 'waiting');
-      // waiting으로 변경 후 아래 로직에서 에이전트 배정 진행
+      console.log(`[Scanner] [SKIP] Issue #${issue.iid} (stage: ${currentStage})`);
+      continue;
     }
 
     // 가용 에이전트 중 가장 오래 쉰 에이전트 선택 (라운드로빈)
@@ -679,14 +634,11 @@ async function executeTask(
     const botCompletions = notes.filter((n: any) => n.body.includes("<!-- ive-bot -->") || n.body.includes("IVE(봇)"));
     const iterationCount = botCompletions.length + 1;
 
-    // 사용자 코멘트 추출 (시스템/봇 노트/봇 착수 코멘트 제외)
+    // 사용자 코멘트 추출 (시스템/봇 노트 제외 — <!-- ive-bot --> 마커로만 판별)
     const userNotes = notes.filter((n: any) =>
       !n.system &&
       !n.body.includes("<!-- ive-bot -->") &&
-      !n.body.includes("IVE(봇)") &&
-      !n.body.includes("착수") &&
-      !n.body.includes("작업을 시작") &&
-      !n.body.includes("이슈 해결")
+      !n.body.includes("IVE(봇)")
     );
 
     // 마지막 봇 완료 이후의 사용자 코멘트 = 최신 피드백/지시사항
@@ -712,32 +664,13 @@ async function executeTask(
           body = body.replace(/<details>[\s\S]*?<\/details>/gi, "[작업 로그 생략]");
           // 너무 긴 노트는 잘라냄
           if (body.length > 800) body = body.substring(0, 800) + "\n...(이하 생략)";
-          const role = n.body.includes("<!-- ive-bot -->") || n.body.includes("IVE(봇)") || n.body.includes("착수") ? "🤖 봇" : `👤 ${n.author?.name || "사용자"}`;
+          const role = n.body.includes("<!-- ive-bot -->") || n.body.includes("IVE(봇)") ? "🤖 봇" : `👤 ${n.author?.name || "사용자"}`;
           return `**${role}** (${n.created_at}):\n${body}`;
         });
       iterationContext = "\n## 이슈 대화 히스토리:\n" + conversationNotes.join('\n\n---\n\n');
     }
 
     log(`반복 횟수: ${iterationCount}차, 봇 완료 노트: ${botCompletions.length}건, 사용자 피드백: ${latestFeedback ? '있음' : '없음'}`, 'system');
-    if (latestFeedback) {
-      log(`피드백 내용:\n${latestFeedback.substring(0, 300)}`, 'system');
-    }
-
-    // 2차 이상 실행인데 사용자 피드백(지시)이 없으면 실행하지 않음
-    if (iterationCount > 1 && !latestFeedback) {
-      log(`${iterationCount}차 실행이지만 새로운 사용자 지시가 없어 스킵합니다.`, 'system');
-      // 코멘트를 남기지 않음 → 봇 코멘트가 updated_at를 변경하여 재실행 악순환을 유발하기 때문
-      setIssueStage(project.id, iid, 'done');
-      updateExecutionStatus(executionId, 'success', new Date().toISOString());
-      updateAgentStatus(agent.id, 'available');
-      logStream.end();
-      try {
-        if (fs.existsSync(workspacePath)) {
-          fs.rmSync(workspacePath, { recursive: true, force: true });
-        }
-      } catch (e) { /* ignore */ }
-      return;
-    }
 
     // API 정보 구성
     const repoUrlParsed = new URL(project.repoUrl.replace(/\.git$/, ''));

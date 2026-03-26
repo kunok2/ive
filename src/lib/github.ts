@@ -124,44 +124,6 @@ function normalizeIssue(ghIssue: any): any {
   };
 }
 
-/**
- * 특정 이슈의 레이블을 업데이트합니다.
- */
-export async function updateGitHubIssueLabels(
-  project: Project,
-  issueNumber: number,
-  decryptedToken: string,
-  addLabels: string[],
-  removeLabels: string[]
-) {
-  const ownerRepo = getOwnerRepo(project.repoUrl);
-  if (!ownerRepo) return;
-
-  const headers = getGitHubAuthHeaders(project, decryptedToken);
-
-  try {
-    // 현재 이슈 조회
-    const res = await fetch(apiUrl(project, `/issues/${issueNumber}`), { headers });
-    if (!res.ok) throw new Error(`Fetch issue failed: ${res.statusText}`);
-    const issueData = await res.json();
-    let currentLabels: string[] = (issueData.labels || []).map((l: any) => typeof l === 'string' ? l : l.name);
-
-    let newLabels = currentLabels.filter(l => !removeLabels.includes(l));
-    addLabels.forEach(l => {
-      if (!newLabels.includes(l)) newLabels.push(l);
-    });
-
-    await fetch(apiUrl(project, `/issues/${issueNumber}`), {
-      method: 'PATCH',
-      headers: { ...headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ labels: newLabels }),
-    });
-
-    console.log(`[GitHub] Updated labels for issue #${issueNumber}: [${newLabels.join(', ')}]`);
-  } catch (err) {
-    console.error(`[GitHub] Error updating labels for issue #${issueNumber}:`, err);
-  }
-}
 
 /**
  * 이슈에 코멘트를 추가합니다.

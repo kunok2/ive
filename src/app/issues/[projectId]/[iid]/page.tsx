@@ -242,7 +242,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
 
   const stageInfo = STAGE_INFO[issue.stage] || STAGE_INFO.unknown
   const actions = STAGE_ACTIONS[issue.stage] || []
-  const iterationCount = notes.filter(n => n.body.includes('IVE(봇)')).length
+  const iterationCount = notes.filter(n => n.body.includes('<!-- ive-bot -->') || n.body.includes('IVE(봇)')).length
 
   return (
     <div className="h-screen flex flex-col">
@@ -398,7 +398,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
           ) : (
             <div className="space-y-1.5">
               {notes.map(note => {
-                const isBot = !note.system && note.body.includes('IVE(봇)')
+                const isBot = !note.system && (note.body.includes('<!-- ive-bot -->') || note.body.includes('IVE(봇)'))
                 return (
                 <div key={note.id} className={`rounded-lg px-3 py-2 ${
                   note.system

@@ -126,44 +126,6 @@ export async function fetchGitLabIssues(project: Project, decryptedToken: string
   }
 }
 
-/**
- * 특정 이슈의 레이블을 업데이트합니다.
- */
-export async function updateGitLabIssueLabels(
-  project: Project,
-  issueIid: number,
-  decryptedToken: string,
-  addLabels: string[],
-  removeLabels: string[]
-) {
-  const projectPath = getProjectPath(project.repoUrl);
-  if (!projectPath) return;
-
-  const headers = getAuthHeaders(project, decryptedToken);
-
-  try {
-    const res = await fetch(apiUrl(project, `/issues/${issueIid}`), { headers });
-
-    if (!res.ok) throw new Error(`Fetch issue failed: ${res.statusText}`);
-    const issueData = await res.json();
-    let currentLabels: string[] = issueData.labels || [];
-
-    let newLabels = currentLabels.filter(l => !removeLabels.includes(l));
-    addLabels.forEach(l => {
-      if (!newLabels.includes(l)) newLabels.push(l);
-    });
-
-    await fetch(apiUrl(project, `/issues/${issueIid}`), {
-      method: 'PUT',
-      headers: { ...headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ labels: newLabels.join(',') })
-    });
-
-    console.log(`[GitLab] Updated labels for issue #${issueIid}: [${newLabels.join(', ')}]`);
-  } catch (err) {
-    console.error(`[GitLab] Error updating labels for issue #${issueIid}:`, err);
-  }
-}
 
 /**
  * 이슈에 코멘트를 추가합니다.
