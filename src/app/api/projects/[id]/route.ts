@@ -31,14 +31,25 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
   const { id } = await params
   const body = await req.json()
-  
+
+  // 기존 프로젝트 소유자 확인
+  const existing = getProject(id)
+  if (!existing || existing.userId !== user.id) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
+
+  // accessToken이 비어있으면 기존 토큰 유지
+  const accessToken = body.accessToken?.trim()
+    ? encrypt(body.accessToken.trim())
+    : existing.accessToken
+
   const updatedProject = {
     ...body,
     id,
     userId: user.id,
-    accessToken: encrypt(body.accessToken || '')
+    accessToken,
   }
-  
+
   updateProject(updatedProject)
   logActivity({ userId: user.id, category: 'project', action: 'update_project', detail: `프로젝트 수정: ${body.name || id}`, targetType: 'project', targetId: id, req })
   return NextResponse.json({ ...updatedProject })

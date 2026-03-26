@@ -157,7 +157,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
       repoUrl: repoUrl.trim(),
       authType: 'token' as const,
       gitUsername: '',
-      accessToken: accessToken.trim() || (existing?.accessToken ?? ''),
+      accessToken: accessToken.trim(),
       labelTarget: labelTarget.trim(),
       showToolUsage,
       checkInterval: Number(checkInterval) || 10,

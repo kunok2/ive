@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getProjectsByUser, createProject, getProjectAssignments, getSharedProjectsForUser, countActiveExecutionsByProject } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
-import { decrypt, encrypt } from '@/lib/crypto'
+import { encrypt } from '@/lib/crypto'
 import { ensureLabels } from '@/lib/provider'
 import { logActivity } from '@/lib/activity'
 
@@ -12,7 +12,8 @@ export async function GET() {
   const ownProjects = getProjectsByUser(user.id)
   const ownData = ownProjects.map(p => ({
     ...p,
-    accessToken: safeDecrypt(p.accessToken),
+    accessToken: p.accessToken ? '••••••' : '',
+    hasToken: !!p.accessToken,
     assignedAgents: getProjectAssignments(p.id),
     runningCount: countActiveExecutionsByProject(p.id),
     shareRole: null as string | null, // 소유자
@@ -27,14 +28,6 @@ export async function GET() {
   }))
 
   return NextResponse.json([...ownData, ...sharedData])
-}
-
-function safeDecrypt(token: string): string {
-  try {
-    return decrypt(token)
-  } catch {
-    return token
-  }
 }
 
 export async function POST(req: Request) {

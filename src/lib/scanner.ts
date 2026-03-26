@@ -51,6 +51,7 @@ import { setToolActivity, setThinking, clearActivity } from "./tool-activity";
 import { calcCostFromDb } from "./token-pricing";
 
 const exec = promisify(require('child_process').exec);
+const execFile = promisify(require('child_process').execFile);
 
 /**
  * OpenCode run --format json 이벤트를 읽기 좋은 로그 텍스트로 변환
@@ -610,27 +611,27 @@ async function executeTask(
     const branchName = `dev-${iid}`;
     
     log("저장소 클론 중...", 'system');
-    await exec(`git clone ${repoUrl} .`, { cwd: workspacePath });
-    
+    await execFile('git', ['clone', repoUrl, '.'], { cwd: workspacePath });
+
     let baseBranch = 'staging';
     try {
-      await exec(`git fetch origin staging`, { cwd: workspacePath });
-      await exec(`git checkout staging`, { cwd: workspacePath });
-      await exec(`git pull origin staging`, { cwd: workspacePath });
+      await execFile('git', ['fetch', 'origin', 'staging'], { cwd: workspacePath });
+      await execFile('git', ['checkout', 'staging'], { cwd: workspacePath });
+      await execFile('git', ['pull', 'origin', 'staging'], { cwd: workspacePath });
     } catch {
       // staging 브랜치 없으면 원격 기본 브랜치 감지
       try {
-        await exec(`git remote set-head origin --auto`, { cwd: workspacePath });
-        const { stdout: headRef } = await exec(`git symbolic-ref refs/remotes/origin/HEAD`, { cwd: workspacePath });
+        await execFile('git', ['remote', 'set-head', 'origin', '--auto'], { cwd: workspacePath });
+        const { stdout: headRef } = await execFile('git', ['symbolic-ref', 'refs/remotes/origin/HEAD'], { cwd: workspacePath });
         baseBranch = headRef.trim().replace('refs/remotes/origin/', '');
       } catch {
         baseBranch = 'main'; // fallback
       }
-      await exec(`git checkout ${baseBranch}`, { cwd: workspacePath });
-      await exec(`git pull origin ${baseBranch}`, { cwd: workspacePath });
+      await execFile('git', ['checkout', baseBranch], { cwd: workspacePath });
+      await execFile('git', ['pull', 'origin', baseBranch], { cwd: workspacePath });
     }
-    
-    await exec(`git checkout -B ${branchName}`, { cwd: workspacePath });
+
+    await execFile('git', ['checkout', '-B', branchName], { cwd: workspacePath });
 
     // 3. 이전 작업 이력 및 사용자 피드백 확인
     const notes = project.provider === 'github'
@@ -802,7 +803,7 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
     const mainBin = resolvedCliPath.split(' ')[0];
     if (!fs.existsSync(mainBin)) {
       try {
-        const { stdout } = await exec(`which ${path.basename(mainBin)}`);
+        const { stdout } = await execFile('which', [path.basename(mainBin)]);
         const detected = stdout.trim();
         if (detected) {
           log(`CLI 경로 "${mainBin}" 없음 → "${detected}" 감지`, 'system');
@@ -1053,12 +1054,12 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
     const durationStr = `${Math.max(1, Math.floor(durationSeconds/60))}m`;
 
     // 6. 변경 사항 확인 및 커밋/푸시
-    const { stdout: diffResult } = await exec(`git diff --cached --name-only`, { cwd: workspacePath });
+    const { stdout: diffResult } = await execFile('git', ['diff', '--cached', '--name-only'], { cwd: workspacePath });
     if (diffResult.trim()) {
       log("변경사항 감지. 커밋 및 푸시 중...", 'system');
-      await exec(`git commit -m "fix: resolve #${iid} - ${issue.title}"`, { cwd: workspacePath });
+      await execFile('git', ['commit', '-m', `fix: resolve #${iid} - ${issue.title}`], { cwd: workspacePath });
       try {
-        await exec(`git push -f origin ${branchName}`, { cwd: workspacePath });
+        await execFile('git', ['push', '-f', 'origin', branchName], { cwd: workspacePath });
       } catch (pushErr: any) {
         const pushMsg = pushErr.message || String(pushErr);
         const isPermission = pushMsg.includes('403') || pushMsg.includes('denied') || pushMsg.includes('Permission') || pushMsg.includes('protected');
