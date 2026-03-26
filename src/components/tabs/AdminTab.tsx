@@ -7,7 +7,7 @@ import { useDialog } from '@/components/ui/ConfirmDialog'
 import TerminalTab from './TerminalTab'
 import PullToRefresh from '@/components/ui/PullToRefresh'
 
-type SubTab = 'users' | 'mail' | 'settings' | 'pricing' | 'activity' | 'cli'
+type SubTab = 'users' | 'mail' | 'settings' | 'activity' | 'cli'
 
 export default function AdminTab() {
   const t = useTranslations('admin')
@@ -15,7 +15,7 @@ export default function AdminTab() {
   const [subTab, setSubTab] = useState<SubTab>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('ive-admin-subtab')
-      if (saved && ['users', 'mail', 'settings', 'pricing', 'activity', 'cli'].includes(saved)) return saved as SubTab
+      if (saved && ['users', 'mail', 'settings', 'activity', 'cli'].includes(saved)) return saved as SubTab
     }
     return 'users'
   })
@@ -33,7 +33,6 @@ export default function AdminTab() {
     { key: 'users', icon: 'fa-solid fa-users', label: t('users') },
     { key: 'mail', icon: 'fa-solid fa-envelope', label: t('mail') },
     { key: 'settings', icon: 'fa-solid fa-gear', label: t('settings') },
-    { key: 'pricing', icon: 'fa-solid fa-coins', label: t('pricing') },
     { key: 'activity', icon: 'fa-solid fa-clock-rotate-left', label: t('activity') },
     { key: 'cli', icon: 'fa-solid fa-terminal', label: t('cli') },
   ]
@@ -62,7 +61,6 @@ export default function AdminTab() {
       {subTab === 'users' && <UsersPanel key={refreshKey} />}
       {subTab === 'mail' && <MailPanel key={refreshKey} />}
       {subTab === 'settings' && <SettingsPanel key={refreshKey} />}
-      {subTab === 'pricing' && <PricingPanel key={refreshKey} />}
       {subTab === 'activity' && <ActivityPanel key={refreshKey} />}
       {subTab === 'cli' && <TerminalTab />}
     </PullToRefresh>
@@ -923,6 +921,17 @@ const SETTING_GROUPS: SettingGroup[] = [
   },
 ]
 
+interface PricingItem {
+  id: string; cliName: string; modelName: string
+  inputPrice: number; outputPrice: number; updatedAt: string
+}
+
+const CLI_ICONS: Record<string, string> = {
+  claude: 'fa-solid fa-c',
+  gemini: 'fa-solid fa-g',
+  codex: 'fa-solid fa-code',
+}
+
 function SettingsPanel() {
   const t = useTranslations('admin')
   const tc = useTranslations('common')
@@ -934,13 +943,17 @@ function SettingsPanel() {
   const [testing, setTesting] = useState(false)
   const [testEmail, setTestEmail] = useState('')
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null)
+  // pricing
+  const [pricingItems, setPricingItems] = useState<PricingItem[]>([])
+  const [pricingFetching, setPricingFetching] = useState(false)
+  const [pricingSaving, setPricingSaving] = useState(false)
+  const [pricingSaved, setPricingSaved] = useState(false)
 
   useEffect(() => {
     fetch('/api/admin/env')
       .then(r => r.json())
       .then(data => {
         const s = data.settings || {}
-        // 기본값이 있는 필드에 값이 없으면 기본값 적용
         for (const group of SETTING_GROUPS) {
           for (const field of group.fields) {
             if (field.defaultValue && !s[field.key]) {
@@ -952,6 +965,7 @@ function SettingsPanel() {
         setLoading(false)
       })
       .catch(() => setLoading(false))
+    fetch('/api/settings/pricing').then(r => r.json()).then(setPricingItems).catch(() => {})
   }, [])
 
   function updateSetting(key: string, value: string) {
@@ -1081,6 +1095,102 @@ function SettingsPanel() {
         </div>
       ))}
 
+      {/* 단가 설정 섹션 */}
+      <div className="bg-ive-bg-card border border-ive-border-subtle rounded-xl overflow-hidden">
+        <button
+          onClick={() => setExpandedGroup(expandedGroup === 'pricing' ? null : 'pricing')}
+          className="w-full px-4 py-3 flex items-center gap-2 text-left hover:bg-white/[0.02]"
+        >
+          <i className="fa-solid fa-coins text-sm text-ive-text-dim" />
+          <span className="text-sm font-bold text-ive-text flex-1">{t('pricing')}</span>
+          <span className="text-xs text-ive-text-dim">{pricingItems.length}</span>
+          <i className={`fa-solid fa-chevron-${expandedGroup === 'pricing' ? 'up' : 'down'} text-xs text-ive-text-dim`} />
+        </button>
+
+        {expandedGroup === 'pricing' && (
+          <div className="px-4 pb-4 border-t border-ive-border-dark pt-3">
+            <div className="text-xs text-ive-text-dim mb-2">{t('pricingDesc')}</div>
+            <div className="space-y-2.5">
+              {pricingItems.map(it => (
+                <div key={it.cliName} className="bg-ive-bg-deep border border-ive-border-dark rounded-lg px-3 py-2.5">
+                  <div className="flex items-center gap-2 mb-2">
+                    <i className={`${CLI_ICONS[it.cliName] || 'fa-solid fa-robot'} text-sm text-ive-text-dim`} />
+                    <span className="text-xs font-extrabold text-ive-text uppercase">{it.cliName}</span>
+                    <input
+                      value={it.modelName}
+                      onChange={e => { setPricingItems(prev => prev.map(p => p.cliName === it.cliName ? { ...p, modelName: e.target.value } : p)); setPricingSaved(false) }}
+                      className="flex-1 text-xs text-ive-text-muted bg-transparent border-b border-ive-border-dark focus:border-ive-green focus:outline-none px-1 py-0.5 text-right"
+                      placeholder={t('modelName')}
+                    />
+                  </div>
+                  <div className="flex gap-3">
+                    <div className="flex-1">
+                      <div className="text-[10px] text-ive-text-dim mb-0.5">{t('input')}</div>
+                      <input
+                        type="number" step="0.01" min="0"
+                        value={it.inputPrice}
+                        onChange={e => { setPricingItems(prev => prev.map(p => p.cliName === it.cliName ? { ...p, inputPrice: parseFloat(e.target.value) || 0 } : p)); setPricingSaved(false) }}
+                        className="w-full text-sm font-bold text-ive-cyan bg-ive-bg-input border border-ive-border rounded-lg px-2 py-1.5 text-right focus:outline-none focus:border-ive-green"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-[10px] text-ive-text-dim mb-0.5">{t('output')}</div>
+                      <input
+                        type="number" step="0.01" min="0"
+                        value={it.outputPrice}
+                        onChange={e => { setPricingItems(prev => prev.map(p => p.cliName === it.cliName ? { ...p, outputPrice: parseFloat(e.target.value) || 0 } : p)); setPricingSaved(false) }}
+                        className="w-full text-sm font-bold text-ive-amber bg-ive-bg-input border border-ive-border rounded-lg px-2 py-1.5 text-right focus:outline-none focus:border-ive-green"
+                      />
+                    </div>
+                  </div>
+                  <div className="text-[10px] text-ive-text-dim mt-1.5 text-right">
+                    {t('modified')}: {new Date(it.updatedAt).toLocaleDateString('ko-KR')}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2 mt-3">
+              <button
+                onClick={async () => {
+                  setPricingFetching(true)
+                  try {
+                    const res = await fetch('/api/settings/pricing', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'auto-fetch' }) })
+                    if (res.ok) { setPricingItems(await res.json()); setPricingSaved(false); await alert({ title: t('fetchComplete'), message: t('latestPricingApplied'), variant: 'success' }) }
+                    else { const data = await res.json(); await alert({ message: data.error || t('fetchFailed'), variant: 'error' }) }
+                  } finally { setPricingFetching(false) }
+                }}
+                disabled={pricingFetching}
+                className="flex-1 py-2 rounded-lg text-xs font-bold bg-ive-bg-deep border border-ive-border-subtle text-ive-cyan active:scale-[0.98] transition-all disabled:opacity-40"
+              >
+                {pricingFetching
+                  ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />{t('fetching')}</>
+                  : <><i className="fa-solid fa-rotate mr-1" />{t('applyLatestPricing')}</>
+                }
+              </button>
+              <button
+                onClick={async () => {
+                  setPricingSaving(true)
+                  try {
+                    const res = await fetch('/api/settings/pricing', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: pricingItems.map(it => ({ cliName: it.cliName, modelName: it.modelName, inputPrice: it.inputPrice, outputPrice: it.outputPrice })) }) })
+                    if (res.ok) { setPricingItems(await res.json()); setPricingSaved(true); setTimeout(() => setPricingSaved(false), 2000) }
+                    else { const data = await res.json(); await alert({ message: data.error || tc('saveFailed'), variant: 'error' }) }
+                  } finally { setPricingSaving(false) }
+                }}
+                disabled={pricingSaving}
+                className={`flex-1 py-2 rounded-lg text-xs font-bold active:scale-[0.98] transition-all disabled:opacity-40 ${pricingSaved ? 'bg-ive-green/20 text-ive-green' : 'bg-ive-green-dark text-white'}`}
+              >
+                {pricingSaving
+                  ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />{t('saving')}</>
+                  : pricingSaved
+                    ? <><i className="fa-solid fa-check mr-1" />{t('saved')}</>
+                    : <><i className="fa-solid fa-floppy-disk mr-1" />{tc('save')}</>
+                }
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
       <button
         onClick={handleSave}
         disabled={saving}
@@ -1095,171 +1205,6 @@ function SettingsPanel() {
             : <><i className="fa-solid fa-floppy-disk mr-1" />{tc('save')}</>
         }
       </button>
-    </main>
-  )
-}
-
-// ── Pricing Panel ──
-interface PricingItem {
-  id: string; cliName: string; modelName: string
-  inputPrice: number; outputPrice: number; updatedAt: string
-}
-
-const CLI_ICONS: Record<string, string> = {
-  claude: 'fa-solid fa-c',
-  gemini: 'fa-solid fa-g',
-  codex: 'fa-solid fa-code',
-}
-
-function PricingPanel() {
-  const t = useTranslations('admin')
-  const tc = useTranslations('common')
-  const { alert } = useDialog()
-  const [items, setItems] = useState<PricingItem[]>([])
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [fetching, setFetching] = useState(false)
-  const [saved, setSaved] = useState(false)
-
-  useEffect(() => {
-    fetch('/api/settings/pricing').then(r => r.json()).then(data => {
-      setItems(data)
-      setLoading(false)
-    }).catch(() => setLoading(false))
-  }, [])
-
-  function updateItem(cliName: string, field: 'modelName' | 'inputPrice' | 'outputPrice', value: string) {
-    setItems(prev => prev.map(it =>
-      it.cliName === cliName
-        ? { ...it, [field]: field === 'modelName' ? value : parseFloat(value) || 0 }
-        : it
-    ))
-    setSaved(false)
-  }
-
-  async function handleSave() {
-    setSaving(true)
-    try {
-      const res = await fetch('/api/settings/pricing', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: items.map(it => ({
-          cliName: it.cliName, modelName: it.modelName,
-          inputPrice: it.inputPrice, outputPrice: it.outputPrice,
-        })) }),
-      })
-      if (res.ok) {
-        setItems(await res.json())
-        setSaved(true)
-        setTimeout(() => setSaved(false), 2000)
-      } else {
-        const data = await res.json()
-        await alert({ message: data.error || tc('saveFailed'), variant: 'error' })
-      }
-    } finally { setSaving(false) }
-  }
-
-  async function handleAutoFetch() {
-    setFetching(true)
-    try {
-      const res = await fetch('/api/settings/pricing', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'auto-fetch' }),
-      })
-      if (res.ok) {
-        setItems(await res.json())
-        setSaved(false)
-        await alert({ title: t('fetchComplete'), message: t('latestPricingApplied'), variant: 'success' })
-      } else {
-        const data = await res.json()
-        await alert({ message: data.error || t('fetchFailed'), variant: 'error' })
-      }
-    } finally { setFetching(false) }
-  }
-
-  if (loading) return <div className="text-center py-10 text-ive-text-dim">{tc('loading')}</div>
-
-  return (
-    <main className="px-4 py-4 max-w-lg mx-auto">
-      <div className="flex items-center justify-between mb-3">
-        <div className="text-xs text-ive-text-dim">
-          {t('pricingDesc')}
-        </div>
-      </div>
-
-      <div className="space-y-2.5">
-        {items.map(it => (
-          <div key={it.cliName} className="bg-ive-bg-card border border-ive-border-subtle rounded-xl px-3 py-2.5">
-            <div className="flex items-center gap-2 mb-2">
-              <i className={`${CLI_ICONS[it.cliName] || 'fa-solid fa-robot'} text-sm text-ive-text-dim`} />
-              <span className="text-xs font-extrabold text-ive-text uppercase">{it.cliName}</span>
-              <input
-                value={it.modelName}
-                onChange={e => updateItem(it.cliName, 'modelName', e.target.value)}
-                className="flex-1 text-xs text-ive-text-muted bg-transparent border-b border-ive-border-dark focus:border-ive-green focus:outline-none px-1 py-0.5 text-right"
-                placeholder={t('modelName')}
-              />
-            </div>
-            <div className="flex gap-3">
-              <div className="flex-1">
-                <div className="text-[10px] text-ive-text-dim mb-0.5">{t('input')}</div>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-
-                  value={it.inputPrice}
-                  onChange={e => updateItem(it.cliName, 'inputPrice', e.target.value)}
-                  className="w-full text-sm font-bold text-ive-cyan bg-ive-bg-input border border-ive-border rounded-lg px-2 py-1.5 text-right focus:outline-none focus:border-ive-green"
-                />
-              </div>
-              <div className="flex-1">
-                <div className="text-[10px] text-ive-text-dim mb-0.5">{t('output')}</div>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-
-                  value={it.outputPrice}
-                  onChange={e => updateItem(it.cliName, 'outputPrice', e.target.value)}
-                  className="w-full text-sm font-bold text-ive-amber bg-ive-bg-input border border-ive-border rounded-lg px-2 py-1.5 text-right focus:outline-none focus:border-ive-green"
-                />
-              </div>
-            </div>
-            <div className="text-[10px] text-ive-text-dim mt-1.5 text-right">
-              {t('modified')}: {new Date(it.updatedAt).toLocaleDateString('ko-KR')}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="flex gap-2 mt-4">
-        <button
-          onClick={handleAutoFetch}
-          disabled={fetching}
-          className="flex-1 py-2.5 rounded-lg text-xs font-bold bg-ive-bg-card border border-ive-border-subtle text-ive-cyan active:scale-[0.98] transition-all disabled:opacity-40"
-        >
-          {fetching
-            ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />{t('fetching')}</>
-            : <><i className="fa-solid fa-rotate mr-1" />{t('applyLatestPricing')}</>
-          }
-        </button>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className={`flex-1 py-2.5 rounded-lg text-xs font-bold active:scale-[0.98] transition-all disabled:opacity-40 ${
-            saved ? 'bg-ive-green/20 text-ive-green' : 'bg-ive-green-dark text-white'
-          }`}
-        >
-          {saving
-            ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />{t('saving')}</>
-            : saved
-              ? <><i className="fa-solid fa-check mr-1" />{t('saved')}</>
-              : <><i className="fa-solid fa-floppy-disk mr-1" />{tc('save')}</>
-          }
-        </button>
-      </div>
     </main>
   )
 }
