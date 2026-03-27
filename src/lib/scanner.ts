@@ -18,7 +18,6 @@ import {
   getIssueStages,
   getIssueStageUpdatedAt,
   setIssueStage,
-  hasPastExecution
 } from "./db";
 import { decrypt } from "./crypto";
 import { defaultLocale } from "@/i18n/config";
@@ -508,11 +507,14 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
       busyAgentIds.add(availableAgent.id);
       console.log(`[Scanner] [ASSIGN] Project: ${project.name}, Issue: #${issue.iid}, Agent: ${availableAgent.name}${agentToken !== decryptedToken ? ' (자체 토큰)' : ''}`);
 
+      // 대기 큐 진입 시점을 stage 변경 전에 읽어둠 (대기시간 계산 기준)
+      const waitingSince = getIssueStageUpdatedAt(project.id, issue.iid);
+
       // 상태 변경: 대기 → 개발 중 (로컬 DB)
       setIssueStage(project.id, issue.iid, 'dev');
 
       // 비동기로 태스크 실행 (개발자별 토큰 우선)
-      executeTask(project, issue, availableAgent, agentToken)
+      executeTask(project, issue, availableAgent, agentToken, waitingSince)
         .then(() => {
           console.log(`[Scanner] [DONE] Issue #${issue.iid} processed.`);
         })
@@ -538,6 +540,7 @@ async function executeTask(
   issue: any,
   agent: Agent,
   token: string,
+  waitingSince?: string | null,
 ) {
   const iid = issue.iid;
   const executionId = `ex-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
@@ -551,11 +554,11 @@ async function executeTask(
   updateAgentStatus(agent.id, 'busy');
 
   // 0. DB에 실행 시작 기록
-  // 재실행(retry/reopen)인 경우 대기시간 기준을 재요청 시점(stage가 waiting으로 변경된 시점)으로 설정
-  const isRetry = hasPastExecution(project.id, iid);
-  const effectiveCreatedAt = isRetry
-    ? (getIssueStageUpdatedAt(project.id, iid) || issue.created_at || undefined)
-    : (issue.created_at || undefined);
+  // 대기시간 기준: 이슈가 대기 큐에 진입한 시점(issue_stages.updated_at)을 사용
+  // - 첫 실행: 스캐너가 이슈를 처음 발견하여 'waiting'으로 설정한 시점
+  // - 재실행: 사용자가 재요청하여 'waiting'으로 재설정한 시점
+  // issue.created_at(GitLab 이슈 생성일)은 개발 큐 진입과 무관하므로 사용하지 않음
+  const effectiveCreatedAt = waitingSince || issue.created_at || undefined;
 
   createExecution({
     id: executionId,
