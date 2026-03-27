@@ -4,6 +4,7 @@ import { use, useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import MobileTabBar from '@/components/layout/MobileTabBar'
 import { useDialog } from '@/components/ui/ConfirmDialog'
+import PullToRefresh from '@/components/ui/PullToRefresh'
 import MRReviewSection from '@/components/mr/MRReviewSection'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -92,6 +93,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   const [editDesc, setEditDesc] = useState('')
   const [saving, setSaving] = useState(false)
   const notesEndRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
   const postingRef = useRef(false)
 
   // Chat state
@@ -122,6 +124,10 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
     }
     setNotesLoading(false)
   }, [projectId, iid])
+
+  const refreshAll = useCallback(async () => {
+    await Promise.all([fetchIssue(), fetchNotes()])
+  }, [fetchIssue, fetchNotes])
 
   useEffect(() => {
     fetchIssue()
@@ -624,7 +630,8 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
 
       {/* 활동 기록 - 남은 공간 전체 사용 */}
       <div className="flex-1 flex flex-col min-h-0 max-w-lg mx-auto w-full">
-        <div className="flex-1 overflow-y-auto pb-2 pl-3 pr-1">
+        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto pb-2 pl-3 pr-1">
+          <PullToRefresh onRefresh={refreshAll} scrollContainerRef={scrollContainerRef}>
           {/* MR 리뷰 섹션 - 스크롤 영역 안에 배치 */}
           {(issue.stage === 'done' || issue.stage === 'dev') && (
             <div className="pr-2">
@@ -637,15 +644,25 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
               <i className="fa-solid fa-comments mr-1" />{tIssue('activityLog')}
               {!notesLoading && <span className="ml-1 opacity-50">({notes.length})</span>}
             </span>
-            {notes.length > 0 && (
+            <div className="flex items-center gap-1">
               <button
-                onClick={() => notesEndRef.current?.scrollIntoView({ behavior: 'smooth' })}
-                className="text-xs font-bold text-ive-text-dim hover:text-ive-green border border-ive-border-subtle hover:border-ive-green/30 px-2 py-0.5 rounded-lg transition-all"
-                title={tIssue('lastNoteTooltip')}
+                onClick={refreshAll}
+                disabled={loading || notesLoading}
+                className="text-xs font-bold text-ive-text-dim hover:text-ive-green border border-ive-border-subtle hover:border-ive-green/30 px-2 py-0.5 rounded-lg transition-all disabled:opacity-40"
+                title={tc('refresh')}
               >
-                <i className="fa-solid fa-angles-down mr-1" />{tIssue('last')}
+                <i className={`fa-solid fa-arrows-rotate mr-1 ${loading || notesLoading ? 'fa-spin' : ''}`} />{tc('refresh')}
               </button>
-            )}
+              {notes.length > 0 && (
+                <button
+                  onClick={() => notesEndRef.current?.scrollIntoView({ behavior: 'smooth' })}
+                  className="text-xs font-bold text-ive-text-dim hover:text-ive-green border border-ive-border-subtle hover:border-ive-green/30 px-2 py-0.5 rounded-lg transition-all"
+                  title={tIssue('lastNoteTooltip')}
+                >
+                  <i className="fa-solid fa-angles-down mr-1" />{tIssue('last')}
+                </button>
+              )}
+            </div>
           </div>
 
           {notesLoading ? (
@@ -784,6 +801,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
               <div ref={notesEndRef} />
             </div>
           )}
+          </PullToRefresh>
         </div>
 
         {/* 하단 입력 영역 */}
