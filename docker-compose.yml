@@ -1,22 +1,35 @@
 services:
   spring-ive:
     image: dazzlepf/spring-ive:latest
+    env_file:
+      - .env
+    container_name: spring-ive
+    restart: unless-stopped
     ports:
-      - "443:443"
+      - "3100:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - JWT_SECRET=${JWT_SECRET:-spring-ive-secret-change-me}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-spring-ive-encryption-key-change-me}
+      - SHELL=/bin/bash
     volumes:
       - ./data:/app/data
       - ./workspaces:/app/workspaces
       - ./claude-config:/home/ive/.claude
-      - ./ssl:/app/ssl:ro
-    env_file:
-      - .env
-    environment:
-      - NODE_ENV=production
-      - ENCRYPTION_KEY=spring-ive-dev-encryption-key-change-in-prod
-      - JWT_SECRET=spring-ive-dev-secret-change-in-production
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+
+  watchtower:
+    image: containrrr/watchtower
+    container_name: watchtower-ive
     restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_POLL_INTERVAL=30
+      - WATCHTOWER_LABEL_ENABLE=true
+      - WATCHTOWER_NO_PULL=false
+      - DOCKER_API_VERSION=1.44
+    command: --interval 30 --label-enable --cleanup --no-pull
