@@ -698,9 +698,12 @@ async function executeTask(
         ? `다음 ${providerLabel} 이슈를 해결해주세요. ${langInstruction}\n\n## 이슈 #${iid}: ${issue.title}\n${issue.description || "설명 없음"}`
         : `Please resolve the following ${providerLabel} issue. ${langInstruction}\n\n## Issue #${iid}: ${issue.title}\n${issue.description || "No description"}`;
     } else {
+      const currentBody = isKo
+        ? `## 현재 이슈 본문:\n${issue.description || "설명 없음"}`
+        : `## Current Issue Body:\n${issue.description || "No description"}`;
       prompt = isKo
-        ? `이슈 #${iid} "${issue.title}"에 대한 ${iterationCount}차 후속 작업입니다. ${langInstruction}\n${iterationContext}\n\n## ⚠️ 이번 작업 지시 (아래 사용자 코멘트만 수행하세요):\n${latestFeedback}\n\n**중요: 이슈 본문의 원래 요청은 이미 처리 완료되었습니다. 위 대화 히스토리는 맥락 참고용이며, "이번 작업 지시" 섹션의 사용자 코멘트만 수행하세요.**`
-        : `This is follow-up iteration #${iterationCount} for issue #${iid} "${issue.title}". ${langInstruction}\n${iterationContext}\n\n## ⚠️ Current Task (only perform the user comments below):\n${latestFeedback}\n\n**Important: The original request in the issue body has already been completed. The conversation history above is for context only — only perform what is described in the "Current Task" section.**`;
+        ? `이슈 #${iid} "${issue.title}"에 대한 ${iterationCount}차 후속 작업입니다. ${langInstruction}\n${currentBody}\n\n${iterationContext}\n\n## ⚠️ 이번 작업 지시 (이슈 본문 수정 또는 아래 사용자 코멘트를 수행하세요):\n${latestFeedback}\n\n**중요: 이슈 본문 수정분이 있으면 위 "현재 이슈 본문" 섹션에 반영되어 있습니다. 코멘트가 있으면 "이번 작업 지시" 섹션의 사용자 코멘트도 수행하세요.**`
+        : `This is follow-up iteration #${iterationCount} for issue #${iid} "${issue.title}". ${langInstruction}\n${currentBody}\n\n${iterationContext}\n\n## ⚠️ Current Task (perform issue body changes or user comments below):\n${latestFeedback}\n\n**Important: If the issue body was modified, it will be reflected in the "Current Issue Body" section above. If there are user comments, also address them in the "Current Task" section.**`;
     }
 
     if (isGitHub) {
