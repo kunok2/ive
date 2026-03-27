@@ -21,7 +21,6 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
   const [killing, setKilling] = useState<string | null>(null)
   const [tick, setTick] = useState(0)
 
-  // 진행중인 실행이 있으면 1초마다 경과시간 갱신
   useEffect(() => {
     const hasRunning = executions.some(e => e.status === 'running')
     if (!hasRunning) return
@@ -31,7 +30,6 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
 
   useEffect(() => {
     fetchExecutions()
-    // 목록 열려 있는 동안 10초마다 자동 갱신
     const interval = setInterval(fetchExecutions, 10000)
     return () => clearInterval(interval)
   }, [projectId])

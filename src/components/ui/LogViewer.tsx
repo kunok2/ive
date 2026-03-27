@@ -60,7 +60,6 @@ function parseAnsi(text: string): AnsiSpan[] {
   let bold = false, italic = false, underline = false, dim = false, strikethrough = false
   let fg: string | null = null, bg: string | null = null
 
-  // ESC[ ... m 패턴 분리
   const parts = text.split(/(\x1b\[[0-9;]*m)/)
 
   for (const part of parts) {
@@ -89,7 +88,6 @@ function parseAnsi(text: string): AnsiSpan[] {
         i++
       }
     } else if (part.length > 0) {
-      // 기타 이스케이프 시퀀스 제거 (커서 이동 등)
       const cleaned = part.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').replace(/\x1b\][^\x07]*\x07/g, '')
       if (cleaned.length > 0) {
         spans.push({ text: cleaned, bold, italic, underline, dim, strikethrough, fg, bg })
@@ -110,7 +108,6 @@ interface MdSegment {
 
 function parseMarkdownInline(text: string): MdSegment[] {
   const segments: MdSegment[] = []
-  // 패턴: **bold**, *italic*, `code`, ~~strike~~, [text](url)
   const regex = /(\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`|~~(.+?)~~|\[([^\]]+)\]\(([^)]+)\))/g
   let lastIndex = 0
   let match: RegExpExecArray | null
@@ -186,12 +183,10 @@ function LogLine({ line, showLineNum, lineNum }: { line: LineData; lineNum: numb
     const raw = line.raw
 
     if (line.hasAnsi) {
-      // ANSI 이스케이프 코드가 있으면 ANSI 파서 사용
       const spans = parseAnsi(raw)
       return spans.map((s, i) => renderAnsiSpan(s, i))
     }
 
-    // 마크다운 헤더 감지
     const headerMatch = raw.match(/^(#{1,6})\s+(.*)$/)
     if (headerMatch) {
       const level = headerMatch[1].length
@@ -204,12 +199,10 @@ function LogLine({ line, showLineNum, lineNum }: { line: LineData; lineNum: numb
       )
     }
 
-    // 마크다운 수평선
     if (/^[-*_]{3,}\s*$/.test(raw)) {
       return <span className="block border-t border-ive-border-dark my-1" />
     }
 
-    // 마크다운 리스트
     const listMatch = raw.match(/^(\s*)([-*+]|\d+\.)\s+(.*)$/)
     if (listMatch) {
       const indent = listMatch[1].length
@@ -222,7 +215,6 @@ function LogLine({ line, showLineNum, lineNum }: { line: LineData; lineNum: numb
       )
     }
 
-    // 마크다운 블록 인용
     if (raw.startsWith('> ')) {
       const mdSegs = parseMarkdownInline(raw.slice(2))
       return (
@@ -232,7 +224,6 @@ function LogLine({ line, showLineNum, lineNum }: { line: LineData; lineNum: numb
       )
     }
 
-    // 일반 텍스트 — 인라인 마크다운 처리
     const mdSegs = parseMarkdownInline(raw)
     return mdSegs.map((s, i) => renderMdSegment(s, i))
   }, [line.raw, line.hasAnsi])
@@ -282,7 +273,6 @@ function groupIntoBlocks(lines: LineData[]): Block[] {
     }
   }
 
-  // 닫히지 않은 코드블록은 일반 라인으로 처리
   if (inCode) {
     blocks.push({ type: 'line', lines: [{ raw: '```' + codeLang, hasAnsi: false }] })
     for (const l of codeLines) blocks.push({ type: 'line', lines: [l] })
@@ -294,25 +284,15 @@ function groupIntoBlocks(lines: LineData[]): Block[] {
 // ── 메인 LogViewer 컴포넌트 ──
 
 interface LogViewerProps {
-  /** SSE 엔드포인트 URL */
   sseUrl: string
-  /** 초기 내용 fetch URL (마운트 시 기존 로그를 즉시 로드) */
   initialFetchUrl?: string
-  /** 라인 번호 표시 여부 */
   showLineNumbers?: boolean
-  /** 폰트 크기 (px) */
   fontSize?: number
-  /** 최대 라인 수 (기본: 50000) */
   maxLines?: number
-  /** 추가 CSS 클래스 */
   className?: string
-  /** 연결 상태 콜백 */
   onConnectionChange?: (connected: boolean) => void
-  /** 라인 수 콜백 */
   onLineCountChange?: (count: number) => void
-  /** 자동 스크롤 활성화 여부 (기본: true). false이면 초기 스크롤을 맨 위로 유지 */
   initialAutoScroll?: boolean
-  /** 실시간 로그 여부 — true이면 하단에 thinking 애니메이션 표시 */
   isLive?: boolean
 }
 
@@ -343,7 +323,6 @@ export default function LogViewer({
       raw,
       hasAnsi: ANSI_ESCAPE_RE.test(raw),
     }))
-    // 마지막 빈 줄 제거
     if (newLines.length > 0 && newLines[newLines.length - 1].raw === '') {
       newLines.pop()
     }
@@ -357,7 +336,6 @@ export default function LogViewer({
     onLineCountChange?.(linesRef.current.length)
   }, [maxLines, onLineCountChange])
 
-  // 자동 스크롤 (부드럽게)
   const scrollToBottom = useCallback(() => {
     if (containerRef.current) {
       containerRef.current.scrollTo({
@@ -367,14 +345,12 @@ export default function LogViewer({
     }
   }, [])
 
-  // 스크롤 위치 감지 → 자동 스크롤 토글
   const handleScroll = useCallback(() => {
     if (!containerRef.current) return
     const { scrollTop, scrollHeight, clientHeight } = containerRef.current
     autoScrollRef.current = scrollHeight - scrollTop - clientHeight < 50
   }, [])
 
-  // 초기 내용 fetch (SSE보다 먼저 표시)
   useEffect(() => {
     if (!initialFetchUrl || initialLoadedRef.current) return
     initialLoadedRef.current = true
@@ -392,7 +368,6 @@ export default function LogViewer({
       .catch(() => {})
   }, [initialFetchUrl, appendLines, onConnectionChange])
 
-  // SSE 연결
   useEffect(() => {
     const url = initialFetchUrl ? `${sseUrl}${sseUrl.includes('?') ? '&' : '?'}skipInitial=1` : sseUrl
     const eventSource = new EventSource(url)
@@ -414,7 +389,6 @@ export default function LogViewer({
     }
   }, [sseUrl, appendLines, onConnectionChange])
 
-  // 자동 스크롤 실행
   useEffect(() => {
     if (autoScrollRef.current) {
       scrollToBottom()
@@ -464,7 +438,6 @@ export default function LogViewer({
           })
         })}
 
-        {/* Thinking 애니메이션 */}
         {(isLive ?? connected) && (
           <div className="flex items-center gap-1 pt-2 pb-1">
             {showLineNumbers && <span className="shrink-0 pr-2" />}
@@ -480,7 +453,6 @@ export default function LogViewer({
   )
 }
 
-/** 하단 스크롤 버튼용 ref 노출 헬퍼 */
 export function useLogViewerScroll(containerRef: React.RefObject<HTMLDivElement | null>) {
   return useCallback(() => {
     if (containerRef.current) {

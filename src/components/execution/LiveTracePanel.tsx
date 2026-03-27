@@ -70,7 +70,6 @@ export default function LiveTracePanel({ agents, onKill }: Props) {
 
   return (
     <div className="border-t border-ive-cyan/20 flex-1 flex flex-col min-h-0">
-      {/* 에이전트 탭 */}
       <div className="flex border-b border-ive-border-dark bg-ive-bg-deep/50 shrink-0">
         {runningAgents.map((tab, idx) => {
           const activity = activities[tab.agent.id]
@@ -95,7 +94,6 @@ export default function LiveTracePanel({ agents, onKill }: Props) {
         })}
       </div>
 
-      {/* 현재 선택된 에이전트 내용 */}
       <div className="flex-1 flex flex-col min-h-0 p-3 gap-2">
         <div className="flex items-center justify-between shrink-0">
           <div className="min-w-0 flex-1">

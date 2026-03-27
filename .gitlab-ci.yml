@@ -1,23 +1,31 @@
 stages:
   - build
+  - deploy
   - publish
 
 variables:
   IMAGE_NAME: dazzlepf/spring-ive
 
-# 이미지 빌드 → Watchtower가 30초 내 자동 배포
 build:
   stage: build
   tags:
     - deploy
   script:
-    - DOCKER_BUILDKIT=1 docker build --no-cache -t $IMAGE_NAME:latest -t $IMAGE_NAME:$CI_COMMIT_SHORT_SHA .
-    - docker image prune -f
-    - docker builder prune -a -f --filter 'until=24h'
+    - docker build -t spring-ive:latest .
+    - docker compose up -d --force-recreate spring-ive
   only:
     - main
 
-# Docker Hub 배포 (수동 실행)
+deploy:
+  stage: deploy
+  tags:
+    - deploy
+  script:
+    - docker build -t spring-ive:latest .
+    - docker compose up -d --force-recreate spring-ive
+  only:
+    - main
+
 publish:
   stage: publish
   tags:
@@ -25,6 +33,7 @@ publish:
   before_script:
     - docker login -u "$DOCKER_USERNAME" -p "$DOCKER_PASSWORD"
   script:
+    - docker build -t $IMAGE_NAME:latest -t $IMAGE_NAME:$CI_COMMIT_SHORT_SHA .
     - docker push $IMAGE_NAME:latest
     - docker push $IMAGE_NAME:$CI_COMMIT_SHORT_SHA
   only:

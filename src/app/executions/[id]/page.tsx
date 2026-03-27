@@ -35,13 +35,11 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
   const tc = useTranslations('common')
   const te = useTranslations('execution')
 
-  // 경과시간 갱신
   useEffect(() => {
     const timer = setInterval(() => setTick(t => t + 1), 1000)
     return () => clearInterval(timer)
   }, [])
 
-  // 실행 정보 가져오기
   useEffect(() => {
     fetch(`/api/executions/${id}/content`)
       .then(r => r.json())
@@ -59,7 +57,6 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
       .catch(() => {})
   }, [id])
 
-  // 도구 활동 폴링
   useEffect(() => {
     if (!connected) return
     const fetchActivity = async () => {
@@ -67,10 +64,7 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
         const res = await fetch('/api/activities')
         if (res.ok) {
           const list: ToolActivity[] = await res.json()
-          // execInfo의 agentId로 매칭하기 어려우므로, agentName으로 매칭
-          // 또는 모든 활동 중 이 execution과 관련된 것을 찾기
           if (list.length > 0) {
-            // 단일 실행 페이지이므로 가장 최근 활동 사용
             setActivity(list[0])
           }
         }
@@ -97,7 +91,6 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
 
   return (
     <div className="h-screen bg-[#0a0a0a] flex flex-col overflow-hidden">
-      {/* 헤더 */}
       <div className="bg-ive-bg-card border-b border-ive-border-dark px-4 py-3 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3 min-w-0">
           <button
@@ -157,7 +150,6 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
         </div>
       </div>
 
-      {/* 로그 뷰어 */}
       <div ref={containerRef} className="flex-1 min-h-0">
         <LogViewer
           sseUrl={`/api/executions/${id}/logs`}
@@ -171,7 +163,6 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
         />
       </div>
 
-      {/* 하단 바 */}
       <div className="bg-ive-bg-card border-t border-ive-border-dark px-4 py-2 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3 text-xs text-ive-text-dim">
           <span><i className="fa-solid fa-lines-leaning mr-1" />{lineCount} lines</span>
