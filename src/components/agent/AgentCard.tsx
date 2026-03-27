@@ -81,7 +81,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
   const [chatHistory, setChatHistory] = useState<{ role: 'user' | 'agent'; text: string }[]>([])
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
-  const chatInputRef = useRef<HTMLInputElement>(null)
+  const chatInputRef = useRef<HTMLTextAreaElement>(null)
   const [expandedPanel, _setExpandedPanel] = useState<'running' | 'done' | 'failed' | 'stats' | null>(() => {
     if (typeof window === 'undefined') return null
     const saved = sessionStorage.getItem(`ac-panel-${agent.id}`)
@@ -560,14 +560,24 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
               )}
             </div>
             <div className="border-t border-ive-border-dark p-2 flex gap-2">
-              <input
+              <textarea
                 ref={chatInputRef}
-                type="text"
                 value={chatInput}
-                onChange={e => setChatInput(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleInterview()}
+                onChange={e => {
+                  setChatInput(e.target.value)
+                  e.target.style.height = 'auto'
+                  e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
+                }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                    e.preventDefault()
+                    handleInterview()
+                  }
+                }}
                 placeholder={t('questionPlaceholder')}
-                className="flex-1 bg-ive-bg-input border border-ive-border rounded-lg px-3 py-1.5 text-sm text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green"
+                rows={1}
+                className="flex-1 min-h-[34px] bg-ive-bg-input border border-ive-border rounded-lg px-3 py-1.5 text-sm text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green resize-none"
+                style={{ overflowY: 'auto' }}
                 disabled={chatLoading}
               />
               <button
