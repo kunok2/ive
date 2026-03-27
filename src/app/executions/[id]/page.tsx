@@ -1,10 +1,8 @@
 'use client'
 
-import { useEffect, useRef, useState, use } from 'react'
+import { useRef, useState, use } from 'react'
 import { useRouter } from 'next/navigation'
-import { Terminal } from '@xterm/xterm'
-import { FitAddon } from '@xterm/addon-fit'
-import '@xterm/xterm/css/xterm.css'
+import LogViewer from '@/components/ui/LogViewer'
 
 export default function ExecutionDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -12,100 +10,7 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
   const [killing, setKilling] = useState(false)
   const [lineCount, setLineCount] = useState(0)
   const [connected, setConnected] = useState(false)
-  const termRef = useRef<HTMLDivElement>(null)
-  const termInstance = useRef<Terminal | null>(null)
-  const fitAddon = useRef<FitAddon | null>(null)
-
-  // xterm 초기화 + SSE 연결
-  useEffect(() => {
-    if (!termRef.current) return
-
-    const term = new Terminal({
-      theme: {
-        background: '#0a0a0a',
-        foreground: '#d4d4d4',
-        cursor: '#4ade80',
-        selectionBackground: '#4ade8040',
-        black: '#171717',
-        red: '#f87171',
-        green: '#4ade80',
-        yellow: '#facc15',
-        blue: '#60a5fa',
-        magenta: '#c084fc',
-        cyan: '#22d3ee',
-        white: '#e5e5e5',
-        brightBlack: '#737373',
-        brightRed: '#fca5a5',
-        brightGreen: '#86efac',
-        brightYellow: '#fde68a',
-        brightBlue: '#93c5fd',
-        brightMagenta: '#d8b4fe',
-        brightCyan: '#67e8f9',
-        brightWhite: '#ffffff',
-      },
-      fontSize: 13,
-      fontFamily: '"JetBrains Mono", "Fira Code", "Cascadia Code", Menlo, Monaco, monospace',
-      lineHeight: 1.4,
-      cursorStyle: 'bar',
-      cursorBlink: false,
-      scrollback: 50000,
-      convertEol: true,
-      disableStdin: true,
-    })
-
-    const fit = new FitAddon()
-    term.loadAddon(fit)
-    term.open(termRef.current)
-    fit.fit()
-
-    termInstance.current = term
-    fitAddon.current = fit
-
-    let count = 0
-    const eventSource = new EventSource(`/api/executions/${id}/logs`)
-
-    eventSource.onopen = () => setConnected(true)
-
-    eventSource.onmessage = (event) => {
-      const lines = event.data.split('\n')
-      for (const line of lines) {
-        term.writeln(line)
-        count++
-      }
-      setLineCount(count)
-    }
-
-    eventSource.onerror = () => {
-      eventSource.close()
-      setConnected(false)
-    }
-
-    // 모바일 터치 스크롤 지원 (iOS Safari)
-    const el = termRef.current!
-    let touchY = 0
-    const onTouchStart = (e: TouchEvent) => { touchY = e.touches[0].clientY }
-    const onTouchMove = (e: TouchEvent) => {
-      e.preventDefault()
-      const dy = touchY - e.touches[0].clientY
-      touchY = e.touches[0].clientY
-      const lines = Math.round(dy / 14)
-      if (lines !== 0) term.scrollLines(lines)
-    }
-    el.addEventListener('touchstart', onTouchStart, { passive: true })
-    el.addEventListener('touchmove', onTouchMove, { passive: false })
-
-    const handleResize = () => fit.fit()
-    window.addEventListener('resize', handleResize)
-
-    return () => {
-      eventSource.close()
-      window.removeEventListener('resize', handleResize)
-      el.removeEventListener('touchstart', onTouchStart)
-      el.removeEventListener('touchmove', onTouchMove)
-      term.dispose()
-      termInstance.current = null
-    }
-  }, [id])
+  const logContainerRef = useRef<HTMLDivElement>(null)
 
   const handleKill = async () => {
     setKilling(true)
@@ -117,7 +22,9 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
   }
 
   const scrollToBottom = () => {
-    termInstance.current?.scrollToBottom()
+    if (logContainerRef.current) {
+      logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight
+    }
   }
 
   return (
@@ -150,8 +57,18 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
         </div>
       </div>
 
-      {/* xterm 터미널 */}
-      <div ref={termRef} className="flex-1 min-h-0" />
+      {/* 커스텀 로그 뷰어 */}
+      <div className="flex-1 min-h-0 relative" ref={logContainerRef}>
+        <LogViewer
+          sseUrl={`/api/executions/${id}/logs`}
+          fontSize={13}
+          maxLines={50000}
+          enableMarkdown={true}
+          onConnectionChange={setConnected}
+          onLineCountChange={setLineCount}
+          className="h-full"
+        />
+      </div>
 
       {/* 하단 바 */}
       <div className="bg-ive-bg-card border-t border-ive-border-dark px-4 py-2 flex items-center justify-between shrink-0">
