@@ -255,6 +255,14 @@ function initSchema(db: Database.Database) {
     }
   } catch (e) { console.error("Migration failed for projects monitoring:", e) }
 
+  // 충돌 수 캐시 컬럼
+  try {
+    const tableInfo = db.prepare("PRAGMA table_info(projects)").all() as any[]
+    if (!tableInfo.some((col: any) => col.name === 'conflict_count')) {
+      db.exec("ALTER TABLE projects ADD COLUMN conflict_count INTEGER NOT NULL DEFAULT 0")
+    }
+  } catch (e) { console.error("Migration failed for projects conflict_count:", e) }
+
   // 에이전트 모니터링 설정
   try {
     const tableInfo = db.prepare("PRAGMA table_info(agents)").all() as any[]
@@ -365,6 +373,42 @@ function initSchema(db: Database.Database) {
   `)
   db.exec(`CREATE INDEX IF NOT EXISTS idx_activity_logs_user ON user_activity_logs(user_id, created_at)`)
   db.exec(`CREATE INDEX IF NOT EXISTS idx_activity_logs_created ON user_activity_logs(created_at)`)
+
+  // Chat sessions & messages (Issue Chat feature)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS chat_sessions (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      issue_iid INTEGER NOT NULL,
+      agent_id TEXT,
+      execution_id TEXT,
+      cli_session_id TEXT,
+      workspace_path TEXT,
+      status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'ended')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      last_active_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_chat_sessions_issue ON chat_sessions(project_id, issue_iid, status);
+  `)
+  // Migrate: add execution_id, cli_session_id columns if missing
+  try {
+    const cols = db.prepare("PRAGMA table_info(chat_sessions)").all() as any[]
+    const colNames = cols.map((c: any) => c.name)
+    if (!colNames.includes('execution_id')) db.exec("ALTER TABLE chat_sessions ADD COLUMN execution_id TEXT")
+    if (!colNames.includes('cli_session_id')) db.exec("ALTER TABLE chat_sessions ADD COLUMN cli_session_id TEXT")
+  } catch { /* ignore */ }
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
+      content TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages(session_id, created_at);
+  `)
 
   // agents.cli_name CHECK constraint에 opencode 추가 — 테이블 재생성 (구문별 개별 실행)
   try {
@@ -483,6 +527,7 @@ type ProjectRow = {
   last_error: string | null; last_error_at: string | null;
   sort_order: number; avatar_url: string;
   snapshot_interval: number; sparkline_points: number; stats_retention: number;
+  conflict_count: number;
 }
 
 function mapProject(r: ProjectRow): Project {
@@ -505,6 +550,7 @@ function mapProject(r: ProjectRow): Project {
     snapshotInterval: r.snapshot_interval ?? 1,
     sparklinePoints: r.sparkline_points ?? 60,
     statsRetention: r.stats_retention ?? 7,
+    conflictCount: r.conflict_count ?? 0,
   }
 }
 
@@ -579,6 +625,10 @@ export function updateProjectLastChecked(id: string, timestamp: string, issueCou
 
 export function updateProjectError(id: string, error: string) {
   getDb().prepare('UPDATE projects SET last_error = ?, last_error_at = ? WHERE id = ?').run(error, new Date().toISOString(), id)
+}
+
+export function updateProjectConflictCount(id: string, count: number) {
+  getDb().prepare('UPDATE projects SET conflict_count = ? WHERE id = ?').run(count, id)
 }
 
 export function clearProjectError(id: string) {
@@ -790,7 +840,9 @@ export function resetStuckExecutions() {
   if (stuckRows.length > 0) console.log(`[DB] Reset ${stuckRows.length} stuck execution(s).`)
 
   // 서버 재기동 시 '개발중(dev)' 상태로 멈춘 이슈를 '대기(waiting)'로 복원
-  const stuckIssues = getDb().prepare("UPDATE issue_stages SET stage = 'waiting', updated_at = datetime('now') WHERE stage = 'dev'").run()
+  // JS ISO 형식으로 통일 (datetime('now')는 'YYYY-MM-DD HH:MM:SS' 형식이라 timezone 파싱 불일치 위험)
+  const restartTs = new Date().toISOString()
+  const stuckIssues = getDb().prepare("UPDATE issue_stages SET stage = 'waiting', updated_at = ? WHERE stage = 'dev'").run(restartTs)
   if (stuckIssues.changes > 0) console.log(`[DB] Reset ${stuckIssues.changes} stuck issue(s) from 'dev' to 'waiting'.`)
 }
 
@@ -1411,4 +1463,118 @@ export function cleanOldActivityLogs(retentionDays: number = 90) {
   if (result.changes > 0) {
     console.log(`[Cleanup] Purged ${result.changes} activity logs (retention: ${retentionDays}d)`)
   }
+}
+
+// ── Chat Sessions & Messages ──
+
+export interface ChatSession {
+  id: string
+  projectId: string
+  issueIid: number
+  agentId: string | null
+  executionId: string | null
+  cliSessionId: string | null
+  workspacePath: string | null
+  status: 'active' | 'ended'
+  createdAt: string
+  lastActiveAt: string
+}
+
+export interface ChatMessage {
+  id: string
+  sessionId: string
+  role: 'user' | 'assistant'
+  content: string
+  createdAt: string
+}
+
+function mapChatSession(r: any): ChatSession {
+  return {
+    id: r.id,
+    projectId: r.project_id,
+    issueIid: r.issue_iid,
+    agentId: r.agent_id,
+    executionId: r.execution_id ?? null,
+    cliSessionId: r.cli_session_id ?? null,
+    workspacePath: r.workspace_path,
+    status: r.status,
+    createdAt: r.created_at,
+    lastActiveAt: r.last_active_at,
+  }
+}
+
+function mapChatMessage(r: any): ChatMessage {
+  return {
+    id: r.id,
+    sessionId: r.session_id,
+    role: r.role,
+    content: r.content,
+    createdAt: r.created_at,
+  }
+}
+
+export function createChatSession(s: { id: string; projectId: string; issueIid: number; agentId?: string; executionId?: string; workspacePath?: string }) {
+  const now = new Date().toISOString()
+  getDb().prepare(`
+    INSERT INTO chat_sessions (id, project_id, issue_iid, agent_id, execution_id, workspace_path, status, created_at, last_active_at)
+    VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?)
+  `).run(s.id, s.projectId, s.issueIid, s.agentId || null, s.executionId || null, s.workspacePath || null, now, now)
+}
+
+export function getAnyActiveChatSession(projectId: string): ChatSession | null {
+  const r = getDb().prepare(
+    "SELECT * FROM chat_sessions WHERE project_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1"
+  ).get(projectId) as any
+  return r ? mapChatSession(r) : null
+}
+
+export function getActiveChatSession(projectId: string, issueIid: number): ChatSession | null {
+  const r = getDb().prepare(
+    "SELECT * FROM chat_sessions WHERE project_id = ? AND issue_iid = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1"
+  ).get(projectId, issueIid) as any
+  return r ? mapChatSession(r) : null
+}
+
+export function getChatSession(id: string): ChatSession | null {
+  const r = getDb().prepare('SELECT * FROM chat_sessions WHERE id = ?').get(id) as any
+  return r ? mapChatSession(r) : null
+}
+
+export function updateChatSessionActivity(id: string) {
+  getDb().prepare("UPDATE chat_sessions SET last_active_at = datetime('now') WHERE id = ?").run(id)
+}
+
+export function updateChatSessionAgent(id: string, agentId: string) {
+  getDb().prepare("UPDATE chat_sessions SET agent_id = ? WHERE id = ?").run(agentId, id)
+}
+
+export function updateChatSessionWorkspace(id: string, workspacePath: string) {
+  getDb().prepare("UPDATE chat_sessions SET workspace_path = ? WHERE id = ?").run(workspacePath, id)
+}
+
+export function updateChatSessionCliId(id: string, cliSessionId: string) {
+  getDb().prepare("UPDATE chat_sessions SET cli_session_id = ? WHERE id = ?").run(cliSessionId, id)
+}
+
+export function endChatSession(id: string) {
+  getDb().prepare("UPDATE chat_sessions SET status = 'ended', last_active_at = datetime('now') WHERE id = ?").run(id)
+}
+
+export function saveChatMessage(m: { id: string; sessionId: string; role: 'user' | 'assistant'; content: string }) {
+  getDb().prepare(`
+    INSERT INTO chat_messages (id, session_id, role, content, created_at)
+    VALUES (?, ?, ?, ?, datetime('now'))
+  `).run(m.id, m.sessionId, m.role, m.content)
+  updateChatSessionActivity(m.sessionId)
+}
+
+export function getChatMessages(sessionId: string): ChatMessage[] {
+  const rows = getDb().prepare('SELECT * FROM chat_messages WHERE session_id = ? ORDER BY created_at ASC').all(sessionId) as any[]
+  return rows.map(mapChatMessage)
+}
+
+export function getChatHistoryForPrompt(sessionId: string): string {
+  const msgs = getChatMessages(sessionId)
+  if (msgs.length === 0) return ''
+  return msgs.map(m => `**${m.role === 'user' ? '👤 User' : '🤖 AI'}**: ${m.content}`).join('\n\n')
 }

@@ -99,42 +99,8 @@ export async function GET(req: NextRequest) {
     return (new Date(endedAt).getTime() - new Date(startedAt).getTime()) / 60000
   }
 
-  // 재실행(retry) 보정을 위한 이전 실행 종료시각 맵 구축
-  // 같은 이슈의 이전 실행이 있으면, 대기시간 기준을 max(issueCreatedAt, 이전실행종료시각)으로 보정
-  // → 기존 DB에 잘못된 issue_created_at이 저장된 레코드도 올바르게 처리
-  const allExecs = [...execs, ...prevExecs]
-  const issueExecGroups = new Map<string, typeof allExecs>()
-  for (const e of allExecs) {
-    const key = `${e.projectId}:${e.issueIid}`
-    if (!issueExecGroups.has(key)) issueExecGroups.set(key, [])
-    issueExecGroups.get(key)!.push(e)
-  }
-  // 각 실행의 보정된 대기시작시각을 계산
-  const correctedWaitStart = new Map<string, string | null>()
-  for (const [, group] of issueExecGroups) {
-    const sorted = [...group].sort((a, b) => a.startedAt.localeCompare(b.startedAt))
-    for (let i = 0; i < sorted.length; i++) {
-      const e = sorted[i]
-      if (i === 0) {
-        // 첫 실행: issueCreatedAt 그대로 사용
-        correctedWaitStart.set(e.id, e.issueCreatedAt ?? null)
-      } else {
-        // 재실행: max(issueCreatedAt, 이전 실행 종료시각)으로 보정
-        const prevEndedAt = sorted[i - 1].endedAt
-        if (!e.issueCreatedAt) {
-          correctedWaitStart.set(e.id, prevEndedAt ?? null)
-        } else if (prevEndedAt && new Date(prevEndedAt).getTime() > new Date(e.issueCreatedAt).getTime()) {
-          correctedWaitStart.set(e.id, prevEndedAt)
-        } else {
-          correctedWaitStart.set(e.id, e.issueCreatedAt)
-        }
-      }
-    }
-  }
-  /** 보정된 대기시작시각 반환 */
-  function getWaitStart(e: typeof execs[0]): string | null {
-    return correctedWaitStart.get(e.id) ?? e.issueCreatedAt ?? null
-  }
+  // 대기시간 = issue_created_at → started_at
+  // scanner.ts가 큐 진입 시점을 issue_created_at에 정확히 저장하므로 그대로 사용
 
   // Summary
   const totalTasks = execs.length
@@ -195,7 +161,7 @@ export async function GET(req: NextRequest) {
     if ((e.status === 'success' || e.status === 'failed') && e.endedAt) {
       const proc = durationMin(e.startedAt, e.endedAt)
       if (proc > 0) d.procTimes.push(proc)
-      const ws = getWaitStart(e)
+      const ws = e.issueCreatedAt
       if (ws) {
         const wait = durationMin(ws, e.startedAt)
         if (wait >= 0) d.waitTimes.push(wait)
@@ -303,7 +269,7 @@ export async function GET(req: NextRequest) {
     if ((e.status === 'success' || e.status === 'failed') && e.endedAt) {
       const proc = durationMin(e.startedAt, e.endedAt)
       if (proc > 0) d.procTimes.push(proc)
-      const ws = getWaitStart(e)
+      const ws = e.issueCreatedAt
       if (ws) {
         const wait = durationMin(ws, e.startedAt)
         if (wait >= 0) d.waitTimes.push(wait)
@@ -411,7 +377,7 @@ export async function GET(req: NextRequest) {
           durationMin: Math.round(durationMin(e.startedAt, e.endedAt) * 10) / 10,
           cost: Math.round(calcCost(pricingMap, e.cliName, e.inputTokens, e.outputTokens) * 100) / 100,
           waitMin: (() => {
-            const ws = getWaitStart(e)
+            const ws = e.issueCreatedAt
             return ws ? Math.round(durationMin(ws, e.startedAt) * 10) / 10 : null
           })(),
           turns: e.turns,
@@ -424,19 +390,19 @@ export async function GET(req: NextRequest) {
   // 이슈 생애주기 집계
   const finishedExecs = execs.filter(e => (e.status === 'success' || e.status === 'failed') && e.endedAt)
 
-  // 대기시간: 보정된 대기시작시각 → started_at
+  // 대기시간: issue_created_at(큐 진입 시점) → started_at
   const waitTimes = finishedExecs
-    .filter(e => getWaitStart(e))
-    .map(e => durationMin(getWaitStart(e)!, e.startedAt))
+    .filter(e => e.issueCreatedAt)
+    .map(e => durationMin(e.issueCreatedAt!, e.startedAt))
     .filter(v => v >= 0)
   // 처리시간: started_at → ended_at
   const procTimes = finishedExecs
     .map(e => durationMin(e.startedAt, e.endedAt!))
     .filter(v => v > 0)
-  // 총시간: 보정된 대기시작시각 → ended_at
+  // 총시간: issue_created_at(큐 진입 시점) → ended_at
   const totalTimes = finishedExecs
-    .filter(e => getWaitStart(e))
-    .map(e => durationMin(getWaitStart(e)!, e.endedAt!))
+    .filter(e => e.issueCreatedAt)
+    .map(e => durationMin(e.issueCreatedAt!, e.endedAt!))
     .filter(v => v >= 0)
 
   // 이슈별 실행 횟수
@@ -470,15 +436,15 @@ export async function GET(req: NextRequest) {
   // 이전 기간 생애주기 집계
   const prevFinishedExecs = prevExecs.filter(e => (e.status === 'success' || e.status === 'failed') && e.endedAt)
   const prevWaitTimes = prevFinishedExecs
-    .filter(e => getWaitStart(e))
-    .map(e => durationMin(getWaitStart(e)!, e.startedAt))
+    .filter(e => e.issueCreatedAt)
+    .map(e => durationMin(e.issueCreatedAt!, e.startedAt))
     .filter(v => v >= 0)
   const prevProcTimes = prevFinishedExecs
     .map(e => durationMin(e.startedAt, e.endedAt!))
     .filter(v => v > 0)
   const prevTotalTimes = prevFinishedExecs
-    .filter(e => getWaitStart(e))
-    .map(e => durationMin(getWaitStart(e)!, e.endedAt!))
+    .filter(e => e.issueCreatedAt)
+    .map(e => durationMin(e.issueCreatedAt!, e.endedAt!))
     .filter(v => v >= 0)
 
   const prevLifecycle = {

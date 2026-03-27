@@ -8,6 +8,16 @@ import MRReviewSection from '@/components/mr/MRReviewSection'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useTranslations } from 'next-intl'
+import { useStore } from '@/lib/store'
+import AgentAvatar from '@/components/agent/AgentAvatar'
+
+interface ChatMessage {
+  id: string
+  sessionId: string
+  role: 'user' | 'assistant'
+  content: string
+  createdAt: string
+}
 
 interface IssueDetail {
   iid: number
@@ -42,6 +52,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   const { projectId, iid } = use(params)
   const router = useRouter()
   const { confirm } = useDialog()
+  const { state } = useStore()
   const tc = useTranslations('common')
   const tStage = useTranslations('stage')
   const tIssue = useTranslations('issue')
@@ -82,6 +93,17 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   const [saving, setSaving] = useState(false)
   const notesEndRef = useRef<HTMLDivElement>(null)
   const postingRef = useRef(false)
+
+  // Chat state
+  const [mode, setMode] = useState<'comment' | 'chat'>('comment')
+  const [chatSessionId, setChatSessionId] = useState<string | null>(null)
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
+  const [chatInput, setChatInput] = useState('')
+  const [chatSending, setChatSending] = useState(false)
+  const [chatStarting, setChatStarting] = useState(false)
+  const [chatStreamText, setChatStreamText] = useState('')
+  const [chatAgentName, setChatAgentName] = useState<string | null>(null)
+  const [chatAgentAvatar, setChatAgentAvatar] = useState<string | null>(null)
 
   const fetchIssue = useCallback(async () => {
     const res = await fetch(`/api/projects/${projectId}/issues/${iid}`)
@@ -222,6 +244,241 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
       setSaving(false)
     }
   }
+
+  // Check for existing chat session on mount
+  useEffect(() => {
+    fetch(`/api/projects/${projectId}/issues/${iid}/chat`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.session) {
+          setChatSessionId(data.session.id)
+          if (data.agentName) { setChatAgentName(data.agentName); setChatAgentAvatar(data.agentAvatar || null) }
+          setMode('chat') // Restore chat mode
+          // Load existing messages + check if agent is still processing
+          loadChatMessages(data.session.id)
+        }
+      })
+      .catch(() => {})
+  }, [projectId, iid])
+
+  // Load messages and poll if agent is still processing
+  async function loadChatMessages(sid: string) {
+    const fetchMsgs = async (): Promise<boolean> => {
+      try {
+        const res = await fetch(`/api/projects/${projectId}/issues/${iid}/chat/messages?sessionId=${sid}`)
+        const data = await res.json()
+        if (data.messages && Array.isArray(data.messages)) {
+          setChatMessages(data.messages)
+        }
+        return data.agentProcessing === true
+      } catch { return false }
+    }
+
+    const processing = await fetchMsgs()
+    if (processing) {
+      setChatSending(true)
+      setChatStreamText('...')
+      // Poll until agent finishes
+      const poll = setInterval(async () => {
+        const stillProcessing = await fetchMsgs()
+        if (!stillProcessing) {
+          clearInterval(poll)
+          setChatSending(false)
+          setChatStreamText('')
+        }
+      }, 2000)
+    }
+  }
+
+  async function handleStartChat(force = false) {
+    setChatStarting(true)
+    try {
+      const res = await fetch(`/api/projects/${projectId}/issues/${iid}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force }),
+      })
+      const data = await res.json()
+
+      // Another issue already has an active chat — ask user to confirm
+      if (res.status === 409 && data.existingChatOnIssue) {
+        setChatStarting(false)
+        const ok = await confirm({
+          title: tIssue('chatMode'),
+          message: tIssue('chatExistingConfirm', { iid: data.existingChatOnIssue }),
+          confirmText: tc('confirm'),
+          cancelText: tc('cancel'),
+          variant: 'warning',
+        })
+        if (ok) {
+          // End the other chat first, then retry with force
+          await fetch(`/api/projects/${projectId}/issues/${data.existingChatOnIssue}/chat/end`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId: data.existingSessionId }),
+          }).catch(() => {})
+          handleStartChat(true)
+        }
+        return
+      }
+
+      if (data.sessionId) {
+        setChatSessionId(data.sessionId)
+        if (data.agentName) { setChatAgentName(data.agentName); setChatAgentAvatar(data.agentAvatar || null) }
+        setMode('chat')
+        if (data.existing) {
+          loadChatMessages(data.sessionId)
+        }
+      } else if (data.error) {
+        alert(data.error === 'noAgentAvailable' ? tIssue('chatNoAgent') : data.error)
+      }
+    } catch {
+      alert(tIssue('chatError'))
+    } finally {
+      setChatStarting(false)
+    }
+  }
+
+  async function handleEndChat() {
+    if (!chatSessionId) return
+    const ok = await confirm({
+      title: tIssue('endChat'),
+      message: tIssue('endChatConfirm'),
+      confirmText: tc('confirm'),
+      cancelText: tc('cancel'),
+      variant: 'warning',
+    })
+    if (!ok) return
+    try {
+      await fetch(`/api/projects/${projectId}/issues/${iid}/chat/end`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: chatSessionId }),
+      })
+    } catch { /* ignore */ }
+    setChatSessionId(null)
+    setChatMessages([])
+    setChatStreamText('')
+    setMode('comment')
+  }
+
+  async function handleSendChatMessage() {
+    if (!chatInput.trim() || !chatSessionId || chatSending) return
+    const msg = chatInput.trim()
+    setChatInput('')
+    setChatSending(true)
+    setChatStreamText('')
+
+    // Optimistically add user message
+    const userMsg: ChatMessage = {
+      id: `temp-${Date.now()}`,
+      sessionId: chatSessionId,
+      role: 'user',
+      content: msg,
+      createdAt: new Date().toISOString(),
+    }
+    setChatMessages(prev => [...prev, userMsg])
+
+    try {
+      const res = await fetch(`/api/projects/${projectId}/issues/${iid}/chat/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: chatSessionId, message: msg }),
+      })
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setChatStreamText('')
+        setChatSending(false)
+        alert(data.error || tIssue('chatError'))
+        return
+      }
+
+      // Read SSE stream
+      const reader = res.body?.getReader()
+      const decoder = new TextDecoder()
+      let fullText = ''
+
+      if (reader) {
+        let buffer = ''
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n')
+          buffer = lines.pop() || ''
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue
+            try {
+              const event = JSON.parse(line.slice(6))
+              if (event.type === 'text' && event.content) {
+                fullText += event.content
+                setChatStreamText(fullText)
+              } else if (event.type === 'error') {
+                fullText += `\n\n[Error: ${event.content}]`
+                setChatStreamText(fullText)
+              }
+            } catch { /* skip */ }
+          }
+        }
+      }
+
+      // Finalize: add assistant message
+      if (fullText.trim()) {
+        const assistantMsg: ChatMessage = {
+          id: `temp-${Date.now()}-ai`,
+          sessionId: chatSessionId,
+          role: 'assistant',
+          content: fullText.trim(),
+          createdAt: new Date().toISOString(),
+        }
+        setChatMessages(prev => [...prev, assistantMsg])
+      }
+      setChatStreamText('')
+    } catch {
+      alert(tIssue('chatError'))
+    } finally {
+      setChatSending(false)
+    }
+  }
+
+  // Auto-scroll when chat messages change or stream updates
+  useEffect(() => {
+    if (mode === 'chat') {
+      notesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [chatMessages, chatStreamText, mode])
+
+  // Auto-close chat after 5 minutes of inactivity
+  useEffect(() => {
+    if (!chatSessionId || chatSending) return
+    const timer = setTimeout(async () => {
+      // Add farewell message locally
+      const farewellMsg: ChatMessage = {
+        id: `sys-${Date.now()}`,
+        sessionId: chatSessionId,
+        role: 'assistant',
+        content: tIssue('chatIdleClose', { agent: chatAgentName || 'AI' }),
+        createdAt: new Date().toISOString(),
+      }
+      setChatMessages(prev => [...prev, farewellMsg])
+      // End the session
+      try {
+        await fetch(`/api/projects/${projectId}/issues/${iid}/chat/end`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: chatSessionId }),
+        })
+      } catch { /* ignore */ }
+      setChatSessionId(null)
+      setChatAgentName(null)
+      setChatAgentAvatar(null)
+      setTimeout(() => setMode('comment'), 3000)
+    }, 5 * 60 * 1000) // 5 minutes
+    return () => clearTimeout(timer)
+  // Reset timer on every new message
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatSessionId, chatMessages.length, chatSending])
 
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center text-ive-text-muted">{tc('loading')}</div>
@@ -436,47 +693,223 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                 </div>
                 )
               })}
+
+              {/* Chat messages inline in timeline */}
+              {mode === 'chat' && chatSessionId && (
+                <>
+                  <div className="flex items-center gap-2 my-2">
+                    <div className="flex-1 border-t border-purple-500/30" />
+                    <span className="text-xs font-bold text-purple-400 uppercase tracking-widest">
+                      <i className="fa-solid fa-comments mr-1" />{tIssue('chatMode')}
+                    </span>
+                    <div className="flex-1 border-t border-purple-500/30" />
+                  </div>
+
+                  {/* Agent greeting */}
+                  <div className="flex items-start gap-2">
+                    <div className="shrink-0 mt-0.5">
+                      <AgentAvatar avatar={chatAgentAvatar || 'av-01'} size="sm" />
+                    </div>
+                    <div className="flex-1 rounded-lg px-3 py-2 bg-purple-500/[0.06] border border-purple-500/15">
+                      <div className="text-xs font-bold text-purple-300 mb-1">{chatAgentName || 'AI'}</div>
+                      <div className="text-sm leading-relaxed text-ive-text-muted">
+                        {tIssue('chatGreeting', { agent: chatAgentName || 'AI', iid: iid })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {chatMessages.map(msg => (
+                    <div key={msg.id} className={`flex ${msg.role === 'user' ? 'flex-row-reverse' : ''} items-start gap-2`}>
+                      <div className="shrink-0 mt-0.5">
+                        {msg.role === 'user' ? (
+                          <AgentAvatar avatar={state.user?.avatar || 'av-01'} size="sm" />
+                        ) : (
+                          <AgentAvatar avatar={chatAgentAvatar || 'av-01'} size="sm" />
+                        )}
+                      </div>
+                      <div className={`rounded-lg px-3 py-2 ${msg.role === 'user' ? 'max-w-[80%]' : 'flex-1'} ${
+                        msg.role === 'user'
+                          ? 'bg-sky-500/[0.12] border border-sky-500/25'
+                          : 'bg-ive-bg-card border border-purple-500/10'
+                      }`}>
+                        <div className={`flex items-center gap-2 mb-1 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                          <span className={`text-xs font-bold ${
+                            msg.role === 'user' ? 'text-sky-400' : 'text-purple-300'
+                          }`}>
+                            {msg.role === 'user' ? (state.user?.name || 'You') : (chatAgentName || 'AI')}
+                          </span>
+                          <span className="text-xs text-ive-text-dim">
+                            {new Date(msg.createdAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', hour12: false })}
+                          </span>
+                        </div>
+                        <div className={`text-sm leading-relaxed break-words text-ive-text-muted ${msg.role === 'user' ? 'text-right' : ''}`}>
+                          <MarkdownNote body={msg.content} />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+
+              {/* Streaming indicator */}
+              {chatSending && chatStreamText && (
+                <div className="flex items-start gap-2">
+                  <div className="shrink-0 mt-0.5">
+                    <AgentAvatar avatar={chatAgentAvatar || 'av-01'} size="sm" />
+                  </div>
+                  <div className="flex-1 rounded-lg px-3 py-2 bg-ive-bg-card border border-purple-500/10">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs font-bold text-purple-300">
+                        {chatAgentName || 'AI'}
+                        <i className="fa-solid fa-circle-notch fa-spin ml-1.5 text-[10px]" />
+                      </span>
+                    </div>
+                    <div className="text-sm leading-relaxed break-words text-ive-text-muted">
+                      <MarkdownNote body={chatStreamText} />
+                    </div>
+                  </div>
+                </div>
+              )}
+              {chatSending && !chatStreamText && (
+                <div className="flex items-center gap-2 py-3">
+                  <div className="shrink-0">
+                    <AgentAvatar avatar={chatAgentAvatar || 'av-01'} size="sm" />
+                  </div>
+                  <span className="text-purple-400 text-sm">
+                    <i className="fa-solid fa-circle-notch fa-spin mr-1" />{tIssue('chatSending')}
+                  </span>
+                </div>
+              )}
+
               <div ref={notesEndRef} />
             </div>
           )}
         </div>
 
-        {/* 코멘트 입력 - 하단 고정 */}
+        {/* 하단 입력 영역 */}
         <div className="shrink-0 px-3 pb-20 pt-2 border-t border-ive-border-dark bg-ive-bg-deep/80">
-          <div className="flex gap-2 items-end">
-            <textarea
-              value={comment}
-              onChange={e => {
-                setComment(e.target.value)
-                e.target.style.height = 'auto'
-                e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
-              }}
-              placeholder={tIssue('commentPlaceholder')}
-              rows={1}
-              className="flex-1 min-h-10 bg-ive-bg-card border border-ive-border rounded-xl px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-green/50"
-              style={{ overflow: 'hidden' }}
-            />
-            <button
-              onClick={handlePostComment}
-              disabled={posting || !comment.trim()}
-              className="shrink-0 w-10 h-10 rounded-xl bg-ive-green text-ive-bg-deep flex items-center justify-center active:scale-95 transition-all disabled:opacity-40"
-              title={tIssue('postCommentOnly')}
-              aria-label={tIssue('postComment')}
-            >
-              {posting ? <i className="fa-solid fa-circle-notch fa-spin" /> : <i className="fa-solid fa-paper-plane" />}
-            </button>
-            {issue.stage !== 'dev' && (
+          {/* Mode tabs */}
+          {(
+            <div className="flex items-center gap-1 mb-2">
               <button
-                onClick={handleCommentAndRetry}
-                disabled={posting || !comment.trim()}
-                className="shrink-0 h-10 px-3 rounded-xl bg-ive-cyan text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold whitespace-nowrap"
-                title={tIssue('postAndRetryHint')}
-                aria-label={tIssue('postAndRetry')}
+                onClick={() => setMode('comment')}
+                className={`text-xs font-bold px-2.5 py-1 rounded-lg transition-all ${
+                  mode === 'comment' ? 'bg-ive-green/15 text-ive-green' : 'text-ive-text-dim hover:text-ive-text'
+                }`}
               >
-                {posting ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-paper-plane" /><span>{tIssue('rerun')}</span></>}
+                <i className="fa-solid fa-comment mr-1" />{tIssue('commentMode')}
               </button>
-            )}
-          </div>
+              <button
+                onClick={() => {
+                  if (!chatSessionId) {
+                    handleStartChat()
+                  } else {
+                    setMode('chat')
+                  }
+                }}
+                disabled={chatStarting}
+                className={`text-xs font-bold px-2.5 py-1 rounded-lg transition-all ${
+                  mode === 'chat' ? 'bg-purple-500/15 text-purple-400' : 'text-ive-text-dim hover:text-ive-text'
+                }`}
+              >
+                {chatStarting ? (
+                  <><i className="fa-solid fa-circle-notch fa-spin mr-1" />{tIssue('startingChat')}</>
+                ) : (
+                  <><i className="fa-solid fa-comments mr-1" />{chatSessionId && chatAgentName ? `${tIssue('chatMode')}(${chatAgentName})` : tIssue('chatMode')}</>
+                )}
+              </button>
+              {chatSessionId && mode === 'chat' && (
+                <button
+                  onClick={handleEndChat}
+                  className="text-xs font-bold px-2 py-1 rounded-lg text-ive-red/70 hover:text-ive-red hover:bg-ive-red/10 transition-all ml-auto"
+                >
+                  <i className="fa-solid fa-xmark mr-0.5" />{tIssue('endChat')}
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Comment mode input */}
+          {mode === 'comment' && (
+            <div className="flex gap-2 items-end">
+              <textarea
+                value={comment}
+                onChange={e => {
+                  setComment(e.target.value)
+                  e.target.style.height = 'auto'
+                  e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
+                }}
+                placeholder={tIssue('commentPlaceholder')}
+                rows={1}
+                className="flex-1 min-h-10 bg-ive-bg-card border border-ive-border rounded-xl px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-green/50"
+                style={{ overflow: 'hidden' }}
+              />
+              <button
+                onClick={handlePostComment}
+                disabled={posting || !comment.trim()}
+                className="shrink-0 w-10 h-10 rounded-xl bg-ive-green text-ive-bg-deep flex items-center justify-center active:scale-95 transition-all disabled:opacity-40"
+                title={tIssue('postCommentOnly')}
+                aria-label={tIssue('postComment')}
+              >
+                {posting ? <i className="fa-solid fa-circle-notch fa-spin" /> : <i className="fa-solid fa-paper-plane" />}
+              </button>
+              {issue.stage !== 'dev' && (
+                <button
+                  onClick={handleCommentAndRetry}
+                  disabled={posting || !comment.trim()}
+                  className="shrink-0 h-10 px-3 rounded-xl bg-ive-cyan text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold whitespace-nowrap"
+                  title={tIssue('postAndRetryHint')}
+                  aria-label={tIssue('postAndRetry')}
+                >
+                  {posting ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-paper-plane" /><span>{tIssue('rerun')}</span></>}
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Chat mode input */}
+          {mode === 'chat' && chatSessionId && (
+            <div className="flex gap-2 items-end">
+              <textarea
+                value={chatInput}
+                onChange={e => {
+                  setChatInput(e.target.value)
+                  e.target.style.height = 'auto'
+                  e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
+                }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    handleSendChatMessage()
+                  }
+                }}
+                placeholder={tIssue('chatPlaceholder')}
+                rows={1}
+                disabled={chatSending}
+                className="flex-1 min-h-10 bg-ive-bg-card border border-purple-500/30 rounded-xl px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-purple-500/50 disabled:opacity-50"
+                style={{ overflow: 'hidden' }}
+              />
+              <button
+                onClick={handleSendChatMessage}
+                disabled={chatSending || !chatInput.trim()}
+                className="shrink-0 w-10 h-10 rounded-xl bg-purple-500 text-white flex items-center justify-center active:scale-95 transition-all disabled:opacity-40"
+              >
+                {chatSending ? <i className="fa-solid fa-circle-notch fa-spin" /> : <i className="fa-solid fa-paper-plane" />}
+              </button>
+            </div>
+          )}
+
+          {/* Chat start prompt (when mode=chat but no session yet) */}
+          {mode === 'chat' && !chatSessionId && !chatStarting && (
+            <div className="text-center py-2">
+              <button
+                onClick={() => handleStartChat()}
+                className="text-sm font-bold text-purple-400 hover:text-purple-300 transition-colors"
+              >
+                <i className="fa-solid fa-comments mr-1" />{tIssue('startChat')}
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

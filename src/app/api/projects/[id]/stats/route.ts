@@ -36,6 +36,7 @@ export async function GET(
     completed: completed.length,
     failed: failed.length,
     waiting: project.lastScannedIssueCount ?? 0,
+    conflictCount: project.conflictCount ?? 0,
     totalTokens,
     totalCost,
     yesterdayCompleted: yesterdayCount,

@@ -11,6 +11,7 @@ import ExecutionList from '@/components/execution/ExecutionList'
 import LiveTracePanel from '@/components/execution/LiveTracePanel'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 import MarqueeText from '@/components/ui/MarqueeText'
+import ConflictResolutionPanel from '@/components/mr/ConflictResolutionPanel'
 import type { ToolActivity } from '@/lib/tool-activity'
 import { useTranslations } from 'next-intl'
 
@@ -30,6 +31,7 @@ interface ProjectStats {
   completed: number
   failed: number
   waiting: number
+  conflictCount: number
   totalTokens: number
   totalCost: number
   yesterdayCompleted: number
@@ -43,12 +45,12 @@ export default function ProjectCard({ project }: Props) {
   const { alert: showAlert } = useDialog()
   const tp = useTranslations('project')
   const [scanning, setScanning] = useState(false)
-  const [expandedPanel, _setExpandedPanel] = useState<'running' | 'done' | 'waiting' | null>(() => {
+  const [expandedPanel, _setExpandedPanel] = useState<'running' | 'done' | 'waiting' | 'conflicts' | null>(() => {
     if (typeof window === 'undefined') return null
     const saved = sessionStorage.getItem(`pc-panel-${project.id}`)
-    return (saved === 'running' || saved === 'done' || saved === 'waiting') ? saved as any : null
+    return (saved === 'running' || saved === 'done' || saved === 'waiting' || saved === 'conflicts') ? saved as any : null
   })
-  const setExpandedPanel = (v: 'running' | 'done' | 'waiting' | null) => {
+  const setExpandedPanel = (v: 'running' | 'done' | 'waiting' | 'conflicts' | null) => {
     _setExpandedPanel(v)
     if (v) sessionStorage.setItem(`pc-panel-${project.id}`, v)
     else sessionStorage.removeItem(`pc-panel-${project.id}`)
@@ -307,6 +309,18 @@ export default function ProjectCard({ project }: Props) {
           <Sparkline data={snapshots.map(s => s.totalTokens)} width={40} height={12} />
           <span className="text-xs text-ive-text-dim font-bold">{tp('tokensLabel')}</span>
         </div>
+
+        {/* 충돌 */}
+        <button
+          onClick={() => setExpandedPanel(expandedPanel === 'conflicts' ? null : 'conflicts')}
+          className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'conflicts' ? 'bg-ive-red/5' : 'hover:bg-white/[0.02]'}`}
+        >
+          <span className={`text-lg font-black leading-none ${(stats?.conflictCount ?? 0) > 0 ? 'text-ive-red animate-pulse' : 'text-ive-text-dim'}`}>
+            {stats?.conflictCount ?? 0}
+          </span>
+          <i className={`fa-solid fa-code-merge text-xs ${(stats?.conflictCount ?? 0) > 0 ? 'text-ive-red' : 'text-ive-text-dim'}`} />
+          <span className={`text-xs font-bold ${(stats?.conflictCount ?? 0) > 0 ? 'text-ive-red' : 'text-ive-text-dim'}`}>{tp('conflictLabel')}</span>
+        </button>
       </div>
 
       {/* 진행 중 작업 요약 (패널 펼치지 않았을 때, running 있을 때만) */}
@@ -315,17 +329,20 @@ export default function ProjectCard({ project }: Props) {
           {runningExecs.map(ex => {
             const agent = (project.assignedAgents ?? []).find(pa => pa.agentId === ex.agentId)?.agent
             const activity = agent ? activities[agent.id] : undefined
+            const isChat = ex.id.startsWith('exec-chat-')
             return (
               <div key={ex.id} className="flex items-center gap-1.5 text-xs">
                 {agent && (
                   <AgentAvatar
                     avatar={agent.avatar}
                     size="sm"
-                    toolBadge={activity?.category ?? null}
+                    toolBadge={isChat ? null : (activity?.category ?? null)}
                   />
                 )}
-                {agent && <span className="text-ive-amber/70 font-bold shrink-0">{agent.name}</span>}
-                <MarqueeText className="text-ive-text-muted">#{ex.issueIid} {ex.issueTitle || ''}</MarqueeText>
+                {agent && <span className={`font-bold shrink-0 ${isChat ? 'text-purple-400/70' : 'text-ive-amber/70'}`}>{agent.name}</span>}
+                <MarqueeText className={isChat ? 'text-purple-400/60' : 'text-ive-text-muted'}>
+                  {isChat ? `💬 #${ex.issueIid} ${tp('chatLabel')}` : `#${ex.issueIid} ${ex.issueTitle || ''}`}
+                </MarqueeText>
               </div>
             )
           })}
@@ -340,6 +357,7 @@ export default function ProjectCard({ project }: Props) {
               agent: pa.agent,
               execution: runningExecs.find(e => e.agentId === pa.agentId) ?? null,
             }))}
+            projectId={project.id}
             onKill={handleKill}
           />
         </div>
@@ -402,6 +420,15 @@ export default function ProjectCard({ project }: Props) {
             <ExecutionList executions={todayDoneExecs} onKill={handleKill} killing={killing} scrollKey={`pc-done-${project.id}`} />
           </div>
         </div>
+      )}
+
+      {/* 충돌 해결 패널 */}
+      {expandedPanel === 'conflicts' && (
+        <ConflictResolutionPanel
+          projectId={project.id}
+          projectColor={project.color || '#4ade80'}
+          onClose={() => setExpandedPanel(null)}
+        />
       )}
     </div>
   )

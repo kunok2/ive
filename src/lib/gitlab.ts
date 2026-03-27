@@ -359,6 +359,40 @@ export async function mergeGitLabMR(project: Project, decryptedToken: string, mr
 }
 
 /**
+ * 열린 MR 전체 목록을 조회합니다 (충돌 감지용).
+ */
+export async function fetchOpenGitLabMRs(project: Project, decryptedToken: string) {
+  const projectPath = getProjectPath(project.repoUrl);
+  if (!projectPath) return [];
+
+  const headers = getAuthHeaders(project, decryptedToken);
+  const mrs: any[] = [];
+  let page = 1;
+
+  while (true) {
+    const res = await fetch(
+      apiUrl(project, `/merge_requests?state=opened&per_page=100&page=${page}`),
+      { headers }
+    );
+    if (!res.ok) break;
+    const data = await res.json();
+    if (!data.length) break;
+    mrs.push(...data);
+    if (data.length < 100) break;
+    page++;
+  }
+
+  return mrs.map((mr: any) => ({
+    iid: mr.iid,
+    title: mr.title,
+    source_branch: mr.source_branch,
+    target_branch: mr.target_branch,
+    has_conflicts: mr.has_conflicts === true || mr.merge_status === 'cannot_be_merged',
+    web_url: mr.web_url,
+  }));
+}
+
+/**
  * 프로젝트의 IVE 관련 이슈를 모두 가져옵니다 (모든 IVE 레이블 대상).
  */
 export async function fetchAllIveIssues(project: Project, decryptedToken: string) {

@@ -63,6 +63,7 @@ export interface Project {
   snapshotInterval: number      // 스냅샷 수집 간격 (분)
   sparklinePoints: number       // 스파크라인 표시 건수
   statsRetention: number        // 데이터 보관 기간 (일)
+  conflictCount: number          // 충돌 MR/PR 수 (ConflictWorker가 갱신, 서버 전용)
   createdAt: string
 }
 

@@ -18,6 +18,8 @@ import {
   getIssueStages,
   getIssueStageUpdatedAt,
   setIssueStage,
+  deleteIssueStage,
+  updateProjectConflictCount,
 } from "./db";
 import { decrypt } from "./crypto";
 import { defaultLocale } from "@/i18n/config";
@@ -335,6 +337,7 @@ export function startScanner() {
 
   // 보고서 자동 발송 스케줄러 시작
   startReportScheduler();
+
 }
 
 export function stopScanner() {
@@ -420,6 +423,7 @@ export async function scanProject(project: Project, force: boolean = false) {
     // 로컬 DB에 waiting 상태인데 원격 레이블로는 못 찾은 이슈도 포함
     const localStages = getIssueStages(project.id);
     for (const [iid, info] of localStages) {
+      if (iid === 0) continue; // 충돌 작업 마커는 일반 이슈 처리에서 제외
       if (info.stage === 'waiting' && !issueMap.has(iid)) {
         try {
           const issue = await fetchSingleIssue(project, iid, decryptedToken);
@@ -439,7 +443,15 @@ export async function scanProject(project: Project, force: boolean = false) {
 
     // 마지막 체크 시간 및 이슈 수 업데이트
     updateProjectLastChecked(project.id, now.toISOString(), issueCount);
-    
+
+    // 충돌 감지 작업 배정: done 상태 이슈가 2개 이상이면 MR 충돌 가능성 있음
+    // TODO: processConflictCheck not yet implemented
+    // try {
+    //   await processConflictCheck(project, decryptedToken);
+    // } catch (e) {
+    //   console.warn(`[Scanner] Conflict check failed for ${project.name}:`, e);
+    // }
+
   } catch (err) {
     let msg = err instanceof Error ? err.message : String(err);
     // 인증 관련 에러에 조치 안내 추가
@@ -543,8 +555,11 @@ async function executeTask(
   waitingSince?: string | null,
 ) {
   const iid = issue.iid;
-  const executionId = `ex-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-  const workspacePath = path.join(process.cwd(), 'workspaces', project.id, `issue-${iid}`);
+  const isConflictTask = iid === 0; // iid=0: 충돌 감지 작업
+  const executionId = isConflictTask
+    ? `ex-conflict-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+    : `ex-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+  const workspacePath = path.join(process.cwd(), 'workspaces', project.id, isConflictTask ? 'conflict-check' : `issue-${iid}`);
   const logDir = path.join(process.cwd(), 'data', 'logs');
   const logPath = path.join(logDir, `${executionId}.log`);
 
@@ -557,8 +572,8 @@ async function executeTask(
   // 대기시간 기준: 이슈가 대기 큐에 진입한 시점(issue_stages.updated_at)을 사용
   // - 첫 실행: 스캐너가 이슈를 처음 발견하여 'waiting'으로 설정한 시점
   // - 재실행: 사용자가 재요청하여 'waiting'으로 재설정한 시점
-  // issue.created_at(GitLab 이슈 생성일)은 개발 큐 진입과 무관하므로 사용하지 않음
-  const effectiveCreatedAt = waitingSince || issue.created_at || undefined;
+  // waitingSince가 없으면 현재 시각 사용 (GitLab 생성일은 큐 진입과 무관하므로 사용하지 않음)
+  const effectiveCreatedAt = waitingSince || new Date().toISOString();
 
   createExecution({
     id: executionId,
@@ -620,7 +635,7 @@ async function executeTask(
       repoUrl = project.repoUrl.replace('https://', `https://oauth2:${token}@`);
     }
     const branchName = `dev-${iid}`;
-    
+
     log("저장소 클론 중...", 'system');
     await execFile('git', ['clone', repoUrl, '.'], { cwd: workspacePath });
 
@@ -642,49 +657,53 @@ async function executeTask(
       await execFile('git', ['pull', 'origin', baseBranch], { cwd: workspacePath });
     }
 
-    await execFile('git', ['checkout', '-B', branchName], { cwd: workspacePath });
+    // 충돌 감지 작업은 기본 브랜치에서 분석만 수행 (별도 브랜치 생성 안 함)
+    if (!isConflictTask) {
+      await execFile('git', ['checkout', '-B', branchName], { cwd: workspacePath });
+    }
 
-    // 3. 이전 작업 이력 및 사용자 피드백 확인
-    const notes = project.provider === 'github'
-      ? await fetchGitHubIssueNotes(project, iid, token)
-      : await fetchGitLabIssueNotes(project, iid, token);
-    const botCompletions = notes.filter((n: any) => n.body.includes("<!-- ive-bot -->") || n.body.includes("IVE(봇)"));
-    const iterationCount = botCompletions.length + 1;
-
-    // 사용자 코멘트 추출 (시스템/봇 노트 제외 — <!-- ive-bot --> 마커로만 판별)
-    const userNotes = notes.filter((n: any) =>
-      !n.system &&
-      !n.body.includes("<!-- ive-bot -->") &&
-      !n.body.includes("IVE(봇)")
-    );
-
-    // 마지막 봇 완료 이후의 사용자 코멘트 = 최신 피드백/지시사항
+    // 3. 이전 작업 이력 및 사용자 피드백 확인 (충돌 작업은 이슈 노트가 없으므로 건너뜀)
+    let iterationCount = 1;
     let latestFeedback = "";
-    if (botCompletions.length > 0) {
-      const lastBotNoteId = botCompletions[botCompletions.length - 1].id;
-      const feedbackNotes = userNotes.filter((n: any) => n.id > lastBotNoteId);
-      if (feedbackNotes.length > 0) {
-        latestFeedback = "\n\n## ⚠️ Latest User Feedback (must be addressed first):\n" +
-          feedbackNotes.map((n: any) => `> **${n.author.name}**: ${n.body}`).join('\n\n');
-      }
-    }
-
-    // 이전 대화 히스토리 (재시도인 경우 — 이슈의 전체 대화 흐름을 제공)
     let iterationContext = "";
-    if (iterationCount > 1) {
-      const conversationNotes = notes
-        .filter((n: any) => !n.system)
-        .map((n: any) => {
-          let body = n.body || "";
-          body = body.replace(/<details>[\s\S]*?<\/details>/gi, "[work log omitted]");
-          if (body.length > 800) body = body.substring(0, 800) + "\n...(truncated)";
-          const role = n.body.includes("<!-- ive-bot -->") || n.body.includes("IVE(봇)") ? "🤖 Bot" : `👤 ${n.author?.name || "User"}`;
-          return `**${role}** (${n.created_at}):\n${body}`;
-        });
-      iterationContext = "\n## Issue Conversation History:\n" + conversationNotes.join('\n\n---\n\n');
-    }
 
-    log(`반복 횟수: ${iterationCount}차, 봇 완료 노트: ${botCompletions.length}건, 사용자 피드백: ${latestFeedback ? '있음' : '없음'}`, 'system');
+    if (!isConflictTask) {
+      const notes = project.provider === 'github'
+        ? await fetchGitHubIssueNotes(project, iid, token)
+        : await fetchGitLabIssueNotes(project, iid, token);
+      const botCompletions = notes.filter((n: any) => n.body.includes("<!-- ive-bot -->") || n.body.includes("IVE(봇)"));
+      iterationCount = botCompletions.length + 1;
+
+      const userNotes = notes.filter((n: any) =>
+        !n.system &&
+        !n.body.includes("<!-- ive-bot -->") &&
+        !n.body.includes("IVE(봇)")
+      );
+
+      if (botCompletions.length > 0) {
+        const lastBotNoteId = botCompletions[botCompletions.length - 1].id;
+        const feedbackNotes = userNotes.filter((n: any) => n.id > lastBotNoteId);
+        if (feedbackNotes.length > 0) {
+          latestFeedback = "\n\n## ⚠️ Latest User Feedback (must be addressed first):\n" +
+            feedbackNotes.map((n: any) => `> **${n.author.name}**: ${n.body}`).join('\n\n');
+        }
+      }
+
+      if (iterationCount > 1) {
+        const conversationNotes = notes
+          .filter((n: any) => !n.system)
+          .map((n: any) => {
+            let body = n.body || "";
+            body = body.replace(/<details>[\s\S]*?<\/details>/gi, "[work log omitted]");
+            if (body.length > 800) body = body.substring(0, 800) + "\n...(truncated)";
+            const role = n.body.includes("<!-- ive-bot -->") || n.body.includes("IVE(봇)") ? "🤖 Bot" : `👤 ${n.author?.name || "User"}`;
+            return `**${role}** (${n.created_at}):\n${body}`;
+          });
+        iterationContext = "\n## Issue Conversation History:\n" + conversationNotes.join('\n\n---\n\n');
+      }
+
+      log(`반복 횟수: ${iterationCount}차, 봇 완료 노트: ${botCompletions.length}건, 사용자 피드백: ${latestFeedback ? '있음' : '없음'}`, 'system');
+    }
 
     // API 정보 구성
     const repoUrlParsed = new URL(project.repoUrl.replace(/\.git$/, ''));
@@ -693,7 +712,10 @@ async function executeTask(
     let prompt: string;
     const providerLabel = isGitHub ? 'GitHub' : 'GitLab';
     const langInstruction = isKo ? 'You MUST report and comment in Korean only.' : 'Report in English only.';
-    if (iterationCount === 1) {
+    if (isConflictTask) {
+      // 충돌 감지 작업: description에 프롬프트가 이미 구성되어 있음
+      prompt = `${langInstruction}\n\n${issue.description}`;
+    } else if (iterationCount === 1) {
       prompt = `Please resolve the following ${providerLabel} issue. ${langInstruction}
 
 ## Issue #${iid}: ${issue.title}
@@ -1030,7 +1052,23 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
     const durationSeconds = Math.floor((Date.now() - startTime) / 1000);
     const durationStr = `${Math.max(1, Math.floor(durationSeconds/60))}m`;
 
-    // 6. 변경 사항 확인 및 커밋/푸시
+    // 6. 충돌 감지 작업은 커밋/푸시/MR 생성 불필요 — 로그에서 결과 파싱 후 완료 처리
+    if (isConflictTask) {
+      // 실행 로그에서 CONFLICT_RESULT 파싱
+      let conflictCount = 0;
+      try {
+        const logContent = fs.readFileSync(logPath, 'utf-8');
+        const match = logContent.match(/CONFLICT_RESULT:\s*(\d+)/);
+        if (match) conflictCount = parseInt(match[1], 10);
+      } catch {}
+      updateProjectConflictCount(project.id, conflictCount);
+      deleteIssueStage(project.id, 0);  // 충돌 작업은 일회성 — done 잔류 방지
+      log(`충돌 분석 완료. 충돌 수: ${conflictCount}`, 'system');
+      updateExecutionStatus(executionId, 'success', new Date().toISOString());
+      // 충돌 작업 완료 → finally 블록으로 이동
+    } else {
+
+    // 변경 사항 확인 및 커밋/푸시
     const { stdout: diffResult } = await execFile('git', ['diff', '--cached', '--name-only'], { cwd: workspacePath });
     if (diffResult.trim()) {
       log("변경사항 감지. 커밋 및 푸시 중...", 'system');
@@ -1125,19 +1163,27 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
       setIssueStage(project.id, iid, 'done');
       updateExecutionStatus(executionId, 'success', new Date().toISOString());
     }
+    } // end of !isConflictTask
 
   } catch (err: any) {
     log(`오류 발생: ${err.message}`, 'error');
     const errorLog = conversationParts.join('\n\n').substring(0, 60000);
     const errorNote = `<!-- ive-bot -->\n## ${agent.name} Execution Error\nAn error occurred: ${err.message}\n\n<details>\n<summary>🤖 AI Work Log (expand)</summary>\n\n${errorLog}\n\n</details>`;
-    setIssueStage(project.id, iid, 'dev_fail', (err.message || 'Unknown error').substring(0, 200));
-    try {
-      if (isGitHub) {
-        await addGitHubIssueComment(project, iid, token, errorNote);
-      } else {
-        await addGitLabIssueComment(project, iid, token, errorNote);
-      }
-    } catch (e) { console.warn(`[Scanner] Remote comment failed:`, e); }
+    if (isConflictTask) {
+      deleteIssueStage(project.id, 0);  // 충돌 작업 실패 시에도 스테이지 정리
+      updateProjectConflictCount(project.id, 0);  // 실패 시 충돌 수 초기화
+    } else {
+      setIssueStage(project.id, iid, 'dev_fail', (err.message || 'Unknown error').substring(0, 200));
+    }
+    if (!isConflictTask) {
+      try {
+        if (isGitHub) {
+          await addGitHubIssueComment(project, iid, token, errorNote);
+        } else {
+          await addGitLabIssueComment(project, iid, token, errorNote);
+        }
+      } catch (e) { console.warn(`[Scanner] Remote comment failed:`, e); }
+    }
     updateExecutionStatus(executionId, 'failed', new Date().toISOString());
   } finally {
     // 에이전트 상태를 'available'로 복원
@@ -1159,4 +1205,106 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
       }
     } catch (e) { /* ignore */ }
   }
+}
+
+/**
+ * 충돌 감지 작업 배정: done 상태 이슈가 2개 이상이면 에이전트를 배정하여 MR 충돌을 분석/해결합니다.
+ * 기존 이슈 처리와 100% 동일한 관리 흐름 (executeTask 사용).
+ * - 이미 충돌 작업이 진행 중이면 (issueIid=0) 추가 배정하지 않음
+ */
+async function processConflictCheck(project: Project, decryptedToken: string) {
+  // DB에서 done 상태 이슈 수 확인 (API 호출 없이 DB 상태만으로 판단)
+  const stages = getIssueStages(project.id);
+  const doneIids: number[] = [];
+  for (const [iid, info] of stages) {
+    if (iid === 0) continue; // 이전 충돌 작업 자체를 제외
+    if (info.stage === 'done') doneIids.push(iid);
+  }
+
+  if (doneIids.length < 2) {
+    updateProjectConflictCount(project.id, 0);
+    return;
+  }
+
+  // 이미 충돌 작업이 진행 중이면 추가 배정하지 않음 (issueIid=0은 충돌 작업 식별자)
+  if (hasActiveExecution(project.id, 0)) {
+    console.log(`[Scanner] [SKIP] Conflict check already running for ${project.name}`);
+    return;
+  }
+
+  // 가용 에이전트 선택 (이슈 배정과 동일한 라운드로빈)
+  const assignments = getProjectAssignments(project.id);
+  let selectedAgent: Agent | null = null;
+  let agentToken = decryptedToken;
+  let oldestTime = Infinity;
+
+  for (const pa of assignments) {
+    const running = countActiveExecutionsByAgent(pa.agentId);
+    if (running === 0) {
+      const lastDone = getLastCompletedAt(pa.agentId);
+      const t = lastDone ? new Date(lastDone).getTime() : 0;
+      if (t < oldestTime) {
+        oldestTime = t;
+        selectedAgent = pa.agent;
+        if (pa.accessToken) {
+          try { agentToken = decrypt(pa.accessToken); } catch { agentToken = decryptedToken; }
+        }
+      }
+    }
+  }
+
+  if (!selectedAgent) {
+    console.log(`[Scanner] [SKIP] No available agent for conflict check on ${project.name}`);
+    return;
+  }
+
+  console.log(`[Scanner] [ASSIGN-CONFLICT] Project: ${project.name}, Agent: ${selectedAgent.name}, Done issues: ${doneIids.length}`);
+
+  // 충돌 감지를 가상 이슈로 취급하여 기존 executeTask 그대로 사용
+  const conflictIssue = {
+    iid: 0,
+    title: `MR Conflict Check (${doneIids.length} branches: ${doneIids.map(i => `dev-${i}`).join(', ')})`,
+    description: buildConflictPrompt(project, doneIids),
+  };
+
+  setIssueStage(project.id, 0, 'dev');
+
+  executeTask(project, conflictIssue, selectedAgent, agentToken)
+    .then(() => {
+      // 실행 완료 후 충돌 수는 에이전트의 커밋/결과 로그에서 확인
+      // done 상태로 전환은 executeTask가 자동 처리
+      console.log(`[Scanner] [DONE-CONFLICT] ${project.name} conflict check completed.`);
+    })
+    .catch(err => {
+      console.error(`[Scanner] [FAILED-CONFLICT] ${project.name} error:`, err);
+      deleteIssueStage(project.id, 0);  // 안전장치: 실패 시 스테이지 잔류 방지
+    });
+}
+
+/**
+ * 충돌 감지 작업의 이슈 description (프롬프트)을 생성합니다.
+ */
+function buildConflictPrompt(project: Project, doneIids: number[]): string {
+  const branches = doneIids.map(iid => `dev-${iid}`);
+  return `## MR Conflict Analysis Task
+
+There are ${branches.length} completed MR branches in this project that have not been merged yet.
+When merging them sequentially, conflicts may occur between branches.
+
+### Branches to analyze:
+${branches.map(b => `- \`${b}\``).join('\n')}
+
+### Instructions:
+1. Fetch all the branches listed above from origin.
+2. For each branch, try merging it into the base branch (staging or main) locally:
+   - \`git checkout <base>\`
+   - \`git merge --no-commit --no-ff origin/<branch>\`
+   - Check if conflicts arise. Record which files conflict.
+   - \`git merge --abort\` to reset after each test.
+3. If merging branch A changes the base, test branch B against the updated base (simulate sequential merge).
+4. After analysis, output a summary line in this EXACT format:
+   \`CONFLICT_RESULT: <number of branches that would have conflicts>\`
+5. If conflicts are found, describe which branches conflict and which files are affected.
+6. Do NOT push any changes. This is an analysis task.
+7. Leave a brief comment on the project about your findings.`;
 }

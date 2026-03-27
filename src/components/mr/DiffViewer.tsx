@@ -119,7 +119,7 @@ export default function DiffViewer({ changes }: { changes: FileChange[] }) {
               className="w-full px-3 py-2.5 flex items-center gap-2 text-left hover:bg-ive-bg-deep/50 transition-colors"
             >
               <i className={`fa-solid fa-chevron-${isOpen ? 'down' : 'right'} text-[10px] text-ive-text-dim w-3`} />
-              <span className="text-sm font-mono text-ive-text truncate flex-1">{filePath}</span>
+              <span className="text-sm font-mono text-ive-text flex-1 break-all">{filePath}</span>
               <FileLabel change={change} />
               {added > 0 && <span className="text-xs text-green-400 font-bold">+{added}</span>}
               {removed > 0 && <span className="text-xs text-red-400 font-bold">-{removed}</span>}

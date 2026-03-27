@@ -351,6 +351,40 @@ export async function addGitHubPRNote(project: Project, decryptedToken: string, 
 }
 
 /**
+ * 열린 PR 전체 목록을 조회합니다 (충돌 감지용).
+ */
+export async function fetchOpenGitHubPRs(project: Project, decryptedToken: string) {
+  const ownerRepo = getOwnerRepo(project.repoUrl);
+  if (!ownerRepo) return [];
+
+  const headers = getGitHubAuthHeaders(project, decryptedToken);
+  const prs: any[] = [];
+  let page = 1;
+
+  while (true) {
+    const res = await fetch(
+      apiUrl(project, `/pulls?state=open&per_page=100&page=${page}`),
+      { headers }
+    );
+    if (!res.ok) break;
+    const data = await res.json();
+    if (!data.length) break;
+    prs.push(...data);
+    if (data.length < 100) break;
+    page++;
+  }
+
+  return prs.map((pr: any) => ({
+    iid: pr.number,
+    title: pr.title,
+    source_branch: pr.head?.ref,
+    target_branch: pr.base?.ref,
+    has_conflicts: pr.mergeable === false,
+    web_url: pr.html_url,
+  }));
+}
+
+/**
  * PR의 커밋에 연결된 check runs (CI 상태)를 조회합니다.
  * GitLab 파이프라인에 대응하는 GitHub 기능입니다.
  */
