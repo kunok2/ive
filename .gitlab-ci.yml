@@ -1,19 +1,9 @@
 stages:
-  - build
   - deploy
   - publish
 
 variables:
   IMAGE_NAME: dazzlepf/spring-ive
-
-build:
-  stage: build
-  tags:
-    - deploy
-  script:
-    - docker build -t spring-ive:latest .
-  only:
-    - main
 
 deploy:
   stage: deploy
