@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { TaskExecution } from '@/types'
 import LogViewer from '@/components/ui/LogViewer'
+import MarqueeText from '@/components/ui/MarqueeText'
 
 function formatDuration(startedAt: string, endedAt?: string): string {
   const start = new Date(startedAt).getTime()
@@ -20,7 +21,6 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
   const [killing, setKilling] = useState<string | null>(null)
   const [tick, setTick] = useState(0)
 
-  // 진행중인 실행이 있으면 1초마다 경과시간 갱신
   useEffect(() => {
     const hasRunning = executions.some(e => e.status === 'running')
     if (!hasRunning) return
@@ -30,7 +30,6 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
 
   useEffect(() => {
     fetchExecutions()
-    // 목록 열려 있는 동안 10초마다 자동 갱신
     const interval = setInterval(fetchExecutions, 10000)
     return () => clearInterval(interval)
   }, [projectId])
@@ -62,7 +61,7 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
                 const elapsed = formatDuration(ex.startedAt, ex.endedAt)
                 return (
                   <span className="text-ive-text-muted font-mono normal-case tracking-normal">
-                    {new Date(ex.startedAt).toLocaleString('ko-KR', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}
+                    {new Date(ex.startedAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}
                     {ex.status === 'running' && <span className="text-ive-amber ml-2">{elapsed}{tick >= 0 ? '' : ''}</span>}
                     {ex.status !== 'running' && <span className="text-ive-text-dim ml-2">{elapsed}</span>}
                   </span>
@@ -78,10 +77,11 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
           </div>
           <LogViewer
             sseUrl={`/api/executions/${selectedId}/logs`}
+            initialFetchUrl={`/api/executions/${selectedId}/content`}
             fontSize={12}
             maxLines={10000}
-            enableMarkdown={true}
             className="flex-1 min-h-0"
+            initialAutoScroll={executions.find(e => e.id === selectedId)?.status === 'running'}
           />
         </div>
       ) : (
@@ -98,8 +98,8 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
                   onClick={() => setSelectedId(ex.id)}
                   className="w-full text-left bg-ive-bg-card border border-ive-border-subtle p-4 rounded-xl hover:border-ive-green/50 hover:bg-ive-green/5 transition-all group cursor-pointer"
                 >
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-base font-black text-ive-green-pale">Issue #{ex.issueIid}</span>
+                  <div className="flex items-center justify-between mb-1.5 gap-2">
+                    <MarqueeText className="text-base font-black text-ive-green-pale">Issue #{ex.issueIid}{ex.issueTitle && ` — ${ex.issueTitle}`}</MarqueeText>
                     <span className={`text-sm font-bold px-2 py-0.5 rounded-full tracking-tighter ${
                       ex.status === 'running' ? 'bg-ive-amber/20 text-ive-amber animate-pulse' :
                       ex.status === 'success' ? 'bg-ive-green/20 text-ive-green' :
@@ -118,7 +118,7 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
                   <div className="flex items-center justify-between text-sm text-ive-text-muted group-hover:text-ive-text-dim">
                     <span>
                       <i className="fa-solid fa-calendar-day mr-1" />
-                      {new Date(ex.startedAt).toLocaleString('ko-KR', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}
+                      {new Date(ex.startedAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}
                     </span>
                     <span className={`font-mono font-bold ${ex.status === 'running' ? 'text-ive-amber' : 'text-ive-text-dim'}`}>
                       {ex.status === 'running' && <i className="fa-solid fa-stopwatch mr-1 text-sm" />}

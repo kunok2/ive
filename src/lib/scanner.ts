@@ -1,5 +1,6 @@
 import {
   getAllProjects,
+  getProject,
   updateProjectLastChecked,
   updateProjectError,
   getProjectAssignments,
@@ -9,39 +10,139 @@ import {
   updateExecutionTokens,
   resetStuckExecutions,
   hasActiveExecution,
-  countActiveExecutionsByAgent
+  countActiveExecutionsByAgent,
+  updateAgentStatus,
+  getLastCompletedAt,
+  getSystemSetting,
+  getIssueStage,
+  getIssueStages,
+  setIssueStage
 } from "./db";
 import { decrypt } from "./crypto";
-import { 
-  ensureGitLabLabels, 
-  fetchGitLabIssues, 
-  updateGitLabIssueLabels, 
-  addGitLabIssueComment, 
-  fetchGitLabIssueNotes, 
-  addGitLabSpentTime, 
-  createGitLabMR, 
-  getGitLabMR, 
-  addGitLabMRNote 
+import { defaultLocale } from "@/i18n/config";
+import { fetchSingleIssue } from "./provider";
+import {
+  ensureGitLabLabels,
+  fetchGitLabIssues,
+  addGitLabIssueComment,
+  fetchGitLabIssueNotes,
+  addGitLabSpentTime,
+  createGitLabMR,
+  getGitLabMR,
+  addGitLabMRNote
 } from "./gitlab";
+import {
+  ensureGitHubLabels,
+  fetchGitHubIssues,
+  addGitHubIssueComment,
+  fetchGitHubIssueNotes,
+  createGitHubPR,
+  getGitHubPR,
+  addGitHubPRNote,
+} from "./github";
 import { Project, Agent } from "@/types";
 import { startStatsCollector } from "./stats-collector";
+import { startReportScheduler } from "./report-scheduler";
 import { spawn } from "child_process";
 import fs from "fs";
 import path from "path";
 import { promisify } from "util";
+import { setToolActivity, setThinking, clearActivity } from "./tool-activity";
+import { calcCostFromDb } from "./token-pricing";
 
 const exec = promisify(require('child_process').exec);
+const execFile = promisify(require('child_process').execFile);
 
-// CLI별 토큰 단가 (USD per 1M tokens) — cost_usd가 제공되지 않을 때 사용
-const TOKEN_PRICING: Record<string, { input: number; output: number }> = {
-  claude:  { input: 3.0,  output: 15.0 },   // Sonnet 기본
-  gemini:  { input: 1.25, output: 5.0 },     // Gemini 2.0 Flash
-  codex:   { input: 2.5,  output: 10.0 },    // GPT-4.1 mini
+/**
+ * OpenCode run --format json 이벤트를 읽기 좋은 로그 텍스트로 변환
+ */
+function formatOpenCodeEvent(event: any, showToolUsage: boolean = false): string | null {
+  const ts = new Date().toTimeString().slice(0, 8);
+  switch (event.type) {
+    case 'text': {
+      // OpenCode 1.x: content is in event.part.text
+      const content = event.part?.text ?? event.content ?? event.text ?? '';
+      if (!content.trim()) return null;
+      return `[${ts}] ${content}`;
+    }
+    case 'tool_use': {
+      if (!showToolUsage) return null;
+      // OpenCode 1.x: tool name is in event.part.tool, input in event.part.state.input
+      const toolName = event.part?.tool ?? event.tool ?? event.name ?? '';
+      const input = event.part?.state?.input ?? event.input ?? event.args ?? {};
+      const summary = formatToolInput(toolName, input);
+      return `[${ts}] \x1b[1;34m[Tool] ${toolName}\x1b[0m ${summary}`;
+    }
+    case 'step_finish': {
+      // OpenCode 1.x: completion is step_finish with reason='stop'
+      if (event.part?.reason !== 'stop') return null;
+      const tokens = event.part?.tokens ?? {};
+      const inputT = tokens.input ?? 0;
+      const outputT = tokens.output ?? 0;
+      const cost = event.part?.cost ?? 0;
+      const meta: string[] = [];
+      if (inputT || outputT) meta.push(`입력 ${Number(inputT).toLocaleString()} + 출력 ${Number(outputT).toLocaleString()} 토큰`);
+      if (cost) meta.push(`비용 $${Number(cost).toFixed(4)}`);
+      const metaStr = meta.length > 0 ? `\x1b[90m(${meta.join(' | ')})\x1b[0m ` : '';
+      return `[${ts}] \x1b[1;32m[완료]\x1b[0m ${metaStr}`;
+    }
+    case 'session.status': {
+      // Legacy format fallback
+      const meta: string[] = [];
+      const inputT = event.inputTokens ?? event.input_tokens ?? event.tokens?.input ?? 0;
+      const outputT = event.outputTokens ?? event.output_tokens ?? event.tokens?.output ?? 0;
+      const cost = event.cost ?? event.costUsd ?? event.cost_usd ?? 0;
+      if (inputT || outputT) meta.push(`입력 ${Number(inputT).toLocaleString()} + 출력 ${Number(outputT).toLocaleString()} 토큰`);
+      if (cost) meta.push(`비용 $${Number(cost).toFixed(4)}`);
+      const metaStr = meta.length > 0 ? `\x1b[90m(${meta.join(' | ')})\x1b[0m ` : '';
+      return `[${ts}] \x1b[1;32m[완료]\x1b[0m ${metaStr}`;
+    }
+    case 'session.error': {
+      const msg = event.error ?? event.message ?? '알 수 없는 오류';
+      return `[${ts}] \x1b[1;31m[오류]\x1b[0m ${msg}`;
+    }
+    default:
+      return null;
+  }
 }
 
-function estimateCost(cliName: string, inputTokens: number, outputTokens: number): number {
-  const pricing = TOKEN_PRICING[cliName] || TOKEN_PRICING.claude
-  return (inputTokens * pricing.input + outputTokens * pricing.output) / 1_000_000
+function formatOpenCodeEventMarkdown(event: any): string | null {
+  switch (event.type) {
+    case 'text': {
+      const content = event.part?.text ?? event.content ?? event.text ?? '';
+      return content.trim() || null;
+    }
+    case 'tool_use': {
+      const toolName = event.part?.tool ?? event.tool ?? event.name ?? '';
+      const summary = formatToolInputMarkdown(toolName, event.part?.state?.input ?? event.input ?? event.args ?? {});
+      return `> **🔧 ${toolName}** ${summary}`;
+    }
+    case 'step_finish': {
+      if (event.part?.reason !== 'stop') return null;
+      const tokens = event.part?.tokens ?? {};
+      const inputT = tokens.input ?? 0;
+      const outputT = tokens.output ?? 0;
+      const cost = event.part?.cost ?? 0;
+      const meta: string[] = [];
+      if (cost) meta.push(`비용: $${Number(cost).toFixed(4)}`);
+      if (inputT || outputT) meta.push(`토큰: ${(Number(inputT) + Number(outputT)).toLocaleString()}`);
+      return `\n---\n**📊 실행 결과** ${meta.join(' | ')}`;
+    }
+    case 'session.status': {
+      // Legacy format fallback
+      const meta: string[] = [];
+      const inputT = event.inputTokens ?? event.input_tokens ?? event.tokens?.input ?? 0;
+      const outputT = event.outputTokens ?? event.output_tokens ?? event.tokens?.output ?? 0;
+      const cost = event.cost ?? event.costUsd ?? event.cost_usd ?? 0;
+      const model = event.model ?? event.modelId ?? event.model_id ?? '';
+      if (model) meta.push(`모델: ${model}`);
+      if (cost) meta.push(`비용: $${Number(cost).toFixed(4)}`);
+      if (inputT || outputT) meta.push(`토큰: ${(Number(inputT) + Number(outputT)).toLocaleString()}`);
+      return `\n---\n**📊 실행 결과** ${meta.join(' | ')}`;
+    }
+    default:
+      return null;
+  }
 }
 
 /**
@@ -62,7 +163,7 @@ function extractMeta(event: any, usage?: any): string | null {
   return meta.length > 0 ? `(${meta.join(' | ')})` : null;
 }
 
-function formatStreamEvent(event: any): string | null {
+function formatStreamEvent(event: any, showToolUsage: boolean = false): string | null {
   const ts = new Date().toTimeString().slice(0, 8);
 
   switch (event.type) {
@@ -72,7 +173,7 @@ function formatStreamEvent(event: any): string | null {
       for (const part of parts) {
         if (part.type === 'text' && part.text?.trim()) {
           lines.push(`[${ts}] ${part.text}`);
-        } else if (part.type === 'tool_use') {
+        } else if (part.type === 'tool_use' && showToolUsage) {
           const input = part.input || {};
           const summary = formatToolInput(part.name, input);
           lines.push(`[${ts}] \x1b[1;34m[Tool] ${part.name}\x1b[0m ${summary}`);
@@ -94,12 +195,13 @@ function formatStreamEvent(event: any): string | null {
     case 'result': {
       const meta = extractMeta(event, event.usage) || '';
       const metaStr = meta ? `\x1b[90m${meta}\x1b[0m ` : '';
-      return `[${ts}] \x1b[1;32m[완료]\x1b[0m ${metaStr}${event.result ? '\n' + event.result : ''}`;
+      return `[${ts}] \x1b[1;32m[완료]\x1b[0m ${metaStr}`;
     }
     case 'system': {
       // system 이벤트 중 의미 있는 메시지만 출력 (JSON 덤프 방지)
       if (event.subtype === 'init' || event.subtype === 'session') {
-        return `[${ts}] \x1b[1;36m[시작]\x1b[0m 세션 초기화`;
+        const model = event.model ?? event.modelId ?? '';
+        return `[${ts}] \x1b[1;36m[시작]\x1b[0m 세션 초기화${model ? ` \x1b[90m(${model})\x1b[0m` : ''}`;
       }
       // task_notification 등 내부 이벤트는 메타만 간략히
       if (event.subtype === 'task_notification') {
@@ -144,12 +246,14 @@ function formatStreamEventMarkdown(event: any): string | null {
       const inputTokens = event.input_tokens ?? event.inputTokens ?? event.usage?.input_tokens;
       const outputTokens = event.output_tokens ?? event.outputTokens ?? event.usage?.output_tokens;
       const turns = event.num_turns ?? event.numTurns;
+      const model = event.model ?? event.modelId ?? event.model_id ?? '';
+      if (model) info.push(`모델: ${model}`);
       if (cost) info.push(`비용: $${Number(cost).toFixed(4)}`);
       if (duration) info.push(`소요: ${(Number(duration) / 1000).toFixed(1)}s`);
       if (tokens) info.push(`토큰: ${Number(tokens).toLocaleString()}`);
       else if (inputTokens || outputTokens) info.push(`토큰: ${(Number(inputTokens||0) + Number(outputTokens||0)).toLocaleString()}`);
       if (turns) info.push(`턴: ${turns}`);
-      return `\n---\n**📊 실행 결과** ${info.join(' | ')}${event.result ? '\n\n' + event.result : ''}`;
+      return `\n---\n**📊 실행 결과** ${info.join(' | ')}`;
     }
     default:
       return null;
@@ -227,6 +331,9 @@ export function startScanner() {
 
   // 통계 수집기 시작
   startStatsCollector();
+
+  // 보고서 자동 발송 스케줄러 시작
+  startReportScheduler();
 }
 
 export function stopScanner() {
@@ -286,85 +393,124 @@ export async function scanProject(project: Project, force: boolean = false) {
     const decryptedToken = decrypt(project.accessToken);
     let issueCount = 0;
 
-    if (project.provider === 'gitlab') {
-      await ensureGitLabLabels(project, decryptedToken);
-
-      // 개발 큐: labelTarget (예: IVE)
-      const devIssues = await fetchGitLabIssues(project, decryptedToken, project.labelTarget);
-      if (devIssues.length > 0) {
-        console.log(`[Scanner] Found ${devIssues.length} dev-queue issues for ${project.name}`);
-        const { assigned, waiting } = await processIssues(project, devIssues, decryptedToken, true);
-        issueCount += waiting;
+    // 레이블 동기화 (best-effort)
+    try {
+      if (project.provider === 'gitlab') {
+        await ensureGitLabLabels(project, decryptedToken);
+      } else {
+        await ensureGitHubLabels(project, decryptedToken);
       }
+    } catch (e) { console.warn(`[Scanner] Label sync failed for ${project.name}:`, e); }
 
-      // 검증 큐: labelValidation (예: IVE(V)) - 개발 완료 후 대기 중인 이슈
-      const valIssues = await fetchGitLabIssues(project, decryptedToken, project.labelValidation);
-      if (valIssues.length > 0) {
-        console.log(`[Scanner] Found ${valIssues.length} val-queue issues for ${project.name}`);
-        const { waiting: valWaiting } = await processIssues(project, valIssues, decryptedToken, false);
-        issueCount += valWaiting;
+    // 개발 큐: 원격 labelTarget 레이블 + 로컬 DB waiting 이슈 병합
+    const fetchIssues = project.provider === 'github' ? fetchGitHubIssues : fetchGitLabIssues;
+    const remoteIssues = await fetchIssues(project, decryptedToken, project.labelTarget);
+
+    // 원격에서 가져온 이슈를 Map으로 (iid → issue), closed 이슈 제외
+    const issueMap = new Map<number, any>();
+    for (const issue of remoteIssues) {
+      if (issue.state === 'closed') continue;
+      issueMap.set(issue.iid, issue);
+      if (!getIssueStage(project.id, issue.iid)) {
+        setIssueStage(project.id, issue.iid, 'waiting');
       }
-    } else if (project.provider === 'github') {
-      // 구현 예정
+    }
+
+    // 로컬 DB에 waiting 상태인데 원격 레이블로는 못 찾은 이슈도 포함
+    const localStages = getIssueStages(project.id);
+    for (const [iid, info] of localStages) {
+      if (info.stage === 'waiting' && !issueMap.has(iid)) {
+        try {
+          const issue = await fetchSingleIssue(project, iid, decryptedToken);
+          if (issue && issue.state !== 'closed') {
+            issueMap.set(iid, issue);
+          }
+        } catch { /* 조회 실패 시 무시 */ }
+      }
+    }
+
+    const devIssues = Array.from(issueMap.values());
+    if (devIssues.length > 0) {
+      console.log(`[Scanner] Found ${devIssues.length} dev-queue issues for ${project.name} (${remoteIssues.length} remote + ${devIssues.length - remoteIssues.length} local-only)`);
+      const { assigned, waiting } = await processIssues(project, devIssues, decryptedToken);
+      issueCount += waiting;
     }
 
     // 마지막 체크 시간 및 이슈 수 업데이트
     updateProjectLastChecked(project.id, now.toISOString(), issueCount);
     
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    let msg = err instanceof Error ? err.message : String(err);
+    // 인증 관련 에러에 조치 안내 추가
+    if (msg.includes('인증 정보가 유효하지 않거나 만료') || msg.includes('인증 실패')) {
+      msg = `Git 액세스 토큰 인증 실패 — 프로젝트 설정에서 토큰을 확인하거나 새로 발급하여 교체해주세요.`;
+    }
     console.warn(`[Scanner] Error scanning project ${project.name}: ${msg}`);
     updateProjectError(project.id, msg);
   }
 }
 
-async function processIssues(project: Project, issues: any[], decryptedToken: string, isDevelop: boolean): Promise<{ assigned: number; waiting: number }> {
+async function processIssues(project: Project, issues: any[], decryptedToken: string): Promise<{ assigned: number; waiting: number }> {
   const assignments = getProjectAssignments(project.id);
   let assignedCount = 0;
   let waitingCount = 0;
   const busyAgentIds = new Set<string>();
 
-  console.log(`[Scanner] processIssues: ${issues.length} issues, ${assignments.length} agents, isDevelop=${isDevelop}`);
+  console.log(`[Scanner] processIssues: ${issues.length} issues, ${assignments.length} agents`);
   for (const issue of issues) {
-    // 개발 큐: 이미 IVE(D) 또는 IVE(V) 레이블이 있거나 실행 중이면 스킵
-    if (isDevelop && (
-      issue.labels.includes(project.labelInProgress) ||
-      issue.labels.includes(project.labelValidation) ||
-      hasActiveExecution(project.id, issue.iid)
-    )) {
-      console.log(`[Scanner] [SKIP-INPROG] Issue #${issue.iid} (labels: ${issue.labels.join(',')}, activeExec: ${hasActiveExecution(project.id, issue.iid)})`);
-      continue;
-    }
-    // 검증 큐: 이미 실행 중인 execution이 있으면 스킵 (중복 배정 방지)
-    if (!isDevelop && hasActiveExecution(project.id, issue.iid)) {
+    // 이미 진행 중인 실행이 있으면 무조건 스킵
+    if (hasActiveExecution(project.id, issue.iid)) {
+      console.log(`[Scanner] [SKIP] Issue #${issue.iid} (activeExec: true)`);
       continue;
     }
 
-    // 실행 중인 작업이 없는 에이전트 탐색 (이번 루프에서 이미 배정한 에이전트도 제외)
+    const currentStage = getIssueStage(project.id, issue.iid);
+
+    // dev 상태: 실행 중이어야 하나 activeExec가 없음 → 위에서 이미 체크됨, 여기 도달하면 고착 상태
+    if (currentStage === 'dev') {
+      console.log(`[Scanner] [SKIP] Issue #${issue.iid} (stage: dev, no active exec — will be reset on restart)`);
+      continue;
+    }
+
+    // done/dev_fail 상태: 완료된 이슈는 스킵. 재작업이 필요하면 사용자가 UI에서 "대기"로 변경.
+    if (currentStage === 'done' || currentStage === 'dev_fail') {
+      console.log(`[Scanner] [SKIP] Issue #${issue.iid} (stage: ${currentStage})`);
+      continue;
+    }
+
+    // 가용 에이전트 중 가장 오래 쉰 에이전트 선택 (라운드로빈)
     let availableAgent: Agent | null = null;
+    let agentToken = decryptedToken; // 기본: 프로젝트 토큰
+    let oldestTime = Infinity;
+    let selectedPa: typeof assignments[0] | null = null;
     for (const pa of assignments) {
       if (busyAgentIds.has(pa.agentId)) continue;
       const running = countActiveExecutionsByAgent(pa.agentId);
       if (running === 0) {
-        availableAgent = pa.agent;
-        break;
+        const lastDone = getLastCompletedAt(pa.agentId);
+        const t = lastDone ? new Date(lastDone).getTime() : 0; // 작업 이력 없으면 최우선
+        if (t < oldestTime) {
+          oldestTime = t;
+          selectedPa = pa;
+        }
+      }
+    }
+    if (selectedPa) {
+      availableAgent = selectedPa.agent;
+      if (selectedPa.accessToken) {
+        try { agentToken = decrypt(selectedPa.accessToken); } catch { agentToken = decryptedToken; }
       }
     }
 
     if (availableAgent) {
       busyAgentIds.add(availableAgent.id);
-      const taskType = isDevelop ? '개발' : '검증';
-      console.log(`[Scanner] [ASSIGN] Project: ${project.name}, Issue: #${issue.iid}, Agent: ${availableAgent.name} (${taskType})`);
+      console.log(`[Scanner] [ASSIGN] Project: ${project.name}, Issue: #${issue.iid}, Agent: ${availableAgent.name}${agentToken !== decryptedToken ? ' (자체 토큰)' : ''}`);
 
-      // 레이블 변경
-      const currentLabel = isDevelop ? project.labelTarget : project.labelValidation;
-      const inProgressLabel = isDevelop ? project.labelInProgress : project.labelValidation;
-      if (isDevelop) {
-        await updateGitLabIssueLabels(project, issue.iid, decryptedToken, [inProgressLabel], [currentLabel]);
-      }
+      // 상태 변경: 대기 → 개발 중 (로컬 DB)
+      setIssueStage(project.id, issue.iid, 'dev');
 
-      // 비동기로 태스크 실행
-      executeTask(project, issue, availableAgent, decryptedToken, inProgressLabel, isDevelop)
+      // 비동기로 태스크 실행 (개발자별 토큰 우선)
+      executeTask(project, issue, availableAgent, agentToken)
         .then(() => {
           console.log(`[Scanner] [DONE] Issue #${issue.iid} processed.`);
         })
@@ -375,8 +521,7 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
       assignedCount++;
     } else {
       waitingCount++;
-      const taskType = isDevelop ? '개발' : '검증';
-      console.log(`[Scanner] [SKIP] No available agent for Issue #${issue.iid} (${taskType}). Will retry in next scan.`);
+      console.log(`[Scanner] [SKIP] No available agent for Issue #${issue.iid}. Will retry in next scan.`);
     }
   }
   console.log(`[Scanner] processIssues result: assigned=${assignedCount}, waiting=${waitingCount}, busyAgents=[${[...busyAgentIds].join(',')}]`);
@@ -391,8 +536,6 @@ async function executeTask(
   issue: any,
   agent: Agent,
   token: string,
-  currentLabel: string,
-  isDevelop: boolean
 ) {
   const iid = issue.iid;
   const executionId = `ex-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
@@ -401,6 +544,9 @@ async function executeTask(
   const logPath = path.join(logDir, `${executionId}.log`);
 
   if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
+
+  // 0. 에이전트 상태를 'busy'로 변경
+  updateAgentStatus(agent.id, 'busy');
 
   // 0. DB에 실행 시작 기록
   createExecution({
@@ -416,8 +562,10 @@ async function executeTask(
     outputTokens: 0,
     costUsd: 0,
     turns: 0,
+    issueCreatedAt: issue.created_at || undefined,
   });
 
+  const isGitHub = project.provider === 'github';
   const conversationParts: string[] = []; // 이슈 노트용 대화 내용 수집
   const logStream = fs.createWriteStream(logPath, { flags: 'a' });
   const log = (msg: string, type: 'info' | 'error' | 'warn' | 'system' = 'info') => {
@@ -432,11 +580,15 @@ async function executeTask(
     console.log(`[Task #${iid}] ${msg}`);
   };
 
+  // 사용자 선택 locale (시스템 설정 > defaultLocale)
+  const locale = getSystemSetting('locale') || defaultLocale;
+  const isKo = locale === 'ko';
+
   try {
     // 0-1. 이슈 정보 출력
     log(`\x1b[1;36m${'═'.repeat(50)}\x1b[0m`, 'info');
     log(`Issue #${iid}: ${issue.title}`, 'system');
-    log(`Agent : ${agent.name} (${isDevelop ? '개발' : '검증'})`, 'system');
+    log(`Agent : ${agent.name}`, 'system');
     log(`Project: ${project.name}`, 'system');
     log(`\x1b[1;36m${'═'.repeat(50)}\x1b[0m`, 'info');
 
@@ -448,95 +600,309 @@ async function executeTask(
     fs.mkdirSync(workspacePath, { recursive: true });
 
     // 2. Git 클론 및 준비
-    const repoUrl = project.repoUrl.replace('https://', `https://oauth2:${token}@`);
-    const branchName = isDevelop ? `dev-${iid}` : `val-${iid}`;
+    let repoUrl: string;
+    if (project.authType === 'basic') {
+      repoUrl = project.repoUrl.replace('https://', `https://${encodeURIComponent(project.gitUsername)}:${encodeURIComponent(token)}@`);
+    } else if (isGitHub) {
+      repoUrl = project.repoUrl.replace('https://', `https://x-access-token:${token}@`);
+    } else {
+      repoUrl = project.repoUrl.replace('https://', `https://oauth2:${token}@`);
+    }
+    const branchName = `dev-${iid}`;
     
     log("저장소 클론 중...", 'system');
-    await exec(`git clone ${repoUrl} .`, { cwd: workspacePath });
-    
+    await execFile('git', ['clone', repoUrl, '.'], { cwd: workspacePath });
+
     let baseBranch = 'staging';
     try {
-      await exec(`git fetch origin staging`, { cwd: workspacePath });
-      await exec(`git checkout staging`, { cwd: workspacePath });
-      await exec(`git pull origin staging`, { cwd: workspacePath });
+      await execFile('git', ['fetch', 'origin', 'staging'], { cwd: workspacePath });
+      await execFile('git', ['checkout', 'staging'], { cwd: workspacePath });
+      await execFile('git', ['pull', 'origin', 'staging'], { cwd: workspacePath });
     } catch {
-      baseBranch = 'main';
-      await exec(`git checkout main`, { cwd: workspacePath });
-      await exec(`git pull origin main`, { cwd: workspacePath });
+      // staging 브랜치 없으면 원격 기본 브랜치 감지
+      try {
+        await execFile('git', ['remote', 'set-head', 'origin', '--auto'], { cwd: workspacePath });
+        const { stdout: headRef } = await execFile('git', ['symbolic-ref', 'refs/remotes/origin/HEAD'], { cwd: workspacePath });
+        baseBranch = headRef.trim().replace('refs/remotes/origin/', '');
+      } catch {
+        baseBranch = 'main'; // fallback
+      }
+      await execFile('git', ['checkout', baseBranch], { cwd: workspacePath });
+      await execFile('git', ['pull', 'origin', baseBranch], { cwd: workspacePath });
     }
-    
-    await exec(`git checkout -B ${branchName}`, { cwd: workspacePath });
 
-    // 3. 이전 작업 이력 확인
-    const notes = await fetchGitLabIssueNotes(project, iid, token);
-    const iterationCount = notes.filter((n: any) => n.body.includes("IVE(봇) 이슈 해결")).length + 1;
+    await execFile('git', ['checkout', '-B', branchName], { cwd: workspacePath });
+
+    // 3. 이전 작업 이력 및 사용자 피드백 확인
+    const notes = project.provider === 'github'
+      ? await fetchGitHubIssueNotes(project, iid, token)
+      : await fetchGitLabIssueNotes(project, iid, token);
+    const botCompletions = notes.filter((n: any) => n.body.includes("<!-- ive-bot -->") || n.body.includes("IVE(봇)"));
+    const iterationCount = botCompletions.length + 1;
+
+    // 사용자 코멘트 추출 (시스템/봇 노트 제외 — <!-- ive-bot --> 마커로만 판별)
+    const userNotes = notes.filter((n: any) =>
+      !n.system &&
+      !n.body.includes("<!-- ive-bot -->") &&
+      !n.body.includes("IVE(봇)")
+    );
+
+    // 마지막 봇 완료 이후의 사용자 코멘트 = 최신 피드백/지시사항
+    let latestFeedback = "";
+    if (botCompletions.length > 0) {
+      const lastBotNoteId = botCompletions[botCompletions.length - 1].id;
+      const feedbackNotes = userNotes.filter((n: any) => n.id > lastBotNoteId);
+      if (feedbackNotes.length > 0) {
+        latestFeedback = (isKo ? "\n\n## ⚠️ 최신 사용자 피드백 (반드시 우선 반영):\n" : "\n\n## ⚠️ Latest User Feedback (must be addressed first):\n") +
+          feedbackNotes.map((n: any) => `> **${n.author.name}**: ${n.body}`).join('\n\n');
+      }
+    }
+
+    // 이전 대화 히스토리 (재시도인 경우 — 이슈의 전체 대화 흐름을 제공)
     let iterationContext = "";
     if (iterationCount > 1) {
-      const recentNotes = notes.filter((n: any) => !n.system).slice(-5);
-      iterationContext = "\n## 이전 작업 이력 및 피드백:\n" + 
-        recentNotes.map((n: any) => `### ${n.author.name} (${n.created_at})\n${n.body.substring(0, 500)}`).join('\n');
+      const conversationNotes = notes
+        .filter((n: any) => !n.system)
+        .map((n: any) => {
+          let body = n.body || "";
+          body = body.replace(/<details>[\s\S]*?<\/details>/gi, isKo ? "[작업 로그 생략]" : "[work log omitted]");
+          if (body.length > 800) body = body.substring(0, 800) + (isKo ? "\n...(이하 생략)" : "\n...(truncated)");
+          const role = n.body.includes("<!-- ive-bot -->") || n.body.includes("IVE(봇)") ? (isKo ? "🤖 봇" : "🤖 Bot") : `👤 ${n.author?.name || (isKo ? "사용자" : "User")}`;
+          return `**${role}** (${n.created_at}):\n${body}`;
+        });
+      iterationContext = `\n## ${isKo ? '이슈 대화 히스토리' : 'Issue Conversation History'}:\n` + conversationNotes.join('\n\n---\n\n');
     }
 
-    // GitLab API 정보 구성
+    log(`반복 횟수: ${iterationCount}차, 봇 완료 노트: ${botCompletions.length}건, 사용자 피드백: ${latestFeedback ? '있음' : '없음'}`, 'system');
+
+    // API 정보 구성
     const repoUrlParsed = new URL(project.repoUrl.replace(/\.git$/, ''));
-    const gitlabBaseUrl = `${repoUrlParsed.protocol}//${repoUrlParsed.host}`;
-    const projectPath = repoUrlParsed.pathname.startsWith('/') ? repoUrlParsed.pathname.slice(1) : repoUrlParsed.pathname;
-    const encodedProjectPath = encodeURIComponent(projectPath);
 
-    const prompt = `다음 GitLab 이슈를 해결해주세요. 한국어로만 보고하세요.
+    // 1차: 이슈 본문이 지시사항 / 2차+: 사용자 피드백만이 지시사항
+    let prompt: string;
+    const providerLabel = isGitHub ? 'GitHub' : 'GitLab';
+    const langInstruction = isKo ? '한국어로만 보고하세요.' : 'Report in English only.';
+    if (iterationCount === 1) {
+      prompt = isKo
+        ? `다음 ${providerLabel} 이슈를 해결해주세요. ${langInstruction}\n\n## 이슈 #${iid}: ${issue.title}\n${issue.description || "설명 없음"}`
+        : `Please resolve the following ${providerLabel} issue. ${langInstruction}\n\n## Issue #${iid}: ${issue.title}\n${issue.description || "No description"}`;
+    } else {
+      prompt = isKo
+        ? `이슈 #${iid} "${issue.title}"에 대한 ${iterationCount}차 후속 작업입니다. ${langInstruction}\n${iterationContext}\n\n## ⚠️ 이번 작업 지시 (아래 사용자 코멘트만 수행하세요):\n${latestFeedback}\n\n**중요: 이슈 본문의 원래 요청은 이미 처리 완료되었습니다. 위 대화 히스토리는 맥락 참고용이며, "이번 작업 지시" 섹션의 사용자 코멘트만 수행하세요.**`
+        : `This is follow-up iteration #${iterationCount} for issue #${iid} "${issue.title}". ${langInstruction}\n${iterationContext}\n\n## ⚠️ Current Task (only perform the user comments below):\n${latestFeedback}\n\n**Important: The original request in the issue body has already been completed. The conversation history above is for context only — only perform what is described in the "Current Task" section.**`;
+    }
 
-## 이슈 #${iid}: ${issue.title}
-${issue.description || "설명 없음"}
-${iterationContext}
+    if (isGitHub) {
+      const ownerRepo = repoUrlParsed.pathname.startsWith('/') ? repoUrlParsed.pathname.slice(1) : repoUrlParsed.pathname;
+      prompt += isKo ? `
+
+## GitHub 연동 정보:
+- GitHub API: https://api.github.com
+- Repository: ${ownerRepo}
+- Issue Number: ${iid}
+- 인증: 환경변수 IVE_GITHUB_TOKEN 사용 (Authorization: Bearer 헤더)
+
+### 사용 가능한 GitHub API 예시:
+\`\`\`bash
+# 이슈에 코멘트 달기
+curl -s -H "Authorization: Bearer $IVE_GITHUB_TOKEN" -H "Accept: application/vnd.github+json" -X POST "https://api.github.com/repos/${ownerRepo}/issues/${iid}/comments" -d '{"body":"코멘트 내용"}'
+
+# 이슈 정보 조회
+curl -s -H "Authorization: Bearer $IVE_GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${ownerRepo}/issues/${iid}"
+
+# 이슈 코멘트 목록
+curl -s -H "Authorization: Bearer $IVE_GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${ownerRepo}/issues/${iid}/comments"
+\`\`\`` : `
+
+## GitHub Integration:
+- GitHub API: https://api.github.com
+- Repository: ${ownerRepo}
+- Issue Number: ${iid}
+- Auth: Use IVE_GITHUB_TOKEN env var (Authorization: Bearer header)
+
+### Available GitHub API Examples:
+\`\`\`bash
+# Post a comment on the issue
+curl -s -H "Authorization: Bearer $IVE_GITHUB_TOKEN" -H "Accept: application/vnd.github+json" -X POST "https://api.github.com/repos/${ownerRepo}/issues/${iid}/comments" -d '{"body":"Comment text"}'
+
+# Get issue details
+curl -s -H "Authorization: Bearer $IVE_GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${ownerRepo}/issues/${iid}"
+
+# List issue comments
+curl -s -H "Authorization: Bearer $IVE_GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${ownerRepo}/issues/${iid}/comments"
+\`\`\``;
+    } else {
+      const gitlabBaseUrl = `${repoUrlParsed.protocol}//${repoUrlParsed.host}`;
+      const projectPath = repoUrlParsed.pathname.startsWith('/') ? repoUrlParsed.pathname.slice(1) : repoUrlParsed.pathname;
+      const encodedProjectPath = encodeURIComponent(projectPath);
+      prompt += isKo ? `
 
 ## GitLab 연동 정보:
 - GitLab API: ${gitlabBaseUrl}/api/v4
 - Project: ${projectPath} (encoded: ${encodedProjectPath})
 - Issue IID: ${iid}
-- 인증: 환경변수 GITLAB_TOKEN 사용 (PRIVATE-TOKEN 헤더)
+- 인증: 환경변수 IVE_GITLAB_TOKEN 사용 (PRIVATE-TOKEN 헤더)
 
 ### 사용 가능한 GitLab API 예시:
 \`\`\`bash
 # 이슈에 코멘트 달기
-curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" -X POST "${gitlabBaseUrl}/api/v4/projects/${encodedProjectPath}/issues/${iid}/notes" --data-urlencode "body=코멘트 내용"
+curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" -X POST "${gitlabBaseUrl}/api/v4/projects/${encodedProjectPath}/issues/${iid}/notes" --data-urlencode "body=코멘트 내용"
 
 # 이슈 정보 조회
-curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/projects/${encodedProjectPath}/issues/${iid}"
+curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/projects/${encodedProjectPath}/issues/${iid}"
 
 # 이슈 코멘트 목록
-curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/projects/${encodedProjectPath}/issues/${iid}/notes"
-\`\`\`
+curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/projects/${encodedProjectPath}/issues/${iid}/notes"
+\`\`\`` : `
+
+## GitLab Integration:
+- GitLab API: ${gitlabBaseUrl}/api/v4
+- Project: ${projectPath} (encoded: ${encodedProjectPath})
+- Issue IID: ${iid}
+- Auth: Use IVE_GITLAB_TOKEN env var (PRIVATE-TOKEN header)
+
+### Available GitLab API Examples:
+\`\`\`bash
+# Post a comment on the issue
+curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" -X POST "${gitlabBaseUrl}/api/v4/projects/${encodedProjectPath}/issues/${iid}/notes" --data-urlencode "body=Comment text"
+
+# Get issue details
+curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/projects/${encodedProjectPath}/issues/${iid}"
+
+# List issue comments
+curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/projects/${encodedProjectPath}/issues/${iid}/notes"
+\`\`\``;
+    }
+
+    prompt += isKo ? `
 
 ## 지시사항:
 - 프로젝트 구조와 스타일을 파악하고 관련 코드를 수정하세요.
 - 수정 완료 후 git add로 변경 사항을 스테이징하세요.
 - git commit/push는 하지 마세요.
 - 작업 진행 중 중요한 발견이나 질문이 있으면 이슈에 코멘트를 남기세요.
-- 작업 시작 시 간단한 착수 코멘트를 이슈에 남기세요.`;
+- 작업 시작 시 간단한 착수 코멘트를 이슈에 남기세요.
+- 아주 꼼꼼히 충분한 시간을 가지고 정확히 문제를 해결하세요.
+- 의도한 기능이 동작하지 않을 이유가 0이 될 때까지 검토 또 검토하세요.
+- 화면 설계 시에는 가급적 텍스트아트로 작업의 결과를 제공하세요.` : `
 
-    // 5. 에이전트 CLI 실행
+## Instructions:
+- Understand the project structure and style, then modify the relevant code.
+- After completing changes, stage them with git add.
+- Do NOT git commit or push.
+- If you find important discoveries or have questions during work, leave a comment on the issue.
+- Leave a brief start comment on the issue when you begin work.
+- Take your time and be thorough — resolve the problem precisely.
+- Review repeatedly until there are zero reasons the intended functionality could fail.
+- When designing UI, provide text-art mockups of the result where possible.`;
+
+    // 5. 에이전트 CLI 실행 (시스템 설정의 CLI 경로 우선 사용)
+    const systemCliPath = getSystemSetting(`cli.${agent.cliName}.path`);
+    let resolvedCliPath = systemCliPath || agent.cliPath;
+    // CLI 경로가 존재하지 않으면 which로 자동 탐색
+    const mainBin = resolvedCliPath.split(' ')[0];
+    if (!fs.existsSync(mainBin)) {
+      try {
+        const { stdout } = await execFile('which', [path.basename(mainBin)]);
+        const detected = stdout.trim();
+        if (detected) {
+          log(`CLI 경로 "${mainBin}" 없음 → "${detected}" 감지`, 'system');
+          resolvedCliPath = resolvedCliPath.replace(mainBin, detected);
+        }
+      } catch { /* which 실패 시 원래 경로 유지 */ }
+    }
+
     const startTime = Date.now();
+    const isOpenCode = agent.cliName === 'opencode';
     await new Promise<void>((resolve, reject) => {
-      const cliParts = agent.cliPath.split(' ');
+      const cliParts = resolvedCliPath.split(' ');
       const mainCmd = cliParts[0];
-      const allowedTools = ['Read', 'Edit', 'Write', 'Grep', 'Glob', 'Bash', 'WebFetch'];
-      const args = [
-        ...cliParts.slice(1),
-        '--dangerously-skip-permissions',
-        '--output-format', 'stream-json',
-        '--verbose',
-        '--max-turns', String(agent.maxTurns || 200),
-        '--allowedTools', ...allowedTools,
-        '-p', prompt
-      ];
 
-      log(`CMD: ${mainCmd} ${args.slice(0, -2).join(' ')} [prompt omitted]`, 'system');
+      let args: string[];
+      let spawnEnv: Record<string, string | undefined>;
+
+      // MCP 설정 로드 (시스템 전체 설정)
+      const mcpConfigRaw = getSystemSetting('mcp.config');
+      let mcpServers: Record<string, any> | null = null;
+      if (mcpConfigRaw) {
+        try { mcpServers = JSON.parse(mcpConfigRaw); } catch { /* 잘못된 JSON 무시 */ }
+      }
+
+      if (isOpenCode) {
+        // opencode run --format json "prompt"
+        // max-turns, permissions, MCP는 OPENCODE_CONFIG_CONTENT 환경변수로 전달
+        const opencodeConfig: any = {
+          agent: { coder: { steps: agent.maxTurns || 200, permission: 'allow' } },
+          compaction: { auto: true },
+        };
+        if (mcpServers) opencodeConfig.mcp = mcpServers;
+
+        args = [
+          ...cliParts.slice(1),
+          'run',
+          '--format', 'json',
+          prompt,
+        ];
+        spawnEnv = {
+          ...process.env,
+          OPENCODE_CONFIG_CONTENT: JSON.stringify(opencodeConfig),
+          // GITLAB_TOKEN은 OpenCode가 GitLab AI provider로 자동 감지하므로 제외
+          // 대신 IVE_GITLAB_TOKEN으로 전달 (프롬프트에서 이 변수명 사용)
+          IVE_GITLAB_TOKEN: token,
+          // GITHUB_TOKEN도 OpenCode가 GitHub Copilot으로 자동 감지하므로 제외
+          IVE_GITHUB_TOKEN: token,
+        };
+      } else {
+        // Claude Code: claude --dangerously-skip-permissions --output-format stream-json ...
+        // MCP는 workspace .mcp.json 파일로 주입
+        if (mcpServers) {
+          // opencode 포맷 → Claude Code .mcp.json 포맷으로 변환
+          const claudeMcp: Record<string, any> = {};
+          for (const [name, cfg] of Object.entries(mcpServers)) {
+            if (cfg.type === 'local' && Array.isArray(cfg.command) && cfg.command.length > 0) {
+              claudeMcp[name] = {
+                command: cfg.command[0],
+                args: cfg.command.slice(1),
+                ...(cfg.environment ? { env: cfg.environment } : {}),
+              };
+            } else if (cfg.type === 'remote' && cfg.url) {
+              claudeMcp[name] = { url: cfg.url, ...(cfg.headers ? { headers: cfg.headers } : {}) };
+            }
+          }
+          if (Object.keys(claudeMcp).length > 0) {
+            try {
+              fs.writeFileSync(
+                path.join(workspacePath, '.mcp.json'),
+                JSON.stringify({ mcpServers: claudeMcp }, null, 2)
+              );
+            } catch { /* 파일 쓰기 실패 시 무시 */ }
+          }
+        }
+
+        const allowedTools = ['Read', 'Edit', 'Write', 'Grep', 'Glob', 'Bash', 'WebFetch'];
+        args = [
+          ...cliParts.slice(1),
+          '--dangerously-skip-permissions',
+          '--output-format', 'stream-json',
+          '--verbose',
+          '--max-turns', String(agent.maxTurns || 200),
+          '--allowedTools', ...allowedTools,
+          '-p', prompt,
+        ];
+        spawnEnv = {
+          ...process.env,
+          GITLAB_TOKEN: token, GITLAB_API_TOKEN: token,
+          GITHUB_TOKEN: token,
+        };
+      }
+
+      log(`CMD: ${mainCmd} ${args.slice(0, isOpenCode ? -1 : -2).join(' ')} [prompt omitted]`, 'system');
       log(`CWD: ${workspacePath}`, 'system');
 
       const child = spawn(mainCmd, args, {
         cwd: workspacePath,
         stdio: ['ignore', 'pipe', 'pipe'],
-        env: { ...process.env, GITLAB_TOKEN: token, GITLAB_API_TOKEN: token },
+        env: spawnEnv as NodeJS.ProcessEnv,
         detached: true,  // 새 프로세스 그룹 생성 → kill -pgid로 전체 종료 가능
       });
 
@@ -546,13 +912,94 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
         log(`PID: ${child.pid} (PGID: -${child.pid})`, 'system');
       }
 
-      // stream-json 포맷을 파싱하여 사람이 읽을 수 있는 로그로 변환
+      // stream-json / opencode --format json 포맷을 파싱하여 사람이 읽을 수 있는 로그로 변환
       let stdoutBuffer = '';
       let totalInputTokens = 0;
       let totalOutputTokens = 0;
       let totalCostUsd = 0;
       let totalTurns = 0;
       let assistantTurnCount = 0;
+      let detectedModel = '';
+
+      const processEvent = (event: any) => {
+        // 모델명 캡처 (어떤 이벤트든 model 필드가 있으면 저장)
+        const eventModel = event.model ?? event.modelId ?? event.model_id ?? '';
+        if (eventModel && !detectedModel) detectedModel = eventModel;
+
+        if (isOpenCode) {
+          // opencode 이벤트 처리
+          const formatted = formatOpenCodeEvent(event, project.showToolUsage);
+          if (formatted) logStream.write(formatted + '\n');
+          const md = formatOpenCodeEventMarkdown(event);
+          if (md) conversationParts.push(md);
+          // 도구 활동 추적 (OpenCode 1.x: tool info is in event.part)
+          if (event.type === 'tool_use') {
+            const toolName = event.part?.tool ?? event.tool ?? event.name ?? '';
+            if (toolName) {
+              const detail = formatToolInput(toolName, event.part?.state?.input ?? event.input ?? event.args ?? {});
+              setToolActivity(executionId, agent.id, toolName, detail);
+            }
+          } else if (event.type === 'text') {
+            setThinking(executionId, agent.id);
+            assistantTurnCount++;
+          } else if (event.type === 'step_start') {
+            setThinking(executionId, agent.id);
+          }
+          // 토큰/비용 누적 (OpenCode 1.x: step_finish에 per-step 토큰 포함)
+          if (event.type === 'step_finish') {
+            const tokens = event.part?.tokens ?? {};
+            const iT = tokens.input ?? 0;
+            const oT = tokens.output ?? 0;
+            const cost = event.part?.cost ?? 0;
+            totalInputTokens += Number(iT);
+            totalOutputTokens += Number(oT);
+            totalCostUsd += Number(cost);
+            if (event.part?.reason === 'stop') totalTurns = assistantTurnCount;
+          }
+          // Legacy session.status 이벤트 처리 (구버전 호환)
+          if (event.type === 'session.status') {
+            const iT = event.inputTokens ?? event.input_tokens ?? event.tokens?.input ?? 0;
+            const oT = event.outputTokens ?? event.output_tokens ?? event.tokens?.output ?? 0;
+            const cost = event.cost ?? event.costUsd ?? event.cost_usd ?? 0;
+            const turns = event.turns ?? event.numTurns ?? event.num_turns ?? 0;
+            totalInputTokens += Number(iT);
+            totalOutputTokens += Number(oT);
+            totalCostUsd += Number(cost);
+            totalTurns = Math.max(totalTurns, Number(turns));
+          }
+        } else {
+          // Claude Code 이벤트 처리
+          const formatted = formatStreamEvent(event, project.showToolUsage);
+          if (formatted) logStream.write(formatted + '\n');
+          const md = formatStreamEventMarkdown(event);
+          if (md) conversationParts.push(md);
+          // 도구 활동 추적
+          if (event.type === 'assistant') {
+            const parts = event.message?.content || [];
+            let foundTool = false;
+            for (const part of parts) {
+              if (part.type === 'tool_use' && part.name) {
+                const detail = formatToolInput(part.name, part.input || '');
+                setToolActivity(executionId, agent.id, part.name, detail);
+                foundTool = true;
+              }
+            }
+            if (!foundTool) setThinking(executionId, agent.id);
+            assistantTurnCount++;
+          }
+          // 토큰/비용/턴 누적
+          if (event.type === 'result') {
+            const iT = event.input_tokens ?? event.inputTokens ?? event.usage?.input_tokens ?? 0;
+            const oT = event.output_tokens ?? event.outputTokens ?? event.usage?.output_tokens ?? 0;
+            const cost = event.cost_usd ?? event.costUsd ?? event.cost ?? 0;
+            const turns = event.num_turns ?? event.numTurns ?? 0;
+            totalInputTokens += Number(iT);
+            totalOutputTokens += Number(oT);
+            totalCostUsd += Number(cost);
+            totalTurns = Math.max(totalTurns, Number(turns));
+          }
+        }
+      };
 
       child.stdout.on('data', (data: Buffer) => {
         stdoutBuffer += data.toString();
@@ -562,26 +1009,7 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
           if (!line.trim()) continue;
           try {
             const event = JSON.parse(line);
-            const formatted = formatStreamEvent(event);
-            if (formatted) logStream.write(formatted + '\n');
-            // 이슈 노트용 마크다운 수집
-            const md = formatStreamEventMarkdown(event);
-            if (md) conversationParts.push(md);
-            // assistant 이벤트 카운트 (턴 수 fallback용)
-            if (event.type === 'assistant') {
-              assistantTurnCount++;
-            }
-            // 토큰/비용/턴 누적
-            if (event.type === 'result') {
-              const iT = event.input_tokens ?? event.inputTokens ?? event.usage?.input_tokens ?? 0;
-              const oT = event.output_tokens ?? event.outputTokens ?? event.usage?.output_tokens ?? 0;
-              const cost = event.cost_usd ?? event.costUsd ?? event.cost ?? 0;
-              const turns = event.num_turns ?? event.numTurns ?? 0;
-              totalInputTokens += Number(iT);
-              totalOutputTokens += Number(oT);
-              totalCostUsd += Number(cost);
-              totalTurns = Math.max(totalTurns, Number(turns));
-            }
+            processEvent(event);
           } catch {
             logStream.write(line + '\n');
           }
@@ -597,12 +1025,12 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
         if (stdoutBuffer.trim()) {
           try {
             const event = JSON.parse(stdoutBuffer);
-            const formatted = formatStreamEvent(event);
-            if (formatted) logStream.write(formatted + '\n');
+            processEvent(event);
           } catch {
             logStream.write(stdoutBuffer + '\n');
           }
         }
+        clearActivity(executionId);
         log(`CLI 종료: code=${code}, signal=${signal}`, code === 0 ? 'system' : 'error');
         // 토큰/비용/턴 DB 저장 (CLI가 cost를 제공하지 않으면 토큰 수로 환산)
         // result 이벤트에서 turns를 못 가져왔으면 assistant 이벤트 카운트를 사용
@@ -610,8 +1038,8 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
         if (totalInputTokens || totalOutputTokens || totalCostUsd || finalTurns) {
           const finalCost = totalCostUsd > 0
             ? totalCostUsd
-            : estimateCost(agent.cliName, totalInputTokens, totalOutputTokens);
-          updateExecutionTokens(executionId, totalInputTokens, totalOutputTokens, finalCost, finalTurns);
+            : calcCostFromDb(agent.cliName, totalInputTokens, totalOutputTokens, detectedModel || undefined);
+          updateExecutionTokens(executionId, totalInputTokens, totalOutputTokens, finalCost, finalTurns, detectedModel || undefined);
         }
         if (code === 0) resolve();
         else reject(new Error(`Agent CLI exited with code ${code}`));
@@ -626,68 +1054,141 @@ curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/project
     const durationStr = `${Math.max(1, Math.floor(durationSeconds/60))}m`;
 
     // 6. 변경 사항 확인 및 커밋/푸시
-    const { stdout: diffResult } = await exec(`git diff --cached --name-only`, { cwd: workspacePath });
+    const { stdout: diffResult } = await execFile('git', ['diff', '--cached', '--name-only'], { cwd: workspacePath });
     if (diffResult.trim()) {
       log("변경사항 감지. 커밋 및 푸시 중...", 'system');
-      await exec(`git commit -m "fix: resolve #${iid} - ${issue.title}"`, { cwd: workspacePath });
-      await exec(`git push -f origin ${branchName}`, { cwd: workspacePath });
+      await execFile('git', ['commit', '-m', `fix: resolve #${iid} - ${issue.title}`], { cwd: workspacePath });
+      try {
+        await execFile('git', ['push', '-f', 'origin', branchName], { cwd: workspacePath });
+      } catch (pushErr: any) {
+        const pushMsg = pushErr.message || String(pushErr);
+        const isPermission = pushMsg.includes('403') || pushMsg.includes('denied') || pushMsg.includes('Permission') || pushMsg.includes('protected');
+        log(`push 실패: ${pushMsg}`, 'error');
+        // 이슈에 push 실패 사유 코멘트 (best-effort)
+        const pushFailReason = isPermission ? (isKo ? 'Push 권한 없음' : 'No push permission') : `Push ${isKo ? '실패' : 'failed'}: ${pushMsg.substring(0, 100)}`;
+        const pushFailNote = isPermission
+          ? (isKo
+            ? `<!-- ive-bot -->\n## ${agent.name} Push 권한 없음\n\n코드 수정은 완료했으나, 이 저장소에 push 권한이 없어 브랜치를 생성할 수 없습니다.\n토큰 계정에 저장소 쓰기(write) 권한을 부여하거나, fork 방식을 사용해주세요.\n\n소요 시간: ${durationStr}`
+            : `<!-- ive-bot -->\n## ${agent.name} No Push Permission\n\nCode changes are complete, but cannot create a branch due to insufficient push permissions.\nPlease grant write access to the token account or use a fork-based workflow.\n\nDuration: ${durationStr}`)
+          : (isKo
+            ? `<!-- ive-bot -->\n## ${agent.name} Push 실패\n\n코드 수정은 완료했으나 push에 실패했습니다: ${pushMsg}\n\n소요 시간: ${durationStr}`
+            : `<!-- ive-bot -->\n## ${agent.name} Push Failed\n\nCode changes are complete, but push failed: ${pushMsg}\n\nDuration: ${durationStr}`);
+        setIssueStage(project.id, iid, 'dev_fail', pushFailReason);
+        try {
+          if (isGitHub) {
+            await addGitHubIssueComment(project, iid, token, pushFailNote);
+          } else {
+            await addGitLabIssueComment(project, iid, token, pushFailNote);
+          }
+        } catch (e) { console.warn(`[Scanner] Remote comment failed:`, e); }
+        updateExecutionStatus(executionId, 'failed', new Date().toISOString());
+        updateAgentStatus(agent.id, 'available');
+        logStream.end();
+        try { if (fs.existsSync(workspacePath)) fs.rmSync(workspacePath, { recursive: true, force: true }); } catch {}
+        return;
+      }
 
-      const existingMR = await getGitLabMR(project, token, branchName);
+      // MR/PR 생성 또는 업데이트
       let mrUrl = "";
-      if (existingMR) {
-        mrUrl = existingMR.web_url;
-        await addGitLabMRNote(project, token, existingMR.iid, `## 반복 수정 (${iterationCount}차)\n피드백을 반영하여 추가 수정했습니다.`);
+      if (isGitHub) {
+        const existingPR = await getGitHubPR(project, token, branchName);
+        if (existingPR) {
+          mrUrl = existingPR.web_url;
+          await addGitHubPRNote(project, token, existingPR.iid, isKo ? `## 반복 수정 (${iterationCount}차)\n피드백을 반영하여 추가 수정했습니다.` : `## Iteration #${iterationCount}\nApplied feedback and made additional changes.`);
+        } else {
+          const prResult = await createGitHubPR(project, token, {
+            source_branch: branchName,
+            target_branch: baseBranch,
+            title: `fix: resolve #${iid} - ${issue.title}`,
+            description: isKo ? `이슈 #${iid} 해결을 위한 자동 PR입니다. (${iterationCount}차 작업)` : `Auto-generated PR to resolve issue #${iid}. (Iteration #${iterationCount})`,
+          });
+          mrUrl = prResult?.web_url || "";
+        }
       } else {
-        const mrResult = await createGitLabMR(project, token, {
-          source_branch: branchName,
-          target_branch: baseBranch,
-          title: `fix: resolve #${iid} - ${issue.title}`,
-          description: `이슈 #${iid} 해결을 위한 자동 MR입니다. (${iterationCount}차 작업)`,
-          remove_source_branch: false,
-          squash: true
-        });
-        mrUrl = mrResult?.web_url || "";
+        const existingMR = await getGitLabMR(project, token, branchName);
+        if (existingMR) {
+          mrUrl = existingMR.web_url;
+          await addGitLabMRNote(project, token, existingMR.iid, isKo ? `## 반복 수정 (${iterationCount}차)\n피드백을 반영하여 추가 수정했습니다.` : `## Iteration #${iterationCount}\nApplied feedback and made additional changes.`);
+        } else {
+          const mrResult = await createGitLabMR(project, token, {
+            source_branch: branchName,
+            target_branch: baseBranch,
+            title: `fix: resolve #${iid} - ${issue.title}`,
+            description: isKo ? `이슈 #${iid} 해결을 위한 자동 MR입니다. (${iterationCount}차 작업)` : `Auto-generated MR to resolve issue #${iid}. (Iteration #${iterationCount})`,
+            remove_source_branch: false,
+            squash: true
+          });
+          mrUrl = mrResult?.web_url || "";
+        }
       }
 
-      // 대화 내용을 마크다운으로 정리 (최대 60000자 — GitLab 노트 제한 65535)
+      const mrLabel = isGitHub ? 'PR' : 'MR';
+      // 대화 내용을 마크다운으로 정리 (최대 60000자)
       const conversationLog = conversationParts.join('\n\n').substring(0, 60000);
-      const completionNote = `## IVE(봇) ${isDevelop ? '개발' : '검증'} 완료\n\nMR: ${mrUrl}\n소요 시간: ${durationStr}\n\n${isDevelop ? '개발이 완료되었습니다. 검증 단계로 전환합니다.' : '검증이 완료되었습니다. 리뷰 후 머지해주세요.'}\n\n<details>\n<summary>🤖 AI 작업 로그 (펼치기)</summary>\n\n${conversationLog}\n\n</details>`;
-      await addGitLabIssueComment(project, iid, token, completionNote);
-      await addGitLabSpentTime(project, iid, token, durationStr);
-      
-      if (isDevelop) {
-        // 개발 완료: IVE(D) → IVE(V) (검증 큐로 이동)
-        await updateGitLabIssueLabels(project, iid, token, [project.labelValidation], [currentLabel]);
+      const mrLine = mrUrl ? `${mrLabel}: ${mrUrl}` : `${mrLabel}: ${isKo ? '생성 실패 (권한 부족 또는 API 오류)' : 'creation failed (insufficient permissions or API error)'}`;
+      const completionNote = isKo
+        ? `<!-- ive-bot -->\n## ${agent.name} 개발 완료\n\n${mrLine}\n소요 시간: ${durationStr}\n\n개발이 완료되었습니다. 리뷰 후 머지해주세요.\n\n<details>\n<summary>🤖 AI 작업 로그 (펼치기)</summary>\n\n${conversationLog}\n\n</details>`
+        : `<!-- ive-bot -->\n## ${agent.name} Development Complete\n\n${mrLine}\nDuration: ${durationStr}\n\nDevelopment is complete. Please review and merge.\n\n<details>\n<summary>🤖 AI Work Log (expand)</summary>\n\n${conversationLog}\n\n</details>`;
+      if (isGitHub) {
+        await addGitHubIssueComment(project, iid, token, completionNote);
       } else {
-        // 검증 완료: IVE(V) → IVE(E) (완료)
-        await updateGitLabIssueLabels(project, iid, token, [project.labelDone], [currentLabel]);
+        await addGitLabIssueComment(project, iid, token, completionNote);
+        await addGitLabSpentTime(project, iid, token, durationStr);
       }
+
+      setIssueStage(project.id, iid, 'done');
       log("작업 완료.", 'system');
       updateExecutionStatus(executionId, 'success', new Date().toISOString());
     } else {
       log("코드 변경사항 없음. 작업 완료로 처리.", 'system');
       const noChangeLog = conversationParts.join('\n\n').substring(0, 60000);
-      await addGitLabIssueComment(project, iid, token, `## IVE(봇) ${isDevelop ? '개발' : '검증'} 완료\n\n코드 변경 없이 작업을 완료했습니다.\n소요 시간: ${durationStr}\n\n<details>\n<summary>🤖 AI 작업 로그 (펼치기)</summary>\n\n${noChangeLog}\n\n</details>`);
-      await addGitLabSpentTime(project, iid, token, durationStr);
-      if (isDevelop) {
-        await updateGitLabIssueLabels(project, iid, token, [project.labelValidation], [currentLabel]);
-      } else {
-        await updateGitLabIssueLabels(project, iid, token, [project.labelDone], [currentLabel]);
-      }
+      const noChangeNote = isKo
+        ? `<!-- ive-bot -->\n## ${agent.name} 개발 완료\n\n코드 변경 없이 작업을 완료했습니다.\n소요 시간: ${durationStr}\n\n<details>\n<summary>🤖 AI 작업 로그 (펼치기)</summary>\n\n${noChangeLog}\n\n</details>`
+        : `<!-- ive-bot -->\n## ${agent.name} Development Complete\n\nTask completed without code changes.\nDuration: ${durationStr}\n\n<details>\n<summary>🤖 AI Work Log (expand)</summary>\n\n${noChangeLog}\n\n</details>`;
+      try {
+        if (isGitHub) {
+          await addGitHubIssueComment(project, iid, token, noChangeNote);
+        } else {
+          await addGitLabIssueComment(project, iid, token, noChangeNote);
+          await addGitLabSpentTime(project, iid, token, durationStr);
+        }
+      } catch (e) { console.warn(`[Scanner] Remote comment failed:`, e); }
+      setIssueStage(project.id, iid, 'done');
       updateExecutionStatus(executionId, 'success', new Date().toISOString());
     }
 
   } catch (err: any) {
     log(`오류 발생: ${err.message}`, 'error');
     const errorLog = conversationParts.join('\n\n').substring(0, 60000);
-    await addGitLabIssueComment(project, iid, token, `## IVE(봇) 실행 오류\n오류가 발생했습니다: ${err.message}\n\n<details>\n<summary>🤖 AI 작업 로그 (펼치기)</summary>\n\n${errorLog}\n\n</details>`);
-    await updateGitLabIssueLabels(project, iid, token, [isDevelop ? project.labelFailDev : project.labelFailVal], [currentLabel]);
+    const errorNote = isKo
+      ? `<!-- ive-bot -->\n## ${agent.name} 실행 오류\n오류가 발생했습니다: ${err.message}\n\n<details>\n<summary>🤖 AI 작업 로그 (펼치기)</summary>\n\n${errorLog}\n\n</details>`
+      : `<!-- ive-bot -->\n## ${agent.name} Execution Error\nAn error occurred: ${err.message}\n\n<details>\n<summary>🤖 AI Work Log (expand)</summary>\n\n${errorLog}\n\n</details>`;
+    setIssueStage(project.id, iid, 'dev_fail', (err.message || (isKo ? '알 수 없는 오류' : 'Unknown error')).substring(0, 200));
+    try {
+      if (isGitHub) {
+        await addGitHubIssueComment(project, iid, token, errorNote);
+      } else {
+        await addGitLabIssueComment(project, iid, token, errorNote);
+      }
+    } catch (e) { console.warn(`[Scanner] Remote comment failed:`, e); }
     updateExecutionStatus(executionId, 'failed', new Date().toISOString());
   } finally {
+    // 에이전트 상태를 'available'로 복원
+    updateAgentStatus(agent.id, 'available');
+
     logStream.end();
     try {
       if (fs.existsSync(workspacePath)) {
         fs.rmSync(workspacePath, { recursive: true, force: true });
+      }
+    } catch (e) { /* ignore */ }
+
+    // 대기 이슈가 있으면 즉시 재스캔 → 빈 에이전트에 바로 배정
+    try {
+      const freshProject = getProject(project.id);
+      if (freshProject && (freshProject.lastScannedIssueCount ?? 0) > 0) {
+        console.log(`[Scanner] Agent ${agent.name} freed — re-scanning ${freshProject.name} for waiting issues`);
+        scanProject(freshProject, true);
       }
     } catch (e) { /* ignore */ }
   }

@@ -1,56 +1,39 @@
 'use client'
 
-import { useState, useMemo } from 'react'
-import { CliName } from '@/types'
+import { useState, useEffect } from 'react'
+import { useTranslations } from 'next-intl'
+import { CliName, DEFAULT_AVATARS } from '@/types'
 import { useStore } from '@/lib/store'
+import { AvatarSelector } from '@/components/agent/AgentAvatar'
 
 interface Props {
   onSuccess?: () => void
 }
 
-type OS = 'mac' | 'windows' | 'linux'
-
-function detectOS(): OS {
-  if (typeof navigator === 'undefined') return 'linux'
-  const ua = navigator.userAgent.toLowerCase()
-  if (ua.includes('win')) return 'windows'
-  if (ua.includes('mac')) return 'mac'
-  return 'linux'
-}
-
-const defaultPaths: Record<OS, Record<CliName, string>> = {
-  mac: {
-    claude: '/opt/homebrew/bin/claude',
-    gemini: '/opt/homebrew/bin/gemini',
-    codex: '/opt/homebrew/bin/codex',
-  },
-  linux: {
-    claude: '/usr/local/bin/claude',
-    gemini: '/usr/local/bin/gemini',
-    codex: '/usr/local/bin/codex',
-  },
-  windows: {
-    claude: 'C:\\Users\\%USERNAME%\\AppData\\Roaming\\npm\\claude.cmd',
-    gemini: 'C:\\Users\\%USERNAME%\\AppData\\Roaming\\npm\\gemini.cmd',
-    codex: 'C:\\Users\\%USERNAME%\\AppData\\Roaming\\npm\\codex.cmd',
-  },
-}
-
-const cliTools: { value: CliName; label: string; icon: string; desc: string; defaultName: string }[] = [
-  { value: 'claude', label: 'Claude Code', icon: 'fa-solid fa-atom', desc: 'Anthropic의 AI 코딩 CLI', defaultName: 'Claude' },
-  { value: 'gemini', label: 'Gemini CLI', icon: 'fa-brands fa-google', desc: 'Google의 AI 코딩 CLI', defaultName: 'Gemini' },
-  { value: 'codex', label: 'Codex CLI', icon: 'fa-solid fa-brain', desc: 'OpenAI의 AI 코딩 CLI', defaultName: 'Codex' },
-]
-
 export default function AgentForm({ onSuccess }: Props) {
-  const { addAgent } = useStore()
-  const os = useMemo(() => detectOS(), [])
+  const t = useTranslations('agent')
+  const tc = useTranslations('common')
+  const { addAgent, state } = useStore()
+  const userMaxAgents = state.user?.maxAgents || 0
+  const userMaxTurns = state.user?.maxTurns || 0
+  const currentAgentCount = state.agents.length
+  const limitReached = userMaxAgents > 0 && currentAgentCount >= userMaxAgents
 
-  const [cliName, setCliName] = useState<CliName>('claude')
-  const [name, setName] = useState(cliTools[0].defaultName)
-  const [cliPath, setCliPath] = useState(defaultPaths[os].claude)
+  const cliTools: { value: CliName; label: string; icon: string; desc: string; defaultName: string }[] = [
+    { value: 'claude', label: 'Claude Code', icon: 'fa-solid fa-atom', desc: t('claudeDesc'), defaultName: 'Claude' },
+    { value: 'opencode', label: 'OpenCode', icon: 'fa-solid fa-terminal', desc: t('opencodeDesc'), defaultName: 'OpenCode' },
+  ]
+
+  const allowedClis = state.user?.allowedClis || ['opencode']
+  const availableTools = cliTools.filter(t => allowedClis.includes(t.value))
+  const defaultCli = (availableTools[0]?.value ?? 'opencode') as CliName
+
+  const [cliName, setCliName] = useState<CliName>(defaultCli)
+  const [name, setName] = useState(availableTools[0]?.defaultName ?? 'Agent')
+  const [avatar, setAvatar] = useState<string>(() => DEFAULT_AVATARS[Math.floor(Math.random() * DEFAULT_AVATARS.length)].id)
+  const [cliPaths, setCliPaths] = useState<Record<string, string>>({})
   const [cliVersion, setCliVersion] = useState('')
-  const [maxTurns, setMaxTurns] = useState(200)
+  const [maxTurns, setMaxTurns] = useState(() => userMaxTurns > 0 ? Math.floor(userMaxTurns / 2) : 200)
   const [snapshotInterval, setSnapshotInterval] = useState(1)
   const [sparklinePoints, setSparklinePoints] = useState(60)
   const [statsRetention, setStatsRetention] = useState(7)
@@ -58,25 +41,33 @@ export default function AgentForm({ onSuccess }: Props) {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
+  useEffect(() => {
+    fetch('/api/settings/cli-paths')
+      .then(r => r.json())
+      .then(setCliPaths)
+      .catch(() => {})
+  }, [])
+
   function handleCliChange(cli: CliName) {
     setCliName(cli)
     const tool = cliTools.find(t => t.value === cli)
     if (tool) {
-      setCliPath(defaultPaths[os][cli])
       setName(tool.defaultName)
     }
   }
+
+  const currentCliPath = cliPaths[cliName] || ''
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
 
     if (!name.trim()) {
-      setError('Agent 이름을 입력해주세요')
+      setError(t('nameRequired'))
       return
     }
-    if (!cliPath.trim()) {
-      setError('CLI 설치 경로를 입력해주세요')
+    if (!currentCliPath) {
+      setError(t('cliPathMissing'))
       return
     }
 
@@ -84,8 +75,9 @@ export default function AgentForm({ onSuccess }: Props) {
     try {
       await addAgent({
         name: name.trim(),
+        avatar,
         cliName,
-        cliPath: cliPath.trim(),
+        cliPath: currentCliPath,
         cliVersion: cliVersion.trim(),
         maxTurns,
         status: 'available',
@@ -95,7 +87,7 @@ export default function AgentForm({ onSuccess }: Props) {
       })
       onSuccess?.()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Agent 생성 실패')
+      setError(err instanceof Error ? err.message : t('createFailed'))
     } finally {
       setLoading(false)
     }
@@ -105,77 +97,59 @@ export default function AgentForm({ onSuccess }: Props) {
     <form onSubmit={handleSubmit} className="flex flex-col gap-5">
       {/* CLI 도구 선택 */}
       <div>
-        <label className="block text-base font-semibold text-ive-text-muted mb-2">CLI 도구</label>
+        <label className="block text-base font-semibold text-ive-text-muted mb-2">{t('cliTool')}</label>
         <div className="flex flex-col gap-2">
-          {cliTools.map(t => {
-            const disabled = t.value !== 'claude'
-            return (
-              <button
-                key={t.value}
-                type="button"
-                onClick={() => !disabled && handleCliChange(t.value)}
-                disabled={disabled}
-                className={`flex items-center gap-3 p-3 rounded-lg border text-left transition-colors ${
-                  disabled
-                    ? 'bg-ive-bg-deep border-ive-border-subtle opacity-40 cursor-not-allowed'
-                    : cliName === t.value
-                      ? 'bg-ive-green/10 border-ive-green'
-                      : 'bg-ive-bg-card border-ive-border-subtle'
-                }`}
-              >
-                <i className={`${t.icon} text-xl w-6 text-center`} />
-                <div>
-                  <div className={`text-base font-bold ${disabled ? 'text-ive-text-dim' : cliName === t.value ? 'text-ive-green' : 'text-ive-text'}`}>
-                    {t.label}
-                    {disabled && <span className="ml-2 text-sm font-normal text-ive-text-dim">(준비 중)</span>}
-                  </div>
-                  <div className="text-base text-ive-text-muted">{t.desc}</div>
+          {availableTools.map(t => (
+            <button
+              key={t.value}
+              type="button"
+              onClick={() => handleCliChange(t.value)}
+              className={`flex items-center gap-3 p-3 rounded-lg border text-left transition-colors ${
+                cliName === t.value
+                  ? 'bg-ive-green/10 border-ive-green'
+                  : 'bg-ive-bg-card border-ive-border-subtle'
+              }`}
+            >
+              <i className={`${t.icon} text-xl w-6 text-center`} />
+              <div>
+                <div className={`text-base font-bold ${cliName === t.value ? 'text-ive-green' : 'text-ive-text'}`}>
+                  {t.label}
                 </div>
-              </button>
-            )
-          })}
+                <div className="text-base text-ive-text-muted">{t.desc}</div>
+              </div>
+            </button>
+          ))}
         </div>
       </div>
 
       {/* Agent 이름 */}
       <div>
-        <label className="block text-base font-semibold text-ive-text-muted mb-2">Agent 이름</label>
+        <label className="block text-base font-semibold text-ive-text-muted mb-2">{t('agentName')} <span className="text-ive-red">*</span></label>
         <input
           type="text"
           value={name}
           onChange={e => setName(e.target.value)}
-          placeholder="개발 Agent #1"
+          placeholder={t('agentNamePlaceholder')}
           className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-base text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green"
         />
       </div>
 
-      {/* CLI 설치 경로 */}
+      {/* 아바타 선택 */}
       <div>
-        <label className="block text-base font-semibold text-ive-text-muted mb-2">
-          <i className="fa-solid fa-folder mr-1" />설치 경로
-        </label>
-        <input
-          type="text"
-          value={cliPath}
-          onChange={e => setCliPath(e.target.value)}
-          placeholder="/opt/homebrew/bin/claude"
-          className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-base text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green font-mono"
-        />
-        <p className="text-sm text-ive-text-dim mt-1">
-          <i className="fa-solid fa-circle-info mr-1" />장비에 설치된 CLI 실행 파일의 전체 경로
-        </p>
+        <label className="block text-base font-semibold text-ive-text-muted mb-2">{t('avatar')}</label>
+        <AvatarSelector value={avatar} onChange={setAvatar} />
       </div>
 
       {/* 버전 (선택) */}
       <div>
         <label className="block text-base font-semibold text-ive-text-muted mb-2">
-          <i className="fa-solid fa-code-branch mr-1" />버전 <span className="text-ive-text-dim font-normal">(선택)</span>
+          <i className="fa-solid fa-code-branch mr-1" />{t('versionOptional')}
         </label>
         <input
           type="text"
           value={cliVersion}
           onChange={e => setCliVersion(e.target.value)}
-          placeholder="예: 2.1.69"
+          placeholder={t('versionPlaceholder')}
           className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-base text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green font-mono"
         />
       </div>
@@ -183,7 +157,7 @@ export default function AgentForm({ onSuccess }: Props) {
       {/* Max Turns */}
       <div>
         <label className="block text-base font-semibold text-ive-text-muted mb-2">
-          <i className="fa-solid fa-repeat mr-1" />최대 턴 수
+          <i className="fa-solid fa-repeat mr-1" />{t('maxTurns')}
         </label>
         <div className="flex items-center gap-1.5">
           <div className="flex items-center border border-ive-border rounded-lg overflow-hidden bg-ive-bg-input shrink-0">
@@ -195,12 +169,13 @@ export default function AgentForm({ onSuccess }: Props) {
             <span className="w-12 py-3 flex items-center justify-center text-base font-black text-ive-text border-x border-ive-border">{maxTurns}</span>
             <button
               type="button"
-              onClick={() => setMaxTurns(v => Math.min(1000, v + 10))}
+              onClick={() => setMaxTurns(v => Math.min(userMaxTurns > 0 ? userMaxTurns : 1000, v + 10))}
               className="px-2.5 py-3 text-ive-text-muted hover:text-ive-green hover:bg-ive-green/10 transition-colors text-base font-black"
             >+</button>
           </div>
+          {userMaxTurns > 0 && <span className="text-[10px] text-ive-amber shrink-0">max {userMaxTurns}</span>}
           <div className="flex gap-1 flex-1 min-w-0">
-            {[50, 100, 200].map(v => (
+            {[50, 100, 200].filter(v => userMaxTurns <= 0 || v <= userMaxTurns).map(v => (
               <button key={v} type="button" onClick={() => setMaxTurns(v)}
                 className={`flex-1 py-3 rounded-lg text-sm font-black border transition-all ${maxTurns === v ? 'bg-ive-green/10 border-ive-green text-ive-green' : 'bg-ive-bg-card border-ive-border-subtle text-ive-text-dim'}`}
               >{v}</button>
@@ -217,14 +192,14 @@ export default function AgentForm({ onSuccess }: Props) {
           className="flex items-center gap-1.5 text-base font-bold text-ive-cyan mb-3"
         >
           <i className={`fa-solid ${showMonitoring ? 'fa-chevron-down' : 'fa-chevron-right'} text-sm`} />
-          모니터링 설정
+          {t('monitoring')}
         </button>
 
         {showMonitoring && (
           <div className="space-y-4 pb-2 animate-in fade-in slide-in-from-top-2">
             <div>
               <label className="block text-sm font-bold text-ive-text-muted mb-1.5 ml-1">
-                스냅샷 수집 간격 <span className="text-ive-text-dim font-normal">(분)</span>
+                {t('snapshotInterval')} <span className="text-ive-text-dim font-normal">({tc('minutes')})</span>
               </label>
               <div className="flex items-center gap-2">
                 <div className="flex bg-ive-bg-input border border-ive-border rounded-lg overflow-hidden">
@@ -244,7 +219,7 @@ export default function AgentForm({ onSuccess }: Props) {
 
             <div>
               <label className="block text-sm font-bold text-ive-text-muted mb-1.5 ml-1">
-                스파크라인 표시 건수
+                {t('sparklinePoints')}
               </label>
               <div className="flex items-center gap-2">
                 <div className="flex bg-ive-bg-input border border-ive-border rounded-lg overflow-hidden">
@@ -264,7 +239,7 @@ export default function AgentForm({ onSuccess }: Props) {
 
             <div>
               <label className="block text-sm font-bold text-ive-text-muted mb-1.5 ml-1">
-                데이터 보관 기간 <span className="text-ive-text-dim font-normal">(일)</span>
+                {t('dataRetention')} <span className="text-ive-text-dim font-normal">({tc('days')})</span>
               </label>
               <div className="flex items-center gap-2">
                 <div className="flex bg-ive-bg-input border border-ive-border rounded-lg overflow-hidden">
@@ -285,6 +260,13 @@ export default function AgentForm({ onSuccess }: Props) {
         )}
       </div>
 
+      {limitReached && (
+        <div className="text-sm text-ive-amber bg-ive-amber/10 rounded-lg px-3 py-2">
+          <i className="fa-solid fa-triangle-exclamation mr-1" />
+          {t('limitExceededCurrent', { max: userMaxAgents, current: currentAgentCount })}
+        </div>
+      )}
+
       {error && (
         <div className="text-base text-ive-red bg-ive-red/10 rounded-lg px-3 py-2">
           <i className="fa-solid fa-circle-exclamation mr-1" />{error}
@@ -293,10 +275,10 @@ export default function AgentForm({ onSuccess }: Props) {
 
       <button
         type="submit"
-        disabled={loading}
+        disabled={loading || limitReached}
         className="w-full bg-ive-green-dark text-white font-bold py-3 rounded-lg text-base active:bg-ive-green/80 transition-colors mt-2 disabled:opacity-50"
       >
-        {loading ? (<><i className="fa-solid fa-spinner fa-spin mr-1.5" />생성 중...</>) : (<><i className="fa-solid fa-robot mr-1.5" />Agent 추가</>)}
+        {loading ? (<><i className="fa-solid fa-spinner fa-spin mr-1.5" />{tc('creating')}</>) : (<><i className="fa-solid fa-robot mr-1.5" />{t('addAgent')}</>)}
       </button>
     </form>
   )

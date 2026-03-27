@@ -9,38 +9,46 @@ import ProjectForm from '@/components/project/ProjectForm'
 import MobileTabBar from '@/components/layout/MobileTabBar'
 import Modal from '@/components/ui/Modal'
 import ConfirmModal from '@/components/ui/ConfirmModal'
+import { useTranslations } from 'next-intl'
 
 export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
-  const { state, deleteProject, assignAgentToProject, unassignAgentFromProject } = useStore()
+  const { state, deleteProject, assignAgentToProject, unassignAgentFromProject, updateAgentToken } = useStore()
 
   const [showEditProject, setShowEditProject] = useState(false)
   const [showDeleteProject, setShowDeleteProject] = useState(false)
   const [showAssignAgent, setShowAssignAgent] = useState(false)
   const [assignError, setAssignError] = useState('')
+  const [assignToken, setAssignToken] = useState('')
+  // 토큰 편집 중인 에이전트
+  const [editingTokenAgentId, setEditingTokenAgentId] = useState<string | null>(null)
+  const [editTokenValue, setEditTokenValue] = useState('')
+  const tc = useTranslations('common')
+  const tp = useTranslations('project')
+  const ts = useTranslations('stage')
 
   const project = state.projects.find(p => p.id === id)
 
   if (state.loading) {
-    return <div className="min-h-screen flex items-center justify-center text-ive-text-muted text-base">불러오는 중...</div>
+    return <div className="min-h-screen flex items-center justify-center text-ive-text-muted text-base">{tc('loading')}</div>
   }
 
   if (!project) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <p className="text-ive-text-muted mb-4">프로젝트를 찾을 수 없습니다</p>
+          <p className="text-ive-text-muted mb-4">{tp('notFound')}</p>
           <Link href="/" className="text-ive-green text-base font-semibold">
-            <i className="fa-solid fa-arrow-left mr-1" />홈으로
+            <i className="fa-solid fa-arrow-left mr-1" />{tc('home')}
           </Link>
         </div>
       </div>
     )
   }
 
+  const isOwner = !project.shareRole
   const assignedAgents = project.assignedAgents || []
-  // 모든 프로젝트에 배정된 에이전트 ID 수집 (한 에이전트는 한 프로젝트에만 배정 가능)
   const allAssignedAgentIds = new Set<string>()
   for (const p of state.projects) {
     for (const pa of (p.assignedAgents || [])) {
@@ -57,9 +65,10 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   async function handleAssignAgent(agentId: string) {
     setAssignError('')
     try {
-      await assignAgentToProject(id, agentId)
+      await assignAgentToProject(id, agentId, assignToken.trim() || undefined)
+      setAssignToken('')
     } catch (err) {
-      setAssignError(err instanceof Error ? err.message : '개발자 배정 실패')
+      setAssignError(err instanceof Error ? err.message : tp('assignFailed'))
     }
   }
 
@@ -68,16 +77,23 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     try {
       await unassignAgentFromProject(id, agentId)
     } catch (err) {
-      setAssignError(err instanceof Error ? err.message : '개발자 해제 실패')
+      setAssignError(err instanceof Error ? err.message : tp('unassignFailed'))
     }
   }
+
+  async function handleSaveToken(agentId: string) {
+    await updateAgentToken(id, agentId, editTokenValue.trim())
+    setEditingTokenAgentId(null)
+    setEditTokenValue('')
+  }
+
 
   return (
     <div className="min-h-screen pb-20">
       <header className="sticky top-0 z-40 bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark shadow-sm">
         <div className="flex items-center gap-3 px-4 py-3 max-w-lg mx-auto">
           <Link href="/" className="text-ive-green text-base font-semibold p-1 hover:bg-ive-green/5 rounded">
-            <i className="fa-solid fa-arrow-left mr-1" />뒤로
+            <i className="fa-solid fa-arrow-left mr-1" />{tc('back')}
           </Link>
           <h1 className="text-lg font-bold text-ive-green-pale flex-1 truncate">{project.name}</h1>
         </div>
@@ -94,12 +110,16 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           </div>
 
           <div className="flex items-center gap-3 mb-4 relative z-10">
-            <div
-              className="w-12 h-12 rounded-xl bg-ive-bg-deep border border-ive-border flex items-center justify-center shrink-0 shadow-lg"
-              style={{ borderColor: `${project.color || '#4ade80'}40` }}
-            >
-              <i className={`fa-brands ${project.provider === 'github' ? 'fa-github' : 'fa-gitlab'} text-3xl`} style={{ color: project.color || '#4ade80' }} />
-            </div>
+            {project.avatarUrl ? (
+              <img src={project.avatarUrl} alt="" className="w-12 h-12 rounded-xl object-cover border border-ive-border shrink-0 shadow-lg" style={{ borderColor: `${project.color || '#4ade80'}40` }} />
+            ) : (
+              <div
+                className="w-12 h-12 rounded-xl bg-ive-bg-deep border border-ive-border flex items-center justify-center shrink-0 shadow-lg"
+                style={{ borderColor: `${project.color || '#4ade80'}40` }}
+              >
+                <i className={`fa-brands ${project.provider === 'github' ? 'fa-github' : 'fa-gitlab'} text-3xl`} style={{ color: project.color || '#4ade80' }} />
+              </div>
+            )}
             <div className="min-w-0 flex-1">
               <div className="text-xl font-bold truncate leading-tight" style={{ color: project.color || '#4ade80' }}>{project.name}</div>
               <a
@@ -118,29 +138,36 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             <div className="flex items-center gap-4">
               <div className="text-center">
                 <div className={`text-xl font-black leading-none ${assignedAgents.length > 0 ? 'text-ive-green-light' : 'text-ive-text-dim'}`}>{assignedAgents.length}</div>
-                <div className="text-sm text-ive-text-muted mt-1 uppercase tracking-wider font-bold">개발자</div>
+                <div className="text-sm text-ive-text-muted mt-1 uppercase tracking-wider font-bold">{tp('developers')}</div>
               </div>
               <div className="text-center">
                 <div className={`text-xl font-black leading-none ${(project.lastScannedIssueCount ?? 0) > 0 ? 'text-ive-cyan' : 'text-ive-text-dim'}`}>
                   {project.lastScannedIssueCount ?? 0}
                 </div>
-                <div className="text-sm text-ive-text-muted mt-1 uppercase tracking-wider font-bold">대기</div>
+                <div className="text-sm text-ive-text-muted mt-1 uppercase tracking-wider font-bold">{ts('waiting')}</div>
               </div>
             </div>
-            <div className="flex gap-2 shrink-0">
-              <button
-                onClick={() => setShowEditProject(true)}
-                className="text-base font-black text-ive-text-muted border border-ive-border px-3 py-2 rounded-xl hover:border-ive-green/30 hover:text-ive-green transition-all bg-ive-bg/50"
-              >
-                <i className="fa-solid fa-pen-to-square mr-1" />수정
-              </button>
-              <button
-                onClick={() => setShowDeleteProject(true)}
-                className="text-base font-black text-ive-red/60 border border-ive-red/20 px-3 py-2 rounded-xl hover:bg-ive-red/10 transition-all"
-              >
-                <i className="fa-solid fa-trash-can" />
-              </button>
-            </div>
+            {isOwner ? (
+              <div className="flex gap-2 shrink-0">
+                <button
+                  onClick={() => setShowEditProject(true)}
+                  className="text-base font-black text-ive-text-muted border border-ive-border px-3 py-2 rounded-xl hover:border-ive-green/30 hover:text-ive-green transition-all bg-ive-bg/50"
+                >
+                  <i className="fa-solid fa-pen-to-square mr-1" />{tc('edit')}
+                </button>
+                <button
+                  onClick={() => setShowDeleteProject(true)}
+                  className="text-base font-black text-ive-red/60 border border-ive-red/20 px-3 py-2 rounded-xl hover:bg-ive-red/10 transition-all"
+                >
+                  <i className="fa-solid fa-trash-can" />
+                </button>
+              </div>
+            ) : (
+              <span className={`text-xs font-black px-2.5 py-1 rounded-full leading-none ${project.shareRole === 'editor' ? 'bg-ive-amber/15 text-ive-amber border border-ive-amber/30' : 'bg-ive-cyan/15 text-ive-cyan border border-ive-cyan/30'}`}>
+                <i className="fa-solid fa-share-nodes mr-1" />
+                {project.shareRole === 'editor' ? tp('editPermission') : tp('viewerPermission')}
+              </span>
+            )}
           </div>
         </div>
 
@@ -148,31 +175,72 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         <div className="flex items-center justify-between mb-4 px-1">
           <h2 className="text-base font-black text-ive-text uppercase tracking-widest flex items-center gap-2">
             <span className="w-1.5 h-1.5 rounded-full bg-ive-green" />
-            배정된 개발자 ({assignedAgents.length})
+            {tp('assignedAgents', { count: assignedAgents.length })}
           </h2>
-          <button
-            onClick={() => { setShowAssignAgent(true); setAssignError('') }}
-            className="text-base font-bold text-ive-green bg-ive-green/10 px-4 py-2 rounded-xl active:scale-95 transition-all hover:bg-ive-green/15"
-          >
-            <i className="fa-solid fa-plus mr-1.5" />개발자 배정
-          </button>
+          {isOwner && (
+            <button
+              onClick={() => { setShowAssignAgent(true); setAssignError(''); setAssignToken('') }}
+              className="text-base font-bold text-ive-green bg-ive-green/10 px-4 py-2 rounded-xl active:scale-95 transition-all hover:bg-ive-green/15"
+            >
+              <i className="fa-solid fa-plus mr-1.5" />{tp('assignAgent')}
+            </button>
+          )}
         </div>
 
         {assignedAgents.length === 0 ? (
-          <div className="text-center py-16 bg-ive-bg-card rounded-2xl border border-dashed border-ive-border-subtle group hover:border-ive-green/30 transition-all">
-            <i className="fa-solid fa-robot text-4xl text-ive-text-dim mb-4 block group-hover:scale-110 transition-transform" />
-            <p className="text-base text-ive-text-muted mb-4 font-medium">이 프로젝트에 배정된 개발자가 없습니다</p>
-            <button
-              onClick={() => { setShowAssignAgent(true); setAssignError('') }}
-              className="inline-flex items-center gap-2 bg-ive-green-dark text-white font-black px-6 py-2.5 rounded-xl text-base shadow-lg shadow-ive-green/10"
-            >
-              <i className="fa-solid fa-plus" />개발자 배정하기
-            </button>
+          <div className="text-center py-16 bg-ive-bg-card rounded-2xl border border-dashed border-ive-border-subtle">
+            <i className="fa-solid fa-robot text-4xl text-ive-text-dim mb-4 block" />
+            <p className="text-base text-ive-text-muted font-medium">{tp('noAssignedAgents')}</p>
           </div>
         ) : (
           <div className="grid gap-3">
             {assignedAgents.map(pa => (
-              <AgentCard key={pa.id} agent={pa.agent} compact onRemove={() => handleUnassignAgent(pa.agentId)} />
+              <div key={pa.id} className="bg-ive-bg-card rounded-xl border border-ive-border-subtle overflow-hidden">
+                <div className="flex items-center gap-2 p-1">
+                  <div className="flex-1 min-w-0">
+                    <AgentCard agent={pa.agent} compact onRemove={isOwner ? () => handleUnassignAgent(pa.agentId) : undefined} />
+                  </div>
+                </div>
+                {/* 하단 액션 바 — 소유자만 토큰 편집 가능 */}
+                {isOwner && (
+                  <div className="flex items-center gap-1 px-3 pb-2.5 pt-0">
+                    {editingTokenAgentId === pa.agentId ? (
+                      <div className="flex-1 flex items-center gap-1.5">
+                        <input
+                          type="text"
+                          autoComplete="off"
+                          data-1p-ignore
+                          value={editTokenValue}
+                          onChange={e => setEditTokenValue(e.target.value)}
+                          placeholder="Personal Access Token"
+                          className="flex-1 min-w-0 bg-ive-bg-input border border-ive-border rounded px-2 py-1 text-xs text-ive-text font-mono focus:outline-none focus:border-ive-green"
+                          style={{ WebkitTextSecurity: 'disc' } as React.CSSProperties}
+                          autoFocus
+                        />
+                        <button onClick={() => handleSaveToken(pa.agentId)} className="text-xs font-bold text-ive-green px-2 py-1 rounded hover:bg-ive-green/10">
+                          <i className="fa-solid fa-check" />
+                        </button>
+                        <button onClick={() => setEditingTokenAgentId(null)} className="text-xs font-bold text-ive-text-dim px-2 py-1 rounded hover:bg-ive-bg-deep">
+                          <i className="fa-solid fa-xmark" />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => { setEditingTokenAgentId(pa.agentId); setEditTokenValue('') }}
+                        className={`text-xs font-bold px-2 py-1 rounded transition-colors ${
+                          pa.accessToken
+                            ? 'text-ive-cyan bg-ive-cyan/10 hover:bg-ive-cyan/20'
+                            : 'text-ive-text-dim hover:bg-ive-bg-deep hover:text-ive-text-muted'
+                        }`}
+                        title={pa.accessToken ? tp('individualTokenInUse') : tp('projectTokenInUse')}
+                      >
+                        <i className={`fa-solid fa-key mr-1 ${pa.accessToken ? '' : 'opacity-40'}`} />
+                        {pa.accessToken ? tp('individualTokenLabel') : tp('projectTokenLabel')}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             ))}
           </div>
         )}
@@ -185,32 +253,52 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       </main>
 
       {/* 모달들 */}
-      <Modal open={showEditProject} onClose={() => setShowEditProject(false)} title="프로젝트 설정">
+      <Modal open={showEditProject} onClose={() => setShowEditProject(false)} title={tp('projectSettings')}>
         <ProjectForm existing={project} onSuccess={() => setShowEditProject(false)} />
       </Modal>
 
-      <Modal open={showAssignAgent} onClose={() => setShowAssignAgent(false)} title="개발자 배정">
+      <Modal open={showAssignAgent} onClose={() => setShowAssignAgent(false)} title={tp('assignAgent')}>
         <div className="space-y-3">
           {availableAgents.length === 0 ? (
             <div className="text-center py-8 text-ive-text-muted">
               <i className="fa-solid fa-robot text-3xl text-ive-text-dim mb-3 block" />
-              <p className="text-base">배정 가능한 개발자가 없습니다</p>
-              <p className="text-sm text-ive-text-dim mt-1">새 개발자를 등록하거나, 다른 프로젝트에서 해제하세요</p>
+              <p className="text-base">{tp('noAvailableAgents')}</p>
+              <p className="text-sm text-ive-text-dim mt-1">{tp('noAvailableAgentsHint')}</p>
             </div>
           ) : (
-            availableAgents.map(agent => (
-              <div key={agent.id} className="flex items-center gap-3 bg-ive-bg rounded-xl p-3 border border-ive-border-subtle">
-                <div className="flex-1 min-w-0">
-                  <AgentCard agent={agent} compact />
-                </div>
-                <button
-                  onClick={() => handleAssignAgent(agent.id)}
-                  className="shrink-0 text-base font-bold text-ive-green bg-ive-green/10 px-3 py-1.5 rounded-lg hover:bg-ive-green/20 transition-colors"
-                >
-                  <i className="fa-solid fa-plus mr-1" />배정
-                </button>
+            <>
+              {/* 개별 토큰 입력 (선택사항) */}
+              <div className="bg-ive-bg rounded-xl p-3 border border-ive-border-subtle">
+                <label className="block text-xs font-bold text-ive-text-muted mb-1.5">
+                  <i className="fa-solid fa-key mr-1 text-ive-cyan" />{tp('individualToken')}
+                </label>
+                <input
+                  type="text"
+                  autoComplete="off"
+                  data-1p-ignore
+                  value={assignToken}
+                  onChange={e => setAssignToken(e.target.value)}
+                  placeholder={tp('individualTokenPlaceholder')}
+                  className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text font-mono placeholder:text-ive-text-dim focus:outline-none focus:border-ive-cyan"
+                  style={{ WebkitTextSecurity: 'disc' } as React.CSSProperties}
+                />
+                <p className="text-xs text-ive-text-dim mt-1">{tp('individualTokenHint')}</p>
               </div>
-            ))
+
+              {availableAgents.map(agent => (
+                <div key={agent.id} className="flex items-center gap-3 bg-ive-bg rounded-xl p-3 border border-ive-border-subtle">
+                  <div className="flex-1 min-w-0">
+                    <AgentCard agent={agent} compact />
+                  </div>
+                  <button
+                    onClick={() => handleAssignAgent(agent.id)}
+                    className="shrink-0 text-base font-bold text-ive-green bg-ive-green/10 px-3 py-1.5 rounded-lg hover:bg-ive-green/20 transition-colors"
+                  >
+                    <i className="fa-solid fa-plus mr-1" />{tp('assign')}
+                  </button>
+                </div>
+              ))}
+            </>
           )}
           {assignError && (
             <div className="text-base text-ive-red bg-ive-red/10 rounded-lg px-4 py-3 border border-ive-red/20">
@@ -224,9 +312,9 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         open={showDeleteProject}
         onClose={() => setShowDeleteProject(false)}
         onConfirm={handleDeleteProject}
-        title="프로젝트 삭제"
-        message="정말 이 프로젝트를 삭제하시겠습니까? 배정된 개발자와 실행 기록이 모두 사라집니다."
-        confirmLabel="영구 삭제"
+        title={tp('deleteProject')}
+        message={tp('deleteProjectConfirm')}
+        confirmLabel={tp('permanentDelete')}
         danger
       />
 

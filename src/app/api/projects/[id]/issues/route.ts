@@ -1,58 +1,53 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject } from '@/lib/db';
+import { getProject, getProjectAccess, getIssueStages, setIssueStage } from '@/lib/db';
+import { getCurrentUser } from '@/lib/auth';
 import { decrypt } from '@/lib/crypto';
-import { createGitLabIssue, fetchAllProjectIssues } from '@/lib/gitlab';
+import { fetchAllProjectIssues, createIssue } from '@/lib/provider';
 
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   const { id: projectId } = await params;
   const project = getProject(projectId);
   if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+
+  if (!getProjectAccess(projectId, user.id)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
 
   try {
     const decryptedToken = decrypt(project.accessToken);
     const issues = await fetchAllProjectIssues(project, decryptedToken);
 
-    // IVE 라벨 목록
-    const iveLabels = [
-      project.labelTarget, project.labelInProgress, project.labelFailDev,
-      project.labelValidation, project.labelFailVal, project.labelDone,
-    ];
-
-    // 각 이슈에 stage 정보 부여
-    const stageMap: Record<string, string> = {
-      [project.labelTarget]: 'waiting',
-      [project.labelInProgress]: 'dev',
-      [project.labelFailDev]: 'dev_fail',
-      [project.labelValidation]: 'validation',
-      [project.labelFailVal]: 'val_fail',
-      [project.labelDone]: 'done',
-    };
+    // 로컬 DB에서 stage 맵 로드
+    const localStages = getIssueStages(projectId);
 
     const mapped = issues.map((issue: any) => {
-      let stage = 'unknown';
-      const issueLabels = issue.labels || [];
-      for (const label of issueLabels) {
-        if (stageMap[label]) {
-          stage = stageMap[label];
-          break;
-        }
-      }
-      // IVE 라벨이 하나도 없는 이슈는 "대기"로 분류
-      if (stage === 'unknown') {
-        const hasIveLabel = issueLabels.some((l: string) => iveLabels.includes(l));
-        if (!hasIveLabel) {
+      // 로컬 DB에서 stage 조회 (상태는 로컬 DB로만 관리)
+      const local = localStages.get(issue.iid);
+      let stage: string | null = local?.stage || null;
+      let failReason: string | null = local?.failReason || null;
+
+      // 로컬에 없지만 IVE 레이블이 붙어있으면 waiting으로 등록
+      if (!stage) {
+        const issueLabels = issue.labels || [];
+        if (issueLabels.includes(project.labelTarget)) {
           stage = 'waiting';
+          setIssueStage(projectId, issue.iid, 'waiting');
         }
       }
+
       return {
         iid: issue.iid,
         title: issue.title,
         description: issue.description,
         state: issue.state,
-        stage,
+        stage: stage || 'none',
+        failReason,
         labels: issue.labels,
         createdAt: issue.created_at,
         updatedAt: issue.updated_at,
@@ -71,9 +66,17 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   const { id: projectId } = await params;
   const project = getProject(projectId);
   if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+
+  const access = getProjectAccess(projectId, user.id);
+  if (!access || access === 'viewer') {
+    return NextResponse.json({ error: '작업 생성 권한이 없습니다.' }, { status: 403 });
+  }
 
   const { title, description, asDev } = await req.json();
   if (!title?.trim()) return NextResponse.json({ error: '제목을 입력하세요.' }, { status: 400 });
@@ -81,7 +84,13 @@ export async function POST(
   try {
     const decryptedToken = decrypt(project.accessToken);
     const labels = asDev ? [project.labelTarget] : [];
-    const issue = await createGitLabIssue(project, decryptedToken, title.trim(), description?.trim() ?? '', labels);
+    const issue = await createIssue(project, decryptedToken, title.trim(), description?.trim() ?? '', labels);
+
+    // 이슈 생성 시 로컬 DB에 stage 등록
+    if (asDev && issue.iid) {
+      setIssueStage(projectId, issue.iid, 'waiting');
+    }
+
     return NextResponse.json(issue);
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : '이슈 생성 실패' }, { status: 500 });

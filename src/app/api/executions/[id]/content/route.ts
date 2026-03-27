@@ -1,0 +1,36 @@
+import { NextRequest, NextResponse } from 'next/server'
+import fs from 'fs'
+import { getExecution, getAgent, getProjectAccess } from '@/lib/db'
+import { getCurrentUser } from '@/lib/auth'
+
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const user = await getCurrentUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { id } = await params
+  const execution = getExecution(id)
+
+  if (!execution || !fs.existsSync(execution.logPath)) {
+    return Response.json({ content: '', status: 'not_found' })
+  }
+
+  // 프로젝트 접근 권한 확인
+  if (!getProjectAccess(execution.projectId, user.id)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const agent = getAgent(execution.agentId)
+  const content = fs.readFileSync(execution.logPath, 'utf-8')
+  return Response.json({
+    content,
+    status: execution.status,
+    issueIid: execution.issueIid,
+    issueTitle: execution.issueTitle ?? '',
+    startedAt: execution.startedAt,
+    agentName: agent?.name ?? execution.agentName ?? '',
+    agentAvatar: agent?.avatar ?? 'av-01',
+  })
+}

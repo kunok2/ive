@@ -15,6 +15,7 @@
   --color-ive-lime: #a3e635;
   --color-ive-red: #ef4444;
   --color-ive-cyan: #22d3ee;
+  --color-ive-purple: #a78bfa;
 
   --color-ive-text: #e0e0e0;
   --color-ive-text-secondary: #b0c8b4;
@@ -29,8 +30,38 @@
 body {
   background: var(--color-ive-bg-deep);
   color: var(--color-ive-text);
-  font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Segoe UI', 'Malgun Gothic', 'Noto Sans KR', sans-serif;
   -webkit-font-smoothing: antialiased;
+}
+
+/* Hide number input spinners */
+@layer base {
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+  /* Android Chrome에서 기본 배경 그라디언트/오버레이 제거 */
+  button, select, [role="button"] {
+    -webkit-appearance: none;
+    appearance: none;
+    background: none;
+    background-image: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* Android에서 input/textarea의 기본 배경색 제거 */
+  input, textarea, select {
+    -webkit-appearance: none;
+    appearance: none;
+    background-color: inherit;
+  }
+  /* Android 터치 하이라이트 전역 제거 */
+  a, div[onclick], [role="button"] {
+    -webkit-tap-highlight-color: transparent;
+  }
 }
 
 @keyframes slide-up {
@@ -68,6 +99,58 @@ body {
 
 .animate-spin-slow {
   animation: spin-slow 3s linear infinite;
+}
+
+@keyframes thinking {
+  0%, 80%, 100% { opacity: 0.2; transform: scale(0.8); }
+  40% { opacity: 1; transform: scale(1.2); }
+}
+
+@keyframes toast-in {
+  from { transform: translateY(100%) scale(0.95); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+@keyframes toast-out {
+  from { transform: translateY(0) scale(1); opacity: 1; }
+  to { transform: translateY(100%) scale(0.95); opacity: 0; }
+}
+
+.animate-toast-in {
+  animation: toast-in 0.35s cubic-bezier(0.21, 1.02, 0.73, 1) forwards;
+}
+
+.animate-toast-out {
+  animation: toast-out 0.3s ease-in forwards;
+}
+
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  12% { transform: translateX(0); }
+  88% { transform: translateX(var(--marquee-scroll)); }
+  100% { transform: translateX(var(--marquee-scroll)); }
+}
+
+.marquee-container {
+  overflow: hidden;
+  position: relative;
+}
+
+.marquee-content {
+  display: inline-flex;
+  white-space: nowrap;
+}
+
+.marquee-content.scrolling {
+  animation: marquee 12s linear infinite;
+}
+
+.marquee-segment {
+  flex-shrink: 0;
+}
+
+.marquee-gap {
+  margin-left: 80px;
 }
 
 /* Firefox */

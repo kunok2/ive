@@ -2,31 +2,38 @@
 
 import { useTab, TabKey } from '@/lib/tab-context'
 import { usePathname, useRouter } from 'next/navigation'
-
-const tabs: { key: TabKey; icon: string; label: string }[] = [
-  { key: 'projects', icon: 'fa-solid fa-folder-open', label: '프로젝트' },
-  { key: 'agents', icon: 'fa-solid fa-robot', label: '개발자' },
-  { key: 'issues', icon: 'fa-solid fa-list-check', label: '작업' },
-  { key: 'terminal', icon: 'fa-solid fa-terminal', label: 'CLI' },
-]
+import { useStore } from '@/lib/store'
+import { useTranslations } from 'next-intl'
 
 export default function MobileTabBar() {
   const { activeTab, setActiveTab } = useTab()
   const pathname = usePathname()
   const router = useRouter()
+  const { state } = useStore()
+  const t = useTranslations('nav')
+
+  const baseTabs: { key: TabKey; icon: string; label: string }[] = [
+    { key: 'projects', icon: 'fa-solid fa-folder-open', label: t('projects') },
+    { key: 'agents', icon: 'fa-solid fa-robot', label: t('agents') },
+    { key: 'issues', icon: 'fa-solid fa-list-check', label: t('issues') },
+    { key: 'reports', icon: 'fa-solid fa-chart-bar', label: t('reports') },
+  ]
+
+  const tabs = state.user?.isAdmin
+    ? [...baseTabs, { key: 'admin' as TabKey, icon: 'fa-solid fa-gear', label: t('admin') }]
+    : baseTabs
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-ive-bg-card border-t border-ive-border">
-      <div className="flex justify-around items-center h-14 max-w-lg mx-auto">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-ive-bg-card border-t border-ive-border" aria-label={t('mainNavigation')}>
+      <div className="flex justify-around items-start pt-2 h-16 max-w-lg mx-auto">
         {tabs.map(tab => (
           <button
             key={tab.key}
             onClick={() => {
               setActiveTab(tab.key)
-              // 서브페이지에 있으면 메인으로 돌아가기
               if (pathname !== '/') router.push('/')
             }}
-            className={`flex flex-col items-center gap-0.5 px-3 py-1 transition-colors ${
+            className={`flex flex-col items-center gap-0.5 px-3 transition-colors ${
               activeTab === tab.key ? 'text-ive-green' : 'text-ive-text-dim'
             }`}
           >

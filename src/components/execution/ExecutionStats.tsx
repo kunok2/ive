@@ -1,5 +1,7 @@
 'use client'
 
+import { useTranslations } from 'next-intl'
+
 function formatDuration(seconds: number): string {
   if (seconds < 60) return `${seconds}s`
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`
@@ -22,13 +24,14 @@ interface Props {
 }
 
 export default function ExecutionStats({ avgDurationSec, avgTokensPerTask, avgCostPerTask, successRate, tasksPerHour, avgTurnsPerTask }: Props) {
+  const te = useTranslations('execution')
   const stats = [
-    { label: '평균 작업시간', value: formatDuration(avgDurationSec), icon: 'fa-clock' },
-    { label: '평균 턴/작업', value: `${avgTurnsPerTask ?? 0}`, icon: 'fa-rotate' },
-    { label: '평균 토큰/작업', value: formatTokens(avgTokensPerTask), icon: 'fa-microchip' },
-    { label: '평균 비용/작업', value: `$${avgCostPerTask.toFixed(4)}`, icon: 'fa-coins' },
-    { label: '성공률', value: `${successRate}%`, icon: 'fa-bullseye', color: successRate >= 80 ? 'text-ive-green' : successRate >= 50 ? 'text-ive-amber' : 'text-ive-red' },
-    { label: '금일 처리량', value: `${tasksPerHour} 건/h`, icon: 'fa-gauge-high' },
+    { label: te('avgTaskTime'), value: formatDuration(avgDurationSec), icon: 'fa-clock' },
+    { label: te('avgTurnsPerTask'), value: `${avgTurnsPerTask ?? 0}`, icon: 'fa-rotate' },
+    { label: te('avgTokensPerTask'), value: formatTokens(avgTokensPerTask), icon: 'fa-microchip' },
+    { label: te('avgCostPerTask'), value: `$${avgCostPerTask.toFixed(4)}`, icon: 'fa-coins' },
+    { label: te('successRate'), value: `${successRate}%`, icon: 'fa-bullseye', color: successRate >= 80 ? 'text-ive-green' : successRate >= 50 ? 'text-ive-amber' : 'text-ive-red' },
+    { label: te('todayThroughput'), value: `${tasksPerHour} ${te('itemsPerHour')}`, icon: 'fa-gauge-high' },
   ]
 
   return (

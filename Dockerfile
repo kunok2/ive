@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --include=dev
 
 COPY . .
 RUN npm run build
@@ -19,6 +19,10 @@ FROM node:22-slim
 
 RUN apt-get update && apt-get install -y \
     python3 make g++ git \
+    curl wget jq unzip zip \
+    ripgrep fd-find tree \
+    procps psmisc \
+    netcat-openbsd dnsutils \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -35,10 +39,13 @@ RUN --mount=type=bind,from=builder,source=/app/public,target=/builder-public \
 COPY server.ts ./
 COPY src ./src
 COPY tsconfig.json ./
-COPY next.config.ts ./
+COPY next.config.mjs ./
 
 # Claude Code CLI 설치
 RUN npm install -g @anthropic-ai/claude-code
+
+# OpenCode CLI 설치
+RUN npm install -g opencode-ai
 
 # non-root 사용자 생성 (Claude Code의 root 제한 우회)
 RUN useradd -m -s /bin/bash ive \

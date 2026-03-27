@@ -5,6 +5,8 @@ import { User, Project, Agent, ProjectAssignment } from '@/types'
 
 interface ProjectWithAgents extends Project {
   assignedAgents: (ProjectAssignment & { agent: Agent })[]
+  runningCount?: number       // 현재 실행 중인 작업 수
+  shareRole?: string | null  // null=소유자, 'viewer', 'editor'
 }
 
 interface State {
@@ -25,7 +27,8 @@ type Action =
 function reducer(state: State, action: Action): State {
   switch (action.type) {
     case 'SET_USER':
-      return { ...state, user: action.user, authChecked: true }
+      // 비로그인이면 loading도 해제
+      return { ...state, user: action.user, authChecked: true, loading: action.user ? state.loading : false }
     case 'SET_PROJECTS':
       return { ...state, projects: action.projects, loading: false }
     case 'SET_AGENTS':
@@ -41,7 +44,7 @@ function reducer(state: State, action: Action): State {
 
 const StoreContext = createContext<{
   state: State
-  refreshUser: () => Promise<void>
+  refreshUser: () => Promise<User | null>
   refresh: () => Promise<void>
   logout: () => Promise<void>
   addProject: (p: Omit<Project, 'id' | 'userId' | 'createdAt'>) => Promise<void>
@@ -51,13 +54,13 @@ const StoreContext = createContext<{
   addAgent: (a: Omit<Agent, 'id' | 'userId' | 'createdAt'>) => Promise<void>
   updateAgent: (a: Agent) => Promise<void>
   deleteAgent: (id: string) => Promise<void>
-  assignAgentToProject: (projectId: string, agentId: string) => Promise<void>
+  assignAgentToProject: (projectId: string, agentId: string, accessToken?: string) => Promise<void>
   unassignAgentFromProject: (projectId: string, agentId: string) => Promise<void>
-  reorderProject: (projectId: string, direction: 'up' | 'down') => Promise<void>
+  updateAgentToken: (projectId: string, agentId: string, accessToken: string) => Promise<void>
   scanProjectNow: (id: string) => Promise<void>
 }>({
   state: { user: null, projects: [], agents: [], loading: true, authChecked: false },
-  refreshUser: async () => {},
+  refreshUser: async () => null,
   refresh: async () => {},
   logout: async () => {},
   addProject: async () => {},
@@ -69,7 +72,7 @@ const StoreContext = createContext<{
   deleteAgent: async () => {},
   assignAgentToProject: async () => {},
   unassignAgentFromProject: async () => {},
-  reorderProject: async () => {},
+  updateAgentToken: async () => {},
   scanProjectNow: async () => {},
 })
 
@@ -82,13 +85,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     authChecked: false,
   })
 
-  const refreshUser = useCallback(async () => {
+  const refreshUser = useCallback(async (): Promise<User | null> => {
     const res = await fetch('/api/auth/me')
     if (res.ok) {
-      const user = await res.json()
+      const data = await res.json()
+      const user = data.user === null ? null : (data.id ? data : null)
       dispatch({ type: 'SET_USER', user })
+      return user
     } else {
       dispatch({ type: 'SET_USER', user: null })
+      return null
     }
   }, [])
 
@@ -96,7 +102,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const res = await fetch('/api/projects')
     if (res.ok) {
       const data = await res.json()
+      // 작업 중인 프로젝트를 위로 정렬 (running > 0 우선, 그 다음 sortOrder)
+      data.sort((a: any, b: any) => {
+        const aRunning = a.runningCount ?? 0
+        const bRunning = b.runningCount ?? 0
+        if (aRunning > 0 && bRunning === 0) return -1
+        if (aRunning === 0 && bRunning > 0) return 1
+        return (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
+      })
       dispatch({ type: 'SET_PROJECTS', projects: data })
+    } else if (res.status === 401) {
+      // 세션 만료: 사용자 상태 초기화 → 로그인 페이지로 리다이렉트
+      sessionStorage.setItem('ive-session-expired', '1')
+      dispatch({ type: 'SET_USER', user: null })
     } else {
       dispatch({ type: 'SET_PROJECTS', projects: [] })
     }
@@ -106,7 +124,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const res = await fetch('/api/agents')
     if (res.ok) {
       const data = await res.json()
+      // busy 에이전트를 위로 정렬
+      data.sort((a: any, b: any) => {
+        if (a.status === 'busy' && b.status !== 'busy') return -1
+        if (a.status !== 'busy' && b.status === 'busy') return 1
+        return 0
+      })
       dispatch({ type: 'SET_AGENTS', agents: data })
+    } else if (res.status === 401) {
+      sessionStorage.setItem('ive-session-expired', '1')
+      dispatch({ type: 'SET_USER', user: null })
     } else {
       dispatch({ type: 'SET_AGENTS', agents: [] })
     }
@@ -117,6 +144,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'SET_USER', user: null })
     dispatch({ type: 'SET_PROJECTS', projects: [] })
     dispatch({ type: 'SET_AGENTS', agents: [] })
+    // 세션 캐시 제거
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('issues-cache')
+      sessionStorage.removeItem('issues-scroll')
+    }
   }, [])
 
   const userRef = useRef(state.user)
@@ -125,9 +157,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [state.user])
 
   useEffect(() => {
-    refreshUser().then(() => {
-      refresh()
-      refreshAgents()
+    refreshUser().then((user) => {
+      if (user) {
+        dispatch({ type: 'SET_LOADING', loading: true })
+        refresh()
+        refreshAgents()
+      }
     })
 
     // 10초마다 데이터 자동 갱신 (스캐너 상태 등 반영)
@@ -200,16 +235,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     await refresh()
   }, [refreshAgents, refresh])
 
-  const assignAgentToProject = useCallback(async (projectId: string, agentId: string) => {
+  const assignAgentToProject = useCallback(async (projectId: string, agentId: string, accessToken?: string) => {
     const res = await fetch(`/api/projects/${projectId}/agents`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ agentId }),
+      body: JSON.stringify({ agentId, accessToken: accessToken || '' }),
     })
     if (!res.ok) {
       const data = await res.json()
       throw new Error(data.error || 'Agent 배정 실패')
     }
+    await refresh()
+  }, [refresh])
+
+  const updateAgentToken = useCallback(async (projectId: string, agentId: string, accessToken: string) => {
+    await fetch(`/api/projects/${projectId}/agents`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agentId, accessToken }),
+    })
     await refresh()
   }, [refresh])
 
@@ -221,27 +265,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     })
     await refresh()
   }, [refresh])
-
-  const reorderProject = useCallback(async (projectId: string, direction: 'up' | 'down') => {
-    const projects = [...state.projects].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
-    const idx = projects.findIndex(p => p.id === projectId)
-    if (idx < 0) return
-    const swapIdx = direction === 'up' ? idx - 1 : idx + 1
-    if (swapIdx < 0 || swapIdx >= projects.length) return
-
-    const orders = projects.map((p, i) => {
-      if (i === idx) return { id: p.id, sortOrder: swapIdx }
-      if (i === swapIdx) return { id: p.id, sortOrder: idx }
-      return { id: p.id, sortOrder: i }
-    })
-
-    await fetch('/api/projects/reorder', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ orders }),
-    })
-    await refresh()
-  }, [state.projects, refresh])
 
   const scanProjectNow = useCallback(async (id: string) => {
     const res = await fetch(`/api/projects/${id}/scan`, { method: 'POST' })
@@ -258,8 +281,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       state, refreshUser, refresh, logout,
       addProject, updateProject, deleteProject,
       refreshAgents, addAgent, updateAgent, deleteAgent,
-      assignAgentToProject, unassignAgentFromProject,
-      reorderProject, scanProjectNow,
+      assignAgentToProject, unassignAgentFromProject, updateAgentToken,
+      scanProjectNow,
     }}>
       {children}
     </StoreContext.Provider>

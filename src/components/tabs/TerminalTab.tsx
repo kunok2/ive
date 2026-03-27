@@ -83,20 +83,9 @@ export default function TerminalTab() {
         }
       })
 
-      // 모바일 터치 스크롤 지원 (iOS Safari)
-      let touchStartY = 0
-      const handleTouchStart = (e: TouchEvent) => {
-        touchStartY = e.touches[0].clientY
-      }
-      const handleTouchMove = (e: TouchEvent) => {
-        e.preventDefault()
-        const dy = touchStartY - e.touches[0].clientY
-        touchStartY = e.touches[0].clientY
-        const lines = Math.round(dy / 14)
-        if (lines !== 0) term.scrollLines(lines)
-      }
-      containerRef.current!.addEventListener('touchstart', handleTouchStart, { passive: true })
-      containerRef.current!.addEventListener('touchmove', handleTouchMove, { passive: false })
+      // 모바일 터치 스크롤 지원 (iOS Safari — 관성 포함)
+      const { setupXtermTouchScroll } = await import('@/lib/xterm-touch')
+      const cleanupTouch = setupXtermTouchScroll(containerRef.current!, term)
 
       containerRef.current!.addEventListener('contextmenu', (e) => {
         e.preventDefault()
@@ -116,6 +105,7 @@ export default function TerminalTab() {
       window.addEventListener('resize', handleResize)
 
       return () => {
+        cleanupTouch()
         window.removeEventListener('resize', handleResize)
       }
     }

@@ -1,6 +1,7 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
-import { getExecution } from '@/lib/db';
+import { getExecution, getProjectAccess } from '@/lib/db';
+import { getCurrentUser } from '@/lib/auth';
 
 function toSSE(text: string): string {
   if (!text) return ''
@@ -14,6 +15,9 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   const { id: executionId } = await params;
   const execution = getExecution(executionId);
 
@@ -24,16 +28,24 @@ export async function GET(
     });
   }
 
+  // 프로젝트 접근 권한 확인
+  if (!getProjectAccess(execution.projectId, user.id)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   const logPath = execution.logPath;
+  const skipInitial = req.nextUrl.searchParams.get('skipInitial') === '1';
 
   const stream = new ReadableStream({
     start(controller) {
       let position = 0;
 
-      // 기존 내용 전송
-      const initialContent = fs.readFileSync(logPath, 'utf-8');
-      if (initialContent) {
-        controller.enqueue(new TextEncoder().encode(toSSE(initialContent)));
+      if (!skipInitial) {
+        // 기존 내용 전송
+        const initialContent = fs.readFileSync(logPath, 'utf-8');
+        if (initialContent) {
+          controller.enqueue(new TextEncoder().encode(toSSE(initialContent)));
+        }
       }
       position = fs.statSync(logPath).size;
 

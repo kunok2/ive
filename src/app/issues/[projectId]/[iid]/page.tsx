@@ -1,9 +1,13 @@
 'use client'
 
-import { use, useCallback, useEffect, useState } from 'react'
+import { use, useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import MobileTabBar from '@/components/layout/MobileTabBar'
+import { useDialog } from '@/components/ui/ConfirmDialog'
+import MRReviewSection from '@/components/mr/MRReviewSection'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import { useTranslations } from 'next-intl'
 
 interface IssueDetail {
   iid: number
@@ -22,18 +26,9 @@ interface Note {
   id: number
   body: string
   author: string
+  avatarUrl: string
   system: boolean
   createdAt: string
-}
-
-const STAGE_INFO: Record<string, { label: string; color: string; icon: string; bg: string }> = {
-  waiting:    { label: '대기',     color: 'text-ive-green',    icon: 'fa-clock',              bg: 'bg-ive-green/10' },
-  dev:        { label: '개발 중',  color: 'text-ive-cyan',     icon: 'fa-code',               bg: 'bg-ive-cyan/10' },
-  dev_fail:   { label: '개발 실패', color: 'text-ive-red',     icon: 'fa-circle-xmark',       bg: 'bg-ive-red/10' },
-  validation: { label: '검증 대기', color: 'text-ive-amber',   icon: 'fa-flask',              bg: 'bg-ive-amber/10' },
-  val_fail:   { label: '검증 실패', color: 'text-ive-red',     icon: 'fa-triangle-exclamation', bg: 'bg-ive-red/10' },
-  done:       { label: '완료',     color: 'text-emerald-400', icon: 'fa-circle-check',       bg: 'bg-emerald-500/10' },
-  unknown:    { label: '알 수 없음', color: 'text-ive-text-dim', icon: 'fa-question',         bg: 'bg-white/5' },
 }
 
 interface StageAction {
@@ -43,30 +38,35 @@ interface StageAction {
   danger?: boolean
 }
 
-const STAGE_ACTIONS: Record<string, StageAction[]> = {
-  waiting: [],
-  dev: [
-    { action: 'cancel', label: '개발 취소 (대기로)', icon: 'fa-rotate-left', danger: true },
-  ],
-  dev_fail: [
-    { action: 'retry', label: '재시도 (대기로)', icon: 'fa-rotate' },
-  ],
-  validation: [
-    { action: 'reject', label: '반려 (대기로)', icon: 'fa-rotate-left', danger: true },
-  ],
-  val_fail: [
-    { action: 'revalidate', label: '재검증', icon: 'fa-flask' },
-    { action: 'retry', label: '재개발 (대기로)', icon: 'fa-rotate' },
-  ],
-  done: [
-    { action: 'revalidate', label: '재검증 요청', icon: 'fa-flask' },
-    { action: 'reopen', label: '다시 열기 (대기로)', icon: 'fa-rotate' },
-  ],
-}
-
 export default function IssueDetailPage({ params }: { params: Promise<{ projectId: string; iid: string }> }) {
   const { projectId, iid } = use(params)
   const router = useRouter()
+  const { confirm } = useDialog()
+  const tc = useTranslations('common')
+  const tStage = useTranslations('stage')
+  const tIssue = useTranslations('issue')
+  const tAuth = useTranslations('auth')
+
+  const STAGE_INFO: Record<string, { label: string; color: string; icon: string; bg: string }> = {
+    waiting:    { label: tStage('waiting'),   color: 'text-ive-green',    icon: 'fa-clock',              bg: 'bg-ive-green/10' },
+    dev:        { label: tStage('dev'),       color: 'text-ive-cyan',     icon: 'fa-code',               bg: 'bg-ive-cyan/10' },
+    dev_fail:   { label: tStage('dev_fail'),  color: 'text-ive-red',     icon: 'fa-circle-xmark',       bg: 'bg-ive-red/10' },
+    done:       { label: tStage('done'),      color: 'text-emerald-400', icon: 'fa-circle-check',       bg: 'bg-emerald-500/10' },
+    unknown:    { label: tStage('unknown'),   color: 'text-ive-text-dim', icon: 'fa-question',         bg: 'bg-white/5' },
+  }
+
+  const STAGE_ACTIONS: Record<string, StageAction[]> = {
+    waiting: [],
+    dev: [
+      { action: 'cancel', label: tIssue('cancelToDev'), icon: 'fa-rotate-left', danger: true },
+    ],
+    dev_fail: [
+      { action: 'retry', label: tIssue('retryToWaiting'), icon: 'fa-rotate' },
+    ],
+    done: [
+      { action: 'reopen', label: tIssue('reopenToWaiting'), icon: 'fa-rotate' },
+    ],
+  }
   const [issue, setIssue] = useState<IssueDetail | null>(null)
   const [notes, setNotes] = useState<Note[]>([])
   const [loading, setLoading] = useState(true)
@@ -74,15 +74,19 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   const [comment, setComment] = useState('')
   const [posting, setPosting] = useState(false)
   const [stageChanging, setStageChanging] = useState(false)
-  const [showDesc, setShowDesc] = useState(false)
+  const [showDesc, setShowDesc] = useState(true)
   const [isClosing, setIsClosing] = useState(false)
+  const [editMode, setEditMode] = useState(false)
+  const [editTitle, setEditTitle] = useState('')
+  const [editDesc, setEditDesc] = useState('')
+  const [saving, setSaving] = useState(false)
+  const notesEndRef = useRef<HTMLDivElement>(null)
+  const postingRef = useRef(false)
 
   const fetchIssue = useCallback(async () => {
-    const res = await fetch(`/api/projects/${projectId}/issues`)
+    const res = await fetch(`/api/projects/${projectId}/issues/${iid}`)
     if (res.ok) {
-      const issues = await res.json()
-      const found = issues.find((i: any) => i.iid === Number(iid))
-      if (found) setIssue(found)
+      setIssue(await res.json())
     }
     setLoading(false)
   }, [projectId, iid])
@@ -121,6 +125,14 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   }
 
   async function handleCloseIssue() {
+    const ok = await confirm({
+      title: tIssue('closeIssue'),
+      message: tIssue('closeIssueConfirm', { iid }),
+      confirmText: tc('close'),
+      cancelText: tc('cancel'),
+      variant: 'warning',
+    })
+    if (!ok) return
     setIsClosing(true)
     try {
       const res = await fetch(`/api/projects/${projectId}/issues/${iid}/close`, {
@@ -136,7 +148,8 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   }
 
   async function handlePostComment() {
-    if (!comment.trim()) return
+    if (!comment.trim() || postingRef.current) return
+    postingRef.current = true
     setPosting(true)
     try {
       const res = await fetch(`/api/projects/${projectId}/issues/${iid}/notes`, {
@@ -149,22 +162,79 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
         await fetchNotes()
       }
     } finally {
+      postingRef.current = false
       setPosting(false)
     }
   }
 
+  // 코멘트 작성 + 상태를 대기로 변경 (재실행 트리거)
+  async function handleCommentAndRetry() {
+    if (!comment.trim() || postingRef.current) return
+    postingRef.current = true
+    setPosting(true)
+    try {
+      // 1. 코멘트 등록
+      const res = await fetch(`/api/projects/${projectId}/issues/${iid}/notes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: comment.trim() }),
+      })
+      if (!res.ok) return
+      setComment('')
+      // 2. 상태를 대기로 변경 (waiting이면 이미 대기이므로 스킵)
+      if (issue?.stage !== 'waiting') {
+        const stageAction = issue?.stage === 'done' ? 'reopen' : 'retry'
+        await fetch(`/api/projects/${projectId}/issues/${iid}/stage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stage: issue?.stage, action: stageAction }),
+        })
+      }
+      await fetchIssue()
+      await fetchNotes()
+    } finally {
+      postingRef.current = false
+      setPosting(false)
+    }
+  }
+
+  function startEdit() {
+    if (!issue) return
+    setEditTitle(issue.title)
+    setEditDesc(issue.description || '')
+    setEditMode(true)
+  }
+
+  async function handleSaveEdit() {
+    if (!editTitle.trim()) return
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/projects/${projectId}/issues/${iid}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: editTitle.trim(), description: editDesc }),
+      })
+      if (res.ok) {
+        setEditMode(false)
+        await fetchIssue()
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
+
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center text-ive-text-muted">불러오는 중...</div>
+    return <div className="min-h-screen flex items-center justify-center text-ive-text-muted">{tc('loading')}</div>
   }
 
   if (!issue) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <p className="text-ive-text-muted mb-4">이슈를 찾을 수 없습니다</p>
-          <Link href="/issues" className="text-ive-green font-semibold">
-            <i className="fa-solid fa-arrow-left mr-1" />목록으로
-          </Link>
+          <p className="text-ive-text-muted mb-4">{tIssue('notFound')}</p>
+          <button onClick={() => router.back()} className="text-ive-green font-semibold">
+            <i className="fa-solid fa-arrow-left mr-1" />{tAuth('goBack')}
+          </button>
         </div>
       </div>
     )
@@ -172,100 +242,201 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
 
   const stageInfo = STAGE_INFO[issue.stage] || STAGE_INFO.unknown
   const actions = STAGE_ACTIONS[issue.stage] || []
+  const iterationCount = notes.filter(n => n.body.includes('<!-- ive-bot -->') || n.body.includes('IVE(봇)')).length
 
   return (
     <div className="h-screen flex flex-col">
       {/* 헤더: 뒤로가기 + 이슈번호 + 상태 + 외부링크 */}
       <header className="sticky top-0 z-40 bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark shrink-0">
         <div className="flex items-center gap-2 px-3 py-2 max-w-lg mx-auto">
-          <Link href="/issues" className="text-ive-green font-semibold p-1 hover:bg-ive-green/5 rounded shrink-0">
+          <button onClick={() => router.back()} className="text-ive-green font-semibold p-1 hover:bg-ive-green/5 rounded shrink-0">
             <i className="fa-solid fa-arrow-left" />
-          </Link>
+          </button>
           <span className="text-base font-black text-ive-green shrink-0">#{issue.iid}</span>
           <span className={`text-xs font-bold px-1.5 py-0.5 rounded border ${stageInfo.bg} ${stageInfo.color} border-current/20 shrink-0`}>
             <i className={`fa-solid ${stageInfo.icon} mr-0.5`} />{stageInfo.label}
           </span>
+          {iterationCount > 0 && (
+            <span className="text-xs font-bold px-1.5 py-0.5 rounded border bg-ive-cyan/10 text-ive-cyan border-ive-cyan/20 shrink-0" title={tIssue('iterationCount', { count: iterationCount })}>
+              <i className="fa-solid fa-repeat mr-0.5" />{tIssue('iterationLabel', { count: iterationCount })}
+            </span>
+          )}
           <span className="text-xs text-ive-text-dim shrink-0"><i className="fa-solid fa-user mr-0.5" />{issue.author}</span>
           <span className="text-xs text-ive-text-dim ml-auto shrink-0">
-            {new Date(issue.updatedAt).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}
+            {new Date(issue.updatedAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}
           </span>
+          {issue.webUrl && (
+            <button
+              onClick={() => window.open(issue.webUrl, '_blank')}
+              className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center bg-ive-bg-card text-ive-text-dim border border-ive-border-subtle hover:text-ive-cyan hover:border-ive-cyan/30 transition-all"
+              title={tIssue('viewOnRemote')}
+              aria-label={tIssue('openOriginal')}
+            >
+              <i className="fa-solid fa-arrow-up-right-from-square text-xs" />
+            </button>
+          )}
         </div>
         {/* 제목 + 설명 토글 + 단계 변경 */}
         <div className="px-3 pb-2 max-w-lg mx-auto">
-          <div className="flex items-start gap-2">
-            <h1 className="text-sm font-bold text-ive-text leading-snug flex-1 line-clamp-2">{issue.title}</h1>
-            <div className="flex items-center gap-1 shrink-0">
-              {issue.description && (
-                <button onClick={() => setShowDesc(!showDesc)} className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all ${showDesc ? 'bg-ive-green/10 text-ive-green' : 'bg-ive-bg-card text-ive-text-dim border border-ive-border-subtle'}`} title="설명 보기">
-                  <i className={`fa-solid fa-file-lines text-xs`} />
-                </button>
-              )}
-              {actions.map(act => (
+          {editMode ? (
+            <div className="space-y-2">
+              <div className="flex gap-2 items-center">
+                <input
+                  type="text"
+                  value={editTitle}
+                  onChange={e => setEditTitle(e.target.value)}
+                  className="flex-1 bg-ive-bg-input border border-ive-border rounded-lg px-3 py-1.5 text-sm font-bold text-ive-text focus:outline-none focus:border-ive-green"
+                  placeholder={tIssue('title')}
+                  autoFocus
+                />
+              </div>
+              <div className="flex gap-2 items-end">
+                <textarea
+                  value={editDesc}
+                  onChange={e => setEditDesc(e.target.value)}
+                  className="flex-1 bg-ive-bg-input border border-ive-border rounded-lg px-3 py-1.5 text-sm text-ive-text resize-none focus:outline-none focus:border-ive-green"
+                  placeholder={tIssue('descriptionOptional')}
+                  rows={4}
+                />
+              </div>
+              <div className="flex gap-2">
                 <button
-                  key={act.action}
-                  onClick={() => handleStageAction(act.action)}
-                  disabled={stageChanging}
-                  className={`h-7 px-2 rounded-lg text-xs font-bold border transition-all active:scale-95 disabled:opacity-40 ${
-                    act.danger
-                      ? 'text-ive-red/80 border-ive-red/30 bg-ive-bg-card hover:bg-ive-red/10'
-                      : 'text-ive-green border-ive-green/30 bg-ive-bg-card hover:bg-ive-green/10'
-                  }`}
+                  onClick={handleSaveEdit}
+                  disabled={saving || !editTitle.trim()}
+                  className="flex-1 text-xs font-bold text-ive-green border border-ive-green/30 py-1.5 rounded-lg hover:bg-ive-green/10 transition-colors disabled:opacity-40"
                 >
-                  {stageChanging ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className={`fa-solid ${act.icon} mr-0.5`} />{act.label}</>}
+                  {saving ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-check mr-1" />{tc('save')}</>}
                 </button>
-              ))}
-              <button
-                onClick={handleCloseIssue}
-                disabled={isClosing || stageChanging}
-                className="h-7 px-2 rounded-lg text-xs font-bold border text-ive-red/80 border-ive-red/30 bg-ive-bg-card hover:bg-ive-red/10 transition-all active:scale-95 disabled:opacity-40"
-              >
-                {isClosing ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-xmark mr-0.5" />닫기</>}
-              </button>
+                <button
+                  onClick={() => setEditMode(false)}
+                  className="flex-1 text-xs font-bold text-ive-text-dim border border-ive-border py-1.5 rounded-lg hover:bg-ive-bg-deep transition-colors"
+                >
+                  {tc('cancel')}
+                </button>
+              </div>
             </div>
-          </div>
-          {showDesc && issue.description && (
-            <div className="mt-1.5 text-sm text-ive-text-muted bg-ive-bg-card rounded-lg p-2.5 whitespace-pre-wrap break-words leading-relaxed max-h-[30vh] overflow-y-auto">
-              {issue.description}
-            </div>
+          ) : (
+            <>
+              <div className="flex items-start gap-2 flex-wrap">
+                <h1 className="text-sm font-bold text-ive-text leading-snug flex-1 min-w-[70%]">{issue.title}</h1>
+                <div className="flex items-center gap-1 shrink-0 ml-auto">
+                  <button
+                    onClick={startEdit}
+                    className="w-7 h-7 rounded-lg flex items-center justify-center bg-ive-bg-card text-ive-text-dim border border-ive-border-subtle hover:text-ive-green hover:border-ive-green/30 transition-all"
+                    title={tc('edit')}
+                  >
+                    <i className="fa-solid fa-pen text-xs" />
+                  </button>
+                  {issue.description && (
+                    <button onClick={() => setShowDesc(!showDesc)} className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all ${showDesc ? 'bg-ive-green/10 text-ive-green' : 'bg-ive-bg-card text-ive-text-dim border border-ive-border-subtle'}`} title={tIssue('viewDescription')}>
+                      <i className={`fa-solid fa-file-lines text-xs`} />
+                    </button>
+                  )}
+                  {actions.map(act => (
+                    <button
+                      key={act.action}
+                      onClick={() => handleStageAction(act.action)}
+                      disabled={stageChanging}
+                      className={`h-7 px-2 rounded-lg text-xs font-bold border transition-all active:scale-95 disabled:opacity-40 ${
+                        act.danger
+                          ? 'text-ive-red/80 border-ive-red/30 bg-ive-bg-card hover:bg-ive-red/10'
+                          : 'text-ive-green border-ive-green/30 bg-ive-bg-card hover:bg-ive-green/10'
+                      }`}
+                    >
+                      {stageChanging ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className={`fa-solid ${act.icon} mr-0.5`} />{act.label}</>}
+                    </button>
+                  ))}
+                  <button
+                    onClick={handleCloseIssue}
+                    disabled={isClosing || stageChanging}
+                    className="h-7 px-2 rounded-lg text-xs font-bold border text-ive-red/80 border-ive-red/30 bg-ive-bg-card hover:bg-ive-red/10 transition-all active:scale-95 disabled:opacity-40"
+                  >
+                    {isClosing ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-xmark mr-0.5" />{tc('close')}</>}
+                  </button>
+                </div>
+              </div>
+              {showDesc && issue.description && (
+                <div className="mt-1.5 text-sm text-ive-text-muted bg-ive-bg-card rounded-lg p-2.5 break-words leading-relaxed max-h-[30vh] overflow-y-auto">
+                  <MarkdownNote body={cleanNoteBody(issue.description)} />
+                </div>
+              )}
+            </>
           )}
         </div>
       </header>
 
       {/* 활동 기록 - 남은 공간 전체 사용 */}
       <div className="flex-1 flex flex-col min-h-0 max-w-lg mx-auto w-full">
-        <div className="px-3 py-1.5 shrink-0 flex items-center justify-between">
-          <span className="text-xs font-bold text-ive-text-dim uppercase tracking-widest">
-            <i className="fa-solid fa-comments mr-1" />활동 기록
-            {!notesLoading && <span className="ml-1 opacity-50">({notes.length})</span>}
-          </span>
-        </div>
+        <div className="flex-1 overflow-y-auto pb-2 pl-3 pr-1">
+          {/* MR 리뷰 섹션 - 스크롤 영역 안에 배치 */}
+          {(issue.stage === 'done' || issue.stage === 'dev') && (
+            <div className="pr-2">
+              <MRReviewSection projectId={projectId} issueIid={Number(iid)} />
+            </div>
+          )}
 
-        <div className="flex-1 overflow-y-auto px-3 pb-2">
+          <div className="py-1.5 pr-2 flex items-center justify-between mt-2 sticky top-0 z-10 bg-ive-bg-deep/95 backdrop-blur-sm">
+            <span className="text-xs font-bold text-ive-text-dim uppercase tracking-widest">
+              <i className="fa-solid fa-comments mr-1" />{tIssue('activityLog')}
+              {!notesLoading && <span className="ml-1 opacity-50">({notes.length})</span>}
+            </span>
+            {notes.length > 0 && (
+              <button
+                onClick={() => notesEndRef.current?.scrollIntoView({ behavior: 'smooth' })}
+                className="text-xs font-bold text-ive-text-dim hover:text-ive-green border border-ive-border-subtle hover:border-ive-green/30 px-2 py-0.5 rounded-lg transition-all"
+                title={tIssue('lastNoteTooltip')}
+              >
+                <i className="fa-solid fa-angles-down mr-1" />{tIssue('last')}
+              </button>
+            )}
+          </div>
+
           {notesLoading ? (
-            <div className="text-center py-10 text-ive-text-dim text-sm">노트 불러오는 중...</div>
+            <div className="text-center py-10 text-ive-text-dim text-sm">{tIssue('loadingNotes')}</div>
           ) : notes.length === 0 ? (
-            <div className="text-center py-10 text-ive-text-dim text-sm">아직 활동 기록이 없습니다</div>
+            <div className="text-center py-10 text-ive-text-dim text-sm">{tIssue('noActivity')}</div>
           ) : (
             <div className="space-y-1.5">
-              {notes.map(note => (
-                <div key={note.id} className={`rounded-lg px-3 py-2 ${note.system ? 'bg-white/[0.02]' : 'bg-ive-bg-card border border-ive-border-subtle'}`}>
+              {notes.map(note => {
+                const isBot = !note.system && (note.body.includes('<!-- ive-bot -->') || note.body.includes('IVE(봇)'))
+                return (
+                <div key={note.id} className={`rounded-lg px-3 py-2 ${
+                  note.system
+                    ? 'bg-white/[0.02]'
+                    : isBot
+                      ? 'bg-ive-bg-card border border-ive-border-subtle'
+                      : 'bg-ive-green/[0.06] border border-ive-green/20'
+                }`}>
                   <div className="flex items-center gap-2 mb-1">
-                    <span className={`text-xs font-bold ${note.system ? 'text-ive-text-dim' : 'text-ive-cyan'}`}>
+                    <span className={`text-xs font-bold flex items-center gap-1 ${
+                      note.system ? 'text-ive-text-dim' : isBot ? 'text-ive-cyan' : 'text-ive-green'
+                    }`}>
                       {note.system ? (
-                        <><i className="fa-solid fa-gear mr-0.5" />시스템</>
+                        <><i className="fa-solid fa-gear mr-0.5" />{tIssue('system')}</>
+                      ) : isBot ? (
+                        <><i className="fa-solid fa-robot mr-0.5" />{tIssue('iveBot')}</>
                       ) : (
-                        <><i className="fa-solid fa-user mr-0.5" />{note.author}</>
+                        <>
+                          {note.avatarUrl ? (
+                            <img src={note.avatarUrl} alt="" className="w-4 h-4 rounded-full" />
+                          ) : (
+                            <i className="fa-solid fa-user" />
+                          )}
+                          {note.author}
+                        </>
                       )}
                     </span>
                     <span className="text-xs text-ive-text-dim ml-auto">
-                      {new Date(note.createdAt).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}
+                      {new Date(note.createdAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}
                     </span>
                   </div>
-                  <div className={`text-sm leading-relaxed whitespace-pre-wrap break-words ${note.system ? 'text-ive-text-dim italic' : 'text-ive-text-muted'}`}>
-                    {note.body.length > 500 ? <NoteBody body={note.body} /> : note.body}
+                  <div className={`text-sm leading-relaxed break-words ${note.system ? 'text-ive-text-dim italic' : 'text-ive-text-muted'}`}>
+                    {note.body.length > 500 ? <NoteBody body={note.body} /> : <MarkdownNote body={cleanNoteBody(note.body)} />}
                   </div>
                 </div>
-              ))}
+                )
+              })}
+              <div ref={notesEndRef} />
             </div>
           )}
         </div>
@@ -275,18 +446,36 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
           <div className="flex gap-2 items-end">
             <textarea
               value={comment}
-              onChange={e => setComment(e.target.value)}
-              placeholder="코멘트..."
+              onChange={e => {
+                setComment(e.target.value)
+                e.target.style.height = 'auto'
+                e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
+              }}
+              placeholder={tIssue('commentPlaceholder')}
               rows={1}
-              className="flex-1 bg-ive-bg-card border border-ive-border rounded-xl px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-green/50"
+              className="flex-1 min-h-10 bg-ive-bg-card border border-ive-border rounded-xl px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-green/50"
+              style={{ overflow: 'hidden' }}
             />
             <button
               onClick={handlePostComment}
               disabled={posting || !comment.trim()}
               className="shrink-0 w-10 h-10 rounded-xl bg-ive-green text-ive-bg-deep flex items-center justify-center active:scale-95 transition-all disabled:opacity-40"
+              title={tIssue('postCommentOnly')}
+              aria-label={tIssue('postComment')}
             >
               {posting ? <i className="fa-solid fa-circle-notch fa-spin" /> : <i className="fa-solid fa-paper-plane" />}
             </button>
+            {issue.stage !== 'dev' && (
+              <button
+                onClick={handleCommentAndRetry}
+                disabled={posting || !comment.trim()}
+                className="shrink-0 h-10 px-3 rounded-xl bg-ive-cyan text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold whitespace-nowrap"
+                title={tIssue('postAndRetryHint')}
+                aria-label={tIssue('postAndRetry')}
+              >
+                {posting ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-paper-plane" /><span>{tIssue('rerun')}</span></>}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -296,17 +485,74 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   )
 }
 
+/** 노트 본문 정리: 도구 태그 제거, HTML 태그를 MD로 변환 */
+function cleanNoteBody(body: string): string {
+  return body
+    .split('\n')
+    .filter(line => !line.match(/^>\s*\*{0,2}🔧/))
+    .join('\n')
+    .replace(/<details>/gi, '')
+    .replace(/<\/details>/gi, '')
+    .replace(/<summary>(.*?)<\/summary>/gi, '**$1**')
+    .replace(/<\/?br\s*\/?>/gi, '\n')
+    .replace(/<\/?(?:div|span|p)[^>]*>/gi, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+function MarkdownNote({ body }: { body: string }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        h1: ({ children }) => <h1 className="text-base font-bold text-ive-text mt-2 mb-1">{children}</h1>,
+        h2: ({ children }) => <h2 className="text-sm font-bold text-ive-text mt-2 mb-1">{children}</h2>,
+        h3: ({ children }) => <h3 className="text-sm font-bold text-ive-text mt-1.5 mb-0.5">{children}</h3>,
+        p: ({ children }) => <p className="mb-1.5 last:mb-0">{children}</p>,
+        ul: ({ children }) => <ul className="list-disc list-inside mb-1.5 space-y-0.5">{children}</ul>,
+        ol: ({ children }) => <ol className="list-decimal list-inside mb-1.5 space-y-0.5">{children}</ol>,
+        li: ({ children }) => <li>{children}</li>,
+        strong: ({ children }) => <strong className="font-bold text-ive-text">{children}</strong>,
+        em: ({ children }) => <em className="italic">{children}</em>,
+        code: ({ children, className }) => {
+          const isBlock = className?.includes('language-')
+          if (isBlock) {
+            return <code className="block bg-ive-bg-deep rounded-lg p-2 my-1.5 text-xs font-mono overflow-x-auto whitespace-pre">{children}</code>
+          }
+          return <code className="bg-ive-bg-deep px-1 py-0.5 rounded text-xs font-mono text-ive-cyan">{children}</code>
+        },
+        pre: ({ children }) => <pre className="mb-1.5">{children}</pre>,
+        blockquote: ({ children }) => <blockquote className="border-l-2 border-ive-border pl-2.5 my-1.5 text-ive-text-dim">{children}</blockquote>,
+        a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-ive-cyan hover:underline">{children}</a>,
+        hr: () => <hr className="border-ive-border-dark my-2" />,
+        table: ({ children }) => <table className="w-full border-collapse my-2 text-sm">{children}</table>,
+        thead: ({ children }) => <thead className="bg-ive-bg-deep">{children}</thead>,
+        tbody: ({ children }) => <tbody>{children}</tbody>,
+        tr: ({ children }) => <tr className="border-b border-ive-border-dark">{children}</tr>,
+        th: ({ children }) => <th className="border border-ive-border-dark px-2 py-1 text-left font-bold text-ive-text">{children}</th>,
+        td: ({ children }) => <td className="border border-ive-border-dark px-2 py-1 text-ive-text-dim">{children}</td>,
+      }}
+    >
+      {body}
+    </ReactMarkdown>
+  )
+}
+
 // 긴 노트를 접었다 펼 수 있는 컴포넌트
 function NoteBody({ body }: { body: string }) {
   const [expanded, setExpanded] = useState(false)
+  const tc = useTranslations('common')
+  const tIssue = useTranslations('issue')
+  const cleaned = cleanNoteBody(body)
+  const display = expanded ? cleaned : cleaned.slice(0, 500) + '...'
   return (
     <>
-      {expanded ? body : body.slice(0, 500) + '...'}
+      <MarkdownNote body={display} />
       <button
         onClick={() => setExpanded(!expanded)}
         className="block mt-1 text-xs text-ive-green hover:underline"
       >
-        {expanded ? '접기' : '전체 보기'}
+        {expanded ? tc('collapse') : tIssue('viewAll')}
       </button>
     </>
   )
