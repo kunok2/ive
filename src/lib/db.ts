@@ -801,6 +801,13 @@ export function hasActiveExecution(projectId: string, issueIid: number): boolean
   return !!r
 }
 
+export function hasPastExecution(projectId: string, issueIid: number): boolean {
+  const r = getDb().prepare(
+    "SELECT id FROM task_executions WHERE project_id = ? AND issue_iid = ? AND status IN ('success', 'failed') LIMIT 1"
+  ).get(projectId, issueIid)
+  return !!r
+}
+
 export function getLatestExecutionsByProject(projectId: string, limit: number = 20): TaskExecution[] {
   const rows = getDb().prepare(`
     SELECT te.*, a.name AS agent_name

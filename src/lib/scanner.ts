@@ -16,7 +16,9 @@ import {
   getSystemSetting,
   getIssueStage,
   getIssueStages,
-  setIssueStage
+  getIssueStageUpdatedAt,
+  setIssueStage,
+  hasPastExecution
 } from "./db";
 import { decrypt } from "./crypto";
 import { defaultLocale } from "@/i18n/config";
@@ -549,6 +551,12 @@ async function executeTask(
   updateAgentStatus(agent.id, 'busy');
 
   // 0. DB에 실행 시작 기록
+  // 재실행(retry/reopen)인 경우 대기시간 기준을 재요청 시점(stage가 waiting으로 변경된 시점)으로 설정
+  const isRetry = hasPastExecution(project.id, iid);
+  const effectiveCreatedAt = isRetry
+    ? (getIssueStageUpdatedAt(project.id, iid) || issue.created_at || undefined)
+    : (issue.created_at || undefined);
+
   createExecution({
     id: executionId,
     projectId: project.id,
@@ -562,7 +570,7 @@ async function executeTask(
     outputTokens: 0,
     costUsd: 0,
     turns: 0,
-    issueCreatedAt: issue.created_at || undefined,
+    issueCreatedAt: effectiveCreatedAt,
   });
 
   const isGitHub = project.provider === 'github';
