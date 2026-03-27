@@ -163,14 +163,19 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     }
   }, [addTrigger])
 
-  useEffect(() => {
+  const saveDraft = useCallback((value: string) => {
     if (!selectedProjectId) return
-    if (newBody) {
-      localStorage.setItem(`ive-issue-draft-${selectedProjectId}`, newBody)
+    if (value) {
+      localStorage.setItem(`ive-issue-draft-${selectedProjectId}`, value)
     } else {
       localStorage.removeItem(`ive-issue-draft-${selectedProjectId}`)
     }
-  }, [newBody, selectedProjectId])
+  }, [selectedProjectId])
+
+  const handleBodyChange = useCallback((value: string) => {
+    setNewBody(value)
+    saveDraft(value)
+  }, [saveDraft])
 
   useEffect(() => {
     if (selectedProjectId) {
@@ -275,8 +280,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
       })
       if (res.ok) {
         const created = await res.json()
-        setNewBody('')
-        localStorage.removeItem(`ive-issue-draft-${selectedProjectId}`)
+        handleBodyChange('')
         setShowAddForm(false)
         const newIssue: IveIssue = {
           iid: created.iid,
@@ -489,7 +493,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                   <span className="text-sm font-bold text-ive-green">
                     <i className="fa-solid fa-plus mr-1" />{tIssue('addNewIssue')}
                   </span>
-                  <button onClick={() => { setShowAddForm(false); setNewBody(''); localStorage.removeItem(`ive-issue-draft-${selectedProjectId}`) }} className="text-xs text-ive-text-dim hover:text-ive-text font-bold px-2 py-1 rounded-lg hover:bg-white/5 transition-all">
+                  <button onClick={() => { setShowAddForm(false); handleBodyChange('') }} className="text-xs text-ive-text-dim hover:text-ive-text font-bold px-2 py-1 rounded-lg hover:bg-white/5 transition-all">
                     {tCommon('cancel')}
                   </button>
                 </div>
@@ -497,7 +501,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                 <div className="flex gap-2 items-end mb-2">
                   <textarea
                     value={newBody}
-                    onChange={e => setNewBody(e.target.value)}
+                    onChange={e => handleBodyChange(e.target.value)}
                     placeholder={`${tIssue('titlePlaceholder')}\n\n${tIssue('bodyPlaceholder')}`}
                     rows={4}
                     className="flex-1 bg-ive-bg-deep border border-ive-border-dark rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-green/50"
