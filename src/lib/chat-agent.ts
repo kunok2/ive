@@ -100,7 +100,9 @@ export async function* runChatAgent(opts: ChatAgentOptions): AsyncGenerator<{ ty
 
   const locale = getSystemSetting('locale') || defaultLocale
   const isKo = locale === 'ko'
-  const langInstruction = isKo ? 'You MUST respond in Korean only.' : 'Respond in English only.'
+  const langInstruction = isKo
+    ? 'You MUST respond in the user\'s language: Korean (ko). All output — answers, explanations, code comments in responses, and summaries — MUST be written in Korean.'
+    : 'You MUST respond in the user\'s language: English (en). All output must be in English.'
 
   const isFirstMessage = !cliSessionId
   const resolvedCliPath = await resolveCliPath(agent)
@@ -133,7 +135,8 @@ ${userMessage}
 - Answer questions clearly and concisely.
 - If asked to make code changes, make them using git add (do NOT commit or push).
 - After making changes, briefly list what you modified.
-- Focus on answering the specific question — do not re-implement the entire issue.`
+- Focus on answering the specific question — do not re-implement the entire issue.
+- IMPORTANT: ${langInstruction}`
   } else {
     prompt = userMessage
   }

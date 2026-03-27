@@ -711,7 +711,9 @@ async function executeTask(
     // 1차: 이슈 본문이 지시사항 / 2차+: 사용자 피드백만이 지시사항
     let prompt: string;
     const providerLabel = isGitHub ? 'GitHub' : 'GitLab';
-    const langInstruction = isKo ? 'You MUST report and comment in Korean only.' : 'Report in English only.';
+    const langInstruction = isKo
+      ? 'You MUST respond in the user\'s language: Korean (ko). All output — comments, explanations, status updates, and work summaries — MUST be written in Korean.'
+      : 'You MUST respond in the user\'s language: English (en). All output must be in English.';
     if (isConflictTask) {
       // 충돌 감지 작업: description에 프롬프트가 이미 구성되어 있음
       prompt = `${langInstruction}\n\n${issue.description}`;
@@ -793,7 +795,8 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
 - Leave a brief start comment on the issue when you begin work.
 - Take your time and be thorough — resolve the problem precisely.
 - Review repeatedly until there are zero reasons the intended functionality could fail.
-- When designing UI, provide text-art mockups of the result where possible.`;
+- When designing UI, provide text-art mockups of the result where possible.
+- IMPORTANT: ${langInstruction}`;
 
     // 5. 에이전트 CLI 실행 (시스템 설정의 CLI 경로 우선 사용)
     const systemCliPath = getSystemSetting(`cli.${agent.cliName}.path`);
