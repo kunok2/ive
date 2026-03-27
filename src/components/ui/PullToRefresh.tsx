@@ -1,27 +1,35 @@
 'use client'
 
-import { useRef, useState, useCallback, type ReactNode } from 'react'
+import { useRef, useState, useCallback, type ReactNode, type RefObject } from 'react'
 import { useTranslations } from 'next-intl'
 
 interface Props {
   onRefresh: () => Promise<void>
   children: ReactNode
   className?: string
+  scrollContainerRef?: RefObject<HTMLElement | null>
 }
 
-export default function PullToRefresh({ onRefresh, children, className }: Props) {
+export default function PullToRefresh({ onRefresh, children, className, scrollContainerRef }: Props) {
   const [pullY, setPullY] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
   const touchStartY = useRef(0)
   const pulling = useRef(false)
   const t = useTranslations('pull')
 
+  const isAtTop = useCallback(() => {
+    if (scrollContainerRef?.current) {
+      return scrollContainerRef.current.scrollTop <= 0
+    }
+    return window.scrollY <= 0
+  }, [scrollContainerRef])
+
   const onTouchStart = useCallback((e: React.TouchEvent) => {
-    if (window.scrollY <= 0 && !refreshing) {
+    if (isAtTop() && !refreshing) {
       touchStartY.current = e.touches[0].clientY
       pulling.current = true
     }
-  }, [refreshing])
+  }, [refreshing, isAtTop])
 
   const onTouchMove = useCallback((e: React.TouchEvent) => {
     if (!pulling.current) return
