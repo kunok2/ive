@@ -664,7 +664,7 @@ async function executeTask(
       const lastBotNoteId = botCompletions[botCompletions.length - 1].id;
       const feedbackNotes = userNotes.filter((n: any) => n.id > lastBotNoteId);
       if (feedbackNotes.length > 0) {
-        latestFeedback = (isKo ? "\n\n## ⚠️ 최신 사용자 피드백 (반드시 우선 반영):\n" : "\n\n## ⚠️ Latest User Feedback (must be addressed first):\n") +
+        latestFeedback = "\n\n## ⚠️ Latest User Feedback (must be addressed first):\n" +
           feedbackNotes.map((n: any) => `> **${n.author.name}**: ${n.body}`).join('\n\n');
       }
     }
@@ -676,12 +676,12 @@ async function executeTask(
         .filter((n: any) => !n.system)
         .map((n: any) => {
           let body = n.body || "";
-          body = body.replace(/<details>[\s\S]*?<\/details>/gi, isKo ? "[작업 로그 생략]" : "[work log omitted]");
-          if (body.length > 800) body = body.substring(0, 800) + (isKo ? "\n...(이하 생략)" : "\n...(truncated)");
-          const role = n.body.includes("<!-- ive-bot -->") || n.body.includes("IVE(봇)") ? (isKo ? "🤖 봇" : "🤖 Bot") : `👤 ${n.author?.name || (isKo ? "사용자" : "User")}`;
+          body = body.replace(/<details>[\s\S]*?<\/details>/gi, "[work log omitted]");
+          if (body.length > 800) body = body.substring(0, 800) + "\n...(truncated)";
+          const role = n.body.includes("<!-- ive-bot -->") || n.body.includes("IVE(봇)") ? "🤖 Bot" : `👤 ${n.author?.name || "User"}`;
           return `**${role}** (${n.created_at}):\n${body}`;
         });
-      iterationContext = `\n## ${isKo ? '이슈 대화 히스토리' : 'Issue Conversation History'}:\n` + conversationNotes.join('\n\n---\n\n');
+      iterationContext = "\n## Issue Conversation History:\n" + conversationNotes.join('\n\n---\n\n');
     }
 
     log(`반복 횟수: ${iterationCount}차, 봇 완료 노트: ${botCompletions.length}건, 사용자 피드백: ${latestFeedback ? '있음' : '없음'}`, 'system');
@@ -692,28 +692,15 @@ async function executeTask(
     // 1차: 이슈 본문이 지시사항 / 2차+: 사용자 피드백만이 지시사항
     let prompt: string;
     const providerLabel = isGitHub ? 'GitHub' : 'GitLab';
-    const langInstruction = isKo ? '한국어로만 보고하세요.' : 'Report in English only.';
+    const langInstruction = isKo ? 'You MUST report and comment in Korean only.' : 'Report in English only.';
     if (iterationCount === 1) {
-      prompt = isKo
-        ? `다음 ${providerLabel} 이슈를 해결해주세요. ${langInstruction}\n\n## 이슈 #${iid}: ${issue.title}\n${issue.description || "설명 없음"}`
-        : `Please resolve the following ${providerLabel} issue. ${langInstruction}\n\n## Issue #${iid}: ${issue.title}\n${issue.description || "No description"}`;
+      prompt = `Please resolve the following ${providerLabel} issue. ${langInstruction}
+
+## Issue #${iid}: ${issue.title}
+${issue.description || "No description"}`;
     } else {
       // 재작업: 사용자의 최신 피드백이 최우선 명령. 이슈 본문/이력은 참고용.
-      prompt = isKo
-        ? `이슈 #${iid} "${issue.title}"에 대한 ${iterationCount}차 후속 작업입니다. ${langInstruction}
-
-## 🚨 최우선 작업 지시 (아래 내용만 수행하세요):
-${latestFeedback}
-
-**⚠️ 중요: 위 "최우선 작업 지시"에 있는 사용자 요청만 수행하세요. 이슈 본문의 원래 요청은 이미 이전 작업에서 처리 완료되었습니다. 아래 참고 섹션의 이전 이력과 이슈 본문은 맥락 이해용이며, 절대 이슈 본문을 처음부터 다시 수행하지 마세요.**
-${iterationContext}
-
-<details>
-<summary>참고: 원본 이슈 본문 (맥락 참고용 — 다시 수행하지 마세요)</summary>
-
-${issue.description || "설명 없음"}
-</details>`
-        : `This is follow-up iteration #${iterationCount} for issue #${iid} "${issue.title}". ${langInstruction}
+      prompt = `This is follow-up iteration #${iterationCount} for issue #${iid} "${issue.title}". ${langInstruction}
 
 ## 🚨 PRIMARY TASK (only perform the instructions below):
 ${latestFeedback}
@@ -730,25 +717,7 @@ ${issue.description || "No description"}
 
     if (isGitHub) {
       const ownerRepo = repoUrlParsed.pathname.startsWith('/') ? repoUrlParsed.pathname.slice(1) : repoUrlParsed.pathname;
-      prompt += isKo ? `
-
-## GitHub 연동 정보:
-- GitHub API: https://api.github.com
-- Repository: ${ownerRepo}
-- Issue Number: ${iid}
-- 인증: 환경변수 IVE_GITHUB_TOKEN 사용 (Authorization: Bearer 헤더)
-
-### 사용 가능한 GitHub API 예시:
-\`\`\`bash
-# 이슈에 코멘트 달기
-curl -s -H "Authorization: Bearer $IVE_GITHUB_TOKEN" -H "Accept: application/vnd.github+json" -X POST "https://api.github.com/repos/${ownerRepo}/issues/${iid}/comments" -d '{"body":"코멘트 내용"}'
-
-# 이슈 정보 조회
-curl -s -H "Authorization: Bearer $IVE_GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${ownerRepo}/issues/${iid}"
-
-# 이슈 코멘트 목록
-curl -s -H "Authorization: Bearer $IVE_GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${ownerRepo}/issues/${iid}/comments"
-\`\`\`` : `
+      prompt += `
 
 ## GitHub Integration:
 - GitHub API: https://api.github.com
@@ -771,25 +740,7 @@ curl -s -H "Authorization: Bearer $IVE_GITHUB_TOKEN" -H "Accept: application/vnd
       const gitlabBaseUrl = `${repoUrlParsed.protocol}//${repoUrlParsed.host}`;
       const projectPath = repoUrlParsed.pathname.startsWith('/') ? repoUrlParsed.pathname.slice(1) : repoUrlParsed.pathname;
       const encodedProjectPath = encodeURIComponent(projectPath);
-      prompt += isKo ? `
-
-## GitLab 연동 정보:
-- GitLab API: ${gitlabBaseUrl}/api/v4
-- Project: ${projectPath} (encoded: ${encodedProjectPath})
-- Issue IID: ${iid}
-- 인증: 환경변수 IVE_GITLAB_TOKEN 사용 (PRIVATE-TOKEN 헤더)
-
-### 사용 가능한 GitLab API 예시:
-\`\`\`bash
-# 이슈에 코멘트 달기
-curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" -X POST "${gitlabBaseUrl}/api/v4/projects/${encodedProjectPath}/issues/${iid}/notes" --data-urlencode "body=코멘트 내용"
-
-# 이슈 정보 조회
-curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/projects/${encodedProjectPath}/issues/${iid}"
-
-# 이슈 코멘트 목록
-curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/projects/${encodedProjectPath}/issues/${iid}/notes"
-\`\`\`` : `
+      prompt += `
 
 ## GitLab Integration:
 - GitLab API: ${gitlabBaseUrl}/api/v4
@@ -810,17 +761,7 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
 \`\`\``;
     }
 
-    prompt += isKo ? `
-
-## 지시사항:
-- 프로젝트 구조와 스타일을 파악하고 관련 코드를 수정하세요.
-- 수정 완료 후 git add로 변경 사항을 스테이징하세요.
-- git commit/push는 하지 마세요.
-- 작업 진행 중 중요한 발견이나 질문이 있으면 이슈에 코멘트를 남기세요.
-- 작업 시작 시 간단한 착수 코멘트를 이슈에 남기세요.
-- 아주 꼼꼼히 충분한 시간을 가지고 정확히 문제를 해결하세요.
-- 의도한 기능이 동작하지 않을 이유가 0이 될 때까지 검토 또 검토하세요.
-- 화면 설계 시에는 가급적 텍스트아트로 작업의 결과를 제공하세요.` : `
+    prompt += `
 
 ## Instructions:
 - Understand the project structure and style, then modify the relevant code.
@@ -1101,14 +1042,10 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
         const isPermission = pushMsg.includes('403') || pushMsg.includes('denied') || pushMsg.includes('Permission') || pushMsg.includes('protected');
         log(`push 실패: ${pushMsg}`, 'error');
         // 이슈에 push 실패 사유 코멘트 (best-effort)
-        const pushFailReason = isPermission ? (isKo ? 'Push 권한 없음' : 'No push permission') : `Push ${isKo ? '실패' : 'failed'}: ${pushMsg.substring(0, 100)}`;
+        const pushFailReason = isPermission ? 'No push permission' : `Push failed: ${pushMsg.substring(0, 100)}`;
         const pushFailNote = isPermission
-          ? (isKo
-            ? `<!-- ive-bot -->\n## ${agent.name} Push 권한 없음\n\n코드 수정은 완료했으나, 이 저장소에 push 권한이 없어 브랜치를 생성할 수 없습니다.\n토큰 계정에 저장소 쓰기(write) 권한을 부여하거나, fork 방식을 사용해주세요.\n\n소요 시간: ${durationStr}`
-            : `<!-- ive-bot -->\n## ${agent.name} No Push Permission\n\nCode changes are complete, but cannot create a branch due to insufficient push permissions.\nPlease grant write access to the token account or use a fork-based workflow.\n\nDuration: ${durationStr}`)
-          : (isKo
-            ? `<!-- ive-bot -->\n## ${agent.name} Push 실패\n\n코드 수정은 완료했으나 push에 실패했습니다: ${pushMsg}\n\n소요 시간: ${durationStr}`
-            : `<!-- ive-bot -->\n## ${agent.name} Push Failed\n\nCode changes are complete, but push failed: ${pushMsg}\n\nDuration: ${durationStr}`);
+          ? `<!-- ive-bot -->\n## ${agent.name} No Push Permission\n\nCode changes are complete, but cannot create a branch due to insufficient push permissions.\nPlease grant write access to the token account or use a fork-based workflow.\n\nDuration: ${durationStr}`
+          : `<!-- ive-bot -->\n## ${agent.name} Push Failed\n\nCode changes are complete, but push failed: ${pushMsg}\n\nDuration: ${durationStr}`;
         setIssueStage(project.id, iid, 'dev_fail', pushFailReason);
         try {
           if (isGitHub) {
@@ -1130,13 +1067,13 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
         const existingPR = await getGitHubPR(project, token, branchName);
         if (existingPR) {
           mrUrl = existingPR.web_url;
-          await addGitHubPRNote(project, token, existingPR.iid, isKo ? `## 반복 수정 (${iterationCount}차)\n피드백을 반영하여 추가 수정했습니다.` : `## Iteration #${iterationCount}\nApplied feedback and made additional changes.`);
+          await addGitHubPRNote(project, token, existingPR.iid, `## Iteration #${iterationCount}\nApplied feedback and made additional changes.`);
         } else {
           const prResult = await createGitHubPR(project, token, {
             source_branch: branchName,
             target_branch: baseBranch,
             title: `fix: resolve #${iid} - ${issue.title}`,
-            description: isKo ? `이슈 #${iid} 해결을 위한 자동 PR입니다. (${iterationCount}차 작업)` : `Auto-generated PR to resolve issue #${iid}. (Iteration #${iterationCount})`,
+            description: `Auto-generated PR to resolve issue #${iid}. (Iteration #${iterationCount})`,
           });
           mrUrl = prResult?.web_url || "";
         }
@@ -1144,13 +1081,13 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
         const existingMR = await getGitLabMR(project, token, branchName);
         if (existingMR) {
           mrUrl = existingMR.web_url;
-          await addGitLabMRNote(project, token, existingMR.iid, isKo ? `## 반복 수정 (${iterationCount}차)\n피드백을 반영하여 추가 수정했습니다.` : `## Iteration #${iterationCount}\nApplied feedback and made additional changes.`);
+          await addGitLabMRNote(project, token, existingMR.iid, `## Iteration #${iterationCount}\nApplied feedback and made additional changes.`);
         } else {
           const mrResult = await createGitLabMR(project, token, {
             source_branch: branchName,
             target_branch: baseBranch,
             title: `fix: resolve #${iid} - ${issue.title}`,
-            description: isKo ? `이슈 #${iid} 해결을 위한 자동 MR입니다. (${iterationCount}차 작업)` : `Auto-generated MR to resolve issue #${iid}. (Iteration #${iterationCount})`,
+            description: `Auto-generated MR to resolve issue #${iid}. (Iteration #${iterationCount})`,
             remove_source_branch: false,
             squash: true
           });
@@ -1161,10 +1098,8 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
       const mrLabel = isGitHub ? 'PR' : 'MR';
       // 대화 내용을 마크다운으로 정리 (최대 60000자)
       const conversationLog = conversationParts.join('\n\n').substring(0, 60000);
-      const mrLine = mrUrl ? `${mrLabel}: ${mrUrl}` : `${mrLabel}: ${isKo ? '생성 실패 (권한 부족 또는 API 오류)' : 'creation failed (insufficient permissions or API error)'}`;
-      const completionNote = isKo
-        ? `<!-- ive-bot -->\n## ${agent.name} 개발 완료\n\n${mrLine}\n소요 시간: ${durationStr}\n\n개발이 완료되었습니다. 리뷰 후 머지해주세요.\n\n<details>\n<summary>🤖 AI 작업 로그 (펼치기)</summary>\n\n${conversationLog}\n\n</details>`
-        : `<!-- ive-bot -->\n## ${agent.name} Development Complete\n\n${mrLine}\nDuration: ${durationStr}\n\nDevelopment is complete. Please review and merge.\n\n<details>\n<summary>🤖 AI Work Log (expand)</summary>\n\n${conversationLog}\n\n</details>`;
+      const mrLine = mrUrl ? `${mrLabel}: ${mrUrl}` : `${mrLabel}: creation failed (insufficient permissions or API error)`;
+      const completionNote = `<!-- ive-bot -->\n## ${agent.name} Development Complete\n\n${mrLine}\nDuration: ${durationStr}\n\nDevelopment is complete. Please review and merge.\n\n<details>\n<summary>🤖 AI Work Log (expand)</summary>\n\n${conversationLog}\n\n</details>`;
       if (isGitHub) {
         await addGitHubIssueComment(project, iid, token, completionNote);
       } else {
@@ -1178,9 +1113,7 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
     } else {
       log("코드 변경사항 없음. 작업 완료로 처리.", 'system');
       const noChangeLog = conversationParts.join('\n\n').substring(0, 60000);
-      const noChangeNote = isKo
-        ? `<!-- ive-bot -->\n## ${agent.name} 개발 완료\n\n코드 변경 없이 작업을 완료했습니다.\n소요 시간: ${durationStr}\n\n<details>\n<summary>🤖 AI 작업 로그 (펼치기)</summary>\n\n${noChangeLog}\n\n</details>`
-        : `<!-- ive-bot -->\n## ${agent.name} Development Complete\n\nTask completed without code changes.\nDuration: ${durationStr}\n\n<details>\n<summary>🤖 AI Work Log (expand)</summary>\n\n${noChangeLog}\n\n</details>`;
+      const noChangeNote = `<!-- ive-bot -->\n## ${agent.name} Development Complete\n\nTask completed without code changes.\nDuration: ${durationStr}\n\n<details>\n<summary>🤖 AI Work Log (expand)</summary>\n\n${noChangeLog}\n\n</details>`;
       try {
         if (isGitHub) {
           await addGitHubIssueComment(project, iid, token, noChangeNote);
@@ -1196,10 +1129,8 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
   } catch (err: any) {
     log(`오류 발생: ${err.message}`, 'error');
     const errorLog = conversationParts.join('\n\n').substring(0, 60000);
-    const errorNote = isKo
-      ? `<!-- ive-bot -->\n## ${agent.name} 실행 오류\n오류가 발생했습니다: ${err.message}\n\n<details>\n<summary>🤖 AI 작업 로그 (펼치기)</summary>\n\n${errorLog}\n\n</details>`
-      : `<!-- ive-bot -->\n## ${agent.name} Execution Error\nAn error occurred: ${err.message}\n\n<details>\n<summary>🤖 AI Work Log (expand)</summary>\n\n${errorLog}\n\n</details>`;
-    setIssueStage(project.id, iid, 'dev_fail', (err.message || (isKo ? '알 수 없는 오류' : 'Unknown error')).substring(0, 200));
+    const errorNote = `<!-- ive-bot -->\n## ${agent.name} Execution Error\nAn error occurred: ${err.message}\n\n<details>\n<summary>🤖 AI Work Log (expand)</summary>\n\n${errorLog}\n\n</details>`;
+    setIssueStage(project.id, iid, 'dev_fail', (err.message || 'Unknown error').substring(0, 200));
     try {
       if (isGitHub) {
         await addGitHubIssueComment(project, iid, token, errorNote);
