@@ -878,7 +878,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                   e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
                 }}
                 onKeyDown={e => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
+                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
                     e.preventDefault()
                     handleSendChatMessage()
                   }
@@ -887,7 +887,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                 rows={1}
                 disabled={chatSending}
                 className="flex-1 min-h-10 bg-ive-bg-card border border-purple-500/30 rounded-xl px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-purple-500/50 disabled:opacity-50"
-                style={{ overflow: 'hidden' }}
+                style={{ overflowY: 'auto' }}
               />
               <button
                 onClick={handleSendChatMessage}
