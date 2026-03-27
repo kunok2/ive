@@ -1,18 +1,8 @@
 stages:
-  - deploy
   - publish
 
 variables:
   IMAGE_NAME: dazzlepf/spring-ive
-
-deploy:
-  stage: deploy
-  tags:
-    - deploy
-  script:
-    - docker compose up -d --force-recreate spring-ive
-  only:
-    - main
 
 publish:
   stage: publish
@@ -26,4 +16,3 @@ publish:
     - docker push $IMAGE_NAME:$CI_COMMIT_SHORT_SHA
   only:
     - main
-  when: manual
