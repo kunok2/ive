@@ -1,22 +1,17 @@
 services:
-  ive:
+  spring-ive:
     image: dazzlepf/spring-ive:latest
     ports:
       - "443:443"
     volumes:
-      # SQLite DB, 로그 영속
       - ./data:/app/data
-      # 에이전트 작업 공간 영속
       - ./workspaces:/app/workspaces
-      # Claude Code 설정/인증 영속 (claude 로그인 정보 등)
       - ./claude-config:/home/ive/.claude
-      # SSL 인증서
       - ./ssl:/app/ssl:ro
     env_file:
       - .env
     environment:
       - NODE_ENV=production
-      # 반드시 안전한 값으로 변경하세요
       - ENCRYPTION_KEY=spring-ive-dev-encryption-key-change-in-prod
       - JWT_SECRET=spring-ive-dev-secret-change-in-production
     logging:
