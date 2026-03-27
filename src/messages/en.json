@@ -278,10 +278,10 @@
     "waitingBadge": "Waiting",
     "todayRecords": "Today's Records ({count})",
     "errorLabel": "Error:",
-    "conflictLabel": "Conflict"
+    "conflictLabel": "Merge"
   },
   "conflict": {
-    "title": "MR Conflict Manager",
+    "title": "MR Merge Manager",
     "conflictCount": "{count} conflict(s)",
     "totalMRs": "{count} total",
     "loading": "Loading MR list...",

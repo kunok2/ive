@@ -152,11 +152,11 @@ export default function ConflictResolutionPanel({ projectId, projectColor, onClo
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 border-t border-ive-red/20">
+    <div className="flex-1 flex flex-col min-h-0 border-t border-ive-purple/20">
       <div className="px-3 py-2 bg-ive-bg-deep/50 border-b border-ive-border-dark shrink-0 flex items-center justify-between">
-        <span className="text-xs font-bold text-ive-red uppercase tracking-widest">
+        <span className="text-xs font-bold text-ive-purple uppercase tracking-widest">
           <i className="fa-solid fa-code-merge mr-1" />
-          {t('title')} — {t('conflictCount', { count: conflicts.length })} / {t('totalMRs', { count: mrs.length })}
+          {t('title')} —{conflicts.length > 0 && <>{' '}<span className="text-ive-red">{t('conflictCount', { count: conflicts.length })}</span> /</>} {t('totalMRs', { count: mrs.length })}
         </span>
         <button onClick={onClose} className="text-ive-text-dim hover:text-ive-text transition-colors">
           <i className="fa-solid fa-xmark" />

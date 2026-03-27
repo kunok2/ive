@@ -61,6 +61,8 @@ export default function ProjectCard({ project }: Props) {
   const [killing, setKilling] = useState<string | null>(null)
   const [waitingIssues, setWaitingIssues] = useState<any[]>([])
   const [activities, setActivities] = useState<Record<string, ToolActivity>>({})
+  const [liveMRCount, setLiveMRCount] = useState<number | null>(null)
+  const [liveConflictCount, setLiveConflictCount] = useState<number | null>(null)
 
   const fetchStats = useCallback(async () => {
     try {
@@ -147,11 +149,30 @@ export default function ProjectCard({ project }: Props) {
   const todayStartISO = getKSTTodayStartISO()
   const todayDoneExecs = doneExecs.filter(e => e.startedAt >= todayStartISO)
 
+  const mergeCount = liveMRCount ?? 0
+  const conflictCount = liveConflictCount ?? stats?.conflictCount ?? 0
   const runningCount = stats?.running ?? 0
   const completedCount = stats?.completed ?? 0
   const failedCount = stats?.failed ?? 0
   const totalDone = completedCount + failedCount
   const yesterdayDiff = stats ? totalDone - stats.yesterdayCompleted : 0
+
+  // 실시간 충돌(병합) 카운트 — DB 캐시와 별도로 API에서 직접 조회
+  useEffect(() => {
+    const fetchConflictCount = async () => {
+      try {
+        const res = await fetch(`/api/projects/${project.id}/conflicts`)
+        if (res.ok) {
+          const data = await res.json()
+          setLiveMRCount(data.totalOpenMRs ?? 0)
+          setLiveConflictCount(data.conflictCount ?? 0)
+        }
+      } catch { /* ignore */ }
+    }
+    fetchConflictCount()
+    const timer = setInterval(fetchConflictCount, 60000)
+    return () => clearInterval(timer)
+  }, [project.id])
 
   // activities 폴링 (running 중일 때만)
   useEffect(() => {
@@ -310,16 +331,16 @@ export default function ProjectCard({ project }: Props) {
           <span className="text-xs text-ive-text-dim font-bold">{tp('tokensLabel')}</span>
         </div>
 
-        {/* 충돌 */}
+        {/* 병합 */}
         <button
           onClick={() => setExpandedPanel(expandedPanel === 'conflicts' ? null : 'conflicts')}
-          className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'conflicts' ? 'bg-ive-red/5' : 'hover:bg-white/[0.02]'}`}
+          className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'conflicts' ? 'bg-ive-purple/5' : 'hover:bg-white/[0.02]'}`}
         >
-          <span className={`text-lg font-black leading-none ${(stats?.conflictCount ?? 0) > 0 ? 'text-ive-red animate-pulse' : 'text-ive-text-dim'}`}>
-            {stats?.conflictCount ?? 0}
+          <span className={`text-lg font-black leading-none ${conflictCount > 0 ? 'text-ive-red animate-pulse' : mergeCount > 0 ? 'text-ive-purple' : 'text-ive-text-dim'}`}>
+            {mergeCount}
           </span>
-          <i className={`fa-solid fa-code-merge text-xs ${(stats?.conflictCount ?? 0) > 0 ? 'text-ive-red' : 'text-ive-text-dim'}`} />
-          <span className={`text-xs font-bold ${(stats?.conflictCount ?? 0) > 0 ? 'text-ive-red' : 'text-ive-text-dim'}`}>{tp('conflictLabel')}</span>
+          <i className={`fa-solid fa-code-merge text-xs ${conflictCount > 0 ? 'text-ive-red' : mergeCount > 0 ? 'text-ive-purple' : 'text-ive-text-dim'}`} />
+          <span className={`text-xs font-bold ${conflictCount > 0 ? 'text-ive-red' : mergeCount > 0 ? 'text-ive-purple' : 'text-ive-text-dim'}`}>{tp('conflictLabel')}</span>
         </button>
       </div>
 
@@ -422,7 +443,7 @@ export default function ProjectCard({ project }: Props) {
         </div>
       )}
 
-      {/* 충돌 해결 패널 */}
+      {/* 병합 관리 패널 */}
       {expandedPanel === 'conflicts' && (
         <ConflictResolutionPanel
           projectId={project.id}

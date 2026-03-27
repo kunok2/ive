@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
-import { getProject, getProjectAccess } from '@/lib/db'
+import { getProject, getProjectAccess, updateProjectConflictCount } from '@/lib/db'
 import { decrypt } from '@/lib/crypto'
 import { fetchOpenMRs, mergeMR } from '@/lib/provider'
 
@@ -26,6 +26,9 @@ export async function GET(
 
   const openMRs = await fetchOpenMRs(project, decryptedToken)
   const conflicts = openMRs.filter((mr: any) => mr.has_conflicts)
+
+  // DB 캐시도 실시간 값으로 동기화 — 카드 통계에 반영
+  updateProjectConflictCount(id, conflicts.length)
 
   return NextResponse.json({
     conflictCount: conflicts.length,
