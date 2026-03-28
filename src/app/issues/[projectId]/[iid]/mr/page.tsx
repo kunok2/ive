@@ -33,7 +33,9 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [merging, setMerging] = useState(false)
+  const [closing, setClosing] = useState(false)
   const [showMergeConfirm, setShowMergeConfirm] = useState(false)
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false)
   const [mergeError, setMergeError] = useState('')
 
   const fetchChanges = useCallback(async () => {
@@ -68,6 +70,25 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
       setMergeError(err instanceof Error ? err.message : '머지 실패')
     } finally {
       setMerging(false)
+    }
+  }
+
+  async function handleCloseMR() {
+    setClosing(true)
+    setMergeError('')
+    try {
+      const res = await fetch(`/api/projects/${projectId}/issues/${iid}/mr`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'close' }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Close failed')
+      router.back()
+    } catch (err) {
+      setMergeError(err instanceof Error ? err.message : 'MR 닫기 실패')
+    } finally {
+      setClosing(false)
     }
   }
 
@@ -134,13 +155,13 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
               </div>
             )}
 
-            {/* 머지 버튼 */}
+            {/* 머지/닫기 버튼 */}
             {!isMerged && (
-              <div className="mt-6 mb-4">
+              <div className="mt-6 mb-4 flex gap-2">
                 <button
                   onClick={() => canMerge && setShowMergeConfirm(true)}
-                  disabled={!canMerge || merging}
-                  className={`w-full text-base font-bold py-3 rounded-xl active:scale-[0.98] transition-all ${
+                  disabled={!canMerge || merging || closing}
+                  className={`flex-1 text-base font-bold py-3 rounded-xl active:scale-[0.98] transition-all ${
                     canMerge
                       ? 'text-white bg-ive-green hover:bg-ive-green/90 shadow-lg shadow-ive-green/20'
                       : 'text-ive-text-dim bg-ive-bg-card border border-ive-border-subtle cursor-not-allowed'
@@ -152,6 +173,17 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
                     <><i className="fa-solid fa-ban mr-1.5" />충돌로 머지 불가</>
                   ) : (
                     <><i className="fa-solid fa-code-merge mr-1.5" />머지</>
+                  )}
+                </button>
+                <button
+                  onClick={() => setShowCloseConfirm(true)}
+                  disabled={merging || closing}
+                  className="text-base font-bold text-ive-red/70 bg-ive-red/5 px-4 py-3 rounded-xl active:scale-[0.98] transition-all hover:bg-ive-red/10 border border-ive-red/20"
+                >
+                  {closing ? (
+                    <i className="fa-solid fa-spinner fa-spin" />
+                  ) : (
+                    <><i className="fa-solid fa-xmark mr-1.5" />닫기</>
                   )}
                 </button>
               </div>
@@ -174,6 +206,15 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
         title="MR 머지 확인"
         message={`!${mr?.iid} ${mr?.source_branch} → ${mr?.target_branch}\n\n이 MR을 머지할까요?`}
         confirmLabel="머지"
+      />
+      <ConfirmModal
+        open={showCloseConfirm}
+        onClose={() => setShowCloseConfirm(false)}
+        onConfirm={handleCloseMR}
+        title="MR 닫기"
+        message={`!${mr?.iid} ${mr?.source_branch}\n\n머지하지 않고 이 MR을 닫을까요?`}
+        confirmLabel="닫기"
+        danger
       />
 
       <MobileTabBar />

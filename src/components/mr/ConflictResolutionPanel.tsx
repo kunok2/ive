@@ -62,6 +62,8 @@ export default function ConflictResolutionPanel({ projectId, projectColor, onClo
     else setSelected(new Set(mrs.map(mr => mr.iid)))
   }
 
+  const [closing, setClosing] = useState(false)
+
   const handleMerge = async () => {
     if (selected.size === 0) return
     setMerging(true)
@@ -80,6 +82,26 @@ export default function ConflictResolutionPanel({ projectId, projectColor, onClo
       }
     } catch { /* ignore */ }
     finally { setMerging(false) }
+  }
+
+  const handleClose = async () => {
+    if (selected.size === 0) return
+    setClosing(true)
+    setMergeResults([])
+    try {
+      const res = await fetch(`/api/projects/${projectId}/conflicts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'close', mrIids: Array.from(selected) }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setMergeResults(data.results ?? [])
+        setSelected(new Set())
+        setTimeout(fetchConflicts, 2000)
+      }
+    } catch { /* ignore */ }
+    finally { setClosing(false) }
   }
 
   const renderMR = (mr: MRItem) => {
@@ -130,7 +152,7 @@ export default function ConflictResolutionPanel({ projectId, projectColor, onClo
                   ? 'bg-ive-green/15 text-ive-green border border-ive-green/30'
                   : 'bg-ive-red/15 text-ive-red border border-ive-red/30'
               }`}>
-                {result.success ? t('merged') : t('mergeFailed')}
+                {result.success ? (result.error === 'closed' ? t('closed') : t('merged')) : t('mergeFailed')}
               </span>
             )}
           </div>
@@ -221,17 +243,30 @@ export default function ConflictResolutionPanel({ projectId, projectColor, onClo
           <span className="text-xs text-ive-text-dim">
             {t('selectedCount', { count: selected.size })}
           </span>
-          <button
-            onClick={handleMerge}
-            disabled={merging || selected.size === 0}
-            className="h-8 px-3 rounded-full text-xs font-bold transition-all disabled:opacity-30 disabled:cursor-not-allowed bg-ive-green/15 text-ive-green border border-ive-green/30 hover:bg-ive-green/25"
-          >
-            {merging ? (
-              <><i className="fa-solid fa-circle-notch fa-spin mr-1" />{t('merging')}</>
-            ) : (
-              <><i className="fa-solid fa-code-merge mr-1" />{t('sequentialMerge')}</>
-            )}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleClose}
+              disabled={closing || merging || selected.size === 0}
+              className="h-8 px-3 rounded-full text-xs font-bold transition-all disabled:opacity-30 disabled:cursor-not-allowed bg-ive-red/10 text-ive-red/70 border border-ive-red/20 hover:bg-ive-red/15"
+            >
+              {closing ? (
+                <><i className="fa-solid fa-circle-notch fa-spin mr-1" />{t('closingMR')}</>
+              ) : (
+                <><i className="fa-solid fa-xmark mr-1" />{t('closeMR')}</>
+              )}
+            </button>
+            <button
+              onClick={handleMerge}
+              disabled={merging || closing || selected.size === 0}
+              className="h-8 px-3 rounded-full text-xs font-bold transition-all disabled:opacity-30 disabled:cursor-not-allowed bg-ive-green/15 text-ive-green border border-ive-green/30 hover:bg-ive-green/25"
+            >
+              {merging ? (
+                <><i className="fa-solid fa-circle-notch fa-spin mr-1" />{t('merging')}</>
+              ) : (
+                <><i className="fa-solid fa-code-merge mr-1" />{t('sequentialMerge')}</>
+              )}
+            </button>
+          </div>
         </div>
       )}
     </div>

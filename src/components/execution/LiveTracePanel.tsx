@@ -8,6 +8,19 @@ import LogViewer from '@/components/ui/LogViewer'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 import MarqueeText from '@/components/ui/MarqueeText'
 
+function ThinkingElapsed() {
+  const [seconds, setSeconds] = useState(0)
+  useEffect(() => {
+    const interval = setInterval(() => setSeconds(s => s + 1), 1000)
+    return () => clearInterval(interval)
+  }, [])
+  return (
+    <span className="text-purple-400 text-xs">
+      {seconds}초 생각중...
+    </span>
+  )
+}
+
 interface ChatMsg { id: string; role: 'user' | 'assistant'; content: string; createdAt: string }
 
 function ChatViewer({ projectId, execution, agent }: { projectId: string; execution: TaskExecution; agent: Agent }) {
@@ -79,9 +92,7 @@ function ChatViewer({ projectId, execution, agent }: { projectId: string; execut
       {agentProcessing && (
         <div className="flex items-center gap-1.5">
           <AgentAvatar avatar={agent.avatar} size="sm" />
-          <span className="text-purple-400 text-xs">
-            <i className="fa-solid fa-circle-notch fa-spin mr-1" />응답 중...
-          </span>
+          <ThinkingElapsed />
         </div>
       )}
     </div>

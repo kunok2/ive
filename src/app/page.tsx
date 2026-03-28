@@ -125,7 +125,7 @@ export default function HomePage() {
             </button>
             <button
               onClick={async () => {
-                const ok = await showConfirm({ title: td('logoutTitle'), message: td('logoutMessage'), confirmText: tAuth('logout'), cancelText: tc('cancel'), variant: 'warning' })
+                const ok = await showConfirm({ title: td('logoutTitle'), message: td('logoutMessage'), confirmText: tAuth('logout'), cancelText: tc('cancel'), variant: 'info' })
                 if (ok) { await logout(); router.push('/login') }
               }}
               className="w-8 h-8 rounded-full bg-ive-bg-card border border-ive-border-subtle flex items-center justify-center text-ive-text-dim hover:text-ive-text active:scale-95 transition-all"

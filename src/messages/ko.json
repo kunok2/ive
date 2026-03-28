@@ -296,7 +296,10 @@
     "openIssue": "이슈 페이지 열기",
     "selectedCount": "{count}건 선택",
     "sequentialMerge": "순차 머지",
-    "merging": "머지 중..."
+    "merging": "머지 중...",
+    "closeMR": "MR 닫기",
+    "closingMR": "닫는 중...",
+    "closed": "닫기 완료"
   },
   "issue": {
     "issues": "이슈",
@@ -358,10 +361,12 @@
     "startingChat": "채팅 준비 중...",
     "endChat": "채팅 종료",
     "endChatConfirm": "채팅 세션을 종료하시겠습니까?",
-    "chatPlaceholder": "AI에게 질문... (Ctrl+Enter로 전송)",
+    "chatPlaceholder": "AI에게 질문... (Enter로 전송)",
     "chatSending": "응답 중...",
+    "chatThinking": "{seconds}초 생각중...",
     "chatWelcome": "AI 채팅이 시작되었습니다. 완료된 작업에 대해 질문하거나 간단한 수정을 요청할 수 있습니다.",
-    "chatEnded": "채팅이 종료되었습니다.",
+    "chatEnded": "이전 채팅이 종료되었습니다.",
+    "startNewChat": "새 채팅 시작",
     "chatGreeting": "안녕하세요, {agent}입니다. 이슈 #{iid}의 내용을 확인했습니다. 궁금한 점이나 수정이 필요한 사항이 있으면 편하게 질문해 주세요.",
     "chatExistingConfirm": "이슈 #{iid}에서 진행 중인 채팅이 있습니다. 해당 채팅을 종료하고 새 채팅을 시작하시겠습니까?",
     "chatIdleClose": "일정 시간 동안 대화가 없어 채팅을 종료합니다. 추가 질문이 있으시면 다시 채팅을 시작해 주세요. 감사합니다. - {agent}",
@@ -484,7 +489,9 @@
     "logoutMessage": "로그아웃 하시겠습니까?",
     "limitExceededTitle": "제한 초과",
     "mrMergeTitle": "MR 머지 확인",
-    "mrMergeConfirm": "!{iid} {source} → {target}\n\n이 MR을 머지할까요?"
+    "mrMergeConfirm": "!{iid} {source} → {target}\n\n이 MR을 머지할까요?",
+    "mrCloseTitle": "MR 닫기",
+    "mrCloseConfirm": "!{iid} {source}\n\n머지하지 않고 이 MR을 닫을까요?"
   },
   "color": {
     "green": "초록",
@@ -529,7 +536,8 @@
     "codeReview": "코드 리뷰",
     "merging": "머지 중...",
     "cannotMerge": "머지 불가",
-    "merge": "머지"
+    "merge": "머지",
+    "closeMR": "닫기"
   },
   "report": {
     "weekly": "주간",

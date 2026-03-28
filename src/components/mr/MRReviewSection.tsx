@@ -36,7 +36,9 @@ export default function MRReviewSection({ projectId, issueIid }: Props) {
   const [mr, setMr] = useState<MRInfo | null>(null)
   const [loading, setLoading] = useState(true)
   const [merging, setMerging] = useState(false)
+  const [closing, setClosing] = useState(false)
   const [showMergeConfirm, setShowMergeConfirm] = useState(false)
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false)
   const [error, setError] = useState('')
 
   const fetchMR = useCallback(async () => {
@@ -78,6 +80,25 @@ export default function MRReviewSection({ projectId, issueIid }: Props) {
       setError(err instanceof Error ? err.message : 'Merge failed')
     } finally {
       setMerging(false)
+    }
+  }
+
+  async function handleClose() {
+    setClosing(true)
+    setError('')
+    try {
+      const res = await fetch(`/api/projects/${projectId}/issues/${issueIid}/mr`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'close' }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Close failed')
+      await fetchMR()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Close failed')
+    } finally {
+      setClosing(false)
     }
   }
 
@@ -163,23 +184,36 @@ export default function MRReviewSection({ projectId, issueIid }: Props) {
               <i className="fa-solid fa-code mr-1.5" />{t('codeReview')}
             </button>
             {!isMerged && (
-              <button
-                onClick={() => canMerge && setShowMergeConfirm(true)}
-                disabled={!canMerge || merging}
-                className={`flex-1 text-sm font-bold px-3 py-2.5 rounded-xl active:scale-[0.98] transition-all ${
-                  canMerge
-                    ? 'text-ive-green bg-ive-green/10 hover:bg-ive-green/15'
-                    : 'text-ive-text-dim bg-ive-bg-deep cursor-not-allowed'
-                }`}
-              >
-                {merging ? (
-                  <><i className="fa-solid fa-spinner fa-spin mr-1.5" />{t('merging')}</>
-                ) : hasConflicts ? (
-                  <><i className="fa-solid fa-ban mr-1.5" />{t('cannotMerge')}</>
-                ) : (
-                  <><i className="fa-solid fa-code-merge mr-1.5" />{t('merge')}</>
-                )}
-              </button>
+              <>
+                <button
+                  onClick={() => canMerge && setShowMergeConfirm(true)}
+                  disabled={!canMerge || merging || closing}
+                  className={`flex-1 text-sm font-bold px-3 py-2.5 rounded-xl active:scale-[0.98] transition-all ${
+                    canMerge
+                      ? 'text-ive-green bg-ive-green/10 hover:bg-ive-green/15'
+                      : 'text-ive-text-dim bg-ive-bg-deep cursor-not-allowed'
+                  }`}
+                >
+                  {merging ? (
+                    <><i className="fa-solid fa-spinner fa-spin mr-1.5" />{t('merging')}</>
+                  ) : hasConflicts ? (
+                    <><i className="fa-solid fa-ban mr-1.5" />{t('cannotMerge')}</>
+                  ) : (
+                    <><i className="fa-solid fa-code-merge mr-1.5" />{t('merge')}</>
+                  )}
+                </button>
+                <button
+                  onClick={() => setShowCloseConfirm(true)}
+                  disabled={merging || closing}
+                  className="text-sm font-bold text-ive-red/70 bg-ive-red/5 px-3 py-2.5 rounded-xl active:scale-[0.98] transition-all hover:bg-ive-red/10"
+                >
+                  {closing ? (
+                    <i className="fa-solid fa-spinner fa-spin" />
+                  ) : (
+                    <><i className="fa-solid fa-xmark mr-1.5" />{t('closeMR')}</>
+                  )}
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -192,6 +226,15 @@ export default function MRReviewSection({ projectId, issueIid }: Props) {
         title={td('mrMergeTitle')}
         message={td('mrMergeConfirm', { iid: mr?.iid ?? 0, source: mr?.source_branch ?? '', target: mr?.target_branch ?? '' })}
         confirmLabel={t('merge')}
+      />
+      <ConfirmModal
+        open={showCloseConfirm}
+        onClose={() => setShowCloseConfirm(false)}
+        onConfirm={handleClose}
+        title={td('mrCloseTitle')}
+        message={td('mrCloseConfirm', { iid: mr?.iid ?? 0, source: mr?.source_branch ?? '' })}
+        confirmLabel={t('closeMR')}
+        danger
       />
     </>
   )

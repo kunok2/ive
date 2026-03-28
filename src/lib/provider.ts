@@ -68,6 +68,12 @@ export function mergeMR(project: Project, token: string, mrIid: number) {
     : gitlab.mergeGitLabMR(project, token, mrIid);
 }
 
+export function closeMR(project: Project, token: string, mrIid: number) {
+  return project.provider === 'github'
+    ? github.closeGitHubPR(project, token, mrIid)
+    : gitlab.closeGitLabMR(project, token, mrIid);
+}
+
 // Open MRs (충돌 감지용)
 export function fetchOpenMRs(project: Project, token: string) {
   return project.provider === 'github'

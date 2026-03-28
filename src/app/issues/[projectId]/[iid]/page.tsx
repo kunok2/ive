@@ -106,6 +106,8 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   const [chatStreamText, setChatStreamText] = useState('')
   const [chatAgentName, setChatAgentName] = useState<string | null>(null)
   const [chatAgentAvatar, setChatAgentAvatar] = useState<string | null>(null)
+  const [chatHistoryOnly, setChatHistoryOnly] = useState(false) // read-only past chat
+  const chatSessionRef = useRef<string | null>(null)
 
   const fetchIssue = useCallback(async () => {
     const res = await fetch(`/api/projects/${projectId}/issues/${iid}`)
@@ -251,6 +253,9 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
     }
   }
 
+  // Keep ref in sync for beforeunload handler
+  useEffect(() => { chatSessionRef.current = chatSessionId }, [chatSessionId])
+
   // Check for existing chat session on mount
   useEffect(() => {
     fetch(`/api/projects/${projectId}/issues/${iid}/chat`)
@@ -259,12 +264,36 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
         if (data.session) {
           setChatSessionId(data.session.id)
           if (data.agentName) { setChatAgentName(data.agentName); setChatAgentAvatar(data.agentAvatar || null) }
-          setMode('chat') // Restore chat mode
-          // Load existing messages + check if agent is still processing
+          setMode('chat')
           loadChatMessages(data.session.id)
+        } else if (data.lastChat?.messages?.length > 0) {
+          // Show last ended chat as read-only history
+          setChatMessages(data.lastChat.messages)
+          setChatAgentName(data.lastChat.agentName || null)
+          setChatAgentAvatar(data.lastChat.agentAvatar || null)
+          setChatHistoryOnly(true)
+          setMode('chat')
         }
       })
       .catch(() => {})
+  }, [projectId, iid])
+
+  // End chat session when leaving the page
+  useEffect(() => {
+    const endSession = () => {
+      const sid = chatSessionRef.current
+      if (!sid) return
+      navigator.sendBeacon(
+        `/api/projects/${projectId}/issues/${iid}/chat/end`,
+        new Blob([JSON.stringify({ sessionId: sid })], { type: 'application/json' })
+      )
+    }
+    window.addEventListener('beforeunload', endSession)
+    return () => {
+      window.removeEventListener('beforeunload', endSession)
+      // Also end on unmount (SPA navigation)
+      endSession()
+    }
   }, [projectId, iid])
 
   // Load messages and poll if agent is still processing
@@ -314,7 +343,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
           message: tIssue('chatExistingConfirm', { iid: data.existingChatOnIssue }),
           confirmText: tc('confirm'),
           cancelText: tc('cancel'),
-          variant: 'warning',
+          variant: 'info',
         })
         if (ok) {
           // End the other chat first, then retry with force
@@ -330,6 +359,8 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
 
       if (data.sessionId) {
         setChatSessionId(data.sessionId)
+        setChatHistoryOnly(false)
+        setChatMessages([])
         if (data.agentName) { setChatAgentName(data.agentName); setChatAgentAvatar(data.agentAvatar || null) }
         setMode('chat')
         if (data.existing) {
@@ -352,7 +383,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
       message: tIssue('endChatConfirm'),
       confirmText: tc('confirm'),
       cancelText: tc('cancel'),
-      variant: 'warning',
+      variant: 'info',
     })
     if (!ok) return
     try {
@@ -363,9 +394,9 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
       })
     } catch { /* ignore */ }
     setChatSessionId(null)
-    setChatMessages([])
     setChatStreamText('')
-    setMode('comment')
+    // Keep messages visible as read-only history
+    setChatHistoryOnly(true)
   }
 
   async function handleSendChatMessage() {
@@ -477,9 +508,8 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
         })
       } catch { /* ignore */ }
       setChatSessionId(null)
-      setChatAgentName(null)
-      setChatAgentAvatar(null)
-      setTimeout(() => setMode('comment'), 3000)
+      // Keep messages as read-only history
+      setChatHistoryOnly(true)
     }, 5 * 60 * 1000) // 5 minutes
     return () => clearTimeout(timer)
   // Reset timer on every new message
@@ -648,7 +678,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
               <button
                 onClick={refreshAll}
                 disabled={loading || notesLoading}
-                className="text-xs font-bold text-ive-text-dim hover:text-ive-green border border-ive-border-subtle hover:border-ive-green/30 px-2 py-0.5 rounded-lg transition-all disabled:opacity-40"
+                className="text-xs font-bold text-ive-text-dim hover:text-ive-green border border-ive-border-subtle hover:border-ive-green/30 px-3 py-1.5 rounded-lg transition-all disabled:opacity-40"
                 title={tc('refresh')}
               >
                 <i className={`fa-solid fa-arrows-rotate mr-1 ${loading || notesLoading ? 'fa-spin' : ''}`} />{tc('refresh')}
@@ -656,7 +686,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
               {notes.length > 0 && (
                 <button
                   onClick={() => notesEndRef.current?.scrollIntoView({ behavior: 'smooth' })}
-                  className="text-xs font-bold text-ive-text-dim hover:text-ive-green border border-ive-border-subtle hover:border-ive-green/30 px-2 py-0.5 rounded-lg transition-all"
+                  className="text-xs font-bold text-ive-text-dim hover:text-ive-green border border-ive-border-subtle hover:border-ive-green/30 px-3 py-1.5 rounded-lg transition-all"
                   title={tIssue('lastNoteTooltip')}
                 >
                   <i className="fa-solid fa-angles-down mr-1" />{tIssue('last')}
@@ -712,7 +742,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
               })}
 
               {/* Chat messages inline in timeline */}
-              {mode === 'chat' && chatSessionId && (
+              {mode === 'chat' && (chatSessionId || chatHistoryOnly) && (
                 <>
                   <div className="flex items-center gap-2 my-2">
                     <div className="flex-1 border-t border-purple-500/30" />
@@ -792,9 +822,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                   <div className="shrink-0">
                     <AgentAvatar avatar={chatAgentAvatar || 'av-01'} size="sm" />
                   </div>
-                  <span className="text-purple-400 text-sm">
-                    <i className="fa-solid fa-circle-notch fa-spin mr-1" />{tIssue('chatSending')}
-                  </span>
+                  <ThinkingTimer />
                 </div>
               )}
 
@@ -819,7 +847,10 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
               </button>
               <button
                 onClick={() => {
-                  if (!chatSessionId) {
+                  if (chatHistoryOnly) {
+                    // Already viewing history, toggle to show it
+                    setMode('chat')
+                  } else if (!chatSessionId) {
                     handleStartChat()
                   } else {
                     setMode('chat')
@@ -832,6 +863,8 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
               >
                 {chatStarting ? (
                   <><i className="fa-solid fa-circle-notch fa-spin mr-1" />{tIssue('startingChat')}</>
+                ) : chatHistoryOnly && !chatSessionId ? (
+                  <><i className="fa-solid fa-clock-rotate-left mr-1" />{tIssue('chatMode')}</>
                 ) : (
                   <><i className="fa-solid fa-comments mr-1" />{chatSessionId && chatAgentName ? `${tIssue('chatMode')}(${chatAgentName})` : tIssue('chatMode')}</>
                 )}
@@ -856,6 +889,14 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                   setComment(e.target.value)
                   e.target.style.height = 'auto'
                   e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
+                }}
+                onKeyDown={e => {
+                  if (e.key !== 'Enter') return
+                  const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0
+                  if (isMobile) return
+                  if (e.shiftKey) return
+                  e.preventDefault()
+                  handlePostComment()
                 }}
                 placeholder={tIssue('commentPlaceholder')}
                 rows={1}
@@ -896,16 +937,18 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                   e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
                 }}
                 onKeyDown={e => {
-                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                    e.preventDefault()
-                    handleSendChatMessage()
-                  }
+                  if (e.key !== 'Enter') return
+                  const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0
+                  if (isMobile) return // mobile: Enter = newline, send via button
+                  if (e.shiftKey) return // PC: Shift+Enter = newline
+                  e.preventDefault()
+                  handleSendChatMessage() // PC: Enter = send
                 }}
                 placeholder={tIssue('chatPlaceholder')}
                 rows={1}
                 disabled={chatSending}
                 className="flex-1 min-h-10 bg-ive-bg-card border border-purple-500/30 rounded-xl px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-purple-500/50 disabled:opacity-50"
-                style={{ overflowY: 'auto' }}
+                style={{ overflow: 'hidden' }}
               />
               <button
                 onClick={handleSendChatMessage}
@@ -917,8 +960,27 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
             </div>
           )}
 
-          {/* Chat start prompt (when mode=chat but no session yet) */}
-          {mode === 'chat' && !chatSessionId && !chatStarting && (
+          {/* Chat history-only: show "start new chat" prompt */}
+          {mode === 'chat' && !chatSessionId && chatHistoryOnly && !chatStarting && (
+            <div className="flex items-center justify-between py-2">
+              <span className="text-xs text-ive-text-dim">
+                <i className="fa-solid fa-clock-rotate-left mr-1" />{tIssue('chatEnded')}
+              </span>
+              <button
+                onClick={() => {
+                  setChatHistoryOnly(false)
+                  setChatMessages([])
+                  handleStartChat()
+                }}
+                className="text-xs font-bold text-purple-400 hover:text-purple-300 transition-colors"
+              >
+                <i className="fa-solid fa-plus mr-1" />{tIssue('startNewChat')}
+              </button>
+            </div>
+          )}
+
+          {/* Chat start prompt (when mode=chat but no session yet and no history) */}
+          {mode === 'chat' && !chatSessionId && !chatHistoryOnly && !chatStarting && (
             <div className="text-center py-2">
               <button
                 onClick={() => handleStartChat()}
@@ -933,6 +995,21 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
 
       <MobileTabBar />
     </div>
+  )
+}
+
+// 경과 시간 표시 (예: "3초 생각중...")
+function ThinkingTimer() {
+  const [seconds, setSeconds] = useState(0)
+  const tIssue = useTranslations('issue')
+  useEffect(() => {
+    const interval = setInterval(() => setSeconds(s => s + 1), 1000)
+    return () => clearInterval(interval)
+  }, [])
+  return (
+    <span className="text-purple-400 text-sm">
+      {tIssue('chatThinking', { seconds })}
+    </span>
   )
 }
 

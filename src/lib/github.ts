@@ -343,6 +343,26 @@ export async function mergeGitHubPR(project: Project, decryptedToken: string, pr
 }
 
 /**
+ * PR을 닫습니다 (머지하지 않고).
+ */
+export async function closeGitHubPR(project: Project, decryptedToken: string, prNumber: number) {
+  const headers = getGitHubAuthHeaders(project, decryptedToken);
+  const res = await fetch(
+    apiUrl(project, `/pulls/${prNumber}`),
+    {
+      method: 'PATCH',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ state: 'closed' }),
+    }
+  );
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`PR 닫기 실패 (${res.status}): ${body}`);
+  }
+  return await res.json();
+}
+
+/**
  * PR에 코멘트를 추가합니다.
  */
 export async function addGitHubPRNote(project: Project, decryptedToken: string, prNumber: number, body: string) {

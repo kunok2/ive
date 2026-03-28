@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { getProject, getProjectAccess, updateProjectConflictCount } from '@/lib/db'
 import { decrypt } from '@/lib/crypto'
-import { fetchOpenMRs, mergeMR } from '@/lib/provider'
+import { fetchOpenMRs, mergeMR, closeMR } from '@/lib/provider'
 
 export async function GET(
   req: NextRequest,
@@ -61,23 +61,43 @@ export async function POST(
   const body = await req.json()
   const { action, mrIids } = body
 
-  if (action !== 'sequential_merge' || !Array.isArray(mrIids)) {
+  if (!Array.isArray(mrIids)) {
     return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
   }
 
-  const results: { iid: number; success: boolean; error?: string }[] = []
-  for (const iid of mrIids) {
-    try {
-      await mergeMR(project, decryptedToken, iid)
-      results.push({ iid, success: true })
-    } catch (e) {
-      results.push({ iid, success: false, error: e instanceof Error ? e.message : String(e) })
+  if (action === 'sequential_merge') {
+    const results: { iid: number; success: boolean; error?: string }[] = []
+    for (const iid of mrIids) {
+      try {
+        await mergeMR(project, decryptedToken, iid)
+        results.push({ iid, success: true })
+      } catch (e) {
+        results.push({ iid, success: false, error: e instanceof Error ? e.message : String(e) })
+      }
     }
+    return NextResponse.json({
+      results,
+      mergedCount: results.filter(r => r.success).length,
+      failedCount: results.filter(r => !r.success).length,
+    })
   }
 
-  return NextResponse.json({
-    results,
-    mergedCount: results.filter(r => r.success).length,
-    failedCount: results.filter(r => !r.success).length,
-  })
+  if (action === 'close') {
+    const results: { iid: number; success: boolean; error?: string }[] = []
+    for (const iid of mrIids) {
+      try {
+        await closeMR(project, decryptedToken, iid)
+        results.push({ iid, success: true })
+      } catch (e) {
+        results.push({ iid, success: false, error: e instanceof Error ? e.message : String(e) })
+      }
+    }
+    return NextResponse.json({
+      results,
+      closedCount: results.filter(r => r.success).length,
+      failedCount: results.filter(r => !r.success).length,
+    })
+  }
+
+  return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
 }

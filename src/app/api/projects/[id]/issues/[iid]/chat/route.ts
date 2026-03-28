@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getProject, getProjectAccess, getActiveChatSession, getAnyActiveChatSession, createChatSession, createExecution, updateAgentStatus, getAgent } from '@/lib/db'
+import { getProject, getProjectAccess, getActiveChatSession, getAnyActiveChatSession, getLastEndedChatSession, getChatMessages, createChatSession, createExecution, updateAgentStatus, getAgent } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { pickAgentForChat, prepareChatWorkspace } from '@/lib/chat-agent'
 
@@ -26,7 +26,19 @@ export async function GET(
     const agent = getAgent(session.agentId)
     return NextResponse.json({ session, agentName: agent?.name, agentAvatar: agent?.avatar })
   }
-  return NextResponse.json({ session: session || null })
+  if (session) {
+    return NextResponse.json({ session })
+  }
+
+  // No active session — return last ended session history for read-only display
+  const lastEnded = getLastEndedChatSession(projectId, Number(iid))
+  if (lastEnded) {
+    const messages = getChatMessages(lastEnded.id)
+    const agent = lastEnded.agentId ? getAgent(lastEnded.agentId) : null
+    return NextResponse.json({ session: null, lastChat: { sessionId: lastEnded.id, agentName: agent?.name, agentAvatar: agent?.avatar, messages } })
+  }
+
+  return NextResponse.json({ session: null })
 }
 
 /**

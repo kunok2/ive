@@ -359,6 +359,26 @@ export async function mergeGitLabMR(project: Project, decryptedToken: string, mr
 }
 
 /**
+ * MR을 닫습니다 (머지하지 않고).
+ */
+export async function closeGitLabMR(project: Project, decryptedToken: string, mrIid: number) {
+  const headers = getAuthHeaders(project, decryptedToken);
+  const res = await fetch(
+    apiUrl(project, `/merge_requests/${mrIid}`),
+    {
+      method: 'PUT',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ state_event: 'close' }),
+    }
+  );
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`MR 닫기 실패 (${res.status}): ${body}`);
+  }
+  return await res.json();
+}
+
+/**
  * 열린 MR 전체 목록을 조회합니다 (충돌 감지용).
  */
 export async function fetchOpenGitLabMRs(project: Project, decryptedToken: string) {

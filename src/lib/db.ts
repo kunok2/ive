@@ -1573,6 +1573,13 @@ export function getChatMessages(sessionId: string): ChatMessage[] {
   return rows.map(mapChatMessage)
 }
 
+export function getLastEndedChatSession(projectId: string, issueIid: number): ChatSession | null {
+  const r = getDb().prepare(
+    "SELECT * FROM chat_sessions WHERE project_id = ? AND issue_iid = ? AND status = 'ended' ORDER BY last_active_at DESC LIMIT 1"
+  ).get(projectId, issueIid) as any
+  return r ? mapChatSession(r) : null
+}
+
 export function getChatHistoryForPrompt(sessionId: string): string {
   const msgs = getChatMessages(sessionId)
   if (msgs.length === 0) return ''

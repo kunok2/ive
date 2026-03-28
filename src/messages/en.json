@@ -296,7 +296,10 @@
     "openIssue": "Open issue page",
     "selectedCount": "{count} selected",
     "sequentialMerge": "Sequential Merge",
-    "merging": "Merging..."
+    "merging": "Merging...",
+    "closeMR": "Close MR",
+    "closingMR": "Closing...",
+    "closed": "Closed"
   },
   "issue": {
     "issues": "Issues",
@@ -358,10 +361,12 @@
     "startingChat": "Preparing chat...",
     "endChat": "End Chat",
     "endChatConfirm": "End chat session?",
-    "chatPlaceholder": "Ask AI a question... (Ctrl+Enter to send)",
+    "chatPlaceholder": "Ask AI a question... (Enter to send)",
     "chatSending": "Responding...",
+    "chatThinking": "Thinking for {seconds}s...",
     "chatWelcome": "AI Chat started. Ask questions about completed work or request quick fixes.",
-    "chatEnded": "Chat session ended.",
+    "chatEnded": "Previous chat ended.",
+    "startNewChat": "Start new chat",
     "chatGreeting": "Hi, I'm {agent}. I've reviewed issue #{iid}. Feel free to ask any questions or request changes.",
     "chatExistingConfirm": "There is an active chat on issue #{iid}. End that chat and start a new one?",
     "chatIdleClose": "Closing chat due to inactivity. Feel free to start a new chat if you have more questions. Thank you. - {agent}",
@@ -484,7 +489,9 @@
     "logoutMessage": "Are you sure you want to log out?",
     "limitExceededTitle": "Limit Exceeded",
     "mrMergeTitle": "Confirm MR Merge",
-    "mrMergeConfirm": "!{iid} {source} → {target}\n\nMerge this MR?"
+    "mrMergeConfirm": "!{iid} {source} → {target}\n\nMerge this MR?",
+    "mrCloseTitle": "Close MR",
+    "mrCloseConfirm": "!{iid} {source}\n\nClose this MR without merging?"
   },
   "color": {
     "green": "Green",
@@ -529,7 +536,8 @@
     "codeReview": "Code Review",
     "merging": "Merging...",
     "cannotMerge": "Cannot Merge",
-    "merge": "Merge"
+    "merge": "Merge",
+    "closeMR": "Close"
   },
   "report": {
     "weekly": "Weekly",
