@@ -22,7 +22,7 @@ import { useTranslations } from 'next-intl'
 export default function HomePage() {
   const router = useRouter()
   const { state, logout, refreshUser } = useStore()
-  const { activeTab, issuesProjectId } = useTab()
+  const { activeTab, issuesProjectId, issueAddTrigger: contextAddTrigger } = useTab()
   const { alert: showAlert, confirm: showConfirm } = useDialog()
   const tn = useTranslations('nav')
   const tc = useTranslations('common')
@@ -144,7 +144,7 @@ export default function HomePage() {
         <AgentsTab onAdd={() => setShowNewAgent(true)} />
       </div>
       <div style={{ display: activeTab === 'issues' ? 'block' : 'none' }}>
-        <IssuesTab addTrigger={issueAddTrigger} />
+        <IssuesTab addTrigger={issueAddTrigger + contextAddTrigger} />
       </div>
       <div style={{ display: activeTab === 'reports' ? 'block' : 'none' }}>
         <ReportsTab />

@@ -228,6 +228,7 @@
     "showToolUsage": "트레이스에 툴 사용 표시",
     "showToolUsageHint": "에이전트 실행 로그에 Read, Edit, Bash 등 툴 호출 내역을 포함합니다",
     "distinguishColor": "구분 색상",
+    "addIssue": "이슈 추가",
     "projectSettings": "프로젝트 설정",
     "shareProject": "프로젝트 공유",
     "viewer": "뷰어",
