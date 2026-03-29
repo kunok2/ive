@@ -15,6 +15,8 @@ const TabContext = createContext<{
   issuesSort: string
   setIssuesSort: (sort: string) => void
   navigateToIssues: (projectId: string) => void
+  issueAddTrigger: number
+  navigateToAddIssue: (projectId: string) => void
 }>({
   activeTab: 'projects',
   setActiveTab: () => {},
@@ -25,6 +27,8 @@ const TabContext = createContext<{
   issuesSort: 'newest',
   setIssuesSort: () => {},
   navigateToIssues: () => {},
+  issueAddTrigger: 0,
+  navigateToAddIssue: () => {},
 })
 
 export function TabProvider({ children }: { children: ReactNode }) {
@@ -113,6 +117,14 @@ export function TabProvider({ children }: { children: ReactNode }) {
     setActiveTab('issues')
   }, [setIssuesProjectId, setActiveTab])
 
+  const [issueAddTrigger, setIssueAddTrigger] = useState(0)
+
+  const navigateToAddIssue = useCallback((projectId: string) => {
+    setIssuesProjectId(projectId)
+    setActiveTab('issues')
+    setIssueAddTrigger(t => t + 1)
+  }, [setIssuesProjectId, setActiveTab])
+
   return (
     <TabContext.Provider value={{
       activeTab, setActiveTab,
@@ -120,6 +132,7 @@ export function TabProvider({ children }: { children: ReactNode }) {
       issuesFilter, setIssuesFilter,
       issuesSort, setIssuesSort,
       navigateToIssues,
+      issueAddTrigger, navigateToAddIssue,
     }}>
       {children}
     </TabContext.Provider>

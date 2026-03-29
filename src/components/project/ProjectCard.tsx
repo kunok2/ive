@@ -14,6 +14,7 @@ import MarqueeText from '@/components/ui/MarqueeText'
 import ConflictResolutionPanel from '@/components/mr/ConflictResolutionPanel'
 import type { ToolActivity } from '@/lib/tool-activity'
 import { useTranslations } from 'next-intl'
+import { useTab } from '@/lib/tab-context'
 
 function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
@@ -43,6 +44,7 @@ export default function ProjectCard({ project }: Props) {
   const isOwner = !project.shareRole
   const { updateProject, scanProjectNow } = useStore()
   const { alert: showAlert } = useDialog()
+  const { navigateToAddIssue } = useTab()
   const tp = useTranslations('project')
   const [scanning, setScanning] = useState(false)
   const [expandedPanel, _setExpandedPanel] = useState<'running' | 'done' | 'waiting' | 'conflicts' | null>(() => {
@@ -237,6 +239,16 @@ export default function ProjectCard({ project }: Props) {
                   <button onClick={handleManualScan} disabled={scanning} className="flex items-center gap-1 transition-all disabled:opacity-30 disabled:cursor-not-allowed" title={tp('scanNow')} aria-label={tp('manualScan')}>
                     <span className={`h-8 px-2.5 rounded-full flex items-center gap-1 text-xs font-bold transition-all ${scanning ? 'bg-ive-green/20 text-ive-green border border-ive-green/30' : 'bg-ive-bg-deep text-ive-green/60 hover:text-ive-green hover:bg-ive-green/10 border border-ive-border-dark'}`}>
                       {scanning ? <i className="fa-solid fa-circle-notch fa-spin text-[11px]" /> : <i className="fa-solid fa-rocket text-[11px]" />}
+                    </span>
+                  </button>
+                  <button
+                    onClick={e => { e.preventDefault(); e.stopPropagation(); navigateToAddIssue(project.id) }}
+                    className="flex items-center transition-all"
+                    title={tp('addIssue')}
+                    aria-label={tp('addIssue')}
+                  >
+                    <span className="h-8 px-2.5 rounded-full flex items-center gap-1 text-xs font-bold bg-ive-bg-deep text-ive-cyan/60 hover:text-ive-cyan hover:bg-ive-cyan/10 border border-ive-border-dark transition-all">
+                      <i className="fa-solid fa-plus text-[11px]" />
                     </span>
                   </button>
                   <button

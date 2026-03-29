@@ -228,6 +228,7 @@
     "showToolUsage": "Show Tool Usage in Trace",
     "showToolUsageHint": "Include tool calls like Read, Edit, Bash in agent execution logs",
     "distinguishColor": "Color",
+    "addIssue": "Add Issue",
     "projectSettings": "Project Settings",
     "shareProject": "Share Project",
     "viewer": "Viewer",
