@@ -1,6 +1,7 @@
 import { getRequestConfig } from 'next-intl/server'
 import { cookies, headers } from 'next/headers'
 import { defaultLocale, locales, Locale } from './config'
+import { getSystemSetting, setSystemSetting } from '@/lib/db'
 
 function parseAcceptLanguage(header: string): Locale | null {
   const langs = header.split(',').map(part => {
@@ -29,6 +30,15 @@ export default getRequestConfig(async () => {
       locale = parseAcceptLanguage(acceptLang) ?? defaultLocale
     }
   }
+
+  // Sync detected locale to system_settings for AI prompt language
+  // Only write if the DB has no locale set yet (first-time users)
+  try {
+    const dbLocale = getSystemSetting('locale')
+    if (!dbLocale) {
+      setSystemSetting('locale', locale)
+    }
+  } catch { /* DB not ready yet during build */ }
 
   return {
     locale,
