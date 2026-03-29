@@ -180,7 +180,7 @@ export default function LiveTracePanel({ agents, projectId, onKill }: Props) {
                 size="sm"
                 toolBadge={tabIsChat ? null : (activity?.category ?? null)}
               />
-              <span className="truncate min-w-0 flex-1"><MarqueeText className="text-sm">{tab.agent.name}</MarqueeText></span>
+              <span className="truncate min-w-0"><MarqueeText className="text-sm">{tab.agent.name}</MarqueeText></span>
             </button>
           )
         })}
