@@ -684,8 +684,7 @@ async function executeTask(
         const lastBotNoteId = botCompletions[botCompletions.length - 1].id;
         const feedbackNotes = userNotes.filter((n: any) => n.id > lastBotNoteId);
         if (feedbackNotes.length > 0) {
-          latestFeedback = "\n\n## ⚠️ Latest User Feedback (must be addressed first):\n" +
-            feedbackNotes.map((n: any) => `> **${n.author.name}**: ${n.body}`).join('\n\n');
+          latestFeedback = feedbackNotes.map((n: any) => `> **${n.author.name}**: ${n.body}`).join('\n\n');
         }
       }
 
@@ -712,7 +711,7 @@ async function executeTask(
     let prompt: string;
     const providerLabel = isGitHub ? 'GitHub' : 'GitLab';
     const langInstruction = isKo
-      ? 'You MUST respond in the user\'s language: Korean (ko). All output — comments, explanations, status updates, and work summaries — MUST be written in Korean.'
+      ? 'You MUST respond in the user\'s language: Korean (ko). 모든 출력 — 코멘트, 설명, 상태 업데이트, 작업 요약 — 반드시 한국어로 작성하세요. All output MUST be written in Korean.'
       : 'You MUST respond in the user\'s language: English (en). All output must be in English.';
     if (isConflictTask) {
       // 충돌 감지 작업: description에 프롬프트가 이미 구성되어 있음
@@ -724,12 +723,17 @@ async function executeTask(
 ${issue.description || "No description"}`;
     } else {
       // 재작업: 사용자의 최신 피드백이 최우선 명령. 이슈 본문/이력은 참고용.
-      prompt = `This is follow-up iteration #${iterationCount} for issue #${iid} "${issue.title}". ${langInstruction}
-
-## 🚨 PRIMARY TASK (only perform the instructions below):
+      const feedbackSection = latestFeedback
+        ? `## 🚨 PRIMARY TASK — User Feedback (this is your ONLY instruction):
 ${latestFeedback}
 
-**⚠️ IMPORTANT: Only perform the user request in the "PRIMARY TASK" section above. The original issue body has already been completed in previous iterations. The history and issue body below are for context only — do NOT re-implement the original request.**
+**⚠️ IMPORTANT: Only perform the user request in the "PRIMARY TASK" section above. The original issue body has already been completed in previous iterations. The history and issue body below are for context only — do NOT re-implement the original request.**`
+        : `## 🚨 PRIMARY TASK — Review and fix remaining issues:
+The user has requested a re-run of this issue. Review the conversation history below and the previous work, then fix any remaining problems or incomplete parts.`;
+
+      prompt = `This is follow-up iteration #${iterationCount} for issue #${iid} "${issue.title}". ${langInstruction}
+
+${feedbackSection}
 ${iterationContext}
 
 <details>
