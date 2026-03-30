@@ -50,10 +50,36 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
   const [activeSection, setActiveSection] = useState<ActiveSection>('none')
   const [selectedLocale, setSelectedLocale] = useState<Locale>((userLocale || currentLocale) as Locale)
   const [selectedTimezone, setSelectedTimezone] = useState(userTimezone || 'Asia/Seoul')
+  const [prefsSaving, setPrefsSaving] = useState(false)
+  const [prefsSaved, setPrefsSaved] = useState(false)
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [photoTs, setPhotoTs] = useState(() => Date.now())
   const [cropFile, setCropFile] = useState<File | null>(null)
+
+  // 환경 설정 자동 저장
+  async function savePreferences(locale: Locale, timezone: string) {
+    setPrefsSaving(true)
+    setPrefsSaved(false)
+    try {
+      if (locale !== currentLocale) {
+        document.cookie = `NEXT_LOCALE=${locale};path=/;max-age=31536000`
+      }
+      await fetch('/api/settings/locale', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ locale, timezone }),
+      })
+      onSettingsChanged?.()
+      setPrefsSaved(true)
+      setTimeout(() => setPrefsSaved(false), 2000)
+      if (locale !== currentLocale) {
+        router.refresh()
+      }
+    } catch { /* ignore */ } finally {
+      setPrefsSaving(false)
+    }
+  }
 
   // 이메일 변경
   const [newEmail, setNewEmail] = useState('')
@@ -507,7 +533,11 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
                   <button
                     key={l}
                     type="button"
-                    onClick={() => setSelectedLocale(l)}
+                    disabled={prefsSaving}
+                    onClick={() => {
+                      setSelectedLocale(l)
+                      savePreferences(l, selectedTimezone)
+                    }}
                     className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${
                       selectedLocale === l
                         ? 'bg-ive-green/15 text-ive-green border border-ive-green/30'
@@ -526,7 +556,12 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
               </label>
               <select
                 value={selectedTimezone}
-                onChange={(e) => setSelectedTimezone(e.target.value)}
+                disabled={prefsSaving}
+                onChange={(e) => {
+                  const tz = e.target.value
+                  setSelectedTimezone(tz)
+                  savePreferences(selectedLocale, tz)
+                }}
                 className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2.5 text-sm text-ive-text focus:outline-none focus:border-ive-green"
               >
                 {TIMEZONE_OPTIONS.map((tz) => (
@@ -535,30 +570,17 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
               </select>
               <p className="text-xs text-ive-text-dim mt-1">{t('timezoneDescription')}</p>
             </div>
-            {/* 저장 버튼 */}
-            <button
-              type="button"
-              onClick={async () => {
-                try {
-                  // locale 변경 시 쿠키도 갱신
-                  if (selectedLocale !== currentLocale) {
-                    document.cookie = `NEXT_LOCALE=${selectedLocale};path=/;max-age=31536000`
-                  }
-                  await fetch('/api/settings/locale', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ locale: selectedLocale, timezone: selectedTimezone }),
-                  })
-                  onSettingsChanged?.()
-                  if (selectedLocale !== currentLocale) {
-                    router.refresh()
-                  }
-                } catch { /* ignore */ }
-              }}
-              className="w-full py-2.5 rounded-lg text-sm font-bold bg-ive-green/80 text-white hover:bg-ive-green transition-colors"
-            >
-              {tc('save')}
-            </button>
+            {/* 자동 저장 피드백 */}
+            {prefsSaving && (
+              <div className="text-center text-sm text-ive-text-muted py-1">
+                <i className="fa-solid fa-circle-notch fa-spin mr-1" />{tc('save')}...
+              </div>
+            )}
+            {prefsSaved && (
+              <div className="text-center text-sm text-ive-green py-1 animate-fade-in">
+                <i className="fa-solid fa-circle-check mr-1" />{t('settingsSaved')}
+              </div>
+            )}
           </div>
         )}
       </div>
