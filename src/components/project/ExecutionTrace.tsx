@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { TaskExecution } from '@/types'
+import { useStore } from '@/lib/store'
+import { formatDateLong } from '@/lib/format-date'
 import LogViewer from '@/components/ui/LogViewer'
 import MarqueeText from '@/components/ui/MarqueeText'
 
@@ -15,6 +17,9 @@ function formatDuration(startedAt: string, endedAt?: string): string {
 }
 
 export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { projectId: string; className?: string }) {
+  const { state } = useStore()
+  const userLocale = state.user?.locale
+  const userTz = state.user?.timezone
   const [executions, setExecutions] = useState<TaskExecution[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -61,7 +66,7 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
                 const elapsed = formatDuration(ex.startedAt, ex.endedAt)
                 return (
                   <span className="text-ive-text-muted font-mono normal-case tracking-normal">
-                    {new Date(ex.startedAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}
+                    {formatDateLong(ex.startedAt, userLocale, userTz)}
                     {ex.status === 'running' && <span className="text-ive-amber ml-2">{elapsed}{tick >= 0 ? '' : ''}</span>}
                     {ex.status !== 'running' && <span className="text-ive-text-dim ml-2">{elapsed}</span>}
                   </span>
@@ -118,7 +123,7 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
                   <div className="flex items-center justify-between text-sm text-ive-text-muted group-hover:text-ive-text-dim">
                     <span>
                       <i className="fa-solid fa-calendar-day mr-1" />
-                      {new Date(ex.startedAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}
+                      {formatDateLong(ex.startedAt, userLocale, userTz)}
                     </span>
                     <span className={`font-mono font-bold ${ex.status === 'running' ? 'text-ive-amber' : 'text-ive-text-dim'}`}>
                       {ex.status === 'running' && <i className="fa-solid fa-stopwatch mr-1 text-sm" />}

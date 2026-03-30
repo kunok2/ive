@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { User, UserActivityLog, DEFAULT_AVATARS } from '@/types'
+import { useStore } from '@/lib/store'
+import { formatDateFull, formatDateWithSeconds } from '@/lib/format-date'
 import { useDialog } from '@/components/ui/ConfirmDialog'
 import TerminalTab from './TerminalTab'
 import PullToRefresh from '@/components/ui/PullToRefresh'
@@ -786,6 +788,9 @@ function ReportScheduleView() {
 
 // ── 발송 이력 조회 ──
 function SendLogView() {
+  const { state } = useStore()
+  const userLocale = state.user?.locale
+  const userTz = state.user?.timezone
   const t = useTranslations('admin')
   const tc = useTranslations('common')
   const tr = useTranslations('report')
@@ -843,7 +848,7 @@ function SendLogView() {
             </div>
             <div className="flex items-center gap-2 mt-1 text-[10px] text-ive-text-dim">
               <span>{log.periodStart} ~ {log.periodEnd}</span>
-              <span className="ml-auto">{new Date(log.sentAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}</span>
+              <span className="ml-auto">{formatDateFull(log.sentAt, userLocale, userTz)}</span>
             </div>
             {log.errorMessage && (
               <div className="mt-1 text-[10px] text-ive-red bg-ive-red/5 rounded px-2 py-1 break-all">
@@ -1235,6 +1240,9 @@ const DATE_PRESETS: { labelKey: string; days: number | null }[] = [
 ]
 
 function ActivityPanel() {
+  const { state } = useStore()
+  const userLocale = state.user?.locale
+  const userTz = state.user?.timezone
   const t = useTranslations('admin')
   const tc = useTranslations('common')
   const [logs, setLogs] = useState<UserActivityLog[]>([])
@@ -1291,10 +1299,7 @@ function ActivityPanel() {
   }
 
   function formatTime(iso: string) {
-    try {
-      const d = new Date(iso + (iso.endsWith('Z') ? '' : 'Z'))
-      return d.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
-    } catch { return iso }
+    return formatDateWithSeconds(iso, userLocale, userTz)
   }
 
   if (loading) return <div className="text-center py-10 text-ive-text-dim">{tc('loading')}</div>

@@ -222,6 +222,9 @@ function initSchema(db: Database.Database) {
     if (!tableInfo.some((col: any) => col.name === 'locale')) {
       db.exec("ALTER TABLE users ADD COLUMN locale TEXT")
     }
+    if (!tableInfo.some((col: any) => col.name === 'timezone')) {
+      db.exec("ALTER TABLE users ADD COLUMN timezone TEXT")
+    }
   } catch (e) { console.error("Migration failed for users:", e) }
 
   try {
@@ -492,6 +495,7 @@ function mapUser(r: any): User {
     isAdmin: !!r.is_admin, maxAgents: r.max_agents ?? 0, maxTurns: r.max_turns ?? 0,
     allowedClis: parseAllowedClis(r.allowed_clis) as User['allowedClis'],
     locale: r.locale,
+    timezone: r.timezone,
     createdAt: r.created_at,
   }
 }
@@ -517,6 +521,10 @@ export function updateUserAvatar(id: string, avatar: string) {
 
 export function updateUserLocale(id: string, locale: string) {
   getDb().prepare('UPDATE users SET locale = ? WHERE id = ?').run(locale, id)
+}
+
+export function updateUserTimezone(id: string, timezone: string) {
+  getDb().prepare('UPDATE users SET timezone = ? WHERE id = ?').run(timezone, id)
 }
 
 export function createUser(u: any) {

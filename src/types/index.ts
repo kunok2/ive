@@ -8,6 +8,7 @@ export interface User {
   maxTurns: number     // 에이전트 최대 턴 수 상한 (0 = 무제한)
   allowedClis: CliName[]  // 사용 가능한 CLI 도구 목록
   locale?: string      // 사용자 지정 언어
+  timezone?: string    // 사용자 지정 타임존 (예: 'Asia/Seoul')
   createdAt: string
 }
 

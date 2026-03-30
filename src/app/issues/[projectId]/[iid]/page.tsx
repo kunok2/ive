@@ -10,6 +10,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useTranslations } from 'next-intl'
 import { useStore } from '@/lib/store'
+import { formatDateMedium, formatTime } from '@/lib/format-date'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 
 interface ChatMessage {
@@ -556,7 +557,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
           )}
           <span className="text-xs text-ive-text-dim shrink-0"><i className="fa-solid fa-user mr-0.5" />{issue.author}</span>
           <span className="text-xs text-ive-text-dim ml-auto shrink-0">
-            {new Date(issue.updatedAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}
+            {formatDateMedium(issue.updatedAt, state.user?.locale, state.user?.timezone)}
           </span>
           {issue.webUrl && (
             <button
@@ -731,7 +732,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                       )}
                     </span>
                     <span className="text-xs text-ive-text-dim ml-auto">
-                      {new Date(note.createdAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}
+                      {formatDateMedium(note.createdAt, state.user?.locale, state.user?.timezone)}
                     </span>
                   </div>
                   <div className={`text-sm leading-relaxed break-words ${note.system ? 'text-ive-text-dim italic' : 'text-ive-text-muted'}`}>
@@ -786,7 +787,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                             {msg.role === 'user' ? (state.user?.name || 'You') : (chatAgentName || 'AI')}
                           </span>
                           <span className="text-xs text-ive-text-dim">
-                            {new Date(msg.createdAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', hour12: false })}
+                            {formatTime(msg.createdAt, state.user?.locale, state.user?.timezone)}
                           </span>
                         </div>
                         <div className={`text-sm leading-relaxed break-words text-ive-text-muted ${msg.role === 'user' ? 'text-right' : ''}`}>

@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { Project, ProjectAssignment, Agent, TaskExecution, StatSnapshot } from '@/types'
 import { useEffect, useState, useCallback } from 'react'
 import { useStore } from '@/lib/store'
+import { formatDateShort, formatDateMedium } from '@/lib/format-date'
 import { useDialog } from '@/components/ui/ConfirmDialog'
 import { getKSTTodayStartISO } from '@/lib/date-utils'
 import Sparkline from '@/components/ui/Sparkline'
@@ -42,7 +43,9 @@ interface ProjectStats {
 export default function ProjectCard({ project }: Props) {
   const agentCount = project.assignedAgents?.length ?? 0
   const isOwner = !project.shareRole
-  const { updateProject, scanProjectNow } = useStore()
+  const { updateProject, scanProjectNow, state } = useStore()
+  const userLocale = state.user?.locale
+  const userTz = state.user?.timezone
   const { alert: showAlert } = useDialog()
   const { navigateToAddIssue } = useTab()
   const tp = useTranslations('project')
@@ -226,7 +229,7 @@ export default function ProjectCard({ project }: Props) {
               {project.lastCheckedAt && (
                 <span className="text-sm text-ive-green/50 font-medium whitespace-nowrap flex items-center gap-1">
                   <i className="fa-solid fa-bolt-lightning opacity-70" />
-                  {new Date(project.lastCheckedAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).replace(',', '')}
+                  {formatDateShort(project.lastCheckedAt, userLocale, userTz).replace(',', '')}
                 </span>
               )}
               {isOwner && (
@@ -281,7 +284,7 @@ export default function ProjectCard({ project }: Props) {
             <i className="fa-solid fa-triangle-exclamation mr-1.5" />
             <span className="font-bold">{tp('errorLabel')}</span> {project.lastError}
             {project.lastErrorAt && (
-              <span className="text-ive-red/50 ml-1.5 text-xs">({new Date(project.lastErrorAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })})</span>
+              <span className="text-ive-red/50 ml-1.5 text-xs">({formatDateMedium(project.lastErrorAt, userLocale, userTz)})</span>
             )}
           </div>
         )}
@@ -430,7 +433,7 @@ export default function ProjectCard({ project }: Props) {
                         <span><i className="fa-solid fa-user mr-0.5" />{issue.author}</span>
                       )}
                       <span>
-                        {new Date(issue.createdAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })}
+                        {formatDateShort(issue.createdAt, userLocale, userTz)}
                       </span>
                     </div>
                   </div>

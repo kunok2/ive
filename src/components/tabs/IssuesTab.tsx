@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useStore } from '@/lib/store'
 import { useTab } from '@/lib/tab-context'
+import { formatDateMedium } from '@/lib/format-date'
 import PullToRefresh from '@/components/ui/PullToRefresh'
 import { useDialog } from '@/components/ui/ConfirmDialog'
 import { useTranslations } from 'next-intl'
@@ -685,9 +686,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                         </span>
                         <span>
                           <i className="fa-solid fa-calendar-day mr-1" />
-                          {new Date(issue.updatedAt).toLocaleString('ko-KR', {
-                            timeZone: 'Asia/Seoul', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
-                          })}
+                          {formatDateMedium(issue.updatedAt, state.user?.locale, state.user?.timezone)}
                         </span>
                         {canEdit && !bulkMode && (
                           <button
