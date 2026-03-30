@@ -4,6 +4,7 @@ import { defaultLocale } from '@/i18n/config'
 import { getCurrentUser } from '@/lib/auth'
 import { existsSync } from 'fs'
 import { spawn } from 'child_process'
+import { getLocale } from 'next-intl/server'
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser()
@@ -30,7 +31,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   // 인터뷰 시스템 프롬프트 — locale 설정에 따라 언어 전환
-  const locale = getSystemSetting('locale') || defaultLocale
+  const locale = await getLocale()
   const systemPrompt = locale === 'ko'
     ? `당신은 "${agent.name}"이라는 이름의 AI 개발자입니다. 면접관이 질문하면 간결하고 재치있게 답변하세요. 자기소개, 기술 역량, 성격 등을 자유롭게 표현하되, 3~4문장 이내로 짧게 답하세요. 반드시 한국어(Korean)로만 답변하세요. 일본어는 절대 사용하지 마세요. 꼭 필요한 경우가 아니면 한자도 쓰지 마세요.`
     : `You are an AI developer named "${agent.name}". Answer interview questions concisely and wittily. Feel free to express your self-introduction, technical skills, and personality, but keep answers brief — within 3-4 sentences. You MUST respond in English only.`

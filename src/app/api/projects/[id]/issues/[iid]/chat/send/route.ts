@@ -4,6 +4,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { decrypt } from '@/lib/crypto'
 import { runChatAgent, isChatAgentRunning } from '@/lib/chat-agent'
 import { fetchSingleIssue } from '@/lib/provider'
+import { getLocale } from 'next-intl/server'
 
 /**
  * POST: Send a message and stream the AI response via SSE.
@@ -69,6 +70,8 @@ export async function POST(
     return new Response(JSON.stringify({ error: 'Agent not found' }), { status: 500 })
   }
 
+  const currentLocale = await getLocale()
+
   // Stream response via SSE
   const encoder = new TextEncoder()
   const stream = new ReadableStream({
@@ -86,6 +89,7 @@ export async function POST(
           issueDescription,
           userMessage: message.trim(),
           workspacePath: session.workspacePath || '',
+          userLocale: currentLocale,
         })
 
         for await (const chunk of gen) {

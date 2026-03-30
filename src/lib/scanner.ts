@@ -18,8 +18,9 @@ import {
   getIssueStages,
   getIssueStageUpdatedAt,
   setIssueStage,
-  deleteIssueStage,
   updateProjectConflictCount,
+  deleteIssueStage,
+  getUserById,
 } from "./db";
 import { decrypt } from "./crypto";
 import { defaultLocale } from "@/i18n/config";
@@ -606,8 +607,9 @@ async function executeTask(
     console.log(`[Task #${iid}] ${msg}`);
   };
 
-  // 사용자 선택 locale (시스템 설정 > defaultLocale)
-  const locale = getSystemSetting('locale') || defaultLocale;
+  // 프로젝트 소유자의 사용자별 locale 설정 우선 (없으면 시스템 설정 > 기본값)
+  const projectOwner = getUserById(project.userId);
+  const locale = projectOwner?.locale || getSystemSetting('locale') || defaultLocale;
   const isKo = locale === 'ko';
 
   try {

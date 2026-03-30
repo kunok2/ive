@@ -219,6 +219,9 @@ function initSchema(db: Database.Database) {
       // 기존 관리자 계정은 모든 CLI 허용
       db.exec("UPDATE users SET allowed_clis = 'claude,opencode' WHERE is_admin = 1")
     }
+    if (!tableInfo.some((col: any) => col.name === 'locale')) {
+      db.exec("ALTER TABLE users ADD COLUMN locale TEXT")
+    }
   } catch (e) { console.error("Migration failed for users:", e) }
 
   try {
@@ -488,6 +491,7 @@ function mapUser(r: any): User {
     id: r.id, email: r.email, name: r.name, avatar: r.avatar || 'av-01',
     isAdmin: !!r.is_admin, maxAgents: r.max_agents ?? 0, maxTurns: r.max_turns ?? 0,
     allowedClis: parseAllowedClis(r.allowed_clis) as User['allowedClis'],
+    locale: r.locale,
     createdAt: r.created_at,
   }
 }
@@ -509,6 +513,10 @@ export function deleteUser(id: string) {
 
 export function updateUserAvatar(id: string, avatar: string) {
   getDb().prepare('UPDATE users SET avatar = ? WHERE id = ?').run(avatar, id)
+}
+
+export function updateUserLocale(id: string, locale: string) {
+  getDb().prepare('UPDATE users SET locale = ? WHERE id = ?').run(locale, id)
 }
 
 export function createUser(u: any) {

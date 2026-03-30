@@ -2,6 +2,7 @@ import { getRequestConfig } from 'next-intl/server'
 import { cookies, headers } from 'next/headers'
 import { defaultLocale, locales, Locale } from './config'
 import { getSystemSetting, setSystemSetting } from '@/lib/db'
+import { getCurrentUser } from '@/lib/auth'
 
 function parseAcceptLanguage(header: string): Locale | null {
   const langs = header.split(',').map(part => {
@@ -21,7 +22,18 @@ export default getRequestConfig(async () => {
 
   let locale: Locale = defaultLocale
 
-  if (locales.includes(localeCookie as Locale)) {
+  // User's DB locale has highest priority if securely logged in
+  let userDbLocale: Locale | null = null
+  try {
+    const user = await getCurrentUser()
+    if (user && user.locale && locales.includes(user.locale as Locale)) {
+      userDbLocale = user.locale as Locale
+    }
+  } catch { /* ignore auth errors during static rendering */ }
+
+  if (userDbLocale) {
+    locale = userDbLocale
+  } else if (locales.includes(localeCookie as Locale)) {
     locale = localeCookie as Locale
   } else {
     const headerStore = await headers()

@@ -88,6 +88,7 @@ interface ChatAgentOptions {
   issueDescription: string
   userMessage: string
   workspacePath: string
+  userLocale?: string
 }
 
 /**
@@ -96,9 +97,9 @@ interface ChatAgentOptions {
  * Subsequent messages: resumes CLI session with --resume / -s.
  */
 export async function* runChatAgent(opts: ChatAgentOptions): AsyncGenerator<{ type: 'text' | 'done' | 'error' | 'session_id'; content?: string }> {
-  const { sessionId, cliSessionId, project, agent, token, issueIid, issueTitle, issueDescription, userMessage, workspacePath } = opts
+  const { sessionId, cliSessionId, project, agent, token, issueIid, issueTitle, issueDescription, userMessage, workspacePath, userLocale } = opts
 
-  const locale = getSystemSetting('locale') || defaultLocale
+  const locale = userLocale || getSystemSetting('locale') || defaultLocale
   const isKo = locale === 'ko'
   const langInstruction = isKo
     ? 'You MUST respond in the user\'s language: Korean (ko). 모든 출력 — 답변, 설명, 코드 코멘트, 요약 — 반드시 한국어로 작성하세요. All output MUST be written in Korean.'
