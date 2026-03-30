@@ -51,7 +51,7 @@ const cliConfig: Record<CliName, { label: string; icon: string; color: string; d
 }
 
 export default function AgentCard({ agent, onDelete, compact, assignedProjects, onRemove }: Props) {
-  const { refreshAgents, updateAgent } = useStore()
+  const { state, refreshAgents, updateAgent } = useStore()
   const t = useTranslations('agent')
   const tc = useTranslations('common')
   const statusConfig = {
@@ -503,15 +503,22 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
           <div className="bg-ive-bg rounded-xl border border-ive-border-subtle overflow-hidden">
             <div className="max-h-[240px] overflow-y-auto p-3 space-y-2.5" ref={el => { if (el) el.scrollTop = el.scrollHeight }}>
               {chatHistory.map((msg, i) => (
-                <div key={i} className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  {msg.role === 'agent' && (
-                    <AgentAvatar avatar={agent.avatar} size="sm" className="shrink-0 mt-0.5" />
-                  )}
-                  <div className={`max-w-[80%] rounded-xl px-3 py-2 text-sm leading-relaxed ${
-                    msg.role === 'user'
-                      ? 'bg-ive-green/15 text-ive-green-pale'
-                      : 'bg-ive-bg-card text-ive-text border border-ive-border-subtle'
-                  }`}>
+                <div key={i} className={`flex ${msg.role === 'user' ? 'flex-row-reverse' : ''} items-start gap-2`}>
+                  <div className="shrink-0 mt-0.5">
+                    {msg.role === 'user' ? (
+                      <AgentAvatar avatar={state.user?.avatar || 'av-01'} size="sm" />
+                    ) : (
+                      <AgentAvatar avatar={agent.avatar} size="sm" />
+                    )}
+                  </div>
+                  <div
+                    className={`rounded-xl px-3 py-2 text-sm leading-relaxed ${
+                      msg.role === 'user'
+                        ? 'max-w-[80%] bg-ive-green/15 text-ive-green-pale'
+                        : 'flex-1 bg-ive-bg-card text-ive-text border border-ive-border-subtle'
+                    }`}
+                    style={{ whiteSpace: 'pre-wrap' }}
+                  >
                     {msg.role === 'agent' ? (
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
@@ -519,7 +526,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
                           h1: ({ children }) => <h1 className="text-base font-bold text-ive-text mt-2 mb-1">{children}</h1>,
                           h2: ({ children }) => <h2 className="text-sm font-bold text-ive-text mt-2 mb-1">{children}</h2>,
                           h3: ({ children }) => <h3 className="text-sm font-bold text-ive-text mt-1.5 mb-0.5">{children}</h3>,
-                          p: ({ children }) => <p className="mb-1.5 last:mb-0">{children}</p>,
+                          p: ({ children }) => <p className="mb-1.5 last:mb-0" style={{ whiteSpace: 'pre-wrap' }}>{children}</p>,
                           ul: ({ children }) => <ul className="list-disc list-inside mb-1.5 space-y-0.5">{children}</ul>,
                           ol: ({ children }) => <ol className="list-decimal list-inside mb-1.5 space-y-0.5">{children}</ol>,
                           li: ({ children }) => <li>{children}</li>,
@@ -569,15 +576,17 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
                   e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
                 }}
                 onKeyDown={e => {
-                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                    e.preventDefault()
-                    handleInterview()
-                  }
+                  if (e.key !== 'Enter') return
+                  const isMobile = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0)
+                  if (isMobile) return
+                  if (e.shiftKey) return
+                  e.preventDefault()
+                  handleInterview()
                 }}
                 placeholder={t('questionPlaceholder')}
                 rows={1}
                 className="flex-1 min-h-[34px] bg-ive-bg-input border border-ive-border rounded-lg px-3 py-1.5 text-sm text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green resize-none"
-                style={{ overflowY: 'auto' }}
+                style={{ overflowY: 'auto', scrollbarGutter: 'stable' }}
                 disabled={chatLoading}
               />
               <button

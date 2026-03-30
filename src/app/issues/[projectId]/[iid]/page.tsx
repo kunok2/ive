@@ -892,7 +892,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                 }}
                 onKeyDown={e => {
                   if (e.key !== 'Enter') return
-                  const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0
+                  const isMobile = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0)
                   if (isMobile) return
                   if (e.shiftKey) return
                   e.preventDefault()
@@ -901,7 +901,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                 placeholder={tIssue('commentPlaceholder')}
                 rows={1}
                 className="flex-1 min-h-10 bg-ive-bg-card border border-ive-border rounded-xl px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-green/50"
-                style={{ overflow: 'hidden' }}
+                style={{ overflow: 'auto', scrollbarGutter: 'stable' }}
               />
               <button
                 onClick={handlePostComment}
@@ -938,7 +938,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                 }}
                 onKeyDown={e => {
                   if (e.key !== 'Enter') return
-                  const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0
+                  const isMobile = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0)
                   if (isMobile) return // mobile: Enter = newline, send via button
                   if (e.shiftKey) return // PC: Shift+Enter = newline
                   e.preventDefault()
@@ -948,7 +948,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                 rows={1}
                 disabled={chatSending}
                 className="flex-1 min-h-10 bg-ive-bg-card border border-purple-500/30 rounded-xl px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-purple-500/50 disabled:opacity-50"
-                style={{ overflow: 'hidden' }}
+                style={{ overflow: 'auto', scrollbarGutter: 'stable' }}
               />
               <button
                 onClick={handleSendChatMessage}
@@ -1036,7 +1036,7 @@ function MarkdownNote({ body }: { body: string }) {
         h1: ({ children }) => <h1 className="text-base font-bold text-ive-text mt-2 mb-1">{children}</h1>,
         h2: ({ children }) => <h2 className="text-sm font-bold text-ive-text mt-2 mb-1">{children}</h2>,
         h3: ({ children }) => <h3 className="text-sm font-bold text-ive-text mt-1.5 mb-0.5">{children}</h3>,
-        p: ({ children }) => <p className="mb-1.5 last:mb-0">{children}</p>,
+        p: ({ children }) => <p className="mb-1.5 last:mb-0" style={{ whiteSpace: 'pre-wrap' }}>{children}</p>,
         ul: ({ children }) => <ul className="list-disc list-inside mb-1.5 space-y-0.5">{children}</ul>,
         ol: ({ children }) => <ol className="list-decimal list-inside mb-1.5 space-y-0.5">{children}</ol>,
         li: ({ children }) => <li>{children}</li>,
