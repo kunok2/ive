@@ -192,7 +192,7 @@ export default function LiveTracePanel({ agents, projectId, onKill }: Props) {
       {(() => {
         const isChat = current.execution!.id.startsWith('exec-chat-')
         return (
-          <div className="flex-1 flex flex-col min-h-0 p-3 gap-2">
+          <div key={current.execution!.id} className="flex-1 flex flex-col min-h-0 p-3 gap-2">
             <div className="flex items-center justify-between shrink-0">
               <div className="min-w-0 flex-1">
                 <MarqueeText className="text-sm font-semibold text-ive-text">
