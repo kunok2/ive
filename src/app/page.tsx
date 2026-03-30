@@ -16,7 +16,6 @@ import Modal from '@/components/ui/Modal'
 import { useDialog } from '@/components/ui/ConfirmDialog'
 import UserProfileForm from '@/components/auth/UserProfileForm'
 import { DEFAULT_AVATARS } from '@/types'
-import LanguageSwitcher from '@/components/ui/LanguageSwitcher'
 import { useTranslations } from 'next-intl'
 
 export default function HomePage() {
@@ -100,16 +99,7 @@ export default function HomePage() {
               ) : null
             })()}
 
-            {/* 구분자 - 탭별 버튼이 있을 때만 표시 */}
-            {(activeTab === 'projects' || activeTab === 'agents' || (activeTab === 'issues' && issuesProjectId && (() => {
-              const proj = state.projects.find(p => p.id === issuesProjectId)
-              return proj ? !proj.shareRole || proj.shareRole === 'editor' : false
-            })())) && (
-              <span className="text-ive-border-subtle mx-0.5">|</span>
-            )}
-
-            {/* 언어 + 아바타 + 로그아웃 */}
-            <LanguageSwitcher />
+            {/* 아바타 + 로그아웃 */}
             <button
               onClick={() => setShowChangePassword(true)}
               className="w-8 h-8 rounded-full flex items-center justify-center overflow-hidden transition-all hover:scale-110 active:scale-95"
@@ -163,7 +153,7 @@ export default function HomePage() {
         <AgentForm onSuccess={() => setShowNewAgent(false)} />
       </Modal>
       <Modal open={showChangePassword} onClose={() => setShowChangePassword(false)} title={tAuth('myInfo')}>
-        <UserProfileForm userId={state.user.id} email={state.user.email} name={state.user.name} avatar={state.user.avatar} onSuccess={() => setShowChangePassword(false)} onCancel={() => setShowChangePassword(false)} onEmailChanged={() => refreshUser()} onAvatarChanged={() => { setAvatarTs(Date.now()); refreshUser() }} />
+        <UserProfileForm userId={state.user.id} email={state.user.email} name={state.user.name} avatar={state.user.avatar} locale={state.user.locale} timezone={state.user.timezone} onSuccess={() => setShowChangePassword(false)} onCancel={() => setShowChangePassword(false)} onEmailChanged={() => refreshUser()} onAvatarChanged={() => { setAvatarTs(Date.now()); refreshUser() }} onSettingsChanged={() => refreshUser()} />
       </Modal>
     </>
   )

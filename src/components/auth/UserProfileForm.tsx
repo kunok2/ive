@@ -1,27 +1,55 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { useTranslations } from 'next-intl'
+import { useTranslations, useLocale } from 'next-intl'
+import { useRouter } from 'next/navigation'
 import { DEFAULT_AVATARS } from '@/types'
+import { locales, localeNames, Locale } from '@/i18n/config'
 import AvatarCropEditor from './AvatarCropEditor'
+
+const TIMEZONE_OPTIONS = [
+  { value: 'Asia/Seoul', label: '🇰🇷 서울 (KST, UTC+9)' },
+  { value: 'Asia/Tokyo', label: '🇯🇵 도쿄 (JST, UTC+9)' },
+  { value: 'Asia/Shanghai', label: '🇨🇳 상하이 (CST, UTC+8)' },
+  { value: 'Asia/Singapore', label: '🇸🇬 싱가포르 (SGT, UTC+8)' },
+  { value: 'Asia/Kolkata', label: '🇮🇳 콜카타 (IST, UTC+5:30)' },
+  { value: 'Asia/Dubai', label: '🇦🇪 두바이 (GST, UTC+4)' },
+  { value: 'Europe/London', label: '🇬🇧 런던 (GMT/BST)' },
+  { value: 'Europe/Paris', label: '🇫🇷 파리 (CET/CEST)' },
+  { value: 'Europe/Berlin', label: '🇩🇪 베를린 (CET/CEST)' },
+  { value: 'America/New_York', label: '🇺🇸 뉴욕 (EST/EDT)' },
+  { value: 'America/Chicago', label: '🇺🇸 시카고 (CST/CDT)' },
+  { value: 'America/Denver', label: '🇺🇸 덴버 (MST/MDT)' },
+  { value: 'America/Los_Angeles', label: '🇺🇸 LA (PST/PDT)' },
+  { value: 'Pacific/Auckland', label: '🇳🇿 오클랜드 (NZST, UTC+12)' },
+  { value: 'Australia/Sydney', label: '🇦🇺 시드니 (AEST, UTC+10)' },
+  { value: 'UTC', label: 'UTC (협정 세계시)' },
+]
 
 interface Props {
   userId: string
   email: string
   name: string
   avatar: string
+  locale?: string
+  timezone?: string
   onSuccess?: () => void
   onCancel?: () => void
   onEmailChanged?: () => void
   onAvatarChanged?: () => void
+  onSettingsChanged?: () => void
 }
 
-type ActiveSection = 'none' | 'avatar' | 'email' | 'password'
+type ActiveSection = 'none' | 'avatar' | 'email' | 'password' | 'preferences'
 
-export default function UserProfileForm({ userId, email, name, avatar, onSuccess, onCancel, onEmailChanged, onAvatarChanged }: Props) {
+export default function UserProfileForm({ userId, email, name, avatar, locale: userLocale, timezone: userTimezone, onSuccess, onCancel, onEmailChanged, onAvatarChanged, onSettingsChanged }: Props) {
   const t = useTranslations('auth')
   const tc = useTranslations('common')
+  const currentLocale = useLocale()
+  const router = useRouter()
   const [activeSection, setActiveSection] = useState<ActiveSection>('none')
+  const [selectedLocale, setSelectedLocale] = useState<Locale>((userLocale || currentLocale) as Locale)
+  const [selectedTimezone, setSelectedTimezone] = useState(userTimezone || 'Asia/Seoul')
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [photoTs, setPhotoTs] = useState(() => Date.now())
@@ -451,6 +479,87 @@ export default function UserProfileForm({ userId, email, name, avatar, onSuccess
               {pwLoading ? t('changingPassword') : t('changePassword')}
             </button>
           </form>
+        )}
+      </div>
+
+      {/* 환경 설정 섹션 (언어 + 타임존) */}
+      <div className="border border-ive-border rounded-lg overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setActiveSection(activeSection === 'preferences' ? 'none' : 'preferences')}
+          className="w-full flex items-center justify-between px-4 py-3 bg-ive-bg-card hover:bg-ive-bg-input transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <i className="fa-solid fa-gear text-sm text-ive-text-muted" />
+            <span className="text-sm font-semibold text-ive-text">{t('preferences')}</span>
+          </div>
+          <i className={`fa-solid fa-chevron-${activeSection === 'preferences' ? 'up' : 'down'} text-xs text-ive-text-dim`} />
+        </button>
+        {activeSection === 'preferences' && (
+          <div className="px-4 pb-4 pt-2 flex flex-col gap-3 border-t border-ive-border">
+            {/* 언어 선택 */}
+            <div>
+              <label className="block text-sm font-semibold text-ive-text-muted mb-1">
+                <i className="fa-solid fa-globe mr-1 text-xs" />{t('language')}
+              </label>
+              <div className="flex gap-2">
+                {locales.map((l) => (
+                  <button
+                    key={l}
+                    type="button"
+                    onClick={() => setSelectedLocale(l)}
+                    className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${
+                      selectedLocale === l
+                        ? 'bg-ive-green/15 text-ive-green border border-ive-green/30'
+                        : 'bg-ive-bg-deep border border-ive-border-subtle text-ive-text-dim hover:border-ive-green/30'
+                    }`}
+                  >
+                    {localeNames[l]}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {/* 타임존 선택 */}
+            <div>
+              <label className="block text-sm font-semibold text-ive-text-muted mb-1">
+                <i className="fa-solid fa-clock mr-1 text-xs" />{t('timezone')}
+              </label>
+              <select
+                value={selectedTimezone}
+                onChange={(e) => setSelectedTimezone(e.target.value)}
+                className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2.5 text-sm text-ive-text focus:outline-none focus:border-ive-green"
+              >
+                {TIMEZONE_OPTIONS.map((tz) => (
+                  <option key={tz.value} value={tz.value}>{tz.label}</option>
+                ))}
+              </select>
+              <p className="text-xs text-ive-text-dim mt-1">{t('timezoneDescription')}</p>
+            </div>
+            {/* 저장 버튼 */}
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  // locale 변경 시 쿠키도 갱신
+                  if (selectedLocale !== currentLocale) {
+                    document.cookie = `NEXT_LOCALE=${selectedLocale};path=/;max-age=31536000`
+                  }
+                  await fetch('/api/settings/locale', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ locale: selectedLocale, timezone: selectedTimezone }),
+                  })
+                  onSettingsChanged?.()
+                  if (selectedLocale !== currentLocale) {
+                    router.refresh()
+                  }
+                } catch { /* ignore */ }
+              }}
+              className="w-full py-2.5 rounded-lg text-sm font-bold bg-ive-green/80 text-white hover:bg-ive-green transition-colors"
+            >
+              {tc('save')}
+            </button>
+          </div>
         )}
       </div>
 

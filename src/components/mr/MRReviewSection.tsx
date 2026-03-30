@@ -3,6 +3,8 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
+import { useStore } from '@/lib/store'
+import { formatDateFull } from '@/lib/format-date'
 import ConfirmModal from '@/components/ui/ConfirmModal'
 import { useToast } from '@/components/ui/Toast'
 
@@ -30,6 +32,9 @@ interface Props {
 
 export default function MRReviewSection({ projectId, issueIid }: Props) {
   const router = useRouter()
+  const { state } = useStore()
+  const userLocale = state.user?.locale
+  const userTz = state.user?.timezone
   const t = useTranslations('mr')
   const td = useTranslations('dialog')
   const { watchPipeline } = useToast()
@@ -170,8 +175,8 @@ export default function MRReviewSection({ projectId, issueIid }: Props) {
           {/* 머지 완료 정보 */}
           {isMerged && mr.merged_at && (
             <div className="text-xs text-ive-text-dim mb-3">
-              {mr.merged_by?.name && <span>{t('mergedBy', { name: mr.merged_by.name, date: new Date(mr.merged_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) })}</span>}
-              {!mr.merged_by?.name && <span>{new Date(mr.merged_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}</span>}
+              {mr.merged_by?.name && <span>{t('mergedBy', { name: mr.merged_by.name, date: formatDateFull(mr.merged_at, userLocale, userTz) })}</span>}
+              {!mr.merged_by?.name && <span>{formatDateFull(mr.merged_at, userLocale, userTz)}</span>}
             </div>
           )}
 

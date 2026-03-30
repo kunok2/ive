@@ -3,6 +3,8 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { TaskExecution, Agent } from '@/types'
+import { useStore } from '@/lib/store'
+import { formatTime as formatTimeUtil } from '@/lib/format-date'
 import type { ToolActivity } from '@/lib/tool-activity'
 import LogViewer from '@/components/ui/LogViewer'
 import AgentAvatar from '@/components/agent/AgentAvatar'
@@ -24,6 +26,7 @@ function ThinkingElapsed() {
 interface ChatMsg { id: string; role: 'user' | 'assistant'; content: string; createdAt: string }
 
 function ChatViewer({ projectId, execution, agent }: { projectId: string; execution: TaskExecution; agent: Agent }) {
+  const { state } = useStore()
   const [messages, setMessages] = useState<ChatMsg[]>([])
   const [agentProcessing, setAgentProcessing] = useState(false)
   const [userAvatar, setUserAvatar] = useState<string>('av-01')
@@ -80,7 +83,7 @@ function ChatViewer({ projectId, execution, agent }: { projectId: string; execut
                 {msg.role === 'user' ? 'You' : agent.name}
               </span>
               <span className="text-[10px] text-ive-text-dim">
-                {new Date(msg.createdAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', hour12: false })}
+                {formatTimeUtil(msg.createdAt, state.user?.locale, state.user?.timezone)}
               </span>
             </div>
             <div className={`break-words whitespace-pre-wrap text-ive-text-muted ${msg.role === 'user' ? 'text-right' : ''}`}>
