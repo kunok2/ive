@@ -11,7 +11,7 @@ build-image:
   tags:
     - deploy
   script:
-    - DOCKER_BUILDKIT=1 docker build --no-cache -t $IMAGE_NAME:latest -t $IMAGE_NAME:$CI_COMMIT_SHORT_SHA .
+    - DOCKER_BUILDKIT=1 docker build --no-cache --provenance=false -t $IMAGE_NAME:latest -t $IMAGE_NAME:$CI_COMMIT_SHORT_SHA .
     - docker image prune -f
     - docker builder prune -a -f --filter 'until=24h'
   only:
