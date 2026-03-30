@@ -226,7 +226,7 @@ export default function ProjectCard({ project }: Props) {
               {project.lastCheckedAt && (
                 <span className="text-sm text-ive-green/50 font-medium whitespace-nowrap flex items-center gap-1">
                   <i className="fa-solid fa-bolt-lightning opacity-70" />
-                  {new Date(project.lastCheckedAt).toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).replace(',', '')}
+                  {new Date(project.lastCheckedAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).replace(',', '')}
                 </span>
               )}
               {isOwner && (
