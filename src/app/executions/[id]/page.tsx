@@ -6,6 +6,8 @@ import LogViewer from '@/components/ui/LogViewer'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 import type { ToolActivity } from '@/lib/tool-activity'
 import { useTranslations } from 'next-intl'
+import { useStore } from '@/lib/store'
+import { formatDateLong } from '@/lib/format-date'
 
 function formatDuration(startedAt: string): string {
   const s = Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000)
@@ -34,6 +36,9 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
   const containerRef = useRef<HTMLDivElement>(null)
   const tc = useTranslations('common')
   const te = useTranslations('execution')
+  const { state } = useStore()
+  const userLocale = state.user?.locale
+  const userTz = state.user?.timezone
 
   useEffect(() => {
     const timer = setInterval(() => setTick(t => t + 1), 1000)
@@ -120,6 +125,10 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
                       {activity.tool === 'thinking' ? te('thinking') : activity.tool}
                     </span>
                   )}
+                  <span className="text-ive-text-muted">
+                    <i className="fa-solid fa-clock mr-0.5" />
+                    {formatDateLong(execInfo.startedAt, userLocale, userTz)}
+                  </span>
                   <span className="font-mono font-bold text-ive-amber">
                     {formatDuration(execInfo.startedAt)}
                     {tick >= 0 ? '' : ''}

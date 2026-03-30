@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { TaskExecution } from '@/types'
 import MarqueeText from '@/components/ui/MarqueeText'
 import { useTranslations } from 'next-intl'
+import { useStore } from '@/lib/store'
+import { formatDateShort } from '@/lib/format-date'
 
 function formatDuration(startedAt: string, endedAt?: string): string {
   const start = new Date(startedAt).getTime()
@@ -33,6 +35,9 @@ export default function ExecutionList({ executions, showAgent = true, onKill, ki
   const router = useRouter()
   const listRef = useRef<HTMLDivElement>(null)
   const te = useTranslations('execution')
+  const { state } = useStore()
+  const userLocale = state.user?.locale
+  const userTz = state.user?.timezone
 
   // 마운트 시 저장된 스크롤 위치 복원
   useEffect(() => {
@@ -96,6 +101,10 @@ export default function ExecutionList({ executions, showAgent = true, onKill, ki
           )}
 
           <div className="flex items-center gap-3 text-xs text-ive-text-dim">
+            <span>
+              <i className="fa-solid fa-calendar-day mr-0.5" />
+              {formatDateShort(ex.startedAt, userLocale, userTz)}
+            </span>
             <span className={`font-mono font-bold ${ex.status === 'running' ? 'text-ive-amber' : ''}`}>
               {formatDuration(ex.startedAt, ex.endedAt)}
             </span>
