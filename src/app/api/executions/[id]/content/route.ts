@@ -14,7 +14,7 @@ export async function GET(
   const execution = getExecution(id)
 
   if (!execution || !fs.existsSync(execution.logPath)) {
-    return Response.json({ content: '', status: 'not_found' })
+    return NextResponse.json({ content: '', status: 'not_found' }, { status: 404 })
   }
 
   // 프로젝트 접근 권한 확인

@@ -56,6 +56,7 @@ export async function GET(
       }
 
       // 실행 중: 500ms 폴링으로 새 내용 감시 (fs.watch는 macOS에서 불안정)
+      let pollCleared = false;
       const poll = setInterval(() => {
         try {
           const currentSize = fs.statSync(logPath).size;
@@ -68,18 +69,22 @@ export async function GET(
             controller.enqueue(new TextEncoder().encode(toSSE(buffer.toString('utf-8'))));
           }
 
-          // 실행 완료 확인
-          const cur = getExecution(executionId);
-          if (cur && cur.status !== 'running') {
-            setTimeout(() => {
-              clearInterval(poll);
-              try { controller.close(); } catch { /* ignore */ }
-            }, 2000);
+          // 실행 완료 확인 — 중복 clearInterval 방지
+          if (!pollCleared) {
+            const cur = getExecution(executionId);
+            if (cur && cur.status !== 'running') {
+              pollCleared = true;
+              setTimeout(() => {
+                clearInterval(poll);
+                try { controller.close(); } catch { /* ignore */ }
+              }, 2000);
+            }
           }
         } catch { /* ignore */ }
       }, 500);
 
       req.signal.addEventListener('abort', () => {
+        pollCleared = true;
         clearInterval(poll);
         try { controller.close(); } catch { /* ignore */ }
       });

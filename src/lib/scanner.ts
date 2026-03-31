@@ -21,6 +21,7 @@ import {
   updateProjectConflictCount,
   deleteIssueStage,
   getUserById,
+  assignIssueAtomically,
 } from "./db";
 import { decrypt } from "./crypto";
 import { defaultLocale } from "@/i18n/config";
@@ -520,10 +521,7 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
       // 대기 큐 진입 시점을 stage 변경 전에 읽어둠 (대기시간 계산 기준)
       const waitingSince = getIssueStageUpdatedAt(project.id, issue.iid);
 
-      // 상태 변경: 대기 → 개발 중 (로컬 DB)
-      setIssueStage(project.id, issue.iid, 'dev');
-
-      // 비동기로 태스크 실행 (개발자별 토큰 우선)
+      // 비동기로 태스크 실행 (개발자별 토큰 우선) — 트랜잭션은 executeTask 내에서 처리
       executeTask(project, issue, availableAgent, agentToken, waitingSince)
         .then(() => {
           console.log(`[Scanner] [DONE] Issue #${issue.iid} processed.`);
@@ -566,14 +564,10 @@ async function executeTask(
   // 0. 에이전트 상태를 'busy'로 변경
   updateAgentStatus(agent.id, 'busy');
 
-  // 0. DB에 실행 시작 기록
+  // 0. DB에 실행 시작 기록 — 트랜잭션으로 중복 배정 방지
   // 대기시간 기준: 이슈가 대기 큐에 진입한 시점(issue_stages.updated_at)을 사용
-  // - 첫 실행: 스캐너가 이슈를 처음 발견하여 'waiting'으로 설정한 시점
-  // - 재실행: 사용자가 재요청하여 'waiting'으로 재설정한 시점
-  // waitingSince가 없으면 현재 시각 사용 (GitLab 생성일은 큐 진입과 무관하므로 사용하지 않음)
   const effectiveCreatedAt = waitingSince || new Date().toISOString();
-
-  createExecution({
+  const execution: Parameters<typeof createExecution>[0] = {
     id: executionId,
     projectId: project.id,
     agentId: agent.id,
@@ -587,7 +581,16 @@ async function executeTask(
     costUsd: 0,
     turns: 0,
     issueCreatedAt: effectiveCreatedAt,
-  });
+  };
+
+  if (!isConflictTask && !assignIssueAtomically(project.id, iid, 'dev', execution)) {
+    console.log(`[Scanner] [SKIP] Issue #${iid} already has active execution (race condition prevented in executeTask)`);
+    updateAgentStatus(agent.id, 'available');
+    return;
+  }
+  if (isConflictTask) {
+    createExecution(execution);
+  }
 
   const isGitHub = project.provider === 'github';
   const conversationParts: string[] = []; // 이슈 노트용 대화 내용 수집

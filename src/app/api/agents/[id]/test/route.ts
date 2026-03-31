@@ -22,7 +22,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({
       success: false,
       error: `CLI 파일을 찾을 수 없습니다: ${cliPath}`,
-    })
+    }, { status: 400 })
   }
 
   // CLI 버전 확인 실행
@@ -50,6 +50,6 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({
       success: false,
       error: err instanceof Error ? err.message : 'CLI 실행 실패',
-    })
+    }, { status: 500 })
   }
 }
