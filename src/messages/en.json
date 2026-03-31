@@ -468,6 +468,7 @@
     "categoryProject": "Project",
     "categoryAgent": "Agent",
     "categoryExecution": "Execution",
+    "categoryTask": "Task",
     "categoryAdmin": "Admin",
     "categorySettings": "Settings",
     "dateToday": "Today",

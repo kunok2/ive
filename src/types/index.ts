@@ -200,7 +200,7 @@ export interface ReportSendLog {
 }
 
 // 사용자 활동 로그 카테고리
-export type ActivityCategory = 'auth' | 'project' | 'agent' | 'execution' | 'admin' | 'settings'
+export type ActivityCategory = 'auth' | 'project' | 'agent' | 'execution' | 'admin' | 'settings' | 'task'
 
 // 사용자 활동 로그
 export interface UserActivityLog {

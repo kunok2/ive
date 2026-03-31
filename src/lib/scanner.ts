@@ -22,6 +22,7 @@ import {
   deleteIssueStage,
   getUserById,
   assignIssueAtomically,
+  createActivityLog,
 } from "./db";
 import { decrypt } from "./crypto";
 import { defaultLocale } from "@/i18n/config";
@@ -590,6 +591,22 @@ async function executeTask(
   }
   if (isConflictTask) {
     createExecution(execution);
+  }
+
+  // 작업 등록 활동 로그
+  if (!isConflictTask) {
+    try {
+      createActivityLog({
+        userId: 'system',
+        category: 'task',
+        action: 'create_task',
+        detail: `작업 등록 (이슈 #${iid}, ${project.name}, 에이전트: ${agent.name})`,
+        targetType: 'execution',
+        targetId: executionId,
+      })
+    } catch (e) {
+      console.error('[Scanner] Failed to log task activity:', e)
+    }
   }
 
   const isGitHub = project.provider === 'github';

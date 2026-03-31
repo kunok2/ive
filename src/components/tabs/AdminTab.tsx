@@ -1221,6 +1221,7 @@ const CATEGORY_META: Record<string, { labelKey: string; icon: string; color: str
   project: { labelKey: 'categoryProject', icon: 'fa-solid fa-folder', color: 'text-ive-green' },
   agent: { labelKey: 'categoryAgent', icon: 'fa-solid fa-robot', color: 'text-ive-amber' },
   execution: { labelKey: 'categoryExecution', icon: 'fa-solid fa-play', color: 'text-blue-400' },
+  task: { labelKey: 'categoryTask', icon: 'fa-solid fa-list-check', color: 'text-teal-400' },
   admin: { labelKey: 'categoryAdmin', icon: 'fa-solid fa-shield', color: 'text-ive-red' },
   settings: { labelKey: 'categorySettings', icon: 'fa-solid fa-gear', color: 'text-purple-400' },
 }
