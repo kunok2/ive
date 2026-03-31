@@ -261,12 +261,19 @@ ${userMessage}
     })
   })
 
-  // Yield text chunks as they arrive
+  // Yield text chunks as they arrive (5분 타임아웃으로 무한 대기 방지)
+  const chatTimeout = Date.now() + 5 * 60 * 1000
   while (!done || textChunks.length > 0) {
     if (textChunks.length > 0) {
       const chunk = textChunks.shift()!
       yield chunk
     } else {
+      if (Date.now() > chatTimeout) {
+        try { child.kill('SIGKILL') } catch { /* ignore */ }
+        getAgentMap().delete(sessionId)
+        yield { type: 'error', content: 'Chat session timed out (5 minutes)' }
+        return
+      }
       await new Promise(r => setTimeout(r, 100))
     }
   }

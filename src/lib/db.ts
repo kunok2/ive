@@ -1601,3 +1601,28 @@ export function getChatHistoryForPrompt(sessionId: string): string {
   if (msgs.length === 0) return ''
   return msgs.map(m => `**${m.role === 'user' ? '👤 User' : '🤖 AI'}**: ${m.content}`).join('\n\n')
 }
+
+/**
+ * 이슈 배정을 원자적으로 수행합니다.
+ * hasActiveExecution 체크 + setIssueStage + createExecution을 하나의 트랜잭션으로 묶어
+ * 레이스 컨디션으로 인한 중복 배정을 방지합니다.
+ */
+export function assignIssueAtomically(
+  projectId: string,
+  issueIid: number,
+  stage: IssueStage,
+  execution: TaskExecution,
+): boolean {
+  const tx = getDb().transaction(() => {
+    // 트랜잭션 내에서 다시 확인 — 다른 프로세스가 먼저 배정했는지 체크
+    const active = getDb().prepare(
+      "SELECT id FROM task_executions WHERE project_id = ? AND issue_iid = ? AND status = 'running' LIMIT 1"
+    ).get(projectId, issueIid)
+    if (active) return false
+
+    setIssueStage(projectId, issueIid, stage)
+    createExecution(execution)
+    return true
+  })
+  return tx()
+}
