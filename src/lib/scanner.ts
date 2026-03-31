@@ -61,13 +61,12 @@ const execFile = promisify(require('child_process').execFile);
  * OpenCode run --format json 이벤트를 읽기 좋은 로그 텍스트로 변환
  */
 function formatOpenCodeEvent(event: any, showToolUsage: boolean = false): string | null {
-  const ts = new Date().toTimeString().slice(0, 8);
   switch (event.type) {
     case 'text': {
       // OpenCode 1.x: content is in event.part.text
       const content = event.part?.text ?? event.content ?? event.text ?? '';
       if (!content.trim()) return null;
-      return `[${ts}] ${content}`;
+      return content;
     }
     case 'tool_use': {
       if (!showToolUsage) return null;
@@ -75,7 +74,7 @@ function formatOpenCodeEvent(event: any, showToolUsage: boolean = false): string
       const toolName = event.part?.tool ?? event.tool ?? event.name ?? '';
       const input = event.part?.state?.input ?? event.input ?? event.args ?? {};
       const summary = formatToolInput(toolName, input);
-      return `[${ts}] \x1b[1;34m[Tool] ${toolName}\x1b[0m ${summary}`;
+      return `\x1b[1;34m[Tool] ${toolName}\x1b[0m ${summary}`;
     }
     case 'step_finish': {
       // OpenCode 1.x: completion is step_finish with reason='stop'
@@ -88,7 +87,7 @@ function formatOpenCodeEvent(event: any, showToolUsage: boolean = false): string
       if (inputT || outputT) meta.push(`입력 ${Number(inputT).toLocaleString()} + 출력 ${Number(outputT).toLocaleString()} 토큰`);
       if (cost) meta.push(`비용 $${Number(cost).toFixed(4)}`);
       const metaStr = meta.length > 0 ? `\x1b[90m(${meta.join(' | ')})\x1b[0m ` : '';
-      return `[${ts}] \x1b[1;32m[완료]\x1b[0m ${metaStr}`;
+      return `\x1b[1;32m[완료]\x1b[0m ${metaStr}`;
     }
     case 'session.status': {
       // Legacy format fallback
@@ -99,11 +98,11 @@ function formatOpenCodeEvent(event: any, showToolUsage: boolean = false): string
       if (inputT || outputT) meta.push(`입력 ${Number(inputT).toLocaleString()} + 출력 ${Number(outputT).toLocaleString()} 토큰`);
       if (cost) meta.push(`비용 $${Number(cost).toFixed(4)}`);
       const metaStr = meta.length > 0 ? `\x1b[90m(${meta.join(' | ')})\x1b[0m ` : '';
-      return `[${ts}] \x1b[1;32m[완료]\x1b[0m ${metaStr}`;
+      return `\x1b[1;32m[완료]\x1b[0m ${metaStr}`;
     }
     case 'session.error': {
       const msg = event.error ?? event.message ?? '알 수 없는 오류';
-      return `[${ts}] \x1b[1;31m[오류]\x1b[0m ${msg}`;
+      return `\x1b[1;31m[오류]\x1b[0m ${msg}`;
     }
     default:
       return null;
@@ -168,25 +167,23 @@ function extractMeta(event: any, usage?: any): string | null {
 }
 
 function formatStreamEvent(event: any, showToolUsage: boolean = false): string | null {
-  const ts = new Date().toTimeString().slice(0, 8);
-
   switch (event.type) {
     case 'assistant': {
       const parts = event.message?.content || [];
       const lines: string[] = [];
       for (const part of parts) {
         if (part.type === 'text' && part.text?.trim()) {
-          lines.push(`[${ts}] ${part.text}`);
+          lines.push(part.text);
         } else if (part.type === 'tool_use' && showToolUsage) {
           const input = part.input || {};
           const summary = formatToolInput(part.name, input);
-          lines.push(`[${ts}] \x1b[1;34m[Tool] ${part.name}\x1b[0m ${summary}`);
+          lines.push(`\x1b[1;34m[Tool] ${part.name}\x1b[0m ${summary}`);
         }
       }
       if (lines.length === 0) return null;
       const usage = event.message?.usage || event.usage;
       const meta = extractMeta(event, usage);
-      if (meta) lines.push(`\x1b[90m       ${meta}\x1b[0m`);
+      if (meta) lines.push(`\x1b[90m${meta}\x1b[0m`);
       return lines.join('\n');
     }
     case 'content_block_delta': {
@@ -199,23 +196,23 @@ function formatStreamEvent(event: any, showToolUsage: boolean = false): string |
     case 'result': {
       const meta = extractMeta(event, event.usage) || '';
       const metaStr = meta ? `\x1b[90m${meta}\x1b[0m ` : '';
-      return `[${ts}] \x1b[1;32m[완료]\x1b[0m ${metaStr}`;
+      return `\x1b[1;32m[완료]\x1b[0m ${metaStr}`;
     }
     case 'system': {
       // system 이벤트 중 의미 있는 메시지만 출력 (JSON 덤프 방지)
       if (event.subtype === 'init' || event.subtype === 'session') {
         const model = event.model ?? event.modelId ?? '';
-        return `[${ts}] \x1b[1;36m[시작]\x1b[0m 세션 초기화${model ? ` \x1b[90m(${model})\x1b[0m` : ''}`;
+        return `\x1b[1;36m[시작]\x1b[0m 세션 초기화${model ? ` \x1b[90m(${model})\x1b[0m` : ''}`;
       }
       // task_notification 등 내부 이벤트는 메타만 간략히
       if (event.subtype === 'task_notification') {
         const summary = event.summary || '';
         const tokens = event.usage?.total_tokens ? ` (${event.usage.total_tokens.toLocaleString()} tokens)` : '';
-        return summary ? `[${ts}] \x1b[90m[내부작업] ${summary}${tokens}\x1b[0m` : null;
+        return summary ? `\x1b[90m[내부작업] ${summary}${tokens}\x1b[0m` : null;
       }
       // 문자열 메시지가 있으면 표시, 아니면 무시
       if (typeof event.message === 'string' && event.message.trim()) {
-        return `[${ts}] \x1b[1;36m[System]\x1b[0m ${event.message}`;
+        return `\x1b[1;36m[System]\x1b[0m ${event.message}`;
       }
       return null; // 나머지 system 이벤트는 무시
     }
@@ -596,14 +593,13 @@ async function executeTask(
   const conversationParts: string[] = []; // 이슈 노트용 대화 내용 수집
   const logStream = fs.createWriteStream(logPath, { flags: 'a' });
   const log = (msg: string, type: 'info' | 'error' | 'warn' | 'system' = 'info') => {
-    const timestamp = new Date().toTimeString().slice(0, 8);
     let colorCode = '';
     if (type === 'system') colorCode = '\x1b[1;32m'; // Bright Green
     if (type === 'error') colorCode = '\x1b[1;31m';  // Bright Red
     if (type === 'warn') colorCode = '\x1b[1;33m';   // Bright Yellow
 
     const coloredMsg = colorCode ? `${colorCode}${msg}\x1b[0m` : msg;
-    logStream.write(`[${timestamp}] ${coloredMsg}\n`);
+    logStream.write(`${coloredMsg}\n`);
     console.log(`[Task #${iid}] ${msg}`);
   };
 
