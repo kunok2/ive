@@ -1152,6 +1152,7 @@ export interface ReportExecution {
   agentAvatar: string
   cliName: string
   developerName: string
+  developerUserId: string | null
   issueIid: number
   issueTitle: string | null
   status: string
@@ -1171,7 +1172,7 @@ export function getExecutionsInRange(userId: string, start: string, end: string)
   const rows = getDb().prepare(`
     SELECT te.id, te.project_id, p.name as project_name, p.color as project_color, p.avatar_url as project_avatar_url, p.provider as project_provider,
            te.agent_id, a.name as agent_name, a.avatar as agent_avatar, a.cli_name,
-           u.name as developer_name,
+           u.name as developer_name, a.user_id as developer_user_id,
            te.issue_iid, te.issue_title, te.status,
            te.started_at, te.ended_at, te.input_tokens, te.output_tokens, te.cost_usd, te.turns,
            te.issue_created_at
@@ -1188,6 +1189,7 @@ export function getExecutionsInRange(userId: string, start: string, end: string)
     projectColor: r.project_color, projectAvatarUrl: r.project_avatar_url || '', projectProvider: r.project_provider || 'gitlab',
     agentId: r.agent_id, agentName: r.agent_name, agentAvatar: r.agent_avatar || 'av-01',
     cliName: r.cli_name, developerName: r.developer_name || r.agent_name,
+    developerUserId: r.developer_user_id ?? null,
     issueIid: r.issue_iid, issueTitle: r.issue_title,
     status: r.status, startedAt: r.started_at, endedAt: r.ended_at,
     inputTokens: r.input_tokens ?? 0, outputTokens: r.output_tokens ?? 0,
@@ -1366,7 +1368,7 @@ export function getGlobalExecutionsInRange(start: string, end: string): ReportEx
   const rows = getDb().prepare(`
     SELECT te.id, te.project_id, p.name as project_name, p.color as project_color, p.avatar_url as project_avatar_url, p.provider as project_provider,
            te.agent_id, a.name as agent_name, a.avatar as agent_avatar, a.cli_name,
-           u.name as developer_name,
+           u.name as developer_name, a.user_id as developer_user_id,
            te.issue_iid, te.issue_title, te.status,
            te.started_at, te.ended_at, te.input_tokens, te.output_tokens, te.cost_usd, te.turns,
            te.issue_created_at
@@ -1382,6 +1384,7 @@ export function getGlobalExecutionsInRange(start: string, end: string): ReportEx
     projectColor: r.project_color, projectAvatarUrl: r.project_avatar_url || '', projectProvider: r.project_provider || 'gitlab',
     agentId: r.agent_id, agentName: r.agent_name, agentAvatar: r.agent_avatar || 'av-01',
     cliName: r.cli_name, developerName: r.developer_name || r.agent_name,
+    developerUserId: r.developer_user_id ?? null,
     issueIid: r.issue_iid, issueTitle: r.issue_title,
     status: r.status, startedAt: r.started_at, endedAt: r.ended_at,
     inputTokens: r.input_tokens ?? 0, outputTokens: r.output_tokens ?? 0,

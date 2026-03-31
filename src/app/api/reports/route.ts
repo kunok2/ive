@@ -148,6 +148,20 @@ export async function GET(req: NextRequest) {
     cost: Math.round(aExecs.reduce((s, e) => s + calcCost(pricingMap, e.cliName, e.inputTokens, e.outputTokens), 0) * 100) / 100,
   }))
 
+  // 이전 기간 사용자별
+  const prevUserMap = new Map<string, typeof prevExecs>()
+  for (const e of prevExecs) {
+    const uid = e.developerUserId || e.developerName
+    if (!prevUserMap.has(uid)) prevUserMap.set(uid, [])
+    prevUserMap.get(uid)!.push(e)
+  }
+  const prevByUser = Array.from(prevUserMap.entries()).map(([uid, uExecs]) => ({
+    userId: uid, userName: uExecs[0].developerName,
+    tasks: uExecs.length,
+    issueCount: new Set(uExecs.map(e => `${e.projectId}:${e.issueIid}`)).size,
+    cost: Math.round(uExecs.reduce((s, e) => s + calcCost(pricingMap, e.cliName, e.inputTokens, e.outputTokens), 0) * 100) / 100,
+  }))
+
   // 이전 기간 일별 트렌드 — 전체 기간 버킷 채움 (waitAvg, procAvg 포함)
   const prevAllKeys = periodKeys(prevRange.start, prevRange.end, type)
   const prevDayMap = new Map<string, { tasks: number; cost: number; waitTimes: number[]; procTimes: number[] }>()
@@ -252,6 +266,36 @@ export async function GET(req: NextRequest) {
     }
   })
 
+  // By user (사용자별)
+  const userMap = new Map<string, typeof execs>()
+  for (const e of execs) {
+    const uid = e.developerUserId || e.developerName
+    if (!userMap.has(uid)) userMap.set(uid, [])
+    userMap.get(uid)!.push(e)
+  }
+  const byUser = Array.from(userMap.entries()).map(([uid, uExecs]) => {
+    const uSuccess = uExecs.filter(e => e.status === 'success').length
+    const uFailed = uExecs.filter(e => e.status === 'failed').length
+    const uDur = uExecs.reduce((s, e) => s + durationMin(e.startedAt, e.endedAt), 0)
+    const uFinished = uSuccess + uFailed
+    const uCost = uExecs.reduce((s, e) => s + calcCost(pricingMap, e.cliName, e.inputTokens, e.outputTokens), 0)
+    const uniqueIssues = new Set(uExecs.map(e => `${e.projectId}:${e.issueIid}`))
+    const uniqueProjects = new Set(uExecs.map(e => e.projectId))
+    return {
+      userId: uid, userName: uExecs[0].developerName,
+      tasks: uExecs.length, success: uSuccess, failed: uFailed,
+      issueCount: uniqueIssues.size,
+      projectCount: uniqueProjects.size,
+      totalDurationMin: Math.round(uDur * 10) / 10,
+      avgDurationMin: uFinished > 0 ? Math.round((uDur / uFinished) * 10) / 10 : 0,
+      inputTokens: uExecs.reduce((s, e) => s + e.inputTokens, 0),
+      outputTokens: uExecs.reduce((s, e) => s + e.outputTokens, 0),
+      cost: Math.round(uCost * 100) / 100,
+    }
+  })
+
+  // User trend (daily breakdown per user) — 전체 기간 버킷 채움 (아래에서 allKeys 사용)
+
   // Daily trend (extended with waitAvg, procAvg) — 전체 기간 버킷 채움
   const allKeys = periodKeys(range.start, range.end, type)
   const todayKey = toBucketKey(getKSTTodayString(), type)
@@ -343,6 +387,35 @@ export async function GET(req: NextRequest) {
       daily: allKeys.map(key => {
         const isFuture = key > todayKey
         const d = aMap.get(key) ?? { tasks: 0, cost: 0 }
+        return { date: key, tasks: isFuture ? null : d.tasks, cost: isFuture ? null : Math.round(d.cost * 100) / 100 }
+      }),
+    }
+  })
+
+  // User trend (daily breakdown per user)
+  const userDayMap = new Map<string, Map<string, { tasks: number; cost: number }>>()
+  for (const e of execs) {
+    const key = toBucketKey(e.startedAt, type)
+    const uid = e.developerUserId || e.developerName
+    if (!userDayMap.has(uid)) {
+      const m = new Map<string, { tasks: number; cost: number }>()
+      for (const k of allKeys) m.set(k, { tasks: 0, cost: 0 })
+      userDayMap.set(uid, m)
+    }
+    const uMap = userDayMap.get(uid)!
+    if (!uMap.has(key)) uMap.set(key, { tasks: 0, cost: 0 })
+    const d = uMap.get(key)!
+    d.tasks++
+    d.cost += calcCost(pricingMap, e.cliName, e.inputTokens, e.outputTokens)
+  }
+  const userTrend = Array.from(userDayMap.entries()).map(([uid, uMap]) => {
+    const uInfo = execs.find(e => (e.developerUserId || e.developerName) === uid)!
+    return {
+      userId: uid,
+      userName: uInfo.developerName,
+      daily: allKeys.map(key => {
+        const isFuture = key > todayKey
+        const d = uMap.get(key) ?? { tasks: 0, cost: 0 }
         return { date: key, tasks: isFuture ? null : d.tasks, cost: isFuture ? null : Math.round(d.cost * 100) / 100 }
       }),
     }
@@ -540,6 +613,24 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // 사용자별 주요 변화
+    for (const ut of userTrend) {
+      const pastDaily = ut.daily.filter(d => d.tasks !== null)
+      if (pastDaily.length >= 2) {
+        const uMid = Math.floor(pastDaily.length / 2)
+        const uFirst = pastDaily.slice(0, uMid)
+        const uSecond = pastDaily.slice(uMid)
+        const utFirst = avgArr(uFirst, d => d.tasks!)
+        const utSecond = avgArr(uSecond, d => d.tasks!)
+        if (utFirst > 0) {
+          const utChange = ((utSecond - utFirst) / utFirst) * 100
+          if (Math.abs(utChange) >= 30) {
+            insights.push(`${ut.userName} 사용자의 이슈 생성량이 ${utChange > 0 ? '증가' : '감소'}했습니다 (${utChange > 0 ? '+' : ''}${Math.round(utChange).toLocaleString()}%)`)
+          }
+        }
+      }
+    }
+
     // 개발자별 주요 변화
     for (const at of agentTrend) {
       const pastDaily = at.daily.filter(d => d.tasks !== null)
@@ -589,13 +680,16 @@ export async function GET(req: NextRequest) {
     },
     prevByProject,
     prevByAgent,
+    prevByUser,
     prevDailyTrend,
     prevLifecycle,
     byProject,
     byAgent,
+    byUser,
     dailyTrend,
     projectTrend,
     agentTrend,
+    userTrend,
     resolvedIssues,
     lifecycle,
     insights,
