@@ -67,6 +67,19 @@ interface AgentTrend {
   daily: TrendDaily[]
 }
 
+interface UserStat {
+  userId: string; userName: string
+  tasks: number; success: number; failed: number
+  issueCount: number; projectCount: number
+  totalDurationMin: number; avgDurationMin: number
+  inputTokens: number; outputTokens: number; cost: number
+}
+
+interface UserTrend {
+  userId: string; userName: string
+  daily: TrendDaily[]
+}
+
 interface ResolvedIssue {
   issueIid: number; issueTitle: string; projectId: string; projectName: string; projectColor: string
   agentName: string; agentAvatar: string; status: 'success' | 'failed'; startedAt: string; durationMin: number; cost: number
@@ -99,13 +112,16 @@ interface ReportData {
   prevSummary: PrevSummary
   prevByProject: (PrevByItem & { projectId: string; projectName: string })[]
   prevByAgent: (PrevByItem & { agentId: string; agentName: string })[]
+  prevByUser: (PrevByItem & { userId: string; userName: string; issueCount: number })[]
   prevDailyTrend: PrevDaily[]
   prevLifecycle: PrevLifecycle
   byProject: ProjectStat[]
   byAgent: AgentGlobal[]
+  byUser: UserStat[]
   dailyTrend: DailyTrend[]
   projectTrend: ProjectTrend[]
   agentTrend: AgentTrend[]
+  userTrend: UserTrend[]
   resolvedIssues?: ResolvedIssue[]
   lifecycle: Lifecycle
   insights: string[]
@@ -124,6 +140,8 @@ const PROJ_SORT_KEY = 'ive-report-proj-sort'
 const PROJ_SORT_DIR = 'ive-report-proj-sort-dir'
 const AGENT_SORT_KEY = 'ive-report-agent-sort'
 const AGENT_SORT_DIR = 'ive-report-agent-sort-dir'
+const USER_SORT_KEY = 'ive-report-user-sort'
+const USER_SORT_DIR = 'ive-report-user-sort-dir'
 
 let _fmtDur: ((key: string, params?: Record<string, unknown>) => string) | null = null
 
@@ -194,6 +212,7 @@ export default function ReportsTab() {
   const [loading, setLoading] = useState(false)
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(() => new Set((saved?.expandedProjects as string[]) || []))
   const [expandedAgents, setExpandedAgents] = useState<Set<string>>(() => new Set((saved?.expandedAgents as string[]) || []))
+  const [expandedUsers, setExpandedUsers] = useState<Set<string>>(() => new Set((saved?.expandedUsers as string[]) || []))
   const [projectSortKey, setProjectSortKey] = useState<SectionSortKey>(() => {
     if (typeof window === 'undefined') return 'tasks'
     return (localStorage.getItem(PROJ_SORT_KEY) as SectionSortKey) || 'tasks'
@@ -209,6 +228,14 @@ export default function ReportsTab() {
   const [agentSortDir, setAgentSortDir] = useState<SectionSortDir>(() => {
     if (typeof window === 'undefined') return 'desc'
     return (localStorage.getItem(AGENT_SORT_DIR) as SectionSortDir) || 'desc'
+  })
+  const [userSortKey, setUserSortKey] = useState<SectionSortKey>(() => {
+    if (typeof window === 'undefined') return 'tasks'
+    return (localStorage.getItem(USER_SORT_KEY) as SectionSortKey) || 'tasks'
+  })
+  const [userSortDir, setUserSortDir] = useState<SectionSortDir>(() => {
+    if (typeof window === 'undefined') return 'desc'
+    return (localStorage.getItem(USER_SORT_DIR) as SectionSortDir) || 'desc'
   })
   const [issueFilter, setIssueFilter] = useState<IssueFilter>(() => (saved?.issueFilter as IssueFilter) || 'all')
   const [issueProjectFilter, setIssueProjectFilter] = useState<string>(() => (saved?.issueProjectFilter as string) || 'all')
@@ -245,9 +272,10 @@ export default function ReportsTab() {
       type, date,
       expandedProjects: [...expandedProjects],
       expandedAgents: [...expandedAgents],
+      expandedUsers: [...expandedUsers],
       issueFilter, issueProjectFilter, issueKeyword,
     })
-  }, [type, date, expandedProjects, expandedAgents, issueFilter, issueProjectFilter, issueKeyword])
+  }, [type, date, expandedProjects, expandedAgents, expandedUsers, issueFilter, issueProjectFilter, issueKeyword])
 
   // 페이지 스크롤 위치 복원
   useEffect(() => {
@@ -304,6 +332,10 @@ export default function ReportsTab() {
     setExpandedAgents(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next })
   }
 
+  function toggleUser(id: string) {
+    setExpandedUsers(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next })
+  }
+
   function toggleSectionSort(
     currentKey: SectionSortKey, currentDir: SectionSortDir,
     setKey: (k: SectionSortKey) => void, setDir: (d: SectionSortDir) => void,
@@ -333,6 +365,14 @@ export default function ReportsTab() {
     return [...data.byAgent].sort((a, b) => {
       const v = agentSortKey === 'cost' ? a.cost - b.cost : a.tasks - b.tasks
       return agentSortDir === 'desc' ? -v : v
+    })
+  }
+
+  function sortedUsers() {
+    if (!data) return []
+    return [...data.byUser].sort((a, b) => {
+      const v = userSortKey === 'cost' ? a.cost - b.cost : a.tasks - b.tasks
+      return userSortDir === 'desc' ? -v : v
     })
   }
 
@@ -766,6 +806,20 @@ export default function ReportsTab() {
             </section>
           )}
 
+          {/* 사용자별 비교 */}
+          {data.byUser && data.byUser.length > 0 && (
+            <section>
+              <CompareTable
+                title={t('byUser')}
+                icon="fa-user"
+                data={data.byUser.map(u => {
+                  const prev = data.prevByUser?.find(pu => pu.userId === u.userId)
+                  return { name: u.userName, color: '', tasks: u.tasks, cost: u.cost, prevTasks: prev?.tasks ?? 0, prevCost: prev?.cost ?? 0 }
+                })}
+              />
+            </section>
+          )}
+
           {/* By Project */}
           {data.byProject.length > 0 && (
             <section>
@@ -899,6 +953,73 @@ export default function ReportsTab() {
                               <div className="flex items-center gap-1.5">
                                 <span className="text-[10px] text-ive-text-dim shrink-0">{t('costSmall')}</span>
                                 <Sparkline data={at.daily.map(d => d.cost)} width={100} height={20} color="amber" />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  )
+                })}
+              </div>
+            </section>
+          )}
+
+          {/* By User (사용자별) */}
+          {data.byUser && data.byUser.length > 0 && (
+            <section>
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-xs font-bold text-ive-text-dim uppercase tracking-wider">{t('byUser')}</div>
+                <SortButtons sortKey={userSortKey} sortDir={userSortDir} onToggle={(k) => toggleSectionSort(userSortKey, userSortDir, setUserSortKey, setUserSortDir, k, USER_SORT_KEY, USER_SORT_DIR)} countLabel={t('countLabel')} costLabel={t('costSmall')} />
+              </div>
+              <div className="space-y-2">
+                {sortedUsers().map(u => {
+                  const ut = data.userTrend?.find(t => t.userId === u.userId)
+                  const prev = data.prevByUser?.find(pu => pu.userId === u.userId)
+                  const taskDiff = diffPct(u.tasks, prev?.tasks ?? 0)
+                  const costDiff = diffPct(u.cost, prev?.cost ?? 0)
+                  return (
+                  <div key={u.userId} className="bg-ive-bg-card border border-ive-border-subtle rounded-xl overflow-hidden">
+                    <button onClick={() => toggleUser(u.userId)} className="w-full px-3 py-2.5 flex items-center gap-2 text-left">
+                      <span className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 bg-ive-bg-deep border border-ive-border-dark">
+                        <i className="fa-solid fa-user text-xs text-ive-text-dim" />
+                      </span>
+                      <span className="text-sm font-bold text-ive-text flex-1 truncate">{u.userName}</span>
+                      <span className="text-xs text-ive-text-dim">{t('itemsUnit', { count: u.tasks.toLocaleString() })}</span>
+                      {taskDiff != null && <span className={`text-[10px] font-bold ${taskDiff > 0 ? 'text-ive-green' : taskDiff < 0 ? 'text-ive-red' : 'text-ive-text-dim'}`}>{taskDiff > 0 ? '+' : ''}{taskDiff.toLocaleString()}%</span>}
+                      <span className="text-xs text-ive-amber">${formatCost(u.cost)}</span>
+                      {costDiff != null && <span className={`text-[10px] font-bold ${costDiff > 0 ? 'text-ive-red' : costDiff < 0 ? 'text-ive-green' : 'text-ive-text-dim'}`}>{costDiff > 0 ? '+' : ''}{costDiff.toLocaleString()}%</span>}
+                      <i className={`fa-solid fa-chevron-${expandedUsers.has(u.userId) ? 'up' : 'down'} text-xs text-ive-text-dim`} />
+                    </button>
+                    {expandedUsers.has(u.userId) && (
+                      <div className="px-3 pb-3 border-t border-ive-border-dark">
+                        <div className="grid grid-cols-4 gap-1 mt-2 text-center">
+                          <MiniStat label={t('issueCount')} value={u.issueCount.toLocaleString()} color="text-ive-cyan" />
+                          <MiniStat label={t('success')} value={u.success.toLocaleString()} color="text-ive-green" />
+                          <MiniStat label={t('failed')} value={u.failed.toLocaleString()} color="text-ive-red" />
+                          <MiniStat label={t('projectCount')} value={u.projectCount.toLocaleString()} color="text-ive-text-muted" />
+                        </div>
+                        <div className="grid grid-cols-3 gap-1 mt-1 text-center">
+                          <MiniStat label={t('costLabel')} value={`$${formatCost(u.cost)}`} color="text-ive-amber" />
+                          <MiniStat label={t('totalLabel')} value={formatDuration(u.totalDurationMin)} color="text-ive-text-muted" />
+                          <MiniStat label={t('avgLabel')} value={formatDuration(u.avgDurationMin)} color="text-ive-text-muted" />
+                        </div>
+                        <div className="text-xs text-ive-text-dim mt-1 text-center">
+                          {t('inputOutputTokens', { input: formatTokens(u.inputTokens), output: formatTokens(u.outputTokens) })}
+                        </div>
+                        {/* 사용자별 건수/비용 추이 */}
+                        {ut && ut.daily.length >= 2 && (
+                          <div className="mt-2 bg-ive-bg-deep rounded-lg p-2">
+                            <div className="text-[10px] font-bold text-ive-text-dim mb-1.5">{t('countCostTrend')}</div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] text-ive-text-dim shrink-0">{t('countLabel')}</span>
+                                <Sparkline data={ut.daily.map(d => d.tasks)} width={100} height={20} color="auto" />
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] text-ive-text-dim shrink-0">{t('costSmall')}</span>
+                                <Sparkline data={ut.daily.map(d => d.cost)} width={100} height={20} color="amber" />
                               </div>
                             </div>
                           </div>

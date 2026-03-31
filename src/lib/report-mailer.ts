@@ -166,6 +166,38 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
     prevByDeveloper.set(devKey, d)
   }
 
+  // 사용자별 집계 (이슈 생성건수 포함)
+  const byUser = new Map<string, { name: string; total: number; success: number; failed: number; cost: number; issueCount: number; projectCount: number }>()
+  for (const e of executions) {
+    const uid = e.developerUserId || e.developerName || e.agentName
+    const u = byUser.get(uid) || { name: e.developerName || e.agentName, total: 0, success: 0, failed: 0, cost: 0, issueCount: 0, projectCount: 0 }
+    u.total++
+    if (e.status === 'success') u.success++
+    if (e.status === 'failed') u.failed++
+    u.cost += e.costUsd
+    byUser.set(uid, u)
+  }
+  // 사용자별 이슈 수, 프로젝트 수 계산
+  for (const [uid] of byUser) {
+    const userExecs = executions.filter(e => (e.developerUserId || e.developerName || e.agentName) === uid)
+    byUser.get(uid)!.issueCount = new Set(userExecs.map(e => `${e.projectId}:${e.issueIid}`)).size
+    byUser.get(uid)!.projectCount = new Set(userExecs.map(e => e.projectId)).size
+  }
+
+  // 전 기간 사용자별 집계
+  const prevByUser = new Map<string, { total: number; cost: number; issueCount: number }>()
+  for (const e of prev) {
+    const uid = e.developerUserId || e.developerName || e.agentName
+    const u = prevByUser.get(uid) || { total: 0, cost: 0, issueCount: 0 }
+    u.total++
+    u.cost += e.costUsd
+    prevByUser.set(uid, u)
+  }
+  for (const [uid] of prevByUser) {
+    const userExecs = prev.filter(e => (e.developerUserId || e.developerName || e.agentName) === uid)
+    prevByUser.get(uid)!.issueCount = new Set(userExecs.map(e => `${e.projectId}:${e.issueIid}`)).size
+  }
+
   const successRate = total > 0 ? ((success / total) * 100).toFixed(1) : '0.0'
   const prevSuccessRate = prevTotal > 0 ? ((prevSuccess / prevTotal) * 100).toFixed(1) : '0.0'
 
@@ -368,6 +400,42 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
           </tr>
         </thead>
         <tbody>${developerRows}</tbody>
+      </table>
+    </div>
+    ` : ''}
+
+    ${byUser.size > 0 ? `
+    <!-- 사용자별 -->
+    <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:20px;">
+      <h3 style="color:#111827;font-size:14px;margin:0 0 12px;font-weight:700;">사용자별 현황</h3>
+      <table width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;color:#111827;">
+        <thead>
+          <tr style="color:#6b7280;font-size:11px;">
+            <th style="padding:6px 12px;text-align:left;border-bottom:1px solid #e5e7eb;">사용자</th>
+            <th style="padding:6px 12px;text-align:center;border-bottom:1px solid #e5e7eb;">이슈 수</th>
+            <th style="padding:6px 12px;text-align:center;border-bottom:1px solid #e5e7eb;">작업</th>
+            <th style="padding:6px 12px;text-align:center;border-bottom:1px solid #e5e7eb;">성공</th>
+            <th style="padding:6px 12px;text-align:center;border-bottom:1px solid #e5e7eb;">실패</th>
+            <th style="padding:6px 12px;text-align:center;border-bottom:1px solid #e5e7eb;">프로젝트</th>
+            <th style="padding:6px 12px;text-align:right;border-bottom:1px solid #e5e7eb;">비용</th>
+          </tr>
+        </thead>
+        <tbody>${Array.from(byUser.entries())
+          .sort((a, b) => b[1].total - a[1].total)
+          .map(([uid, u]) => {
+            const pu = prevByUser.get(uid)
+            return `
+          <tr>
+            <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#111827;"><strong>${esc(u.name)}</strong></td>
+            <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;color:#0891b2;font-weight:600;">${u.issueCount}${hasPrev && pu ? ` <span style="font-size:10px;">${changeIndicator(u.issueCount, pu.issueCount)}</span>` : ''}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;color:#111827;">${u.total}${hasPrev && pu ? ` <span style="font-size:10px;">${changeIndicator(u.total, pu.total)}</span>` : ''}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;color:#16a34a;font-weight:600;">${u.success}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;color:#dc2626;font-weight:600;">${u.failed}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;color:#6b7280;">${u.projectCount}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#111827;">$${u.cost.toFixed(2)}${hasPrev && pu ? ` <span style="font-size:10px;">${changeIndicator(u.cost, pu.cost, true)}</span>` : ''}</td>
+          </tr>`
+          }).join('')}
+        </tbody>
       </table>
     </div>
     ` : ''}
