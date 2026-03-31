@@ -142,28 +142,26 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
     prevByProject.set(e.projectId, p)
   }
 
-  // 개발자별 집계 (에이전트 소유자 기준)
-  const byDeveloper = new Map<string, { name: string; agent: string; total: number; success: number; failed: number; cost: number }>()
+  // 개발자(에이전트)별 집계 - agentId 기준
+  const byAgent = new Map<string, { name: string; cli: string; total: number; success: number; failed: number; cost: number }>()
   for (const e of executions) {
-    const devKey = e.developerName || e.agentName
-    const d = byDeveloper.get(devKey) || { name: devKey, agent: e.agentName, total: 0, success: 0, failed: 0, cost: 0 }
-    d.total++
-    if (e.status === 'success') d.success++
-    if (e.status === 'failed') d.failed++
-    d.cost += e.costUsd
-    byDeveloper.set(devKey, d)
+    const a = byAgent.get(e.agentId) || { name: e.agentName, cli: e.cliName, total: 0, success: 0, failed: 0, cost: 0 }
+    a.total++
+    if (e.status === 'success') a.success++
+    if (e.status === 'failed') a.failed++
+    a.cost += e.costUsd
+    byAgent.set(e.agentId, a)
   }
 
-  // 전 기간 개발자별 집계
-  const prevByDeveloper = new Map<string, { total: number; success: number; failed: number; cost: number }>()
+  // 전 기간 개발자(에이전트)별 집계
+  const prevByAgent = new Map<string, { total: number; success: number; failed: number; cost: number }>()
   for (const e of prev) {
-    const devKey = e.developerName || e.agentName
-    const d = prevByDeveloper.get(devKey) || { total: 0, success: 0, failed: 0, cost: 0 }
-    d.total++
-    if (e.status === 'success') d.success++
-    if (e.status === 'failed') d.failed++
-    d.cost += e.costUsd
-    prevByDeveloper.set(devKey, d)
+    const a = prevByAgent.get(e.agentId) || { total: 0, success: 0, failed: 0, cost: 0 }
+    a.total++
+    if (e.status === 'success') a.success++
+    if (e.status === 'failed') a.failed++
+    a.cost += e.costUsd
+    prevByAgent.set(e.agentId, a)
   }
 
   // 사용자별 집계 (이슈 생성건수 포함)
@@ -202,7 +200,7 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
   const prevSuccessRate = prevTotal > 0 ? ((prevSuccess / prevTotal) * 100).toFixed(1) : '0.0'
 
   // 총평 생성
-  const summary = generateSummary(label, total, success, failed, running, parseFloat(successRate), totalCost, byProject, byDeveloper, hasPrev ? { prevTotal, prevSuccess, prevFailed, prevSuccessRate: parseFloat(prevSuccessRate), prevTotalCost } : undefined)
+  const summary = generateSummary(label, total, success, failed, running, parseFloat(successRate), totalCost, byProject, byAgent, byUser, hasPrev ? { prevTotal, prevSuccess, prevFailed, prevSuccessRate: parseFloat(prevSuccessRate), prevTotalCost } : undefined)
 
   // 프로젝트 이름 목록 (헤더 표시용)
   const projectNames = Array.from(byProject.values()).map(p => p.name).filter(Boolean)
@@ -224,20 +222,20 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
       </tr>
     `}).join('')
 
-  const developerRows = Array.from(byDeveloper.entries())
+  const agentRows = Array.from(byAgent.entries())
     .sort((a, b) => b[1].total - a[1].total)
-    .map(([devKey, d]) => {
-      const pd = prevByDeveloper.get(devKey)
+    .map(([agentId, a]) => {
+      const pa = prevByAgent.get(agentId)
       return `
       <tr>
         <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#111827;">
-          <strong>${esc(d.name)}</strong>
-          <span style="color:#6b7280;font-size:11px;"> (${esc(d.agent)})</span>
+          <strong>${esc(a.name)}</strong>
+          <span style="color:#6b7280;font-size:11px;"> (${esc(a.cli)})</span>
         </td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;color:#111827;">${d.total}${hasPrev && pd ? ` <span style="font-size:10px;">${changeIndicator(d.total, pd.total)}</span>` : ''}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;color:#16a34a;font-weight:600;">${d.success}${hasPrev && pd ? ` <span style="font-size:10px;">${changeIndicator(d.success, pd.success)}</span>` : ''}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;color:#dc2626;font-weight:600;">${d.failed}${hasPrev && pd ? ` <span style="font-size:10px;">${changeIndicator(d.failed, pd.failed, true)}</span>` : ''}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#111827;">$${d.cost.toFixed(2)}${hasPrev && pd ? ` <span style="font-size:10px;">${changeIndicator(d.cost, pd.cost, true)}</span>` : ''}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;color:#111827;">${a.total}${hasPrev && pa ? ` <span style="font-size:10px;">${changeIndicator(a.total, pa.total)}</span>` : ''}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;color:#16a34a;font-weight:600;">${a.success}${hasPrev && pa ? ` <span style="font-size:10px;">${changeIndicator(a.success, pa.success)}</span>` : ''}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;color:#dc2626;font-weight:600;">${a.failed}${hasPrev && pa ? ` <span style="font-size:10px;">${changeIndicator(a.failed, pa.failed, true)}</span>` : ''}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#111827;">$${a.cost.toFixed(2)}${hasPrev && pa ? ` <span style="font-size:10px;">${changeIndicator(a.cost, pa.cost, true)}</span>` : ''}</td>
       </tr>
     `}).join('')
 
@@ -385,21 +383,21 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
     </div>
     ` : ''}
 
-    ${byDeveloper.size > 0 ? `
-    <!-- 개발자별 -->
+    ${byAgent.size > 0 ? `
+    <!-- 개발자(에이전트)별 -->
     <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:20px;">
-      <h3 style="color:#111827;font-size:14px;margin:0 0 12px;font-weight:700;">개발자별 현황</h3>
+      <h3 style="color:#111827;font-size:14px;margin:0 0 12px;font-weight:700;">개발자(에이전트)별 현황</h3>
       <table width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;color:#111827;">
         <thead>
           <tr style="color:#6b7280;font-size:11px;">
-            <th style="padding:6px 12px;text-align:left;border-bottom:1px solid #e5e7eb;">개발자</th>
+            <th style="padding:6px 12px;text-align:left;border-bottom:1px solid #e5e7eb;">에이전트</th>
             <th style="padding:6px 12px;text-align:center;border-bottom:1px solid #e5e7eb;">전체</th>
             <th style="padding:6px 12px;text-align:center;border-bottom:1px solid #e5e7eb;">성공</th>
             <th style="padding:6px 12px;text-align:center;border-bottom:1px solid #e5e7eb;">실패</th>
             <th style="padding:6px 12px;text-align:right;border-bottom:1px solid #e5e7eb;">비용</th>
           </tr>
         </thead>
-        <tbody>${developerRows}</tbody>
+        <tbody>${agentRows}</tbody>
       </table>
     </div>
     ` : ''}
@@ -473,7 +471,8 @@ function generateSummary(
   successRate: number,
   totalCost: number,
   byProject: Map<string, { name: string; total: number; success: number; failed: number; cost: number }>,
-  byDeveloper: Map<string, { name: string; agent: string; total: number; success: number; failed: number; cost: number }>,
+  byAgent: Map<string, { name: string; cli: string; total: number; success: number; failed: number; cost: number }>,
+  byUser: Map<string, { name: string; total: number; success: number; failed: number; cost: number; issueCount: number; projectCount: number }>,
   prevData?: { prevTotal: number; prevSuccess: number; prevFailed: number; prevSuccessRate: number; prevTotalCost: number }
 ): string {
   const parts: string[] = []
@@ -511,11 +510,18 @@ function generateSummary(
     }
   }
 
-  // 개발자별 하이라이트
-  const developers = Array.from(byDeveloper.values()).sort((a, b) => b.total - a.total)
-  if (developers.length > 1) {
-    const topDev = developers[0]
-    parts.push(`가장 많은 작업을 수행한 개발자는 <strong>${esc(topDev.name)}</strong>(${topDev.total}건)입니다.`)
+  // 개발자(에이전트)별 하이라이트
+  const agents = Array.from(byAgent.values()).sort((a, b) => b.total - a.total)
+  if (agents.length > 1) {
+    const topAgent = agents[0]
+    parts.push(`가장 많은 작업을 수행한 에이전트는 <strong>${esc(topAgent.name)}</strong>(${topAgent.total}건)입니다.`)
+  }
+
+  // 사용자별 하이라이트
+  const users = Array.from(byUser.values()).sort((a, b) => b.total - a.total)
+  if (users.length > 1) {
+    const topUser = users[0]
+    parts.push(`가장 많은 작업을 요청한 사용자는 <strong>${esc(topUser.name)}</strong>(${topUser.total}건)입니다.`)
   }
 
   // 비용 요약
