@@ -218,8 +218,8 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
           <div className="text-base font-bold text-ive-green-pale truncate">{agent.name}</div>
           <div className="text-sm text-ive-text-muted truncate">{cli.label}</div>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          <div className={`w-2 h-2 rounded-full ${status.dot}`} />
+        <div className="flex items-center gap-1.5 shrink-0 whitespace-nowrap">
+          <div className={`w-2 h-2 rounded-full shrink-0 ${status.dot}`} />
           <span className="text-sm text-ive-text-muted">{status.label}</span>
           {onRemove && (
             <button
@@ -255,11 +255,11 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
         onClick={toggleCollapsed}
         className={`p-3 flex items-center justify-between cursor-pointer active:bg-white/[0.02] transition-colors ${collapsed ? '' : 'border-b border-ive-border-dark'}`}
       >
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 min-w-0 flex-1">
           <AgentAvatar avatar={agent.avatar} size="md" toolBadge={toolBadge} />
           <div className="min-w-0">
-            <div className="text-base font-bold text-ive-green-pale">{agent.name}</div>
-            <div className="text-sm text-ive-text-muted">{cli.label} · {cli.desc}</div>
+            <div className="text-base font-bold text-ive-green-pale truncate">{agent.name}</div>
+            <div className="text-sm text-ive-text-muted truncate">{cli.label} · {cli.desc}</div>
             {collapsed && assignedProjects && assignedProjects.length > 0 && (
               <div className="text-xs text-ive-text-dim mt-0.5 truncate">
                 {assignedProjects.map(p => p.name).join(', ')}
@@ -267,9 +267,9 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5">
-            <div className={`w-2 h-2 rounded-full ${status.dot}`} />
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 whitespace-nowrap">
+            <div className={`w-2 h-2 rounded-full shrink-0 ${status.dot}`} />
             <span className="text-sm text-ive-text-muted">{status.label}</span>
           </div>
           {collapsed && (
