@@ -3,6 +3,7 @@ import { getProject, getProjectAccess, setIssueStage, type IssueStage } from '@/
 import { getCurrentUser } from '@/lib/auth';
 import { decrypt } from '@/lib/crypto';
 import { reopenIssue, fetchSingleIssue } from '@/lib/provider';
+import { logActivity } from '@/lib/activity';
 
 // 허용되는 stage 전환
 const TRANSITIONS: Record<string, { action: string; toStage: IssueStage }[]> = {
@@ -65,6 +66,22 @@ export async function POST(
 
   // 로컬 DB에 stage 업데이트
   setIssueStage(projectId, Number(iid), transition.toStage);
+
+  // 활동 로그 기록
+  const actionLabels: Record<string, string> = {
+    retry: '재시도 요청',
+    cancel: '작업 취소',
+    reopen: '작업 재오픈',
+  }
+  logActivity({
+    userId: user.id,
+    category: 'task',
+    action: `task_${action}`,
+    detail: `${actionLabels[action] || action} (이슈 #${iid}, ${project.name})`,
+    targetType: 'issue',
+    targetId: `${projectId}:${iid}`,
+    req,
+  })
 
   return NextResponse.json({ success: true, stage: transition.toStage });
 }
