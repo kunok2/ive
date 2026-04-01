@@ -516,7 +516,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
             </div>
 
             {/* 이슈 추가 폼 */}
-            {showAddForm && !isHistoryTab && (
+            {showAddForm && (
               <div className="mb-3 bg-ive-bg-card border border-ive-green/30 rounded-xl p-3">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-bold text-ive-green">
