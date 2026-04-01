@@ -43,6 +43,7 @@ interface ProjectStats {
 export default function ProjectCard({ project }: Props) {
   const agentCount = project.assignedAgents?.length ?? 0
   const isOwner = !project.shareRole
+  const canEdit = isOwner || project.shareRole === 'editor'
   const { updateProject, scanProjectNow, state } = useStore()
   const userLocale = state.user?.locale
   const userTz = state.user?.timezone
@@ -232,7 +233,7 @@ export default function ProjectCard({ project }: Props) {
                   {formatDateShort(project.lastCheckedAt, userLocale, userTz).replace(',', '')}
                 </span>
               )}
-              {isOwner && (
+              {canEdit && (
                 <>
                   <button onClick={toggleScanner} className="flex items-center gap-1 transition-all" title={project.scannerActive ? tp('pauseScanner') : tp('resumeScanner')} aria-label={project.scannerActive ? tp('pauseScanner') : tp('resumeScanner')}>
                     <span className={`h-8 px-2.5 rounded-full flex items-center gap-1 text-xs font-bold transition-all ${project.scannerActive ? 'bg-ive-bg-deep text-ive-green/60 hover:text-ive-green hover:bg-ive-green/10 border border-ive-border-dark' : 'bg-ive-red/10 text-ive-red border border-ive-red/30 hover:bg-ive-red/20 scale-105'}`}>

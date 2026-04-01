@@ -48,6 +48,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   }
 
   const isOwner = !project.shareRole
+  const canEdit = isOwner || project.shareRole === 'editor'
   const assignedAgents = project.assignedAgents || []
   const allAssignedAgentIds = new Set<string>()
   for (const p of state.projects) {
@@ -147,7 +148,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                 <div className="text-sm text-ive-text-muted mt-1 uppercase tracking-wider font-bold">{ts('waiting')}</div>
               </div>
             </div>
-            {isOwner ? (
+            {canEdit ? (
               <div className="flex gap-2 shrink-0">
                 <button
                   onClick={() => setShowEditProject(true)}
@@ -155,17 +156,19 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                 >
                   <i className="fa-solid fa-pen-to-square mr-1" />{tc('edit')}
                 </button>
-                <button
-                  onClick={() => setShowDeleteProject(true)}
-                  className="text-base font-black text-ive-red/60 border border-ive-red/20 px-3 py-2 rounded-xl hover:bg-ive-red/10 transition-all"
-                >
-                  <i className="fa-solid fa-trash-can" />
-                </button>
+                {isOwner && (
+                  <button
+                    onClick={() => setShowDeleteProject(true)}
+                    className="text-base font-black text-ive-red/60 border border-ive-red/20 px-3 py-2 rounded-xl hover:bg-ive-red/10 transition-all"
+                  >
+                    <i className="fa-solid fa-trash-can" />
+                  </button>
+                )}
               </div>
             ) : (
-              <span className={`text-xs font-black px-2.5 py-1 rounded-full leading-none ${project.shareRole === 'editor' ? 'bg-ive-amber/15 text-ive-amber border border-ive-amber/30' : 'bg-ive-cyan/15 text-ive-cyan border border-ive-cyan/30'}`}>
+              <span className={`text-xs font-black px-2.5 py-1 rounded-full leading-none bg-ive-cyan/15 text-ive-cyan border border-ive-cyan/30`}>
                 <i className="fa-solid fa-share-nodes mr-1" />
-                {project.shareRole === 'editor' ? tp('editPermission') : tp('viewerPermission')}
+                {tp('viewerPermission')}
               </span>
             )}
           </div>
@@ -177,7 +180,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             <span className="w-1.5 h-1.5 rounded-full bg-ive-green" />
             {tp('assignedAgents', { count: assignedAgents.length })}
           </h2>
-          {isOwner && (
+          {canEdit && (
             <button
               onClick={() => { setShowAssignAgent(true); setAssignError(''); setAssignToken('') }}
               className="text-base font-bold text-ive-green bg-ive-green/10 px-4 py-2 rounded-xl active:scale-95 transition-all hover:bg-ive-green/15"
@@ -198,11 +201,11 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               <div key={pa.id} className="bg-ive-bg-card rounded-xl border border-ive-border-subtle overflow-hidden">
                 <div className="flex items-center gap-2 p-1">
                   <div className="flex-1 min-w-0">
-                    <AgentCard agent={pa.agent} compact onRemove={isOwner ? () => handleUnassignAgent(pa.agentId) : undefined} />
+                    <AgentCard agent={pa.agent} compact onRemove={canEdit ? () => handleUnassignAgent(pa.agentId) : undefined} />
                   </div>
                 </div>
-                {/* 하단 액션 바 — 소유자만 토큰 편집 가능 */}
-                {isOwner && (
+                {/* 하단 액션 바 — 소유자 및 editor 토큰 편집 가능 */}
+                {canEdit && (
                   <div className="flex items-center gap-1 px-3 pb-2.5 pt-0">
                     {editingTokenAgentId === pa.agentId ? (
                       <div className="flex-1 flex items-center gap-1.5">
