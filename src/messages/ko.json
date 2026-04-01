@@ -286,10 +286,10 @@
     "waitingBadge": "대기",
     "todayRecords": "금일 수행기록 ({count})",
     "errorLabel": "오류:",
-    "conflictLabel": "병합"
+    "conflictLabel": "취합"
   },
   "conflict": {
-    "title": "MR 병합 관리",
+    "title": "MR 취합 관리",
     "conflictCount": "충돌 {count}건",
     "totalMRs": "전체 {count}건",
     "loading": "MR 목록 불러오는 중...",

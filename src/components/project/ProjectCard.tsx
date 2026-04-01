@@ -347,7 +347,7 @@ export default function ProjectCard({ project }: Props) {
           <span className="text-xs text-ive-text-dim font-bold">{tp('tokensLabel')}</span>
         </div>
 
-        {/* 병합 */}
+        {/* 취합 */}
         <button
           onClick={() => setExpandedPanel(expandedPanel === 'conflicts' ? null : 'conflicts')}
           className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'conflicts' ? 'bg-ive-purple/5' : 'hover:bg-white/[0.02]'}`}
@@ -459,7 +459,7 @@ export default function ProjectCard({ project }: Props) {
         </div>
       )}
 
-      {/* 병합 관리 패널 */}
+      {/* 취합 관리 패널 */}
       {expandedPanel === 'conflicts' && (
         <ConflictResolutionPanel
           projectId={project.id}
