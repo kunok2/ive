@@ -663,7 +663,12 @@
     "procTimeIncreased": "Avg process time increased by {pct}% compared to {prev}.",
     "procTimeDecreased": "Avg process time decreased by {pct}% compared to {prev}.",
     "stableOverallLocal": "{period} is overall stable compared to {prev}.",
-    "waitProcAvgTrend": "Wait/Process Time Avg Trend"
+    "waitProcAvgTrend": "Wait/Process Time Avg Trend",
+    "waitingTrend": "Pending Issues Trend",
+    "waitingCurrent": "Current Pending",
+    "waitingUnit": "",
+    "waitingAvg": "Period Avg",
+    "prevWaiting": "Prev Pending"
   },
   "pull": {
     "loading": "Loading...",

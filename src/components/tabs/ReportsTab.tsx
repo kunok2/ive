@@ -7,7 +7,7 @@ import { DEFAULT_AVATARS } from '@/types'
 import PullToRefresh from '@/components/ui/PullToRefresh'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 import Sparkline from '@/components/ui/Sparkline'
-import { DailyTrendChart, CompareTable } from '@/components/reports/ReportCharts'
+import { DailyTrendChart, CompareTable, WaitingTrendChart } from '@/components/reports/ReportCharts'
 import { getKSTTodayString } from '@/lib/date-utils'
 
 const REPORT_STATE_KEY = 'ive-report-state'
@@ -80,6 +80,12 @@ interface UserTrend {
   daily: TrendDaily[]
 }
 
+interface WaitingDay {
+  date: string
+  total: number
+  byProject: { projectId: string; projectName: string; projectColor: string; waiting: number }[]
+}
+
 interface ResolvedIssue {
   issueIid: number; issueTitle: string; projectId: string; projectName: string; projectColor: string
   agentName: string; agentAvatar: string; status: 'success' | 'failed'; startedAt: string; durationMin: number; cost: number
@@ -125,6 +131,8 @@ interface ReportData {
   resolvedIssues?: ResolvedIssue[]
   lifecycle: Lifecycle
   insights: string[]
+  waitingTrend: WaitingDay[]
+  prevWaitingTrend: WaitingDay[]
 }
 
 type SectionSortKey = 'tasks' | 'cost'
@@ -570,6 +578,16 @@ export default function ReportsTab() {
               </section>
             )
           })()}
+
+          {/* 대기 건수 추이 */}
+          {data.waitingTrend && data.waitingTrend.some(d => d.total > 0) && (
+            <section>
+              <div className="text-xs font-bold text-ive-text-dim mb-2 uppercase tracking-wider">
+                {t('waitingTrend')}
+              </div>
+              <WaitingTrendChart data={data.waitingTrend} prevData={data.prevWaitingTrend || []} type={type} />
+            </section>
+          )}
 
           {/* Summary Cards */}
           <section>

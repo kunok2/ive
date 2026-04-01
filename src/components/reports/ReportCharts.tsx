@@ -2,7 +2,7 @@
 
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  CartesianGrid, ComposedChart, Line, Area, Cell,
+  CartesianGrid, ComposedChart, Line, Area, Cell, AreaChart,
 } from 'recharts'
 import { useTranslations } from 'next-intl'
 import AgentAvatar from '@/components/agent/AgentAvatar'
@@ -173,6 +173,107 @@ export function CompareTable({ title, data, icon }: { title: string; data: Compa
         <div className="flex justify-end">
           <Badge value={pctChange(data.reduce((s, d) => s + d.cost, 0), data.reduce((s, d) => s + d.prevCost, 0))} invert />
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ───────────── 대기 건수 추이 (프로젝트별 스택 영역 차트) ─────────────
+
+interface WaitingDay {
+  date: string
+  total: number
+  byProject: { projectId: string; projectName: string; projectColor: string; waiting: number }[]
+}
+
+export function WaitingTrendChart({ data, prevData, type }: {
+  data: WaitingDay[]; prevData: WaitingDay[]; type: string
+}) {
+  const t = useTranslations('report')
+  const DAY_LABELS = t.raw('dayLabels') as string[]
+
+  // 모든 프로젝트 추출 (색상 포함)
+  const projectSet = new Map<string, { name: string; color: string }>()
+  for (const d of data) {
+    for (const p of d.byProject) {
+      if (!projectSet.has(p.projectId)) {
+        projectSet.set(p.projectId, { name: p.projectName, color: p.projectColor })
+      }
+    }
+  }
+  const projects = Array.from(projectSet.entries())
+
+  // 차트 데이터 구성 (날짜별 row, 프로젝트별 key)
+  const chartData = data.map((d, i) => {
+    let label: string
+    if (type === 'yearly') {
+      label = `${parseInt(d.date.slice(5, 7))}월`
+    } else {
+      const dt = new Date(d.date)
+      label = type === 'weekly' ? DAY_LABELS[dt.getDay()] : `${dt.getDate()}`
+    }
+    const row: Record<string, unknown> = { label, total: d.total, prevTotal: prevData[i]?.total ?? 0 }
+    for (const [pid] of projects) {
+      const found = d.byProject.find(p => p.projectId === pid)
+      row[pid] = found?.waiting ?? 0
+    }
+    return row
+  })
+
+  // 현재/이전 기간 총 대기건수 평균
+  const avgCur = data.length > 0 ? Math.round(data.reduce((s, d) => s + d.total, 0) / data.length * 10) / 10 : 0
+  const avgPrev = prevData.length > 0 ? Math.round(prevData.reduce((s, d) => s + d.total, 0) / prevData.length * 10) / 10 : 0
+  const latestTotal = data.length > 0 ? data[data.length - 1].total : 0
+
+  return (
+    <div className="bg-ive-bg-card border border-ive-border-subtle rounded-xl p-3 space-y-2">
+      {/* 요약 한 줄 */}
+      <div className="flex items-center gap-3">
+        <span className="text-xs font-bold text-ive-text">{t('waitingCurrent')} {latestTotal.toLocaleString()}{t('waitingUnit')}</span>
+        <Badge value={pctChange(avgCur, avgPrev)} invert />
+        <span className="text-xs text-ive-text-dim ml-auto">{t('waitingAvg')} {avgCur.toLocaleString()}</span>
+      </div>
+
+      <ResponsiveContainer width="100%" height={170}>
+        <AreaChart data={chartData}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#2a2f3e" />
+          <XAxis dataKey="label" tick={{ fill: '#6b7280', fontSize: 10 }} axisLine={false} tickLine={false} />
+          <YAxis tick={{ fill: '#6b7280', fontSize: 10 }} axisLine={false} tickLine={false} width={24} allowDecimals={false} />
+          <Tooltip
+            {...tooltipStyle}
+            formatter={(value: unknown, name: unknown) => {
+              const proj = projects.find(([pid]) => pid === name)
+              return [String(value), proj ? proj[1].name : String(name)]
+            }}
+          />
+          {/* 이전 기간 대기건수 — 회색 점선 영역 */}
+          <Area dataKey="prevTotal" name={t('prevWaiting')} fill="#6b7280" fillOpacity={0.08} stroke="#6b7280" strokeDasharray="3 3" strokeWidth={1} dot={false} />
+          {/* 프로젝트별 스택 영역 */}
+          {projects.map(([pid, info], idx) => (
+            <Area
+              key={pid}
+              dataKey={pid}
+              name={info.name}
+              stackId="waiting"
+              fill={info.color}
+              fillOpacity={0.6}
+              stroke={info.color}
+              strokeWidth={1}
+              dot={false}
+            />
+          ))}
+        </AreaChart>
+      </ResponsiveContainer>
+
+      {/* 범례 — 프로젝트별 */}
+      <div className="flex items-center justify-center gap-3 flex-wrap text-[10px] text-ive-text-dim">
+        {projects.map(([pid, info]) => (
+          <span key={pid}>
+            <span className="inline-block w-2 h-2 rounded-sm mr-0.5" style={{ background: info.color }} />
+            {info.name}
+          </span>
+        ))}
+        <span><span className="inline-block w-3 h-2 bg-[#6b7280]/20 border border-[#6b7280]/40 mr-0.5 align-middle" />{t('prevWaiting')}</span>
       </div>
     </div>
   )

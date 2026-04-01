@@ -26,6 +26,7 @@ export function startStatsCollector() {
       const snapshotDays = Number(getSystemSetting('retention.snapshots_days')) || 7
       const execDays = Number(getSystemSetting('retention.executions_days')) || 365
       cleanOldSnapshots(snapshotDays)
+      // stat_daily_summaries는 영구 보관 (적재량 적음, 연도별 히스토리 조회용)
       cleanOldExecutions(execDays)
       cleanOldActivityLogs(90)
     } catch (e) {
