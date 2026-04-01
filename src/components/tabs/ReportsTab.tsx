@@ -580,7 +580,7 @@ export default function ReportsTab() {
           })()}
 
           {/* 대기 건수 추이 */}
-          {data.waitingTrend && data.waitingTrend.some(d => d.total > 0) && (
+          {data.waitingTrend && data.waitingTrend.length > 0 && (
             <section>
               <div className="text-xs font-bold text-ive-text-dim mb-2 uppercase tracking-wider">
                 {t('waitingTrend')}
