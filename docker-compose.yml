@@ -19,6 +19,7 @@ services:
       - ./claude-config:/home/ive/.claude
     labels:
       - com.centurylinklabs.watchtower.enable=true
+      - com.centurylinklabs.watchtower.scope=ive
 
   watchtower:
     image: containrrr/watchtower
@@ -31,4 +32,4 @@ services:
       - WATCHTOWER_POLL_INTERVAL=30
       - WATCHTOWER_LABEL_ENABLE=true
       - DOCKER_API_VERSION=1.44
-    command: --interval 30 --label-enable --cleanup
+    command: --interval 30 --label-enable --cleanup --scope ive
