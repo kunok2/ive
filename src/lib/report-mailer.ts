@@ -1,5 +1,5 @@
 import { ReportSchedule, ReportSendLog, ReportType } from '@/types'
-import { getGlobalExecutionsInRange, ReportExecution, createReportSendLog, hasAlreadySent } from './db'
+import { getGlobalExecutionsInRange, ReportExecution, createReportSendLog, hasAlreadySent, getDailyWaitingTrend } from './db'
 import { createTransporter, getFromAddress } from './mail'
 import { getKSTTodayString } from './date-utils'
 
@@ -363,6 +363,80 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
       </table>
     </div>
     ` : ''}
+
+    ${(() => {
+      // 대기 건수 추이 테이블
+      const waitingData = getDailyWaitingTrend(periodStart, periodEnd)
+      const prevWaitingData = prevExecutions ? getDailyWaitingTrend(
+        calculatePreviousPeriod(reportType, periodStart, periodEnd).start,
+        calculatePreviousPeriod(reportType, periodStart, periodEnd).end
+      ) : null
+      const hasWaitingData = waitingData.daily.some(d => d.total > 0)
+      if (!hasWaitingData) return ''
+
+      // 모든 프로젝트 추출
+      const allProjects = new Map<string, { name: string; color: string }>()
+      for (const d of waitingData.daily) {
+        for (const p of d.byProject) {
+          if (!allProjects.has(p.projectId)) {
+            allProjects.set(p.projectId, { name: p.projectName, color: p.projectColor })
+          }
+        }
+      }
+      const projectList = Array.from(allProjects.entries())
+
+      // 기간 평균
+      const avgTotal = waitingData.daily.length > 0 ? Math.round(waitingData.daily.reduce((s, d) => s + d.total, 0) / waitingData.daily.length * 10) / 10 : 0
+      const prevAvgTotal = prevWaitingData && prevWaitingData.daily.length > 0 ? Math.round(prevWaitingData.daily.reduce((s, d) => s + d.total, 0) / prevWaitingData.daily.length * 10) / 10 : 0
+      const latestTotal = waitingData.daily.length > 0 ? waitingData.daily[waitingData.daily.length - 1].total : 0
+
+      const waitingRows = waitingData.daily.map(d => {
+        const projCells = projectList.map(([pid, info]) => {
+          const found = d.byProject.find(p => p.projectId === pid)
+          const val = found?.waiting ?? 0
+          return `<td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center;color:${val > 0 ? info.color : '#9ca3af'};font-weight:${val > 0 ? '600' : '400'};">${val}</td>`
+        }).join('')
+        return `<tr>
+          <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:12px;">${d.date.slice(5)}</td>
+          <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center;color:#111827;font-weight:700;">${d.total}</td>
+          ${projCells}
+        </tr>`
+      }).join('')
+
+      const projHeaders = projectList.map(([, info]) =>
+        `<th style="padding:6px 8px;text-align:center;border-bottom:1px solid #e5e7eb;"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${info.color};margin-right:3px;vertical-align:middle;"></span>${esc(info.name)}</th>`
+      ).join('')
+
+      return `
+    <!-- 대기 건수 추이 -->
+    <div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:12px;padding:16px;margin-bottom:20px;">
+      <h3 style="color:#92400e;font-size:14px;margin:0 0 8px;font-weight:700;">⏳ 대기 건수 추이</h3>
+      <div style="margin-bottom:12px;">
+        <table cellpadding="0" cellspacing="0" style="font-size:13px;">
+          <tr>
+            <td style="padding:2px 12px 2px 0;color:#92400e;font-weight:600;">현재 대기</td>
+            <td style="padding:2px 0;color:#111827;font-weight:800;font-size:18px;">${latestTotal}건</td>
+          </tr>
+          <tr>
+            <td style="padding:2px 12px 2px 0;color:#92400e;font-weight:600;">기간 평균</td>
+            <td style="padding:2px 0;color:#111827;font-weight:700;">${avgTotal}건 ${hasPrev && prevAvgTotal > 0 ? changeIndicator(avgTotal, prevAvgTotal, true) : ''}</td>
+          </tr>
+        </table>
+      </div>
+      <div style="overflow-x:auto;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="font-size:12px;color:#111827;">
+          <thead>
+            <tr style="color:#6b7280;font-size:11px;">
+              <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #e5e7eb;">날짜</th>
+              <th style="padding:6px 8px;text-align:center;border-bottom:1px solid #e5e7eb;">전체</th>
+              ${projHeaders}
+            </tr>
+          </thead>
+          <tbody>${waitingRows}</tbody>
+        </table>
+      </div>
+    </div>`
+    })()}
 
     ${byProject.size > 0 ? `
     <!-- 프로젝트별 -->

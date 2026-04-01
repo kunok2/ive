@@ -663,7 +663,12 @@
     "procTimeIncreased": "평균 수행시간이 {prev} 대비 {pct}% 늘어났습니다.",
     "procTimeDecreased": "평균 수행시간이 {prev} 대비 {pct}% 단축되었습니다.",
     "stableOverallLocal": "{period}은 {prev}과 비교하여 전반적으로 안정적인 수준입니다.",
-    "waitProcAvgTrend": "대기/수행시간 평균 트렌드"
+    "waitProcAvgTrend": "대기/수행시간 평균 트렌드",
+    "waitingTrend": "대기 건수 추이",
+    "waitingCurrent": "현재 대기",
+    "waitingUnit": "건",
+    "waitingAvg": "기간 평균",
+    "prevWaiting": "이전 대기"
   },
   "pull": {
     "loading": "조회 중...",

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
-import { getExecutionsInRange, getAllTokenPricing } from '@/lib/db'
+import { getExecutionsInRange, getAllTokenPricing, getDailyWaitingTrend } from '@/lib/db'
 import { calcCost } from '@/lib/token-pricing'
 import { getKSTTodayString, utcISOToKSTDate, utcISOToKSTMonth } from '@/lib/date-utils'
 
@@ -654,6 +654,26 @@ export async function GET(req: NextRequest) {
     insights.push('선택 구간 내 유의미한 변동이 없습니다. 안정적인 추세입니다.')
   }
 
+  // 대기건수 추이 (stat_snapshots 기반)
+  const waitingTrend = getDailyWaitingTrend(range.start, range.end)
+  const prevWaitingTrend = getDailyWaitingTrend(prevRange.start, prevRange.end)
+
+  // 대기건수 인사이트
+  const waitingDays = waitingTrend.daily.filter(d => d.date <= todayKey)
+  if (waitingDays.length >= 2) {
+    const mid = Math.floor(waitingDays.length / 2)
+    const firstHalf = waitingDays.slice(0, mid)
+    const secondHalf = waitingDays.slice(mid)
+    const avgFirst = firstHalf.reduce((s, d) => s + d.total, 0) / firstHalf.length
+    const avgSecond = secondHalf.reduce((s, d) => s + d.total, 0) / secondHalf.length
+    if (avgFirst > 0) {
+      const change = ((avgSecond - avgFirst) / avgFirst) * 100
+      if (Math.abs(change) >= 15) {
+        insights.push(`대기 건수가 ${change > 0 ? '증가' : '감소'} 추세입니다 (${change > 0 ? '+' : ''}${Math.round(change).toLocaleString()}%)`)
+      }
+    }
+  }
+
   return NextResponse.json({
     period: { start: range.start, end: range.end, type },
     prevPeriod: { start: prevRange.start, end: prevRange.end },
@@ -693,5 +713,7 @@ export async function GET(req: NextRequest) {
     resolvedIssues,
     lifecycle,
     insights,
+    waitingTrend: waitingTrend.daily,
+    prevWaitingTrend: prevWaitingTrend.daily,
   })
 }

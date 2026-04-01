@@ -109,6 +109,22 @@ function initSchema(db: Database.Database) {
     );
     CREATE INDEX IF NOT EXISTS idx_stat_snapshots_entity ON stat_snapshots(entity_type, entity_id, timestamp);
 
+    CREATE TABLE IF NOT EXISTS stat_daily_summaries (
+      id TEXT PRIMARY KEY,
+      entity_type TEXT NOT NULL CHECK(entity_type IN ('project', 'agent')),
+      entity_id TEXT NOT NULL,
+      date TEXT NOT NULL,
+      avg_running REAL NOT NULL DEFAULT 0,
+      avg_waiting REAL NOT NULL DEFAULT 0,
+      avg_completed REAL NOT NULL DEFAULT 0,
+      avg_failed REAL NOT NULL DEFAULT 0,
+      avg_total_tokens REAL NOT NULL DEFAULT 0,
+      avg_cost_usd REAL NOT NULL DEFAULT 0,
+      sample_count INTEGER NOT NULL DEFAULT 0,
+      UNIQUE(entity_type, entity_id, date)
+    );
+    CREATE INDEX IF NOT EXISTS idx_stat_daily_summaries_lookup ON stat_daily_summaries(entity_type, entity_id, date);
+
     CREATE TABLE IF NOT EXISTS token_pricing (
       id TEXT PRIMARY KEY,
       cli_name TEXT NOT NULL UNIQUE,
@@ -1019,7 +1035,133 @@ export function getHourlyAvgSnapshots(entityType: 'project' | 'agent', entityId:
   })).reverse()
 }
 
+/** 스냅샷을 일별 요약으로 집계 (KST 기준, 삭제 전 호출) */
+export function aggregateSnapshotsToDailySummaries() {
+  const db = getDb()
+  // KST 기준 날짜로 그룹화하여 집계
+  const rows = db.prepare(`
+    SELECT
+      entity_type,
+      entity_id,
+      DATE(timestamp, '+9 hours') as kst_date,
+      ROUND(AVG(running), 2) as avg_running,
+      ROUND(AVG(waiting), 2) as avg_waiting,
+      ROUND(AVG(completed), 2) as avg_completed,
+      ROUND(AVG(failed), 2) as avg_failed,
+      ROUND(AVG(total_tokens), 2) as avg_total_tokens,
+      ROUND(AVG(cost_usd), 6) as avg_cost_usd,
+      COUNT(*) as sample_count
+    FROM stat_snapshots
+    GROUP BY entity_type, entity_id, DATE(timestamp, '+9 hours')
+  `).all() as any[]
+
+  const upsert = db.prepare(`
+    INSERT INTO stat_daily_summaries (id, entity_type, entity_id, date, avg_running, avg_waiting, avg_completed, avg_failed, avg_total_tokens, avg_cost_usd, sample_count)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(entity_type, entity_id, date) DO UPDATE SET
+      avg_running = excluded.avg_running,
+      avg_waiting = excluded.avg_waiting,
+      avg_completed = excluded.avg_completed,
+      avg_failed = excluded.avg_failed,
+      avg_total_tokens = excluded.avg_total_tokens,
+      avg_cost_usd = excluded.avg_cost_usd,
+      sample_count = excluded.sample_count
+  `)
+
+  const tx = db.transaction(() => {
+    for (const r of rows) {
+      upsert.run(
+        `ds-${r.entity_type}-${r.entity_id}-${r.kst_date}`,
+        r.entity_type, r.entity_id, r.kst_date,
+        r.avg_running, r.avg_waiting, r.avg_completed, r.avg_failed,
+        r.avg_total_tokens, r.avg_cost_usd, r.sample_count
+      )
+    }
+  })
+  tx()
+
+  if (rows.length > 0) {
+    console.log(`[Cleanup] Aggregated ${rows.length} snapshot groups into daily summaries`)
+  }
+}
+
+/* stat_daily_summaries는 적재량이 적으므로 영구 보관 — 연도별 히스토리 조회용 */
+
+/** 기간 내 일별 대기건수 추이 (전체 + 프로젝트별) — daily_summaries 우선, raw 스냅샷 보완 */
+export function getDailyWaitingTrend(startDate: string, endDate: string): {
+  daily: { date: string; total: number; byProject: { projectId: string; projectName: string; projectColor: string; waiting: number }[] }[]
+} {
+  const db = getDb()
+
+  // 프로젝트 목록 가져오기
+  const projects = db.prepare('SELECT id, name, color FROM projects').all() as { id: string; name: string; color: string }[]
+  const projectMap = new Map(projects.map(p => [p.id, { name: p.name, color: p.color }]))
+
+  // 1. daily_summaries에서 장기 데이터 조회 (KST 날짜 기준)
+  const summaryRows = db.prepare(`
+    SELECT date as day, entity_id as project_id, avg_waiting
+    FROM stat_daily_summaries
+    WHERE entity_type = 'project'
+      AND date >= ? AND date < ?
+    ORDER BY day ASC
+  `).all(startDate, endDate) as { day: string; project_id: string; avg_waiting: number }[]
+
+  // 2. raw 스냅샷에서 최근 데이터 조회 (KST 기준 날짜 변환)
+  const snapshotRows = db.prepare(`
+    SELECT
+      DATE(timestamp, '+9 hours') as day,
+      entity_id as project_id,
+      ROUND(AVG(waiting)) as avg_waiting
+    FROM stat_snapshots
+    WHERE entity_type = 'project'
+      AND DATE(timestamp, '+9 hours') >= ? AND DATE(timestamp, '+9 hours') < ?
+    GROUP BY DATE(timestamp, '+9 hours'), entity_id
+    ORDER BY day ASC
+  `).all(startDate, endDate) as { day: string; project_id: string; avg_waiting: number }[]
+
+  // 날짜별 그룹화 (스냅샷 데이터가 daily_summaries보다 최신이면 덮어씀)
+  const dayMap = new Map<string, Map<string, number>>()
+  for (const r of summaryRows) {
+    if (!dayMap.has(r.day)) dayMap.set(r.day, new Map())
+    dayMap.get(r.day)!.set(r.project_id, r.avg_waiting)
+  }
+  for (const r of snapshotRows) {
+    if (!dayMap.has(r.day)) dayMap.set(r.day, new Map())
+    dayMap.get(r.day)!.set(r.project_id, r.avg_waiting)
+  }
+
+  // 모든 날짜 버킷 생성
+  const daily: { date: string; total: number; byProject: { projectId: string; projectName: string; projectColor: string; waiting: number }[] }[] = []
+  const cur = new Date(startDate)
+  const end = new Date(endDate)
+  while (cur < end) {
+    const dateStr = cur.toISOString().slice(0, 10)
+    const projData = dayMap.get(dateStr)
+    const byProject: { projectId: string; projectName: string; projectColor: string; waiting: number }[] = []
+    let total = 0
+
+    if (projData) {
+      for (const [pid, waiting] of projData) {
+        const info = projectMap.get(pid)
+        if (info) {
+          byProject.push({ projectId: pid, projectName: info.name, projectColor: info.color, waiting })
+          total += waiting
+        }
+      }
+    }
+
+    // 프로젝트 이름순 정렬
+    byProject.sort((a, b) => a.projectName.localeCompare(b.projectName))
+    daily.push({ date: dateStr, total, byProject })
+    cur.setDate(cur.getDate() + 1)
+  }
+
+  return { daily }
+}
+
 export function cleanOldSnapshots(retentionDays: number = 7) {
+  // 삭제 전 일별 요약으로 집계
+  aggregateSnapshotsToDailySummaries()
   const cutoff = new Date(Date.now() - retentionDays * 86400000).toISOString()
   getDb().prepare('DELETE FROM stat_snapshots WHERE timestamp < ?').run(cutoff)
 }
