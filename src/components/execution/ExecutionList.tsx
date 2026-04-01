@@ -6,7 +6,7 @@ import { TaskExecution } from '@/types'
 import MarqueeText from '@/components/ui/MarqueeText'
 import { useTranslations } from 'next-intl'
 import { useStore } from '@/lib/store'
-import { formatDateShort } from '@/lib/format-date'
+import { formatDateShort, formatTimeWithSeconds } from '@/lib/format-date'
 
 function formatDuration(startedAt: string, endedAt?: string): string {
   const start = new Date(startedAt).getTime()
@@ -84,6 +84,7 @@ export default function ExecutionList({ executions, showAgent = true, onKill, ki
                 </span>
               )}
               <span className="text-sm font-black text-ive-green">#{ex.issueIid}</span>
+              <span className="text-xs font-mono font-bold text-ive-text-muted">{formatTimeWithSeconds(ex.startedAt, userLocale, userTz)}</span>
             </div>
             <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
               ex.status === 'running' ? 'bg-ive-amber/20 text-ive-amber animate-pulse' :

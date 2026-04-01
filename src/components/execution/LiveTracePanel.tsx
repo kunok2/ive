@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { TaskExecution, Agent } from '@/types'
 import { useStore } from '@/lib/store'
-import { formatTime as formatTimeUtil } from '@/lib/format-date'
+import { formatTime as formatTimeUtil, formatTimeWithSeconds } from '@/lib/format-date'
 import type { ToolActivity } from '@/lib/tool-activity'
 import LogViewer from '@/components/ui/LogViewer'
 import AgentAvatar from '@/components/agent/AgentAvatar'
@@ -125,6 +125,9 @@ export default function LiveTracePanel({ agents, projectId, onKill }: Props) {
   const [activeIdx, setActiveIdx] = useState(0)
   const [tick, setTick] = useState(0)
   const [activities, setActivities] = useState<Record<string, ToolActivity>>({})
+  const { state } = useStore()
+  const userLocale = state.user?.locale
+  const userTz = state.user?.timezone
 
   useEffect(() => {
     const timer = setInterval(() => setTick(t => t + 1), 1000)
@@ -201,6 +204,7 @@ export default function LiveTracePanel({ agents, projectId, onKill }: Props) {
                   ) : (
                     <span className="font-black text-ive-green">#{current.execution!.issueIid}</span>
                   )}
+                  <span className="ml-1.5 text-ive-text-muted font-mono text-xs font-bold">{formatTimeWithSeconds(current.execution!.startedAt, userLocale, userTz)}</span>
                   {current.execution!.issueTitle && !isChat && (
                     <span className="ml-1.5">{current.execution!.issueTitle}</span>
                   )}

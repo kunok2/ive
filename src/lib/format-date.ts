@@ -72,6 +72,17 @@ export function formatTime(iso: string, locale?: string, timezone?: string): str
   } catch { return iso }
 }
 
+/** 예: "14:30:59" — 시:분:초 (사용자 타임존 적용) */
+export function formatTimeWithSeconds(iso: string, locale?: string, timezone?: string): string {
+  try {
+    const d = parseDate(iso)
+    return d.toLocaleString(resolveLocale(locale), {
+      timeZone: resolveTz(timezone),
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+    })
+  } catch { return iso }
+}
+
 /** 예: "03/28 14:30:59" */
 export function formatDateWithSeconds(iso: string, locale?: string, timezone?: string): string {
   try {
