@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { Project, ProjectAssignment, Agent, TaskExecution, StatSnapshot } from '@/types'
 import { useEffect, useState, useCallback } from 'react'
 import { useStore } from '@/lib/store'
-import { formatDateShort, formatDateMedium } from '@/lib/format-date'
+import { formatDateShort, formatDateMedium, formatTimeWithSeconds } from '@/lib/format-date'
 import { useDialog } from '@/components/ui/ConfirmDialog'
 import { getKSTTodayStartISO } from '@/lib/date-utils'
 import Sparkline from '@/components/ui/Sparkline'
@@ -394,7 +394,9 @@ export default function ProjectCard({ project }: Props) {
                 )}
                 {agent && <span className={`font-bold shrink-0 ${isChat ? 'text-purple-400/70' : 'text-ive-amber/70'}`}>{agent.name}</span>}
                 <MarqueeText className={isChat ? 'text-purple-400/60' : 'text-ive-text-muted'}>
-                  {isChat ? `💬 #${ex.issueIid} ${tp('chatLabel')}` : `#${ex.issueIid} ${ex.issueTitle || ''}`}
+                  {isChat ? `💬 #${ex.issueIid} ${tp('chatLabel')}` : `#${ex.issueIid} `}
+                  <span className="font-mono text-ive-text-dim">{formatTimeWithSeconds(ex.startedAt, userLocale, userTz)}</span>
+                  {!isChat && ex.issueTitle && ` ${ex.issueTitle}`}
                 </MarqueeText>
                 <span className={`shrink-0 text-[10px] font-mono font-bold tabular-nums ${isChat ? 'text-purple-400/70' : 'text-ive-amber/70'}`}>
                   {formatDuration(ex.startedAt)}
