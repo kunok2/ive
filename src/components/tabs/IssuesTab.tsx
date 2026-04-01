@@ -47,6 +47,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     { key: 'active', label: tFilter('active') },
     { key: 'failed', label: tFilter('failed') },
     { key: 'done', label: tFilter('done') },
+    { key: 'history', label: tFilter('history') },
   ], [tFilter])
 
   const BULK_ACTIONS: Record<string, { action: string; label: string; icon: string; danger?: boolean }[]> = useMemo(() => ({
@@ -77,6 +78,8 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     }
     return []
   })
+  const [closedIssues, setClosedIssues] = useState<IveIssue[]>([])
+  const [closedLoading, setClosedLoading] = useState(false)
   const [loading, setLoading] = useState(false)
   const [bulkMode, setBulkMode] = useState(false)
   const [selected, setSelected] = useState<Set<number>>(new Set())
@@ -152,7 +155,25 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
       .finally(() => setLoading(false))
   }, [selectedProjectId])
 
+  const fetchClosedIssues = useCallback(() => {
+    if (!selectedProjectId) return Promise.resolve()
+    setClosedLoading(true)
+    return fetch(`/api/projects/${selectedProjectId}/issues?state=closed`)
+      .then(res => res.ok ? res.json() : [])
+      .then(data => {
+        const doneIssues = data.filter((i: IveIssue) => i.stage === 'done')
+        setClosedIssues(doneIssues)
+      })
+      .finally(() => setClosedLoading(false))
+  }, [selectedProjectId])
+
   useEffect(() => { fetchIssues() }, [fetchIssues])
+
+  useEffect(() => {
+    if (filter === 'history' && selectedProjectId && closedIssues.length === 0) {
+      fetchClosedIssues()
+    }
+  }, [filter, selectedProjectId, fetchClosedIssues])
 
   useEffect(() => {
     if (activeTab === 'issues' && selectedProjectId) fetchIssues()
@@ -188,14 +209,16 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     }
   }, [selectedProjectId])
 
-  const filtered = issues.filter(issue => {
+  const isHistoryTab = filter === 'history'
+
+  const filtered = (isHistoryTab ? closedIssues : issues.filter(issue => {
     if (filter === 'all') return true
     if (filter === 'waiting') return issue.stage === 'waiting'
     if (filter === 'active') return issue.stage === 'dev'
     if (filter === 'failed') return issue.stage === 'dev_fail'
     if (filter === 'done') return issue.stage === 'done'
     return true
-  }).sort((a, b) => {
+  })).sort((a, b) => {
     if (sortOrder === 'newest') return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
   })
@@ -358,7 +381,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   }, [projectDropdownOpen])
 
   return (
-    <PullToRefresh onRefresh={fetchIssues} className="h-[calc(100dvh-3.5rem)] flex flex-col max-w-lg mx-auto px-4">
+    <PullToRefresh onRefresh={isHistoryTab ? fetchClosedIssues : fetchIssues} className="h-[calc(100dvh-3.5rem)] flex flex-col max-w-lg mx-auto px-4">
       <div className="pt-4 shrink-0">
         {state.projects.length > 1 && (
           <div ref={dropdownRef} className="relative mb-3">
@@ -425,7 +448,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                     <div className="text-lg font-black text-ive-green-light">{issues.length}</div>
                     <div className="text-xs text-ive-text-dim">{tIssue('issues')}</div>
                   </div>
-                  {canEdit && issues.length > 0 && !bulkMode && (
+                  {canEdit && issues.length > 0 && !bulkMode && !isHistoryTab && (
                     <button
                       onClick={() => setBulkMode(true)}
                       className="w-9 h-9 rounded-full bg-ive-bg-deep border border-ive-border-subtle flex items-center justify-center text-ive-text-dim hover:text-ive-text hover:border-ive-green/30 transition-all"
@@ -436,12 +459,12 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                   )}
                   {!bulkMode && (
                     <button
-                      onClick={fetchIssues}
-                      disabled={loading}
+                      onClick={isHistoryTab ? fetchClosedIssues : fetchIssues}
+                      disabled={loading || closedLoading}
                       className="w-9 h-9 rounded-full bg-ive-bg-deep border border-ive-border-subtle flex items-center justify-center text-ive-text-dim hover:text-ive-green hover:border-ive-green/30 transition-all disabled:opacity-40"
                       title={tCommon('refresh')}
                     >
-                      <i className={`fa-solid fa-arrows-rotate text-sm ${loading ? 'fa-spin' : ''}`} />
+                      <i className={`fa-solid fa-arrows-rotate text-sm ${(loading || closedLoading) ? 'fa-spin' : ''}`} />
                     </button>
                   )}
                 </div>
@@ -452,10 +475,14 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
               {FILTER_TABS.map(tab => (
                 <button
                   key={tab.key}
-                  onClick={() => { setFilter(tab.key); setSelected(new Set()) }}
+                  onClick={() => {
+                    setFilter(tab.key)
+                    setSelected(new Set())
+                    if (tab.key === 'history') fetchClosedIssues()
+                  }}
                   className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${
                     filter === tab.key
-                      ? 'bg-ive-green/20 text-ive-green'
+                      ? tab.key === 'history' ? 'bg-ive-text-dim/20 text-ive-text-muted' : 'bg-ive-green/20 text-ive-green'
                       : 'text-ive-text-dim hover:text-ive-text-muted'
                   }`}
                 >
@@ -466,6 +493,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                       : tab.key === 'active' ? issues.filter(i => i.stage === 'dev').length
                       : tab.key === 'failed' ? issues.filter(i => i.stage === 'dev_fail').length
                       : tab.key === 'done' ? issues.filter(i => i.stage === 'done').length
+                      : tab.key === 'history' ? closedIssues.length
                       : 0
                     return count > 0 ? <span className="ml-1 text-xs opacity-60">{count}</span> : null
                   })()}
@@ -488,7 +516,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
             </div>
 
             {/* 이슈 추가 폼 */}
-            {showAddForm && (
+            {showAddForm && !isHistoryTab && (
               <div className="mb-3 bg-ive-bg-card border border-ive-green/30 rounded-xl p-3">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-bold text-ive-green">
@@ -520,7 +548,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
             )}
 
             {/* 벌크 모드 툴바 */}
-            {bulkMode && (
+            {bulkMode && !isHistoryTab && (
               <div className="mb-3 bg-ive-bg-card border border-ive-amber/30 rounded-xl p-3">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
@@ -624,13 +652,13 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
       {/* 스크롤 가능한 리스트 영역 */}
       {selectedProjectId && (
         <div className="flex-1 min-h-0 overflow-y-auto pb-20 custom-scrollbar" data-scroll-container="issues-list">
-            {loading && issues.length === 0 ? (
+            {(isHistoryTab ? closedLoading : loading) && (isHistoryTab ? closedIssues : issues).length === 0 ? (
               <div className="text-center py-20 text-ive-text-muted">{tIssue('loadingIssues')}</div>
             ) : filtered.length === 0 ? (
               <div className="text-center py-20 bg-ive-bg/50 rounded-2xl border border-dashed border-ive-border-subtle">
                 <i className="fa-solid fa-inbox text-4xl text-ive-text-dim mb-4 block" />
                 <p className="text-base text-ive-text-muted">
-                  {issues.length === 0 ? tIssue('noIveIssues') : tIssue('noFilterMatch')}
+                  {isHistoryTab ? tIssue('noFilterMatch') : issues.length === 0 ? tIssue('noIveIssues') : tIssue('noFilterMatch')}
                 </p>
               </div>
             ) : (
@@ -688,7 +716,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                           <i className="fa-solid fa-calendar-day mr-1" />
                           {formatDateMedium(issue.updatedAt, state.user?.locale, state.user?.timezone)}
                         </span>
-                        {canEdit && !bulkMode && (
+                        {canEdit && !bulkMode && !isHistoryTab && (
                           <button
                             onClick={(e) => handleCloseIssue(e, issue.iid)}
                             disabled={closing === issue.iid}

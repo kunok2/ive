@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getProject, getProjectAccess, getIssueStages, setIssueStage } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { decrypt } from '@/lib/crypto';
-import { fetchAllProjectIssues, createIssue } from '@/lib/provider';
+import { fetchAllProjectIssues, fetchClosedProjectIssues, createIssue } from '@/lib/provider';
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const user = await getCurrentUser();
@@ -19,9 +19,13 @@ export async function GET(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
+  const stateParam = req.nextUrl.searchParams.get('state');
+
   try {
     const decryptedToken = decrypt(project.accessToken);
-    const issues = await fetchAllProjectIssues(project, decryptedToken);
+    const issues = stateParam === 'closed'
+      ? await fetchClosedProjectIssues(project, decryptedToken)
+      : await fetchAllProjectIssues(project, decryptedToken);
 
     // 로컬 DB에서 stage 맵 로드
     const localStages = getIssueStages(projectId);

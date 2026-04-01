@@ -141,7 +141,8 @@
     "waiting": "Waiting",
     "active": "Active",
     "failed": "Failed",
-    "done": "Done"
+    "done": "Done",
+    "history": "History"
   },
   "sort": {
     "newest": "Newest",

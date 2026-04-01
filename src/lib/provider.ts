@@ -12,6 +12,12 @@ export function fetchAllProjectIssues(project: Project, token: string) {
     : gitlab.fetchAllProjectIssues(project, token);
 }
 
+export function fetchClosedProjectIssues(project: Project, token: string) {
+  return project.provider === 'github'
+    ? github.fetchClosedProjectIssues(project, token)
+    : gitlab.fetchClosedProjectIssues(project, token);
+}
+
 export function createIssue(project: Project, token: string, title: string, description: string, labels: string[]) {
   return project.provider === 'github'
     ? github.createGitHubIssue(project, token, title, description, labels)

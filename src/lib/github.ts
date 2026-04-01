@@ -551,6 +551,38 @@ export async function fetchAllProjectIssues(project: Project, decryptedToken: st
   }
 }
 
+export async function fetchClosedProjectIssues(project: Project, decryptedToken: string) {
+  const ownerRepo = getOwnerRepo(project.repoUrl);
+  if (!ownerRepo) return [];
+
+  const headers = getGitHubAuthHeaders(project, decryptedToken);
+
+  try {
+    const allIssues: any[] = [];
+    let page = 1;
+    while (true) {
+      const res = await fetch(
+        apiUrl(project, `/issues?state=closed&per_page=100&page=${page}`),
+        { headers }
+      );
+      if (!res.ok) break;
+      const issues = await res.json();
+      if (issues.length === 0) break;
+      for (const issue of issues) {
+        if (!issue.pull_request) {
+          allIssues.push(normalizeIssue(issue));
+        }
+      }
+      if (issues.length < 100) break;
+      page++;
+    }
+    return allIssues.sort((a: any, b: any) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+  } catch (err) {
+    console.error(`[GitHub] Error fetching closed project issues for ${project.name}:`, err);
+    return [];
+  }
+}
+
 /**
  * GitHub 이슈를 닫습니다.
  */

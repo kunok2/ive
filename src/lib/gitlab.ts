@@ -476,6 +476,34 @@ export async function fetchAllProjectIssues(project: Project, decryptedToken: st
   }
 }
 
+export async function fetchClosedProjectIssues(project: Project, decryptedToken: string) {
+  const projectPath = getProjectPath(project.repoUrl);
+  if (!projectPath) return [];
+
+  const headers = getAuthHeaders(project, decryptedToken);
+
+  try {
+    const allIssues: any[] = [];
+    let page = 1;
+    while (true) {
+      const res = await fetch(
+        apiUrl(project, `/issues?state=closed&per_page=100&page=${page}`),
+        { headers }
+      );
+      if (!res.ok) break;
+      const issues = await res.json();
+      if (issues.length === 0) break;
+      allIssues.push(...issues);
+      if (issues.length < 100) break;
+      page++;
+    }
+    return allIssues.sort((a: any, b: any) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+  } catch (err) {
+    console.error(`[GitLab] Error fetching closed project issues for ${project.name}:`, err);
+    return [];
+  }
+}
+
 /**
  * GitLab 이슈를 닫습니다.
  */
