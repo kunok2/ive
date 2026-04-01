@@ -1140,14 +1140,11 @@ export function getDailyWaitingTrend(startDate: string, endDate: string): {
     const byProject: { projectId: string; projectName: string; projectColor: string; waiting: number }[] = []
     let total = 0
 
-    if (projData) {
-      for (const [pid, waiting] of projData) {
-        const info = projectMap.get(pid)
-        if (info) {
-          byProject.push({ projectId: pid, projectName: info.name, projectColor: info.color, waiting })
-          total += waiting
-        }
-      }
+    // 모든 프로젝트에 대해 데이터가 있으면 사용, 없으면 0으로 채움
+    for (const [pid, info] of projectMap) {
+      const waiting = projData?.get(pid) ?? 0
+      byProject.push({ projectId: pid, projectName: info.name, projectColor: info.color, waiting })
+      total += waiting
     }
 
     // 프로젝트 이름순 정렬
