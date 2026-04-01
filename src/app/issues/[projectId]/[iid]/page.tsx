@@ -419,12 +419,18 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
     }
     setChatMessages(prev => [...prev, userMsg])
 
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 6 * 60 * 1000)
+
     try {
       const res = await fetch(`/api/projects/${projectId}/issues/${iid}/chat/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId: chatSessionId, message: msg }),
+        signal: controller.signal,
       })
+
+      clearTimeout(timeoutId)
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
@@ -434,36 +440,50 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
         return
       }
 
-      // Read SSE stream
       const reader = res.body?.getReader()
       const decoder = new TextDecoder()
       let fullText = ''
+      let streamEnded = false
 
       if (reader) {
         let buffer = ''
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          buffer += decoder.decode(value, { stream: true })
-          const lines = buffer.split('\n')
-          buffer = lines.pop() || ''
-          for (const line of lines) {
-            if (!line.startsWith('data: ')) continue
-            try {
-              const event = JSON.parse(line.slice(6))
-              if (event.type === 'text' && event.content) {
-                fullText += event.content
-                setChatStreamText(fullText)
-              } else if (event.type === 'error') {
-                fullText += `\n\n[Error: ${event.content}]`
-                setChatStreamText(fullText)
-              }
-            } catch { /* skip */ }
+        while (!streamEnded) {
+          try {
+            const { done, value } = await reader.read()
+            if (done) {
+              streamEnded = true
+              break
+            }
+            buffer += decoder.decode(value, { stream: true })
+            const lines = buffer.split('\n')
+            buffer = lines.pop() || ''
+            for (const line of lines) {
+              if (!line.startsWith('data: ')) continue
+              try {
+                const event = JSON.parse(line.slice(6))
+                if (event.type === 'done') {
+                  streamEnded = true
+                } else if (event.type === 'text' && event.content) {
+                  fullText += event.content
+                  setChatStreamText(fullText)
+                } else if (event.type === 'error') {
+                  fullText += `\n\n[Error: ${event.content}]`
+                  setChatStreamText(fullText)
+                  streamEnded = true
+                }
+              } catch { /* skip */ }
+            }
+          } catch (e) {
+            if ((e as Error).name === 'AbortError') {
+              setChatStreamText(prev => prev + '\n\n[Error: Request timed out]')
+              streamEnded = true
+            } else {
+              throw e
+            }
           }
         }
       }
 
-      // Finalize: add assistant message
       if (fullText.trim()) {
         const assistantMsg: ChatMessage = {
           id: `temp-${Date.now()}-ai`,
@@ -475,8 +495,12 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
         setChatMessages(prev => [...prev, assistantMsg])
       }
       setChatStreamText('')
-    } catch {
-      alert(tIssue('chatError'))
+    } catch (e) {
+      if ((e as Error).name === 'AbortError') {
+        setChatStreamText(prev => prev + '\n\n[Error: Request timed out after 6 minutes]')
+      } else {
+        alert(tIssue('chatError'))
+      }
     } finally {
       setChatSending(false)
     }
