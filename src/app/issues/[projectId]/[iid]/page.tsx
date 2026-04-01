@@ -103,6 +103,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [chatInput, setChatInput] = useState('')
   const [chatSending, setChatSending] = useState(false)
+  const [chatSendingStartTime, setChatSendingStartTime] = useState<number | null>(null)
   const [chatStarting, setChatStarting] = useState(false)
   const [chatStreamText, setChatStreamText] = useState('')
   const [chatAgentName, setChatAgentName] = useState<string | null>(null)
@@ -405,6 +406,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
     const msg = chatInput.trim()
     setChatInput('')
     setChatSending(true)
+    setChatSendingStartTime(Date.now())
     setChatStreamText('')
 
     // Optimistically add user message
@@ -811,6 +813,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                         {chatAgentName || 'AI'}
                         <i className="fa-solid fa-circle-notch fa-spin ml-1.5 text-[10px]" />
                       </span>
+                      <ElapsedTimer startTime={chatSendingStartTime} />
                     </div>
                     <div className="text-sm leading-relaxed break-words text-ive-text-muted">
                       <MarkdownNote body={chatStreamText} />
@@ -823,7 +826,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                   <div className="shrink-0">
                     <AgentAvatar avatar={chatAgentAvatar || 'av-01'} size="sm" />
                   </div>
-                  <ThinkingTimer />
+                  <ElapsedTimer startTime={chatSendingStartTime} />
                 </div>
               )}
 
@@ -1000,13 +1003,16 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
 }
 
 // 경과 시간 표시 (예: "3초 생각중...")
-function ThinkingTimer() {
+function ElapsedTimer({ startTime }: { startTime: number | null }) {
   const [seconds, setSeconds] = useState(0)
   const tIssue = useTranslations('issue')
   useEffect(() => {
-    const interval = setInterval(() => setSeconds(s => s + 1), 1000)
+    if (!startTime) return
+    const tick = () => setSeconds(Math.floor((Date.now() - startTime) / 1000))
+    tick()
+    const interval = setInterval(tick, 1000)
     return () => clearInterval(interval)
-  }, [])
+  }, [startTime])
   return (
     <span className="text-purple-400 text-sm">
       {tIssue('chatThinking', { seconds })}
