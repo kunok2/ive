@@ -47,6 +47,14 @@ RUN npm install -g @anthropic-ai/claude-code
 # OpenCode CLI 설치
 RUN npm install -g opencode-ai
 
+# Playwright 설치 (에이전트가 웹 스크래핑/브라우저 자동화 시 사용)
+# 1. 글로벌 설치하여 에이전트 워크스페이스에서도 npx playwright 실행 가능
+# 2. 브라우저를 공유 경로에 설치하여 non-root 사용자(ive)도 접근 가능
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
+RUN npm install -g playwright \
+    && npx playwright install --with-deps chromium \
+    && chmod -R o+rx /opt/playwright-browsers
+
 # non-root 사용자 생성 (Claude Code의 root 제한 우회)
 RUN useradd -m -s /bin/bash ive \
     && mkdir -p data/logs workspaces /home/ive/.claude \
