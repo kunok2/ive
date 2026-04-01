@@ -106,28 +106,34 @@ export default function ConflictResolutionPanel({ projectId, projectColor, onClo
 
   const renderMR = (mr: MRItem) => {
     const result = mergeResults.find(r => r.iid === mr.iid)
+    const isSelected = selected.has(mr.iid)
     return (
       <div
         key={mr.iid}
-        className={`flex items-center gap-2 p-3 rounded-xl border transition-all ${
-          mr.has_conflicts
-            ? 'bg-ive-red/5 border-ive-red/20'
-            : result?.success
-              ? 'bg-ive-green/5 border-ive-green/20'
-              : 'bg-ive-bg-card border-ive-border-subtle'
+        onClick={() => !merging && toggleSelect(mr.iid)}
+        className={`flex items-center gap-2 p-3 rounded-xl border transition-all cursor-pointer ${
+          isSelected
+            ? 'bg-ive-purple/10 border-ive-purple/40 ring-1 ring-ive-purple/30'
+            : mr.has_conflicts
+              ? 'bg-ive-red/5 border-ive-red/20'
+              : result?.success
+                ? 'bg-ive-green/5 border-ive-green/20'
+                : 'bg-ive-bg-card border-ive-border-subtle'
         }`}
       >
         <input
           type="checkbox"
-          checked={selected.has(mr.iid)}
+          checked={isSelected}
           onChange={() => toggleSelect(mr.iid)}
+          onClick={(e) => e.stopPropagation()}
           className="accent-ive-green shrink-0"
           disabled={merging}
         />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-0.5">
             <button
-              onClick={() => {
+              onClick={(e) => {
+                e.stopPropagation()
                 const issueMatch = mr.source_branch.match(/^dev-(\d+)$/)
                 if (issueMatch) {
                   router.push(`/issues/${projectId}/${issueMatch[1]}`)
@@ -163,7 +169,10 @@ export default function ConflictResolutionPanel({ projectId, projectColor, onClo
           </p>
         </div>
         <button
-          onClick={() => window.open(mr.web_url, '_blank')}
+          onClick={(e) => {
+            e.stopPropagation()
+            window.open(mr.web_url, '_blank')
+          }}
           className="shrink-0 text-ive-text-dim hover:text-ive-text transition-colors p-1"
           title={t('openExternal')}
         >
