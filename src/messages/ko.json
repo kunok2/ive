@@ -141,7 +141,8 @@
     "waiting": "대기",
     "active": "진행",
     "failed": "실패",
-    "done": "완료"
+    "done": "완료",
+    "history": "이력"
   },
   "sort": {
     "newest": "최신순",
