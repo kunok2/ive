@@ -464,8 +464,8 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
         )}
       </div>
 
-      {/* 프로젝트 공유 (기존 프로젝트만) */}
-      {existing && (
+      {/* 프로젝트 공유 (기존 프로젝트 소유자만) */}
+      {existing && !(existing as any).shareRole && (
         <div className="border-t border-ive-border-dark pt-2">
           <button
             type="button"

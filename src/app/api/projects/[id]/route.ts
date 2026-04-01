@@ -32,10 +32,13 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const { id } = await params
   const body = await req.json()
 
-  // 기존 프로젝트 소유자 확인
   const existing = getProject(id)
-  if (!existing || existing.userId !== user.id) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  // 소유자 또는 editor 권한 확인
+  const access = getProjectAccess(id, user.id)
+  if (!access || access === 'viewer') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   // accessToken이 비어있으면 기존 토큰 유지
@@ -46,8 +49,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const updatedProject = {
     ...body,
     id,
-    userId: user.id,
-    accessToken,
+    userId: existing.userId,  // 소유자 ID는 변경 불가
+    accessToken: access === 'owner' ? accessToken : existing.accessToken,  // editor는 토큰 변경 불가
   }
 
   updateProject(updatedProject)
