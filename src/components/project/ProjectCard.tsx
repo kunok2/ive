@@ -23,6 +23,13 @@ function formatTokens(n: number): string {
   return String(n)
 }
 
+function formatDuration(startedAt: string): string {
+  const s = Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000)
+  if (s < 60) return `${s}s`
+  if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`
+  return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`
+}
+
 
 interface Props {
   project: Project & { assignedAgents?: (ProjectAssignment & { agent: Agent })[]; shareRole?: string | null }
@@ -69,6 +76,7 @@ export default function ProjectCard({ project }: Props) {
   const [activities, setActivities] = useState<Record<string, ToolActivity>>({})
   const [liveMRCount, setLiveMRCount] = useState<number | null>(null)
   const [liveConflictCount, setLiveConflictCount] = useState<number | null>(null)
+  const [tick, setTick] = useState(0)
 
   const fetchStats = useCallback(async () => {
     try {
@@ -89,6 +97,14 @@ export default function ProjectCard({ project }: Props) {
     document.addEventListener('visibilitychange', onVisible)
     return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVisible) }
   }, [fetchStats, stats?.running])
+
+  // 경과 시간 실시간 업데이트 (running 작업 요약에 표시)
+  useEffect(() => {
+    if ((stats?.running ?? 0) > 0 && !expandedPanel) {
+      const timer = setInterval(() => setTick(t => t + 1), 1000)
+      return () => clearInterval(timer)
+    }
+  }, [stats?.running, expandedPanel])
 
   // 실행 목록 로드: 패널 열렸을 때 또는 running 건이 있을 때
   useEffect(() => {
@@ -380,6 +396,10 @@ export default function ProjectCard({ project }: Props) {
                 <MarqueeText className={isChat ? 'text-purple-400/60' : 'text-ive-text-muted'}>
                   {isChat ? `💬 #${ex.issueIid} ${tp('chatLabel')}` : `#${ex.issueIid} ${ex.issueTitle || ''}`}
                 </MarqueeText>
+                <span className={`shrink-0 text-[10px] font-mono font-bold tabular-nums ${isChat ? 'text-purple-400/70' : 'text-ive-amber/70'}`}>
+                  {formatDuration(ex.startedAt)}
+                  {tick >= 0 ? '' : ''}
+                </span>
               </div>
             )
           })}
