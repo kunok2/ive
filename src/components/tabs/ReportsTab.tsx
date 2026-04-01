@@ -580,12 +580,22 @@ export default function ReportsTab() {
           })()}
 
           {/* 대기 건수 추이 */}
-          {data.waitingTrend && data.waitingTrend.length > 0 && (
+          {data.waitingTrend && data.waitingTrend.length > 0 ? (
             <section>
               <div className="text-xs font-bold text-ive-text-dim mb-2 uppercase tracking-wider">
                 {t('waitingTrend')}
               </div>
               <WaitingTrendChart data={data.waitingTrend} prevData={data.prevWaitingTrend || []} type={type} />
+            </section>
+          ) : (
+            <section>
+              <div className="text-xs font-bold text-ive-text-dim mb-2 uppercase tracking-wider">
+                {t('waitingTrend')}
+              </div>
+              <div className="bg-ive-bg-card border border-ive-border-subtle rounded-xl p-4 text-center">
+                <i className="fa-solid fa-check-circle text-ive-green text-2xl mb-2" />
+                <p className="text-sm text-ive-text-dim">{t('noWaitingIssues')}</p>
+              </div>
             </section>
           )}
 
