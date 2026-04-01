@@ -23,7 +23,7 @@ function resolveTz(timezone?: string): string {
  */
 function parseDate(iso: string): Date {
   if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(iso)) {
-    return new Date(iso.replace(' ', 'T') + 'Z')
+    return new Date(iso.replace(' ', 'T'))
   }
   return new Date(iso)
 }
