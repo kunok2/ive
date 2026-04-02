@@ -176,9 +176,19 @@ function renderAnsiSpan(span: AnsiSpan, key: number) {
 interface LineData {
   raw: string
   hasAnsi: boolean
+  timestamp?: number  // Unix ms timestamp (from log file prefix)
 }
 
-function LogLine({ line, showLineNum, lineNum }: { line: LineData; lineNum: number; showLineNum: boolean }) {
+function formatTimestamp(ts: number, timezone?: string): string {
+  try {
+    return new Date(ts).toLocaleTimeString('en-GB', {
+      timeZone: timezone || 'Asia/Seoul',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+    })
+  } catch { return '' }
+}
+
+function LogLine({ line, showLineNum, lineNum, timezone }: { line: LineData; lineNum: number; showLineNum: boolean; timezone?: string }) {
   const content = useMemo(() => {
     const raw = line.raw
 
@@ -233,6 +243,11 @@ function LogLine({ line, showLineNum, lineNum }: { line: LineData; lineNum: numb
       {showLineNum && (
         <span className="select-none text-ive-text-muted/60 group-hover:text-ive-text-muted w-6 shrink-0 text-right pr-2 font-mono text-[0.85em]">
           {lineNum}
+        </span>
+      )}
+      {line.timestamp && (
+        <span className="select-none text-ive-text-muted shrink-0 pr-2 font-mono text-[0.85em]">
+          {formatTimestamp(line.timestamp, timezone)}
         </span>
       )}
       <span className="flex-1 whitespace-pre-wrap break-all min-w-0">{content}</span>
@@ -294,6 +309,7 @@ interface LogViewerProps {
   onLineCountChange?: (count: number) => void
   initialAutoScroll?: boolean
   isLive?: boolean
+  timezone?: string
 }
 
 const ANSI_ESCAPE_RE = /\x1b\[/
@@ -309,6 +325,7 @@ export default function LogViewer({
   onLineCountChange,
   initialAutoScroll = true,
   isLive,
+  timezone,
 }: LogViewerProps) {
   const [lines, setLines] = useState<LineData[]>([])
   const containerRef = useRef<HTMLDivElement>(null)
@@ -317,12 +334,17 @@ export default function LogViewer({
   const initialLoadedRef = useRef(false)
   const [connected, setConnected] = useState(false)
 
+  const TIMESTAMP_PREFIX_RE = /^(\d{13,})\t(.*)$/
   const appendLines = useCallback((text: string) => {
     if (!text) return
-    const newLines = text.split('\n').map((raw: string): LineData => ({
-      raw,
-      hasAnsi: ANSI_ESCAPE_RE.test(raw),
-    }))
+    const newLines = text.split('\n').map((raw: string): LineData => {
+      const m = raw.match(TIMESTAMP_PREFIX_RE)
+      if (m) {
+        const content = m[2]
+        return { raw: content, hasAnsi: ANSI_ESCAPE_RE.test(content), timestamp: Number(m[1]) }
+      }
+      return { raw, hasAnsi: ANSI_ESCAPE_RE.test(raw) }
+    })
     if (newLines.length > 0 && newLines[newLines.length - 1].raw === '') {
       newLines.pop()
     }
@@ -425,7 +447,7 @@ export default function LogViewer({
                 )}
                 <div className="p-3">
                   {block.lines.map((l, li) => (
-                    <LogLine key={startLine + li} line={l} lineNum={startLine + li} showLineNum={showLineNumbers} />
+                    <LogLine key={startLine + li} line={l} lineNum={startLine + li} showLineNum={showLineNumbers} timezone={timezone} />
                   ))}
                 </div>
               </div>
@@ -434,7 +456,7 @@ export default function LogViewer({
 
           return block.lines.map((l, li) => {
             lineNum++
-            return <LogLine key={`${bi}-${li}`} line={l} lineNum={lineNum} showLineNum={showLineNumbers} />
+            return <LogLine key={`${bi}-${li}`} line={l} lineNum={lineNum} showLineNum={showLineNumbers} timezone={timezone} />
           })
         })}
 
