@@ -917,6 +917,8 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
           ...process.env,
           GITLAB_TOKEN: token, GITLAB_API_TOKEN: token,
           GITHUB_TOKEN: token,
+          IVE_GITLAB_TOKEN: token,
+          IVE_GITHUB_TOKEN: token,
         };
       }
 
