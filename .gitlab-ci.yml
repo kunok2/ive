@@ -13,9 +13,8 @@ deploy:
   tags:
     - deploy
   script:
+    - DOCKER_BUILDKIT=1 docker build --provenance=false -t $IMAGE_NAME:latest .
     - cd $IVE_DIR
-    - git -C /home/ubuntu/ive-src pull origin main
-    - DOCKER_BUILDKIT=1 docker build --provenance=false -t $IMAGE_NAME:latest /home/ubuntu/ive-src
     - docker compose down
     - docker compose up -d
     - docker image prune -f
