@@ -668,7 +668,8 @@
     "waitingCurrent": "현재 대기",
     "waitingUnit": "건",
     "waitingAvg": "기간 평균",
-    "prevWaiting": "이전 대기"
+    "prevWaiting": "이전 대기",
+    "noWaitingHistory": "현재 대기에 대한 이력이 없습니다."
   },
   "pull": {
     "loading": "조회 중...",

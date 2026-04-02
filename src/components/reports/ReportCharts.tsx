@@ -224,6 +224,7 @@ export function WaitingTrendChart({ data, prevData, type }: {
   const avgCur = data.length > 0 ? Math.round(data.reduce((s, d) => s + d.total, 0) / data.length * 10) / 10 : 0
   const avgPrev = prevData.length > 0 ? Math.round(prevData.reduce((s, d) => s + d.total, 0) / prevData.length * 10) / 10 : 0
   const latestTotal = data.length > 0 ? data[data.length - 1].total : 0
+  const allZero = data.every(d => d.total === 0) && prevData.every(d => d.total === 0)
 
   return (
     <div className="bg-ive-bg-card border border-ive-border-subtle rounded-xl p-3 space-y-2">
@@ -234,6 +235,11 @@ export function WaitingTrendChart({ data, prevData, type }: {
         <span className="text-xs text-ive-text-dim ml-auto">{t('waitingAvg')} {avgCur.toLocaleString()}</span>
       </div>
 
+      {allZero ? (
+        <div className="flex items-center justify-center h-[170px] text-xs text-ive-text-dim">
+          {t('noWaitingHistory')}
+        </div>
+      ) : (<>
       <ResponsiveContainer width="100%" height={170}>
         <AreaChart data={chartData}>
           <CartesianGrid strokeDasharray="3 3" stroke="#2a2f3e" />
@@ -275,6 +281,7 @@ export function WaitingTrendChart({ data, prevData, type }: {
         ))}
         <span><span className="inline-block w-3 h-2 bg-[#6b7280]/20 border border-[#6b7280]/40 mr-0.5 align-middle" />{t('prevWaiting')}</span>
       </div>
+      </>)}
     </div>
   )
 }
