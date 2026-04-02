@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { TaskExecution, Agent } from '@/types'
 import { useStore } from '@/lib/store'
@@ -118,9 +118,10 @@ interface Props {
   agents: AgentTab[]
   projectId: string
   onKill?: (id: string) => void
+  onAllCompleted?: () => void
 }
 
-export default function LiveTracePanel({ agents, projectId, onKill }: Props) {
+export default function LiveTracePanel({ agents, projectId, onKill, onAllCompleted }: Props) {
   const router = useRouter()
   const [activeIdx, setActiveIdx] = useState(0)
   const [tick, setTick] = useState(0)
@@ -128,6 +129,7 @@ export default function LiveTracePanel({ agents, projectId, onKill }: Props) {
   const { state } = useStore()
   const userLocale = state.user?.locale
   const userTz = state.user?.timezone
+  const prevRunningRef = useRef<number>(0)
 
   useEffect(() => {
     const timer = setInterval(() => setTick(t => t + 1), 1000)
@@ -153,6 +155,15 @@ export default function LiveTracePanel({ agents, projectId, onKill }: Props) {
   }, [fetchActivities])
 
   const runningAgents = agents.filter(a => a.execution?.status === 'running')
+  const currentRunning = runningAgents.length
+
+  // 모든 작업이 완료되면 부모에게 알림 (running → 0으로 변경될 때만)
+  useEffect(() => {
+    if (onAllCompleted && currentRunning === 0 && prevRunningRef.current > 0) {
+      onAllCompleted()
+    }
+    prevRunningRef.current = currentRunning
+  }, [currentRunning, onAllCompleted])
 
   if (runningAgents.length === 0) {
     return (

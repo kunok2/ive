@@ -418,6 +418,7 @@ export default function ProjectCard({ project }: Props) {
             }))}
             projectId={project.id}
             onKill={handleKill}
+            onAllCompleted={() => setExpandedPanel(null)}
           />
         </div>
       )}
