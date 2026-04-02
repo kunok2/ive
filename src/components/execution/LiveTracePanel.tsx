@@ -250,6 +250,7 @@ export default function LiveTracePanel({ agents, projectId, onKill, onAllComplet
                 maxLines={500}
                 isLive
                 className="rounded-lg flex-1 min-h-0"
+                timezone={userTz}
               />
             )}
 

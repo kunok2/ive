@@ -613,7 +613,19 @@ async function executeTask(
 
   const isGitHub = project.provider === 'github';
   const conversationParts: string[] = []; // 이슈 노트용 대화 내용 수집
-  const logStream = fs.createWriteStream(logPath, { flags: 'a' });
+  const rawLogStream = fs.createWriteStream(logPath, { flags: 'a' });
+  // 각 줄에 Unix timestamp(ms) 접두사를 붙여 기록 → LogViewer에서 사용자 타임존으로 변환 표시
+  const logStream = {
+    write(data: string) {
+      const lines = data.split('\n');
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (i === lines.length - 1 && line === '') continue; // trailing newline
+        rawLogStream.write(`${Date.now()}\t${line}\n`);
+      }
+    },
+    end() { rawLogStream.end(); },
+  };
   const log = (msg: string, type: 'info' | 'error' | 'warn' | 'system' = 'info') => {
     let colorCode = '';
     if (type === 'system') colorCode = '\x1b[1;32m'; // Bright Green
@@ -632,7 +644,14 @@ async function executeTask(
 
   try {
     // 0-1. 이슈 정보 출력
+    const ownerTz = projectOwner?.timezone || 'Asia/Seoul';
+    const startDateStr = new Date().toLocaleString('ko-KR', {
+      timeZone: ownerTz,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+    });
     log(`\x1b[1;36m${'═'.repeat(50)}\x1b[0m`, 'info');
+    log(`Started: ${startDateStr} (${ownerTz})`, 'system');
     log(`Issue #${iid}: ${issue.title}`, 'system');
     log(`Agent : ${agent.name}`, 'system');
     log(`Project: ${project.name}`, 'system');

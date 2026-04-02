@@ -165,6 +165,7 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
           onConnectionChange={setConnected}
           onLineCountChange={setLineCount}
           isLive={connected}
+          timezone={userTz}
         />
       </div>
 

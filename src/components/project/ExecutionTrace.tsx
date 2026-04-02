@@ -86,6 +86,7 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
             maxLines={10000}
             className="flex-1 min-h-0"
             initialAutoScroll={executions.find(e => e.id === selectedId)?.status === 'running'}
+            timezone={userTz}
           />
         </div>
       ) : (
