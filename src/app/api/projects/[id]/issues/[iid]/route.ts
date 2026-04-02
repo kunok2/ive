@@ -70,7 +70,7 @@ export async function GET(
       const issueLabels = issue.labels || []
       if (issueLabels.includes(project.labelTarget)) {
         stage = 'waiting'
-        setIssueStage(projectId, Number(iid), 'waiting')
+        setIssueStage(projectId, Number(iid), 'waiting', undefined, issue.created_at)
       }
     }
 

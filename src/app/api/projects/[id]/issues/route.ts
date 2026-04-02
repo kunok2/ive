@@ -41,7 +41,7 @@ export async function GET(
         const issueLabels = issue.labels || [];
         if (issueLabels.includes(project.labelTarget)) {
           stage = 'waiting';
-          setIssueStage(projectId, issue.iid, 'waiting');
+          setIssueStage(projectId, issue.iid, 'waiting', undefined, issue.created_at);
         }
       }
 
@@ -92,7 +92,7 @@ export async function POST(
 
     // 이슈 생성 시 로컬 DB에 stage 등록
     if (asDev && issue.iid) {
-      setIssueStage(projectId, issue.iid, 'waiting');
+      setIssueStage(projectId, issue.iid, 'waiting', undefined, issue.created_at);
     }
 
     return NextResponse.json(issue);

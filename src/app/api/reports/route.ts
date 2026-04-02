@@ -99,8 +99,8 @@ export async function GET(req: NextRequest) {
     return (new Date(endedAt).getTime() - new Date(startedAt).getTime()) / 60000
   }
 
-  // 대기시간 = issue_created_at → started_at
-  // scanner.ts가 큐 진입 시점을 issue_created_at에 정확히 저장하므로 그대로 사용
+  // 대기시간 = issue_created_at(이슈 생성 시점) → started_at(실행 시작 시점)
+  // scanner.ts가 GitLab/GitHub 이슈의 created_at를 issue_created_at에 저장
 
   // Summary
   const totalTasks = execs.length

@@ -416,7 +416,9 @@ export async function scanProject(project: Project, force: boolean = false) {
       if (issue.state === 'closed') continue;
       issueMap.set(issue.iid, issue);
       if (!getIssueStage(project.id, issue.iid)) {
-        setIssueStage(project.id, issue.iid, 'waiting');
+        // 이슈의 실제 생성 시점(GitLab/GitHub created_at)을 대기 큐 진입 시점으로 사용
+        // → 대기시간 = 이슈 생성 시점 ~ 실행 시작 시점 (스캐너 발견 시점이 아닌 원본 시점)
+        setIssueStage(project.id, issue.iid, 'waiting', undefined, issue.created_at);
       }
     }
 
