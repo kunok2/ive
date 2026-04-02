@@ -286,7 +286,7 @@
     "waitingBadge": "대기",
     "todayRecords": "금일 수행기록 ({count})",
     "errorLabel": "오류:",
-    "conflictLabel": "취합"
+    "conflictLabel": "작업취합"
   },
   "conflict": {
     "title": "MR 취합 관리",
