@@ -1,6 +1,7 @@
 services:
   spring-ive:
-    image: dazzlepf/spring-ive:latest
+    image: spring-ive:latest
+    build: .
     env_file:
       - .env
     container_name: spring-ive
@@ -17,19 +18,3 @@ services:
       - ./data:/app/data
       - ./workspaces:/app/workspaces
       - ./claude-config:/home/ive/.claude
-    labels:
-      - com.centurylinklabs.watchtower.enable=true
-      - com.centurylinklabs.watchtower.scope=ive
-
-  watchtower:
-    image: containrrr/watchtower
-    container_name: watchtower-ive
-    restart: unless-stopped
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    environment:
-      - WATCHTOWER_CLEANUP=true
-      - WATCHTOWER_POLL_INTERVAL=30
-      - WATCHTOWER_LABEL_ENABLE=true
-      - DOCKER_API_VERSION=1.44
-    command: --interval 30 --label-enable --cleanup --scope ive

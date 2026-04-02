@@ -1,24 +1,40 @@
 stages:
-  - build
+  - deploy
+  - publish
 
 variables:
-  IMAGE_NAME: dazzlepf/spring-ive
+  IMAGE_NAME: spring-ive
+  HUB_IMAGE: dazzlepf/spring-ive
+  IVE_DIR: /home/ubuntu/ive
 
-# 이미지 빌드 + Docker Hub 배포 → Watchtower가 30초 내 자동 배포
-build-and-push:
-  stage: build
+# 로컬 빌드 + 컨테이너 재시작 (main push 시 자동)
+deploy:
+  stage: deploy
+  tags:
+    - deploy
+  script:
+    - cd $IVE_DIR
+    - git -C /home/ubuntu/ive-src pull origin main
+    - DOCKER_BUILDKIT=1 docker build --provenance=false -t $IMAGE_NAME:latest /home/ubuntu/ive-src
+    - docker compose down
+    - docker compose up -d
+    - docker image prune -f
+    - docker builder prune -a -f --filter 'until=24h'
+  only:
+    - main
+
+# Docker Hub에 이미지 게시 (수동 실행)
+publish-to-hub:
+  stage: publish
   tags:
     - deploy
   before_script:
     - docker login -u "$DOCKER_USERNAME" -p "$DOCKER_PASSWORD"
   script:
-    - DOCKER_BUILDKIT=1 docker build --provenance=false -t $IMAGE_NAME:build .
-    - docker tag $IMAGE_NAME:build $IMAGE_NAME:latest
-    - docker tag $IMAGE_NAME:build $IMAGE_NAME:$CI_COMMIT_SHORT_SHA
-    - docker push $IMAGE_NAME:latest
-    - docker push $IMAGE_NAME:$CI_COMMIT_SHORT_SHA
-    - docker rmi $IMAGE_NAME:build
-    - docker image prune -f
-    - docker builder prune -a -f --filter 'until=24h'
+    - docker tag $IMAGE_NAME:latest $HUB_IMAGE:latest
+    - docker tag $IMAGE_NAME:latest $HUB_IMAGE:$CI_COMMIT_SHORT_SHA
+    - docker push $HUB_IMAGE:latest
+    - docker push $HUB_IMAGE:$CI_COMMIT_SHORT_SHA
+  when: manual
   only:
     - main
