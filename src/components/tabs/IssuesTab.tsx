@@ -448,6 +448,15 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                     <div className="text-lg font-black text-ive-green-light">{issues.length}</div>
                     <div className="text-xs text-ive-text-dim">{tIssue('issues')}</div>
                   </div>
+                  {canEdit && !bulkMode && !isHistoryTab && (
+                    <button
+                      onClick={() => setShowAddForm(v => !v)}
+                      className="w-9 h-9 rounded-full bg-ive-bg-deep border border-ive-border-subtle flex items-center justify-center text-ive-text-dim hover:text-ive-green hover:border-ive-green/30 transition-all"
+                      title={tIssue('addNewIssue')}
+                    >
+                      <i className="fa-solid fa-plus text-sm" />
+                    </button>
+                  )}
                   {canEdit && issues.length > 0 && !bulkMode && !isHistoryTab && (
                     <button
                       onClick={() => setBulkMode(true)}
