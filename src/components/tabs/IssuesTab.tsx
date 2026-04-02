@@ -584,8 +584,8 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                       <span className="text-xs text-ive-amber font-bold">{tIssue('mixedStages')}</span>
                     )}
                   </div>
-                  <button onClick={exitBulkMode} className="text-xs text-ive-text-dim hover:text-ive-text font-bold px-2 py-1 rounded-lg hover:bg-white/5 transition-all">
-                    {tCommon('cancel')}
+                  <button onClick={exitBulkMode} className="text-sm text-ive-red font-bold px-3 py-1.5 rounded-lg border border-ive-red/30 bg-ive-bg-deep hover:bg-ive-red/10 transition-all active:scale-95">
+                    <i className="fa-solid fa-xmark mr-1" />{tCommon('cancel')}
                   </button>
                 </div>
 
