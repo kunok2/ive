@@ -236,7 +236,7 @@ export function WaitingTrendChart({ data, prevData, type }: {
       </div>
 
       {allZero ? (
-        <div className="flex items-center justify-center h-[170px] text-xs text-ive-text-dim">
+        <div className="flex items-center justify-center py-4 text-xs text-ive-text-dim">
           {t('noWaitingHistory')}
         </div>
       ) : (<>
