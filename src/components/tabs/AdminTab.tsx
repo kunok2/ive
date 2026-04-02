@@ -1240,6 +1240,32 @@ const DATE_PRESETS: { labelKey: string; days: number | null }[] = [
   { labelKey: 'dateAll', days: null },
 ]
 
+const ACTIVITY_FILTER_KEY = 'ive-admin-activity-filter'
+
+function loadActivityFilter(): {
+  category: string
+  userId: string
+  startDate: string
+  endDate: string
+  preset: number | null
+} {
+  if (typeof window === 'undefined') return { category: '', userId: '', startDate: getDateStr(30), endDate: getDateStr(0), preset: 30 }
+  try {
+    const raw = localStorage.getItem(ACTIVITY_FILTER_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      return {
+        category: parsed.category ?? '',
+        userId: parsed.userId ?? '',
+        startDate: parsed.startDate ?? getDateStr(30),
+        endDate: parsed.endDate ?? getDateStr(0),
+        preset: parsed.preset !== undefined ? parsed.preset : 30,
+      }
+    }
+  } catch {}
+  return { category: '', userId: '', startDate: getDateStr(30), endDate: getDateStr(0), preset: 30 }
+}
+
 function ActivityPanel() {
   const { state } = useStore()
   const userLocale = state.user?.locale
@@ -1250,14 +1276,27 @@ function ActivityPanel() {
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
-  const [filterCategory, setFilterCategory] = useState<string>('')
-  const [filterUserId, setFilterUserId] = useState<string>('')
-  const [filterStartDate, setFilterStartDate] = useState<string>(getDateStr(30))
-  const [filterEndDate, setFilterEndDate] = useState<string>(getDateStr(0))
-  const [activePreset, setActivePreset] = useState<number | null>(30)
+  const savedFilter = loadActivityFilter()
+  const [filterCategory, setFilterCategory] = useState<string>(savedFilter.category)
+  const [filterUserId, setFilterUserId] = useState<string>(savedFilter.userId)
+  const [filterStartDate, setFilterStartDate] = useState<string>(savedFilter.startDate)
+  const [filterEndDate, setFilterEndDate] = useState<string>(savedFilter.endDate)
+  const [activePreset, setActivePreset] = useState<number | null>(savedFilter.preset)
   const [users, setUsers] = useState<User[]>([])
   const offsetRef = useRef(0)
   const PAGE_SIZE = 30
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(ACTIVITY_FILTER_KEY, JSON.stringify({
+        category: filterCategory,
+        userId: filterUserId,
+        startDate: filterStartDate,
+        endDate: filterEndDate,
+        preset: activePreset,
+      }))
+    } catch {}
+  }, [filterCategory, filterUserId, filterStartDate, filterEndDate, activePreset])
 
   useEffect(() => {
     fetch('/api/admin/users').then(r => r.json()).then(setUsers).catch(() => {})
