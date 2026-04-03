@@ -487,10 +487,10 @@ export async function GET(req: NextRequest) {
     .filter(e => e.verifiedAt)
     .map(e => durationMin(e.endedAt!, e.verifiedAt!))
     .filter(v => v >= 0)
-  // 총시간: issue_created_at(큐 진입 시점) → ended_at
+  // 총시간: issue_created_at(큐 진입 시점) → verified_at (있으면) 또는 ended_at
   const totalTimes = finishedExecs
     .filter(e => e.issueCreatedAt)
-    .map(e => durationMin(e.issueCreatedAt!, e.endedAt!))
+    .map(e => durationMin(e.issueCreatedAt!, e.verifiedAt || e.endedAt!))
     .filter(v => v >= 0)
 
   // 이슈별 실행 횟수
@@ -539,7 +539,7 @@ export async function GET(req: NextRequest) {
     .filter(v => v >= 0)
   const prevTotalTimes = prevFinishedExecs
     .filter(e => e.issueCreatedAt)
-    .map(e => durationMin(e.issueCreatedAt!, e.endedAt!))
+    .map(e => durationMin(e.issueCreatedAt!, e.verifiedAt || e.endedAt!))
     .filter(v => v >= 0)
 
   const prevLifecycle = {

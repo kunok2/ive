@@ -633,7 +633,7 @@ export default function ReportsTab() {
                   const DiffBadge = ({ diff, isNew }: { diff: number | null; isNew?: boolean }) => {
                     if (isNew) return <span className="text-[9px] font-bold px-1 py-0.5 rounded text-ive-cyan bg-ive-cyan/10">NEW</span>
                     if (diff == null) return null
-                    const color = diff > 0 ? 'text-ive-red bg-ive-red/10' : diff < 0 ? 'text-ive-green bg-ive-green/10' : 'text-ive-text-dim bg-white/5'
+                    const color = diff > 0 ? 'text-ive-red bg-ive-red/10' : diff < 0 ? 'text-emerald-400 bg-emerald-400/10' : 'text-ive-text-dim bg-white/5'
                     return <span className={`text-[9px] font-bold px-1 py-0.5 rounded ${color}`}>{diff > 0 ? '+' : ''}{diff.toLocaleString()}%</span>
                   }
                   return (
@@ -651,7 +651,7 @@ export default function ReportsTab() {
                       )}
                       <div className="text-center">
                         <div className="text-xs text-ive-text-dim">{t('processTime')}</div>
-                        <div className="text-sm font-bold text-ive-green">{formatDuration(data.lifecycle.procAvg)}</div>
+                        <div className="text-sm font-bold text-emerald-400">{formatDuration(data.lifecycle.procAvg)}</div>
                         <div className="text-xs text-ive-text-dim">{t('max')} {formatDuration(data.lifecycle.procMax)}</div>
                         <div className="mt-0.5">
                           <DiffBadge diff={procDiff} isNew={procDiff == null && data.lifecycle.procCount > 0 && prev.procCount === 0} />
@@ -693,7 +693,7 @@ export default function ReportsTab() {
                     <div>
                       <div className="flex h-2.5 rounded-full overflow-hidden bg-ive-bg-deep">
                         <div className="bg-ive-cyan/60" style={{ width: `${waitPct}%` }} />
-                        <div className="bg-ive-green/60" style={{ width: `${procPct}%` }} />
+                        <div className="bg-emerald-400/60" style={{ width: `${procPct}%` }} />
                         {verifyPct > 0 && <div className="bg-orange-400/60" style={{ width: `${verifyPct}%` }} />}
                         {otherPct > 0 && <div className="bg-ive-amber/40" style={{ width: `${otherPct}%` }} />}
                       </div>
@@ -779,17 +779,17 @@ export default function ReportsTab() {
                     <div className="flex items-center gap-3">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="text-xs font-bold text-ive-green">{t('procTime')}</span>
-                          <span className={`text-xs font-bold ${trendDir === 'up' ? 'text-ive-green' : trendDir === 'down' ? 'text-ive-green/60' : 'text-ive-text-dim'}`}>
+                          <span className="text-xs font-bold text-emerald-400">{t('procTime')}</span>
+                          <span className={`text-xs font-bold ${trendDir === 'up' ? 'text-emerald-400' : trendDir === 'down' ? 'text-emerald-400/60' : 'text-ive-text-dim'}`}>
                             {trendDir === 'up' ? t('trendUp') : trendDir === 'down' ? t('trendDown') : t('trendStable')}
                           </span>
                           {prevDiff != null && (
-                            <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${prevDiff > 0 ? 'text-ive-green bg-ive-green/10' : prevDiff < 0 ? 'text-ive-green/60 bg-ive-green/5' : 'text-ive-text-dim bg-white/5'}`}>
+                            <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${prevDiff > 0 ? 'text-emerald-400 bg-emerald-400/10' : prevDiff < 0 ? 'text-emerald-400/60 bg-emerald-400/5' : 'text-ive-text-dim bg-white/5'}`}>
                               {t('vsPrev')} {prevDiff > 0 ? '+' : ''}{prevDiff.toLocaleString()}%
                             </span>
                           )}
                           {prevDiff == null && data.lifecycle.procCount > 0 && data.prevLifecycle.procCount === 0 && (
-                            <span className="text-xs font-bold px-1.5 py-0.5 rounded text-ive-cyan bg-ive-cyan/10">NEW</span>
+                            <span className="text-xs font-bold px-1.5 py-0.5 rounded text-emerald-400 bg-emerald-400/10">NEW</span>
                           )}
                         </div>
                         <div className="flex items-center gap-2">
@@ -832,7 +832,7 @@ export default function ReportsTab() {
                             </span>
                           )}
                           {prevDiff == null && data.lifecycle.verifyCount > 0 && data.prevLifecycle.verifyCount === 0 && (
-                            <span className="text-xs font-bold px-1.5 py-0.5 rounded text-ive-cyan bg-ive-cyan/10">NEW</span>
+                            <span className="text-xs font-bold px-1.5 py-0.5 rounded text-orange-400 bg-orange-400/10">NEW</span>
                           )}
                         </div>
                         <div className="flex items-center gap-2">
