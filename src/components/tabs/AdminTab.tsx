@@ -9,7 +9,7 @@ import { useDialog } from '@/components/ui/ConfirmDialog'
 import TerminalTab from './TerminalTab'
 import PullToRefresh from '@/components/ui/PullToRefresh'
 
-type SubTab = 'users' | 'mail' | 'settings' | 'activity' | 'cli'
+type SubTab = 'users' | 'mail' | 'settings' | 'cli'
 
 export default function AdminTab() {
   const t = useTranslations('admin')
@@ -17,7 +17,9 @@ export default function AdminTab() {
   const [subTab, setSubTab] = useState<SubTab>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('ive-admin-subtab')
-      if (saved && ['users', 'mail', 'settings', 'activity', 'cli'].includes(saved)) return saved as SubTab
+      if (saved && ['users', 'mail', 'settings', 'cli'].includes(saved)) return saved as SubTab
+      // 기존 'activity' 저장값은 'users'로 매핑
+      if (saved === 'activity') return 'users'
     }
     return 'users'
   })
@@ -35,7 +37,6 @@ export default function AdminTab() {
     { key: 'users', icon: 'fa-solid fa-users', label: t('users') },
     { key: 'mail', icon: 'fa-solid fa-envelope', label: t('mail') },
     { key: 'settings', icon: 'fa-solid fa-gear', label: t('settings') },
-    { key: 'activity', icon: 'fa-solid fa-clock-rotate-left', label: t('activity') },
     { key: 'cli', icon: 'fa-solid fa-terminal', label: t('cli') },
   ]
 
@@ -63,23 +64,40 @@ export default function AdminTab() {
       {subTab === 'users' && <UsersPanel key={refreshKey} />}
       {subTab === 'mail' && <MailPanel key={refreshKey} />}
       {subTab === 'settings' && <SettingsPanel key={refreshKey} />}
-      {subTab === 'activity' && <ActivityPanel key={refreshKey} />}
       {subTab === 'cli' && <TerminalTab />}
     </PullToRefresh>
   )
 }
 
 // ── Users Panel ──
+type UsersSubView = 'users' | 'activity'
+
 function UsersPanel() {
   const t = useTranslations('admin')
   const tc = useTranslations('common')
   const ta = useTranslations('agent')
   const { confirm, alert } = useDialog()
+  const [view, setView] = useState<UsersSubView>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('ive-admin-users-subview')
+      if (saved === 'activity') return 'activity'
+    }
+    return 'users'
+  })
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [editingLimits, setEditingLimits] = useState<string | null>(null)
   const [limitValues, setLimitValues] = useState<{ maxAgents: number; maxTurns: number; allowedClis: string[] }>({ maxAgents: 0, maxTurns: 0, allowedClis: ['opencode'] })
+
+  useEffect(() => {
+    localStorage.setItem('ive-admin-users-subview', view)
+  }, [view])
+
+  const views: { key: UsersSubView; label: string; icon: string }[] = [
+    { key: 'users', label: t('users'), icon: 'fa-solid fa-users' },
+    { key: 'activity', label: t('activity'), icon: 'fa-solid fa-clock-rotate-left' },
+  ]
 
   async function fetchUsers() {
     const res = await fetch('/api/admin/users')
@@ -176,8 +194,48 @@ function UsersPanel() {
 
   if (loading) return <div className="text-center py-10 text-ive-text-dim">{tc('loading')}</div>
 
+  if (view === 'activity') {
+    return (
+      <main className="px-4 py-4 max-w-lg mx-auto">
+        {/* 서브뷰 토글 */}
+        <div className="flex gap-1.5 mb-4">
+          {views.map(v => (
+            <button
+              key={v.key}
+              onClick={() => setView(v.key)}
+              className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
+                view === v.key
+                  ? 'bg-ive-green/15 text-ive-green border border-ive-green/30'
+                  : 'bg-ive-bg-card border border-ive-border-subtle text-ive-text-dim active:scale-[0.96]'
+              }`}
+            >
+              <i className={`${v.icon} mr-1`} />{v.label}
+            </button>
+          ))}
+        </div>
+        <ActivityContent />
+      </main>
+    )
+  }
+
   return (
     <main className="px-4 py-4 max-w-lg mx-auto">
+      {/* 서브뷰 토글 */}
+      <div className="flex gap-1.5 mb-4">
+        {views.map(v => (
+          <button
+            key={v.key}
+            onClick={() => setView(v.key)}
+            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
+              view === v.key
+                ? 'bg-ive-green/15 text-ive-green border border-ive-green/30'
+                : 'bg-ive-bg-card border border-ive-border-subtle text-ive-text-dim active:scale-[0.96]'
+            }`}
+          >
+            <i className={`${v.icon} mr-1`} />{v.label}
+          </button>
+        ))}
+      </div>
       <div className="text-xs text-ive-text-dim mb-3">{t('totalUsersCount', { count: users.length })}</div>
       <div className="space-y-2">
         {users.map(u => (
@@ -1266,7 +1324,7 @@ function loadActivityFilter(): {
   return { category: '', userId: '', startDate: getDateStr(30), endDate: getDateStr(0), preset: 30 }
 }
 
-function ActivityPanel() {
+function ActivityContent() {
   const { state } = useStore()
   const userLocale = state.user?.locale
   const userTz = state.user?.timezone
@@ -1345,7 +1403,7 @@ function ActivityPanel() {
   if (loading) return <div className="text-center py-10 text-ive-text-dim">{tc('loading')}</div>
 
   return (
-    <main className="px-4 py-4 max-w-lg mx-auto">
+    <>
       {/* 필터 */}
       <div className="flex gap-2 mb-2">
         <select
@@ -1468,6 +1526,6 @@ function ActivityPanel() {
           }
         </button>
       )}
-    </main>
+    </>
   )
 }
