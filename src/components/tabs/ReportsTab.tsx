@@ -637,7 +637,7 @@ export default function ReportsTab() {
                     return <span className={`text-[9px] font-bold px-1 py-0.5 rounded ${color}`}>{diff > 0 ? '+' : ''}{diff.toLocaleString()}%</span>
                   }
                   return (
-                    <div className={`grid gap-2 ${cols === 3 ? 'grid-cols-3' : cols === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                    <div className={`grid gap-2 ${cols >= 4 ? 'grid-cols-4' : cols === 3 ? 'grid-cols-3' : cols === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
                       {hasWait && (
                         <div className="text-center">
                           <div className="text-xs text-ive-text-dim">{t('createToAssign')}</div>
@@ -717,7 +717,7 @@ export default function ReportsTab() {
           )}
 
           {/* 대기시간/수행시간 평균 트렌드 */}
-          {data.dailyTrend.length >= 2 && (data.dailyTrend.some(d => d.waitAvg !== null) || data.dailyTrend.some(d => d.procAvg !== null)) && (
+          {data.dailyTrend.length >= 2 && (data.dailyTrend.some(d => d.waitAvg !== null) || data.dailyTrend.some(d => d.procAvg !== null) || data.dailyTrend.some(d => d.verifyAvg !== null)) && (
             <section>
               <div className="text-xs font-bold text-ive-text-dim mb-2 uppercase tracking-wider">
                 {t('waitProcAvgTrend')}
@@ -737,11 +737,11 @@ export default function ReportsTab() {
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-xs font-bold text-ive-cyan">{t('waitTime')}</span>
-                          <span className={`text-xs font-bold ${trendDir === 'up' ? 'text-ive-red' : trendDir === 'down' ? 'text-ive-green' : 'text-ive-text-dim'}`}>
+                          <span className={`text-xs font-bold ${trendDir === 'up' ? 'text-ive-cyan' : trendDir === 'down' ? 'text-ive-cyan/60' : 'text-ive-text-dim'}`}>
                             {trendDir === 'up' ? t('trendUp') : trendDir === 'down' ? t('trendDown') : t('trendStable')}
                           </span>
                           {prevDiff != null && (
-                            <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${prevDiff > 0 ? 'text-ive-red bg-ive-red/10' : prevDiff < 0 ? 'text-ive-green bg-ive-green/10' : 'text-ive-text-dim bg-white/5'}`}>
+                            <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${prevDiff > 0 ? 'text-ive-cyan bg-ive-cyan/10' : prevDiff < 0 ? 'text-ive-cyan/60 bg-ive-cyan/5' : 'text-ive-text-dim bg-white/5'}`}>
                               {t('vsPrev')} {prevDiff > 0 ? '+' : ''}{prevDiff.toLocaleString()}%
                             </span>
                           )}
@@ -751,13 +751,13 @@ export default function ReportsTab() {
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="flex-1 min-w-0">
-                            <Sparkline data={waitData} bgData={data.prevDailyTrend.map(d => d.waitAvg ?? null)} width="100%" height={24} color={trendDir === 'up' ? 'red' : trendDir === 'down' ? 'green' : 'cyan'} />
+                            <Sparkline data={waitData} bgData={data.prevDailyTrend.map(d => d.waitAvg ?? null)} width="100%" height={24} color="cyan" />
                           </div>
-                          <div className="text-right shrink-0">
+                          <div className="text-right shrink-0 w-[70px]">
                             <div className="text-xs font-bold text-ive-text">{formatDuration(validWait[validWait.length - 1] ?? 0)}</div>
                             <div className="text-xs text-ive-text-dim">{t('recent')}</div>
                           </div>
-                          <div className="text-right shrink-0 ml-1">
+                          <div className="text-right shrink-0 w-[60px] ml-1">
                             <div className="text-xs font-bold text-ive-text-dim">{data.prevLifecycle.waitCount > 0 ? formatDuration(data.prevLifecycle.waitAvg) : '-'}</div>
                             <div className="text-xs text-ive-text-dim">{t('prevAvg')}</div>
                           </div>
@@ -780,11 +780,11 @@ export default function ReportsTab() {
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-xs font-bold text-ive-green">{t('procTime')}</span>
-                          <span className={`text-xs font-bold ${trendDir === 'up' ? 'text-ive-red' : trendDir === 'down' ? 'text-ive-green' : 'text-ive-text-dim'}`}>
+                          <span className={`text-xs font-bold ${trendDir === 'up' ? 'text-ive-green' : trendDir === 'down' ? 'text-ive-green/60' : 'text-ive-text-dim'}`}>
                             {trendDir === 'up' ? t('trendUp') : trendDir === 'down' ? t('trendDown') : t('trendStable')}
                           </span>
                           {prevDiff != null && (
-                            <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${prevDiff > 0 ? 'text-ive-red bg-ive-red/10' : prevDiff < 0 ? 'text-ive-green bg-ive-green/10' : 'text-ive-text-dim bg-white/5'}`}>
+                            <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${prevDiff > 0 ? 'text-ive-green bg-ive-green/10' : prevDiff < 0 ? 'text-ive-green/60 bg-ive-green/5' : 'text-ive-text-dim bg-white/5'}`}>
                               {t('vsPrev')} {prevDiff > 0 ? '+' : ''}{prevDiff.toLocaleString()}%
                             </span>
                           )}
@@ -794,13 +794,13 @@ export default function ReportsTab() {
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="flex-1 min-w-0">
-                            <Sparkline data={procData} bgData={data.prevDailyTrend.map(d => d.procAvg ?? null)} width="100%" height={24} color={trendDir === 'up' ? 'red' : trendDir === 'down' ? 'green' : 'green'} />
+                            <Sparkline data={procData} bgData={data.prevDailyTrend.map(d => d.procAvg ?? null)} width="100%" height={24} color="green" />
                           </div>
-                          <div className="text-right shrink-0">
+                          <div className="text-right shrink-0 w-[70px]">
                             <div className="text-xs font-bold text-ive-text">{formatDuration(validProc[validProc.length - 1] ?? 0)}</div>
                             <div className="text-xs text-ive-text-dim">{t('recent')}</div>
                           </div>
-                          <div className="text-right shrink-0 ml-1">
+                          <div className="text-right shrink-0 w-[60px] ml-1">
                             <div className="text-xs font-bold text-ive-text-dim">{data.prevLifecycle.procCount > 0 ? formatDuration(data.prevLifecycle.procAvg) : '-'}</div>
                             <div className="text-xs text-ive-text-dim">{t('prevAvg')}</div>
                           </div>
@@ -823,11 +823,11 @@ export default function ReportsTab() {
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-xs font-bold text-orange-400">{t('verifyTime')}</span>
-                          <span className={`text-xs font-bold ${trendDir === 'up' ? 'text-ive-red' : trendDir === 'down' ? 'text-ive-green' : 'text-ive-text-dim'}`}>
+                          <span className={`text-xs font-bold ${trendDir === 'up' ? 'text-orange-400' : trendDir === 'down' ? 'text-orange-400/60' : 'text-ive-text-dim'}`}>
                             {trendDir === 'up' ? t('trendUp') : trendDir === 'down' ? t('trendDown') : t('trendStable')}
                           </span>
                           {prevDiff != null && (
-                            <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${prevDiff > 0 ? 'text-ive-red bg-ive-red/10' : prevDiff < 0 ? 'text-ive-green bg-ive-green/10' : 'text-ive-text-dim bg-white/5'}`}>
+                            <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${prevDiff > 0 ? 'text-orange-400 bg-orange-400/10' : prevDiff < 0 ? 'text-orange-400/60 bg-orange-400/5' : 'text-ive-text-dim bg-white/5'}`}>
                               {t('vsPrev')} {prevDiff > 0 ? '+' : ''}{prevDiff.toLocaleString()}%
                             </span>
                           )}
@@ -837,13 +837,13 @@ export default function ReportsTab() {
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="flex-1 min-w-0">
-                            <Sparkline data={verifyData} bgData={data.prevDailyTrend.map(d => d.verifyAvg ?? null)} width="100%" height={24} color={trendDir === 'up' ? 'red' : trendDir === 'down' ? 'green' : 'amber'} />
+                            <Sparkline data={verifyData} bgData={data.prevDailyTrend.map(d => d.verifyAvg ?? null)} width="100%" height={24} color="amber" />
                           </div>
-                          <div className="text-right shrink-0">
+                          <div className="text-right shrink-0 w-[70px]">
                             <div className="text-xs font-bold text-ive-text">{formatDuration(validVerify[validVerify.length - 1] ?? 0)}</div>
                             <div className="text-xs text-ive-text-dim">{t('recent')}</div>
                           </div>
-                          <div className="text-right shrink-0 ml-1">
+                          <div className="text-right shrink-0 w-[60px] ml-1">
                             <div className="text-xs font-bold text-ive-text-dim">{data.prevLifecycle.verifyCount > 0 ? formatDuration(data.prevLifecycle.verifyAvg) : '-'}</div>
                             <div className="text-xs text-ive-text-dim">{t('prevAvg')}</div>
                           </div>

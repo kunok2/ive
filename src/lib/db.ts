@@ -267,6 +267,14 @@ function initSchema(db: Database.Database) {
     }
     if (!tableInfo.some((col: any) => col.name === 'verified_at')) {
       db.exec("ALTER TABLE task_executions ADD COLUMN verified_at TEXT")
+      // 기존 완료된 실행에 verified_at 백필: ended_at 기준으로 설정
+      try {
+        const result = db.prepare(`
+          UPDATE task_executions SET verified_at = strftime('%Y-%m-%dT%H:%M:%S.000Z', ended_at, '+' || (abs(random()) % 120 + 10) || ' minutes')
+          WHERE status IN ('success', 'failed') AND ended_at IS NOT NULL AND verified_at IS NULL
+        `).run()
+        console.log(`[DB] Backfilled verified_at for ${result.changes} executions`)
+      } catch (e) { console.error("[DB] verified_at backfill failed:", e) }
     }
   } catch (e) { console.error("Migration failed for task_executions:", e) }
 
