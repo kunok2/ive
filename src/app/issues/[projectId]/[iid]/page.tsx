@@ -83,6 +83,10 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   const [issue, setIssue] = useState<IssueDetail | null>(null)
   const [notes, setNotes] = useState<Note[]>([])
   const [loading, setLoading] = useState(true)
+  const [preferredAgent, setPreferredAgent] = useState<{ preferredAgentId: string | null; preferredAgentName: string | null; preferredAgentAvatar: string | null; preferredAgentCliName: string | null } | null>(null)
+  const [projectAgents, setProjectAgents] = useState<{ agentId: string; agent: { id: string; name: string; avatar: string; cliName: string; status: string } }[]>([])
+  const [agentPickerOpen, setAgentPickerOpen] = useState(false)
+  const agentPickerRef = useRef<HTMLDivElement>(null)
   const [notesLoading, setNotesLoading] = useState(true)
   const [comment, setComment] = useState('')
   const [posting, setPosting] = useState(false)
@@ -133,10 +137,41 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
     await Promise.all([fetchIssue(), fetchNotes()])
   }, [fetchIssue, fetchNotes])
 
+  const fetchPreferredAgent = useCallback(async () => {
+    const res = await fetch(`/api/projects/${projectId}/issues/${iid}/preferred-agent`)
+    if (res.ok) setPreferredAgent(await res.json())
+  }, [projectId, iid])
+
   useEffect(() => {
     fetchIssue()
     fetchNotes()
-  }, [fetchIssue, fetchNotes])
+    fetchPreferredAgent()
+    fetch(`/api/projects/${projectId}/agents`)
+      .then(res => res.ok ? res.json() : [])
+      .then(setProjectAgents)
+      .catch(() => setProjectAgents([]))
+  }, [fetchIssue, fetchNotes, fetchPreferredAgent, projectId])
+
+  useEffect(() => {
+    if (!agentPickerOpen) return
+    const handler = (e: MouseEvent) => {
+      if (agentPickerRef.current && !agentPickerRef.current.contains(e.target as Node)) {
+        setAgentPickerOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [agentPickerOpen])
+
+  async function handleChangePreferredAgent(agentId: string | null) {
+    setAgentPickerOpen(false)
+    const res = await fetch(`/api/projects/${projectId}/issues/${iid}/preferred-agent`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agentId }),
+    })
+    if (res.ok) setPreferredAgent(await res.json())
+  }
 
   async function handleStageAction(action: string) {
     if (!issue) return
@@ -582,6 +617,13 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
             </span>
           )}
           <span className="text-xs text-ive-text-dim shrink-0"><i className="fa-solid fa-user mr-0.5" />{issue.author}</span>
+          {/* 선호 에이전트 표시 */}
+          {preferredAgent?.preferredAgentId && preferredAgent.preferredAgentAvatar && (
+            <span className="flex items-center gap-1 shrink-0">
+              <AgentAvatar avatar={preferredAgent.preferredAgentAvatar} size="sm" />
+              <span className="text-xs font-bold text-ive-text-muted">{preferredAgent.preferredAgentName}</span>
+            </span>
+          )}
           <span className="text-xs text-ive-text-dim ml-auto shrink-0">
             {formatDateMedium(issue.updatedAt, state.user?.locale, state.user?.timezone)}
           </span>
@@ -675,6 +717,69 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                   </button>
                 </div>
               </div>
+              {showDesc && issue.description && (
+                <div className="mt-1.5 text-sm text-ive-text-muted bg-ive-bg-card rounded-lg p-2.5 break-words leading-relaxed max-h-[30vh] overflow-y-auto">
+                  <MarkdownNote body={cleanNoteBody(issue.description)} />
+                </div>
+              )}
+              {/* 작업자 지정 — waiting 상태에서만 변경 가능 */}
+              {projectAgents.length > 0 && (
+                <div ref={agentPickerRef} className="relative mt-1.5">
+                  <button
+                    type="button"
+                    onClick={() => issue.stage === 'waiting' && setAgentPickerOpen(v => !v)}
+                    className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg border transition-all ${
+                      issue.stage === 'waiting'
+                        ? 'border-ive-border-subtle hover:border-ive-green/30 cursor-pointer'
+                        : 'border-transparent cursor-default opacity-70'
+                    }`}
+                  >
+                    <i className="fa-solid fa-user-gear text-ive-text-dim" />
+                    {preferredAgent?.preferredAgentId ? (
+                      <span className="font-bold text-ive-text-muted">
+                        {preferredAgent.preferredAgentName}
+                        {issue.stage === 'waiting' && <i className="fa-solid fa-chevron-down ml-1 text-[10px] text-ive-text-dim" />}
+                      </span>
+                    ) : (
+                      <span className="text-ive-text-dim">
+                        {tIssue('noPreference')}
+                        {issue.stage === 'waiting' && <i className="fa-solid fa-chevron-down ml-1 text-[10px]" />}
+                      </span>
+                    )}
+                  </button>
+                  {agentPickerOpen && (
+                    <div className="absolute z-50 top-full left-0 mt-1 bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden shadow-lg shadow-black/30 min-w-[200px]">
+                      <button
+                        onClick={() => handleChangePreferredAgent(null)}
+                        className={`w-full px-3 py-2 text-left text-xs flex items-center gap-2 transition-colors ${
+                          !preferredAgent?.preferredAgentId ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text-dim hover:bg-white/5'
+                        }`}
+                      >
+                        <i className="fa-solid fa-shuffle" />
+                        <span className="font-bold">{tIssue('noPreference')}</span>
+                      </button>
+                      {projectAgents.map(pa => {
+                        const isOffline = pa.agent.status === 'offline'
+                        return (
+                          <button
+                            key={pa.agentId}
+                            onClick={() => handleChangePreferredAgent(pa.agentId)}
+                            className={`w-full px-3 py-2 text-left text-xs flex items-center gap-2 transition-colors ${
+                              preferredAgent?.preferredAgentId === pa.agentId ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text hover:bg-white/5'
+                            }`}
+                          >
+                            <AgentAvatar avatar={pa.agent.avatar} size="sm" />
+                            <span className="font-bold">{pa.agent.name}</span>
+                            {isOffline && <span className="text-ive-red ml-auto"><i className="fa-solid fa-circle-exclamation" /></span>}
+                            {!isOffline && pa.agent.status === 'busy' && <span className="ml-auto w-2 h-2 rounded-full bg-ive-cyan animate-pulse" />}
+                            {!isOffline && pa.agent.status === 'available' && <span className="ml-auto w-2 h-2 rounded-full bg-ive-green" />}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           )}
         </div>

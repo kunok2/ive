@@ -201,7 +201,10 @@
     "workingLabel": "Working",
     "completedLabel": "Done",
     "failedLabel": "Failed",
-    "statsLabel": "Stats"
+    "statsLabel": "Stats",
+    "pendingQueue": "Queue",
+    "pendingQueueCount": "{count} pending",
+    "noPendingIssues": "No pending issues assigned"
   },
   "project": {
     "newProject": "New Project",
@@ -380,7 +383,13 @@
     "chatIdleClose": "Closing chat due to inactivity. Feel free to start a new chat if you have more questions. Thank you. - {agent}",
     "chatError": "Chat error occurred.",
     "chatNoAgent": "No available agents. Please try again after current tasks are done.",
-    "chatAgentBusy": "Agent is still responding."
+    "chatAgentBusy": "Agent is still responding.",
+    "preferredAgent": "Assign worker",
+    "noPreference": "Auto-assign (round-robin)",
+    "assignedTo": "Assigned to {name}",
+    "agentOfflineWarning": "Offline",
+    "changeAgent": "Change worker",
+    "removeAssignment": "Unassign"
   },
   "admin": {
     "users": "Users",

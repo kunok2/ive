@@ -8,6 +8,8 @@ import { formatDateMedium } from '@/lib/format-date'
 import PullToRefresh from '@/components/ui/PullToRefresh'
 import { useDialog } from '@/components/ui/ConfirmDialog'
 import { useTranslations } from 'next-intl'
+import AgentAvatar from '@/components/agent/AgentAvatar'
+import type { CliName } from '@/types'
 
 interface IveIssue {
   iid: number
@@ -19,6 +21,22 @@ interface IveIssue {
   createdAt: string
   updatedAt: string
   author: string
+  preferredAgentId?: string | null
+  preferredAgentName?: string | null
+  preferredAgentAvatar?: string | null
+  preferredAgentCliName?: string | null
+}
+
+interface ProjectAgent {
+  agentId: string
+  agent: { id: string; name: string; avatar: string; cliName: CliName; status: string }
+}
+
+const CLI_CONFIG: Record<CliName, { label: string; icon: string; color: string }> = {
+  claude: { label: 'Claude', icon: 'fa-solid fa-atom', color: 'text-ive-amber' },
+  gemini: { label: 'Gemini', icon: 'fa-brands fa-google', color: 'text-ive-cyan' },
+  codex: { label: 'Codex', icon: 'fa-solid fa-brain', color: 'text-ive-green-light' },
+  opencode: { label: 'OpenCode', icon: 'fa-solid fa-terminal', color: 'text-ive-cyan' },
 }
 
 export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
@@ -95,6 +113,10 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   })
   const [creating, setCreating] = useState(false)
   const [closing, setClosing] = useState<number | null>(null)
+  const [preferredAgentId, setPreferredAgentId] = useState<string | null>(null)
+  const [projectAgents, setProjectAgents] = useState<ProjectAgent[]>([])
+  const [agentDropdownOpen, setAgentDropdownOpen] = useState(false)
+  const agentDropdownRef = useRef<HTMLDivElement>(null)
 
   const setSelectedProjectId = (id: string) => setIssuesProjectId(id)
   const setFilter = (f: string) => setIssuesFilter(f)
@@ -204,10 +226,28 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
       const draft = localStorage.getItem(`ive-issue-draft-${selectedProjectId}`)
       setNewBody(draft || '')
       if (draft) setShowAddForm(true)
+      // 프로젝�� 배정 에이전트 조회
+      fetch(`/api/projects/${selectedProjectId}/agents`)
+        .then(res => res.ok ? res.json() : [])
+        .then(data => setProjectAgents(data))
+        .catch(() => setProjectAgents([]))
     } else {
       setNewBody('')
+      setProjectAgents([])
     }
+    setPreferredAgentId(null)
   }, [selectedProjectId])
+
+  useEffect(() => {
+    if (!agentDropdownOpen) return
+    const handler = (e: MouseEvent) => {
+      if (agentDropdownRef.current && !agentDropdownRef.current.contains(e.target as Node)) {
+        setAgentDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [agentDropdownOpen])
 
   const isHistoryTab = filter === 'history'
 
@@ -300,12 +340,14 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
       const res = await fetch(`/api/projects/${selectedProjectId}/issues`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, description, asDev: true }),
+        body: JSON.stringify({ title, description, asDev: true, preferredAgentId: preferredAgentId || undefined }),
       })
       if (res.ok) {
         const created = await res.json()
         handleBodyChange('')
         setShowAddForm(false)
+        setPreferredAgentId(null)
+        const selectedAgent = preferredAgentId ? projectAgents.find(a => a.agentId === preferredAgentId) : null
         const newIssue: IveIssue = {
           iid: created.iid,
           title: created.title,
@@ -315,6 +357,10 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
           createdAt: created.created_at || new Date().toISOString(),
           updatedAt: created.updated_at || new Date().toISOString(),
           author: created.author?.name || '',
+          preferredAgentId: preferredAgentId || null,
+          preferredAgentName: selectedAgent?.agent.name || null,
+          preferredAgentAvatar: selectedAgent?.agent.avatar || null,
+          preferredAgentCliName: selectedAgent?.agent.cliName || null,
         }
         setIssues(prev => {
           if (prev.some(i => i.iid === created.iid)) return prev
@@ -546,6 +592,66 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                     autoFocus
                   />
                 </div>
+                {/* 작업자 지정 드롭다운 */}
+                {projectAgents.length > 0 && (
+                  <div ref={agentDropdownRef} className="relative mb-2">
+                    <label className="text-xs font-bold text-ive-text-dim mb-1 block">
+                      <i className="fa-solid fa-user-gear mr-1" />{tIssue('preferredAgent')}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setAgentDropdownOpen(v => !v)}
+                      className="w-full bg-ive-bg-deep border border-ive-border-dark rounded-lg px-3 py-2 text-left flex items-center gap-2 text-sm focus:outline-none focus:border-ive-green/50 transition-colors"
+                    >
+                      {preferredAgentId ? (() => {
+                        const pa = projectAgents.find(a => a.agentId === preferredAgentId)
+                        if (!pa) return <span className="text-ive-text-dim">{tIssue('noPreference')}</span>
+                        const cli = CLI_CONFIG[pa.agent.cliName]
+                        return <>
+                          <AgentAvatar avatar={pa.agent.avatar} size="sm" />
+                          <span className="text-ive-text font-bold">{pa.agent.name}</span>
+                          <span className={`text-xs ${cli.color}`}><i className={`${cli.icon} mr-0.5`} />{cli.label}</span>
+                        </>
+                      })() : (
+                        <span className="text-ive-text-dim"><i className="fa-solid fa-shuffle mr-1" />{tIssue('noPreference')}</span>
+                      )}
+                      <i className={`fa-solid fa-chevron-down text-xs text-ive-text-dim ml-auto transition-transform ${agentDropdownOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    {agentDropdownOpen && (
+                      <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden shadow-lg shadow-black/30">
+                        <button
+                          onClick={() => { setPreferredAgentId(null); setAgentDropdownOpen(false) }}
+                          className={`w-full px-3 py-2.5 text-left text-sm flex items-center gap-2 transition-colors ${
+                            !preferredAgentId ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text-dim hover:bg-white/5'
+                          }`}
+                        >
+                          <i className="fa-solid fa-shuffle" />
+                          <span className="font-bold">{tIssue('noPreference')}</span>
+                        </button>
+                        {projectAgents.map(pa => {
+                          const cli = CLI_CONFIG[pa.agent.cliName]
+                          const isOffline = pa.agent.status === 'offline'
+                          return (
+                            <button
+                              key={pa.agentId}
+                              onClick={() => { setPreferredAgentId(pa.agentId); setAgentDropdownOpen(false) }}
+                              className={`w-full px-3 py-2.5 text-left text-sm flex items-center gap-2 transition-colors ${
+                                preferredAgentId === pa.agentId ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text hover:bg-white/5'
+                              }`}
+                            >
+                              <AgentAvatar avatar={pa.agent.avatar} size="sm" />
+                              <span className="font-bold">{pa.agent.name}</span>
+                              <span className={`text-xs ${cli.color}`}><i className={`${cli.icon} mr-0.5`} />{cli.label}</span>
+                              {isOffline && <span className="text-xs text-ive-red ml-auto"><i className="fa-solid fa-circle-exclamation mr-0.5" />{tIssue('agentOfflineWarning')}</span>}
+                              {!isOffline && pa.agent.status === 'busy' && <span className="ml-auto w-2 h-2 rounded-full bg-ive-cyan animate-pulse" />}
+                              {!isOffline && pa.agent.status === 'available' && <span className="ml-auto w-2 h-2 rounded-full bg-ive-green" />}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
                 <button
                   onClick={handleCreateIssue}
                   disabled={creating || !newBody.split('\n')[0].trim()}
@@ -717,6 +823,16 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                         </div>
                       )}
                       <div className="flex items-center gap-3 text-xs text-ive-text-dim">
+                        {issue.preferredAgentId && issue.preferredAgentAvatar && (
+                          <span className="flex items-center gap-1">
+                            <AgentAvatar avatar={issue.preferredAgentAvatar} size="sm" />
+                            <span className="font-bold text-ive-text-muted">{issue.preferredAgentName}</span>
+                            {issue.preferredAgentCliName && (() => {
+                              const cli = CLI_CONFIG[issue.preferredAgentCliName as CliName]
+                              return cli ? <i className={`${cli.icon} ${cli.color} text-[10px]`} /> : null
+                            })()}
+                          </span>
+                        )}
                         <span>
                           <i className="fa-solid fa-user mr-1" />
                           {issue.author}

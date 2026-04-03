@@ -201,7 +201,10 @@
     "workingLabel": "작업중",
     "completedLabel": "완료",
     "failedLabel": "실패",
-    "statsLabel": "통계"
+    "statsLabel": "통계",
+    "pendingQueue": "대기",
+    "pendingQueueCount": "지정 대기 {count}건",
+    "noPendingIssues": "지정 대기 중인 이슈가 없습니다"
   },
   "project": {
     "newProject": "새 프로젝트",
@@ -380,7 +383,13 @@
     "chatIdleClose": "일정 시간 동안 대화가 없어 채팅을 종료합니다. 추가 질문이 있으시면 다시 채팅을 시작해 주세요. 감사합니다. - {agent}",
     "chatError": "채팅 오류가 발생했습니다.",
     "chatNoAgent": "사용 가능한 작업자가 없습니다. 다른 작업이 끝난 후 다시 시도해주세요.",
-    "chatAgentBusy": "에이전트가 아직 응답 중입니다."
+    "chatAgentBusy": "에이전트가 아직 응답 중입니다.",
+    "preferredAgent": "작업자 지정",
+    "noPreference": "자동 배정 (라운드로빈)",
+    "assignedTo": "{name} 지정",
+    "agentOfflineWarning": "오프라인",
+    "changeAgent": "작업자 변경",
+    "removeAssignment": "지정 해제"
   },
   "admin": {
     "users": "사용자",

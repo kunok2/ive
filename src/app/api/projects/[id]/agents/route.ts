@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getProjectAssignments, assignAgentToProject, unassignAgentFromProject, getAgentProjectId, updateAssignmentToken } from '@/lib/db'
+import { getProjectAssignments, assignAgentToProject, unassignAgentFromProject, getAgentProjectId, updateAssignmentToken, clearPreferredAgentRefs } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { encrypt, decrypt } from '@/lib/crypto'
 
@@ -70,6 +70,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
 
   const { id } = await params
   const { agentId } = await req.json()
+  clearPreferredAgentRefs(agentId)
   unassignAgentFromProject(id, agentId)
   return NextResponse.json({ success: true })
 }

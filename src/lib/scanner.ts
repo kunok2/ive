@@ -23,6 +23,7 @@ import {
   getUserById,
   assignIssueAtomically,
   createActivityLog,
+  setPreferredAgent,
 } from "./db";
 import { decrypt } from "./crypto";
 import { defaultLocale } from "@/i18n/config";
@@ -483,6 +484,8 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
   let assignedCount = 0;
   let waitingCount = 0;
   const busyAgentIds = new Set<string>();
+  // preferred_agent_id를 한 번에 조회 (이슈별 개별 쿼리 방지)
+  const stagesMap = getIssueStages(project.id);
 
   console.log(`[Scanner] processIssues: ${issues.length} issues, ${assignments.length} agents`);
   for (const issue of issues) {
@@ -506,23 +509,47 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
       continue;
     }
 
-    // 가용 에이전트 중 가장 오래 쉰 에이전트 선택 (라운드로빈)
+    // 에이전트 선택: 선호 에이전트 우선, 없으면 라운드로빈
     let availableAgent: Agent | null = null;
     let agentToken = decryptedToken; // 기본: 프로젝트 토큰
-    let oldestTime = Infinity;
     let selectedPa: typeof assignments[0] | null = null;
-    for (const pa of assignments) {
-      if (busyAgentIds.has(pa.agentId)) continue;
-      const running = countActiveExecutionsByAgent(pa.agentId);
-      if (running === 0) {
-        const lastDone = getLastCompletedAt(pa.agentId);
-        const t = lastDone ? new Date(lastDone).getTime() : 0; // 작업 이력 없으면 최우선
-        if (t < oldestTime) {
-          oldestTime = t;
-          selectedPa = pa;
+    let useRoundRobin = true;
+    const preferredAgentId = stagesMap.get(issue.iid)?.preferredAgentId || null;
+
+    if (preferredAgentId) {
+      const pa = assignments.find(a => a.agentId === preferredAgentId);
+      if (!pa) {
+        // 지정 에이전트가 프로젝트에서 배정 해제됨 → preferred 초기화, 라운드로빈 전환
+        console.log(`[Scanner] [RESET] Issue #${issue.iid} — 지정 작업자가 프로젝트에서 해제됨, 자동 배정으로 전환`);
+        setPreferredAgent(project.id, issue.iid, null);
+      } else if (busyAgentIds.has(pa.agentId) || countActiveExecutionsByAgent(pa.agentId) > 0) {
+        // 지정 에이전트가 바쁨 → 이번 스캔 스킵, 다음 스캔에서 재시도
+        console.log(`[Scanner] [WAIT] Issue #${issue.iid} — 지정 작업자 '${pa.agent.name}' 작업 중, 대기`);
+        waitingCount++;
+        continue;
+      } else {
+        selectedPa = pa;
+        useRoundRobin = false;
+      }
+    }
+
+    // 선호 에이전트가 없거나 리셋된 경우: 라운드로빈
+    if (useRoundRobin && !selectedPa) {
+      let oldestTime = Infinity;
+      for (const pa of assignments) {
+        if (busyAgentIds.has(pa.agentId)) continue;
+        const running = countActiveExecutionsByAgent(pa.agentId);
+        if (running === 0) {
+          const lastDone = getLastCompletedAt(pa.agentId);
+          const t = lastDone ? new Date(lastDone).getTime() : 0;
+          if (t < oldestTime) {
+            oldestTime = t;
+            selectedPa = pa;
+          }
         }
       }
     }
+
     if (selectedPa) {
       availableAgent = selectedPa.agent;
       if (selectedPa.accessToken) {
@@ -532,7 +559,8 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
 
     if (availableAgent) {
       busyAgentIds.add(availableAgent.id);
-      console.log(`[Scanner] [ASSIGN] Project: ${project.name}, Issue: #${issue.iid}, Agent: ${availableAgent.name}${agentToken !== decryptedToken ? ' (자체 토큰)' : ''}`);
+      const assignType = preferredAgentId ? ' (지정 작업자)' : '';
+      console.log(`[Scanner] [ASSIGN] Project: ${project.name}, Issue: #${issue.iid}, Agent: ${availableAgent.name}${assignType}${agentToken !== decryptedToken ? ' (자체 토큰)' : ''}`);
 
       // 대기 큐 진입 시점을 stage 변경 전에 읽어둠 (대기시간 계산 기준)
       const waitingSince = getIssueStageUpdatedAt(project.id, issue.iid);

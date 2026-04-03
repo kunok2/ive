@@ -344,6 +344,10 @@ function initSchema(db: Database.Database) {
   try {
     db.exec(`ALTER TABLE issue_stages ADD COLUMN fail_reason TEXT DEFAULT NULL`)
   } catch { /* 이미 존재 */ }
+  // preferred_agent_id 컬럼 마이그레이션
+  try {
+    db.exec(`ALTER TABLE issue_stages ADD COLUMN preferred_agent_id TEXT DEFAULT NULL`)
+  } catch { /* 이미 존재 */ }
 
   // 보고서 스케줄 테이블
   db.exec(`
@@ -718,6 +722,7 @@ export function updateAgent(a: Agent) {
 }
 
 export function deleteAgent(id: string, userId: string) {
+  clearPreferredAgentRefs(id)
   getDb().prepare('DELETE FROM agents WHERE id = ? AND user_id = ?').run(id, userId)
 }
 
@@ -1396,16 +1401,19 @@ export function getIssueStageUpdatedAt(projectId: string, issueIid: number): str
   return r ? r.updated_at : null
 }
 
-export function getIssueStages(projectId: string): Map<number, { stage: IssueStage; failReason: string | null }> {
+export function getIssueStages(projectId: string): Map<number, { stage: IssueStage; failReason: string | null; preferredAgentId: string | null }> {
   let rows: any[]
   try {
-    rows = getDb().prepare('SELECT issue_iid, stage, fail_reason FROM issue_stages WHERE project_id = ?').all(projectId) as any[]
+    rows = getDb().prepare('SELECT issue_iid, stage, fail_reason, preferred_agent_id FROM issue_stages WHERE project_id = ?').all(projectId) as any[]
   } catch {
-    // fail_reason 컬럼이 아직 없는 경우 fallback
-    rows = getDb().prepare('SELECT issue_iid, stage FROM issue_stages WHERE project_id = ?').all(projectId) as any[]
+    try {
+      rows = getDb().prepare('SELECT issue_iid, stage, fail_reason FROM issue_stages WHERE project_id = ?').all(projectId) as any[]
+    } catch {
+      rows = getDb().prepare('SELECT issue_iid, stage FROM issue_stages WHERE project_id = ?').all(projectId) as any[]
+    }
   }
-  const map = new Map<number, { stage: IssueStage; failReason: string | null }>()
-  for (const r of rows) map.set(r.issue_iid, { stage: r.stage as IssueStage, failReason: r?.fail_reason || null })
+  const map = new Map<number, { stage: IssueStage; failReason: string | null; preferredAgentId: string | null }>()
+  for (const r of rows) map.set(r.issue_iid, { stage: r.stage as IssueStage, failReason: r?.fail_reason || null, preferredAgentId: r?.preferred_agent_id || null })
   return map
 }
 
@@ -1427,6 +1435,35 @@ export function setIssueStage(projectId: string, issueIid: number, stage: IssueS
 
 export function deleteIssueStage(projectId: string, issueIid: number) {
   getDb().prepare('DELETE FROM issue_stages WHERE project_id = ? AND issue_iid = ?').run(projectId, issueIid)
+}
+
+// ── Preferred Agent (선호 에이전트) ──
+
+export function getPreferredAgentId(projectId: string, issueIid: number): string | null {
+  const r = getDb().prepare('SELECT preferred_agent_id FROM issue_stages WHERE project_id = ? AND issue_iid = ?').get(projectId, issueIid) as any
+  return r?.preferred_agent_id || null
+}
+
+export function setPreferredAgent(projectId: string, issueIid: number, agentId: string | null) {
+  getDb().prepare('UPDATE issue_stages SET preferred_agent_id = ? WHERE project_id = ? AND issue_iid = ?').run(agentId, projectId, issueIid)
+}
+
+export function countWaitingIssuesByPreferredAgent(agentId: string): number {
+  const r = getDb().prepare("SELECT COUNT(*) as cnt FROM issue_stages WHERE preferred_agent_id = ? AND stage = 'waiting'").get(agentId) as any
+  return r?.cnt || 0
+}
+
+export function getWaitingIssuesByPreferredAgent(agentId: string): { projectId: string; projectName: string; issueIid: number }[] {
+  return getDb().prepare(`
+    SELECT s.project_id as projectId, p.name as projectName, s.issue_iid as issueIid
+    FROM issue_stages s JOIN projects p ON p.id = s.project_id
+    WHERE s.preferred_agent_id = ? AND s.stage = 'waiting'
+    ORDER BY s.updated_at ASC
+  `).all(agentId) as any[]
+}
+
+export function clearPreferredAgentRefs(agentId: string) {
+  getDb().prepare('UPDATE issue_stages SET preferred_agent_id = NULL WHERE preferred_agent_id = ?').run(agentId)
 }
 
 // ── Report Schedules (보고서 스케줄) ──

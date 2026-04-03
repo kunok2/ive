@@ -82,12 +82,12 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
   const chatInputRef = useRef<HTMLTextAreaElement>(null)
-  const [expandedPanel, _setExpandedPanel] = useState<'running' | 'done' | 'failed' | 'stats' | null>(() => {
+  const [expandedPanel, _setExpandedPanel] = useState<'running' | 'done' | 'failed' | 'stats' | 'pending' | null>(() => {
     if (typeof window === 'undefined') return null
     const saved = sessionStorage.getItem(`ac-panel-${agent.id}`)
-    return (['running', 'done', 'failed', 'stats'].includes(saved ?? '')) ? saved as any : null
+    return (['running', 'done', 'failed', 'stats', 'pending'].includes(saved ?? '')) ? saved as any : null
   })
-  const setExpandedPanel = (v: 'running' | 'done' | 'failed' | 'stats' | null) => {
+  const setExpandedPanel = (v: 'running' | 'done' | 'failed' | 'stats' | 'pending' | null) => {
     _setExpandedPanel(v)
     if (v) sessionStorage.setItem(`ac-panel-${agent.id}`, v)
     else sessionStorage.removeItem(`ac-panel-${agent.id}`)
@@ -97,6 +97,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
   const [executions, setExecutions] = useState<TaskExecution[]>([])
   const [killing, setKilling] = useState<string | null>(null)
   const [toolBadge, setToolBadge] = useState<ToolCategory | null>(null)
+  const [pendingQueue, setPendingQueue] = useState<{ count: number; issues: { projectId: string; projectName: string; issueIid: number }[] }>({ count: 0, issues: [] })
 
   // 에이전트가 busy 상태일 때 도구 활동 폴링
   useEffect(() => {
@@ -119,12 +120,14 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
 
   const fetchStats = useCallback(async () => {
     try {
-      const [statsRes, snapRes] = await Promise.all([
+      const [statsRes, snapRes, queueRes] = await Promise.all([
         fetch(`/api/agents/${agent.id}/stats`),
         fetch(`/api/agents/${agent.id}/snapshots?mode=daily_avg`),
+        fetch(`/api/agents/${agent.id}/queue`),
       ])
       if (statsRes.ok) setStats(await statsRes.json())
       if (snapRes.ok) setSnapshots(await snapRes.json())
+      if (queueRes.ok) setPendingQueue(await queueRes.json())
     } catch { /* ignore */ }
   }, [agent.id])
 
@@ -138,7 +141,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
   }, [fetchStats, compact])
 
   useEffect(() => {
-    if (!expandedPanel || expandedPanel === 'stats') return
+    if (!expandedPanel || expandedPanel === 'stats' || expandedPanel === 'pending') return
     const fetchExecs = async () => {
       try {
         const res = await fetch(`/api/agents/${agent.id}/executions`)
@@ -421,6 +424,18 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
           <span className="text-xs text-ive-text-dim font-bold">{t('failedLabel')}</span>
         </button>
 
+        {/* 대기 (지정 작업) */}
+        {pendingQueue.count > 0 && (
+          <button
+            onClick={() => setExpandedPanel(expandedPanel === 'pending' ? null : 'pending')}
+            className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'pending' ? 'bg-ive-amber/5' : 'hover:bg-white/[0.02]'}`}
+          >
+            <span className="text-sm font-bold text-ive-amber">{pendingQueue.count}</span>
+            <i className="fa-solid fa-clock text-xs text-ive-amber/60" />
+            <span className="text-xs text-ive-text-dim font-bold">{t('pendingQueue')}</span>
+          </button>
+        )}
+
         {/* 통계 */}
         <button
           onClick={() => setExpandedPanel(expandedPanel === 'stats' ? null : 'stats')}
@@ -639,6 +654,29 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
           </div>
           <div className="max-h-[50vh] overflow-y-auto" data-scroll-container>
             <ExecutionList executions={todayFailedExecs} showAgent={false} onKill={handleKill} killing={killing} scrollKey={`ac-failed-${agent.id}`} />
+          </div>
+        </div>
+      )}
+
+      {/* 대기 패널 */}
+      {expandedPanel === 'pending' && pendingQueue.count > 0 && (
+        <div className="border-t border-ive-amber/20">
+          <div className="px-3 py-2 bg-ive-bg-deep/50 border-b border-ive-border-dark">
+            <span className="text-xs font-bold text-ive-amber uppercase tracking-widest">
+              <i className="fa-solid fa-clock mr-1" />{t('pendingQueueCount', { count: pendingQueue.count })}
+            </span>
+          </div>
+          <div className="max-h-[50vh] overflow-y-auto divide-y divide-ive-border-dark">
+            {pendingQueue.issues.map(issue => (
+              <a
+                key={`${issue.projectId}-${issue.issueIid}`}
+                href={`/issues/${issue.projectId}/${issue.issueIid}`}
+                className="flex items-center gap-2 px-3 py-2.5 hover:bg-white/[0.02] transition-colors"
+              >
+                <span className="text-xs font-bold text-ive-green">#{issue.issueIid}</span>
+                <span className="text-xs text-ive-text-dim truncate">{issue.projectName}</span>
+              </a>
+            ))}
           </div>
         </div>
       )}

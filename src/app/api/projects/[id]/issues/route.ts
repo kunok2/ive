@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAccess, getIssueStages, setIssueStage } from '@/lib/db';
+import { getProject, getProjectAccess, getIssueStages, setIssueStage, setPreferredAgent, getAgent } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { decrypt } from '@/lib/crypto';
 import { fetchAllProjectIssues, fetchClosedProjectIssues, createIssue } from '@/lib/provider';
@@ -35,6 +35,7 @@ export async function GET(
       const local = localStages.get(issue.iid);
       let stage: string | null = local?.stage || null;
       let failReason: string | null = local?.failReason || null;
+      let preferredAgentId: string | null = local?.preferredAgentId || null;
 
       // 로컬에 없지만 IVE 레이블이 붙어있으면 waiting으로 등록
       if (!stage) {
@@ -45,6 +46,21 @@ export async function GET(
         }
       }
 
+      // 선호 에이전트 정보 조회
+      let preferredAgentName: string | null = null;
+      let preferredAgentAvatar: string | null = null;
+      let preferredAgentCliName: string | null = null;
+      if (preferredAgentId) {
+        const agent = getAgent(preferredAgentId);
+        if (agent) {
+          preferredAgentName = agent.name;
+          preferredAgentAvatar = agent.avatar;
+          preferredAgentCliName = agent.cliName;
+        } else {
+          preferredAgentId = null;
+        }
+      }
+
       return {
         iid: issue.iid,
         title: issue.title,
@@ -52,6 +68,10 @@ export async function GET(
         state: issue.state,
         stage: stage || 'none',
         failReason,
+        preferredAgentId,
+        preferredAgentName,
+        preferredAgentAvatar,
+        preferredAgentCliName,
         labels: issue.labels,
         createdAt: issue.created_at,
         updatedAt: issue.updated_at,
@@ -82,7 +102,7 @@ export async function POST(
     return NextResponse.json({ error: '작업 생성 권한이 없습니다.' }, { status: 403 });
   }
 
-  const { title, description, asDev } = await req.json();
+  const { title, description, asDev, preferredAgentId } = await req.json();
   if (!title?.trim()) return NextResponse.json({ error: '제목을 입력하세요.' }, { status: 400 });
 
   try {
@@ -93,6 +113,10 @@ export async function POST(
     // 이슈 생성 시 로컬 DB에 stage 등록
     if (asDev && issue.iid) {
       setIssueStage(projectId, issue.iid, 'waiting', undefined, issue.created_at);
+      // 선호 에이전트 지정
+      if (preferredAgentId) {
+        setPreferredAgent(projectId, issue.iid, preferredAgentId);
+      }
     }
 
     return NextResponse.json(issue);
