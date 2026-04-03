@@ -1060,7 +1060,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
         </div>
 
         {/* 하단 입력 영역 */}
-        <div className="shrink-0 px-3 pb-20 pt-2 border-t border-ive-border-dark bg-ive-bg-deep/80">
+        <div className="shrink-0 px-3 pb-20 pt-2 border-t border-ive-border-dark bg-ive-bg-deep">
           {/* Mode tabs */}
           {(
             <div className="flex items-center gap-1 mb-2">

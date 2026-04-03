@@ -1,10 +1,10 @@
 @import "tailwindcss";
 
 @theme inline {
-  --color-ive-bg-deep: #09090b;
-  --color-ive-bg: #141416;
-  --color-ive-bg-card: #1c1c20;
-  --color-ive-bg-input: #0f0f12;
+  --color-ive-bg-deep: #0e0e11e0;
+  --color-ive-bg: #141416d0;
+  --color-ive-bg-card: #1c1c20c0;
+  --color-ive-bg-input: #0f0f12f0;
 
   --color-ive-green: #22d3ee;
   --color-ive-green-light: #67e8f9;
@@ -20,18 +20,44 @@
   --color-ive-text: #e4e4e7;
   --color-ive-text-secondary: #a1a1aa;
   --color-ive-text-muted: #71717a;
-  --color-ive-text-dim: #52525b;
+  --color-ive-text-dim: #92929b;
 
-  --color-ive-border: #27272a;
-  --color-ive-border-dark: #1c1c20;
-  --color-ive-border-subtle: #232327;
+  --color-ive-border: #27272a80;
+  --color-ive-border-dark: #1c1c2080;
+  --color-ive-border-subtle: #23232780;
 }
 
 body {
-  background: var(--color-ive-bg-deep);
+  background-color: #050505;
   color: var(--color-ive-text);
   font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Segoe UI', 'Malgun Gothic', 'Noto Sans KR', sans-serif;
   -webkit-font-smoothing: antialiased;
+}
+
+@keyframes ambient-glow {
+  0% { transform: scale(1) translate(0, 0); }
+  33% { transform: scale(1.1) translate(2%, 3%); }
+  66% { transform: scale(1.05) translate(-2%, 1%); }
+  100% { transform: scale(1) translate(0, 0); }
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  top: -20%; left: -20%; width: 140%; height: 140%;
+  background: 
+    radial-gradient(circle at 20% 30%, rgba(167, 139, 250, 0.15), transparent 40%),
+    radial-gradient(circle at 80% 70%, rgba(34, 211, 238, 0.12), transparent 40%),
+    radial-gradient(circle at 50% 10%, rgba(251, 191, 36, 0.05), transparent 30%);
+  animation: ambient-glow 20s ease-in-out infinite alternate;
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* Apply global backdrop blur to commonly used background classes to complete the glassmorphism effect */
+.bg-ive-bg-deep, .bg-ive-bg, .bg-ive-bg-card, .bg-ive-bg-input {
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
 }
 
 /* Hide number input spinners */
