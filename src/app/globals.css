@@ -1,15 +1,15 @@
 @import "tailwindcss";
 
 @theme inline {
-  --color-ive-bg-deep: #060c06;
-  --color-ive-bg: #0e160e;
-  --color-ive-bg-card: #121e14;
-  --color-ive-bg-input: #0a120a;
+  --color-ive-bg-deep: #09090b;
+  --color-ive-bg: #141416;
+  --color-ive-bg-card: #1c1c20;
+  --color-ive-bg-input: #0f0f12;
 
-  --color-ive-green: #4ade80;
-  --color-ive-green-light: #86efac;
-  --color-ive-green-dark: #16a34a;
-  --color-ive-green-pale: #dcfce7;
+  --color-ive-green: #22d3ee;
+  --color-ive-green-light: #67e8f9;
+  --color-ive-green-dark: #0891b2;
+  --color-ive-green-pale: #cffafe;
 
   --color-ive-amber: #fbbf24;
   --color-ive-lime: #a3e635;
@@ -17,14 +17,14 @@
   --color-ive-cyan: #22d3ee;
   --color-ive-purple: #a78bfa;
 
-  --color-ive-text: #e0e0e0;
-  --color-ive-text-secondary: #b0c8b4;
-  --color-ive-text-muted: #618068;
-  --color-ive-text-dim: #455048;
+  --color-ive-text: #e4e4e7;
+  --color-ive-text-secondary: #a1a1aa;
+  --color-ive-text-muted: #71717a;
+  --color-ive-text-dim: #52525b;
 
-  --color-ive-border: #1a3a1e;
-  --color-ive-border-dark: #152a18;
-  --color-ive-border-subtle: #1a2e1c;
+  --color-ive-border: #27272a;
+  --color-ive-border-dark: #1c1c20;
+  --color-ive-border-subtle: #232327;
 }
 
 body {

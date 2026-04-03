@@ -591,7 +591,14 @@ export function getAllProjects(): Project[] {
 }
 
 export function getProjectsByUser(userId: string): Project[] {
-  return (getDb().prepare('SELECT * FROM projects WHERE user_id = ? ORDER BY sort_order ASC, created_at ASC').all(userId) as ProjectRow[]).map(mapProject)
+  return (getDb().prepare(`
+    SELECT p.*, COALESCE(
+      (SELECT MAX(te.started_at) FROM task_executions te WHERE te.project_id = p.id), ''
+    ) as last_exec_at
+    FROM projects p
+    WHERE p.user_id = ?
+    ORDER BY last_exec_at DESC, p.sort_order ASC, p.created_at ASC
+  `).all(userId) as ProjectRow[]).map(mapProject)
 }
 
 export function getProject(id: string): Project | null {
@@ -1241,11 +1248,13 @@ export function getProjectShares(projectId: string): (ProjectShare & { userName:
 
 export function getSharedProjectsForUser(userId: string): (Project & { shareRole: ShareRole })[] {
   const rows = getDb().prepare(`
-    SELECT p.*, ps.role as share_role
+    SELECT p.*, ps.role as share_role, COALESCE(
+      (SELECT MAX(te.started_at) FROM task_executions te WHERE te.project_id = p.id), ''
+    ) as last_exec_at
     FROM project_shares ps
     JOIN projects p ON ps.project_id = p.id
     WHERE ps.user_id = ?
-    ORDER BY p.name ASC
+    ORDER BY last_exec_at DESC, p.name ASC
   `).all(userId) as any[]
   return rows.map(r => ({ ...mapProject(r as ProjectRow), shareRole: r.share_role as ShareRole }))
 }
