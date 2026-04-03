@@ -675,11 +675,6 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                   </button>
                 </div>
               </div>
-              {showDesc && issue.description && (
-                <div className="mt-1.5 text-sm text-ive-text-muted bg-ive-bg-card rounded-lg p-2.5 break-words leading-relaxed max-h-[30vh] overflow-y-auto">
-                  <MarkdownNote body={cleanNoteBody(issue.description)} />
-                </div>
-              )}
             </>
           )}
         </div>
@@ -689,6 +684,12 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
       <div className="flex-1 flex flex-col min-h-0 max-w-lg mx-auto w-full">
         <div ref={scrollContainerRef} className="flex-1 overflow-y-auto pb-2 pl-3 pr-1">
           <PullToRefresh onRefresh={refreshAll} scrollContainerRef={scrollContainerRef}>
+          {/* 이슈 본문 - 스크롤 영역 안에 배치 */}
+          {showDesc && issue.description && (
+            <div className="mt-1.5 mr-2 text-sm text-ive-text-muted bg-ive-bg-card rounded-lg p-2.5 break-words leading-relaxed">
+              <MarkdownNote body={cleanNoteBody(issue.description)} />
+            </div>
+          )}
           {/* MR 리뷰 섹션 - 스크롤 영역 안에 배치 */}
           {(issue.stage === 'done' || issue.stage === 'dev') && (
             <div className="pr-2">
