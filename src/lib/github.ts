@@ -47,7 +47,11 @@ export async function ensureGitHubLabels(project: Project, decryptedToken: strin
 
   const headers = getGitHubAuthHeaders(project, decryptedToken);
   const labelsToEnsure = [
-    { name: project.labelTarget, color: '34d399', description: 'IVE 관리 대상 이슈' },
+    { name: project.labelTarget, color: '34d399', description: 'IVE 관리 대상 이슈 표시.' },
+    { name: project.labelSchedule || 'IVE-S', color: 'fbbf24', description: '스케줄 대상. 스캐너가 이 레이블의 이슈를 에이전트에 배정합니다.' },
+    { name: project.labelDev || 'IVE-D', color: '22d3ee', description: '개발 중. 에이전트가 작업을 시작하면 자동 부착됩니다.' },
+    { name: project.labelVerify || 'IVE-V', color: 'fb923c', description: '검증 대기. 개발이 완료되어 리뷰가 필요합니다.' },
+    { name: project.labelEnd || 'IVE-E', color: '60a5fa', description: '처리 완료. 코드가 수정되었으면 MR/PR 머지 대상입니다.' },
   ];
 
   try {
@@ -73,6 +77,42 @@ export async function ensureGitHubLabels(project: Project, decryptedToken: strin
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.warn(`[GitHub] Label sync failed for ${project.name}: ${msg}`);
+  }
+}
+
+export async function addGitHubIssueLabels(project: Project, issueNumber: number, decryptedToken: string, labels: string[]) {
+  const headers = getGitHubAuthHeaders(project, decryptedToken);
+  const res = await fetch(apiUrl(project, `/issues/${issueNumber}/labels`), {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ labels }),
+  });
+  return res.ok;
+}
+
+export async function removeGitHubIssueLabels(project: Project, issueNumber: number, decryptedToken: string, label: string) {
+  const headers = getGitHubAuthHeaders(project, decryptedToken);
+  const res = await fetch(apiUrl(project, `/issues/${issueNumber}/labels/${encodeURIComponent(label)}`), {
+    method: 'DELETE',
+    headers,
+  });
+  return res.ok;
+}
+
+export async function checkGitHubLabelsExist(project: Project, decryptedToken: string): Promise<{ label: string; exists: boolean }[]> {
+  const headers = getGitHubAuthHeaders(project, decryptedToken);
+  const labelsToCheck = [
+    project.labelTarget,
+    project.labelSchedule || 'IVE-S', project.labelDev || 'IVE-D',
+    project.labelVerify || 'IVE-V', project.labelEnd || 'IVE-E',
+  ];
+  try {
+    const res = await fetch(apiUrl(project, '/labels?per_page=100'), { headers });
+    if (!res.ok) return labelsToCheck.map(l => ({ label: l, exists: false }));
+    const existing = (await res.json()).map((l: any) => l.name);
+    return labelsToCheck.map(l => ({ label: l, exists: existing.includes(l) }));
+  } catch {
+    return labelsToCheck.map(l => ({ label: l, exists: false }));
   }
 }
 

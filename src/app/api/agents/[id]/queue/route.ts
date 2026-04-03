@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { countWaitingIssuesByPreferredAgent, getWaitingIssuesByPreferredAgent } from '@/lib/db';
+import { countPreferredIssuesByAgent, getPreferredIssuesByAgent } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 
 export async function GET(
@@ -10,8 +10,8 @@ export async function GET(
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { id: agentId } = await params;
-  const count = countWaitingIssuesByPreferredAgent(agentId);
-  const issues = getWaitingIssuesByPreferredAgent(agentId);
+  const count = countPreferredIssuesByAgent(agentId);
+  const issues = getPreferredIssuesByAgent(agentId);
 
   return NextResponse.json({ count, issues });
 }

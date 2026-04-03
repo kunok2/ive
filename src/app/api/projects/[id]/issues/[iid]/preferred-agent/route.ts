@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAccess, getIssueStage, getPreferredAgentId, setPreferredAgent, getProjectAssignments, getAgent } from '@/lib/db';
+import { getProject, getProjectAccess, getPreferredAgentId, setPreferredAgent, getProjectAssignments, getAgent, hasActiveExecution, stageFromLabels } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { decrypt } from '@/lib/crypto';
+import { fetchSingleIssue } from '@/lib/provider';
 
 export async function GET(
   _req: NextRequest,
@@ -38,10 +40,19 @@ export async function PATCH(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const stage = getIssueStage(projectId, Number(iid));
-  if (stage && stage !== 'waiting') {
-    return NextResponse.json({ error: '대기 상태의 이슈만 작업자를 변경할 수 있습니다.' }, { status: 400 });
-  }
+  // 실행 중(dev)인 이슈는 작업자 변경 불가
+  try {
+    const decryptedToken = decrypt(project.accessToken);
+    const issue = await fetchSingleIssue(project, Number(iid), decryptedToken);
+    if (issue) {
+      const labels = issue.labels || [];
+      const activeExec = hasActiveExecution(projectId, Number(iid));
+      const stage = stageFromLabels(labels, project, { hasActiveExec: activeExec });
+      if (stage === 'dev') {
+        return NextResponse.json({ error: '실행 중인 이슈는 작업자를 변경할 수 없습니다.' }, { status: 400 });
+      }
+    }
+  } catch { /* 조회 실패 시 허용 */ }
 
   const { agentId } = await req.json();
 

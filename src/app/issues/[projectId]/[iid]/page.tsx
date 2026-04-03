@@ -69,11 +69,14 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   const tAuth = useTranslations('auth')
 
   const STAGE_INFO: Record<string, { label: string; color: string; icon: string; bg: string }> = {
-    waiting:    { label: tStage('waiting'),   color: 'text-ive-green',    icon: 'fa-clock',              bg: 'bg-ive-green/10' },
-    dev:        { label: tStage('dev'),       color: 'text-ive-cyan',     icon: 'fa-code',               bg: 'bg-ive-cyan/10' },
-    dev_fail:   { label: tStage('dev_fail'),  color: 'text-ive-red',     icon: 'fa-circle-xmark',       bg: 'bg-ive-red/10' },
-    done:       { label: tStage('done'),      color: 'text-emerald-400', icon: 'fa-circle-check',       bg: 'bg-emerald-500/10' },
-    unknown:    { label: tStage('unknown'),   color: 'text-ive-text-dim', icon: 'fa-question',         bg: 'bg-white/5' },
+    waiting:    { label: tStage('waiting'),    color: 'text-ive-green',    icon: 'fa-clock',              bg: 'bg-ive-green/10' },
+    dev:        { label: tStage('dev'),        color: 'text-ive-cyan',     icon: 'fa-code',               bg: 'bg-ive-cyan/10' },
+    dev_fail:   { label: tStage('dev_fail'),   color: 'text-ive-red',     icon: 'fa-circle-xmark',       bg: 'bg-ive-red/10' },
+    verifying:  { label: tStage('verifying'),  color: 'text-orange-400',  icon: 'fa-magnifying-glass',   bg: 'bg-orange-500/10' },
+    done:       { label: tStage('done'),       color: 'text-emerald-400', icon: 'fa-circle-check',       bg: 'bg-emerald-500/10' },
+    closed:     { label: tStage('closed'),     color: 'text-gray-400',    icon: 'fa-lock',               bg: 'bg-gray-500/10' },
+    rejected:   { label: tStage('rejected'),   color: 'text-rose-400',    icon: 'fa-rotate-left',        bg: 'bg-rose-500/10' },
+    unknown:    { label: tStage('unknown'),    color: 'text-ive-text-dim', icon: 'fa-question',         bg: 'bg-white/5' },
   }
 
   const STAGE_ACTIONS: Record<string, StageAction[]> = {
@@ -84,8 +87,15 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
     dev_fail: [
       { action: 'retry', label: tIssue('retryToWaiting'), icon: 'fa-rotate' },
     ],
+    verifying: [
+      { action: 'approve', label: tIssue('approveVerify'), icon: 'fa-circle-check' },
+      { action: 'reject', label: tIssue('rejectVerify'), icon: 'fa-rotate-left', danger: true },
+    ],
     done: [
       { action: 'reopen', label: tIssue('reopenToWaiting'), icon: 'fa-rotate' },
+    ],
+    rejected: [
+      { action: 'retry', label: tIssue('retryToWaiting'), icon: 'fa-rotate' },
     ],
   }
   const [issue, setIssue] = useState<IssueDetail | null>(null)
@@ -93,15 +103,20 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   const [loading, setLoading] = useState(true)
   const [preferredAgent, setPreferredAgent] = useState<{ preferredAgentId: string | null; preferredAgentName: string | null; preferredAgentAvatar: string | null; preferredAgentCliName: string | null } | null>(null)
   const [projectAgents, setProjectAgents] = useState<{ agentId: string; agent: { id: string; name: string; avatar: string; cliName: string; status: string } }[]>([])
-  const [agentPickerOpen, setAgentPickerOpen] = useState(false)
-  const agentPickerRef = useRef<HTMLDivElement>(null)
+  const [retryAgentPickerOpen, setRetryAgentPickerOpen] = useState(false)
+  const retryAgentPickerRef = useRef<HTMLDivElement>(null)
   const [gitMembers, setGitMembers] = useState<IssueAssignee[]>([])
   const [assigneePickerOpen, setAssigneePickerOpen] = useState(false)
   const assigneePickerRef = useRef<HTMLDivElement>(null)
   const [assigneeSearch, setAssigneeSearch] = useState('')
   const [notesLoading, setNotesLoading] = useState(true)
-  const [comment, setComment] = useState('')
+  const commentKey = `issue-comment-${projectId}-${iid}`
+  const [comment, setComment] = useState(() => {
+    if (typeof window !== 'undefined') return localStorage.getItem(commentKey) || ''
+    return ''
+  })
   const [posting, setPosting] = useState(false)
+  const [postingType, setPostingType] = useState<'comment' | 'retry' | 'done' | null>(null)
   const [stageChanging, setStageChanging] = useState(false)
   const [showDesc, setShowDesc] = useState(true)
   const [isClosing, setIsClosing] = useState(false)
@@ -169,17 +184,6 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   }, [fetchIssue, fetchNotes, fetchPreferredAgent, projectId])
 
   useEffect(() => {
-    if (!agentPickerOpen) return
-    const handler = (e: MouseEvent) => {
-      if (agentPickerRef.current && !agentPickerRef.current.contains(e.target as Node)) {
-        setAgentPickerOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [agentPickerOpen])
-
-  useEffect(() => {
     if (!assigneePickerOpen) { setAssigneeSearch(''); return }
     const handler = (e: MouseEvent) => {
       if (assigneePickerRef.current && !assigneePickerRef.current.contains(e.target as Node)) {
@@ -189,6 +193,17 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [assigneePickerOpen])
+
+  useEffect(() => {
+    if (!retryAgentPickerOpen) return
+    const handler = (e: MouseEvent) => {
+      if (retryAgentPickerRef.current && !retryAgentPickerRef.current.contains(e.target as Node)) {
+        setRetryAgentPickerOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [retryAgentPickerOpen])
 
   async function handleToggleAssignee(member: IssueAssignee) {
     if (!issue) return
@@ -207,7 +222,6 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   }
 
   async function handleChangePreferredAgent(agentId: string | null) {
-    setAgentPickerOpen(false)
     const res = await fetch(`/api/projects/${projectId}/issues/${iid}/preferred-agent`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -261,6 +275,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
     if (!comment.trim() || postingRef.current) return
     postingRef.current = true
     setPosting(true)
+    setPostingType('comment')
     try {
       const res = await fetch(`/api/projects/${projectId}/issues/${iid}/notes`, {
         method: 'POST',
@@ -268,20 +283,22 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
         body: JSON.stringify({ body: comment.trim() }),
       })
       if (res.ok) {
-        setComment('')
+        setComment(''); localStorage.removeItem(commentKey)
         await fetchNotes()
       }
     } finally {
       postingRef.current = false
       setPosting(false)
+      setPostingType(null)
     }
   }
 
   // 코멘트 작성 + 상태를 대기로 변경 (재실행 트리거)
-  async function handleCommentAndRetry() {
+  async function handleCommentAndRetry(agentId?: string | null) {
     if (!comment.trim() || postingRef.current) return
     postingRef.current = true
     setPosting(true)
+    setPostingType('retry')
     try {
       // 1. 코멘트 등록
       const res = await fetch(`/api/projects/${projectId}/issues/${iid}/notes`, {
@@ -290,10 +307,22 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
         body: JSON.stringify({ body: comment.trim() }),
       })
       if (!res.ok) return
-      setComment('')
-      // 2. 상태를 대기로 변경 (waiting이면 이미 대기이므로 스킵)
+      setComment(''); localStorage.removeItem(commentKey)
+      // 2. 선호 에이전트 변경 (지정된 경우)
+      if (agentId !== undefined) {
+        const agentRes = await fetch(`/api/projects/${projectId}/issues/${iid}/preferred-agent`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agentId }),
+        })
+        if (agentRes.ok) setPreferredAgent(await agentRes.json())
+      }
+      // 3. 스케줄 등록 (waiting이면 이미 스케줄이므로 스킵)
       if (issue?.stage !== 'waiting') {
-        const stageAction = issue?.stage === 'done' ? 'reopen' : 'retry'
+        const stageAction = issue?.stage === 'done' ? 'reopen'
+          : issue?.stage === 'verifying' ? 'reject'
+          : issue?.stage === 'none' ? 'schedule'
+          : 'retry'
         await fetch(`/api/projects/${projectId}/issues/${iid}/stage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -305,6 +334,35 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
     } finally {
       postingRef.current = false
       setPosting(false)
+      setPostingType(null)
+    }
+  }
+
+  // 코멘트 작성 + 상태를 완료(IVE-E)로 변경
+  async function handleCommentAndDone() {
+    if (!comment.trim() || postingRef.current) return
+    postingRef.current = true
+    setPosting(true)
+    setPostingType('done')
+    try {
+      const res = await fetch(`/api/projects/${projectId}/issues/${iid}/notes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: comment.trim() }),
+      })
+      if (!res.ok) return
+      setComment(''); localStorage.removeItem(commentKey)
+      await fetch(`/api/projects/${projectId}/issues/${iid}/stage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stage: 'verifying', action: 'approve' }),
+      })
+      await fetchIssue()
+      await fetchNotes()
+    } finally {
+      postingRef.current = false
+      setPosting(false)
+      setPostingType(null)
     }
   }
 
@@ -638,8 +696,9 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
     )
   }
 
-  const stageInfo = STAGE_INFO[issue.stage] || STAGE_INFO.unknown
-  const actions = STAGE_ACTIONS[issue.stage] || []
+  const displayStage = issue.state === 'closed' ? 'closed' : issue.stage
+  const stageInfo = STAGE_INFO[displayStage] || STAGE_INFO.unknown
+  const actions = issue.state === 'closed' ? [] : (STAGE_ACTIONS[issue.stage] || [])
   const iterationCount = notes.filter(n => n.body.includes('<!-- ive-bot -->') || n.body.includes('IVE(봇)')).length
 
   return (
@@ -662,66 +721,61 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
             </span>
           )}
           <span className="text-xs text-ive-text-dim shrink-0"><i className="fa-solid fa-user mr-0.5" />{issue.author}</span>
-          {/* 담당자 아바타 + 편집 드롭다운 */}
-          {((issue.assignees && issue.assignees.length > 0) || gitMembers.length > 0) && (
-            <div ref={assigneePickerRef} className="relative flex items-center gap-1 shrink-0">
-              <span
-                className="flex items-center gap-1 cursor-pointer"
-                onClick={() => gitMembers.length > 0 && setAssigneePickerOpen(v => !v)}
-              >
-                {(issue.assignees || []).map(a => (
+          {/* 담당자 */}
+          <div ref={assigneePickerRef} className="relative shrink-0">
+            <button
+              type="button"
+              onClick={() => setAssigneePickerOpen(v => !v)}
+              className="flex items-center gap-1 text-xs text-ive-text-dim hover:text-ive-text transition-all"
+            >
+              {(issue.assignees && issue.assignees.length > 0) ? (
+                issue.assignees.map(a => (
                   <span key={a.id} className="flex items-center gap-0.5">
-                    {a.avatarUrl ? <img src={a.avatarUrl} className="w-4 h-4 rounded-full" alt="" /> : <i className="fa-solid fa-user text-[10px]" />}
-                    <span className="text-xs font-bold text-ive-text-muted">{a.name || a.username}</span>
+                    {a.avatarUrl ? <img src={a.avatarUrl} className="w-3.5 h-3.5 rounded-full" alt="" /> : <i className="fa-solid fa-user mr-0.5" />}
+                    {a.name || a.username}
                   </span>
-                ))}
-                {gitMembers.length > 0 && !(issue.assignees && issue.assignees.length > 0) && <i className="fa-solid fa-user-pen text-[10px] text-ive-text-dim hover:text-ive-green transition-all" />}
-              </span>
-              {assigneePickerOpen && (
-                <div className="absolute z-50 top-full right-0 mt-1 bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden shadow-lg shadow-black/30 min-w-[220px]">
-                  <div className="sticky top-0 bg-ive-bg-card p-1.5 border-b border-ive-border-dark">
-                    <input
-                      type="text"
-                      value={assigneeSearch}
-                      onChange={e => setAssigneeSearch(e.target.value)}
-                      placeholder={tIssue('searchMember')}
-                      className="w-full bg-ive-bg-deep border border-ive-border-dark rounded px-2 py-1 text-xs text-ive-text placeholder-ive-text-dim focus:outline-none focus:border-ive-green/50"
-                      autoFocus
-                    />
-                  </div>
-                  <div className="max-h-[200px] overflow-y-auto">
-                    {gitMembers.filter(m => {
-                      if (!assigneeSearch) return true
-                      const q = assigneeSearch.toLowerCase()
-                      return (m.name || '').toLowerCase().includes(q) || m.username.toLowerCase().includes(q)
-                    }).map(m => {
-                      const isAssigned = (issue.assignees || []).some(a => a.id === m.id)
-                      return (
-                        <button
-                          key={m.id}
-                          onClick={() => handleToggleAssignee(m)}
-                          className={`w-full px-3 py-2 text-left text-xs flex items-center gap-2 transition-colors ${
-                            isAssigned ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text hover:bg-white/5'
-                          }`}
-                        >
-                          {isAssigned ? <i className="fa-solid fa-check text-[10px] text-ive-green shrink-0 w-3" /> : <span className="w-3 shrink-0" />}
-                          {m.avatarUrl ? <img src={m.avatarUrl} className="w-5 h-5 rounded-full shrink-0" alt="" /> : <i className="fa-solid fa-user text-ive-text-dim shrink-0" />}
-                          <span className="font-bold truncate">{m.name || m.username}</span>
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
+                ))
+              ) : (
+                <><i className="fa-solid fa-user-plus mr-0.5" />{tIssue('selectAssignee')}</>
               )}
-            </div>
-          )}
-          {/* 선호 에이전트 표시 */}
-          {preferredAgent?.preferredAgentId && preferredAgent.preferredAgentAvatar && (
-            <span className="flex items-center gap-1 shrink-0">
-              <AgentAvatar avatar={preferredAgent.preferredAgentAvatar} size="sm" />
-              <span className="text-xs font-bold text-ive-text-muted">{preferredAgent.preferredAgentName}</span>
-            </span>
-          )}
+            </button>
+            {assigneePickerOpen && (
+              <div className="absolute z-50 top-full right-0 mt-1 bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden shadow-lg shadow-black/30 min-w-[220px]">
+                <div className="sticky top-0 bg-ive-bg-card p-1.5 border-b border-ive-border-dark">
+                  <input
+                    type="text"
+                    value={assigneeSearch}
+                    onChange={e => setAssigneeSearch(e.target.value)}
+                    placeholder={tIssue('searchMember')}
+                    className="w-full bg-ive-bg-deep border border-ive-border-dark rounded px-2 py-1 text-xs text-ive-text placeholder-ive-text-dim focus:outline-none focus:border-ive-green/50"
+                    autoFocus
+                  />
+                </div>
+                <div className="max-h-[200px] overflow-y-auto">
+                  {gitMembers.filter(m => {
+                    if (!assigneeSearch) return true
+                    const q = assigneeSearch.toLowerCase()
+                    return (m.name || '').toLowerCase().includes(q) || m.username.toLowerCase().includes(q)
+                  }).map(m => {
+                    const isAssigned = (issue.assignees || []).some(a => a.id === m.id)
+                    return (
+                      <button
+                        key={m.id}
+                        onClick={() => handleToggleAssignee(m)}
+                        className={`w-full px-3 py-2 text-left text-xs flex items-center gap-2 transition-colors ${
+                          isAssigned ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text hover:bg-white/5'
+                        }`}
+                      >
+                        {isAssigned ? <i className="fa-solid fa-check text-[10px] text-ive-green shrink-0 w-3" /> : <span className="w-3 shrink-0" />}
+                        {m.avatarUrl ? <img src={m.avatarUrl} className="w-5 h-5 rounded-full shrink-0" alt="" /> : <i className="fa-solid fa-user text-ive-text-dim shrink-0" />}
+                        <span className="font-bold truncate">{m.name || m.username}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
           <span className="text-xs text-ive-text-dim ml-auto shrink-0">
             {formatDateMedium(issue.updatedAt, state.user?.locale, state.user?.timezone)}
           </span>
@@ -815,64 +869,6 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                   </button>
                 </div>
               </div>
-              {/* 작업자 지정 — waiting 상태에서만 변경 가능 */}
-              {projectAgents.length > 0 && (
-                <div ref={agentPickerRef} className="relative mt-1.5">
-                  <button
-                    type="button"
-                    onClick={() => issue.stage === 'waiting' && setAgentPickerOpen(v => !v)}
-                    className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg border transition-all ${
-                      issue.stage === 'waiting'
-                        ? 'border-ive-border-subtle hover:border-ive-green/30 cursor-pointer'
-                        : 'border-transparent cursor-default opacity-70'
-                    }`}
-                  >
-                    <i className="fa-solid fa-user-gear text-ive-text-dim" />
-                    {preferredAgent?.preferredAgentId ? (
-                      <span className="font-bold text-ive-text-muted">
-                        {preferredAgent.preferredAgentName}
-                        {issue.stage === 'waiting' && <i className="fa-solid fa-chevron-down ml-1 text-[10px] text-ive-text-dim" />}
-                      </span>
-                    ) : (
-                      <span className="text-ive-text-dim">
-                        {tIssue('noPreference')}
-                        {issue.stage === 'waiting' && <i className="fa-solid fa-chevron-down ml-1 text-[10px]" />}
-                      </span>
-                    )}
-                  </button>
-                  {agentPickerOpen && (
-                    <div className="absolute z-50 top-full left-0 mt-1 bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden shadow-lg shadow-black/30 min-w-[200px]">
-                      <button
-                        onClick={() => handleChangePreferredAgent(null)}
-                        className={`w-full px-3 py-2 text-left text-xs flex items-center gap-2 transition-colors ${
-                          !preferredAgent?.preferredAgentId ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text-dim hover:bg-white/5'
-                        }`}
-                      >
-                        <i className="fa-solid fa-shuffle" />
-                        <span className="font-bold">{tIssue('noPreference')}</span>
-                      </button>
-                      {projectAgents.map(pa => {
-                        const isOffline = pa.agent.status === 'offline'
-                        return (
-                          <button
-                            key={pa.agentId}
-                            onClick={() => handleChangePreferredAgent(pa.agentId)}
-                            className={`w-full px-3 py-2 text-left text-xs flex items-center gap-2 transition-colors ${
-                              preferredAgent?.preferredAgentId === pa.agentId ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text hover:bg-white/5'
-                            }`}
-                          >
-                            <AgentAvatar avatar={pa.agent.avatar} size="sm" />
-                            <span className="font-bold">{pa.agent.name}</span>
-                            {isOffline && <span className="text-ive-red ml-auto"><i className="fa-solid fa-circle-exclamation" /></span>}
-                            {!isOffline && pa.agent.status === 'busy' && <span className="ml-auto w-2 h-2 rounded-full bg-ive-cyan animate-pulse" />}
-                            {!isOffline && pa.agent.status === 'available' && <span className="ml-auto w-2 h-2 rounded-full bg-ive-green" />}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
             </>
           )}
         </div>
@@ -884,12 +880,12 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
           <PullToRefresh onRefresh={refreshAll} scrollContainerRef={scrollContainerRef}>
           {/* 이슈 본문 - 스크롤 영역 안에 배치 */}
           {showDesc && issue.description && (
-            <div className="mt-1.5 mr-2 text-sm text-ive-text-muted bg-ive-bg-card rounded-lg p-2.5 break-words leading-relaxed">
+            <div className="mt-1.5 mr-2 text-sm text-ive-text bg-ive-bg-card rounded-lg p-2.5 break-words leading-relaxed">
               <MarkdownNote body={cleanNoteBody(issue.description)} />
             </div>
           )}
           {/* MR 리뷰 섹션 - 스크롤 영역 안에 배치 */}
-          {(issue.stage === 'done' || issue.stage === 'dev') && (
+          {(issue.stage === 'done' || issue.stage === 'dev' || issue.stage === 'verifying') && (
             <div className="pr-2">
               <MRReviewSection projectId={projectId} issueIid={Number(iid)} />
             </div>
@@ -1109,13 +1105,17 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
 
           {/* Comment mode input */}
           {mode === 'comment' && (
+            <div className="flex flex-col gap-2">
             <div className="flex gap-2 items-end">
               <textarea
                 value={comment}
                 onChange={e => {
                   setComment(e.target.value)
+                  localStorage.setItem(commentKey, e.target.value)
                   e.target.style.height = 'auto'
-                  e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
+                  const h = Math.min(e.target.scrollHeight, 120)
+                  e.target.style.height = h + 'px'
+                  e.target.style.overflow = e.target.scrollHeight > 120 ? 'auto' : 'hidden'
                 }}
                 onKeyDown={e => {
                   if (e.key !== 'Enter') return
@@ -1127,8 +1127,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                 }}
                 placeholder={tIssue('commentPlaceholder')}
                 rows={1}
-                className="flex-1 min-h-10 bg-ive-bg-card border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-green/50"
-                style={{ overflow: 'auto', scrollbarGutter: 'stable' }}
+                className="flex-1 min-h-10 bg-ive-bg-card border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-green/50 overflow-hidden"
               />
               <button
                 onClick={handlePostComment}
@@ -1137,19 +1136,83 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                 title={tIssue('postCommentOnly')}
                 aria-label={tIssue('postComment')}
               >
-                {posting ? <i className="fa-solid fa-circle-notch fa-spin" /> : <i className="fa-solid fa-paper-plane" />}
+                {postingType === 'comment' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <i className="fa-solid fa-paper-plane" />}
               </button>
               {issue.stage !== 'dev' && (
                 <button
-                  onClick={handleCommentAndRetry}
+                  onClick={() => handleCommentAndRetry()}
                   disabled={posting || !comment.trim()}
                   className="shrink-0 h-10 px-3 rounded-lg bg-ive-cyan text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold whitespace-nowrap"
                   title={tIssue('postAndRetryHint')}
                   aria-label={tIssue('postAndRetry')}
                 >
-                  {posting ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-paper-plane" /><span>{tIssue('rerun')}</span></>}
+                  {postingType === 'retry' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-paper-plane" /><span>{issue.stage === 'none' ? tIssue('run') : tIssue('rerun')}</span></>}
                 </button>
               )}
+              {issue.stage === 'verifying' && (
+                <button
+                  onClick={handleCommentAndDone}
+                  disabled={posting || !comment.trim()}
+                  className="shrink-0 h-10 px-3 rounded-lg bg-emerald-500 text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold whitespace-nowrap"
+                  title={tIssue('postAndDoneHint')}
+                  aria-label={tIssue('postAndDone')}
+                >
+                  {postingType === 'done' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-circle-check" /><span>{tIssue('done')}</span></>}
+                </button>
+              )}
+            </div>
+            {/* 작업자 선택 — 버튼 행 아래 */}
+            {issue.stage !== 'dev' && projectAgents.length > 0 && (
+              <div ref={retryAgentPickerRef} className="relative flex items-center">
+                <button
+                  type="button"
+                  onClick={() => setRetryAgentPickerOpen(v => !v)}
+                  className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border border-dashed border-ive-border-subtle hover:border-ive-green/30 transition-all"
+                >
+                  <i className="fa-solid fa-user-gear text-ive-green" />
+                  {preferredAgent?.preferredAgentId ? (
+                    <>
+                      <AgentAvatar avatar={preferredAgent.preferredAgentAvatar || ''} size="sm" />
+                      <span className="font-bold text-ive-text">{preferredAgent.preferredAgentName}</span>
+                    </>
+                  ) : (
+                    <span className="text-ive-text-muted font-bold">{tIssue('noPreference')}</span>
+                  )}
+                  <i className="fa-solid fa-chevron-down text-[10px] text-ive-text-dim ml-0.5" />
+                </button>
+                {retryAgentPickerOpen && (
+                  <div className="absolute z-50 bottom-full left-0 mb-1 bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden shadow-lg shadow-black/30 min-w-[200px]">
+                    <button
+                      onClick={() => { setRetryAgentPickerOpen(false); handleChangePreferredAgent(null) }}
+                      className={`w-full px-3 py-2.5 text-left text-xs flex items-center gap-2 transition-colors ${
+                        !preferredAgent?.preferredAgentId ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text hover:bg-white/5'
+                      }`}
+                    >
+                      <i className="fa-solid fa-shuffle" />
+                      <span className="font-bold">{tIssue('noPreference')}</span>
+                    </button>
+                    {projectAgents.map(pa => {
+                      const isOffline = pa.agent.status === 'offline'
+                      return (
+                        <button
+                          key={pa.agentId}
+                          onClick={() => { setRetryAgentPickerOpen(false); handleChangePreferredAgent(pa.agentId) }}
+                          className={`w-full px-3 py-2.5 text-left text-xs flex items-center gap-2 transition-colors ${
+                            preferredAgent?.preferredAgentId === pa.agentId ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text hover:bg-white/5'
+                          }`}
+                        >
+                          <AgentAvatar avatar={pa.agent.avatar} size="sm" />
+                          <span className="font-bold">{pa.agent.name}</span>
+                          {isOffline && <span className="text-ive-red ml-auto"><i className="fa-solid fa-circle-exclamation" /></span>}
+                          {!isOffline && pa.agent.status === 'busy' && <span className="ml-auto w-2 h-2 rounded-full bg-ive-cyan animate-pulse" />}
+                          {!isOffline && pa.agent.status === 'available' && <span className="ml-auto w-2 h-2 rounded-full bg-ive-green" />}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
             </div>
           )}
 

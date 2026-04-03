@@ -203,6 +203,10 @@ export function WaitingTrendChart({ data, prevData, type }: {
   }
   const projects = Array.from(projectSet.entries())
 
+  // 미래 날짜는 축은 유지하되 데이터만 null 처리
+  const todayKST = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  const pastData = type === 'yearly' ? data : data.filter(d => d.date <= todayKST)
+
   // 차트 데이터 구성 (날짜별 row, 프로젝트별 key)
   const chartData = data.map((d, i) => {
     let label: string
@@ -212,19 +216,21 @@ export function WaitingTrendChart({ data, prevData, type }: {
       const dt = new Date(d.date)
       label = type === 'weekly' ? DAY_LABELS[dt.getDay()] : `${dt.getDate()}`
     }
-    const row: Record<string, unknown> = { label, total: d.total, prevTotal: prevData[i]?.total ?? 0 }
+    const isFuture = type !== 'yearly' && d.date > todayKST
+    const row: Record<string, unknown> = { label, total: isFuture ? null : d.total, prevTotal: prevData[i]?.total ?? 0 }
     for (const [pid] of projects) {
+      if (isFuture) { row[pid] = null; continue }
       const found = d.byProject.find(p => p.projectId === pid)
       row[pid] = found?.waiting ?? 0
     }
     return row
   })
 
-  // 현재/이전 기간 총 대기건수 평균
-  const avgCur = data.length > 0 ? Math.round(data.reduce((s, d) => s + d.total, 0) / data.length * 10) / 10 : 0
+  // 현재/이전 기간 총 대기건수 평균 (과거 데이터만)
+  const avgCur = pastData.length > 0 ? Math.round(pastData.reduce((s, d) => s + d.total, 0) / pastData.length * 10) / 10 : 0
   const avgPrev = prevData.length > 0 ? Math.round(prevData.reduce((s, d) => s + d.total, 0) / prevData.length * 10) / 10 : 0
-  const latestTotal = data.length > 0 ? data[data.length - 1].total : 0
-  const allZero = data.every(d => d.total === 0) && prevData.every(d => d.total === 0)
+  const latestTotal = pastData.length > 0 ? pastData[pastData.length - 1].total : 0
+  const allZero = pastData.every(d => d.total === 0) && prevData.every(d => d.total === 0)
 
   return (
     <div className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-3 space-y-2">

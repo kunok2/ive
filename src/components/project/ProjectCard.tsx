@@ -397,7 +397,7 @@ export default function ProjectCard({ project }: Props) {
                   {isChat ? `💬 #${ex.issueIid} ${tp('chatLabel')}` : `#${ex.issueIid} `}
                   {!isChat && ex.issueTitle && `${ex.issueTitle}`}
                 </MarqueeText>
-                <span className={`shrink-0 text-xs font-mono font-bold tabular-nums ${isChat ? 'text-purple-400/70' : 'text-ive-amber/70'}`}>
+                <span className={`shrink-0 text-xs font-mono font-bold tabular-nums ml-auto ${isChat ? 'text-purple-400/70' : 'text-ive-amber/70'}`}>
                   {formatDuration(ex.startedAt)}
                   {tick >= 0 ? '' : ''}
                 </span>

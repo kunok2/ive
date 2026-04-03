@@ -164,11 +164,11 @@ export async function GET(req: NextRequest) {
 
   // 이전 기간 일별 트렌드 — 전체 기간 버킷 채움 (waitAvg, procAvg 포함)
   const prevAllKeys = periodKeys(prevRange.start, prevRange.end, type)
-  const prevDayMap = new Map<string, { tasks: number; cost: number; waitTimes: number[]; procTimes: number[] }>()
-  for (const key of prevAllKeys) prevDayMap.set(key, { tasks: 0, cost: 0, waitTimes: [], procTimes: [] })
+  const prevDayMap = new Map<string, { tasks: number; cost: number; waitTimes: number[]; procTimes: number[]; verifyTimes: number[] }>()
+  for (const key of prevAllKeys) prevDayMap.set(key, { tasks: 0, cost: 0, waitTimes: [], procTimes: [], verifyTimes: [] })
   for (const e of prevExecs) {
     const key = toBucketKey(e.startedAt, type)
-    if (!prevDayMap.has(key)) prevDayMap.set(key, { tasks: 0, cost: 0, waitTimes: [], procTimes: [] })
+    if (!prevDayMap.has(key)) prevDayMap.set(key, { tasks: 0, cost: 0, waitTimes: [], procTimes: [], verifyTimes: [] })
     const d = prevDayMap.get(key)!
     d.tasks++
     d.cost += calcCost(pricingMap, e.cliName, e.inputTokens, e.outputTokens)
@@ -180,6 +180,10 @@ export async function GET(req: NextRequest) {
         const wait = durationMin(ws, e.startedAt)
         if (wait >= 0) d.waitTimes.push(wait)
       }
+      if (e.verifiedAt) {
+        const vt = durationMin(e.endedAt, e.verifiedAt)
+        if (vt >= 0) d.verifyTimes.push(vt)
+      }
     }
   }
   const prevDailyTrend = prevAllKeys.map(key => {
@@ -190,6 +194,7 @@ export async function GET(req: NextRequest) {
       cost: Math.round(d.cost * 100) / 100,
       waitAvg: d.waitTimes.length > 0 ? Math.round(d.waitTimes.reduce((a, b) => a + b, 0) / d.waitTimes.length * 10) / 10 : null,
       procAvg: d.procTimes.length > 0 ? Math.round(d.procTimes.reduce((a, b) => a + b, 0) / d.procTimes.length * 10) / 10 : null,
+      verifyAvg: d.verifyTimes.length > 0 ? Math.round(d.verifyTimes.reduce((a, b) => a + b, 0) / d.verifyTimes.length * 10) / 10 : null,
     }
   })
 
@@ -299,12 +304,12 @@ export async function GET(req: NextRequest) {
   // Daily trend (extended with waitAvg, procAvg) — 전체 기간 버킷 채움
   const allKeys = periodKeys(range.start, range.end, type)
   const todayKey = toBucketKey(getKSTTodayString(), type)
-  type BucketData = { tasks: number; success: number; failed: number; cost: number; waitTimes: number[]; procTimes: number[] }
+  type BucketData = { tasks: number; success: number; failed: number; cost: number; waitTimes: number[]; procTimes: number[]; verifyTimes: number[] }
   const dayMap = new Map<string, BucketData>()
-  for (const key of allKeys) dayMap.set(key, { tasks: 0, success: 0, failed: 0, cost: 0, waitTimes: [], procTimes: [] })
+  for (const key of allKeys) dayMap.set(key, { tasks: 0, success: 0, failed: 0, cost: 0, waitTimes: [], procTimes: [], verifyTimes: [] })
   for (const e of execs) {
     const key = toBucketKey(e.startedAt, type)
-    if (!dayMap.has(key)) dayMap.set(key, { tasks: 0, success: 0, failed: 0, cost: 0, waitTimes: [], procTimes: [] })
+    if (!dayMap.has(key)) dayMap.set(key, { tasks: 0, success: 0, failed: 0, cost: 0, waitTimes: [], procTimes: [], verifyTimes: [] })
     const d = dayMap.get(key)!
     d.tasks++
     if (e.status === 'success') d.success++
@@ -317,6 +322,10 @@ export async function GET(req: NextRequest) {
       if (ws) {
         const wait = durationMin(ws, e.startedAt)
         if (wait >= 0) d.waitTimes.push(wait)
+      }
+      if (e.verifiedAt) {
+        const vt = durationMin(e.endedAt, e.verifiedAt)
+        if (vt >= 0) d.verifyTimes.push(vt)
       }
     }
   }
@@ -331,6 +340,7 @@ export async function GET(req: NextRequest) {
       cost: isFuture ? null : Math.round(d.cost * 100) / 100,
       waitAvg: isFuture ? null : (d.waitTimes.length > 0 ? Math.round(d.waitTimes.reduce((a, b) => a + b, 0) / d.waitTimes.length * 10) / 10 : null),
       procAvg: isFuture ? null : (d.procTimes.length > 0 ? Math.round(d.procTimes.reduce((a, b) => a + b, 0) / d.procTimes.length * 10) / 10 : null),
+      verifyAvg: isFuture ? null : (d.verifyTimes.length > 0 ? Math.round(d.verifyTimes.reduce((a, b) => a + b, 0) / d.verifyTimes.length * 10) / 10 : null),
     }
   })
 
@@ -472,6 +482,11 @@ export async function GET(req: NextRequest) {
   const procTimes = finishedExecs
     .map(e => durationMin(e.startedAt, e.endedAt!))
     .filter(v => v > 0)
+  // 검증시간: ended_at → verified_at
+  const verifyTimes = finishedExecs
+    .filter(e => e.verifiedAt)
+    .map(e => durationMin(e.endedAt!, e.verifiedAt!))
+    .filter(v => v >= 0)
   // 총시간: issue_created_at(큐 진입 시점) → ended_at
   const totalTimes = finishedExecs
     .filter(e => e.issueCreatedAt)
@@ -498,6 +513,9 @@ export async function GET(req: NextRequest) {
     procAvg: round1(avg(procTimes)),
     procMax: round1(max(procTimes)),
     procCount: procTimes.length,
+    verifyAvg: round1(avg(verifyTimes)),
+    verifyMax: round1(max(verifyTimes)),
+    verifyCount: verifyTimes.length,
     totalAvg: round1(avg(totalTimes)),
     totalMax: round1(max(totalTimes)),
     totalCount: totalTimes.length,
@@ -515,6 +533,10 @@ export async function GET(req: NextRequest) {
   const prevProcTimes = prevFinishedExecs
     .map(e => durationMin(e.startedAt, e.endedAt!))
     .filter(v => v > 0)
+  const prevVerifyTimes = prevFinishedExecs
+    .filter(e => e.verifiedAt)
+    .map(e => durationMin(e.endedAt!, e.verifiedAt!))
+    .filter(v => v >= 0)
   const prevTotalTimes = prevFinishedExecs
     .filter(e => e.issueCreatedAt)
     .map(e => durationMin(e.issueCreatedAt!, e.endedAt!))
@@ -525,6 +547,8 @@ export async function GET(req: NextRequest) {
     waitCount: prevWaitTimes.length,
     procAvg: round1(avg(prevProcTimes)),
     procCount: prevProcTimes.length,
+    verifyAvg: round1(avg(prevVerifyTimes)),
+    verifyCount: prevVerifyTimes.length,
     totalAvg: round1(avg(prevTotalTimes)),
     totalCount: prevTotalTimes.length,
   }

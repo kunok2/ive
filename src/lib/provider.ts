@@ -131,6 +131,26 @@ export function ensureLabels(project: Project, token: string) {
     : gitlab.ensureGitLabLabels(project, token);
 }
 
+export function checkLabelsExist(project: Project, token: string) {
+  return project.provider === 'github'
+    ? github.checkGitHubLabelsExist(project, token)
+    : gitlab.checkGitLabLabelsExist(project, token);
+}
+
+export async function addIssueLabels(project: Project, iid: number, token: string, labels: string[]) {
+  return project.provider === 'github'
+    ? github.addGitHubIssueLabels(project, iid, token, labels)
+    : gitlab.addGitLabIssueLabels(project, iid, token, labels);
+}
+
+export async function removeIssueLabels(project: Project, iid: number, token: string, labels: string[]) {
+  if (project.provider === 'github') {
+    for (const label of labels) await github.removeGitHubIssueLabels(project, iid, token, label);
+  } else {
+    await gitlab.removeGitLabIssueLabels(project, iid, token, labels);
+  }
+}
+
 // Fetch issues by label
 export function fetchIssuesByLabel(project: Project, token: string, label: string) {
   return project.provider === 'github'

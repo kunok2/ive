@@ -53,7 +53,7 @@ interface AgentGlobal {
   inputTokens: number; outputTokens: number; cost: number; avgTurns: number
 }
 
-interface DailyTrend { date: string; tasks: number; success: number; failed: number; cost: number; waitAvg: number | null; procAvg: number | null }
+interface DailyTrend { date: string; tasks: number; success: number; failed: number; cost: number; waitAvg: number | null; procAvg: number | null; verifyAvg: number | null }
 
 interface TrendDaily { date: string; tasks: number; cost: number }
 
@@ -95,6 +95,7 @@ interface ResolvedIssue {
 interface Lifecycle {
   waitAvg: number; waitMax: number; waitCount: number
   procAvg: number; procMax: number; procCount: number
+  verifyAvg: number; verifyMax: number; verifyCount: number
   totalAvg: number; totalMax: number; totalCount: number
   avgAttempts: number; retryRate: number; uniqueIssues: number
 }
@@ -106,10 +107,11 @@ interface PrevSummary {
 interface PrevLifecycle {
   waitAvg: number; waitCount: number
   procAvg: number; procCount: number
+  verifyAvg: number; verifyCount: number
   totalAvg: number; totalCount: number
 }
 interface PrevByItem { tasks: number; cost: number }
-interface PrevDaily { date: string; tasks: number; cost: number; waitAvg?: number | null; procAvg?: number | null }
+interface PrevDaily { date: string; tasks: number; cost: number; waitAvg?: number | null; procAvg?: number | null; verifyAvg?: number | null }
 
 interface ReportData {
   period: { start: string; end: string; type: string }
@@ -249,7 +251,6 @@ export default function ReportsTab() {
   const [issueProjectFilter, setIssueProjectFilter] = useState<string>(() => (saved?.issueProjectFilter as string) || 'all')
   const [issueKeyword, setIssueKeyword] = useState(() => (saved?.issueKeyword as string) || '')
   const [visibleCount, setVisibleCount] = useState(20)
-  const [showInsights, setShowInsights] = useState(false)
 
   const [issueSort, setIssueSort] = useState<IssueSortKey>(() => {
     if (typeof window === 'undefined') return 'date'
@@ -621,11 +622,13 @@ export default function ReportsTab() {
                 {/* 단계별 평균/최대 + 이전 비교 */}
                 {(() => {
                   const hasWait = data.lifecycle.waitCount > 0
+                  const hasVerify = data.lifecycle.verifyCount > 0
                   const hasTotal = data.lifecycle.totalCount > 0
-                  const cols = 1 + (hasWait ? 1 : 0) + (hasTotal ? 1 : 0)
+                  const cols = 1 + (hasWait ? 1 : 0) + (hasVerify ? 1 : 0) + (hasTotal ? 1 : 0)
                   const prev = data.prevLifecycle
                   const waitDiff = diffPct(data.lifecycle.waitAvg, prev.waitAvg)
                   const procDiff = diffPct(data.lifecycle.procAvg, prev.procAvg)
+                  const verifyDiff = diffPct(data.lifecycle.verifyAvg, prev.verifyAvg)
                   const totalDiff = diffPct(data.lifecycle.totalAvg, prev.totalAvg)
                   const DiffBadge = ({ diff, isNew }: { diff: number | null; isNew?: boolean }) => {
                     if (isNew) return <span className="text-[9px] font-bold px-1 py-0.5 rounded text-ive-cyan bg-ive-cyan/10">NEW</span>
@@ -655,6 +658,17 @@ export default function ReportsTab() {
                           {prev.procCount > 0 && <div className="text-[9px] text-ive-text-dim mt-0.5">{t('prevDuration', { duration: formatDuration(prev.procAvg) })}</div>}
                         </div>
                       </div>
+                      {hasVerify && (
+                        <div className="text-center">
+                          <div className="text-xs text-ive-text-dim">{t('verifyTime')}</div>
+                          <div className="text-sm font-bold text-orange-400">{formatDuration(data.lifecycle.verifyAvg)}</div>
+                          <div className="text-xs text-ive-text-dim">{t('max')} {formatDuration(data.lifecycle.verifyMax)}</div>
+                          <div className="mt-0.5">
+                            <DiffBadge diff={verifyDiff} isNew={verifyDiff == null && data.lifecycle.verifyCount > 0 && prev.verifyCount === 0} />
+                            {prev.verifyCount > 0 && <div className="text-[9px] text-ive-text-dim mt-0.5">{t('prevDuration', { duration: formatDuration(prev.verifyAvg) })}</div>}
+                          </div>
+                        </div>
+                      )}
                       {hasTotal && (
                         <div className="text-center">
                           <div className="text-xs text-ive-text-dim">{t('totalTime')}</div>
@@ -673,17 +687,20 @@ export default function ReportsTab() {
                 {data.lifecycle.waitCount > 0 && data.lifecycle.totalAvg > 0 && (() => {
                   const waitPct = Math.round((data.lifecycle.waitAvg / data.lifecycle.totalAvg) * 100)
                   const procPct = Math.round((data.lifecycle.procAvg / data.lifecycle.totalAvg) * 100)
-                  const otherPct = Math.max(0, 100 - waitPct - procPct)
+                  const verifyPct = data.lifecycle.verifyCount > 0 ? Math.round((data.lifecycle.verifyAvg / data.lifecycle.totalAvg) * 100) : 0
+                  const otherPct = Math.max(0, 100 - waitPct - procPct - verifyPct)
                   return (
                     <div>
                       <div className="flex h-2.5 rounded-full overflow-hidden bg-ive-bg-deep">
                         <div className="bg-ive-cyan/60" style={{ width: `${waitPct}%` }} />
                         <div className="bg-ive-green/60" style={{ width: `${procPct}%` }} />
+                        {verifyPct > 0 && <div className="bg-orange-400/60" style={{ width: `${verifyPct}%` }} />}
                         {otherPct > 0 && <div className="bg-ive-amber/40" style={{ width: `${otherPct}%` }} />}
                       </div>
                       <div className="flex justify-between mt-1 text-[9px] text-ive-text-dim">
                         <span>{t('waitPct', { pct: waitPct })}</span>
                         <span>{t('procPct', { pct: procPct })}</span>
+                        {verifyPct > 0 && <span>{t('verifyPct', { pct: verifyPct })}</span>}
                         {otherPct > 0 && <span>{t('otherPct', { pct: otherPct })}</span>}
                       </div>
                     </div>
@@ -785,6 +802,49 @@ export default function ReportsTab() {
                           </div>
                           <div className="text-right shrink-0 ml-1">
                             <div className="text-xs font-bold text-ive-text-dim">{data.prevLifecycle.procCount > 0 ? formatDuration(data.prevLifecycle.procAvg) : '-'}</div>
+                            <div className="text-xs text-ive-text-dim">{t('prevAvg')}</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
+                {data.dailyTrend.some(d => d.verifyAvg !== null) && (() => {
+                  const verifyData = data.dailyTrend.map(d => d.tasks === null ? null : (d.verifyAvg ?? 0))
+                  const validVerify = verifyData.filter((v): v is number => v !== null)
+                  const firstAvg = validVerify.slice(0, Math.floor(validVerify.length / 2))
+                  const secondAvg = validVerify.slice(Math.floor(validVerify.length / 2))
+                  const avg1 = firstAvg.length > 0 ? firstAvg.reduce((a, b) => a + b, 0) / firstAvg.length : 0
+                  const avg2 = secondAvg.length > 0 ? secondAvg.reduce((a, b) => a + b, 0) / secondAvg.length : 0
+                  const trendDir = avg2 > avg1 * 1.1 ? 'up' : avg2 < avg1 * 0.9 ? 'down' : 'flat'
+                  const prevDiff = diffPct(data.lifecycle.verifyAvg, data.prevLifecycle.verifyAvg)
+                  return (
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-xs font-bold text-orange-400">{t('verifyTime')}</span>
+                          <span className={`text-xs font-bold ${trendDir === 'up' ? 'text-ive-red' : trendDir === 'down' ? 'text-ive-green' : 'text-ive-text-dim'}`}>
+                            {trendDir === 'up' ? t('trendUp') : trendDir === 'down' ? t('trendDown') : t('trendStable')}
+                          </span>
+                          {prevDiff != null && (
+                            <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${prevDiff > 0 ? 'text-ive-red bg-ive-red/10' : prevDiff < 0 ? 'text-ive-green bg-ive-green/10' : 'text-ive-text-dim bg-white/5'}`}>
+                              {t('vsPrev')} {prevDiff > 0 ? '+' : ''}{prevDiff.toLocaleString()}%
+                            </span>
+                          )}
+                          {prevDiff == null && data.lifecycle.verifyCount > 0 && data.prevLifecycle.verifyCount === 0 && (
+                            <span className="text-xs font-bold px-1.5 py-0.5 rounded text-ive-cyan bg-ive-cyan/10">NEW</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 min-w-0">
+                            <Sparkline data={verifyData} bgData={data.prevDailyTrend.map(d => d.verifyAvg ?? null)} width="100%" height={24} color={trendDir === 'up' ? 'red' : trendDir === 'down' ? 'green' : 'amber'} />
+                          </div>
+                          <div className="text-right shrink-0">
+                            <div className="text-xs font-bold text-ive-text">{formatDuration(validVerify[validVerify.length - 1] ?? 0)}</div>
+                            <div className="text-xs text-ive-text-dim">{t('recent')}</div>
+                          </div>
+                          <div className="text-right shrink-0 ml-1">
+                            <div className="text-xs font-bold text-ive-text-dim">{data.prevLifecycle.verifyCount > 0 ? formatDuration(data.prevLifecycle.verifyAvg) : '-'}</div>
                             <div className="text-xs text-ive-text-dim">{t('prevAvg')}</div>
                           </div>
                         </div>
@@ -1020,37 +1080,6 @@ export default function ReportsTab() {
           )}
 
           {/* 추이 분석 */}
-          {data.insights && data.insights.length > 0 && (
-            <section>
-              <button
-                onClick={() => setShowInsights(v => !v)}
-                className="w-full flex items-center justify-between bg-ive-bg-card border border-ive-border-subtle rounded-lg px-3 py-2.5 hover:border-ive-cyan/30 transition-all"
-              >
-                <div className="flex items-center gap-2">
-                  <i className="fa-solid fa-lightbulb text-ive-amber text-sm" />
-                  <span className="text-xs font-bold text-ive-text">{t('trendAnalysis')}</span>
-                  <span className="text-xs text-ive-text-dim">{t('itemsUnit', { count: data.insights.length })}</span>
-                </div>
-                <i className={`fa-solid fa-chevron-${showInsights ? 'up' : 'down'} text-xs text-ive-text-dim`} />
-              </button>
-              {showInsights && (
-                <div className="mt-2 bg-ive-bg-card border border-ive-border-subtle rounded-lg p-3 space-y-2">
-                  {data.insights.map((insight, i) => (
-                    <div key={i} className="flex items-start gap-2">
-                      <i className={`fa-solid ${
-                        insight.includes('증가') || insight.includes('늘어나') || insight.includes('급증') ? 'fa-arrow-trend-up text-ive-red'
-                        : insight.includes('감소') || insight.includes('줄어들') || insight.includes('급감') ? 'fa-arrow-trend-down text-ive-green'
-                        : insight.includes('개선') ? 'fa-arrow-trend-up text-ive-green'
-                        : insight.includes('하락') ? 'fa-arrow-trend-down text-ive-red'
-                        : 'fa-minus text-ive-text-dim'
-                      } text-xs mt-0.5`} />
-                      <span className="text-xs text-ive-text">{insight}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
-          )}
 
           {/* Resolved Issues */}
           {data.resolvedIssues && data.resolvedIssues.length > 0 && (

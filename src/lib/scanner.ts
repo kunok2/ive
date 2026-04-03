@@ -10,16 +10,14 @@ import {
   updateExecutionTokens,
   resetStuckExecutions,
   hasActiveExecution,
+  hasAnyExecution,
   countActiveExecutionsByAgent,
   updateAgentStatus,
   getLastCompletedAt,
   getSystemSetting,
-  getIssueStage,
-  getIssueStages,
-  getIssueStageUpdatedAt,
-  setIssueStage,
+  stageFromLabels,
   updateProjectConflictCount,
-  deleteIssueStage,
+  getPreferredAgentMap,
   getUserById,
   assignIssueAtomically,
   createActivityLog,
@@ -27,7 +25,7 @@ import {
 } from "./db";
 import { decrypt } from "./crypto";
 import { defaultLocale } from "@/i18n/config";
-import { fetchSingleIssue } from "./provider";
+import { addIssueLabels, removeIssueLabels } from "./provider";
 import {
   ensureGitLabLabels,
   fetchGitLabIssues,
@@ -398,66 +396,93 @@ export async function scanProject(project: Project, force: boolean = false) {
     const decryptedToken = decrypt(project.accessToken);
     let issueCount = 0;
 
-    // 레이블 동기화 (best-effort)
-    try {
-      if (project.provider === 'gitlab') {
-        await ensureGitLabLabels(project, decryptedToken);
-      } else {
-        await ensureGitHubLabels(project, decryptedToken);
-      }
-    } catch (e) { console.warn(`[Scanner] Label sync failed for ${project.name}:`, e); }
+    // 레이블 동기화는 프로젝트 설정에서 수동으로 수행
+    // (스캐너에서 자동 생성하지 않음 — 권한 없을 수 있음)
 
-    // 개발 큐: 원격 labelTarget 레이블 + 로컬 DB waiting 이슈 병합
+    // 모든 상태 레이블로 이슈를 조회합니다.
+    // IVE 레이블이 없으면 IVE에서 관리하지 않는 이슈이므로 무시합니다.
     const fetchIssues = project.provider === 'github' ? fetchGitHubIssues : fetchGitLabIssues;
-    const remoteIssues = await fetchIssues(project, decryptedToken, project.labelTarget);
+    const labelTarget = project.labelTarget;
+    const labelS = project.labelSchedule || 'IVE-S';
+    const labelD = project.labelDev || 'IVE-D';
+    const labelV = project.labelVerify || 'IVE-V';
+    const labelE = project.labelEnd || 'IVE-E';
 
-    // 원격에서 가져온 이슈를 Map으로 (iid → issue), closed 이슈 제외
+    // IVE 레이블이 있는 이슈를 기본으로 조회 (모든 IVE 관리 이슈)
+    // + 상태 레이블 이슈도 병합 (IVE 없이 상태 레이블만 남은 경우 정리용)
+    const [targetIssues, sIssues, dIssues, vIssues, eIssues] = await Promise.all([
+      fetchIssues(project, decryptedToken, labelTarget),
+      fetchIssues(project, decryptedToken, labelS),
+      fetchIssues(project, decryptedToken, labelD),
+      fetchIssues(project, decryptedToken, labelV),
+      fetchIssues(project, decryptedToken, labelE),
+    ]);
+
+    // 이슈를 Map으로 병합 (iid → issue), closed 제외
     const issueMap = new Map<number, any>();
-    for (const issue of remoteIssues) {
+    for (const issue of [...targetIssues, ...sIssues, ...dIssues, ...vIssues, ...eIssues]) {
       if (issue.state === 'closed') continue;
       issueMap.set(issue.iid, issue);
-      if (!getIssueStage(project.id, issue.iid)) {
-        // 이슈의 실제 생성 시점(GitLab/GitHub created_at)을 대기 큐 진입 시점으로 사용
-        // → 대기시간 = 이슈 생성 시점 ~ 실행 시작 시점 (스캐너 발견 시점이 아닌 원본 시점)
-        setIssueStage(project.id, issue.iid, 'waiting', undefined, issue.created_at);
-        // 이슈 감지 활동 로그 기록
-        try {
-          createActivityLog({
-            userId: 'system',
-            category: 'task',
-            action: 'detect_issue',
-            detail: `이슈 감지: #${issue.iid} "${issue.title}" (${project.name})`,
-            targetType: 'issue',
-            targetId: `${project.id}-${issue.iid}`,
-          });
-        } catch (e) {
-          console.error('[Scanner] Failed to log detect_issue activity:', e);
+    }
+
+    // 레이블 정리: IVE 없이 상태 레이블만 있는 이슈 → 상태 레이블 제거 (고아 정리)
+    // 고아 레이블 정리 및 중복 레이블 정리
+    for (const [iid, issue] of issueMap) {
+      const labels: string[] = issue.labels || [];
+      const hasTarget = labels.includes(labelTarget);
+
+      if (!hasTarget) {
+        // IVE 레이블 없음 — 고아 상태 레이블 정리
+        const orphanLabels = [labelS, labelD, labelV, labelE].filter(l => labels.includes(l));
+        if (orphanLabels.length > 0) {
+          try { await removeIssueLabels(project, iid, decryptedToken, orphanLabels); } catch { /* ignore */ }
+          console.log(`[Scanner] Issue #${iid} — orphan labels removed (no ${labelTarget}): ${orphanLabels.join(', ')}`);
+        }
+        issueMap.delete(iid);
+        continue;
+      }
+
+      // IVE-E가 있으면서 이전 단계 레이블 잔류 → 정리
+      if (labels.includes(labelE)) {
+        const staleLabels = [labelS, labelD, labelV].filter(l => labels.includes(l));
+        if (staleLabels.length > 0) {
+          try { await removeIssueLabels(project, iid, decryptedToken, staleLabels); } catch { /* ignore */ }
+          console.log(`[Scanner] Issue #${iid} — cleaned stale labels (has ${labelE}): ${staleLabels.join(', ')}`);
         }
       }
     }
 
-    // 로컬 DB에 waiting 상태인데 원격 레이블로는 못 찾은 이슈도 포함
-    const localStages = getIssueStages(project.id);
-    for (const [iid, info] of localStages) {
-      if (iid === 0) continue; // 충돌 작업 마커는 일반 이슈 처리에서 제외
-      if (info.stage === 'waiting' && !issueMap.has(iid)) {
-        try {
-          const issue = await fetchSingleIssue(project, iid, decryptedToken);
-          if (issue && issue.state !== 'closed') {
-            issueMap.set(iid, issue);
-          }
-        } catch { /* 조회 실패 시 무시 */ }
+    // 레이블로 상태 판정 후, waiting 이슈를 processIssues로 전달
+    const waitingIssues: any[] = [];
+    for (const [iid, issue] of issueMap) {
+      const labels: string[] = issue.labels || [];
+      const activeExec = hasActiveExecution(project.id, iid);
+      const stage = stageFromLabels(labels, project, { hasActiveExec: activeExec });
+
+      if (stage === 'waiting') {
+        // 신규 이슈 감지 로그 (처음 발견된 이슈만)
+        if (!hasAnyExecution(project.id, iid)) {
+          try {
+            createActivityLog({
+              userId: 'system', category: 'task', action: 'detect_issue',
+              detail: `이슈 감지: #${iid} "${issue.title}" (${project.name})`,
+              targetType: 'issue', targetId: `${project.id}-${iid}`,
+            });
+          } catch (e) { console.error('[Scanner] Failed to log detect_issue activity:', e); }
+        }
+        waitingIssues.push(issue);
       }
     }
 
-    const devIssues = Array.from(issueMap.values());
-    if (devIssues.length > 0) {
-      console.log(`[Scanner] Found ${devIssues.length} dev-queue issues for ${project.name} (${remoteIssues.length} remote + ${devIssues.length - remoteIssues.length} local-only)`);
-      const { assigned, waiting } = await processIssues(project, devIssues, decryptedToken);
+    if (waitingIssues.length > 0) {
+      // 먼저 생성된 이슈부터 배정 (created_at 오름차순)
+      waitingIssues.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      console.log(`[Scanner] Found ${waitingIssues.length} waiting issues for ${project.name}`);
+      const { assigned, waiting } = await processIssues(project, waitingIssues, decryptedToken);
       issueCount += waiting;
     }
 
-    // 마지막 체크 시간 및 이슈 수 업데이트
+    // 마지막 체크 시간 및 대기 이슈 수 업데이트 (waiting만 카운트)
     updateProjectLastChecked(project.id, now.toISOString(), issueCount);
 
     // 충돌 감지 작업 배정: done 상태 이슈가 2개 이상이면 MR 충돌 가능성 있음
@@ -485,7 +510,7 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
   let waitingCount = 0;
   const busyAgentIds = new Set<string>();
   // preferred_agent_id를 한 번에 조회 (이슈별 개별 쿼리 방지)
-  const stagesMap = getIssueStages(project.id);
+  const preferredAgentMap = getPreferredAgentMap(project.id);
 
   console.log(`[Scanner] processIssues: ${issues.length} issues, ${assignments.length} agents`);
   for (const issue of issues) {
@@ -495,17 +520,11 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
       continue;
     }
 
-    const currentStage = getIssueStage(project.id, issue.iid);
-
-    // dev 상태: 실행 중이어야 하나 activeExec가 없음 → 위에서 이미 체크됨, 여기 도달하면 고착 상태
-    if (currentStage === 'dev') {
-      console.log(`[Scanner] [SKIP] Issue #${issue.iid} (stage: dev, no active exec — will be reset on restart)`);
-      continue;
-    }
-
-    // done/dev_fail 상태: 완료된 이슈는 스킵. 재작업이 필요하면 사용자가 UI에서 "대기"로 변경.
-    if (currentStage === 'done' || currentStage === 'dev_fail') {
-      console.log(`[Scanner] [SKIP] Issue #${issue.iid} (stage: ${currentStage})`);
+    // 레이블로 상태 판정 — waiting만 processIssues에 들어오므로 여기선 추가 검증
+    const labels: string[] = issue.labels || [];
+    const stage = stageFromLabels(labels, project, { hasActiveExec: false });
+    if (stage !== 'waiting') {
+      console.log(`[Scanner] [SKIP] Issue #${issue.iid} (stage: ${stage})`);
       continue;
     }
 
@@ -514,7 +533,7 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
     let agentToken = decryptedToken; // 기본: 프로젝트 토큰
     let selectedPa: typeof assignments[0] | null = null;
     let useRoundRobin = true;
-    const preferredAgentId = stagesMap.get(issue.iid)?.preferredAgentId || null;
+    const preferredAgentId = preferredAgentMap.get(issue.iid) || null;
 
     if (preferredAgentId) {
       const pa = assignments.find(a => a.agentId === preferredAgentId);
@@ -562,8 +581,8 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
       const assignType = preferredAgentId ? ' (지정 작업자)' : '';
       console.log(`[Scanner] [ASSIGN] Project: ${project.name}, Issue: #${issue.iid}, Agent: ${availableAgent.name}${assignType}${agentToken !== decryptedToken ? ' (자체 토큰)' : ''}`);
 
-      // 대기 큐 진입 시점을 stage 변경 전에 읽어둠 (대기시간 계산 기준)
-      const waitingSince = getIssueStageUpdatedAt(project.id, issue.iid);
+      // 대기시간 계산 기준: 이슈 생성 시점
+      const waitingSince = issue.created_at || new Date().toISOString();
 
       // 비동기로 태스크 실행 (개발자별 토큰 우선) — 트랜잭션은 executeTask 내에서 처리
       executeTask(project, issue, availableAgent, agentToken, waitingSince)
@@ -634,6 +653,14 @@ async function executeTask(
   }
   if (isConflictTask) {
     createExecution(execution);
+  }
+
+  // 레이블 전환: IVE-S 제거, IVE-D 부착 (개발 시작)
+  if (!isConflictTask) {
+    try {
+      await removeIssueLabels(project, iid, token, [project.labelSchedule || 'IVE-S']);
+      await addIssueLabels(project, iid, token, [project.labelDev || 'IVE-D']);
+    } catch (e) { console.warn(`[Scanner] Failed to switch labels on #${iid}:`, e); }
   }
 
   // 작업 등록 활동 로그
@@ -1151,7 +1178,6 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
         if (match) conflictCount = parseInt(match[1], 10);
       } catch {}
       updateProjectConflictCount(project.id, conflictCount);
-      deleteIssueStage(project.id, 0);  // 충돌 작업은 일회성 — done 잔류 방지
       log(`충돌 분석 완료. 충돌 수: ${conflictCount}`, 'system');
       updateExecutionStatus(executionId, 'success', new Date().toISOString());
       // 충돌 작업 완료 → finally 블록으로 이동
@@ -1173,7 +1199,7 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
         const pushFailNote = isPermission
           ? `<!-- ive-bot -->\n## ${agent.name} No Push Permission\n\nCode changes are complete, but cannot create a branch due to insufficient push permissions.\nPlease grant write access to the token account or use a fork-based workflow.\n\nDuration: ${durationStr}`
           : `<!-- ive-bot -->\n## ${agent.name} Push Failed\n\nCode changes are complete, but push failed: ${pushMsg}\n\nDuration: ${durationStr}`;
-        setIssueStage(project.id, iid, 'dev_fail', pushFailReason);
+        // IVE-D 레이블 유지 → dev_fail로 자동 판정 (활성 실행 없으므로)
         try {
           if (isGitHub) {
             await addGitHubIssueComment(project, iid, token, pushFailNote);
@@ -1234,8 +1260,12 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
         await addGitLabSpentTime(project, iid, token, durationStr);
       }
 
-      setIssueStage(project.id, iid, 'done');
-      log("작업 완료.", 'system');
+      // 레이블 전환: IVE-D 제거, IVE-V 부착 (검증 대기)
+      try {
+        await removeIssueLabels(project, iid, token, [project.labelDev || 'IVE-D']);
+        await addIssueLabels(project, iid, token, [project.labelVerify || 'IVE-V']);
+      } catch (e) { console.warn(`[Scanner] Label switch failed:`, e); }
+      log("작업 완료 → 검증 대기 (IVE-V).", 'system');
       updateExecutionStatus(executionId, 'success', new Date().toISOString());
     } else {
       log("코드 변경사항 없음. 작업 완료로 처리.", 'system');
@@ -1249,7 +1279,11 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
           await addGitLabSpentTime(project, iid, token, durationStr);
         }
       } catch (e) { console.warn(`[Scanner] Remote comment failed:`, e); }
-      setIssueStage(project.id, iid, 'done');
+      // 코드 변경 없음 → IVE-D 제거, IVE-V 부착 (검증 대기)
+      try {
+        await removeIssueLabels(project, iid, token, [project.labelDev || 'IVE-D']);
+        await addIssueLabels(project, iid, token, [project.labelVerify || 'IVE-V']);
+      } catch (e) { console.warn(`[Scanner] Label switch failed:`, e); }
       updateExecutionStatus(executionId, 'success', new Date().toISOString());
     }
     } // end of !isConflictTask
@@ -1259,11 +1293,9 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
     const errorLog = conversationParts.join('\n\n').substring(0, 60000);
     const errorNote = `<!-- ive-bot -->\n## ${agent.name} Execution Error\nAn error occurred: ${err.message}\n\n<details>\n<summary>🤖 AI Work Log (expand)</summary>\n\n${errorLog}\n\n</details>`;
     if (isConflictTask) {
-      deleteIssueStage(project.id, 0);  // 충돌 작업 실패 시에도 스테이지 정리
       updateProjectConflictCount(project.id, 0);  // 실패 시 충돌 수 초기화
-    } else {
-      setIssueStage(project.id, iid, 'dev_fail', (err.message || 'Unknown error').substring(0, 200));
     }
+    // IVE-D 레이블 유지 → dev_fail로 자동 판정 (활성 실행 없으므로)
     if (!isConflictTask) {
       try {
         if (isGitHub) {
@@ -1302,13 +1334,8 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
  * - 이미 충돌 작업이 진행 중이면 (issueIid=0) 추가 배정하지 않음
  */
 async function processConflictCheck(project: Project, decryptedToken: string) {
-  // DB에서 done 상태 이슈 수 확인 (API 호출 없이 DB 상태만으로 판단)
-  const stages = getIssueStages(project.id);
+  // TODO: 충돌 감지는 레이블 기반으로 재구현 필요 (현재 비활성)
   const doneIids: number[] = [];
-  for (const [iid, info] of stages) {
-    if (iid === 0) continue; // 이전 충돌 작업 자체를 제외
-    if (info.stage === 'done') doneIids.push(iid);
-  }
 
   if (doneIids.length < 2) {
     updateProjectConflictCount(project.id, 0);
@@ -1356,8 +1383,6 @@ async function processConflictCheck(project: Project, decryptedToken: string) {
     description: buildConflictPrompt(project, doneIids),
   };
 
-  setIssueStage(project.id, 0, 'dev');
-
   executeTask(project, conflictIssue, selectedAgent, agentToken)
     .then(() => {
       // 실행 완료 후 충돌 수는 에이전트의 커밋/결과 로그에서 확인
@@ -1366,7 +1391,7 @@ async function processConflictCheck(project: Project, decryptedToken: string) {
     })
     .catch(err => {
       console.error(`[Scanner] [FAILED-CONFLICT] ${project.name} error:`, err);
-      deleteIssueStage(project.id, 0);  // 안전장치: 실패 시 스테이지 잔류 방지
+      // 충돌 작업은 레이블 없이 DB만 사용하므로 별도 정리 불필요
     });
 }
 

@@ -28,6 +28,23 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const tp = useTranslations('project')
   const ts = useTranslations('stage')
 
+  const [gitMembers, setGitMembers] = useState<{ id: number; username: string; name: string; avatarUrl: string }[]>([])
+  const [gitMembersLoading, setGitMembersLoading] = useState(false)
+
+  const fetchGitMembers = useCallback(async () => {
+    setGitMembersLoading(true)
+    try {
+      const res = await fetch(`/api/projects/${id}/members`)
+      if (res.ok) {
+        const data = await res.json()
+        setGitMembers(data)
+      }
+    } catch { /* ignore */ }
+    finally { setGitMembersLoading(false) }
+  }, [id])
+
+  useEffect(() => { fetchGitMembers() }, [fetchGitMembers])
+
   const project = state.projects.find(p => p.id === id)
 
   if (state.loading) {
@@ -87,24 +104,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     setEditingTokenAgentId(null)
     setEditTokenValue('')
   }
-
-  const [gitMembers, setGitMembers] = useState<{ id: number; username: string; name: string; avatarUrl: string }[]>([])
-  const [gitMembersLoading, setGitMembersLoading] = useState(false)
-
-  const fetchGitMembers = useCallback(async () => {
-    setGitMembersLoading(true)
-    try {
-      const res = await fetch(`/api/projects/${id}/members`)
-      if (res.ok) {
-        const data = await res.json()
-        setGitMembers(data)
-      }
-    } catch { /* ignore */ }
-    finally { setGitMembersLoading(false) }
-  }, [id])
-
-  useEffect(() => { fetchGitMembers() }, [fetchGitMembers])
-
 
   return (
     <div className="min-h-screen pb-20">

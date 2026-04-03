@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getProject, getProjectAccess, getIssueStage, setIssueStage } from '@/lib/db'
+import { getProject, getProjectAccess, hasActiveExecution, stageFromLabels } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { decrypt } from '@/lib/crypto'
 import { updateIssue, fetchSingleIssue } from '@/lib/provider'
@@ -64,15 +64,10 @@ export async function GET(
     const issue = await fetchSingleIssue(project, Number(iid), decryptedToken)
     if (!issue) return NextResponse.json({ error: '이슈를 찾을 수 없습니다' }, { status: 404 })
 
-    // 로컬 DB에서 stage 조회 (상태는 로컬 DB로만 관리)
-    let stage = getIssueStage(projectId, Number(iid))
-    if (!stage) {
-      const issueLabels = issue.labels || []
-      if (issueLabels.includes(project.labelTarget)) {
-        stage = 'waiting'
-        setIssueStage(projectId, Number(iid), 'waiting', undefined, issue.created_at)
-      }
-    }
+    // 레이블에서 stage 판정
+    const issueLabels = issue.labels || []
+    const activeExec = hasActiveExecution(projectId, Number(iid))
+    const stage = stageFromLabels(issueLabels, project, { hasActiveExec: activeExec })
 
     const assignees = (issue.assignees || []).map((a: any) => ({
       id: a.id,

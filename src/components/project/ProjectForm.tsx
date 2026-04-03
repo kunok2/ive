@@ -23,8 +23,15 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
   const [repoUrl, setRepoUrl] = useState(existing?.repoUrl ?? '')
   const [accessToken, setAccessToken] = useState('')
 
-  // 이슈 레이블 설정 (대상 식별 레이블 1개만 사용자 입력, 나머지는 자동 파생)
+  // 이슈 레이블 설정
   const [labelTarget, setLabelTarget] = useState(existing?.labelTarget ?? 'IVE')
+  const [labelSchedule, setLabelSchedule] = useState(existing?.labelSchedule ?? 'IVE-S')
+  const [labelDev, setLabelDev] = useState(existing?.labelDev ?? 'IVE-D')
+  const [labelVerify, setLabelVerify] = useState(existing?.labelVerify ?? 'IVE-V')
+  const [labelEnd, setLabelEnd] = useState(existing?.labelEnd ?? 'IVE-E')
+  const [labelStatus, setLabelStatus] = useState<{ label: string; exists: boolean }[] | null>(null)
+  const [labelCreating, setLabelCreating] = useState(false)
+  const [labelMessage, setLabelMessage] = useState<string | null>(null)
   
   // 작업 주기 설정 추가 (단위: 분)
   const [checkInterval, setCheckInterval] = useState(existing?.checkInterval ?? 10)
@@ -159,6 +166,10 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
       gitUsername: '',
       accessToken: accessToken.trim(),
       labelTarget: labelTarget.trim(),
+      labelSchedule: labelSchedule.trim() || 'IVE-S',
+      labelDev: labelDev.trim() || 'IVE-D',
+      labelVerify: labelVerify.trim() || 'IVE-V',
+      labelEnd: labelEnd.trim() || 'IVE-E',
       showToolUsage,
       checkInterval: Number(checkInterval) || 10,
       lastCheckedAt: existing?.lastCheckedAt ?? null,
@@ -353,22 +364,114 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
         </div>
       </div>
 
-      {/* IVE 대상 레이블 설정 */}
+      {/* IVE 레이블 설정 */}
       <div className="border-t border-ive-border-dark pt-3">
         <label className="block text-sm font-bold text-ive-text-muted mb-1.5 uppercase ml-1">
-          <i className="fa-solid fa-tag mr-1.5 text-xs" />
+          <i className="fa-solid fa-tags mr-1.5 text-xs" />
           {t('targetLabel')}
         </label>
-        <input
-          type="text"
-          value={labelTarget}
-          onChange={e => setLabelTarget(e.target.value)}
-          placeholder="IVE"
-          className="w-full bg-ive-bg-deep border border-ive-border rounded-lg px-3 py-2 text-base text-ive-text focus:outline-none focus:border-ive-green font-bold"
-        />
-        <p className="text-xs text-ive-text-dim mt-1.5 ml-1 leading-relaxed">
-          {t('targetLabelHint')}
+        <p className="text-xs text-ive-text-dim mb-2 ml-1 leading-relaxed">
+          {t('labelSystemHint')}
         </p>
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="w-3 h-3 rounded-full bg-emerald-400 shrink-0" />
+            <input
+              type="text"
+              value={labelTarget}
+              onChange={e => setLabelTarget(e.target.value)}
+              placeholder="IVE"
+              className="flex-1 bg-ive-bg-deep border border-ive-border rounded-lg px-3 py-1.5 text-sm text-ive-text focus:outline-none focus:border-ive-green font-bold"
+            />
+            <span className="text-xs text-ive-text-dim shrink-0 w-16 text-right">{t('labelTarget')}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-3 h-3 rounded-full bg-yellow-400 shrink-0" />
+            <input
+              type="text"
+              value={labelSchedule}
+              onChange={e => setLabelSchedule(e.target.value)}
+              placeholder="IVE-S"
+              className="flex-1 bg-ive-bg-deep border border-ive-border rounded-lg px-3 py-1.5 text-sm text-ive-text focus:outline-none focus:border-ive-green font-bold"
+            />
+            <span className="text-xs text-ive-text-dim shrink-0 w-16 text-right">{t('labelSchedule')}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-3 h-3 rounded-full bg-cyan-400 shrink-0" />
+            <input
+              type="text"
+              value={labelDev}
+              onChange={e => setLabelDev(e.target.value)}
+              placeholder="IVE-D"
+              className="flex-1 bg-ive-bg-deep border border-ive-border rounded-lg px-3 py-1.5 text-sm text-ive-text focus:outline-none focus:border-ive-green font-bold"
+            />
+            <span className="text-xs text-ive-text-dim shrink-0 w-16 text-right">{t('labelDev')}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-3 h-3 rounded-full bg-orange-400 shrink-0" />
+            <input
+              type="text"
+              value={labelVerify}
+              onChange={e => setLabelVerify(e.target.value)}
+              placeholder="IVE-V"
+              className="flex-1 bg-ive-bg-deep border border-ive-border rounded-lg px-3 py-1.5 text-sm text-ive-text focus:outline-none focus:border-ive-green font-bold"
+            />
+            <span className="text-xs text-ive-text-dim shrink-0 w-16 text-right">{t('labelVerify')}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-3 h-3 rounded-full bg-blue-400 shrink-0" />
+            <input
+              type="text"
+              value={labelEnd}
+              onChange={e => setLabelEnd(e.target.value)}
+              placeholder="IVE-E"
+              className="flex-1 bg-ive-bg-deep border border-ive-border rounded-lg px-3 py-1.5 text-sm text-ive-text focus:outline-none focus:border-ive-green font-bold"
+            />
+            <span className="text-xs text-ive-text-dim shrink-0 w-16 text-right">{t('labelEnd')}</span>
+          </div>
+        </div>
+        {/* 레이블 생성 버튼 — 기존 프로젝트에서만 표시 */}
+        {existing && (
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={async () => {
+                setLabelCreating(true)
+                setLabelMessage(null)
+                try {
+                  const res = await fetch(`/api/projects/${existing.id}/labels`, { method: 'POST' })
+                  const data = await res.json()
+                  setLabelStatus(data.results || null)
+                  setLabelMessage(data.message || null)
+                } catch {
+                  setLabelMessage(t('labelCreateFailed'))
+                }
+                setLabelCreating(false)
+              }}
+              disabled={labelCreating}
+              className="text-sm font-bold text-ive-cyan border border-ive-cyan/30 px-3 py-1.5 rounded-lg hover:bg-ive-cyan/10 transition-all disabled:opacity-40"
+            >
+              {labelCreating ? <i className="fa-solid fa-circle-notch fa-spin mr-1" /> : <i className="fa-solid fa-wand-magic-sparkles mr-1" />}
+              {t('createLabels')}
+            </button>
+            {labelStatus && (
+              <div className="mt-2 space-y-1">
+                {labelStatus.map(s => (
+                  <div key={s.label} className={`text-xs flex items-center gap-1.5 ${s.exists ? 'text-ive-green' : 'text-ive-red'}`}>
+                    <i className={`fa-solid ${s.exists ? 'fa-circle-check' : 'fa-circle-xmark'}`} />
+                    <span className="font-bold">{s.label}</span>
+                    <span className="text-ive-text-dim">{s.exists ? t('labelExists') : t('labelMissing')}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {labelMessage && (
+              <p className="text-xs text-ive-amber mt-1.5 ml-1">
+                <i className="fa-solid fa-triangle-exclamation mr-1" />{labelMessage}
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* 트레이스 설정 */}

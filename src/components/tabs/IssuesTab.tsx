@@ -54,17 +54,21 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   const tCommon = useTranslations('common')
 
   const STAGE_INFO: Record<string, { label: string; color: string; icon: string }> = useMemo(() => ({
-    waiting:    { label: tStage('waiting'),   color: 'bg-ive-green/20 text-ive-green border-ive-green/30', icon: 'fa-clock' },
-    dev:        { label: tStage('dev'),       color: 'bg-ive-cyan/20 text-ive-cyan border-ive-cyan/30', icon: 'fa-code' },
-    dev_fail:   { label: tStage('dev_fail'),  color: 'bg-ive-red/20 text-ive-red border-ive-red/30', icon: 'fa-circle-xmark' },
-    done:       { label: tStage('done'),      color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30', icon: 'fa-circle-check' },
-    unknown:    { label: tStage('unknown'),   color: 'bg-white/10 text-ive-text-dim border-white/20', icon: 'fa-question' },
+    waiting:    { label: tStage('waiting'),    color: 'bg-ive-green/20 text-ive-green border-ive-green/30', icon: 'fa-clock' },
+    dev:        { label: tStage('dev'),        color: 'bg-ive-cyan/20 text-ive-cyan border-ive-cyan/30', icon: 'fa-code' },
+    dev_fail:   { label: tStage('dev_fail'),   color: 'bg-ive-red/20 text-ive-red border-ive-red/30', icon: 'fa-circle-xmark' },
+    verifying:  { label: tStage('verifying'),  color: 'bg-orange-500/20 text-orange-400 border-orange-500/30', icon: 'fa-magnifying-glass' },
+    done:       { label: tStage('done'),       color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30', icon: 'fa-circle-check' },
+    closed:     { label: tStage('closed'),     color: 'bg-gray-500/20 text-gray-400 border-gray-500/30', icon: 'fa-lock' },
+    rejected:   { label: tStage('rejected'),   color: 'bg-rose-500/20 text-rose-400 border-rose-500/30', icon: 'fa-rotate-left' },
+    unknown:    { label: tStage('unknown'),    color: 'bg-white/10 text-ive-text-dim border-white/20', icon: 'fa-question' },
   }), [tStage])
 
   const FILTER_TABS = useMemo(() => [
     { key: 'all', label: tFilter('all') },
     { key: 'waiting', label: tFilter('waiting') },
     { key: 'active', label: tFilter('active') },
+    { key: 'verifying', label: tFilter('verifying') },
     { key: 'failed', label: tFilter('failed') },
     { key: 'done', label: tFilter('done') },
     { key: 'history', label: tFilter('history') },
@@ -78,8 +82,15 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     dev_fail: [
       { action: 'retry', label: tIssue('retryToWaiting'), icon: 'fa-rotate' },
     ],
+    verifying: [
+      { action: 'approve', label: tIssue('approveVerify'), icon: 'fa-circle-check' },
+      { action: 'reject', label: tIssue('rejectVerify'), icon: 'fa-rotate-left', danger: true },
+    ],
     done: [
       { action: 'reopen', label: tIssue('reopenToWaiting'), icon: 'fa-rotate' },
+    ],
+    rejected: [
+      { action: 'retry', label: tIssue('retryToWaiting'), icon: 'fa-rotate' },
     ],
   }), [tIssue])
 
@@ -206,17 +217,19 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     setClosedLoading(true)
     return fetch(`/api/projects/${selectedProjectId}/issues?state=closed`)
       .then(res => res.ok ? res.json() : [])
-      .then(data => {
-        const doneIssues = data.filter((i: IveIssue) => i.stage === 'done')
-        setClosedIssues(doneIssues)
-      })
+      .then(data => setClosedIssues(data))
       .finally(() => setClosedLoading(false))
+  }, [selectedProjectId])
+
+  // 프로젝트 변경 시 닫힌 이슈 초기화
+  useEffect(() => {
+    setClosedIssues([])
   }, [selectedProjectId])
 
   useEffect(() => { fetchIssues() }, [fetchIssues])
 
   useEffect(() => {
-    if (filter === 'history' && selectedProjectId && closedIssues.length === 0) {
+    if (filter === 'history' && selectedProjectId) {
       fetchClosedIssues()
     }
   }, [filter, selectedProjectId, fetchClosedIssues])
@@ -318,7 +331,8 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     if (filter === 'all') return true
     if (filter === 'waiting') return issue.stage === 'waiting'
     if (filter === 'active') return issue.stage === 'dev'
-    if (filter === 'failed') return issue.stage === 'dev_fail'
+    if (filter === 'verifying') return issue.stage === 'verifying'
+    if (filter === 'failed') return issue.stage === 'dev_fail' || issue.stage === 'rejected'
     if (filter === 'done') return issue.stage === 'done'
     return true
   })).filter(issue => {
@@ -621,7 +635,8 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                     const count = tab.key === 'all' ? issues.length
                       : tab.key === 'waiting' ? issues.filter(i => i.stage === 'waiting').length
                       : tab.key === 'active' ? issues.filter(i => i.stage === 'dev').length
-                      : tab.key === 'failed' ? issues.filter(i => i.stage === 'dev_fail').length
+                      : tab.key === 'verifying' ? issues.filter(i => i.stage === 'verifying').length
+                      : tab.key === 'failed' ? issues.filter(i => i.stage === 'dev_fail' || i.stage === 'rejected').length
                       : tab.key === 'done' ? issues.filter(i => i.stage === 'done').length
                       : tab.key === 'history' ? closedIssues.length
                       : 0
@@ -760,7 +775,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                     <button
                       type="button"
                       onClick={() => openAssigneeModal([-1])}
-                      className="w-full bg-ive-bg-deep border border-ive-border-dark rounded-lg px-3 py-2 text-left flex items-center gap-2 text-sm focus:outline-none focus:border-ive-green/50 transition-colors"
+                      className="w-full bg-ive-bg-deep border border-ive-border-dark border-dashed rounded-lg px-3 py-2 text-left flex items-center gap-2 text-sm focus:outline-none hover:border-ive-green/50 transition-colors"
                     >
                       {selectedAssignees.length > 0 ? (
                         <span className="flex items-center gap-1.5 flex-wrap">
@@ -770,11 +785,11 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                               <span className="text-ive-text font-bold text-xs">{a.name || a.username}</span>
                             </span>
                           ))}
+                          <i className="fa-solid fa-pen text-[10px] text-ive-text-dim ml-auto" />
                         </span>
                       ) : (
-                        <span className="text-ive-text font-bold"><i className="fa-solid fa-users mr-1 text-ive-text-muted" />{tIssue('noAssignee')}</span>
+                        <span className="text-ive-text-dim font-bold"><i className="fa-solid fa-user-plus mr-1.5" />{tIssue('selectAssignee')}</span>
                       )}
-                      <i className="fa-solid fa-chevron-down text-xs text-ive-text-dim ml-auto" />
                     </button>
                   </div>
                 )}
@@ -913,7 +928,8 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
             ) : (
               <div className="flex flex-col gap-3">
                 {filtered.map(issue => {
-                  const stageInfo = STAGE_INFO[issue.stage] || STAGE_INFO.unknown
+                  const displayStage = issue.state === 'closed' && (!issue.stage || issue.stage === 'none') ? 'closed' : issue.stage
+                  const stageInfo = STAGE_INFO[displayStage] || STAGE_INFO.unknown
                   const isSelected = selected.has(issue.iid)
                   return (
                     <div

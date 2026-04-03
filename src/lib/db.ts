@@ -265,6 +265,9 @@ function initSchema(db: Database.Database) {
     if (!tableInfo.some((col: any) => col.name === 'model_name')) {
       db.exec("ALTER TABLE task_executions ADD COLUMN model_name TEXT")
     }
+    if (!tableInfo.some((col: any) => col.name === 'verified_at')) {
+      db.exec("ALTER TABLE task_executions ADD COLUMN verified_at TEXT")
+    }
   } catch (e) { console.error("Migration failed for task_executions:", e) }
 
   // 프로젝트 모니터링 설정
@@ -325,6 +328,31 @@ function initSchema(db: Database.Database) {
       ) WHERE last_activity_at IS NULL`)
       // 실행 기록이 없는 프로젝트는 생성일로
       db.exec(`UPDATE projects SET last_activity_at = created_at WHERE last_activity_at IS NULL`)
+    }
+    // 새 레이블 컬럼: label_schedule, label_dev, label_verify, label_end
+    if (!tableInfo.some((col: any) => col.name === 'label_schedule')) {
+      db.exec("ALTER TABLE projects ADD COLUMN label_schedule TEXT NOT NULL DEFAULT 'IVE-S'")
+      db.exec("ALTER TABLE projects ADD COLUMN label_dev TEXT NOT NULL DEFAULT 'IVE-D'")
+      db.exec("ALTER TABLE projects ADD COLUMN label_verify TEXT NOT NULL DEFAULT 'IVE-V'")
+      db.exec("ALTER TABLE projects ADD COLUMN label_end TEXT NOT NULL DEFAULT 'IVE-E'")
+    }
+    // 기존 레이블(IVE-DS/DE/VS/VE 등)을 새 체계로 강제 마이그레이션
+    db.exec("UPDATE projects SET label_schedule = 'IVE-S' WHERE label_schedule IN ('IVE-DS', 'IVE-VS', '')")
+    db.exec("UPDATE projects SET label_dev = 'IVE-D' WHERE label_dev IN ('IVE-DE', 'IVE-DS', '')")
+    db.exec("UPDATE projects SET label_verify = 'IVE-V' WHERE label_verify IN ('IVE-VS', 'IVE-VE', '')")
+    db.exec("UPDATE projects SET label_end = 'IVE-E' WHERE label_end IN ('IVE-VE', 'IVE-DE', '')")
+    // 하위 호환: 기존 컬럼이 없는 신규 설치 대비
+    if (!tableInfo.some((col: any) => col.name === 'label_verify_start')) {
+      try { db.exec("ALTER TABLE projects ADD COLUMN label_verify_start TEXT NOT NULL DEFAULT 'IVE-V'") } catch {}
+    }
+    if (!tableInfo.some((col: any) => col.name === 'label_verify_end')) {
+      try { db.exec("ALTER TABLE projects ADD COLUMN label_verify_end TEXT NOT NULL DEFAULT 'IVE-E'") } catch {}
+    }
+    if (!tableInfo.some((col: any) => col.name === 'label_dev_start')) {
+      try { db.exec("ALTER TABLE projects ADD COLUMN label_dev_start TEXT NOT NULL DEFAULT 'IVE-S'") } catch {}
+    }
+    if (!tableInfo.some((col: any) => col.name === 'label_dev_end')) {
+      try { db.exec("ALTER TABLE projects ADD COLUMN label_dev_end TEXT NOT NULL DEFAULT 'IVE-D'") } catch {}
     }
   } catch (e) { console.error("Migration failed for projects:", e) }
 
@@ -395,7 +423,7 @@ function initSchema(db: Database.Database) {
     CREATE TABLE IF NOT EXISTS user_activity_logs (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
-      category TEXT NOT NULL CHECK(category IN ('auth', 'project', 'agent', 'execution', 'admin', 'settings')),
+      category TEXT NOT NULL CHECK(category IN ('auth', 'project', 'agent', 'execution', 'admin', 'settings', 'task')),
       action TEXT NOT NULL,
       detail TEXT NOT NULL DEFAULT '',
       target_type TEXT,
@@ -408,6 +436,32 @@ function initSchema(db: Database.Database) {
   `)
   db.exec(`CREATE INDEX IF NOT EXISTS idx_activity_logs_user ON user_activity_logs(user_id, created_at)`)
   db.exec(`CREATE INDEX IF NOT EXISTS idx_activity_logs_created ON user_activity_logs(created_at)`)
+
+  // 기존 테이블의 CHECK 제약조건에 'task' 카테고리 추가 마이그레이션
+  try {
+    const checkInfo = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='user_activity_logs'").get() as any
+    if (checkInfo?.sql && !checkInfo.sql.includes("'task'")) {
+      db.exec("ALTER TABLE user_activity_logs RENAME TO _user_activity_logs_old")
+      db.exec(`CREATE TABLE user_activity_logs (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        category TEXT NOT NULL CHECK(category IN ('auth', 'project', 'agent', 'execution', 'admin', 'settings', 'task')),
+        action TEXT NOT NULL,
+        detail TEXT NOT NULL DEFAULT '',
+        target_type TEXT,
+        target_id TEXT,
+        ip_address TEXT,
+        user_agent TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )`)
+      db.exec("INSERT INTO user_activity_logs SELECT * FROM _user_activity_logs_old")
+      db.exec("DROP TABLE _user_activity_logs_old")
+      db.exec("CREATE INDEX IF NOT EXISTS idx_activity_logs_user ON user_activity_logs(user_id, created_at)")
+      db.exec("CREATE INDEX IF NOT EXISTS idx_activity_logs_created ON user_activity_logs(created_at)")
+      console.log('[DB] Migrated user_activity_logs: added task category')
+    }
+  } catch (e) { console.warn('[DB] Activity logs migration skipped:', e) }
 
   // Chat sessions & messages (Issue Chat feature)
   db.exec(`
@@ -574,6 +628,10 @@ type ProjectRow = {
   snapshot_interval: number; sparkline_points: number; stats_retention: number;
   conflict_count: number;
   last_activity_at: string | null;
+  label_schedule: string;
+  label_dev: string;
+  label_verify: string;
+  label_end: string;
 }
 
 function mapProject(r: ProjectRow): Project {
@@ -584,6 +642,10 @@ function mapProject(r: ProjectRow): Project {
     color: (r.color || '#4ade80') as Project['color'],
     createdAt: r.created_at,
     labelTarget: r.label_target,
+    labelSchedule: r.label_schedule || 'IVE-S',
+    labelDev: r.label_dev || 'IVE-D',
+    labelVerify: r.label_verify || 'IVE-V',
+    labelEnd: r.label_end || 'IVE-E',
     showToolUsage: r.show_tool_usage === 1,
     checkInterval: r.check_interval,
     lastCheckedAt: r.last_checked_at,
@@ -631,14 +693,15 @@ export function createProject(p: Project) {
   getDb().prepare(
     `INSERT INTO projects (
       id, user_id, name, provider, repo_url, auth_type, git_username, access_token, color,
-      label_target, show_tool_usage,
+      label_target, label_schedule, label_dev, label_verify, label_end, show_tool_usage,
       check_interval, last_checked_at, last_scanned_issue_count, scanner_active, sort_order,
       avatar_url, snapshot_interval, sparkline_points, stats_retention, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     p.id, p.userId, p.name, p.provider, p.repoUrl, p.authType || 'token', p.gitUsername || '',
     p.accessToken, p.color || '#4ade80',
-    p.labelTarget, p.showToolUsage ? 1 : 0,
+    p.labelTarget, p.labelSchedule || 'IVE-S', p.labelDev || 'IVE-D',
+    p.labelVerify || 'IVE-V', p.labelEnd || 'IVE-E', p.showToolUsage ? 1 : 0,
     p.checkInterval, p.lastCheckedAt, p.lastScannedIssueCount, p.scannerActive ? 1 : 0, sortOrder,
     p.avatarUrl || '', p.snapshotInterval ?? 1, p.sparklinePoints ?? 60, p.statsRetention ?? 7, p.createdAt
   )
@@ -649,7 +712,8 @@ export function updateProject(p: Project) {
     `UPDATE projects SET
       name = ?, repo_url = ?, access_token = ?, color = ?,
       auth_type = ?, git_username = ?,
-      label_target = ?, show_tool_usage = ?,
+      label_target = ?, label_schedule = ?, label_dev = ?,
+      label_verify = ?, label_end = ?, show_tool_usage = ?,
       check_interval = ?, last_checked_at = ?, last_scanned_issue_count = ?,
       scanner_active = ?, sort_order = ?, avatar_url = ?,
       snapshot_interval = ?, sparkline_points = ?, stats_retention = ?
@@ -657,7 +721,8 @@ export function updateProject(p: Project) {
   ).run(
     p.name, p.repoUrl, p.accessToken, p.color || '#4ade80',
     p.authType || 'token', p.gitUsername || '',
-    p.labelTarget, p.showToolUsage ? 1 : 0,
+    p.labelTarget, p.labelSchedule || 'IVE-S', p.labelDev || 'IVE-D',
+    p.labelVerify || 'IVE-V', p.labelEnd || 'IVE-E', p.showToolUsage ? 1 : 0,
     p.checkInterval, p.lastCheckedAt, p.lastScannedIssueCount,
     p.scannerActive ? 1 : 0, p.sortOrder ?? 0, p.avatarUrl || '',
     p.snapshotInterval ?? 1, p.sparklinePoints ?? 60, p.statsRetention ?? 7,
@@ -896,11 +961,22 @@ export function resetStuckExecutions() {
   }
   if (stuckRows.length > 0) console.log(`[DB] Reset ${stuckRows.length} stuck execution(s).`)
 
-  // 서버 재기동 시 '개발중(dev)' 상태로 멈춘 이슈를 '대기(waiting)'로 복원
-  // JS ISO 형식으로 통일 (datetime('now')는 'YYYY-MM-DD HH:MM:SS' 형식이라 timezone 파싱 불일치 위험)
-  const restartTs = new Date().toISOString()
-  const stuckIssues = getDb().prepare("UPDATE issue_stages SET stage = 'waiting', updated_at = ? WHERE stage = 'dev'").run(restartTs)
-  if (stuckIssues.changes > 0) console.log(`[DB] Reset ${stuckIssues.changes} stuck issue(s) from 'dev' to 'waiting'.`)
+  // 이슈 상태는 레이블로 관리하므로 DB에서 stage 리셋 불필요
+  // (IVE-DS 레이블이 붙어있지만 활성 실행 없음 → dev_fail로 자동 판정됨)
+}
+
+export function markIssueVerified(projectId: string, issueIid: number) {
+  const now = new Date().toISOString()
+  getDb().prepare(
+    "UPDATE task_executions SET verified_at = ? WHERE project_id = ? AND issue_iid = ? AND status IN ('success', 'failed') AND ended_at IS NOT NULL AND verified_at IS NULL"
+  ).run(now, projectId, issueIid)
+}
+
+export function hasAnyExecution(projectId: string, issueIid: number): boolean {
+  const r = getDb().prepare(
+    "SELECT id FROM task_executions WHERE project_id = ? AND issue_iid = ? LIMIT 1"
+  ).get(projectId, issueIid)
+  return !!r
 }
 
 export function hasActiveExecution(projectId: string, issueIid: number): boolean {
@@ -1329,6 +1405,7 @@ export interface ReportExecution {
   costUsd: number
   turns: number
   issueCreatedAt: string | null
+  verifiedAt: string | null
 }
 
 export function getExecutionsInRange(userId: string, start: string, end: string): ReportExecution[] {
@@ -1341,7 +1418,7 @@ export function getExecutionsInRange(userId: string, start: string, end: string)
            u.name as developer_name, a.user_id as developer_user_id,
            te.issue_iid, te.issue_title, te.status,
            te.started_at, te.ended_at, te.input_tokens, te.output_tokens, te.cost_usd, te.turns,
-           te.issue_created_at
+           te.issue_created_at, te.verified_at
     FROM task_executions te
     JOIN projects p ON p.id = te.project_id
     JOIN agents a ON a.id = te.agent_id
@@ -1361,6 +1438,7 @@ export function getExecutionsInRange(userId: string, start: string, end: string)
     inputTokens: r.input_tokens ?? 0, outputTokens: r.output_tokens ?? 0,
     costUsd: r.cost_usd ?? 0, turns: r.turns ?? 0,
     issueCreatedAt: r.issue_created_at ?? null,
+    verifiedAt: r.verified_at ?? null,
   }))
 }
 
@@ -1400,79 +1478,114 @@ export function setSystemSettings(settings: Record<string, string>) {
   tx()
 }
 
-// ── Issue Stages (로컬 이슈 상태 관리) ──
+// ── Issue Stage (레이블 기반 상태 판정) ──
+// 이슈 상태는 DB가 아닌 Git 레이블로만 관리됩니다.
+// issue_stages 테이블은 preferred_agent_id 저장 용도로만 사용합니다.
 
-export type IssueStage = 'waiting' | 'dev' | 'dev_fail' | 'done'
+export type IssueStage = 'waiting' | 'dev' | 'dev_fail' | 'verifying' | 'done' | 'rejected'
 
-export function getIssueStage(projectId: string, issueIid: number): IssueStage | null {
-  const r = getDb().prepare('SELECT stage FROM issue_stages WHERE project_id = ? AND issue_iid = ?').get(projectId, issueIid) as any
-  return r ? r.stage as IssueStage : null
-}
+/**
+ * Git 레이블로부터 이슈 상태를 판정합니다.
+ * IVE 레이블이 없으면 null (IVE에서 관리하지 않는 이슈).
+ * 우선순위: IVE-E > IVE-V > IVE-D > IVE-S > (IVE only)
+ *
+ * IVE-S: 스케줄 대상 → waiting
+ * IVE-D: 개발 중 → dev (활성 실행 없으면 dev_fail)
+ * IVE-V: 검증 대기 → verifying
+ * IVE-E: 처리 완료 → done
+ * IVE만: 관리 대상이지만 스케줄 미등록 → null이 아닌 'none' 상태
+ */
+export function stageFromLabels(
+  labels: string[],
+  project: Project,
+  options?: { hasActiveExec?: boolean }
+): IssueStage | null {
+  if (!labels.includes(project.labelTarget)) return null
 
-export function getIssueStageUpdatedAt(projectId: string, issueIid: number): string | null {
-  const r = getDb().prepare('SELECT updated_at FROM issue_stages WHERE project_id = ? AND issue_iid = ?').get(projectId, issueIid) as any
-  return r ? r.updated_at : null
-}
+  const labelS = project.labelSchedule || 'IVE-S'
+  const labelD = project.labelDev || 'IVE-D'
+  const labelV = project.labelVerify || 'IVE-V'
+  const labelE = project.labelEnd || 'IVE-E'
 
-export function getIssueStages(projectId: string): Map<number, { stage: IssueStage; failReason: string | null; preferredAgentId: string | null }> {
-  let rows: any[]
-  try {
-    rows = getDb().prepare('SELECT issue_iid, stage, fail_reason, preferred_agent_id FROM issue_stages WHERE project_id = ?').all(projectId) as any[]
-  } catch {
-    try {
-      rows = getDb().prepare('SELECT issue_iid, stage, fail_reason FROM issue_stages WHERE project_id = ?').all(projectId) as any[]
-    } catch {
-      rows = getDb().prepare('SELECT issue_iid, stage FROM issue_stages WHERE project_id = ?').all(projectId) as any[]
-    }
+  if (labels.includes(labelE)) return 'done'
+  if (labels.includes(labelV)) return 'verifying'
+  if (labels.includes(labelD)) {
+    // IVE-D가 있지만 활성 실행이 없으면 → dev_fail
+    if (options?.hasActiveExec === false) return 'dev_fail'
+    return 'dev'
   }
-  const map = new Map<number, { stage: IssueStage; failReason: string | null; preferredAgentId: string | null }>()
-  for (const r of rows) map.set(r.issue_iid, { stage: r.stage as IssueStage, failReason: r?.fail_reason || null, preferredAgentId: r?.preferred_agent_id || null })
-  return map
+  if (labels.includes(labelS)) return 'waiting'
+  return null // IVE만 있고 상태 레이블 없음
 }
 
-export function setIssueStage(projectId: string, issueIid: number, stage: IssueStage, failReason?: string, updatedAt?: string) {
-  const ts = updatedAt || new Date().toISOString();
-  try {
-    getDb().prepare(`
-      INSERT INTO issue_stages (project_id, issue_iid, stage, fail_reason, updated_at) VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(project_id, issue_iid) DO UPDATE SET stage = excluded.stage, fail_reason = excluded.fail_reason, updated_at = excluded.updated_at, preferred_agent_id = COALESCE(issue_stages.preferred_agent_id, excluded.preferred_agent_id)
-    `).run(projectId, issueIid, stage, stage === 'dev_fail' ? (failReason || null) : null, ts)
-  } catch {
-    // fail_reason 컬럼이 아직 없는 경우 fallback
-    getDb().prepare(`
-      INSERT INTO issue_stages (project_id, issue_iid, stage, updated_at) VALUES (?, ?, ?, ?)
-      ON CONFLICT(project_id, issue_iid) DO UPDATE SET stage = excluded.stage, updated_at = excluded.updated_at
-    `).run(projectId, issueIid, stage, ts)
-  }
-  // 프로젝트 최종 활동 시각 갱신
-  touchProjectActivity(projectId)
+/**
+ * 특정 이슈의 마지막 실행 상태를 가져옵니다.
+ */
+export function getLastExecutionStatus(projectId: string, issueIid: number): string | null {
+  const r = getDb().prepare(
+    "SELECT status FROM task_executions WHERE project_id = ? AND issue_iid = ? ORDER BY started_at DESC LIMIT 1"
+  ).get(projectId, issueIid) as any
+  return r?.status || null
 }
 
-export function deleteIssueStage(projectId: string, issueIid: number) {
-  getDb().prepare('DELETE FROM issue_stages WHERE project_id = ? AND issue_iid = ?').run(projectId, issueIid)
+// 하위 호환을 위해 유지 (deprecated — 레이블 기반으로 전환)
+export function getIssueStage(_projectId: string, _issueIid: number): IssueStage | null {
+  return null // 더 이상 DB에서 stage를 관리하지 않음
+}
+
+export function getIssueStageUpdatedAt(_projectId: string, _issueIid: number): string | null {
+  return null
+}
+
+export function setIssueStage(_projectId: string, _issueIid: number, _stage: IssueStage, _failReason?: string, _updatedAt?: string) {
+  // no-op: 레이블 기반으로 전환됨
+}
+
+export function deleteIssueStage(_projectId: string, _issueIid: number) {
+  // no-op: 레이블 기반으로 전환됨
+}
+
+export function countIssuesByStage(_projectId: string, _stage: IssueStage): number {
+  return 0 // 더 이상 DB에서 stage를 카운트하지 않음
 }
 
 // ── Preferred Agent (선호 에이전트) ──
+// issue_stages 테이블은 preferred_agent_id 저장 용도로만 사용합니다.
 
 export function getPreferredAgentId(projectId: string, issueIid: number): string | null {
   const r = getDb().prepare('SELECT preferred_agent_id FROM issue_stages WHERE project_id = ? AND issue_iid = ?').get(projectId, issueIid) as any
   return r?.preferred_agent_id || null
 }
 
-export function setPreferredAgent(projectId: string, issueIid: number, agentId: string | null) {
-  getDb().prepare('UPDATE issue_stages SET preferred_agent_id = ? WHERE project_id = ? AND issue_iid = ?').run(agentId, projectId, issueIid)
+/** 프로젝트 내 모든 이슈의 선호 에이전트 맵을 반환합니다 (iid → preferredAgentId) */
+export function getPreferredAgentMap(projectId: string): Map<number, string | null> {
+  const rows = getDb().prepare(
+    'SELECT issue_iid, preferred_agent_id FROM issue_stages WHERE project_id = ? AND preferred_agent_id IS NOT NULL'
+  ).all(projectId) as any[]
+  const map = new Map<number, string | null>()
+  for (const r of rows) map.set(r.issue_iid, r.preferred_agent_id || null)
+  return map
 }
 
-export function countWaitingIssuesByPreferredAgent(agentId: string): number {
-  const r = getDb().prepare("SELECT COUNT(*) as cnt FROM issue_stages WHERE preferred_agent_id = ? AND stage = 'waiting'").get(agentId) as any
+export function setPreferredAgent(projectId: string, issueIid: number, agentId: string | null) {
+  // UPSERT: 행이 없으면 생성, 있으면 업데이트 (stage는 빈 문자열로 — 더 이상 사용 안 함)
+  getDb().prepare(`
+    INSERT INTO issue_stages (project_id, issue_iid, stage, preferred_agent_id, updated_at)
+    VALUES (?, ?, '', ?, datetime('now'))
+    ON CONFLICT(project_id, issue_iid) DO UPDATE SET preferred_agent_id = excluded.preferred_agent_id, updated_at = excluded.updated_at
+  `).run(projectId, issueIid, agentId)
+}
+
+export function countPreferredIssuesByAgent(agentId: string): number {
+  const r = getDb().prepare("SELECT COUNT(*) as cnt FROM issue_stages WHERE preferred_agent_id = ?").get(agentId) as any
   return r?.cnt || 0
 }
 
-export function getWaitingIssuesByPreferredAgent(agentId: string): { projectId: string; projectName: string; issueIid: number }[] {
+export function getPreferredIssuesByAgent(agentId: string): { projectId: string; projectName: string; issueIid: number }[] {
   return getDb().prepare(`
     SELECT s.project_id as projectId, p.name as projectName, s.issue_iid as issueIid
     FROM issue_stages s JOIN projects p ON p.id = s.project_id
-    WHERE s.preferred_agent_id = ? AND s.stage = 'waiting'
+    WHERE s.preferred_agent_id = ?
     ORDER BY s.updated_at ASC
   `).all(agentId) as any[]
 }
@@ -1571,7 +1684,7 @@ export function getGlobalExecutionsInRange(start: string, end: string): ReportEx
            u.name as developer_name, a.user_id as developer_user_id,
            te.issue_iid, te.issue_title, te.status,
            te.started_at, te.ended_at, te.input_tokens, te.output_tokens, te.cost_usd, te.turns,
-           te.issue_created_at
+           te.issue_created_at, te.verified_at
     FROM task_executions te
     JOIN projects p ON p.id = te.project_id
     JOIN agents a ON a.id = te.agent_id
@@ -1590,6 +1703,7 @@ export function getGlobalExecutionsInRange(start: string, end: string): ReportEx
     inputTokens: r.input_tokens ?? 0, outputTokens: r.output_tokens ?? 0,
     costUsd: r.cost_usd ?? 0, turns: r.turns ?? 0,
     issueCreatedAt: r.issue_created_at ?? null,
+    verifiedAt: r.verified_at ?? null,
   }))
 }
 
@@ -1807,13 +1921,14 @@ export function getChatHistoryForPrompt(sessionId: string): string {
 
 /**
  * 이슈 배정을 원자적으로 수행합니다.
- * hasActiveExecution 체크 + setIssueStage + createExecution을 하나의 트랜잭션으로 묶어
+ * hasActiveExecution 체크 + createExecution을 하나의 트랜잭션으로 묶어
  * 레이스 컨디션으로 인한 중복 배정을 방지합니다.
+ * (stage는 레이블로 관리하므로 DB에 저장하지 않음)
  */
 export function assignIssueAtomically(
   projectId: string,
   issueIid: number,
-  stage: IssueStage,
+  _stage: IssueStage,
   execution: TaskExecution,
 ): boolean {
   const tx = getDb().transaction(() => {
@@ -1823,7 +1938,6 @@ export function assignIssueAtomically(
     ).get(projectId, issueIid)
     if (active) return false
 
-    setIssueStage(projectId, issueIid, stage)
     createExecution(execution)
     return true
   })
