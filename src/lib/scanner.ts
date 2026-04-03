@@ -419,17 +419,18 @@ export async function scanProject(project: Project, force: boolean = false) {
         // 이슈의 실제 생성 시점(GitLab/GitHub created_at)을 대기 큐 진입 시점으로 사용
         // → 대기시간 = 이슈 생성 시점 ~ 실행 시작 시점 (스캐너 발견 시점이 아닌 원본 시점)
         setIssueStage(project.id, issue.iid, 'waiting', undefined, issue.created_at);
+        // 이슈 감지 활동 로그 기록
         try {
           createActivityLog({
             userId: 'system',
             category: 'task',
             action: 'detect_issue',
-            detail: `이슈 감지 (이슈 #${issue.iid}, ${project.name})`,
+            detail: `이슈 감지: #${issue.iid} "${issue.title}" (${project.name})`,
             targetType: 'issue',
-            targetId: `${project.id}:${issue.iid}`,
+            targetId: `${project.id}-${issue.iid}`,
           });
         } catch (e) {
-          console.error('[Scanner] Failed to log issue detection activity:', e);
+          console.error('[Scanner] Failed to log detect_issue activity:', e);
         }
       }
     }
