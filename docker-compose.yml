@@ -1,7 +1,6 @@
 services:
   spring-ive:
     image: spring-ive:latest
-    build: .
     env_file:
       - .env
     container_name: spring-ive
