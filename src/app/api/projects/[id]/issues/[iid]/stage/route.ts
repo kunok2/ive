@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAccess, hasActiveExecution, stageFromLabels, markIssueVerified, type IssueStage } from '@/lib/db';
+import { getProject, getProjectAccess, hasActiveExecution, stageFromLabels, markIssueVerified, touchProjectActivity, type IssueStage } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { decrypt } from '@/lib/crypto';
 import { reopenIssue, fetchSingleIssue, addIssueLabels, removeIssueLabels } from '@/lib/provider';
@@ -139,6 +139,9 @@ export async function POST(
     if (action === 'approve' || action === 'complete') {
       markIssueVerified(projectId, Number(iid));
     }
+
+    // 프로젝트 최종 활동 시각 갱신
+    touchProjectActivity(projectId);
 
     // 전환 후 새로운 stage 판정
     const issue = await fetchSingleIssue(project, Number(iid), token);

@@ -112,6 +112,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   const [closedIssues, setClosedIssues] = useState<IveIssue[]>([])
   const [closedLoading, setClosedLoading] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [navigatingIid, setNavigatingIid] = useState<number | null>(null)
   const [bulkMode, setBulkMode] = useState(false)
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [bulkProgress, setBulkProgress] = useState<{ total: number; done: number; failed: number } | null>(null)
@@ -586,7 +587,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                   {canEdit && !bulkMode && !isHistoryTab && (
                     <button
                       onClick={() => setShowAddForm(v => !v)}
-                      className="w-9 h-9 rounded-full bg-ive-bg-deep border border-ive-border-subtle flex items-center justify-center text-ive-text-dim hover:text-ive-green hover:border-ive-green/30 transition-all"
+                      className="w-9 h-9 rounded-full bg-ive-green/20 border border-ive-green/30 flex items-center justify-center text-ive-green hover:bg-ive-green/30 hover:scale-105 transition-all"
                       title={tIssue('addNewIssue')}
                     >
                       <i className="fa-solid fa-plus text-sm" />
@@ -934,10 +935,21 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                   return (
                     <div
                       key={issue.iid}
-                      onClick={() => {
+                      onClick={async () => {
                         if (bulkMode) { toggleSelect(issue.iid); return }
+                        if (navigatingIid) return
                         const el = document.querySelector('[data-scroll-container="issues-list"]')
                         if (el) sessionStorage.setItem('issues-scroll', String(el.scrollTop))
+                        setNavigatingIid(issue.iid)
+                        try {
+                          // 이슈 상세 + 노트를 prefetch하여 캐시
+                          const [issueRes, notesRes] = await Promise.all([
+                            fetch(`/api/projects/${selectedProjectId}/issues/${issue.iid}`),
+                            fetch(`/api/projects/${selectedProjectId}/issues/${issue.iid}/notes`),
+                          ])
+                          if (issueRes.ok) sessionStorage.setItem(`issue-detail-${selectedProjectId}-${issue.iid}`, JSON.stringify(await issueRes.json()))
+                          if (notesRes.ok) sessionStorage.setItem(`issue-notes-${selectedProjectId}-${issue.iid}`, JSON.stringify(await notesRes.json()))
+                        } catch { /* 실패해도 이동 */ }
                         router.push(`/issues/${selectedProjectId}/${issue.iid}`)
                       }}
                       className={`bg-ive-bg-card border rounded-lg p-4 transition-all cursor-pointer active:scale-[0.98] ${
@@ -961,7 +973,9 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                             <h3 className="text-base font-bold text-ive-text leading-snug mt-0.5 line-clamp-2">{issue.title}</h3>
                           </div>
                         </div>
-                        {issue.stage !== 'none' && (
+                        {navigatingIid === issue.iid ? (
+                          <i className="fa-solid fa-circle-notch fa-spin text-ive-green shrink-0" />
+                        ) : issue.stage !== 'none' && (
                           <span className={`shrink-0 text-xs font-bold px-2 py-1 rounded-lg border ${stageInfo.color}`}>
                             <i className={`fa-solid ${stageInfo.icon} mr-1`} />
                             {stageInfo.label}

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAccess, getPreferredAgentMap, setPreferredAgent, getAgent, hasActiveExecution, hasAnyExecution, stageFromLabels } from '@/lib/db';
+import { getProject, getProjectAccess, getPreferredAgentMap, setPreferredAgent, getAgent, hasActiveExecution, hasAnyExecution, stageFromLabels, touchProjectActivity } from '@/lib/db';
 import { checkLabelsExist } from '@/lib/provider';
 import { getCurrentUser } from '@/lib/auth';
 import { decrypt } from '@/lib/crypto';
@@ -148,6 +148,7 @@ export async function POST(
       setPreferredAgent(projectId, issue.iid, preferredAgentId);
     }
 
+    touchProjectActivity(projectId);
     return NextResponse.json(issue);
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : '이슈 생성 실패' }, { status: 500 });

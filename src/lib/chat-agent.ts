@@ -96,8 +96,12 @@ interface ChatAgentOptions {
  * First message: sends system prompt + user message, captures CLI session ID.
  * Subsequent messages: resumes CLI session with --resume / -s.
  */
-export async function* runChatAgent(opts: ChatAgentOptions): AsyncGenerator<{ type: 'text' | 'done' | 'error' | 'session_id'; content?: string }> {
-  const { sessionId, cliSessionId, project, agent, token, issueIid, issueTitle, issueDescription, userMessage, workspacePath, userLocale } = opts
+/**
+ * Prepare CLI spawn arguments and environment for a chat agent.
+ * Shared by both the legacy SSE generator and the WebSocket callback version.
+ */
+async function prepareChatSpawn(opts: ChatAgentOptions) {
+  const { cliSessionId, project, agent, token, issueIid, issueTitle, issueDescription, userMessage, workspacePath, userLocale } = opts
 
   const locale = userLocale || getSystemSetting('locale') || defaultLocale
   const isKo = locale === 'ko'
@@ -111,9 +115,6 @@ export async function* runChatAgent(opts: ChatAgentOptions): AsyncGenerator<{ ty
   const cliParts = resolvedCliPath.split(' ')
   const mainCmd = cliParts[0]
 
-  let args: string[]
-  let spawnEnv: Record<string, string | undefined>
-
   // MCP config
   const mcpConfigRaw = getSystemSetting('mcp.config')
   let mcpServers: Record<string, any> | null = null
@@ -121,7 +122,7 @@ export async function* runChatAgent(opts: ChatAgentOptions): AsyncGenerator<{ ty
     try { mcpServers = JSON.parse(mcpConfigRaw) } catch { /* ignore */ }
   }
 
-  // Build prompt: full system context for first message, just user message for resume
+  // Build prompt
   let prompt: string
   if (isFirstMessage) {
     prompt = `You are a helpful AI assistant for issue #${issueIid} "${issueTitle}". ${langInstruction}
@@ -141,6 +142,9 @@ ${userMessage}
   } else {
     prompt = userMessage
   }
+
+  let args: string[]
+  let spawnEnv: Record<string, string | undefined>
 
   if (isOpenCode) {
     const opencodeConfig: any = {
@@ -199,6 +203,98 @@ ${userMessage}
     }
   }
 
+  return { mainCmd, args, spawnEnv, isOpenCode, workspacePath, issueIid }
+}
+
+/**
+ * Run chat agent with a callback for each event (WebSocket-friendly).
+ * No timeout — the WebSocket heartbeat keeps the connection alive.
+ * If callback returns false, the agent process is killed.
+ */
+export async function runChatAgentWithCallback(
+  opts: ChatAgentOptions,
+  onEvent: (event: { type: 'text' | 'done' | 'error' | 'session_id'; content?: string }) => boolean,
+): Promise<void> {
+  const { sessionId, cliSessionId } = opts
+  const { mainCmd, args, spawnEnv, isOpenCode, workspacePath, issueIid } = await prepareChatSpawn(opts)
+
+  const child = spawn(mainCmd, args, {
+    cwd: workspacePath,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: spawnEnv as NodeJS.ProcessEnv,
+    detached: true,
+  })
+
+  getAgentMap().set(sessionId, child)
+
+  let capturedCliSessionId: string | null = null
+
+  return new Promise<void>((resolve) => {
+    let stdoutBuffer = ''
+
+    child.stdout?.on('data', (data: Buffer) => {
+      stdoutBuffer += data.toString()
+      const lines = stdoutBuffer.split('\n')
+      stdoutBuffer = lines.pop() || ''
+      for (const line of lines) {
+        if (!line.trim()) continue
+        try {
+          const event = JSON.parse(line)
+
+          // Capture CLI session ID
+          if (!capturedCliSessionId && !cliSessionId) {
+            const sid = extractSessionId(event, isOpenCode)
+            if (sid) {
+              capturedCliSessionId = sid
+              onEvent({ type: 'session_id', content: sid })
+              updateChatSessionCliId(sessionId, sid)
+            }
+          }
+
+          const text = extractTextFromEvent(event, isOpenCode)
+          if (text) {
+            const shouldContinue = onEvent({ type: 'text', content: text })
+            if (!shouldContinue) {
+              // WebSocket closed — kill the agent
+              try { if (child.pid) process.kill(-child.pid, 'SIGTERM') } catch { /* ignore */ }
+              try { child.kill('SIGTERM') } catch { /* ignore */ }
+            }
+          }
+        } catch { /* skip non-JSON */ }
+      }
+    })
+
+    child.stderr?.on('data', (data: Buffer) => {
+      const msg = data.toString().trim()
+      if (msg) console.warn(`[Chat #${issueIid}] stderr: ${msg}`)
+    })
+
+    child.on('close', (code) => {
+      getAgentMap().delete(sessionId)
+      if (code && code !== 0) {
+        onEvent({ type: 'error', content: `Process exited with code ${code}` })
+      } else {
+        onEvent({ type: 'done' })
+      }
+      resolve()
+    })
+
+    child.on('error', (err) => {
+      getAgentMap().delete(sessionId)
+      onEvent({ type: 'error', content: err.message })
+      resolve()
+    })
+  })
+}
+
+/**
+ * Legacy SSE-based generator (kept for backward compatibility).
+ * Uses the same prepareChatSpawn helper.
+ */
+export async function* runChatAgent(opts: ChatAgentOptions): AsyncGenerator<{ type: 'text' | 'done' | 'error' | 'session_id'; content?: string }> {
+  const { sessionId, cliSessionId } = opts
+  const { mainCmd, args, spawnEnv, isOpenCode, workspacePath, issueIid } = await prepareChatSpawn(opts)
+
   const child = spawn(mainCmd, args, {
     cwd: workspacePath,
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -224,13 +320,11 @@ ${userMessage}
         try {
           const event = JSON.parse(line)
 
-          // Capture CLI session ID from first response
           if (!capturedCliSessionId && !cliSessionId) {
             const sid = extractSessionId(event, isOpenCode)
             if (sid) {
               capturedCliSessionId = sid
               textChunks.push({ type: 'session_id', content: sid })
-              // Persist to DB immediately
               updateChatSessionCliId(sessionId, sid)
             }
           }
@@ -263,19 +357,12 @@ ${userMessage}
     })
   })
 
-  // Yield text chunks as they arrive (5분 타임아웃으로 무한 대기 방지)
-  const chatTimeout = Date.now() + 5 * 60 * 1000
+  // Yield text chunks as they arrive (no hard timeout — WebSocket heartbeat handles liveness)
   while (!done || textChunks.length > 0) {
     if (textChunks.length > 0) {
       const chunk = textChunks.shift()!
       yield chunk
     } else {
-      if (Date.now() > chatTimeout) {
-        try { child.kill('SIGKILL') } catch { /* ignore */ }
-        getAgentMap().delete(sessionId)
-        yield { type: 'error', content: 'Chat session timed out (5 minutes)' }
-        return
-      }
       await new Promise(r => setTimeout(r, 100))
     }
   }

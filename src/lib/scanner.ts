@@ -22,6 +22,7 @@ import {
   assignIssueAtomically,
   createActivityLog,
   setPreferredAgent,
+  touchProjectActivity,
 } from "./db";
 import { decrypt } from "./crypto";
 import { defaultLocale } from "@/i18n/config";
@@ -1309,6 +1310,8 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
   } finally {
     // 에이전트 상태를 'available'로 복원
     updateAgentStatus(agent.id, 'available');
+    // 프로젝트 최종 활동 시각 갱신
+    touchProjectActivity(project.id);
 
     logStream.end();
     try {

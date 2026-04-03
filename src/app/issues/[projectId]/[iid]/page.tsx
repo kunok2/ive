@@ -12,6 +12,7 @@ import { useTranslations } from 'next-intl'
 import { useStore } from '@/lib/store'
 import { formatDateMedium, formatTime } from '@/lib/format-date'
 import AgentAvatar from '@/components/agent/AgentAvatar'
+import Modal from '@/components/ui/Modal'
 
 interface ChatMessage {
   id: string
@@ -107,8 +108,8 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   const retryAgentPickerRef = useRef<HTMLDivElement>(null)
   const [gitMembers, setGitMembers] = useState<IssueAssignee[]>([])
   const [assigneePickerOpen, setAssigneePickerOpen] = useState(false)
-  const assigneePickerRef = useRef<HTMLDivElement>(null)
   const [assigneeSearch, setAssigneeSearch] = useState('')
+  const [assigneePick, setAssigneePick] = useState<IssueAssignee | null>(null)
   const [notesLoading, setNotesLoading] = useState(true)
   const commentKey = `issue-comment-${projectId}-${iid}`
   const [comment, setComment] = useState(() => {
@@ -141,8 +142,20 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   const [chatAgentAvatar, setChatAgentAvatar] = useState<string | null>(null)
   const [chatHistoryOnly, setChatHistoryOnly] = useState(false) // read-only past chat
   const chatSessionRef = useRef<string | null>(null)
+  const chatWsRef = useRef<WebSocket | null>(null)
+  const chatWsResolveRef = useRef<(() => void) | null>(null)
+  const chatStreamTextRef = useRef('')
 
   const fetchIssue = useCallback(async () => {
+    // prefetch 캐시가 있으면 즉시 사용 (화면 깜빡임 방지)
+    const cacheKey = `issue-detail-${projectId}-${iid}`
+    const cached = sessionStorage.getItem(cacheKey)
+    if (cached) {
+      sessionStorage.removeItem(cacheKey)
+      setIssue(JSON.parse(cached))
+      setLoading(false)
+      return
+    }
     const res = await fetch(`/api/projects/${projectId}/issues/${iid}`)
     if (res.ok) {
       setIssue(await res.json())
@@ -151,6 +164,15 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   }, [projectId, iid])
 
   const fetchNotes = useCallback(async () => {
+    // prefetch 캐시가 있으면 즉시 사용
+    const cacheKey = `issue-notes-${projectId}-${iid}`
+    const cached = sessionStorage.getItem(cacheKey)
+    if (cached) {
+      sessionStorage.removeItem(cacheKey)
+      setNotes(JSON.parse(cached))
+      setNotesLoading(false)
+      return
+    }
     setNotesLoading(true)
     const res = await fetch(`/api/projects/${projectId}/issues/${iid}/notes`)
     if (res.ok) {
@@ -183,16 +205,6 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
       .catch(() => setGitMembers([]))
   }, [fetchIssue, fetchNotes, fetchPreferredAgent, projectId])
 
-  useEffect(() => {
-    if (!assigneePickerOpen) { setAssigneeSearch(''); return }
-    const handler = (e: MouseEvent) => {
-      if (assigneePickerRef.current && !assigneePickerRef.current.contains(e.target as Node)) {
-        setAssigneePickerOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [assigneePickerOpen])
 
   useEffect(() => {
     if (!retryAgentPickerOpen) return
@@ -205,12 +217,11 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
     return () => document.removeEventListener('mousedown', handler)
   }, [retryAgentPickerOpen])
 
-  async function handleToggleAssignee(member: IssueAssignee) {
+  async function handleConfirmAssignee() {
     if (!issue) return
-    const current = issue.assignees || []
-    const isAssigned = current.some(a => a.id === member.id)
-    const updated = isAssigned ? current.filter(a => a.id !== member.id) : [...current, member]
+    const updated = assigneePick ? [assigneePick] : []
     setIssue({ ...issue, assignees: updated })
+    setAssigneePickerOpen(false)
     await fetch(`/api/projects/${projectId}/issues/${iid}/assignees`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -429,6 +440,11 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
     window.addEventListener('beforeunload', endSession)
     return () => {
       window.removeEventListener('beforeunload', endSession)
+      // Close WebSocket on unmount
+      if (chatWsRef.current) {
+        try { chatWsRef.current.close() } catch { /* ignore */ }
+        chatWsRef.current = null
+      }
       // Also end on unmount (SPA navigation)
       endSession()
     }
@@ -532,9 +548,72 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
       })
     } catch { /* ignore */ }
     setChatSessionId(null)
+    chatStreamTextRef.current = ''
     setChatStreamText('')
     // Keep messages visible as read-only history
     setChatHistoryOnly(true)
+  }
+
+  function getChatWs(): WebSocket {
+    if (chatWsRef.current && chatWsRef.current.readyState === WebSocket.OPEN) {
+      return chatWsRef.current
+    }
+    // Close stale connection
+    if (chatWsRef.current) {
+      try { chatWsRef.current.close() } catch { /* ignore */ }
+    }
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const ws = new WebSocket(`${proto}//${window.location.host}/api/chat`)
+    chatWsRef.current = ws
+
+    ws.onmessage = (e) => {
+      let data: any
+      try { data = JSON.parse(e.data) } catch { return }
+
+      if (data.type === 'ping') {
+        // Respond to server heartbeat
+        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'pong' }))
+        return
+      }
+      if (data.type === 'text' && data.content) {
+        chatStreamTextRef.current += data.content
+        setChatStreamText(chatStreamTextRef.current)
+      } else if (data.type === 'done') {
+        // Finalize: move stream text to messages
+        const text = chatStreamTextRef.current
+        chatStreamTextRef.current = ''
+        setChatStreamText('')
+        
+        if (text.trim()) {
+          const assistantMsg: ChatMessage = {
+            id: `temp-${Date.now()}-${Math.floor(Math.random() * 1000)}-ai`,
+            sessionId: chatSessionRef.current || '',
+            role: 'assistant',
+            content: text.trim(),
+            createdAt: new Date().toISOString(),
+          }
+          setChatMessages(msgs => [...msgs, assistantMsg])
+        }
+        setChatSending(false)
+        if (chatWsResolveRef.current) { chatWsResolveRef.current(); chatWsResolveRef.current = null }
+      } else if (data.type === 'error') {
+        chatStreamTextRef.current += `\n\n[Error: ${data.content}]`
+        setChatStreamText(chatStreamTextRef.current)
+        setChatSending(false)
+        if (chatWsResolveRef.current) { chatWsResolveRef.current(); chatWsResolveRef.current = null }
+      }
+    }
+
+    ws.onclose = () => {
+      chatWsRef.current = null
+      if (chatWsResolveRef.current) { chatWsResolveRef.current(); chatWsResolveRef.current = null }
+    }
+    ws.onerror = () => {
+      chatWsRef.current = null
+      if (chatWsResolveRef.current) { chatWsResolveRef.current(); chatWsResolveRef.current = null }
+    }
+
+    return ws
   }
 
   async function handleSendChatMessage() {
@@ -543,6 +622,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
     setChatInput('')
     setChatSending(true)
     setChatSendingStartTime(Date.now())
+    chatStreamTextRef.current = ''
     setChatStreamText('')
 
     // Optimistically add user message
@@ -555,90 +635,37 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
     }
     setChatMessages(prev => [...prev, userMsg])
 
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 6 * 60 * 1000)
+    const ws = getChatWs()
+
+    const sendPayload = () => {
+      ws.send(JSON.stringify({
+        type: 'send',
+        sessionId: chatSessionId,
+        projectId,
+        issueIid: iid,
+        message: msg,
+        locale: state.user?.locale || '',
+      }))
+    }
 
     try {
-      const res = await fetch(`/api/projects/${projectId}/issues/${iid}/chat/send`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: chatSessionId, message: msg }),
-        signal: controller.signal,
-      })
-
-      clearTimeout(timeoutId)
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        setChatStreamText('')
-        setChatSending(false)
-        alert(data.error || tIssue('chatError'))
-        return
-      }
-
-      const reader = res.body?.getReader()
-      const decoder = new TextDecoder()
-      let fullText = ''
-      let streamEnded = false
-
-      if (reader) {
-        let buffer = ''
-        while (!streamEnded) {
-          try {
-            const { done, value } = await reader.read()
-            if (done) {
-              streamEnded = true
-              break
-            }
-            buffer += decoder.decode(value, { stream: true })
-            const lines = buffer.split('\n')
-            buffer = lines.pop() || ''
-            for (const line of lines) {
-              if (!line.startsWith('data: ')) continue
-              try {
-                const event = JSON.parse(line.slice(6))
-                if (event.type === 'done') {
-                  streamEnded = true
-                } else if (event.type === 'text' && event.content) {
-                  fullText += event.content
-                  setChatStreamText(fullText)
-                } else if (event.type === 'error') {
-                  fullText += `\n\n[Error: ${event.content}]`
-                  setChatStreamText(fullText)
-                  streamEnded = true
-                }
-              } catch { /* skip */ }
-            }
-          } catch (e) {
-            if ((e as Error).name === 'AbortError') {
-              setChatStreamText(prev => prev + '\n\n[Error: Request timed out]')
-              streamEnded = true
-            } else {
-              throw e
-            }
-          }
-        }
-      }
-
-      if (fullText.trim()) {
-        const assistantMsg: ChatMessage = {
-          id: `temp-${Date.now()}-ai`,
-          sessionId: chatSessionId,
-          role: 'assistant',
-          content: fullText.trim(),
-          createdAt: new Date().toISOString(),
-        }
-        setChatMessages(prev => [...prev, assistantMsg])
-      }
-      setChatStreamText('')
-    } catch (e) {
-      if ((e as Error).name === 'AbortError') {
-        setChatStreamText(prev => prev + '\n\n[Error: Request timed out after 6 minutes]')
+      if (ws.readyState === WebSocket.OPEN) {
+        sendPayload()
+      } else if (ws.readyState === WebSocket.CONNECTING) {
+        // Wait for connection to open
+        await new Promise<void>((resolve, reject) => {
+          const onOpen = () => { ws.removeEventListener('error', onError); resolve() }
+          const onError = () => { ws.removeEventListener('open', onOpen); reject(new Error('WebSocket connection failed')) }
+          ws.addEventListener('open', onOpen, { once: true })
+          ws.addEventListener('error', onError, { once: true })
+        })
+        sendPayload()
       } else {
-        alert(tIssue('chatError'))
+        throw new Error('WebSocket not available')
       }
-    } finally {
+    } catch {
       setChatSending(false)
+      alert(tIssue('chatError'))
     }
   }
 
@@ -679,19 +706,34 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatSessionId, chatMessages.length, chatSending])
 
-  if (loading) {
-    return <div className="min-h-screen flex items-center justify-center text-ive-text-muted">{tc('loading')}</div>
+  if (!loading && !issue) {
+    return (
+      <div className="h-screen flex flex-col">
+        <header className="sticky top-0 z-40 bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark shrink-0">
+          <div className="flex items-center gap-2 px-3 py-2 max-w-lg mx-auto">
+            <button onClick={() => router.back()} className="text-ive-green font-bold p-1 hover:bg-ive-green/5 rounded shrink-0">
+              <i className="fa-solid fa-arrow-left" />
+            </button>
+            <span className="text-base font-bold text-ive-green shrink-0">#{iid}</span>
+          </div>
+        </header>
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <p className="text-ive-text-muted mb-4">{tIssue('notFound')}</p>
+            <button onClick={() => router.back()} className="text-ive-green font-bold">
+              <i className="fa-solid fa-arrow-left mr-1" />{tAuth('goBack')}
+            </button>
+          </div>
+        </div>
+        <MobileTabBar />
+      </div>
+    )
   }
 
   if (!issue) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-ive-text-muted mb-4">{tIssue('notFound')}</p>
-          <button onClick={() => router.back()} className="text-ive-green font-bold">
-            <i className="fa-solid fa-arrow-left mr-1" />{tAuth('goBack')}
-          </button>
-        </div>
+      <div className="h-screen flex items-center justify-center">
+        <i className="fa-solid fa-circle-notch fa-spin text-xl text-ive-green" />
       </div>
     )
   }
@@ -722,60 +764,22 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
           )}
           <span className="text-xs text-ive-text-dim shrink-0"><i className="fa-solid fa-user mr-0.5" />{issue.author}</span>
           {/* 담당자 */}
-          <div ref={assigneePickerRef} className="relative shrink-0">
-            <button
-              type="button"
-              onClick={() => setAssigneePickerOpen(v => !v)}
-              className="flex items-center gap-1 text-xs text-ive-text-dim hover:text-ive-text transition-all"
-            >
-              {(issue.assignees && issue.assignees.length > 0) ? (
-                issue.assignees.map(a => (
-                  <span key={a.id} className="flex items-center gap-0.5">
-                    {a.avatarUrl ? <img src={a.avatarUrl} className="w-3.5 h-3.5 rounded-full" alt="" /> : <i className="fa-solid fa-user mr-0.5" />}
-                    {a.name || a.username}
-                  </span>
-                ))
-              ) : (
-                <><i className="fa-solid fa-user-plus mr-0.5" />{tIssue('selectAssignee')}</>
-              )}
-            </button>
-            {assigneePickerOpen && (
-              <div className="absolute z-50 top-full right-0 mt-1 bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden shadow-lg shadow-black/30 min-w-[220px]">
-                <div className="sticky top-0 bg-ive-bg-card p-1.5 border-b border-ive-border-dark">
-                  <input
-                    type="text"
-                    value={assigneeSearch}
-                    onChange={e => setAssigneeSearch(e.target.value)}
-                    placeholder={tIssue('searchMember')}
-                    className="w-full bg-ive-bg-deep border border-ive-border-dark rounded px-2 py-1 text-xs text-ive-text placeholder-ive-text-dim focus:outline-none focus:border-ive-green/50"
-                    autoFocus
-                  />
-                </div>
-                <div className="max-h-[200px] overflow-y-auto">
-                  {gitMembers.filter(m => {
-                    if (!assigneeSearch) return true
-                    const q = assigneeSearch.toLowerCase()
-                    return (m.name || '').toLowerCase().includes(q) || m.username.toLowerCase().includes(q)
-                  }).map(m => {
-                    const isAssigned = (issue.assignees || []).some(a => a.id === m.id)
-                    return (
-                      <button
-                        key={m.id}
-                        onClick={() => handleToggleAssignee(m)}
-                        className={`w-full px-3 py-2 text-left text-xs flex items-center gap-2 transition-colors ${
-                          isAssigned ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text hover:bg-white/5'
-                        }`}
-                      >
-                        {isAssigned ? <i className="fa-solid fa-check text-[10px] text-ive-green shrink-0 w-3" /> : <span className="w-3 shrink-0" />}
-                        {m.avatarUrl ? <img src={m.avatarUrl} className="w-5 h-5 rounded-full shrink-0" alt="" /> : <i className="fa-solid fa-user text-ive-text-dim shrink-0" />}
-                        <span className="font-bold truncate">{m.name || m.username}</span>
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
+          <button
+            type="button"
+            onClick={() => { setAssigneeSearch(''); setAssigneePick(issue.assignees?.[0] || null); setAssigneePickerOpen(true) }}
+            className="flex items-center gap-1 text-xs text-ive-text-dim hover:text-ive-text transition-all shrink-0"
+          >
+            {(issue.assignees && issue.assignees.length > 0) ? (
+              issue.assignees.map(a => (
+                <span key={a.id} className="flex items-center gap-0.5">
+                  {a.avatarUrl ? <img src={a.avatarUrl} className="w-4 h-4 rounded-full" alt="" /> : <i className="fa-solid fa-user mr-0.5" />}
+                  {a.name || a.username}
+                </span>
+              ))
+            ) : (
+              <><i className="fa-solid fa-user-plus mr-0.5" />{tIssue('selectAssignee')}</>
             )}
-          </div>
+          </button>
           <span className="text-xs text-ive-text-dim ml-auto shrink-0">
             {formatDateMedium(issue.updatedAt, state.user?.locale, state.user?.timezone)}
           </span>
@@ -1282,6 +1286,70 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
           )}
         </div>
       </div>
+
+      {/* 담당자 선택 모달 — 단일 선택 + 확인 */}
+      <Modal open={assigneePickerOpen} onClose={() => setAssigneePickerOpen(false)} title={tIssue('assignee')} size="sm">
+        <div className="p-1.5 border-b border-ive-border-dark">
+          <input
+            type="text"
+            value={assigneeSearch}
+            onChange={e => setAssigneeSearch(e.target.value)}
+            placeholder={tIssue('searchMember')}
+            className="w-full bg-ive-bg-deep border border-ive-border-dark rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim focus:outline-none focus:border-ive-green/50"
+            autoFocus
+          />
+        </div>
+        <div className="max-h-[50vh] overflow-y-auto">
+          {/* 담당자 없음 옵션 */}
+          <button
+            onClick={() => setAssigneePick(null)}
+            className={`w-full px-4 py-3 text-left text-sm flex items-center gap-3 transition-colors ${
+              !assigneePick ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text-dim hover:bg-white/5'
+            }`}
+          >
+            {!assigneePick ? <i className="fa-solid fa-circle-dot text-xs shrink-0 w-4" /> : <i className="fa-regular fa-circle text-xs shrink-0 w-4 opacity-30" />}
+            <i className="fa-solid fa-ban text-sm" />
+            <span className="font-bold">{tIssue('noAssignee')}</span>
+          </button>
+          {gitMembers.filter(m => {
+            if (!assigneeSearch) return true
+            const q = assigneeSearch.toLowerCase()
+            return (m.name || '').toLowerCase().includes(q) || m.username.toLowerCase().includes(q)
+          }).map(m => {
+            const isPicked = assigneePick?.id === m.id
+            return (
+              <button
+                key={m.id}
+                onClick={() => setAssigneePick(m)}
+                className={`w-full px-4 py-3 text-left text-sm flex items-center gap-3 transition-colors ${
+                  isPicked ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text hover:bg-white/5'
+                }`}
+              >
+                {isPicked ? <i className="fa-solid fa-circle-dot text-xs shrink-0 w-4" /> : <i className="fa-regular fa-circle text-xs shrink-0 w-4 opacity-30" />}
+                {m.avatarUrl ? <img src={m.avatarUrl} className="w-7 h-7 rounded-full shrink-0" alt="" /> : <div className="w-7 h-7 rounded-full bg-ive-bg-deep flex items-center justify-center shrink-0"><i className="fa-solid fa-user text-ive-text-dim text-xs" /></div>}
+                <div className="min-w-0 flex-1">
+                  <div className="font-bold truncate">{m.name || m.username}</div>
+                  {m.name && m.name !== m.username && <div className="text-xs text-ive-text-dim truncate">@{m.username}</div>}
+                </div>
+              </button>
+            )
+          })}
+        </div>
+        <div className="p-3 border-t border-ive-border-dark flex gap-2">
+          <button
+            onClick={() => setAssigneePickerOpen(false)}
+            className="flex-1 py-2 rounded-lg text-sm font-bold text-ive-text-dim border border-ive-border-subtle hover:bg-white/5 transition-all"
+          >
+            {tc('cancel')}
+          </button>
+          <button
+            onClick={handleConfirmAssignee}
+            className="flex-1 py-2 rounded-lg text-sm font-bold bg-ive-green text-ive-bg-deep transition-all active:scale-[0.98]"
+          >
+            {tc('confirm')}
+          </button>
+        </div>
+      </Modal>
 
       <MobileTabBar />
     </div>

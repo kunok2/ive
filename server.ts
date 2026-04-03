@@ -6,6 +6,7 @@ import next from 'next'
 import { WebSocketServer, WebSocket } from 'ws'
 import * as pty from 'node-pty'
 import jwt from 'jsonwebtoken'
+import { handleChatWebSocket } from './src/lib/chat-ws'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'spring-ive-dev-secret-change-in-production'
 function verifyToken(token: string): { userId: string } | null {
@@ -44,36 +45,49 @@ async function main() {
 
   const wss = new WebSocketServer({ noServer: true })
 
+  // Chat WebSocket server (separate from terminal)
+  const chatWss = new WebSocketServer({ noServer: true })
+
+  chatWss.on('connection', (ws: WebSocket) => {
+    handleChatWebSocket(ws)
+  })
+
   server.on('upgrade', (req, socket, head) => {
     // /_next/ 경로는 Next.js HMR용이므로 그냥 통과
     if (!req.url || req.url.startsWith('/_next/')) return
-    if (req.url !== '/api/terminal') {
+
+    const pathname = req.url.split('?')[0]
+
+    if (pathname !== '/api/terminal' && pathname !== '/api/chat') {
       socket.destroy()
       return
     }
-
-    console.log('[Terminal] WebSocket upgrade request')
 
     // 쿠키에서 JWT 검증
     const cookies = parseCookies(req.headers.cookie || '')
     const token = cookies['ive-token']
     if (!token) {
-      console.log('[Terminal] Auth failed: no ive-token cookie')
+      console.log(`[WS] Auth failed: no ive-token cookie (${pathname})`)
       socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n')
       socket.destroy()
       return
     }
     if (!verifyToken(token)) {
-      console.log('[Terminal] Auth failed: invalid token')
+      console.log(`[WS] Auth failed: invalid token (${pathname})`)
       socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n')
       socket.destroy()
       return
     }
-    console.log('[Terminal] Auth OK, upgrading...')
 
-    wss.handleUpgrade(req, socket, head, (ws) => {
-      wss.emit('connection', ws, req)
-    })
+    if (pathname === '/api/chat') {
+      chatWss.handleUpgrade(req, socket, head, (ws) => {
+        chatWss.emit('connection', ws, req)
+      })
+    } else {
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        wss.emit('connection', ws, req)
+      })
+    }
   })
 
   wss.on('connection', (ws: WebSocket) => {
