@@ -259,6 +259,8 @@
     "assignedAgents": "Assigned Agents ({count})",
     "assignAgent": "Assign Agent",
     "noAssignedAgents": "No agents assigned to this project",
+    "gitMembers": "Reviewers ({count})",
+    "noGitMembers": "No members found",
     "noAvailableAgents": "No agents available for assignment",
     "noAvailableAgentsHint": "Register a new agent or unassign from another project",
     "individualToken": "Individual Access Token (optional)",
@@ -389,7 +391,12 @@
     "assignedTo": "Assigned to {name}",
     "agentOfflineWarning": "Offline",
     "changeAgent": "Change worker",
-    "removeAssignment": "Unassign"
+    "removeAssignment": "Unassign",
+    "noAssignment": "No assignment",
+    "assignee": "Assignee",
+    "noAssignee": "No assignee",
+    "searchMember": "Search by name or username",
+    "searchPlaceholder": "Search title, number, author"
   },
   "admin": {
     "users": "Users",

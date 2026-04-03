@@ -21,6 +21,13 @@ interface ChatMessage {
   createdAt: string
 }
 
+interface IssueAssignee {
+  id: number
+  username: string
+  name: string
+  avatarUrl: string
+}
+
 interface IssueDetail {
   iid: number
   title: string
@@ -32,6 +39,7 @@ interface IssueDetail {
   updatedAt: string
   webUrl: string
   author: string
+  assignees?: IssueAssignee[]
 }
 
 interface Note {
@@ -87,6 +95,10 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   const [projectAgents, setProjectAgents] = useState<{ agentId: string; agent: { id: string; name: string; avatar: string; cliName: string; status: string } }[]>([])
   const [agentPickerOpen, setAgentPickerOpen] = useState(false)
   const agentPickerRef = useRef<HTMLDivElement>(null)
+  const [gitMembers, setGitMembers] = useState<IssueAssignee[]>([])
+  const [assigneePickerOpen, setAssigneePickerOpen] = useState(false)
+  const assigneePickerRef = useRef<HTMLDivElement>(null)
+  const [assigneeSearch, setAssigneeSearch] = useState('')
   const [notesLoading, setNotesLoading] = useState(true)
   const [comment, setComment] = useState('')
   const [posting, setPosting] = useState(false)
@@ -150,6 +162,10 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
       .then(res => res.ok ? res.json() : [])
       .then(setProjectAgents)
       .catch(() => setProjectAgents([]))
+    fetch(`/api/projects/${projectId}/members`)
+      .then(res => res.ok ? res.json() : [])
+      .then(setGitMembers)
+      .catch(() => setGitMembers([]))
   }, [fetchIssue, fetchNotes, fetchPreferredAgent, projectId])
 
   useEffect(() => {
@@ -162,6 +178,33 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [agentPickerOpen])
+
+  useEffect(() => {
+    if (!assigneePickerOpen) { setAssigneeSearch(''); return }
+    const handler = (e: MouseEvent) => {
+      if (assigneePickerRef.current && !assigneePickerRef.current.contains(e.target as Node)) {
+        setAssigneePickerOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [assigneePickerOpen])
+
+  async function handleToggleAssignee(member: IssueAssignee) {
+    if (!issue) return
+    const current = issue.assignees || []
+    const isAssigned = current.some(a => a.id === member.id)
+    const updated = isAssigned ? current.filter(a => a.id !== member.id) : [...current, member]
+    setIssue({ ...issue, assignees: updated })
+    await fetch(`/api/projects/${projectId}/issues/${iid}/assignees`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        assigneeIds: updated.map(a => a.id),
+        assigneeUsernames: updated.map(a => a.username),
+      }),
+    })
+  }
 
   async function handleChangePreferredAgent(agentId: string | null) {
     setAgentPickerOpen(false)
@@ -608,15 +651,70 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
             <i className="fa-solid fa-arrow-left" />
           </button>
           <span className="text-base font-bold text-ive-green shrink-0">#{issue.iid}</span>
-          <span className={`text-xs font-bold px-1.5 py-0.5 rounded border ${stageInfo.bg} ${stageInfo.color} border-current/20 shrink-0`}>
-            <i className={`fa-solid ${stageInfo.icon} mr-0.5`} />{stageInfo.label}
-          </span>
+          {issue.stage !== 'none' && (
+            <span className={`text-xs font-bold px-1.5 py-0.5 rounded border ${stageInfo.bg} ${stageInfo.color} border-current/20 shrink-0`}>
+              <i className={`fa-solid ${stageInfo.icon} mr-0.5`} />{stageInfo.label}
+            </span>
+          )}
           {iterationCount > 0 && (
             <span className="text-xs font-bold px-1.5 py-0.5 rounded border bg-ive-cyan/10 text-ive-cyan border-ive-cyan/20 shrink-0" title={tIssue('iterationCount', { count: iterationCount })}>
               <i className="fa-solid fa-repeat mr-0.5" />{tIssue('iterationLabel', { count: iterationCount })}
             </span>
           )}
           <span className="text-xs text-ive-text-dim shrink-0"><i className="fa-solid fa-user mr-0.5" />{issue.author}</span>
+          {/* 담당자 아바타 + 편집 드롭다운 */}
+          {((issue.assignees && issue.assignees.length > 0) || gitMembers.length > 0) && (
+            <div ref={assigneePickerRef} className="relative flex items-center gap-1 shrink-0">
+              <span
+                className="flex items-center gap-1 cursor-pointer"
+                onClick={() => gitMembers.length > 0 && setAssigneePickerOpen(v => !v)}
+              >
+                {(issue.assignees || []).map(a => (
+                  <span key={a.id} className="flex items-center gap-0.5">
+                    {a.avatarUrl ? <img src={a.avatarUrl} className="w-4 h-4 rounded-full" alt="" /> : <i className="fa-solid fa-user text-[10px]" />}
+                    <span className="text-xs font-bold text-ive-text-muted">{a.name || a.username}</span>
+                  </span>
+                ))}
+                {gitMembers.length > 0 && !(issue.assignees && issue.assignees.length > 0) && <i className="fa-solid fa-user-pen text-[10px] text-ive-text-dim hover:text-ive-green transition-all" />}
+              </span>
+              {assigneePickerOpen && (
+                <div className="absolute z-50 top-full right-0 mt-1 bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden shadow-lg shadow-black/30 min-w-[220px]">
+                  <div className="sticky top-0 bg-ive-bg-card p-1.5 border-b border-ive-border-dark">
+                    <input
+                      type="text"
+                      value={assigneeSearch}
+                      onChange={e => setAssigneeSearch(e.target.value)}
+                      placeholder={tIssue('searchMember')}
+                      className="w-full bg-ive-bg-deep border border-ive-border-dark rounded px-2 py-1 text-xs text-ive-text placeholder-ive-text-dim focus:outline-none focus:border-ive-green/50"
+                      autoFocus
+                    />
+                  </div>
+                  <div className="max-h-[200px] overflow-y-auto">
+                    {gitMembers.filter(m => {
+                      if (!assigneeSearch) return true
+                      const q = assigneeSearch.toLowerCase()
+                      return (m.name || '').toLowerCase().includes(q) || m.username.toLowerCase().includes(q)
+                    }).map(m => {
+                      const isAssigned = (issue.assignees || []).some(a => a.id === m.id)
+                      return (
+                        <button
+                          key={m.id}
+                          onClick={() => handleToggleAssignee(m)}
+                          className={`w-full px-3 py-2 text-left text-xs flex items-center gap-2 transition-colors ${
+                            isAssigned ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text hover:bg-white/5'
+                          }`}
+                        >
+                          {isAssigned ? <i className="fa-solid fa-check text-[10px] text-ive-green shrink-0 w-3" /> : <span className="w-3 shrink-0" />}
+                          {m.avatarUrl ? <img src={m.avatarUrl} className="w-5 h-5 rounded-full shrink-0" alt="" /> : <i className="fa-solid fa-user text-ive-text-dim shrink-0" />}
+                          <span className="font-bold truncate">{m.name || m.username}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           {/* 선호 에이전트 표시 */}
           {preferredAgent?.preferredAgentId && preferredAgent.preferredAgentAvatar && (
             <span className="flex items-center gap-1 shrink-0">
@@ -717,11 +815,6 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                   </button>
                 </div>
               </div>
-              {showDesc && issue.description && (
-                <div className="mt-1.5 text-sm text-ive-text-muted bg-ive-bg-card rounded-lg p-2.5 break-words leading-relaxed max-h-[30vh] overflow-y-auto">
-                  <MarkdownNote body={cleanNoteBody(issue.description)} />
-                </div>
-              )}
               {/* 작업자 지정 — waiting 상태에서만 변경 가능 */}
               {projectAgents.length > 0 && (
                 <div ref={agentPickerRef} className="relative mt-1.5">

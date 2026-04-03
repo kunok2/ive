@@ -259,6 +259,8 @@
     "assignedAgents": "배정된 개발자 ({count})",
     "assignAgent": "개발자 배정",
     "noAssignedAgents": "이 프로젝트에 배정된 개발자가 없습니다",
+    "gitMembers": "검증자 ({count})",
+    "noGitMembers": "등록된 멤버가 없습니다",
     "noAvailableAgents": "배정 가능한 개발자가 없습니다",
     "noAvailableAgentsHint": "새 개발자를 등록하거나, 다른 프로젝트에서 해제하세요",
     "individualToken": "개별 액세스 토큰 (선택)",
@@ -389,7 +391,12 @@
     "assignedTo": "{name} 지정",
     "agentOfflineWarning": "오프라인",
     "changeAgent": "작업자 변경",
-    "removeAssignment": "지정 해제"
+    "removeAssignment": "지정 해제",
+    "noAssignment": "배정 안함",
+    "assignee": "담당자",
+    "noAssignee": "담당자 없음",
+    "searchMember": "이름 또는 아이디로 검색",
+    "searchPlaceholder": "제목, 번호, 작성자 검색"
   },
   "admin": {
     "users": "사용자",

@@ -74,12 +74,20 @@ export async function GET(
       }
     }
 
+    const assignees = (issue.assignees || []).map((a: any) => ({
+      id: a.id,
+      username: a.username || a.login,
+      name: a.name || a.login || a.username,
+      avatarUrl: a.avatar_url,
+    }))
+
     return NextResponse.json({
       iid: issue.iid,
       title: issue.title,
       description: issue.description,
       state: issue.state,
-      stage,
+      stage: stage || 'none',
+      assignees,
       labels: issue.labels,
       createdAt: issue.created_at,
       updatedAt: issue.updated_at,

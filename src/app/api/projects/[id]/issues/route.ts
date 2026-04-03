@@ -61,6 +61,14 @@ export async function GET(
         }
       }
 
+      // assignees 매핑 (GitLab: assignees[], GitHub: assignees[])
+      const assignees = (issue.assignees || []).map((a: any) => ({
+        id: a.id,
+        username: a.username || a.login,
+        name: a.name || a.login || a.username,
+        avatarUrl: a.avatar_url,
+      }));
+
       return {
         iid: issue.iid,
         title: issue.title,
@@ -72,6 +80,7 @@ export async function GET(
         preferredAgentName,
         preferredAgentAvatar,
         preferredAgentCliName,
+        assignees,
         labels: issue.labels,
         createdAt: issue.created_at,
         updatedAt: issue.updated_at,
@@ -102,13 +111,15 @@ export async function POST(
     return NextResponse.json({ error: '작업 생성 권한이 없습니다.' }, { status: 403 });
   }
 
-  const { title, description, asDev, preferredAgentId } = await req.json();
+  const { title, description, asDev, preferredAgentId, assigneeIds, assigneeUsernames } = await req.json();
   if (!title?.trim()) return NextResponse.json({ error: '제목을 입력하세요.' }, { status: 400 });
 
   try {
     const decryptedToken = decrypt(project.accessToken);
     const labels = asDev ? [project.labelTarget] : [];
-    const issue = await createIssue(project, decryptedToken, title.trim(), description?.trim() ?? '', labels);
+    const assignees = (assigneeIds?.length || assigneeUsernames?.length)
+      ? { ids: assigneeIds, usernames: assigneeUsernames } : undefined;
+    const issue = await createIssue(project, decryptedToken, title.trim(), description?.trim() ?? '', labels, assignees);
 
     // 이슈 생성 시 로컬 DB에 stage 등록
     if (asDev && issue.iid) {

@@ -18,16 +18,22 @@ export function fetchClosedProjectIssues(project: Project, token: string) {
     : gitlab.fetchClosedProjectIssues(project, token);
 }
 
-export function createIssue(project: Project, token: string, title: string, description: string, labels: string[]) {
+export function createIssue(project: Project, token: string, title: string, description: string, labels: string[], assignees?: { ids?: number[]; usernames?: string[] }) {
   return project.provider === 'github'
-    ? github.createGitHubIssue(project, token, title, description, labels)
-    : gitlab.createGitLabIssue(project, token, title, description, labels);
+    ? github.createGitHubIssue(project, token, title, description, labels, assignees?.usernames)
+    : gitlab.createGitLabIssue(project, token, title, description, labels, assignees?.ids);
 }
 
-export function updateIssue(project: Project, iid: number, token: string, updates: { title?: string; description?: string }) {
+export function fetchProjectMembers(project: Project, token: string) {
   return project.provider === 'github'
-    ? github.updateGitHubIssue(project, iid, token, updates)
-    : gitlab.updateGitLabIssue(project, iid, token, updates);
+    ? github.fetchGitHubCollaborators(project, token)
+    : gitlab.fetchGitLabProjectMembers(project, token);
+}
+
+export function updateIssue(project: Project, iid: number, token: string, updates: { title?: string; description?: string; assigneeIds?: number[]; assignees?: string[] }) {
+  return project.provider === 'github'
+    ? github.updateGitHubIssue(project, iid, token, { title: updates.title, description: updates.description, assignees: updates.assignees })
+    : gitlab.updateGitLabIssue(project, iid, token, { title: updates.title, description: updates.description, assigneeIds: updates.assigneeIds });
 }
 
 export function closeIssue(project: Project, iid: number, token: string) {

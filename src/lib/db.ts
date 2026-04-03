@@ -317,7 +317,16 @@ function initSchema(db: Database.Database) {
     if (!tableInfo.some((col: any) => col.name === 'avatar_url')) {
       db.exec("ALTER TABLE projects ADD COLUMN avatar_url TEXT NOT NULL DEFAULT ''")
     }
-  } catch (e) { console.error("Migration failed for projects avatar_url:", e) }
+    if (!tableInfo.some((col: any) => col.name === 'last_activity_at')) {
+      db.exec("ALTER TABLE projects ADD COLUMN last_activity_at TEXT")
+      // 기존 프로젝트: 마지막 실행 시각으로 초기화
+      db.exec(`UPDATE projects SET last_activity_at = (
+        SELECT MAX(te.started_at) FROM task_executions te WHERE te.project_id = projects.id
+      ) WHERE last_activity_at IS NULL`)
+      // 실행 기록이 없는 프로젝트는 생성일로
+      db.exec(`UPDATE projects SET last_activity_at = created_at WHERE last_activity_at IS NULL`)
+    }
+  } catch (e) { console.error("Migration failed for projects:", e) }
 
   // system_settings 테이블
   db.exec(`
@@ -564,6 +573,7 @@ type ProjectRow = {
   sort_order: number; avatar_url: string;
   snapshot_interval: number; sparkline_points: number; stats_retention: number;
   conflict_count: number;
+  last_activity_at: string | null;
 }
 
 function mapProject(r: ProjectRow): Project {
@@ -587,6 +597,7 @@ function mapProject(r: ProjectRow): Project {
     sparklinePoints: r.sparkline_points ?? 60,
     statsRetention: r.stats_retention ?? 7,
     conflictCount: r.conflict_count ?? 0,
+    lastActivityAt: r.last_activity_at ?? null,
   }
 }
 
@@ -596,13 +607,15 @@ export function getAllProjects(): Project[] {
 
 export function getProjectsByUser(userId: string): Project[] {
   return (getDb().prepare(`
-    SELECT p.*, COALESCE(
-      (SELECT MAX(te.started_at) FROM task_executions te WHERE te.project_id = p.id), ''
-    ) as last_exec_at
+    SELECT p.*
     FROM projects p
     WHERE p.user_id = ?
-    ORDER BY last_exec_at DESC, p.sort_order ASC, p.created_at ASC
+    ORDER BY p.last_activity_at DESC, p.sort_order ASC, p.created_at ASC
   `).all(userId) as ProjectRow[]).map(mapProject)
+}
+
+export function touchProjectActivity(projectId: string) {
+  getDb().prepare('UPDATE projects SET last_activity_at = datetime(\'now\') WHERE id = ?').run(projectId)
 }
 
 export function getProject(id: string): Project | null {
@@ -1422,7 +1435,7 @@ export function setIssueStage(projectId: string, issueIid: number, stage: IssueS
   try {
     getDb().prepare(`
       INSERT INTO issue_stages (project_id, issue_iid, stage, fail_reason, updated_at) VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(project_id, issue_iid) DO UPDATE SET stage = excluded.stage, fail_reason = excluded.fail_reason, updated_at = excluded.updated_at
+      ON CONFLICT(project_id, issue_iid) DO UPDATE SET stage = excluded.stage, fail_reason = excluded.fail_reason, updated_at = excluded.updated_at, preferred_agent_id = COALESCE(issue_stages.preferred_agent_id, excluded.preferred_agent_id)
     `).run(projectId, issueIid, stage, stage === 'dev_fail' ? (failReason || null) : null, ts)
   } catch {
     // fail_reason 컬럼이 아직 없는 경우 fallback
@@ -1431,6 +1444,8 @@ export function setIssueStage(projectId: string, issueIid: number, stage: IssueS
       ON CONFLICT(project_id, issue_iid) DO UPDATE SET stage = excluded.stage, updated_at = excluded.updated_at
     `).run(projectId, issueIid, stage, ts)
   }
+  // 프로젝트 최종 활동 시각 갱신
+  touchProjectActivity(projectId)
 }
 
 export function deleteIssueStage(projectId: string, issueIid: number) {

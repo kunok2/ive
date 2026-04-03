@@ -628,7 +628,7 @@ export async function updateGitHubIssue(
   project: Project,
   issueNumber: number,
   decryptedToken: string,
-  updates: { title?: string; description?: string }
+  updates: { title?: string; description?: string; assignees?: string[] }
 ) {
   const ownerRepo = getOwnerRepo(project.repoUrl);
   if (!ownerRepo) throw new Error('Invalid repo URL');
@@ -638,6 +638,7 @@ export async function updateGitHubIssue(
   const payload: any = {};
   if (updates.title) payload.title = updates.title;
   if (updates.description !== undefined) payload.body = updates.description;
+  if (updates.assignees !== undefined) payload.assignees = updates.assignees;
 
   const res = await fetch(apiUrl(project, `/issues/${issueNumber}`), {
     method: 'PATCH',
@@ -657,7 +658,8 @@ export async function createGitHubIssue(
   decryptedToken: string,
   title: string,
   description: string,
-  labels: string[]
+  labels: string[],
+  assignees?: string[]
 ) {
   const ownerRepo = getOwnerRepo(project.repoUrl);
   if (!ownerRepo) throw new Error('Invalid repo URL');
@@ -682,10 +684,13 @@ export async function createGitHubIssue(
     }
   }
 
+  const body: any = { title, body: description, labels: validLabels };
+  if (assignees && assignees.length > 0) body.assignees = assignees;
+
   const res = await fetch(apiUrl(project, '/issues'), {
     method: 'POST',
     headers: { ...headers, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title, body: description, labels: validLabels }),
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {
@@ -694,6 +699,21 @@ export async function createGitHubIssue(
     throw new Error(errBody.message || `이슈 생성 실패: ${res.statusText}`);
   }
   return normalizeIssue(await res.json());
+}
+
+export async function fetchGitHubCollaborators(project: Project, decryptedToken: string) {
+  const headers = getGitHubAuthHeaders(project, decryptedToken);
+  const res = await fetch(apiUrl(project, '/collaborators?per_page=100'), { headers });
+  if (!res.ok) return [];
+  const members = await res.json();
+  return members
+    .filter((m: any) => m.type !== 'Bot' && !m.login.includes('[bot]') && !m.login.endsWith('-bot'))
+    .map((m: any) => ({
+      id: m.id,
+      username: m.login,
+      name: m.login,
+      avatarUrl: m.avatar_url,
+    }));
 }
 
 /**

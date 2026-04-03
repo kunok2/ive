@@ -549,17 +549,22 @@ export async function updateGitLabIssue(
   project: Project,
   issueIid: number,
   decryptedToken: string,
-  updates: { title?: string; description?: string }
+  updates: { title?: string; description?: string; assigneeIds?: number[] }
 ) {
   const projectPath = getProjectPath(project.repoUrl);
   if (!projectPath) throw new Error('Invalid repo URL');
 
   const headers = getAuthHeaders(project, decryptedToken);
 
+  const payload: any = {};
+  if (updates.title) payload.title = updates.title;
+  if (updates.description !== undefined) payload.description = updates.description;
+  if (updates.assigneeIds !== undefined) payload.assignee_ids = updates.assigneeIds;
+
   const res = await fetch(apiUrl(project, `/issues/${issueIid}`), {
     method: 'PUT',
     headers: { ...headers, 'Content-Type': 'application/json' },
-    body: JSON.stringify(updates),
+    body: JSON.stringify(payload),
   });
 
   if (!res.ok) throw new Error(`이슈 수정 실패: ${res.statusText}`);
@@ -619,19 +624,38 @@ export async function createGitLabIssue(
   decryptedToken: string,
   title: string,
   description: string,
-  labels: string[]
+  labels: string[],
+  assigneeIds?: number[]
 ) {
   const projectPath = getProjectPath(project.repoUrl);
   if (!projectPath) throw new Error('Invalid repo URL');
 
   const headers = getAuthHeaders(project, decryptedToken);
 
+  const body: any = { title, description, labels: labels.join(',') };
+  if (assigneeIds && assigneeIds.length > 0) body.assignee_ids = assigneeIds;
+
   const res = await fetch(apiUrl(project, '/issues'), {
     method: 'POST',
     headers: { ...headers, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title, description, labels: labels.join(',') }),
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) throw new Error(`이슈 생성 실패: ${res.statusText}`);
   return await res.json();
+}
+
+export async function fetchGitLabProjectMembers(project: Project, decryptedToken: string) {
+  const headers = getAuthHeaders(project, decryptedToken);
+  const res = await fetch(apiUrl(project, '/members/all?per_page=100'), { headers });
+  if (!res.ok) return [];
+  const members = await res.json();
+  return members
+    .filter((m: any) => !m.bot && m.state === 'active' && !m.username.startsWith('project_') && !m.username.includes('_bot'))
+    .map((m: any) => ({
+      id: m.id,
+      username: m.username,
+      name: m.name,
+      avatarUrl: m.avatar_url,
+    }));
 }

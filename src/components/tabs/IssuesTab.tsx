@@ -7,6 +7,7 @@ import { useTab } from '@/lib/tab-context'
 import { formatDateMedium } from '@/lib/format-date'
 import PullToRefresh from '@/components/ui/PullToRefresh'
 import { useDialog } from '@/components/ui/ConfirmDialog'
+import Modal from '@/components/ui/Modal'
 import { useTranslations } from 'next-intl'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 import type { CliName } from '@/types'
@@ -25,6 +26,7 @@ interface IveIssue {
   preferredAgentName?: string | null
   preferredAgentAvatar?: string | null
   preferredAgentCliName?: string | null
+  assignees?: { id: number; username: string; name: string; avatarUrl: string }[]
 }
 
 interface ProjectAgent {
@@ -112,11 +114,17 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     return ''
   })
   const [creating, setCreating] = useState(false)
+  const [issueSearchQuery, setIssueSearchQuery] = useState('')
   const [closing, setClosing] = useState<number | null>(null)
-  const [preferredAgentId, setPreferredAgentId] = useState<string | null>(null)
+  const [preferredAgentId, setPreferredAgentId] = useState<string | null>(null) // null=자동배정, 'none'=배정안함, agentId=지정
   const [projectAgents, setProjectAgents] = useState<ProjectAgent[]>([])
   const [agentDropdownOpen, setAgentDropdownOpen] = useState(false)
   const agentDropdownRef = useRef<HTMLDivElement>(null)
+  const [gitMembers, setGitMembers] = useState<{ id: number; username: string; name: string; avatarUrl: string }[]>([])
+  const [selectedAssignees, setSelectedAssignees] = useState<{ id: number; username: string; name: string; avatarUrl: string }[]>([])
+  const [assigneeModalIids, setAssigneeModalIids] = useState<number[]>([]) // 빈 배열이면 닫힘, iid 목록이면 열림
+  const [assigneeModalSearch, setAssigneeModalSearch] = useState('')
+  const [assigneeModalPick, setAssigneeModalPick] = useState<{ id: number; username: string; name: string; avatarUrl: string } | null>(null)
 
   const setSelectedProjectId = (id: string) => setIssuesProjectId(id)
   const setFilter = (f: string) => setIssuesFilter(f)
@@ -177,6 +185,22 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
       .finally(() => setLoading(false))
   }, [selectedProjectId])
 
+  const fetchProjectAgents = useCallback(() => {
+    if (!selectedProjectId) { setProjectAgents([]); return }
+    fetch(`/api/projects/${selectedProjectId}/agents`)
+      .then(res => res.ok ? res.json() : [])
+      .then(data => setProjectAgents(data))
+      .catch(() => setProjectAgents([]))
+  }, [selectedProjectId])
+
+  const fetchGitMembers = useCallback(() => {
+    if (!selectedProjectId) { setGitMembers([]); return }
+    fetch(`/api/projects/${selectedProjectId}/members`)
+      .then(res => res.ok ? res.json() : [])
+      .then(data => setGitMembers(data))
+      .catch(() => setGitMembers([]))
+  }, [selectedProjectId])
+
   const fetchClosedIssues = useCallback(() => {
     if (!selectedProjectId) return Promise.resolve()
     setClosedLoading(true)
@@ -198,7 +222,11 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   }, [filter, selectedProjectId, fetchClosedIssues])
 
   useEffect(() => {
-    if (activeTab === 'issues' && selectedProjectId) fetchIssues()
+    if (activeTab === 'issues' && selectedProjectId) {
+      fetchIssues()
+      fetchProjectAgents()
+      fetchGitMembers()
+    }
   }, [activeTab])
 
   useEffect(() => {
@@ -226,17 +254,16 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
       const draft = localStorage.getItem(`ive-issue-draft-${selectedProjectId}`)
       setNewBody(draft || '')
       if (draft) setShowAddForm(true)
-      // 프로젝�� 배정 에이전트 조회
-      fetch(`/api/projects/${selectedProjectId}/agents`)
-        .then(res => res.ok ? res.json() : [])
-        .then(data => setProjectAgents(data))
-        .catch(() => setProjectAgents([]))
+      fetchProjectAgents()
+      fetchGitMembers()
     } else {
       setNewBody('')
       setProjectAgents([])
+      setGitMembers([])
     }
     setPreferredAgentId(null)
-  }, [selectedProjectId])
+    setSelectedAssignees([])
+  }, [selectedProjectId, fetchProjectAgents, fetchGitMembers])
 
   useEffect(() => {
     if (!agentDropdownOpen) return
@@ -249,6 +276,42 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     return () => document.removeEventListener('mousedown', handler)
   }, [agentDropdownOpen])
 
+  // 담당자 모달 확인 — 선택된 1명을 대상 이슈들에 적용
+  const handleConfirmAssignee = () => {
+    const isCreateMode = assigneeModalIids.includes(-1)
+    if (isCreateMode) {
+      setSelectedAssignees(assigneeModalPick ? [assigneeModalPick] : [])
+    } else {
+      const updated = assigneeModalPick ? [assigneeModalPick] : []
+      for (const iid of assigneeModalIids) {
+        setIssues(prev => prev.map(i => i.iid === iid ? { ...i, assignees: updated } : i))
+        fetch(`/api/projects/${selectedProjectId}/issues/${iid}/assignees`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            assigneeIds: updated.map(a => a.id),
+            assigneeUsernames: updated.map(a => a.username),
+          }),
+        })
+      }
+    }
+    setAssigneeModalIids([])
+  }
+
+  // 모달 열 때 기존 담당자를 초기값으로 설정
+  const openAssigneeModal = (iids: number[]) => {
+    setAssigneeModalSearch('')
+    if (iids.length === 1 && !iids.includes(-1)) {
+      const issue = issues.find(i => i.iid === iids[0])
+      setAssigneeModalPick(issue?.assignees?.[0] || null)
+    } else if (iids.includes(-1)) {
+      setAssigneeModalPick(selectedAssignees[0] || null)
+    } else {
+      setAssigneeModalPick(null)
+    }
+    setAssigneeModalIids(iids)
+  }
+
   const isHistoryTab = filter === 'history'
 
   const filtered = (isHistoryTab ? closedIssues : issues.filter(issue => {
@@ -258,7 +321,11 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     if (filter === 'failed') return issue.stage === 'dev_fail'
     if (filter === 'done') return issue.stage === 'done'
     return true
-  })).sort((a, b) => {
+  })).filter(issue => {
+    if (!issueSearchQuery) return true
+    const q = issueSearchQuery.toLowerCase()
+    return issue.title.toLowerCase().includes(q) || String(issue.iid).includes(q) || (issue.author || '').toLowerCase().includes(q)
+  }).sort((a, b) => {
     if (sortOrder === 'newest') return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
   })
@@ -340,19 +407,26 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
       const res = await fetch(`/api/projects/${selectedProjectId}/issues`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, description, asDev: true, preferredAgentId: preferredAgentId || undefined }),
+        body: JSON.stringify({
+          title, description,
+          asDev: preferredAgentId !== 'none',
+          preferredAgentId: (preferredAgentId && preferredAgentId !== 'none') ? preferredAgentId : undefined,
+          assigneeIds: selectedAssignees.length > 0 ? selectedAssignees.map(a => a.id) : undefined,
+          assigneeUsernames: selectedAssignees.length > 0 ? selectedAssignees.map(a => a.username) : undefined,
+        }),
       })
       if (res.ok) {
         const created = await res.json()
         handleBodyChange('')
         setShowAddForm(false)
         setPreferredAgentId(null)
+        setSelectedAssignees([])
         const selectedAgent = preferredAgentId ? projectAgents.find(a => a.agentId === preferredAgentId) : null
         const newIssue: IveIssue = {
           iid: created.iid,
           title: created.title,
           state: created.state || 'opened',
-          stage: 'waiting',
+          stage: preferredAgentId === 'none' ? 'none' : 'waiting',
           labels: created.labels || [],
           createdAt: created.created_at || new Date().toISOString(),
           updatedAt: created.updated_at || new Date().toISOString(),
@@ -481,10 +555,11 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
         ) : (
           <>
             {selectedProject && (
-              <div className="flex items-center gap-3 mb-3 bg-ive-bg-card border border-ive-border-subtle rounded-lg px-4 py-3"
-                   style={{ borderLeftWidth: '3px', borderLeftColor: selectedProject.color || '#4ade80' }}>
-                <i className={`fa-brands ${selectedProject.provider === 'github' ? 'fa-github' : 'fa-gitlab'} text-xl`}
-                   style={{ color: selectedProject.color || '#4ade80' }} />
+              <div className="flex items-center gap-3 mb-3 bg-ive-bg-card border border-ive-border-subtle rounded-lg px-4 py-3">
+                <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${selectedProject.color || '#4ade80'}15` }}>
+                  <i className={`fa-brands ${selectedProject.provider === 'github' ? 'fa-github' : 'fa-gitlab'} text-xl`}
+                     style={{ color: selectedProject.color || '#4ade80' }} />
+                </div>
                 <div className="min-w-0 flex-1">
                   <div className="text-base font-bold text-ive-text truncate">{selectedProject.name}</div>
                   <div className="text-xs text-ive-text-dim truncate">{selectedProject.repoUrl}</div>
@@ -556,14 +631,29 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
               ))}
             </div>
 
-            {/* 정렬 */}
-            <div className="flex items-center justify-end mb-3">
+            {/* 검색 + 정렬 */}
+            <div className="flex items-center gap-2 mb-3">
+              <div className="flex-1 relative">
+                <i className="fa-solid fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-ive-text-dim" />
+                <input
+                  type="text"
+                  value={issueSearchQuery}
+                  onChange={e => setIssueSearchQuery(e.target.value)}
+                  placeholder={tIssue('searchPlaceholder')}
+                  className="w-full bg-ive-bg-card border border-ive-border-subtle rounded-lg pl-7 pr-7 py-1.5 text-sm text-ive-text placeholder-ive-text-dim focus:outline-none focus:border-ive-green/50 transition-colors"
+                />
+                {issueSearchQuery && (
+                  <button onClick={() => setIssueSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-ive-text-dim hover:text-ive-text">
+                    <i className="fa-solid fa-xmark text-[10px]" />
+                  </button>
+                )}
+              </div>
               <button
                 onClick={() => {
                   const next = sortOrder === 'newest' ? 'oldest' : 'newest'
                   setIssuesSort(next)
                 }}
-                className="text-xs font-bold text-ive-text-dim hover:text-ive-text flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-white/5 transition-all"
+                className="text-sm font-bold text-ive-text-dim hover:text-ive-text flex items-center gap-1 px-3 py-1.5 rounded-lg bg-ive-bg-card border border-ive-border-subtle hover:border-ive-green/30 transition-all shrink-0"
               >
                 <i className={`fa-solid ${sortOrder === 'newest' ? 'fa-arrow-down-wide-short' : 'fa-arrow-up-wide-short'}`} />
                 {sortOrder === 'newest' ? tSort('newest') : tSort('oldest')}
@@ -593,63 +683,99 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                   />
                 </div>
                 {/* 작업자 지정 드롭다운 */}
-                {projectAgents.length > 0 && (
-                  <div ref={agentDropdownRef} className="relative mb-2">
+                <div ref={agentDropdownRef} className="relative mb-2">
+                  <label className="text-xs font-bold text-ive-text-dim mb-1 block">
+                    <i className="fa-solid fa-user-gear mr-1" />{tIssue('preferredAgent')}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setAgentDropdownOpen(v => !v)}
+                    className="w-full bg-ive-bg-deep border border-ive-border-dark rounded-lg px-3 py-2 text-left flex items-center gap-2 text-sm focus:outline-none focus:border-ive-green/50 transition-colors"
+                  >
+                    {preferredAgentId === 'none' ? (
+                      <span className="text-ive-text font-bold"><i className="fa-solid fa-ban mr-1 text-ive-text-muted" />{tIssue('noAssignment')}</span>
+                    ) : preferredAgentId ? (() => {
+                      const pa = projectAgents.find(a => a.agentId === preferredAgentId)
+                      if (!pa) return <span className="text-ive-text font-bold">{tIssue('noPreference')}</span>
+                      const cli = CLI_CONFIG[pa.agent.cliName]
+                      return <>
+                        <AgentAvatar avatar={pa.agent.avatar} size="sm" />
+                        <span className="text-ive-text font-bold">{pa.agent.name}</span>
+                        <span className={`text-xs ${cli.color}`}><i className={`${cli.icon} mr-0.5`} />{cli.label}</span>
+                      </>
+                    })() : (
+                      <span className="text-ive-text font-bold"><i className="fa-solid fa-shuffle mr-1 text-ive-green" />{tIssue('noPreference')}</span>
+                    )}
+                    <i className={`fa-solid fa-chevron-down text-xs text-ive-text-dim ml-auto transition-transform ${agentDropdownOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                  {agentDropdownOpen && (
+                    <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden shadow-lg shadow-black/30">
+                      <button
+                        onClick={() => { setPreferredAgentId('none'); setAgentDropdownOpen(false) }}
+                        className={`w-full px-3 py-2.5 text-left text-sm flex items-center gap-2 transition-colors ${
+                          preferredAgentId === 'none' ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text-dim hover:bg-white/5'
+                        }`}
+                      >
+                        <i className="fa-solid fa-ban" />
+                        <span className="font-bold">{tIssue('noAssignment')}</span>
+                      </button>
+                      <button
+                        onClick={() => { setPreferredAgentId(null); setAgentDropdownOpen(false) }}
+                        className={`w-full px-3 py-2.5 text-left text-sm flex items-center gap-2 transition-colors ${
+                          preferredAgentId === null ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text-dim hover:bg-white/5'
+                        }`}
+                      >
+                        <i className="fa-solid fa-shuffle" />
+                        <span className="font-bold">{tIssue('noPreference')}</span>
+                      </button>
+                      {projectAgents.map(pa => {
+                        const cli = CLI_CONFIG[pa.agent.cliName]
+                        const isOffline = pa.agent.status === 'offline'
+                        return (
+                          <button
+                            key={pa.agentId}
+                            onClick={() => { setPreferredAgentId(pa.agentId); setAgentDropdownOpen(false) }}
+                            className={`w-full px-3 py-2.5 text-left text-sm flex items-center gap-2 transition-colors ${
+                              preferredAgentId === pa.agentId ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text hover:bg-white/5'
+                            }`}
+                          >
+                            <AgentAvatar avatar={pa.agent.avatar} size="sm" />
+                            <span className="font-bold">{pa.agent.name}</span>
+                            <span className={`text-xs ${cli.color}`}><i className={`${cli.icon} mr-0.5`} />{cli.label}</span>
+                            {isOffline && <span className="text-xs text-ive-red ml-auto"><i className="fa-solid fa-circle-exclamation mr-0.5" />{tIssue('agentOfflineWarning')}</span>}
+                            {!isOffline && pa.agent.status === 'busy' && <span className="ml-auto w-2 h-2 rounded-full bg-ive-cyan animate-pulse" />}
+                            {!isOffline && pa.agent.status === 'available' && <span className="ml-auto w-2 h-2 rounded-full bg-ive-green" />}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+                {/* 담당자 */}
+                {gitMembers.length > 0 && (
+                  <div className="mb-2">
                     <label className="text-xs font-bold text-ive-text-dim mb-1 block">
-                      <i className="fa-solid fa-user-gear mr-1" />{tIssue('preferredAgent')}
+                      <i className="fa-solid fa-user-tag mr-1" />{tIssue('assignee')}
                     </label>
                     <button
                       type="button"
-                      onClick={() => setAgentDropdownOpen(v => !v)}
+                      onClick={() => openAssigneeModal([-1])}
                       className="w-full bg-ive-bg-deep border border-ive-border-dark rounded-lg px-3 py-2 text-left flex items-center gap-2 text-sm focus:outline-none focus:border-ive-green/50 transition-colors"
                     >
-                      {preferredAgentId ? (() => {
-                        const pa = projectAgents.find(a => a.agentId === preferredAgentId)
-                        if (!pa) return <span className="text-ive-text-dim">{tIssue('noPreference')}</span>
-                        const cli = CLI_CONFIG[pa.agent.cliName]
-                        return <>
-                          <AgentAvatar avatar={pa.agent.avatar} size="sm" />
-                          <span className="text-ive-text font-bold">{pa.agent.name}</span>
-                          <span className={`text-xs ${cli.color}`}><i className={`${cli.icon} mr-0.5`} />{cli.label}</span>
-                        </>
-                      })() : (
-                        <span className="text-ive-text-dim"><i className="fa-solid fa-shuffle mr-1" />{tIssue('noPreference')}</span>
+                      {selectedAssignees.length > 0 ? (
+                        <span className="flex items-center gap-1.5 flex-wrap">
+                          {selectedAssignees.map(a => (
+                            <span key={a.id} className="flex items-center gap-1 bg-ive-bg-card rounded px-1.5 py-0.5">
+                              {a.avatarUrl ? <img src={a.avatarUrl} className="w-4 h-4 rounded-full" alt="" /> : <i className="fa-solid fa-user text-xs text-ive-text-dim" />}
+                              <span className="text-ive-text font-bold text-xs">{a.name || a.username}</span>
+                            </span>
+                          ))}
+                        </span>
+                      ) : (
+                        <span className="text-ive-text font-bold"><i className="fa-solid fa-users mr-1 text-ive-text-muted" />{tIssue('noAssignee')}</span>
                       )}
-                      <i className={`fa-solid fa-chevron-down text-xs text-ive-text-dim ml-auto transition-transform ${agentDropdownOpen ? 'rotate-180' : ''}`} />
+                      <i className="fa-solid fa-chevron-down text-xs text-ive-text-dim ml-auto" />
                     </button>
-                    {agentDropdownOpen && (
-                      <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden shadow-lg shadow-black/30">
-                        <button
-                          onClick={() => { setPreferredAgentId(null); setAgentDropdownOpen(false) }}
-                          className={`w-full px-3 py-2.5 text-left text-sm flex items-center gap-2 transition-colors ${
-                            !preferredAgentId ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text-dim hover:bg-white/5'
-                          }`}
-                        >
-                          <i className="fa-solid fa-shuffle" />
-                          <span className="font-bold">{tIssue('noPreference')}</span>
-                        </button>
-                        {projectAgents.map(pa => {
-                          const cli = CLI_CONFIG[pa.agent.cliName]
-                          const isOffline = pa.agent.status === 'offline'
-                          return (
-                            <button
-                              key={pa.agentId}
-                              onClick={() => { setPreferredAgentId(pa.agentId); setAgentDropdownOpen(false) }}
-                              className={`w-full px-3 py-2.5 text-left text-sm flex items-center gap-2 transition-colors ${
-                                preferredAgentId === pa.agentId ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text hover:bg-white/5'
-                              }`}
-                            >
-                              <AgentAvatar avatar={pa.agent.avatar} size="sm" />
-                              <span className="font-bold">{pa.agent.name}</span>
-                              <span className={`text-xs ${cli.color}`}><i className={`${cli.icon} mr-0.5`} />{cli.label}</span>
-                              {isOffline && <span className="text-xs text-ive-red ml-auto"><i className="fa-solid fa-circle-exclamation mr-0.5" />{tIssue('agentOfflineWarning')}</span>}
-                              {!isOffline && pa.agent.status === 'busy' && <span className="ml-auto w-2 h-2 rounded-full bg-ive-cyan animate-pulse" />}
-                              {!isOffline && pa.agent.status === 'available' && <span className="ml-auto w-2 h-2 rounded-full bg-ive-green" />}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    )}
                   </div>
                 )}
                 <button
@@ -722,6 +848,14 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                 {/* 벌크 액션 버튼들 */}
                 {!bulkProgress && selected.size > 0 && (
                   <div className="flex gap-2 flex-wrap">
+                    {gitMembers.length > 0 && (
+                      <button
+                        onClick={() => openAssigneeModal([...selected])}
+                        className="text-xs font-bold px-3 py-1.5 rounded-lg border text-ive-cyan border-ive-cyan/30 bg-ive-bg-deep hover:bg-ive-cyan/10 transition-all active:scale-95"
+                      >
+                        <i className="fa-solid fa-user-tag mr-1" />{tIssue('assignee')} ({selected.size})
+                      </button>
+                    )}
                     {stages.size > 1 ? (
                       <>
                         <span className="text-xs text-ive-amber py-1">{tIssue('sameStageHint')}</span>
@@ -811,10 +945,12 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                             <h3 className="text-base font-bold text-ive-text leading-snug mt-0.5 line-clamp-2">{issue.title}</h3>
                           </div>
                         </div>
-                        <span className={`shrink-0 text-xs font-bold px-2 py-1 rounded-lg border ${stageInfo.color}`}>
-                          <i className={`fa-solid ${stageInfo.icon} mr-1`} />
-                          {stageInfo.label}
-                        </span>
+                        {issue.stage !== 'none' && (
+                          <span className={`shrink-0 text-xs font-bold px-2 py-1 rounded-lg border ${stageInfo.color}`}>
+                            <i className={`fa-solid ${stageInfo.icon} mr-1`} />
+                            {stageInfo.label}
+                          </span>
+                        )}
                       </div>
                       {issue.stage === 'dev_fail' && issue.failReason && (
                         <div className="mb-1.5 px-2 py-1 rounded-lg bg-ive-red/10 border border-ive-red/20 text-xs text-ive-red">
@@ -837,6 +973,27 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                           <i className="fa-solid fa-user mr-1" />
                           {issue.author}
                         </span>
+                        {/* 담당자 아바타 + 편집 */}
+                        {((issue.assignees && issue.assignees.length > 0) || (canEdit && !bulkMode && gitMembers.length > 0)) && (
+                          <span className="flex items-center gap-1"
+                            onClick={(e) => {
+                              if (canEdit && !bulkMode && gitMembers.length > 0) {
+                                e.stopPropagation()
+                                openAssigneeModal([issue.iid])
+                              }
+                            }}
+                          >
+                            {(issue.assignees || []).map(a => (
+                              <span key={a.id} className="flex items-center gap-0.5">
+                                {a.avatarUrl ? <img src={a.avatarUrl} className="w-4 h-4 rounded-full" alt="" /> : <i className="fa-solid fa-user text-[10px]" />}
+                                <span className="text-xs font-bold text-ive-text-muted">{a.name || a.username}</span>
+                              </span>
+                            ))}
+                            {canEdit && !bulkMode && gitMembers.length > 0 && !(issue.assignees && issue.assignees.length > 0) && (
+                              <i className="fa-solid fa-user-pen text-[10px] text-ive-text-dim hover:text-ive-green cursor-pointer transition-all" />
+                            )}
+                          </span>
+                        )}
                         <span>
                           <i className="fa-solid fa-calendar-day mr-1" />
                           {formatDateMedium(issue.updatedAt, state.user?.locale, state.user?.timezone)}
@@ -859,6 +1016,69 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
             )}
         </div>
       )}
+      {/* 담당자 선택 모달 — 단일 선택 + 확인 */}
+      <Modal open={assigneeModalIids.length > 0} onClose={() => setAssigneeModalIids([])} title={`${tIssue('assignee')}${assigneeModalIids.length > 1 && !assigneeModalIids.includes(-1) ? ` (${assigneeModalIids.length}${tCommon('items')})` : ''}`} size="sm">
+        <div className="p-1.5 border-b border-ive-border-dark">
+          <input
+            type="text"
+            value={assigneeModalSearch}
+            onChange={e => setAssigneeModalSearch(e.target.value)}
+            placeholder={tIssue('searchMember')}
+            className="w-full bg-ive-bg-deep border border-ive-border-dark rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim focus:outline-none focus:border-ive-green/50"
+            autoFocus
+          />
+        </div>
+        <div className="max-h-[50vh] overflow-y-auto">
+          {/* 담당자 없음 옵션 */}
+          <button
+            onClick={() => setAssigneeModalPick(null)}
+            className={`w-full px-4 py-3 text-left text-sm flex items-center gap-3 transition-colors ${
+              !assigneeModalPick ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text-dim hover:bg-white/5'
+            }`}
+          >
+            {!assigneeModalPick ? <i className="fa-solid fa-circle-dot text-xs shrink-0 w-4" /> : <i className="fa-regular fa-circle text-xs shrink-0 w-4 opacity-30" />}
+            <i className="fa-solid fa-ban text-sm" />
+            <span className="font-bold">{tIssue('noAssignee')}</span>
+          </button>
+          {gitMembers.filter(m => {
+            if (!assigneeModalSearch) return true
+            const q = assigneeModalSearch.toLowerCase()
+            return (m.name || '').toLowerCase().includes(q) || m.username.toLowerCase().includes(q)
+          }).map(m => {
+            const isPicked = assigneeModalPick?.id === m.id
+            return (
+              <button
+                key={m.id}
+                onClick={() => setAssigneeModalPick(m)}
+                className={`w-full px-4 py-3 text-left text-sm flex items-center gap-3 transition-colors ${
+                  isPicked ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text hover:bg-white/5'
+                }`}
+              >
+                {isPicked ? <i className="fa-solid fa-circle-dot text-xs shrink-0 w-4" /> : <i className="fa-regular fa-circle text-xs shrink-0 w-4 opacity-30" />}
+                {m.avatarUrl ? <img src={m.avatarUrl} className="w-7 h-7 rounded-full shrink-0" alt="" /> : <div className="w-7 h-7 rounded-full bg-ive-bg-deep flex items-center justify-center shrink-0"><i className="fa-solid fa-user text-ive-text-dim text-xs" /></div>}
+                <div className="min-w-0 flex-1">
+                  <div className="font-bold truncate">{m.name || m.username}</div>
+                  {m.name && m.name !== m.username && <div className="text-xs text-ive-text-dim truncate">@{m.username}</div>}
+                </div>
+              </button>
+            )
+          })}
+        </div>
+        <div className="p-3 border-t border-ive-border-dark flex gap-2">
+          <button
+            onClick={() => setAssigneeModalIids([])}
+            className="flex-1 py-2 rounded-lg text-sm font-bold text-ive-text-dim border border-ive-border-subtle hover:bg-white/5 transition-all"
+          >
+            {tCommon('cancel')}
+          </button>
+          <button
+            onClick={handleConfirmAssignee}
+            className="flex-1 py-2 rounded-lg text-sm font-bold bg-ive-green text-ive-bg-deep transition-all active:scale-[0.98]"
+          >
+            {tCommon('confirm')}
+          </button>
+        </div>
+      </Modal>
     </PullToRefresh>
   )
 }

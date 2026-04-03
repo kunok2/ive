@@ -171,6 +171,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
       snapshotInterval,
       sparklinePoints,
       statsRetention,
+      lastActivityAt: existing?.lastActivityAt ?? null,
     }
 
     if (existing) {

@@ -66,6 +66,7 @@ export interface Project {
   sparklinePoints: number       // 스파크라인 표시 건수
   statsRetention: number        // 데이터 보관 기간 (일)
   conflictCount: number          // 충돌 MR/PR 수 (ConflictWorker가 갱신, 서버 전용)
+  lastActivityAt: string | null  // 최종 활동 시각 (이슈 등록, 실행 등)
   createdAt: string
 }
 
