@@ -7,7 +7,7 @@ import { DEFAULT_AVATARS } from '@/types'
 import PullToRefresh from '@/components/ui/PullToRefresh'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 import Sparkline from '@/components/ui/Sparkline'
-import { DailyTrendChart, CompareTable, WaitingTrendChart } from '@/components/reports/ReportCharts'
+import { DailyTrendChart, WaitingTrendChart } from '@/components/reports/ReportCharts'
 import { getKSTTodayString } from '@/lib/date-utils'
 
 const REPORT_STATE_KEY = 'ive-report-state'
@@ -803,48 +803,6 @@ export default function ReportsTab() {
                 {t('dailyTrend', { label: type === 'yearly' ? t('monthlyLabel') : t('dailyLabel') })}
               </div>
               <DailyTrendChart data={data.dailyTrend} prevData={data.prevDailyTrend} type={type} />
-            </section>
-          )}
-
-          {/* 프로젝트별 비교 */}
-          {data.byProject.length > 0 && (
-            <section>
-              <CompareTable
-                title={t('byProject')}
-                icon="fa-folder"
-                data={data.byProject.map(p => {
-                  const prev = data.prevByProject?.find(pp => pp.projectId === p.projectId)
-                  return { name: p.projectName, color: p.projectColor, avatarUrl: p.projectAvatarUrl, provider: p.projectProvider, tasks: p.tasks, cost: p.cost, prevTasks: prev?.tasks ?? 0, prevCost: prev?.cost ?? 0 }
-                })}
-              />
-            </section>
-          )}
-
-          {/* 작업자별 비교 */}
-          {data.byAgent.length > 0 && (
-            <section>
-              <CompareTable
-                title={t('byAgent')}
-                icon="fa-robot"
-                data={data.byAgent.map(a => {
-                  const prev = data.prevByAgent?.find(pa => pa.agentId === a.agentId)
-                  return { name: a.agentName, color: '', avatar: a.agentAvatar, tasks: a.tasks, cost: a.cost, prevTasks: prev?.tasks ?? 0, prevCost: prev?.cost ?? 0 }
-                })}
-              />
-            </section>
-          )}
-
-          {/* 사용자별 비교 */}
-          {data.byUser && data.byUser.length > 0 && (
-            <section>
-              <CompareTable
-                title={t('byUser')}
-                icon="fa-user"
-                data={data.byUser.map(u => {
-                  const prev = data.prevByUser?.find(pu => pu.userId === u.userId)
-                  return { name: u.userName, color: '', tasks: u.tasks, cost: u.cost, prevTasks: prev?.tasks ?? 0, prevCost: prev?.cost ?? 0 }
-                })}
-              />
             </section>
           )}
 
