@@ -224,7 +224,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
           {onRemove && (
             <button
               onClick={(e) => { e.stopPropagation(); onRemove(agent.id) }}
-              className="ml-1 w-6 h-6 rounded-md bg-ive-bg-deep border border-ive-red/20 text-ive-red/40 hover:bg-ive-red/10 hover:text-ive-red hover:border-ive-red/40 flex items-center justify-center transition-all"
+              className="ml-1 w-6 h-6 rounded-lg bg-ive-bg-deep border border-ive-red/20 text-ive-red/40 hover:bg-ive-red/10 hover:text-ive-red hover:border-ive-red/40 flex items-center justify-center transition-all"
               title={t('unassign')}
             >
               <i className="fa-solid fa-xmark text-xs" />
@@ -249,7 +249,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
   const todayFailedExecs = failedExecs.filter(e => e.startedAt >= todayStartISO)
 
   return (
-    <div className={`bg-ive-bg-card rounded-xl border overflow-hidden transition-colors duration-200 ${expandedPanel ? 'border-ive-cyan/30' : 'border-ive-border-subtle'}`}>
+    <div className={`bg-ive-bg-card rounded-lg border overflow-hidden transition-colors duration-200 ${expandedPanel ? 'border-ive-cyan/30' : 'border-ive-border-subtle'}`}>
       {/* 헤더 — 클릭으로 접기/펼치기 */}
       <div
         onClick={toggleCollapsed}
@@ -347,13 +347,13 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
         {agent.cliVersion && (
           <div className="flex items-center gap-2 text-base">
             <span className="text-ive-text-muted"><i className="fa-solid fa-code-branch w-4 text-center" /> {t('version')}</span>
-            <span className="text-ive-text font-semibold">{agent.cliVersion}</span>
+            <span className="text-ive-text font-bold">{agent.cliVersion}</span>
           </div>
         )}
 
         <div className="flex items-center gap-2 text-base">
           <span className="text-ive-text-muted"><i className="fa-solid fa-repeat w-4 text-center" /> {t('maxTurns')}</span>
-          <span className="text-ive-text font-semibold">{agent.maxTurns}</span>
+          <span className="text-ive-text font-bold">{agent.maxTurns}</span>
           <span className="text-xs text-ive-text-dim">({t('maxTurnsHint')})</span>
         </div>
 
@@ -361,11 +361,11 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
           <div className="flex items-center gap-2 text-base">
             <span className="text-ive-text-muted shrink-0"><i className="fa-solid fa-plug w-4 text-center" /> {t('assigned')}</span>
             {assignedProjects.length === 0 ? (
-              <span className="font-semibold text-ive-text-dim">{t('notAssigned')}</span>
+              <span className="font-bold text-ive-text-dim">{t('notAssigned')}</span>
             ) : (
               <div className="flex flex-wrap gap-1.5">
                 {assignedProjects.map(p => (
-                  <span key={p.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-sm font-semibold bg-ive-bg-deep border border-ive-border-dark">
+                  <span key={p.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-sm font-bold bg-ive-bg-deep border border-ive-border-dark">
                     <i className={`fa-brands ${p.provider === 'github' ? 'fa-github' : 'fa-gitlab'} text-xs`} style={{ color: p.color }} />
                     <span className="text-ive-text">{p.name}</span>
                   </span>
@@ -383,7 +383,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
           onClick={() => setExpandedPanel(expandedPanel === 'running' ? null : 'running')}
           className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'running' ? 'bg-ive-amber/5' : 'hover:bg-white/[0.02]'}`}
         >
-          <span className={`text-sm font-black ${runningCount > 0 ? 'text-ive-amber animate-pulse' : 'text-ive-text-dim'}`}>
+          <span className={`text-sm font-bold ${runningCount > 0 ? 'text-ive-amber animate-pulse' : 'text-ive-text-dim'}`}>
             {runningCount}
           </span>
           <Sparkline data={snapshots.map(s => s.running)} width={40} height={12} color="amber" />
@@ -396,7 +396,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
           className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'done' ? 'bg-ive-green/5' : 'hover:bg-white/[0.02]'}`}
         >
           <div className="flex items-baseline gap-1">
-            <span className={`text-sm font-black ${completedCount > 0 ? 'text-ive-green' : 'text-ive-text-dim'}`}>
+            <span className={`text-sm font-bold ${completedCount > 0 ? 'text-ive-green' : 'text-ive-text-dim'}`}>
               {completedCount}
             </span>
             {stats && yesterdayDiff !== 0 && (
@@ -414,7 +414,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
           onClick={() => setExpandedPanel(expandedPanel === 'failed' ? null : 'failed')}
           className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'failed' ? 'bg-ive-red/5' : 'hover:bg-white/[0.02]'}`}
         >
-          <span className={`text-sm font-black ${failedCount > 0 ? 'text-ive-red' : 'text-ive-text-dim'}`}>
+          <span className={`text-sm font-bold ${failedCount > 0 ? 'text-ive-red' : 'text-ive-text-dim'}`}>
             {failedCount}
           </span>
           <Sparkline data={snapshots.map(s => s.failed)} width={40} height={12} color="red" />
@@ -500,7 +500,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
 
         {/* 인터뷰 채팅 */}
         {showInterview && (
-          <div className="bg-ive-bg rounded-xl border border-ive-border-subtle overflow-hidden">
+          <div className="bg-ive-bg rounded-lg border border-ive-border-subtle overflow-hidden">
             <div className="max-h-[240px] overflow-y-auto p-3 space-y-2.5" ref={el => { if (el) el.scrollTop = el.scrollHeight }}>
               {chatHistory.map((msg, i) => (
                 <div key={i} className={`flex ${msg.role === 'user' ? 'flex-row-reverse' : ''} items-start gap-2`}>
@@ -512,7 +512,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
                     )}
                   </div>
                   <div
-                    className={`rounded-xl px-3 py-2 text-sm leading-relaxed ${
+                    className={`rounded-lg px-3 py-2 text-sm leading-relaxed ${
                       msg.role === 'user'
                         ? 'max-w-[80%] bg-ive-green/15 text-ive-green-pale'
                         : 'flex-1 bg-ive-bg-card text-ive-text border border-ive-border-subtle'
@@ -560,7 +560,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
               {chatLoading && (
                 <div className="flex gap-2 justify-start">
                   <AgentAvatar avatar={agent.avatar} size="sm" className="shrink-0 mt-0.5" />
-                  <div className="bg-ive-bg-card text-ive-text-dim border border-ive-border-subtle rounded-xl px-3 py-2 text-sm">
+                  <div className="bg-ive-bg-card text-ive-text-dim border border-ive-border-subtle rounded-lg px-3 py-2 text-sm">
                     <i className="fa-solid fa-ellipsis fa-beat-fade" /> {t('thinking')}
                   </div>
                 </div>

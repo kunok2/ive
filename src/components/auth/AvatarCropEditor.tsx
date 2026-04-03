@@ -186,12 +186,12 @@ export default function AvatarCropEditor({ imageFile, onConfirm, onCancel }: Pro
       <div className="flex flex-col items-center gap-3">
         <div className="w-full text-center py-6">
           <i className="fa-solid fa-circle-exclamation text-ive-red text-2xl mb-2" />
-          <p className="text-sm text-ive-red font-semibold">{loadError}</p>
+          <p className="text-sm text-ive-red font-bold">{loadError}</p>
         </div>
         <button
           type="button"
           onClick={onCancel}
-          className="w-full py-2 rounded-lg text-sm font-semibold text-ive-text-dim bg-ive-bg-card border border-ive-border-subtle"
+          className="w-full py-2 rounded-lg text-sm font-bold text-ive-text-dim bg-ive-bg-card border border-ive-border-subtle"
         >
           돌아가기
         </button>
@@ -272,7 +272,7 @@ export default function AvatarCropEditor({ imageFile, onConfirm, onCancel }: Pro
         <button
           type="button"
           onClick={onCancel}
-          className="flex-1 py-2 rounded-lg text-sm font-semibold text-ive-text-dim bg-ive-bg-card border border-ive-border-subtle"
+          className="flex-1 py-2 rounded-lg text-sm font-bold text-ive-text-dim bg-ive-bg-card border border-ive-border-subtle"
         >
           취소
         </button>

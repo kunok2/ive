@@ -135,7 +135,7 @@ export default function IntroSlides({ onComplete }: IntroSlidesProps) {
           {current > 0 && (
             <button
               onClick={goPrev}
-              className="flex-1 py-3 rounded-lg text-base font-semibold border border-ive-border text-ive-text-muted hover:bg-ive-bg-card transition-colors"
+              className="flex-1 py-3 rounded-lg text-base font-bold border border-ive-border text-ive-text-muted hover:bg-ive-bg-card transition-colors"
             >
               <i className="fa-solid fa-chevron-left mr-1.5" />{tc('previous')}
             </button>

@@ -112,16 +112,16 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
               />
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="text-sm font-black text-ive-green">#{execInfo.issueIid}</span>
+                  <span className="text-sm font-bold text-ive-green">#{execInfo.issueIid}</span>
                   <span className="text-xs font-mono font-bold text-ive-text-muted">{formatTimeWithSeconds(execInfo.startedAt, userLocale, userTz)}</span>
                   {execInfo.issueTitle && (
-                    <span className="text-sm text-ive-text font-semibold truncate">{execInfo.issueTitle}</span>
+                    <span className="text-sm text-ive-text font-bold truncate">{execInfo.issueTitle}</span>
                   )}
                 </div>
                 <div className="flex items-center gap-2 text-xs text-ive-text-dim">
                   <span className="font-bold">{execInfo.agentName}</span>
                   {connected && activity && (
-                    <span className="text-[10px] bg-ive-bg-deep px-1.5 py-0.5 rounded font-mono truncate max-w-[140px]">
+                    <span className="text-xs bg-ive-bg-deep px-1.5 py-0.5 rounded font-mono truncate max-w-[140px]">
                       {activity.tool === 'thinking' ? te('thinking') : activity.tool}
                     </span>
                   )}

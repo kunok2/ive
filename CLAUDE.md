@@ -84,6 +84,10 @@ data/                  # SQLite DB 파일 저장
 4. WebSocket으로 실행 로그를 실시간 스트리밍 (xterm.js)
 5. 완료 시 MR/PR 생성 또는 이슈 코멘트
 
+## Design Guide
+UI 컴포넌트 작성/수정 시 반드시 [DESIGN_GUIDE.md](DESIGN_GUIDE.md)를 따를 것.
+핵심: rounded-lg 통일, font-bold 통일, shadow 금지, ive-* 색상만 사용.
+
 ## Scanner 원칙
 - 스캐너는 DB 상태만으로 판단. 노트/레이블 기반 스케줄링 금지.
 - 임시방편 덧대기 금지.

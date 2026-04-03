@@ -552,7 +552,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <p className="text-ive-text-muted mb-4">{tIssue('notFound')}</p>
-          <button onClick={() => router.back()} className="text-ive-green font-semibold">
+          <button onClick={() => router.back()} className="text-ive-green font-bold">
             <i className="fa-solid fa-arrow-left mr-1" />{tAuth('goBack')}
           </button>
         </div>
@@ -569,10 +569,10 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
       {/* 헤더: 뒤로가기 + 이슈번호 + 상태 + 외부링크 */}
       <header className="sticky top-0 z-40 bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark shrink-0">
         <div className="flex items-center gap-2 px-3 py-2 max-w-lg mx-auto">
-          <button onClick={() => router.back()} className="text-ive-green font-semibold p-1 hover:bg-ive-green/5 rounded shrink-0">
+          <button onClick={() => router.back()} className="text-ive-green font-bold p-1 hover:bg-ive-green/5 rounded shrink-0">
             <i className="fa-solid fa-arrow-left" />
           </button>
-          <span className="text-base font-black text-ive-green shrink-0">#{issue.iid}</span>
+          <span className="text-base font-bold text-ive-green shrink-0">#{issue.iid}</span>
           <span className={`text-xs font-bold px-1.5 py-0.5 rounded border ${stageInfo.bg} ${stageInfo.color} border-current/20 shrink-0`}>
             <i className={`fa-solid ${stageInfo.icon} mr-0.5`} />{stageInfo.label}
           </span>
@@ -835,7 +835,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-xs font-bold text-purple-300">
                         {chatAgentName || 'AI'}
-                        <i className="fa-solid fa-circle-notch fa-spin ml-1.5 text-[10px]" />
+                        <i className="fa-solid fa-circle-notch fa-spin ml-1.5 text-xs" />
                       </span>
                       <ElapsedTimer startTime={chatSendingStartTime} />
                     </div>
@@ -928,13 +928,13 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                 }}
                 placeholder={tIssue('commentPlaceholder')}
                 rows={1}
-                className="flex-1 min-h-10 bg-ive-bg-card border border-ive-border rounded-xl px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-green/50"
+                className="flex-1 min-h-10 bg-ive-bg-card border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-green/50"
                 style={{ overflow: 'auto', scrollbarGutter: 'stable' }}
               />
               <button
                 onClick={handlePostComment}
                 disabled={posting || !comment.trim()}
-                className="shrink-0 w-10 h-10 rounded-xl bg-ive-green text-ive-bg-deep flex items-center justify-center active:scale-95 transition-all disabled:opacity-40"
+                className="shrink-0 w-10 h-10 rounded-lg bg-ive-green text-ive-bg-deep flex items-center justify-center active:scale-95 transition-all disabled:opacity-40"
                 title={tIssue('postCommentOnly')}
                 aria-label={tIssue('postComment')}
               >
@@ -944,7 +944,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                 <button
                   onClick={handleCommentAndRetry}
                   disabled={posting || !comment.trim()}
-                  className="shrink-0 h-10 px-3 rounded-xl bg-ive-cyan text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold whitespace-nowrap"
+                  className="shrink-0 h-10 px-3 rounded-lg bg-ive-cyan text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold whitespace-nowrap"
                   title={tIssue('postAndRetryHint')}
                   aria-label={tIssue('postAndRetry')}
                 >
@@ -975,13 +975,13 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                 placeholder={tIssue('chatPlaceholder')}
                 rows={1}
                 disabled={chatSending}
-                className="flex-1 min-h-10 bg-ive-bg-card border border-purple-500/30 rounded-xl px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-purple-500/50 disabled:opacity-50"
+                className="flex-1 min-h-10 bg-ive-bg-card border border-purple-500/30 rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-purple-500/50 disabled:opacity-50"
                 style={{ overflow: 'auto', scrollbarGutter: 'stable' }}
               />
               <button
                 onClick={handleSendChatMessage}
                 disabled={chatSending || !chatInput.trim()}
-                className="shrink-0 w-10 h-10 rounded-xl bg-purple-500 text-white flex items-center justify-center active:scale-95 transition-all disabled:opacity-40"
+                className="shrink-0 w-10 h-10 rounded-lg bg-purple-500 text-white flex items-center justify-center active:scale-95 transition-all disabled:opacity-40"
               >
                 {chatSending ? <i className="fa-solid fa-circle-notch fa-spin" /> : <i className="fa-solid fa-paper-plane" />}
               </button>

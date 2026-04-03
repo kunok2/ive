@@ -79,10 +79,10 @@ function ChatViewer({ projectId, execution, agent }: { projectId: string; execut
               : 'bg-ive-bg-card border border-purple-500/10'
           }`}>
             <div className={`flex items-center gap-1.5 mb-0.5 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-              <span className={`text-[10px] font-bold ${msg.role === 'user' ? 'text-sky-400' : 'text-purple-300'}`}>
+              <span className={`text-xs font-bold ${msg.role === 'user' ? 'text-sky-400' : 'text-purple-300'}`}>
                 {msg.role === 'user' ? 'You' : agent.name}
               </span>
-              <span className="text-[10px] text-ive-text-dim">
+              <span className="text-xs text-ive-text-dim">
                 {formatTimeUtil(msg.createdAt, state.user?.locale, state.user?.timezone)}
               </span>
             </div>
@@ -209,11 +209,11 @@ export default function LiveTracePanel({ agents, projectId, onKill, onAllComplet
           <div key={current.execution!.id} className="flex-1 flex flex-col min-h-0 p-3 gap-2">
             <div className="flex items-center justify-between shrink-0">
               <div className="min-w-0 flex-1">
-                <MarqueeText className="text-sm font-semibold text-ive-text">
+                <MarqueeText className="text-sm font-bold text-ive-text">
                   {isChat ? (
-                    <span className="font-black text-purple-400">💬 #{current.execution!.issueIid}</span>
+                    <span className="font-bold text-purple-400">💬 #{current.execution!.issueIid}</span>
                   ) : (
-                    <span className="font-black text-ive-green">#{current.execution!.issueIid}</span>
+                    <span className="font-bold text-ive-green">#{current.execution!.issueIid}</span>
                   )}
                   <span className="ml-1.5 text-ive-text-muted font-mono text-xs font-bold">{formatTimeWithSeconds(current.execution!.startedAt, userLocale, userTz)}</span>
                   {current.execution!.issueTitle && !isChat && (
@@ -227,7 +227,7 @@ export default function LiveTracePanel({ agents, projectId, onKill, onAllComplet
                   const activity = activities[current.agent.id]
                   if (!activity) return null
                   return (
-                    <span className="text-[10px] text-ive-text-dim bg-ive-bg-deep px-1.5 py-0.5 rounded font-mono truncate max-w-[140px]">
+                    <span className="text-xs text-ive-text-dim bg-ive-bg-deep px-1.5 py-0.5 rounded font-mono truncate max-w-[140px]">
                       {activity.tool === 'thinking' ? '생각 중...' : activity.tool}
                     </span>
                   )

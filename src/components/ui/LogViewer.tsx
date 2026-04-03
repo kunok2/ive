@@ -200,7 +200,7 @@ function LogLine({ line, showLineNum, lineNum, timezone }: { line: LineData; lin
     const headerMatch = raw.match(/^(#{1,6})\s+(.*)$/)
     if (headerMatch) {
       const level = headerMatch[1].length
-      const sizes = ['text-xl font-black', 'text-lg font-bold', 'text-base font-bold', 'text-sm font-bold', 'text-sm font-semibold', 'text-sm font-medium']
+      const sizes = ['text-xl font-bold', 'text-lg font-bold', 'text-base font-bold', 'text-sm font-bold', 'text-sm font-bold', 'text-sm font-bold']
       const mdSegs = parseMarkdownInline(headerMatch[2])
       return (
         <span className={`${sizes[level - 1]} text-ive-green-pale`}>

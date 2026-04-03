@@ -39,7 +39,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <p className="text-ive-text-muted mb-4">{tp('notFound')}</p>
-          <Link href="/" className="text-ive-green text-base font-semibold">
+          <Link href="/" className="text-ive-green text-base font-bold">
             <i className="fa-solid fa-arrow-left mr-1" />{tc('home')}
           </Link>
         </div>
@@ -91,9 +91,9 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
   return (
     <div className="min-h-screen pb-20">
-      <header className="sticky top-0 z-40 bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark shadow-sm">
+      <header className="sticky top-0 z-40 bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark">
         <div className="flex items-center gap-3 px-4 py-3 max-w-lg mx-auto">
-          <Link href="/" className="text-ive-green text-base font-semibold p-1 hover:bg-ive-green/5 rounded">
+          <Link href="/" className="text-ive-green text-base font-bold p-1 hover:bg-ive-green/5 rounded">
             <i className="fa-solid fa-arrow-left mr-1" />{tc('back')}
           </Link>
           <h1 className="text-lg font-bold text-ive-green-pale flex-1 truncate">{project.name}</h1>
@@ -103,7 +103,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       <main className="px-4 py-4 max-w-lg mx-auto">
         {/* 프로젝트 정보 헤더 */}
         <div
-          className="bg-ive-bg-card rounded-xl p-5 border border-ive-border-subtle mb-6 relative overflow-hidden group"
+          className="bg-ive-bg-card rounded-lg p-5 border border-ive-border-subtle mb-6 relative overflow-hidden group"
           style={{ borderLeftWidth: '3px', borderLeftColor: project.color || '#4ade80' }}
         >
           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
@@ -112,10 +112,10 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
           <div className="flex items-center gap-3 mb-4 relative z-10">
             {project.avatarUrl ? (
-              <img src={project.avatarUrl} alt="" className="w-12 h-12 rounded-xl object-cover border border-ive-border shrink-0 shadow-lg" style={{ borderColor: `${project.color || '#4ade80'}40` }} />
+              <img src={project.avatarUrl} alt="" className="w-12 h-12 rounded-lg object-cover border border-ive-border shrink-0" style={{ borderColor: `${project.color || '#4ade80'}40` }} />
             ) : (
               <div
-                className="w-12 h-12 rounded-xl bg-ive-bg-deep border border-ive-border flex items-center justify-center shrink-0 shadow-lg"
+                className="w-12 h-12 rounded-lg bg-ive-bg-deep border border-ive-border flex items-center justify-center shrink-0"
                 style={{ borderColor: `${project.color || '#4ade80'}40` }}
               >
                 <i className={`fa-brands ${project.provider === 'github' ? 'fa-github' : 'fa-gitlab'} text-3xl`} style={{ color: project.color || '#4ade80' }} />
@@ -138,11 +138,11 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           <div className="flex items-center justify-between mt-4 pt-4 border-t border-ive-border-dark relative z-10 gap-2">
             <div className="flex items-center gap-4">
               <div className="text-center">
-                <div className={`text-xl font-black leading-none ${assignedAgents.length > 0 ? 'text-ive-green-light' : 'text-ive-text-dim'}`}>{assignedAgents.length}</div>
+                <div className={`text-xl font-bold leading-none ${assignedAgents.length > 0 ? 'text-ive-green-light' : 'text-ive-text-dim'}`}>{assignedAgents.length}</div>
                 <div className="text-sm text-ive-text-muted mt-1 uppercase tracking-wider font-bold">{tp('developers')}</div>
               </div>
               <div className="text-center">
-                <div className={`text-xl font-black leading-none ${(project.lastScannedIssueCount ?? 0) > 0 ? 'text-ive-cyan' : 'text-ive-text-dim'}`}>
+                <div className={`text-xl font-bold leading-none ${(project.lastScannedIssueCount ?? 0) > 0 ? 'text-ive-cyan' : 'text-ive-text-dim'}`}>
                   {project.lastScannedIssueCount ?? 0}
                 </div>
                 <div className="text-sm text-ive-text-muted mt-1 uppercase tracking-wider font-bold">{ts('waiting')}</div>
@@ -152,21 +152,21 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               <div className="flex gap-2 shrink-0">
                 <button
                   onClick={() => setShowEditProject(true)}
-                  className="text-base font-black text-ive-text-muted border border-ive-border px-3 py-2 rounded-xl hover:border-ive-green/30 hover:text-ive-green transition-all bg-ive-bg/50"
+                  className="text-base font-bold text-ive-text-muted border border-ive-border px-3 py-2 rounded-lg hover:border-ive-green/30 hover:text-ive-green transition-all bg-ive-bg/50"
                 >
                   <i className="fa-solid fa-pen-to-square mr-1" />{tc('edit')}
                 </button>
                 {isOwner && (
                   <button
                     onClick={() => setShowDeleteProject(true)}
-                    className="text-base font-black text-ive-red/60 border border-ive-red/20 px-3 py-2 rounded-xl hover:bg-ive-red/10 transition-all"
+                    className="text-base font-bold text-ive-red/60 border border-ive-red/20 px-3 py-2 rounded-lg hover:bg-ive-red/10 transition-all"
                   >
                     <i className="fa-solid fa-trash-can" />
                   </button>
                 )}
               </div>
             ) : (
-              <span className={`text-xs font-black px-2.5 py-1 rounded-full leading-none bg-ive-cyan/15 text-ive-cyan border border-ive-cyan/30`}>
+              <span className={`text-xs font-bold px-2.5 py-1 rounded-full leading-none bg-ive-cyan/15 text-ive-cyan border border-ive-cyan/30`}>
                 <i className="fa-solid fa-share-nodes mr-1" />
                 {tp('viewerPermission')}
               </span>
@@ -176,14 +176,14 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
         {/* 배정된 개발자 섹션 */}
         <div className="flex items-center justify-between mb-4 px-1">
-          <h2 className="text-base font-black text-ive-text uppercase tracking-widest flex items-center gap-2">
+          <h2 className="text-base font-bold text-ive-text uppercase tracking-widest flex items-center gap-2">
             <span className="w-1.5 h-1.5 rounded-full bg-ive-green" />
             {tp('assignedAgents', { count: assignedAgents.length })}
           </h2>
           {canEdit && (
             <button
               onClick={() => { setShowAssignAgent(true); setAssignError(''); setAssignToken('') }}
-              className="text-base font-bold text-ive-green bg-ive-green/10 px-4 py-2 rounded-xl active:scale-95 transition-all hover:bg-ive-green/15"
+              className="text-base font-bold text-ive-green bg-ive-green/10 px-4 py-2 rounded-lg active:scale-95 transition-all hover:bg-ive-green/15"
             >
               <i className="fa-solid fa-plus mr-1.5" />{tp('assignAgent')}
             </button>
@@ -193,12 +193,12 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         {assignedAgents.length === 0 ? (
           <div className="text-center py-16 bg-ive-bg-card rounded-2xl border border-dashed border-ive-border-subtle">
             <i className="fa-solid fa-robot text-4xl text-ive-text-dim mb-4 block" />
-            <p className="text-base text-ive-text-muted font-medium">{tp('noAssignedAgents')}</p>
+            <p className="text-base text-ive-text-muted font-bold">{tp('noAssignedAgents')}</p>
           </div>
         ) : (
           <div className="grid gap-3">
             {assignedAgents.map(pa => (
-              <div key={pa.id} className="bg-ive-bg-card rounded-xl border border-ive-border-subtle overflow-hidden">
+              <div key={pa.id} className="bg-ive-bg-card rounded-lg border border-ive-border-subtle overflow-hidden">
                 <div className="flex items-center gap-2 p-1">
                   <div className="flex-1 min-w-0">
                     <AgentCard agent={pa.agent} compact onRemove={canEdit ? () => handleUnassignAgent(pa.agentId) : undefined} />
@@ -271,7 +271,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           ) : (
             <>
               {/* 개별 토큰 입력 (선택사항) */}
-              <div className="bg-ive-bg rounded-xl p-3 border border-ive-border-subtle">
+              <div className="bg-ive-bg rounded-lg p-3 border border-ive-border-subtle">
                 <label className="block text-xs font-bold text-ive-text-muted mb-1.5">
                   <i className="fa-solid fa-key mr-1 text-ive-cyan" />{tp('individualToken')}
                 </label>
@@ -289,7 +289,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               </div>
 
               {availableAgents.map(agent => (
-                <div key={agent.id} className="flex items-center gap-3 bg-ive-bg rounded-xl p-3 border border-ive-border-subtle">
+                <div key={agent.id} className="flex items-center gap-3 bg-ive-bg rounded-lg p-3 border border-ive-border-subtle">
                   <div className="flex-1 min-w-0">
                     <AgentCard agent={agent} compact />
                   </div>

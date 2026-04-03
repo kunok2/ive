@@ -453,7 +453,7 @@ export default function ReportsTab() {
               {!isCurrentPeriod() && (
                 <button
                   onClick={goToToday}
-                  className="px-2 py-0.5 text-[11px] font-bold rounded-md bg-ive-green/20 text-ive-green hover:bg-ive-green/30 transition-colors"
+                  className="px-2 py-0.5 text-xs font-bold rounded-lg bg-ive-green/20 text-ive-green hover:bg-ive-green/30 transition-colors"
                 >
                   {t('today')}
                 </button>
@@ -561,11 +561,11 @@ export default function ReportsTab() {
             }
 
             return (
-              <section className="bg-gradient-to-r from-ive-bg-card to-ive-bg-deep border border-ive-border-subtle rounded-xl p-3">
+              <section className="bg-gradient-to-r from-ive-bg-card to-ive-bg-deep border border-ive-border-subtle rounded-lg p-3">
                 <div className="flex items-center gap-1.5 mb-2">
                   <i className="fa-solid fa-comment-dots text-ive-amber text-sm" />
                   <span className="text-xs font-bold text-ive-text">{t('commentary')}</span>
-                  <span className="text-[10px] text-ive-text-dim">vs {prevLabel}</span>
+                  <span className="text-xs text-ive-text-dim">vs {prevLabel}</span>
                 </div>
                 <div className="space-y-1.5">
                   {lines.map((l, i) => (
@@ -592,7 +592,7 @@ export default function ReportsTab() {
               <div className="text-xs font-bold text-ive-text-dim mb-2 uppercase tracking-wider">
                 {t('waitingTrend')}
               </div>
-              <div className="bg-ive-bg-card border border-ive-border-subtle rounded-xl p-4 text-center">
+              <div className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-4 text-center">
                 <i className="fa-solid fa-check-circle text-ive-green text-2xl mb-2" />
                 <p className="text-sm text-ive-text-dim">{t('noWaitingIssues')}</p>
               </div>
@@ -617,7 +617,7 @@ export default function ReportsTab() {
           {data.lifecycle.procCount > 0 && (
             <section>
               <div className="text-xs font-bold text-ive-text-dim mb-2 uppercase tracking-wider">{t('issueLifecycle')}</div>
-              <div className="bg-ive-bg-card border border-ive-border-subtle rounded-xl p-3 space-y-3">
+              <div className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-3 space-y-3">
                 {/* 단계별 평균/최대 + 이전 비교 */}
                 {(() => {
                   const hasWait = data.lifecycle.waitCount > 0
@@ -637,9 +637,9 @@ export default function ReportsTab() {
                     <div className={`grid gap-2 ${cols === 3 ? 'grid-cols-3' : cols === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
                       {hasWait && (
                         <div className="text-center">
-                          <div className="text-[10px] text-ive-text-dim">{t('createToAssign')}</div>
-                          <div className="text-sm font-extrabold text-ive-cyan">{formatDuration(data.lifecycle.waitAvg)}</div>
-                          <div className="text-[10px] text-ive-text-dim">{t('max')} {formatDuration(data.lifecycle.waitMax)}</div>
+                          <div className="text-xs text-ive-text-dim">{t('createToAssign')}</div>
+                          <div className="text-sm font-bold text-ive-cyan">{formatDuration(data.lifecycle.waitAvg)}</div>
+                          <div className="text-xs text-ive-text-dim">{t('max')} {formatDuration(data.lifecycle.waitMax)}</div>
                           <div className="mt-0.5">
                             <DiffBadge diff={waitDiff} isNew={waitDiff == null && data.lifecycle.waitCount > 0 && prev.waitCount === 0} />
                             {prev.waitCount > 0 && <div className="text-[9px] text-ive-text-dim mt-0.5">{t('prevDuration', { duration: formatDuration(prev.waitAvg) })}</div>}
@@ -647,9 +647,9 @@ export default function ReportsTab() {
                         </div>
                       )}
                       <div className="text-center">
-                        <div className="text-[10px] text-ive-text-dim">{t('processTime')}</div>
-                        <div className="text-sm font-extrabold text-ive-green">{formatDuration(data.lifecycle.procAvg)}</div>
-                        <div className="text-[10px] text-ive-text-dim">{t('max')} {formatDuration(data.lifecycle.procMax)}</div>
+                        <div className="text-xs text-ive-text-dim">{t('processTime')}</div>
+                        <div className="text-sm font-bold text-ive-green">{formatDuration(data.lifecycle.procAvg)}</div>
+                        <div className="text-xs text-ive-text-dim">{t('max')} {formatDuration(data.lifecycle.procMax)}</div>
                         <div className="mt-0.5">
                           <DiffBadge diff={procDiff} isNew={procDiff == null && data.lifecycle.procCount > 0 && prev.procCount === 0} />
                           {prev.procCount > 0 && <div className="text-[9px] text-ive-text-dim mt-0.5">{t('prevDuration', { duration: formatDuration(prev.procAvg) })}</div>}
@@ -657,9 +657,9 @@ export default function ReportsTab() {
                       </div>
                       {hasTotal && (
                         <div className="text-center">
-                          <div className="text-[10px] text-ive-text-dim">{t('totalTime')}</div>
-                          <div className="text-sm font-extrabold text-ive-text">{formatDuration(data.lifecycle.totalAvg)}</div>
-                          <div className="text-[10px] text-ive-text-dim">{t('max')} {formatDuration(data.lifecycle.totalMax)}</div>
+                          <div className="text-xs text-ive-text-dim">{t('totalTime')}</div>
+                          <div className="text-sm font-bold text-ive-text">{formatDuration(data.lifecycle.totalAvg)}</div>
+                          <div className="text-xs text-ive-text-dim">{t('max')} {formatDuration(data.lifecycle.totalMax)}</div>
                           <div className="mt-0.5">
                             <DiffBadge diff={totalDiff} isNew={totalDiff == null && data.lifecycle.totalCount > 0 && prev.totalCount === 0} />
                             {prev.totalCount > 0 && <div className="text-[9px] text-ive-text-dim mt-0.5">{t('prevDuration', { duration: formatDuration(prev.totalAvg) })}</div>}
@@ -690,7 +690,7 @@ export default function ReportsTab() {
                   )
                 })()}
                 {/* 재시도 */}
-                <div className="flex justify-center gap-4 text-[10px] text-ive-text-dim">
+                <div className="flex justify-center gap-4 text-xs text-ive-text-dim">
                   <span>{t('issueCount', { count: data.lifecycle.uniqueIssues.toLocaleString() })}</span>
                   <span>{t('avgAttempts', { count: data.lifecycle.avgAttempts.toFixed(1) })}</span>
                   <span>{t('retryRateLabel', { rate: data.lifecycle.retryRate.toFixed(1) })}</span>
@@ -705,7 +705,7 @@ export default function ReportsTab() {
               <div className="text-xs font-bold text-ive-text-dim mb-2 uppercase tracking-wider">
                 {t('waitProcAvgTrend')}
               </div>
-              <div className="bg-ive-bg-card border border-ive-border-subtle rounded-xl p-3 space-y-3">
+              <div className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-3 space-y-3">
                 {data.dailyTrend.some(d => d.waitAvg !== null) && (() => {
                   const waitData = data.dailyTrend.map(d => d.tasks === null ? null : (d.waitAvg ?? 0))
                   const validWait = waitData.filter((v): v is number => v !== null)
@@ -720,16 +720,16 @@ export default function ReportsTab() {
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-xs font-bold text-ive-cyan">{t('waitTime')}</span>
-                          <span className={`text-[10px] font-bold ${trendDir === 'up' ? 'text-ive-red' : trendDir === 'down' ? 'text-ive-green' : 'text-ive-text-dim'}`}>
+                          <span className={`text-xs font-bold ${trendDir === 'up' ? 'text-ive-red' : trendDir === 'down' ? 'text-ive-green' : 'text-ive-text-dim'}`}>
                             {trendDir === 'up' ? t('trendUp') : trendDir === 'down' ? t('trendDown') : t('trendStable')}
                           </span>
                           {prevDiff != null && (
-                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${prevDiff > 0 ? 'text-ive-red bg-ive-red/10' : prevDiff < 0 ? 'text-ive-green bg-ive-green/10' : 'text-ive-text-dim bg-white/5'}`}>
+                            <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${prevDiff > 0 ? 'text-ive-red bg-ive-red/10' : prevDiff < 0 ? 'text-ive-green bg-ive-green/10' : 'text-ive-text-dim bg-white/5'}`}>
                               {t('vsPrev')} {prevDiff > 0 ? '+' : ''}{prevDiff.toLocaleString()}%
                             </span>
                           )}
                           {prevDiff == null && data.lifecycle.waitCount > 0 && data.prevLifecycle.waitCount === 0 && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded text-ive-cyan bg-ive-cyan/10">NEW</span>
+                            <span className="text-xs font-bold px-1.5 py-0.5 rounded text-ive-cyan bg-ive-cyan/10">NEW</span>
                           )}
                         </div>
                         <div className="flex items-center gap-2">
@@ -738,11 +738,11 @@ export default function ReportsTab() {
                           </div>
                           <div className="text-right shrink-0">
                             <div className="text-xs font-bold text-ive-text">{formatDuration(validWait[validWait.length - 1] ?? 0)}</div>
-                            <div className="text-[10px] text-ive-text-dim">{t('recent')}</div>
+                            <div className="text-xs text-ive-text-dim">{t('recent')}</div>
                           </div>
                           <div className="text-right shrink-0 ml-1">
                             <div className="text-xs font-bold text-ive-text-dim">{data.prevLifecycle.waitCount > 0 ? formatDuration(data.prevLifecycle.waitAvg) : '-'}</div>
-                            <div className="text-[10px] text-ive-text-dim">{t('prevAvg')}</div>
+                            <div className="text-xs text-ive-text-dim">{t('prevAvg')}</div>
                           </div>
                         </div>
                       </div>
@@ -763,16 +763,16 @@ export default function ReportsTab() {
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-xs font-bold text-ive-green">{t('procTime')}</span>
-                          <span className={`text-[10px] font-bold ${trendDir === 'up' ? 'text-ive-red' : trendDir === 'down' ? 'text-ive-green' : 'text-ive-text-dim'}`}>
+                          <span className={`text-xs font-bold ${trendDir === 'up' ? 'text-ive-red' : trendDir === 'down' ? 'text-ive-green' : 'text-ive-text-dim'}`}>
                             {trendDir === 'up' ? t('trendUp') : trendDir === 'down' ? t('trendDown') : t('trendStable')}
                           </span>
                           {prevDiff != null && (
-                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${prevDiff > 0 ? 'text-ive-red bg-ive-red/10' : prevDiff < 0 ? 'text-ive-green bg-ive-green/10' : 'text-ive-text-dim bg-white/5'}`}>
+                            <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${prevDiff > 0 ? 'text-ive-red bg-ive-red/10' : prevDiff < 0 ? 'text-ive-green bg-ive-green/10' : 'text-ive-text-dim bg-white/5'}`}>
                               {t('vsPrev')} {prevDiff > 0 ? '+' : ''}{prevDiff.toLocaleString()}%
                             </span>
                           )}
                           {prevDiff == null && data.lifecycle.procCount > 0 && data.prevLifecycle.procCount === 0 && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded text-ive-cyan bg-ive-cyan/10">NEW</span>
+                            <span className="text-xs font-bold px-1.5 py-0.5 rounded text-ive-cyan bg-ive-cyan/10">NEW</span>
                           )}
                         </div>
                         <div className="flex items-center gap-2">
@@ -781,11 +781,11 @@ export default function ReportsTab() {
                           </div>
                           <div className="text-right shrink-0">
                             <div className="text-xs font-bold text-ive-text">{formatDuration(validProc[validProc.length - 1] ?? 0)}</div>
-                            <div className="text-[10px] text-ive-text-dim">{t('recent')}</div>
+                            <div className="text-xs text-ive-text-dim">{t('recent')}</div>
                           </div>
                           <div className="text-right shrink-0 ml-1">
                             <div className="text-xs font-bold text-ive-text-dim">{data.prevLifecycle.procCount > 0 ? formatDuration(data.prevLifecycle.procAvg) : '-'}</div>
-                            <div className="text-[10px] text-ive-text-dim">{t('prevAvg')}</div>
+                            <div className="text-xs text-ive-text-dim">{t('prevAvg')}</div>
                           </div>
                         </div>
                       </div>
@@ -862,20 +862,20 @@ export default function ReportsTab() {
                   const taskDiff = diffPct(p.tasks, prev?.tasks ?? 0)
                   const costDiff = diffPct(p.cost, prev?.cost ?? 0)
                   return (
-                  <div key={p.projectId} className="bg-ive-bg-card border border-ive-border-subtle rounded-xl overflow-hidden">
+                  <div key={p.projectId} className="bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden">
                     <button onClick={() => toggleProject(p.projectId)} className="w-full px-3 py-2.5 flex items-center gap-2 text-left">
                       {p.projectAvatarUrl ? (
-                        <img src={p.projectAvatarUrl} alt="" className="w-6 h-6 rounded-md object-cover shrink-0" style={{ outline: `2px solid ${p.projectColor || '#4ade80'}50`, outlineOffset: '1px' }} />
+                        <img src={p.projectAvatarUrl} alt="" className="w-6 h-6 rounded-lg object-cover shrink-0" style={{ outline: `2px solid ${p.projectColor || '#4ade80'}50`, outlineOffset: '1px' }} />
                       ) : (
-                        <span className="w-6 h-6 rounded-md flex items-center justify-center shrink-0 bg-ive-bg-deep" style={{ outline: `1.5px solid ${p.projectColor || '#4ade80'}40`, outlineOffset: '0.5px' }}>
+                        <span className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0 bg-ive-bg-deep" style={{ outline: `1.5px solid ${p.projectColor || '#4ade80'}40`, outlineOffset: '0.5px' }}>
                           <i className={`fa-brands ${p.projectProvider === 'github' ? 'fa-github' : 'fa-gitlab'} text-sm`} style={{ color: p.projectColor || '#4ade80' }} />
                         </span>
                       )}
                       <span className="text-sm font-bold text-ive-text flex-1 truncate">{p.projectName}</span>
                       <span className="text-xs text-ive-text-dim">{t('itemsUnit', { count: p.tasks.toLocaleString() })}</span>
-                      {taskDiff != null && <span className={`text-[10px] font-bold ${taskDiff > 0 ? 'text-ive-green' : taskDiff < 0 ? 'text-ive-red' : 'text-ive-text-dim'}`}>{taskDiff > 0 ? '+' : ''}{taskDiff.toLocaleString()}%</span>}
+                      {taskDiff != null && <span className={`text-xs font-bold ${taskDiff > 0 ? 'text-ive-green' : taskDiff < 0 ? 'text-ive-red' : 'text-ive-text-dim'}`}>{taskDiff > 0 ? '+' : ''}{taskDiff.toLocaleString()}%</span>}
                       <span className="text-xs text-ive-amber">${formatCost(p.cost)}</span>
-                      {costDiff != null && <span className={`text-[10px] font-bold ${costDiff > 0 ? 'text-ive-red' : costDiff < 0 ? 'text-ive-green' : 'text-ive-text-dim'}`}>{costDiff > 0 ? '+' : ''}{costDiff.toLocaleString()}%</span>}
+                      {costDiff != null && <span className={`text-xs font-bold ${costDiff > 0 ? 'text-ive-red' : costDiff < 0 ? 'text-ive-green' : 'text-ive-text-dim'}`}>{costDiff > 0 ? '+' : ''}{costDiff.toLocaleString()}%</span>}
                       <i className={`fa-solid fa-chevron-${expandedProjects.has(p.projectId) ? 'up' : 'down'} text-xs text-ive-text-dim`} />
                     </button>
                     {expandedProjects.has(p.projectId) && (
@@ -895,14 +895,14 @@ export default function ReportsTab() {
                         {/* 프로젝트별 건수/비용 추이 */}
                         {pt && pt.daily.length >= 2 && (
                           <div className="mt-2 bg-ive-bg-deep rounded-lg p-2">
-                            <div className="text-[10px] font-bold text-ive-text-dim mb-1.5">{t('countCostTrend')}</div>
+                            <div className="text-xs font-bold text-ive-text-dim mb-1.5">{t('countCostTrend')}</div>
                             <div className="grid grid-cols-2 gap-2">
                               <div className="flex items-center gap-1.5">
-                                <span className="text-[10px] text-ive-text-dim shrink-0">{t('countLabel')}</span>
+                                <span className="text-xs text-ive-text-dim shrink-0">{t('countLabel')}</span>
                                 <Sparkline data={pt.daily.map(d => d.tasks)} width={100} height={20} color="auto" />
                               </div>
                               <div className="flex items-center gap-1.5">
-                                <span className="text-[10px] text-ive-text-dim shrink-0">{t('costSmall')}</span>
+                                <span className="text-xs text-ive-text-dim shrink-0">{t('costSmall')}</span>
                                 <Sparkline data={pt.daily.map(d => d.cost)} width={100} height={20} color="amber" />
                               </div>
                             </div>
@@ -944,14 +944,14 @@ export default function ReportsTab() {
                   const taskDiff = diffPct(a.tasks, prev?.tasks ?? 0)
                   const costDiff = diffPct(a.cost, prev?.cost ?? 0)
                   return (
-                  <div key={a.agentId} className="bg-ive-bg-card border border-ive-border-subtle rounded-xl overflow-hidden">
+                  <div key={a.agentId} className="bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden">
                     <button onClick={() => toggleAgent(a.agentId)} className="w-full px-3 py-2.5 flex items-center gap-2 text-left">
                       <AgentAvatar avatar={a.agentAvatar} size="sm" className="!w-6 !h-6 !text-sm" />
                       <span className="text-sm font-bold text-ive-text flex-1 truncate">{a.agentName}</span>
                       <span className="text-xs text-ive-text-dim">{t('itemsUnit', { count: a.tasks.toLocaleString() })}</span>
-                      {taskDiff != null && <span className={`text-[10px] font-bold ${taskDiff > 0 ? 'text-ive-green' : taskDiff < 0 ? 'text-ive-red' : 'text-ive-text-dim'}`}>{taskDiff > 0 ? '+' : ''}{taskDiff.toLocaleString()}%</span>}
+                      {taskDiff != null && <span className={`text-xs font-bold ${taskDiff > 0 ? 'text-ive-green' : taskDiff < 0 ? 'text-ive-red' : 'text-ive-text-dim'}`}>{taskDiff > 0 ? '+' : ''}{taskDiff.toLocaleString()}%</span>}
                       <span className="text-xs text-ive-amber">${formatCost(a.cost)}</span>
-                      {costDiff != null && <span className={`text-[10px] font-bold ${costDiff > 0 ? 'text-ive-red' : costDiff < 0 ? 'text-ive-green' : 'text-ive-text-dim'}`}>{costDiff > 0 ? '+' : ''}{costDiff.toLocaleString()}%</span>}
+                      {costDiff != null && <span className={`text-xs font-bold ${costDiff > 0 ? 'text-ive-red' : costDiff < 0 ? 'text-ive-green' : 'text-ive-text-dim'}`}>{costDiff > 0 ? '+' : ''}{costDiff.toLocaleString()}%</span>}
                       <i className={`fa-solid fa-chevron-${expandedAgents.has(a.agentId) ? 'up' : 'down'} text-xs text-ive-text-dim`} />
                     </button>
                     {expandedAgents.has(a.agentId) && (
@@ -972,14 +972,14 @@ export default function ReportsTab() {
                         {/* 작업자별 건수/비용 추이 */}
                         {at && at.daily.length >= 2 && (
                           <div className="mt-2 bg-ive-bg-deep rounded-lg p-2">
-                            <div className="text-[10px] font-bold text-ive-text-dim mb-1.5">{t('countCostTrend')}</div>
+                            <div className="text-xs font-bold text-ive-text-dim mb-1.5">{t('countCostTrend')}</div>
                             <div className="grid grid-cols-2 gap-2">
                               <div className="flex items-center gap-1.5">
-                                <span className="text-[10px] text-ive-text-dim shrink-0">{t('countLabel')}</span>
+                                <span className="text-xs text-ive-text-dim shrink-0">{t('countLabel')}</span>
                                 <Sparkline data={at.daily.map(d => d.tasks)} width={100} height={20} color="auto" />
                               </div>
                               <div className="flex items-center gap-1.5">
-                                <span className="text-[10px] text-ive-text-dim shrink-0">{t('costSmall')}</span>
+                                <span className="text-xs text-ive-text-dim shrink-0">{t('costSmall')}</span>
                                 <Sparkline data={at.daily.map(d => d.cost)} width={100} height={20} color="amber" />
                               </div>
                             </div>
@@ -1008,16 +1008,16 @@ export default function ReportsTab() {
                   const taskDiff = diffPct(u.tasks, prev?.tasks ?? 0)
                   const costDiff = diffPct(u.cost, prev?.cost ?? 0)
                   return (
-                  <div key={u.userId} className="bg-ive-bg-card border border-ive-border-subtle rounded-xl overflow-hidden">
+                  <div key={u.userId} className="bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden">
                     <button onClick={() => toggleUser(u.userId)} className="w-full px-3 py-2.5 flex items-center gap-2 text-left">
                       <span className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 bg-ive-bg-deep border border-ive-border-dark">
                         <i className="fa-solid fa-user text-xs text-ive-text-dim" />
                       </span>
                       <span className="text-sm font-bold text-ive-text flex-1 truncate">{u.userName}</span>
                       <span className="text-xs text-ive-text-dim">{t('itemsUnit', { count: u.tasks.toLocaleString() })}</span>
-                      {taskDiff != null && <span className={`text-[10px] font-bold ${taskDiff > 0 ? 'text-ive-green' : taskDiff < 0 ? 'text-ive-red' : 'text-ive-text-dim'}`}>{taskDiff > 0 ? '+' : ''}{taskDiff.toLocaleString()}%</span>}
+                      {taskDiff != null && <span className={`text-xs font-bold ${taskDiff > 0 ? 'text-ive-green' : taskDiff < 0 ? 'text-ive-red' : 'text-ive-text-dim'}`}>{taskDiff > 0 ? '+' : ''}{taskDiff.toLocaleString()}%</span>}
                       <span className="text-xs text-ive-amber">${formatCost(u.cost)}</span>
-                      {costDiff != null && <span className={`text-[10px] font-bold ${costDiff > 0 ? 'text-ive-red' : costDiff < 0 ? 'text-ive-green' : 'text-ive-text-dim'}`}>{costDiff > 0 ? '+' : ''}{costDiff.toLocaleString()}%</span>}
+                      {costDiff != null && <span className={`text-xs font-bold ${costDiff > 0 ? 'text-ive-red' : costDiff < 0 ? 'text-ive-green' : 'text-ive-text-dim'}`}>{costDiff > 0 ? '+' : ''}{costDiff.toLocaleString()}%</span>}
                       <i className={`fa-solid fa-chevron-${expandedUsers.has(u.userId) ? 'up' : 'down'} text-xs text-ive-text-dim`} />
                     </button>
                     {expandedUsers.has(u.userId) && (
@@ -1039,14 +1039,14 @@ export default function ReportsTab() {
                         {/* 사용자별 건수/비용 추이 */}
                         {ut && ut.daily.length >= 2 && (
                           <div className="mt-2 bg-ive-bg-deep rounded-lg p-2">
-                            <div className="text-[10px] font-bold text-ive-text-dim mb-1.5">{t('countCostTrend')}</div>
+                            <div className="text-xs font-bold text-ive-text-dim mb-1.5">{t('countCostTrend')}</div>
                             <div className="grid grid-cols-2 gap-2">
                               <div className="flex items-center gap-1.5">
-                                <span className="text-[10px] text-ive-text-dim shrink-0">{t('countLabel')}</span>
+                                <span className="text-xs text-ive-text-dim shrink-0">{t('countLabel')}</span>
                                 <Sparkline data={ut.daily.map(d => d.tasks)} width={100} height={20} color="auto" />
                               </div>
                               <div className="flex items-center gap-1.5">
-                                <span className="text-[10px] text-ive-text-dim shrink-0">{t('costSmall')}</span>
+                                <span className="text-xs text-ive-text-dim shrink-0">{t('costSmall')}</span>
                                 <Sparkline data={ut.daily.map(d => d.cost)} width={100} height={20} color="amber" />
                               </div>
                             </div>
@@ -1066,17 +1066,17 @@ export default function ReportsTab() {
             <section>
               <button
                 onClick={() => setShowInsights(v => !v)}
-                className="w-full flex items-center justify-between bg-ive-bg-card border border-ive-border-subtle rounded-xl px-3 py-2.5 hover:border-ive-cyan/30 transition-all"
+                className="w-full flex items-center justify-between bg-ive-bg-card border border-ive-border-subtle rounded-lg px-3 py-2.5 hover:border-ive-cyan/30 transition-all"
               >
                 <div className="flex items-center gap-2">
                   <i className="fa-solid fa-lightbulb text-ive-amber text-sm" />
                   <span className="text-xs font-bold text-ive-text">{t('trendAnalysis')}</span>
-                  <span className="text-[10px] text-ive-text-dim">{t('itemsUnit', { count: data.insights.length })}</span>
+                  <span className="text-xs text-ive-text-dim">{t('itemsUnit', { count: data.insights.length })}</span>
                 </div>
                 <i className={`fa-solid fa-chevron-${showInsights ? 'up' : 'down'} text-xs text-ive-text-dim`} />
               </button>
               {showInsights && (
-                <div className="mt-2 bg-ive-bg-card border border-ive-border-subtle rounded-xl p-3 space-y-2">
+                <div className="mt-2 bg-ive-bg-card border border-ive-border-subtle rounded-lg p-3 space-y-2">
                   {data.insights.map((insight, i) => (
                     <div key={i} className="flex items-start gap-2">
                       <i className={`fa-solid ${
@@ -1156,12 +1156,12 @@ export default function ReportsTab() {
 
                 {/* 정렬 */}
                 <div className="flex items-center gap-1">
-                  <span className="text-[10px] text-ive-text-dim mr-0.5">{t('sortLabel')}</span>
+                  <span className="text-xs text-ive-text-dim mr-0.5">{t('sortLabel')}</span>
                   {([['date', t('sortDate')], ['iid', t('sortIid')], ['wait', t('sortWait')], ['duration', t('sortDuration')], ['cost', t('sortCost')]] as [IssueSortKey, string][]).map(([key, label]) => (
                     <button
                       key={key}
                       onClick={() => changeSort(key)}
-                      className={`px-1.5 py-0.5 text-[10px] font-bold rounded transition-all flex items-center gap-0.5 ${
+                      className={`px-1.5 py-0.5 text-xs font-bold rounded transition-all flex items-center gap-0.5 ${
                         issueSort === key ? 'bg-ive-green/20 text-ive-green' : 'text-ive-text-dim hover:bg-ive-bg-card'
                       }`}
                     >
@@ -1182,7 +1182,7 @@ export default function ReportsTab() {
                       sessionStorage.setItem('report-issues-scroll', String(window.scrollY))
                       router.push(`/issues/${issue.projectId}/${issue.issueIid}`)
                     }}
-                    className="bg-ive-bg-card border border-ive-border-subtle rounded-xl px-3 py-2 cursor-pointer hover:border-ive-green/30 active:scale-[0.99] transition-all"
+                    className="bg-ive-bg-card border border-ive-border-subtle rounded-lg px-3 py-2 cursor-pointer hover:border-ive-green/30 active:scale-[0.99] transition-all"
                   >
                     <div className="flex items-start gap-2">
                       <i className={`fa-solid ${issue.status === 'success' ? 'fa-check-circle text-ive-green' : 'fa-times-circle text-ive-red'} text-sm mt-0.5`} />
@@ -1254,13 +1254,13 @@ function SummaryCard({ label, value, sub, color, diff, invertColor }: {
   const subColor = !sub || (!sub.startsWith('+') && !sub.startsWith('-')) ? 'text-ive-cyan' : !invertColor ? 'text-ive-text-dim'
     : sub.startsWith('+') ? 'text-ive-red' : sub.startsWith('-') ? 'text-ive-green' : 'text-ive-text-dim'
   return (
-    <div className="bg-ive-bg-card border border-ive-border-subtle rounded-xl px-3 py-2 text-center">
+    <div className="bg-ive-bg-card border border-ive-border-subtle rounded-lg px-3 py-2 text-center">
       <div className="text-xs text-ive-text-dim">{label}</div>
-      <div className={`text-lg font-extrabold ${color}`}>{value}</div>
+      <div className={`text-lg font-bold ${color}`}>{value}</div>
       <div className="flex items-center justify-center gap-1">
-        {sub && <span className={`text-[10px] font-bold ${subColor}`}>{sub}</span>}
+        {sub && <span className={`text-xs font-bold ${subColor}`}>{sub}</span>}
         {diff != null && (
-          <span className={`text-[10px] font-bold ${diffColor}`}>
+          <span className={`text-xs font-bold ${diffColor}`}>
             {diff > 0 ? '+' : ''}{diff.toLocaleString()}%
           </span>
         )}
@@ -1272,7 +1272,7 @@ function SummaryCard({ label, value, sub, color, diff, invertColor }: {
 function MiniStat({ label, value, color }: { label: string; value: string | number; color: string }) {
   return (
     <div>
-      <div className="text-[10px] text-ive-text-dim">{label}</div>
+      <div className="text-xs text-ive-text-dim">{label}</div>
       <div className={`text-xs font-bold ${color}`}>{value}</div>
     </div>
   )
@@ -1343,7 +1343,7 @@ function SortButtons({ sortKey, sortDir, onToggle, countLabel, costLabel }: {
         <button
           key={key}
           onClick={() => onToggle(key)}
-          className={`px-1.5 py-0.5 text-[10px] font-bold rounded transition-all flex items-center gap-0.5 ${
+          className={`px-1.5 py-0.5 text-xs font-bold rounded transition-all flex items-center gap-0.5 ${
             sortKey === key ? 'bg-ive-green/20 text-ive-green' : 'text-ive-text-dim hover:bg-ive-bg-card'
           }`}
         >

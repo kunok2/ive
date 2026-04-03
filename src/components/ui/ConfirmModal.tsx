@@ -48,7 +48,7 @@ export default function ConfirmModal({
         <div className="flex border-t border-ive-border-dark">
           <button
             onClick={onClose}
-            className="flex-1 py-3 text-base font-semibold text-ive-text-muted border-r border-ive-border-dark rounded-bl-2xl active:bg-ive-bg-deep transition-colors"
+            className="flex-1 py-3 text-base font-bold text-ive-text-muted border-r border-ive-border-dark rounded-bl-2xl active:bg-ive-bg-deep transition-colors"
           >
             {cancelLabel}
           </button>

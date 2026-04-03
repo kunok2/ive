@@ -109,7 +109,7 @@ export default function MRReviewSection({ projectId, issueIid }: Props) {
 
   if (loading) {
     return (
-      <div className="mt-6 bg-ive-bg-card rounded-xl p-4 border border-ive-border-subtle animate-pulse">
+      <div className="mt-6 bg-ive-bg-card rounded-lg p-4 border border-ive-border-subtle animate-pulse">
         <div className="h-4 bg-ive-bg-deep rounded w-1/3 mb-3" />
         <div className="h-3 bg-ive-bg-deep rounded w-2/3" />
       </div>
@@ -124,7 +124,7 @@ export default function MRReviewSection({ projectId, issueIid }: Props) {
 
   return (
     <>
-      <div className="mt-6 bg-ive-bg-card rounded-xl border border-ive-border-subtle overflow-hidden">
+      <div className="mt-6 bg-ive-bg-card rounded-lg border border-ive-border-subtle overflow-hidden">
         <div className="px-4 py-3 border-b border-ive-border-dark flex items-center gap-2">
           <i className="fa-solid fa-code-merge text-ive-cyan" />
           <span className="text-sm font-bold text-ive-text tracking-wider">{t('workResult')}</span>
@@ -138,7 +138,7 @@ export default function MRReviewSection({ projectId, issueIid }: Props) {
               </div>
               <div className="text-sm text-ive-text-muted mt-1 flex items-center gap-1.5 flex-wrap">
                 <code className="text-xs bg-ive-bg-deep px-1.5 py-0.5 rounded">{mr.source_branch}</code>
-                <i className="fa-solid fa-arrow-right text-[10px] text-ive-text-dim" />
+                <i className="fa-solid fa-arrow-right text-xs text-ive-text-dim" />
                 <code className="text-xs bg-ive-bg-deep px-1.5 py-0.5 rounded">{mr.target_branch}</code>
               </div>
             </div>
@@ -184,7 +184,7 @@ export default function MRReviewSection({ projectId, issueIid }: Props) {
           <div className="flex gap-2">
             <button
               onClick={() => router.push(`/issues/${projectId}/${issueIid}/mr`)}
-              className="flex-1 text-sm font-bold text-ive-cyan bg-ive-cyan/10 px-3 py-2.5 rounded-xl active:scale-[0.98] transition-all hover:bg-ive-cyan/15"
+              className="flex-1 text-sm font-bold text-ive-cyan bg-ive-cyan/10 px-3 py-2.5 rounded-lg active:scale-[0.98] transition-all hover:bg-ive-cyan/15"
             >
               <i className="fa-solid fa-code mr-1.5" />{t('codeReview')}
             </button>
@@ -193,7 +193,7 @@ export default function MRReviewSection({ projectId, issueIid }: Props) {
                 <button
                   onClick={() => canMerge && setShowMergeConfirm(true)}
                   disabled={!canMerge || merging || closing}
-                  className={`flex-1 text-sm font-bold px-3 py-2.5 rounded-xl active:scale-[0.98] transition-all ${
+                  className={`flex-1 text-sm font-bold px-3 py-2.5 rounded-lg active:scale-[0.98] transition-all ${
                     canMerge
                       ? 'text-ive-green bg-ive-green/10 hover:bg-ive-green/15'
                       : 'text-ive-text-dim bg-ive-bg-deep cursor-not-allowed'
@@ -210,7 +210,7 @@ export default function MRReviewSection({ projectId, issueIid }: Props) {
                 <button
                   onClick={() => setShowCloseConfirm(true)}
                   disabled={merging || closing}
-                  className="text-sm font-bold text-ive-red/70 bg-ive-red/5 px-3 py-2.5 rounded-xl active:scale-[0.98] transition-all hover:bg-ive-red/10"
+                  className="text-sm font-bold text-ive-red/70 bg-ive-red/5 px-3 py-2.5 rounded-lg active:scale-[0.98] transition-all hover:bg-ive-red/10"
                 >
                   {closing ? (
                     <i className="fa-solid fa-spinner fa-spin" />

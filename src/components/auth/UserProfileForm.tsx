@@ -301,7 +301,7 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="w-full py-2 rounded-lg text-sm font-semibold bg-ive-bg-deep border border-ive-border-subtle text-ive-text hover:border-ive-green transition-colors flex items-center justify-center gap-2"
+                className="w-full py-2 rounded-lg text-sm font-bold bg-ive-bg-deep border border-ive-border-subtle text-ive-text hover:border-ive-green transition-colors flex items-center justify-center gap-2"
               >
                 <i className="fa-solid fa-camera text-ive-green" />
                 {t('uploadPhoto')}
@@ -349,14 +349,14 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
         >
           <div className="flex items-center gap-2">
             <i className="fa-solid fa-envelope text-sm text-ive-cyan" />
-            <span className="text-sm font-semibold text-ive-text">{t('changeEmail')}</span>
+            <span className="text-sm font-bold text-ive-text">{t('changeEmail')}</span>
           </div>
           <i className={`fa-solid fa-chevron-${activeSection === 'email' ? 'up' : 'down'} text-xs text-ive-text-dim`} />
         </button>
         {activeSection === 'email' && (
           <form onSubmit={handleEmailSubmit} className="px-4 pb-4 pt-2 flex flex-col gap-3 border-t border-ive-border">
             <div>
-              <label className="block text-sm font-semibold text-ive-text-muted mb-1">{t('newEmail')}</label>
+              <label className="block text-sm font-bold text-ive-text-muted mb-1">{t('newEmail')}</label>
               <div className="flex gap-2">
                 <input
                   type="email"
@@ -380,7 +380,7 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
             </div>
             {emailCodeSent && (
               <div>
-                <label className="block text-sm font-semibold text-ive-text-muted mb-1">{t('verificationCode')}</label>
+                <label className="block text-sm font-bold text-ive-text-muted mb-1">{t('verificationCode')}</label>
                 <input
                   type="text"
                   value={emailCode}
@@ -394,7 +394,7 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
               </div>
             )}
             <div>
-              <label className="block text-sm font-semibold text-ive-text-muted mb-1">{t('currentPassword')}</label>
+              <label className="block text-sm font-bold text-ive-text-muted mb-1">{t('currentPassword')}</label>
               <input
                 type="password"
                 value={emailPassword}
@@ -420,14 +420,14 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
         >
           <div className="flex items-center gap-2">
             <i className="fa-solid fa-key text-sm text-ive-amber" />
-            <span className="text-sm font-semibold text-ive-text">{t('changePassword')}</span>
+            <span className="text-sm font-bold text-ive-text">{t('changePassword')}</span>
           </div>
           <i className={`fa-solid fa-chevron-${activeSection === 'password' ? 'up' : 'down'} text-xs text-ive-text-dim`} />
         </button>
         {activeSection === 'password' && (
           <form onSubmit={handlePwSubmit} className="px-4 pb-4 pt-2 flex flex-col gap-3 border-t border-ive-border">
             <div>
-              <label className="block text-sm font-semibold text-ive-text-muted mb-1">{t('emailVerification')}</label>
+              <label className="block text-sm font-bold text-ive-text-muted mb-1">{t('emailVerification')}</label>
               <div className="flex gap-2">
                 <input
                   type="email"
@@ -449,7 +449,7 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
             </div>
             {pwCodeSent && (
               <div>
-                <label className="block text-sm font-semibold text-ive-text-muted mb-1">{t('verificationCode')}</label>
+                <label className="block text-sm font-bold text-ive-text-muted mb-1">{t('verificationCode')}</label>
                 <input
                   type="text"
                   value={pwCode}
@@ -463,7 +463,7 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
               </div>
             )}
             <div>
-              <label className="block text-sm font-semibold text-ive-text-muted mb-1">{t('currentPassword')}</label>
+              <label className="block text-sm font-bold text-ive-text-muted mb-1">{t('currentPassword')}</label>
               <input
                 type="password"
                 value={currentPassword}
@@ -473,7 +473,7 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
               />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-ive-text-muted mb-1">{t('newPassword')}</label>
+              <label className="block text-sm font-bold text-ive-text-muted mb-1">{t('newPassword')}</label>
               <input
                 type="password"
                 value={newPassword}
@@ -485,7 +485,7 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
               />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-ive-text-muted mb-1">{t('newPasswordConfirm')}</label>
+              <label className="block text-sm font-bold text-ive-text-muted mb-1">{t('newPasswordConfirm')}</label>
               <input
                 type="password"
                 value={newPasswordConfirm}
@@ -517,7 +517,7 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
         >
           <div className="flex items-center gap-2">
             <i className="fa-solid fa-gear text-sm text-ive-text-muted" />
-            <span className="text-sm font-semibold text-ive-text">{t('preferences')}</span>
+            <span className="text-sm font-bold text-ive-text">{t('preferences')}</span>
           </div>
           <i className={`fa-solid fa-chevron-${activeSection === 'preferences' ? 'up' : 'down'} text-xs text-ive-text-dim`} />
         </button>
@@ -525,7 +525,7 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
           <div className="px-4 pb-4 pt-2 flex flex-col gap-3 border-t border-ive-border">
             {/* 언어 선택 */}
             <div>
-              <label className="block text-sm font-semibold text-ive-text-muted mb-1">
+              <label className="block text-sm font-bold text-ive-text-muted mb-1">
                 <i className="fa-solid fa-globe mr-1 text-xs" />{t('language')}
               </label>
               <div className="flex gap-2">
@@ -551,7 +551,7 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
             </div>
             {/* 타임존 선택 */}
             <div>
-              <label className="block text-sm font-semibold text-ive-text-muted mb-1">
+              <label className="block text-sm font-bold text-ive-text-muted mb-1">
                 <i className="fa-solid fa-clock mr-1 text-xs" />{t('timezone')}
               </label>
               <select

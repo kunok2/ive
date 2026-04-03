@@ -129,7 +129,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {toasts.map(t => (
           <div
             key={t.id}
-            className={`pointer-events-auto w-full max-w-sm mx-auto bg-ive-bg-card border ${borderMap[t.variant]} rounded-xl shadow-2xl px-4 py-3 flex items-center gap-3 ${
+            className={`pointer-events-auto w-full max-w-sm mx-auto bg-ive-bg-card border ${borderMap[t.variant]} rounded-lg px-4 py-3 flex items-center gap-3 ${
               t.dismissing ? 'animate-toast-out' : 'animate-toast-in'
             }`}
             onClick={() => dismiss(t.id)}

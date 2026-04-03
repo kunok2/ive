@@ -51,7 +51,7 @@ export default function HomePage() {
         <div className="px-4 py-3 max-w-lg mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div>
-              <h1 className="text-xl font-extrabold leading-none">
+              <h1 className="text-xl font-bold leading-none">
                 <span className="text-ive-green">Spring</span>{' '}
                 <span className="text-orange-400">IVE</span>
 

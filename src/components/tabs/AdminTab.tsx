@@ -181,7 +181,7 @@ function UsersPanel() {
       <div className="text-xs text-ive-text-dim mb-3">{t('totalUsersCount', { count: users.length })}</div>
       <div className="space-y-2">
         {users.map(u => (
-          <div key={u.id} className="bg-ive-bg-card border border-ive-border-subtle rounded-xl px-4 py-3">
+          <div key={u.id} className="bg-ive-bg-card border border-ive-border-subtle rounded-lg px-4 py-3">
             <div className="flex items-center gap-3">
               {(() => {
                 const av = DEFAULT_AVATARS.find(a => a.id === u.avatar)
@@ -203,7 +203,7 @@ function UsersPanel() {
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-bold text-ive-text truncate">{u.name}</span>
                   {u.isAdmin && (
-                    <span className="text-[10px] font-bold bg-ive-green/15 text-ive-green px-1.5 py-0.5 rounded-full">{t('adminBadge')}</span>
+                    <span className="text-xs font-bold bg-ive-green/15 text-ive-green px-1.5 py-0.5 rounded-full">{t('adminBadge')}</span>
                   )}
                 </div>
                 <div className="text-xs text-ive-text-dim break-all">{u.email}</div>
@@ -262,14 +262,14 @@ function UsersPanel() {
                   <div className="flex items-center gap-1.5 flex-1">
                     <div className="flex bg-ive-bg-input border border-ive-border rounded-lg overflow-hidden">
                       <button type="button" onClick={() => setLimitValues(v => ({ ...v, maxAgents: Math.max(0, v.maxAgents - 1) }))}
-                        className="px-2 py-1.5 text-ive-text-muted hover:text-ive-cyan text-xs font-black">−</button>
-                      <span className="w-10 py-1.5 flex items-center justify-center text-xs font-black text-ive-text border-x border-ive-border">
+                        className="px-2 py-1.5 text-ive-text-muted hover:text-ive-cyan text-xs font-bold">−</button>
+                      <span className="w-10 py-1.5 flex items-center justify-center text-xs font-bold text-ive-text border-x border-ive-border">
                         {limitValues.maxAgents || '∞'}
                       </span>
                       <button type="button" onClick={() => setLimitValues(v => ({ ...v, maxAgents: v.maxAgents + 1 }))}
-                        className="px-2 py-1.5 text-ive-text-muted hover:text-ive-cyan text-xs font-black">+</button>
+                        className="px-2 py-1.5 text-ive-text-muted hover:text-ive-cyan text-xs font-bold">+</button>
                     </div>
-                    <span className="text-[10px] text-ive-text-dim">{t('unlimited')}</span>
+                    <span className="text-xs text-ive-text-dim">{t('unlimited')}</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -279,14 +279,14 @@ function UsersPanel() {
                   <div className="flex items-center gap-1.5 flex-1">
                     <div className="flex bg-ive-bg-input border border-ive-border rounded-lg overflow-hidden">
                       <button type="button" onClick={() => setLimitValues(v => ({ ...v, maxTurns: Math.max(0, v.maxTurns - 10) }))}
-                        className="px-2 py-1.5 text-ive-text-muted hover:text-ive-cyan text-xs font-black">−</button>
-                      <span className="w-10 py-1.5 flex items-center justify-center text-xs font-black text-ive-text border-x border-ive-border">
+                        className="px-2 py-1.5 text-ive-text-muted hover:text-ive-cyan text-xs font-bold">−</button>
+                      <span className="w-10 py-1.5 flex items-center justify-center text-xs font-bold text-ive-text border-x border-ive-border">
                         {limitValues.maxTurns || '∞'}
                       </span>
                       <button type="button" onClick={() => setLimitValues(v => ({ ...v, maxTurns: v.maxTurns + 10 }))}
-                        className="px-2 py-1.5 text-ive-text-muted hover:text-ive-cyan text-xs font-black">+</button>
+                        className="px-2 py-1.5 text-ive-text-muted hover:text-ive-cyan text-xs font-bold">+</button>
                     </div>
-                    <span className="text-[10px] text-ive-text-dim">{t('unlimited')}</span>
+                    <span className="text-xs text-ive-text-dim">{t('unlimited')}</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -663,17 +663,17 @@ function ReportScheduleView() {
         const form = isEditing ? editForm : null
 
         return (
-          <div key={opt.value} className="bg-ive-bg-card border border-ive-border-subtle rounded-xl overflow-hidden">
+          <div key={opt.value} className="bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden">
             {/* 헤더 */}
             <div className="px-4 py-3 flex items-center gap-2">
               <i className={`${opt.icon} text-sm ${schedule?.enabled ? 'text-ive-green' : 'text-ive-text-dim'}`} />
               <span className="text-sm font-bold text-ive-text flex-1">{t('reportCard', { label: optLabel })}</span>
               {schedule ? (
                 <div className="flex items-center gap-1.5">
-                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${schedule.enabled ? 'bg-ive-green/15 text-ive-green' : 'bg-white/5 text-ive-text-dim'}`}>
+                  <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${schedule.enabled ? 'bg-ive-green/15 text-ive-green' : 'bg-white/5 text-ive-text-dim'}`}>
                     {schedule.enabled ? t('active') : t('inactive')}
                   </span>
-                  <span className="text-[10px] text-ive-text-dim">{t('personsCount', { count: schedule.recipients.length })}</span>
+                  <span className="text-xs text-ive-text-dim">{t('personsCount', { count: schedule.recipients.length })}</span>
                   <button
                     onClick={() => handleSendNow(opt.value)}
                     disabled={!schedule?.recipients.length || sending === opt.value}
@@ -726,7 +726,7 @@ function ReportScheduleView() {
                 <div className="flex items-center gap-3">
                   <label className="text-xs font-bold text-ive-text-muted w-20 shrink-0">{t('sendTime')}</label>
                   <span className="text-xs text-ive-cyan font-bold">{t(opt.scheduleKey)} KST</span>
-                  <span className="text-[10px] text-ive-text-dim">
+                  <span className="text-xs text-ive-text-dim">
                     {t('sendTimeDesc', { label: optLabel })}
                   </span>
                 </div>
@@ -735,7 +735,7 @@ function ReportScheduleView() {
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <label className="text-xs font-bold text-ive-text-muted">{t('recipients')}</label>
-                    <button onClick={toggleAllRecipients} className="text-[10px] text-ive-cyan font-bold">
+                    <button onClick={toggleAllRecipients} className="text-xs text-ive-cyan font-bold">
                       {(form.recipients || []).length === users.length ? t('unselectAll') : t('selectAll')}
                     </button>
                   </div>
@@ -744,7 +744,7 @@ function ReportScheduleView() {
                       <button
                         key={u.id}
                         onClick={() => toggleRecipient(u.email)}
-                        className={`text-[11px] px-2 py-1 rounded-full font-bold transition-all ${
+                        className={`text-xs px-2 py-1 rounded-full font-bold transition-all ${
                           (form.recipients || []).includes(u.email)
                             ? 'bg-ive-green/20 text-ive-green border border-ive-green/30'
                             : 'bg-ive-bg-deep text-ive-text-dim border border-ive-border-subtle'
@@ -754,7 +754,7 @@ function ReportScheduleView() {
                       </button>
                     ))}
                   </div>
-                  <p className="text-[10px] text-ive-text-dim mt-1">{t('selectedCount', { count: (form.recipients || []).length })}</p>
+                  <p className="text-xs text-ive-text-dim mt-1">{t('selectedCount', { count: (form.recipients || []).length })}</p>
                 </div>
 
                 {/* 저장/취소 */}
@@ -774,7 +774,7 @@ function ReportScheduleView() {
 
             {/* 요약 정보 (편집 중 아닐 때) */}
             {!isEditing && schedule && schedule.recipients.length > 0 && (
-              <div className="px-4 pb-3 text-[11px] text-ive-text-dim">
+              <div className="px-4 pb-3 text-xs text-ive-text-dim">
                 {t(opt.scheduleKey)} KST | {schedule.recipients.slice(0, 3).join(', ')}
                 {schedule.recipients.length > 3 && ` +${schedule.recipients.length - 3}`}
               </div>
@@ -841,17 +841,17 @@ function SendLogView() {
             <div className="flex items-center gap-2">
               <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${log.status === 'success' ? 'bg-ive-green' : 'bg-ive-red'}`} />
               <span className="text-xs font-bold text-ive-text">{typeLabel(log.reportType)}</span>
-              <span className="text-[10px] text-ive-text-dim flex-1 truncate">{log.recipientEmail}</span>
-              <span className={`text-[10px] font-bold ${log.status === 'success' ? 'text-ive-green' : 'text-ive-red'}`}>
+              <span className="text-xs text-ive-text-dim flex-1 truncate">{log.recipientEmail}</span>
+              <span className={`text-xs font-bold ${log.status === 'success' ? 'text-ive-green' : 'text-ive-red'}`}>
                 {log.status === 'success' ? t('statusSuccess') : t('statusFailed')}
               </span>
             </div>
-            <div className="flex items-center gap-2 mt-1 text-[10px] text-ive-text-dim">
+            <div className="flex items-center gap-2 mt-1 text-xs text-ive-text-dim">
               <span>{log.periodStart} ~ {log.periodEnd}</span>
               <span className="ml-auto">{formatDateFull(log.sentAt, userLocale, userTz)}</span>
             </div>
             {log.errorMessage && (
-              <div className="mt-1 text-[10px] text-ive-red bg-ive-red/5 rounded px-2 py-1 break-all">
+              <div className="mt-1 text-xs text-ive-red bg-ive-red/5 rounded px-2 py-1 break-all">
                 {log.errorMessage}
               </div>
             )}
@@ -1035,7 +1035,7 @@ function SettingsPanel() {
       </div>
 
       {SETTING_GROUPS.map(group => (
-        <div key={group.key} className="bg-ive-bg-card border border-ive-border-subtle rounded-xl overflow-hidden">
+        <div key={group.key} className="bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden">
           <button
             onClick={() => setExpandedGroup(expandedGroup === group.key ? null : group.key)}
             className="w-full px-4 py-3 flex items-center gap-2 text-left hover:bg-white/[0.02]"
@@ -1101,7 +1101,7 @@ function SettingsPanel() {
       ))}
 
       {/* 단가 설정 섹션 */}
-      <div className="bg-ive-bg-card border border-ive-border-subtle rounded-xl overflow-hidden">
+      <div className="bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden">
         <button
           onClick={() => setExpandedGroup(expandedGroup === 'pricing' ? null : 'pricing')}
           className="w-full px-4 py-3 flex items-center gap-2 text-left hover:bg-white/[0.02]"
@@ -1120,7 +1120,7 @@ function SettingsPanel() {
                 <div key={it.cliName} className="bg-ive-bg-deep border border-ive-border-dark rounded-lg px-3 py-2.5">
                   <div className="flex items-center gap-2 mb-2">
                     <i className={`${CLI_ICONS[it.cliName] || 'fa-solid fa-robot'} text-sm text-ive-text-dim`} />
-                    <span className="text-xs font-extrabold text-ive-text uppercase">{it.cliName}</span>
+                    <span className="text-xs font-bold text-ive-text uppercase">{it.cliName}</span>
                     <input
                       value={it.modelName}
                       onChange={e => { setPricingItems(prev => prev.map(p => p.cliName === it.cliName ? { ...p, modelName: e.target.value } : p)); setPricingSaved(false) }}
@@ -1130,7 +1130,7 @@ function SettingsPanel() {
                   </div>
                   <div className="flex gap-3">
                     <div className="flex-1">
-                      <div className="text-[10px] text-ive-text-dim mb-0.5">{t('input')}</div>
+                      <div className="text-xs text-ive-text-dim mb-0.5">{t('input')}</div>
                       <input
                         type="number" step="0.01" min="0"
                         value={it.inputPrice}
@@ -1139,7 +1139,7 @@ function SettingsPanel() {
                       />
                     </div>
                     <div className="flex-1">
-                      <div className="text-[10px] text-ive-text-dim mb-0.5">{t('output')}</div>
+                      <div className="text-xs text-ive-text-dim mb-0.5">{t('output')}</div>
                       <input
                         type="number" step="0.01" min="0"
                         value={it.outputPrice}
@@ -1148,7 +1148,7 @@ function SettingsPanel() {
                       />
                     </div>
                   </div>
-                  <div className="text-[10px] text-ive-text-dim mt-1.5 text-right">
+                  <div className="text-xs text-ive-text-dim mt-1.5 text-right">
                     {t('modified')}: {new Date(it.updatedAt).toLocaleDateString('ko-KR')}
                   </div>
                 </div>
@@ -1385,7 +1385,7 @@ function ActivityPanel() {
                 setFilterEndDate(getDateStr(0))
               }
             }}
-            className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
+            className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${
               activePreset === p.days
                 ? 'bg-ive-green/20 text-ive-green border border-ive-green/40'
                 : 'bg-ive-bg-card border border-ive-border-subtle text-ive-text-dim active:scale-[0.96]'
@@ -1402,14 +1402,14 @@ function ActivityPanel() {
           type="date"
           value={filterStartDate}
           onChange={e => { setFilterStartDate(e.target.value); setActivePreset(-1) }}
-          className="flex-1 bg-ive-bg-input border border-ive-border rounded-lg px-2 py-1.5 text-[11px] text-ive-text focus:outline-none focus:border-ive-green/50"
+          className="flex-1 bg-ive-bg-input border border-ive-border rounded-lg px-2 py-1.5 text-xs text-ive-text focus:outline-none focus:border-ive-green/50"
         />
-        <span className="text-[10px] text-ive-text-dim">~</span>
+        <span className="text-xs text-ive-text-dim">~</span>
         <input
           type="date"
           value={filterEndDate}
           onChange={e => { setFilterEndDate(e.target.value); setActivePreset(-1) }}
-          className="flex-1 bg-ive-bg-input border border-ive-border rounded-lg px-2 py-1.5 text-[11px] text-ive-text focus:outline-none focus:border-ive-green/50"
+          className="flex-1 bg-ive-bg-input border border-ive-border rounded-lg px-2 py-1.5 text-xs text-ive-text focus:outline-none focus:border-ive-green/50"
         />
       </div>
 
@@ -1420,23 +1420,23 @@ function ActivityPanel() {
         {logs.map(log => {
           const meta = CATEGORY_META[log.category] || CATEGORY_META.auth
           return (
-            <div key={log.id} className="bg-ive-bg-card border border-ive-border-subtle rounded-xl px-3 py-2.5">
+            <div key={log.id} className="bg-ive-bg-card border border-ive-border-subtle rounded-lg px-3 py-2.5">
               <div className="flex items-start gap-2">
                 <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5 bg-ive-bg-deep`}>
-                  <i className={`${meta.icon} text-[10px] ${meta.color}`} />
+                  <i className={`${meta.icon} text-xs ${meta.color}`} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 mb-0.5">
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${meta.color} bg-ive-bg-deep`}>{t(meta.labelKey as any)}</span>
-                    <span className="text-[10px] text-ive-text-dim">{formatTime(log.createdAt)}</span>
+                    <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${meta.color} bg-ive-bg-deep`}>{t(meta.labelKey as any)}</span>
+                    <span className="text-xs text-ive-text-dim">{formatTime(log.createdAt)}</span>
                   </div>
                   <div className="text-xs text-ive-text leading-relaxed">{log.detail}</div>
                   <div className="flex items-center gap-2 mt-1">
-                    <span className="text-[10px] text-ive-text-muted">
+                    <span className="text-xs text-ive-text-muted">
                       <i className="fa-solid fa-user mr-0.5" />{log.userName || t('unknown')}
                     </span>
                     {log.ipAddress && log.ipAddress !== '0.0.0.0' && (
-                      <span className="text-[10px] text-ive-text-dim">
+                      <span className="text-xs text-ive-text-dim">
                         <i className="fa-solid fa-globe mr-0.5" />{log.ipAddress}
                       </span>
                     )}

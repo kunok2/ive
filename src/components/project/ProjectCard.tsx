@@ -217,7 +217,7 @@ export default function ProjectCard({ project }: Props) {
 
   return (
     <div
-      className={`rounded-xl border shadow-sm overflow-hidden transition-colors duration-200 flex flex-col relative ${expandedPanel ? 'border-ive-cyan/30 h-[calc(100vh-160px)]' : 'border-ive-border-subtle hover:border-ive-green/30'}`}
+      className={`rounded-lg border overflow-hidden transition-colors duration-200 flex flex-col relative ${expandedPanel ? 'border-ive-cyan/30 h-[calc(100vh-160px)]' : 'border-ive-border-subtle hover:border-ive-green/30'}`}
       style={{ background: `linear-gradient(135deg, ${project.color || '#4ade80'}08 0%, transparent 40%), var(--color-ive-bg-card, #121e14)` }}
     >
       <Link href={`/projects/${project.id}`} className="block p-4 active:bg-white/[0.03] transition-colors group">
@@ -233,7 +233,7 @@ export default function ProjectCard({ project }: Props) {
             <div className="flex items-center gap-1.5 mb-1">
               <span className="font-bold text-base truncate leading-none" style={{ color: project.color || '#4ade80' }}>{project.name}</span>
               {project.shareRole && (
-                <span className={`shrink-0 text-[10px] font-black px-1.5 py-0.5 rounded-full leading-none flex items-center gap-0.5 ${project.shareRole === 'editor' ? 'bg-ive-amber/15 text-ive-amber border border-ive-amber/30' : 'bg-ive-cyan/15 text-ive-cyan border border-ive-cyan/30'}`}>
+                <span className={`shrink-0 text-xs font-bold px-1.5 py-0.5 rounded-full leading-none flex items-center gap-0.5 ${project.shareRole === 'editor' ? 'bg-ive-amber/15 text-ive-amber border border-ive-amber/30' : 'bg-ive-cyan/15 text-ive-cyan border border-ive-cyan/30'}`}>
                   <i className="fa-solid fa-share-nodes" />
                   {project.shareRole === 'editor' ? tp('shareEditor') : tp('shareViewer')}
                 </span>
@@ -244,7 +244,7 @@ export default function ProjectCard({ project }: Props) {
             </span>
             <div className="flex items-center gap-2 mt-1">
               {project.lastCheckedAt && (
-                <span className="text-sm text-ive-green/50 font-medium whitespace-nowrap flex items-center gap-1">
+                <span className="text-sm text-ive-green/50 font-bold whitespace-nowrap flex items-center gap-1">
                   <i className="fa-solid fa-bolt-lightning opacity-70" />
                   {formatDateShort(project.lastCheckedAt, userLocale, userTz).replace(',', '')}
                 </span>
@@ -253,12 +253,12 @@ export default function ProjectCard({ project }: Props) {
                 <>
                   <button onClick={toggleScanner} className="flex items-center gap-1 transition-all" title={project.scannerActive ? tp('pauseScanner') : tp('resumeScanner')} aria-label={project.scannerActive ? tp('pauseScanner') : tp('resumeScanner')}>
                     <span className={`h-8 px-2.5 rounded-full flex items-center gap-1 text-xs font-bold transition-all ${project.scannerActive ? 'bg-ive-bg-deep text-ive-green/60 hover:text-ive-green hover:bg-ive-green/10 border border-ive-border-dark' : 'bg-ive-red/10 text-ive-red border border-ive-red/30 hover:bg-ive-red/20 scale-105'}`}>
-                      {project.scannerActive ? <i className="fa-solid fa-pause text-[11px]" /> : <i className="fa-solid fa-play text-[11px] ml-px" />}
+                      {project.scannerActive ? <i className="fa-solid fa-pause text-xs" /> : <i className="fa-solid fa-play text-xs ml-px" />}
                     </span>
                   </button>
                   <button onClick={handleManualScan} disabled={scanning} className="flex items-center gap-1 transition-all disabled:opacity-30 disabled:cursor-not-allowed" title={tp('scanNow')} aria-label={tp('manualScan')}>
                     <span className={`h-8 px-2.5 rounded-full flex items-center gap-1 text-xs font-bold transition-all ${scanning ? 'bg-ive-green/20 text-ive-green border border-ive-green/30' : 'bg-ive-bg-deep text-ive-green/60 hover:text-ive-green hover:bg-ive-green/10 border border-ive-border-dark'}`}>
-                      {scanning ? <i className="fa-solid fa-circle-notch fa-spin text-[11px]" /> : <i className="fa-solid fa-rocket text-[11px]" />}
+                      {scanning ? <i className="fa-solid fa-circle-notch fa-spin text-xs" /> : <i className="fa-solid fa-rocket text-xs" />}
                     </span>
                   </button>
                   <button
@@ -268,7 +268,7 @@ export default function ProjectCard({ project }: Props) {
                     aria-label={tp('addIssue')}
                   >
                     <span className="h-8 px-2.5 rounded-full flex items-center gap-1 text-xs font-bold bg-ive-bg-deep text-ive-cyan/60 hover:text-ive-cyan hover:bg-ive-cyan/10 border border-ive-border-dark transition-all">
-                      <i className="fa-solid fa-plus text-[11px]" />
+                      <i className="fa-solid fa-plus text-xs" />
                     </span>
                   </button>
                   <button
@@ -278,7 +278,7 @@ export default function ProjectCard({ project }: Props) {
                     aria-label={tp('projectSettings')}
                   >
                     <span className="h-8 px-2.5 rounded-full flex items-center gap-1 text-xs font-bold bg-ive-bg-deep text-ive-text-dim hover:text-ive-text hover:bg-white/[0.05] border border-ive-border-dark transition-all">
-                      <i className="fa-solid fa-ellipsis text-[11px]" />
+                      <i className="fa-solid fa-ellipsis text-xs" />
                     </span>
                   </button>
                 </>
@@ -290,7 +290,7 @@ export default function ProjectCard({ project }: Props) {
             <div className="shrink-0 flex items-center">
               <div className="relative w-10 h-10 flex items-center justify-center">
                 <i className="fa-solid fa-gear fa-spin text-xl text-ive-amber" style={{ animationDuration: '2s' }} />
-                <span className="absolute -bottom-0.5 -right-0.5 bg-ive-amber text-ive-bg-deep text-[9px] font-black rounded-full w-4 h-4 flex items-center justify-center">{runningCount}</span>
+                <span className="absolute -bottom-0.5 -right-0.5 bg-ive-amber text-ive-bg-deep text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center">{runningCount}</span>
               </div>
             </div>
           )}
@@ -315,7 +315,7 @@ export default function ProjectCard({ project }: Props) {
           className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'running' ? 'bg-ive-amber/5' : 'hover:bg-white/[0.02]'}`}
         >
           <div className="flex items-baseline gap-0.5">
-            <span className={`text-lg font-black leading-none ${runningCount > 0 ? 'text-ive-amber animate-pulse' : 'text-ive-text-dim'}`}>
+            <span className={`text-lg font-bold leading-none ${runningCount > 0 ? 'text-ive-amber animate-pulse' : 'text-ive-text-dim'}`}>
               {runningCount}/{agentCount}
             </span>
           </div>
@@ -328,7 +328,7 @@ export default function ProjectCard({ project }: Props) {
           onClick={() => setExpandedPanel(expandedPanel === 'waiting' ? null : 'waiting')}
           className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'waiting' ? 'bg-ive-cyan/5' : 'hover:bg-white/[0.02]'}`}
         >
-          <span className={`text-lg font-black leading-none ${(stats?.waiting ?? 0) > 0 ? 'text-ive-cyan' : 'text-ive-text-dim'}`}>
+          <span className={`text-lg font-bold leading-none ${(stats?.waiting ?? 0) > 0 ? 'text-ive-cyan' : 'text-ive-text-dim'}`}>
             {stats?.waiting ?? 0}
           </span>
           <Sparkline data={snapshots.map(s => s.waiting)} width={40} height={12} color="cyan" />
@@ -341,7 +341,7 @@ export default function ProjectCard({ project }: Props) {
           className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'done' ? 'bg-ive-green/5' : 'hover:bg-white/[0.02]'}`}
         >
           <div className="flex items-baseline gap-1">
-            <span className={`text-lg font-black leading-none ${totalDone > 0 ? 'text-ive-green' : 'text-ive-text-dim'}`}>
+            <span className={`text-lg font-bold leading-none ${totalDone > 0 ? 'text-ive-green' : 'text-ive-text-dim'}`}>
               {totalDone}
             </span>
             {stats && yesterdayDiff !== 0 && (
@@ -356,7 +356,7 @@ export default function ProjectCard({ project }: Props) {
 
         {/* 토큰 */}
         <div className="flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5">
-          <span className={`text-lg font-black leading-none ${(stats?.totalTokens ?? 0) > 0 ? 'text-ive-text' : 'text-ive-text-dim'}`}>
+          <span className={`text-lg font-bold leading-none ${(stats?.totalTokens ?? 0) > 0 ? 'text-ive-text' : 'text-ive-text-dim'}`}>
             {formatTokens(stats?.totalTokens ?? 0)}
           </span>
           <Sparkline data={snapshots.map(s => s.totalTokens)} width={40} height={12} />
@@ -368,7 +368,7 @@ export default function ProjectCard({ project }: Props) {
           onClick={() => setExpandedPanel(expandedPanel === 'conflicts' ? null : 'conflicts')}
           className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'conflicts' ? 'bg-ive-purple/5' : 'hover:bg-white/[0.02]'}`}
         >
-          <span className={`text-lg font-black leading-none ${conflictCount > 0 ? 'text-ive-red animate-pulse' : mergeCount > 0 ? 'text-ive-purple' : 'text-ive-text-dim'}`}>
+          <span className={`text-lg font-bold leading-none ${conflictCount > 0 ? 'text-ive-red animate-pulse' : mergeCount > 0 ? 'text-ive-purple' : 'text-ive-text-dim'}`}>
             {mergeCount}
           </span>
           <i className={`fa-solid fa-code-merge text-xs ${conflictCount > 0 ? 'text-ive-red' : mergeCount > 0 ? 'text-ive-purple' : 'text-ive-text-dim'}`} />
@@ -398,7 +398,7 @@ export default function ProjectCard({ project }: Props) {
                   <span className="font-mono text-ive-text-dim">{formatTimeWithSeconds(ex.startedAt, userLocale, userTz)}</span>
                   {!isChat && ex.issueTitle && ` ${ex.issueTitle}`}
                 </MarqueeText>
-                <span className={`shrink-0 text-[10px] font-mono font-bold tabular-nums ${isChat ? 'text-purple-400/70' : 'text-ive-amber/70'}`}>
+                <span className={`shrink-0 text-xs font-mono font-bold tabular-nums ${isChat ? 'text-purple-400/70' : 'text-ive-amber/70'}`}>
                   {formatDuration(ex.startedAt)}
                   {tick >= 0 ? '' : ''}
                 </span>
@@ -443,15 +443,15 @@ export default function ProjectCard({ project }: Props) {
                   <div
                     key={issue.iid}
                     onClick={() => window.open(issue.webUrl, '_blank')}
-                    className="bg-ive-bg-card border border-ive-border-subtle rounded-xl p-3 hover:border-ive-cyan/40 transition-all cursor-pointer active:scale-[0.98]"
+                    className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-3 hover:border-ive-cyan/40 transition-all cursor-pointer active:scale-[0.98]"
                   >
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="text-sm font-black text-ive-cyan">#{issue.iid}</span>
+                      <span className="text-sm font-bold text-ive-cyan">#{issue.iid}</span>
                       <span className="text-xs font-bold text-ive-cyan/70 bg-ive-cyan/10 border border-ive-cyan/20 px-1.5 py-0.5 rounded shrink-0">
                         {tp('waitingBadge')}
                       </span>
                     </div>
-                    <MarqueeText className="text-sm text-ive-text font-semibold">{issue.title}</MarqueeText>
+                    <MarqueeText className="text-sm text-ive-text font-bold">{issue.title}</MarqueeText>
                     <div className="flex items-center gap-3 text-xs text-ive-text-dim mt-1">
                       {issue.author && (
                         <span><i className="fa-solid fa-user mr-0.5" />{issue.author}</span>

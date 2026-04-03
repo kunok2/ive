@@ -38,7 +38,7 @@ export default function MobileTabBar() {
             }`}
           >
             <i className={`${tab.icon} text-lg`} />
-            <span className="text-sm font-semibold">{tab.label}</span>
+            <span className="text-sm font-bold">{tab.label}</span>
           </button>
         ))}
       </div>

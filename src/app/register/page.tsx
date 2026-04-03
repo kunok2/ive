@@ -85,13 +85,13 @@ export default function RegisterPage() {
     <div className="min-h-screen flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-extrabold text-ive-green mb-1">Spring <span className="text-ive-amber">IVE</span></h1>
+          <h1 className="text-3xl font-bold text-ive-green mb-1">Spring <span className="text-ive-amber">IVE</span></h1>
           <p className="text-base text-ive-text-muted">{tAuth('createAccount')}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4" autoComplete="off">
           <div>
-            <label className="block text-base font-semibold text-ive-text-muted mb-1.5">{tAuth('name')}</label>
+            <label className="block text-base font-bold text-ive-text-muted mb-1.5">{tAuth('name')}</label>
             <input
               type="text"
               value={name}
@@ -103,7 +103,7 @@ export default function RegisterPage() {
           </div>
 
           <div>
-            <label className="block text-base font-semibold text-ive-text-muted mb-1.5">{tAuth('email')}</label>
+            <label className="block text-base font-bold text-ive-text-muted mb-1.5">{tAuth('email')}</label>
             <div className="flex gap-2">
               <input
                 type="email"
@@ -128,7 +128,7 @@ export default function RegisterPage() {
 
           {codeSent && (
             <div>
-              <label className="block text-base font-semibold text-ive-text-muted mb-1.5">{tAuth('verificationCode')}</label>
+              <label className="block text-base font-bold text-ive-text-muted mb-1.5">{tAuth('verificationCode')}</label>
               <input
                 type="text"
                 value={code}
@@ -144,7 +144,7 @@ export default function RegisterPage() {
           )}
 
           <div>
-            <label className="block text-base font-semibold text-ive-text-muted mb-1.5">{tAuth('password')}</label>
+            <label className="block text-base font-bold text-ive-text-muted mb-1.5">{tAuth('password')}</label>
             <input
               type="password"
               value={password}
@@ -158,7 +158,7 @@ export default function RegisterPage() {
           </div>
 
           <div>
-            <label className="block text-base font-semibold text-ive-text-muted mb-1.5">{tAuth('passwordConfirm')}</label>
+            <label className="block text-base font-bold text-ive-text-muted mb-1.5">{tAuth('passwordConfirm')}</label>
             <input
               type="password"
               value={passwordConfirm}
@@ -193,7 +193,7 @@ export default function RegisterPage() {
 
         <p className="text-center text-base text-ive-text-muted mt-6">
           {tAuth('alreadyHaveAccount')}{' '}
-          <Link href="/login" className="text-ive-green font-semibold">{tAuth('login')}</Link>
+          <Link href="/login" className="text-ive-green font-bold">{tAuth('login')}</Link>
         </p>
       </div>
     </div>

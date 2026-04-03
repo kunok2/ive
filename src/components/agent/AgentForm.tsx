@@ -97,7 +97,7 @@ export default function AgentForm({ onSuccess }: Props) {
     <form onSubmit={handleSubmit} className="flex flex-col gap-5">
       {/* CLI 도구 선택 */}
       <div>
-        <label className="block text-base font-semibold text-ive-text-muted mb-2">{t('cliTool')}</label>
+        <label className="block text-base font-bold text-ive-text-muted mb-2">{t('cliTool')}</label>
         <div className="flex flex-col gap-2">
           {availableTools.map(t => (
             <button
@@ -124,7 +124,7 @@ export default function AgentForm({ onSuccess }: Props) {
 
       {/* Agent 이름 */}
       <div>
-        <label className="block text-base font-semibold text-ive-text-muted mb-2">{t('agentName')} <span className="text-ive-red">*</span></label>
+        <label className="block text-base font-bold text-ive-text-muted mb-2">{t('agentName')} <span className="text-ive-red">*</span></label>
         <input
           type="text"
           value={name}
@@ -136,13 +136,13 @@ export default function AgentForm({ onSuccess }: Props) {
 
       {/* 아바타 선택 */}
       <div>
-        <label className="block text-base font-semibold text-ive-text-muted mb-2">{t('avatar')}</label>
+        <label className="block text-base font-bold text-ive-text-muted mb-2">{t('avatar')}</label>
         <AvatarSelector value={avatar} onChange={setAvatar} />
       </div>
 
       {/* 버전 (선택) */}
       <div>
-        <label className="block text-base font-semibold text-ive-text-muted mb-2">
+        <label className="block text-base font-bold text-ive-text-muted mb-2">
           <i className="fa-solid fa-code-branch mr-1" />{t('versionOptional')}
         </label>
         <input
@@ -156,7 +156,7 @@ export default function AgentForm({ onSuccess }: Props) {
 
       {/* Max Turns */}
       <div>
-        <label className="block text-base font-semibold text-ive-text-muted mb-2">
+        <label className="block text-base font-bold text-ive-text-muted mb-2">
           <i className="fa-solid fa-repeat mr-1" />{t('maxTurns')}
         </label>
         <div className="flex items-center gap-1.5">
@@ -164,20 +164,20 @@ export default function AgentForm({ onSuccess }: Props) {
             <button
               type="button"
               onClick={() => setMaxTurns(v => Math.max(1, v - 10))}
-              className="px-2.5 py-3 text-ive-text-muted hover:text-ive-green hover:bg-ive-green/10 transition-colors text-base font-black"
+              className="px-2.5 py-3 text-ive-text-muted hover:text-ive-green hover:bg-ive-green/10 transition-colors text-base font-bold"
             >−</button>
-            <span className="w-12 py-3 flex items-center justify-center text-base font-black text-ive-text border-x border-ive-border">{maxTurns}</span>
+            <span className="w-12 py-3 flex items-center justify-center text-base font-bold text-ive-text border-x border-ive-border">{maxTurns}</span>
             <button
               type="button"
               onClick={() => setMaxTurns(v => Math.min(userMaxTurns > 0 ? userMaxTurns : 1000, v + 10))}
-              className="px-2.5 py-3 text-ive-text-muted hover:text-ive-green hover:bg-ive-green/10 transition-colors text-base font-black"
+              className="px-2.5 py-3 text-ive-text-muted hover:text-ive-green hover:bg-ive-green/10 transition-colors text-base font-bold"
             >+</button>
           </div>
-          {userMaxTurns > 0 && <span className="text-[10px] text-ive-amber shrink-0">max {userMaxTurns}</span>}
+          {userMaxTurns > 0 && <span className="text-xs text-ive-amber shrink-0">max {userMaxTurns}</span>}
           <div className="flex gap-1 flex-1 min-w-0">
             {[50, 100, 200].filter(v => userMaxTurns <= 0 || v <= userMaxTurns).map(v => (
               <button key={v} type="button" onClick={() => setMaxTurns(v)}
-                className={`flex-1 py-3 rounded-lg text-sm font-black border transition-all ${maxTurns === v ? 'bg-ive-green/10 border-ive-green text-ive-green' : 'bg-ive-bg-card border-ive-border-subtle text-ive-text-dim'}`}
+                className={`flex-1 py-3 rounded-lg text-sm font-bold border transition-all ${maxTurns === v ? 'bg-ive-green/10 border-ive-green text-ive-green' : 'bg-ive-bg-card border-ive-border-subtle text-ive-text-dim'}`}
               >{v}</button>
             ))}
           </div>
@@ -203,14 +203,14 @@ export default function AgentForm({ onSuccess }: Props) {
               </label>
               <div className="flex items-center gap-2">
                 <div className="flex bg-ive-bg-input border border-ive-border rounded-lg overflow-hidden">
-                  <button type="button" onClick={() => setSnapshotInterval(v => Math.max(1, v - 1))} className="px-3 py-2 text-ive-text-muted hover:text-ive-cyan hover:bg-ive-cyan/10 transition-colors text-base font-black">−</button>
-                  <span className="w-12 py-2 flex items-center justify-center text-base font-black text-ive-text border-x border-ive-border">{snapshotInterval}</span>
-                  <button type="button" onClick={() => setSnapshotInterval(v => Math.min(60, v + 1))} className="px-3 py-2 text-ive-text-muted hover:text-ive-cyan hover:bg-ive-cyan/10 transition-colors text-base font-black">+</button>
+                  <button type="button" onClick={() => setSnapshotInterval(v => Math.max(1, v - 1))} className="px-3 py-2 text-ive-text-muted hover:text-ive-cyan hover:bg-ive-cyan/10 transition-colors text-base font-bold">−</button>
+                  <span className="w-12 py-2 flex items-center justify-center text-base font-bold text-ive-text border-x border-ive-border">{snapshotInterval}</span>
+                  <button type="button" onClick={() => setSnapshotInterval(v => Math.min(60, v + 1))} className="px-3 py-2 text-ive-text-muted hover:text-ive-cyan hover:bg-ive-cyan/10 transition-colors text-base font-bold">+</button>
                 </div>
                 <div className="flex gap-1 flex-1">
                   {[1, 5, 10].map(v => (
                     <button key={v} type="button" onClick={() => setSnapshotInterval(v)}
-                      className={`flex-1 py-2 rounded-lg text-sm font-black border transition-all ${snapshotInterval === v ? 'bg-ive-cyan/10 border-ive-cyan text-ive-cyan' : 'bg-ive-bg-card border-ive-border-subtle text-ive-text-dim'}`}
+                      className={`flex-1 py-2 rounded-lg text-sm font-bold border transition-all ${snapshotInterval === v ? 'bg-ive-cyan/10 border-ive-cyan text-ive-cyan' : 'bg-ive-bg-card border-ive-border-subtle text-ive-text-dim'}`}
                     >{v}m</button>
                   ))}
                 </div>
@@ -223,14 +223,14 @@ export default function AgentForm({ onSuccess }: Props) {
               </label>
               <div className="flex items-center gap-2">
                 <div className="flex bg-ive-bg-input border border-ive-border rounded-lg overflow-hidden">
-                  <button type="button" onClick={() => setSparklinePoints(v => Math.max(10, v - 10))} className="px-3 py-2 text-ive-text-muted hover:text-ive-cyan hover:bg-ive-cyan/10 transition-colors text-base font-black">−</button>
-                  <span className="w-12 py-2 flex items-center justify-center text-base font-black text-ive-text border-x border-ive-border">{sparklinePoints}</span>
-                  <button type="button" onClick={() => setSparklinePoints(v => Math.min(200, v + 10))} className="px-3 py-2 text-ive-text-muted hover:text-ive-cyan hover:bg-ive-cyan/10 transition-colors text-base font-black">+</button>
+                  <button type="button" onClick={() => setSparklinePoints(v => Math.max(10, v - 10))} className="px-3 py-2 text-ive-text-muted hover:text-ive-cyan hover:bg-ive-cyan/10 transition-colors text-base font-bold">−</button>
+                  <span className="w-12 py-2 flex items-center justify-center text-base font-bold text-ive-text border-x border-ive-border">{sparklinePoints}</span>
+                  <button type="button" onClick={() => setSparklinePoints(v => Math.min(200, v + 10))} className="px-3 py-2 text-ive-text-muted hover:text-ive-cyan hover:bg-ive-cyan/10 transition-colors text-base font-bold">+</button>
                 </div>
                 <div className="flex gap-1 flex-1">
                   {[30, 60, 120].map(v => (
                     <button key={v} type="button" onClick={() => setSparklinePoints(v)}
-                      className={`flex-1 py-2 rounded-lg text-sm font-black border transition-all ${sparklinePoints === v ? 'bg-ive-cyan/10 border-ive-cyan text-ive-cyan' : 'bg-ive-bg-card border-ive-border-subtle text-ive-text-dim'}`}
+                      className={`flex-1 py-2 rounded-lg text-sm font-bold border transition-all ${sparklinePoints === v ? 'bg-ive-cyan/10 border-ive-cyan text-ive-cyan' : 'bg-ive-bg-card border-ive-border-subtle text-ive-text-dim'}`}
                     >{v}</button>
                   ))}
                 </div>
@@ -243,14 +243,14 @@ export default function AgentForm({ onSuccess }: Props) {
               </label>
               <div className="flex items-center gap-2">
                 <div className="flex bg-ive-bg-input border border-ive-border rounded-lg overflow-hidden">
-                  <button type="button" onClick={() => setStatsRetention(v => Math.max(1, v - 1))} className="px-3 py-2 text-ive-text-muted hover:text-ive-cyan hover:bg-ive-cyan/10 transition-colors text-base font-black">−</button>
-                  <span className="w-12 py-2 flex items-center justify-center text-base font-black text-ive-text border-x border-ive-border">{statsRetention}</span>
-                  <button type="button" onClick={() => setStatsRetention(v => Math.min(90, v + 1))} className="px-3 py-2 text-ive-text-muted hover:text-ive-cyan hover:bg-ive-cyan/10 transition-colors text-base font-black">+</button>
+                  <button type="button" onClick={() => setStatsRetention(v => Math.max(1, v - 1))} className="px-3 py-2 text-ive-text-muted hover:text-ive-cyan hover:bg-ive-cyan/10 transition-colors text-base font-bold">−</button>
+                  <span className="w-12 py-2 flex items-center justify-center text-base font-bold text-ive-text border-x border-ive-border">{statsRetention}</span>
+                  <button type="button" onClick={() => setStatsRetention(v => Math.min(90, v + 1))} className="px-3 py-2 text-ive-text-muted hover:text-ive-cyan hover:bg-ive-cyan/10 transition-colors text-base font-bold">+</button>
                 </div>
                 <div className="flex gap-1 flex-1">
                   {[7, 14, 30].map(v => (
                     <button key={v} type="button" onClick={() => setStatsRetention(v)}
-                      className={`flex-1 py-2 rounded-lg text-sm font-black border transition-all ${statsRetention === v ? 'bg-ive-cyan/10 border-ive-cyan text-ive-cyan' : 'bg-ive-bg-card border-ive-border-subtle text-ive-text-dim'}`}
+                      className={`flex-1 py-2 rounded-lg text-sm font-bold border transition-all ${statsRetention === v ? 'bg-ive-cyan/10 border-ive-cyan text-ive-cyan' : 'bg-ive-bg-card border-ive-border-subtle text-ive-text-dim'}`}
                     >{v}d</button>
                   ))}
                 </div>

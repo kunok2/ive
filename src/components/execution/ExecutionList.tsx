@@ -74,7 +74,7 @@ export default function ExecutionList({ executions, showAgent = true, onKill, ki
         <div
           key={ex.id}
           onClick={() => { saveScroll(); router.push(`/executions/${ex.id}`) }}
-          className="bg-ive-bg-card border border-ive-border-subtle rounded-xl p-3 hover:border-ive-green/40 transition-all cursor-pointer active:scale-[0.98]"
+          className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-3 hover:border-ive-green/40 transition-all cursor-pointer active:scale-[0.98]"
         >
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-2 min-w-0">
@@ -83,7 +83,7 @@ export default function ExecutionList({ executions, showAgent = true, onKill, ki
                   <i className="fa-solid fa-robot mr-0.5" />{ex.agentName}
                 </span>
               )}
-              <span className="text-sm font-black text-ive-green">#{ex.issueIid}</span>
+              <span className="text-sm font-bold text-ive-green">#{ex.issueIid}</span>
               <span className="text-xs font-mono font-bold text-ive-text-muted">{formatTimeWithSeconds(ex.startedAt, userLocale, userTz)}</span>
             </div>
             <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
@@ -97,7 +97,7 @@ export default function ExecutionList({ executions, showAgent = true, onKill, ki
 
           {ex.issueTitle && (
             <div className="mb-1">
-              <MarqueeText className="text-sm text-ive-text font-semibold">{ex.issueTitle}</MarqueeText>
+              <MarqueeText className="text-sm text-ive-text font-bold">{ex.issueTitle}</MarqueeText>
             </div>
           )}
 

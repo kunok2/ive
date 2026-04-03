@@ -46,7 +46,7 @@ export default function LanguageSwitcher() {
         disabled={isPending}
         className="h-8 px-2 rounded-full bg-ive-bg-card border border-ive-border-subtle flex items-center gap-1 text-xs font-bold text-ive-text-dim hover:text-ive-text active:scale-95 transition-all disabled:opacity-50"
       >
-        <i className="fa-solid fa-globe text-[10px]" />
+        <i className="fa-solid fa-globe text-xs" />
         {localeNames[locale as Locale]}
         <i className={`fa-solid fa-chevron-down text-[8px] transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>

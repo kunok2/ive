@@ -111,7 +111,7 @@ export default function ConflictResolutionPanel({ projectId, projectColor, onClo
       <div
         key={mr.iid}
         onClick={() => !merging && toggleSelect(mr.iid)}
-        className={`flex items-center gap-2 p-3 rounded-xl border transition-all cursor-pointer ${
+        className={`flex items-center gap-2 p-3 rounded-lg border transition-all cursor-pointer ${
           isSelected
             ? 'bg-ive-purple/10 border-ive-purple/40 ring-1 ring-ive-purple/30'
             : mr.has_conflicts
@@ -141,19 +141,19 @@ export default function ConflictResolutionPanel({ projectId, projectColor, onClo
                   router.push(`/issues/${projectId}/${mr.iid}`)
                 }
               }}
-              className="text-sm font-black hover:underline transition-colors"
+              className="text-sm font-bold hover:underline transition-colors"
               style={{ color: projectColor }}
               title={t('openIssue')}
             >
               !{mr.iid}
             </button>
             {mr.has_conflicts && (
-              <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-ive-red/15 text-ive-red border border-ive-red/30">
+              <span className="text-xs font-bold px-1.5 py-0.5 rounded-full bg-ive-red/15 text-ive-red border border-ive-red/30">
                 {t('conflict')}
               </span>
             )}
             {result && (
-              <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${
+              <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${
                 result.success
                   ? 'bg-ive-green/15 text-ive-green border border-ive-green/30'
                   : 'bg-ive-red/15 text-ive-red border border-ive-red/30'
@@ -165,7 +165,7 @@ export default function ConflictResolutionPanel({ projectId, projectColor, onClo
           <p className="text-sm text-ive-text truncate">{mr.title}</p>
           <p className="text-xs text-ive-text-dim mt-0.5">
             <i className="fa-solid fa-code-branch mr-1" />
-            {mr.source_branch} <i className="fa-solid fa-arrow-right mx-1 text-[10px]" /> {mr.target_branch}
+            {mr.source_branch} <i className="fa-solid fa-arrow-right mx-1 text-xs" /> {mr.target_branch}
           </p>
         </div>
         <button

@@ -107,10 +107,10 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
 
   return (
     <div className="min-h-screen pb-20">
-      <header className="sticky top-0 z-40 bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark shadow-sm">
+      <header className="sticky top-0 z-40 bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark">
         <div className="px-4 py-3 max-w-lg mx-auto">
           <div className="flex items-center gap-3">
-            <button onClick={() => router.back()} className="text-ive-green text-base font-semibold p-1 hover:bg-ive-green/5 rounded">
+            <button onClick={() => router.back()} className="text-ive-green text-base font-bold p-1 hover:bg-ive-green/5 rounded">
               <i className="fa-solid fa-arrow-left mr-1" />뒤로
             </button>
             <div className="flex-1 min-w-0">
@@ -161,9 +161,9 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
                 <button
                   onClick={() => canMerge && setShowMergeConfirm(true)}
                   disabled={!canMerge || merging || closing}
-                  className={`flex-1 text-base font-bold py-3 rounded-xl active:scale-[0.98] transition-all ${
+                  className={`flex-1 text-base font-bold py-3 rounded-lg active:scale-[0.98] transition-all ${
                     canMerge
-                      ? 'text-white bg-ive-green hover:bg-ive-green/90 shadow-lg shadow-ive-green/20'
+                      ? 'text-white bg-ive-green hover:bg-ive-green/90'
                       : 'text-ive-text-dim bg-ive-bg-card border border-ive-border-subtle cursor-not-allowed'
                   }`}
                 >
@@ -178,7 +178,7 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
                 <button
                   onClick={() => setShowCloseConfirm(true)}
                   disabled={merging || closing}
-                  className="text-base font-bold text-ive-red/70 bg-ive-red/5 px-4 py-3 rounded-xl active:scale-[0.98] transition-all hover:bg-ive-red/10 border border-ive-red/20"
+                  className="text-base font-bold text-ive-red/70 bg-ive-red/5 px-4 py-3 rounded-lg active:scale-[0.98] transition-all hover:bg-ive-red/10 border border-ive-red/20"
                 >
                   {closing ? (
                     <i className="fa-solid fa-spinner fa-spin" />
@@ -190,7 +190,7 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
             )}
 
             {isMerged && (
-              <div className="mt-6 mb-4 text-center py-3 bg-purple-500/10 rounded-xl border border-purple-500/20">
+              <div className="mt-6 mb-4 text-center py-3 bg-purple-500/10 rounded-lg border border-purple-500/20">
                 <i className="fa-solid fa-code-merge text-purple-300 mr-1.5" />
                 <span className="text-sm font-bold text-purple-300">이미 머지된 MR입니다</span>
               </div>

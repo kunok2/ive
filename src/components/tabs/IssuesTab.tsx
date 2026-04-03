@@ -388,7 +388,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
             <button
               type="button"
               onClick={() => setProjectDropdownOpen(v => !v)}
-              className="w-full appearance-none bg-none bg-ive-bg-card border border-ive-border-subtle rounded-xl px-4 py-3 text-left flex items-center justify-between focus:outline-none focus:border-ive-green/50 transition-colors"
+              className="w-full appearance-none bg-none bg-ive-bg-card border border-ive-border-subtle rounded-lg px-4 py-3 text-left flex items-center justify-between focus:outline-none focus:border-ive-green/50 transition-colors"
             >
               <span className={`text-base font-bold ${selectedProjectId ? 'text-ive-text' : 'text-ive-text-dim'}`}>
                 {selectedProject?.name || tProject('selectProject')}
@@ -396,7 +396,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
               <i className={`fa-solid fa-chevron-down text-xs text-ive-text-dim transition-transform ${projectDropdownOpen ? 'rotate-180' : ''}`} />
             </button>
             {projectDropdownOpen && (
-              <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-ive-bg-card border border-ive-border-subtle rounded-xl overflow-hidden shadow-lg shadow-black/30">
+              <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden shadow-lg shadow-black/30">
                 {state.projects.map(p => (
                   <button
                     key={p.id}
@@ -422,7 +422,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
             <p className="text-sm text-ive-text-dim mb-5">{tProject('addProjectFirst')}</p>
             <button
               onClick={() => setActiveTab('projects')}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-ive-green text-ive-bg-deep font-bold text-sm rounded-xl active:scale-95 transition-transform"
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-ive-green text-ive-bg-deep font-bold text-sm rounded-lg active:scale-95 transition-transform"
             >
               <i className="fa-solid fa-plus" />{tProject('addProjectAction')}
             </button>
@@ -435,7 +435,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
         ) : (
           <>
             {selectedProject && (
-              <div className="flex items-center gap-3 mb-3 bg-ive-bg-card border border-ive-border-subtle rounded-xl px-4 py-3"
+              <div className="flex items-center gap-3 mb-3 bg-ive-bg-card border border-ive-border-subtle rounded-lg px-4 py-3"
                    style={{ borderLeftWidth: '3px', borderLeftColor: selectedProject.color || '#4ade80' }}>
                 <i className={`fa-brands ${selectedProject.provider === 'github' ? 'fa-github' : 'fa-gitlab'} text-xl`}
                    style={{ color: selectedProject.color || '#4ade80' }} />
@@ -445,7 +445,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <div className="text-center">
-                    <div className="text-lg font-black text-ive-green-light">{issues.length}</div>
+                    <div className="text-lg font-bold text-ive-green-light">{issues.length}</div>
                     <div className="text-xs text-ive-text-dim">{tIssue('issues')}</div>
                   </div>
                   {canEdit && !bulkMode && !isHistoryTab && (
@@ -480,7 +480,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
               </div>
             )}
 
-            <div className="flex gap-1 mb-2 bg-ive-bg-card rounded-xl p-1 border border-ive-border-subtle">
+            <div className="flex gap-1 mb-2 bg-ive-bg-card rounded-lg p-1 border border-ive-border-subtle">
               {FILTER_TABS.map(tab => (
                 <button
                   key={tab.key}
@@ -526,7 +526,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
 
             {/* 이슈 추가 폼 */}
             {showAddForm && (
-              <div className="mb-3 bg-ive-bg-card border border-ive-green/30 rounded-xl p-3">
+              <div className="mb-3 bg-ive-bg-card border border-ive-green/30 rounded-lg p-3">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-bold text-ive-green">
                     <i className="fa-solid fa-plus mr-1" />{tIssue('addNewIssue')}
@@ -558,7 +558,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
 
             {/* 벌크 모드 툴바 */}
             {bulkMode && !isHistoryTab && (
-              <div className="mb-3 bg-ive-bg-card border border-ive-amber/30 rounded-xl p-3">
+              <div className="mb-3 bg-ive-bg-card border border-ive-amber/30 rounded-lg p-3">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <button
@@ -684,7 +684,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                         if (el) sessionStorage.setItem('issues-scroll', String(el.scrollTop))
                         router.push(`/issues/${selectedProjectId}/${issue.iid}`)
                       }}
-                      className={`bg-ive-bg-card border rounded-xl p-4 transition-all cursor-pointer active:scale-[0.98] ${
+                      className={`bg-ive-bg-card border rounded-lg p-4 transition-all cursor-pointer active:scale-[0.98] ${
                         isSelected
                           ? 'border-ive-green/50 bg-ive-green/5'
                           : 'border-ive-border-subtle hover:border-ive-green/40'
@@ -701,7 +701,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                             </div>
                           )}
                           <div className="min-w-0 flex-1">
-                            <span className="text-sm font-black text-ive-green">#{issue.iid}</span>
+                            <span className="text-sm font-bold text-ive-green">#{issue.iid}</span>
                             <h3 className="text-base font-bold text-ive-text leading-snug mt-0.5 line-clamp-2">{issue.title}</h3>
                           </div>
                         </div>

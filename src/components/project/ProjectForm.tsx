@@ -191,7 +191,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
     <form onSubmit={handleSubmit} className="flex flex-col gap-5">
       {/* 프로젝트 색상 */}
       <div>
-        <label className="block text-base font-semibold text-ive-text-muted mb-2">{t('distinguishColor')}</label>
+        <label className="block text-base font-bold text-ive-text-muted mb-2">{t('distinguishColor')}</label>
         <div className="grid grid-cols-5 gap-1.5">
           {PROJECT_COLORS.map(c => {
             const selected = color === c.value
@@ -221,7 +221,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
 
       {/* 프로젝트 이름 */}
       <div>
-        <label className="block text-base font-semibold text-ive-text-muted mb-2">{t('projectName')} <span className="text-ive-red">*</span></label>
+        <label className="block text-base font-bold text-ive-text-muted mb-2">{t('projectName')} <span className="text-ive-red">*</span></label>
         <input
           type="text"
           value={name}
@@ -233,7 +233,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
 
       {/* 저장소 URL */}
       <div>
-        <label className="block text-base font-semibold text-ive-text-muted mb-2">{t('repoUrl')} <span className="text-ive-red">*</span></label>
+        <label className="block text-base font-bold text-ive-text-muted mb-2">{t('repoUrl')} <span className="text-ive-red">*</span></label>
         <input
           type="url"
           value={repoUrl}
@@ -245,7 +245,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
 
       {/* 액세스 토큰 */}
       <div>
-        <label className="block text-base font-semibold text-ive-text-muted mb-2">
+        <label className="block text-base font-bold text-ive-text-muted mb-2">
           {t('gitAccessToken')} <span className="text-ive-red">*</span> <span className="text-ive-text-dim font-normal">{t('personalAccessToken')}</span>
         </label>
         <input
@@ -314,7 +314,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
 
       {/* 작업 확인 주기 */}
       <div>
-        <label className="block text-base font-semibold text-ive-text-muted mb-2">
+        <label className="block text-base font-bold text-ive-text-muted mb-2">
           {t('checkInterval')} <span className="text-ive-text-dim font-normal">{t('checkIntervalUnit')}</span>
         </label>
         <div className="flex flex-col gap-2">
@@ -323,13 +323,13 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
               <button
                 type="button"
                 onClick={() => setCheckInterval(v => Math.max(1, v - 1))}
-                className="px-3 py-3 text-ive-text-muted hover:text-ive-green hover:bg-ive-green/10 transition-colors text-base font-black"
+                className="px-3 py-3 text-ive-text-muted hover:text-ive-green hover:bg-ive-green/10 transition-colors text-base font-bold"
               >−</button>
-              <span className="w-16 py-3 flex items-center justify-center text-base font-black text-ive-text border-x border-ive-border">{checkInterval}</span>
+              <span className="w-16 py-3 flex items-center justify-center text-base font-bold text-ive-text border-x border-ive-border">{checkInterval}</span>
               <button
                 type="button"
                 onClick={() => setCheckInterval(v => Math.min(1440, v + 1))}
-                className="px-3 py-3 text-ive-text-muted hover:text-ive-green hover:bg-ive-green/10 transition-colors text-base font-black"
+                className="px-3 py-3 text-ive-text-muted hover:text-ive-green hover:bg-ive-green/10 transition-colors text-base font-bold"
               >+</button>
             </div>
             <div className="flex gap-1 flex-1 min-w-0">
@@ -338,7 +338,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
                   key={n}
                   type="button"
                   onClick={() => setCheckInterval(n)}
-                  className={`flex-1 py-3 rounded-lg text-base font-black border transition-all ${
+                  className={`flex-1 py-3 rounded-lg text-base font-bold border transition-all ${
                     checkInterval === n
                       ? 'bg-ive-green/10 border-ive-green text-ive-green'
                       : 'bg-ive-bg-card border-ive-border-subtle text-ive-text-dim'
@@ -407,14 +407,14 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
               </label>
               <div className="flex items-center gap-2">
                 <div className="flex bg-ive-bg-input border border-ive-border rounded-lg overflow-hidden">
-                  <button type="button" onClick={() => setSnapshotInterval(v => Math.max(1, v - 1))} className="px-3 py-2 text-ive-text-muted hover:text-ive-cyan hover:bg-ive-cyan/10 transition-colors text-base font-black">−</button>
-                  <span className="w-12 py-2 flex items-center justify-center text-base font-black text-ive-text border-x border-ive-border">{snapshotInterval}</span>
-                  <button type="button" onClick={() => setSnapshotInterval(v => Math.min(60, v + 1))} className="px-3 py-2 text-ive-text-muted hover:text-ive-cyan hover:bg-ive-cyan/10 transition-colors text-base font-black">+</button>
+                  <button type="button" onClick={() => setSnapshotInterval(v => Math.max(1, v - 1))} className="px-3 py-2 text-ive-text-muted hover:text-ive-cyan hover:bg-ive-cyan/10 transition-colors text-base font-bold">−</button>
+                  <span className="w-12 py-2 flex items-center justify-center text-base font-bold text-ive-text border-x border-ive-border">{snapshotInterval}</span>
+                  <button type="button" onClick={() => setSnapshotInterval(v => Math.min(60, v + 1))} className="px-3 py-2 text-ive-text-muted hover:text-ive-cyan hover:bg-ive-cyan/10 transition-colors text-base font-bold">+</button>
                 </div>
                 <div className="flex gap-1 flex-1">
                   {[1, 5, 10].map(v => (
                     <button key={v} type="button" onClick={() => setSnapshotInterval(v)}
-                      className={`flex-1 py-2 rounded-lg text-sm font-black border transition-all ${snapshotInterval === v ? 'bg-ive-cyan/10 border-ive-cyan text-ive-cyan' : 'bg-ive-bg-card border-ive-border-subtle text-ive-text-dim'}`}
+                      className={`flex-1 py-2 rounded-lg text-sm font-bold border transition-all ${snapshotInterval === v ? 'bg-ive-cyan/10 border-ive-cyan text-ive-cyan' : 'bg-ive-bg-card border-ive-border-subtle text-ive-text-dim'}`}
                     >{v}m</button>
                   ))}
                 </div>
@@ -427,14 +427,14 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
               </label>
               <div className="flex items-center gap-2">
                 <div className="flex bg-ive-bg-input border border-ive-border rounded-lg overflow-hidden">
-                  <button type="button" onClick={() => setSparklinePoints(v => Math.max(10, v - 10))} className="px-3 py-2 text-ive-text-muted hover:text-ive-cyan hover:bg-ive-cyan/10 transition-colors text-base font-black">−</button>
-                  <span className="w-12 py-2 flex items-center justify-center text-base font-black text-ive-text border-x border-ive-border">{sparklinePoints}</span>
-                  <button type="button" onClick={() => setSparklinePoints(v => Math.min(200, v + 10))} className="px-3 py-2 text-ive-text-muted hover:text-ive-cyan hover:bg-ive-cyan/10 transition-colors text-base font-black">+</button>
+                  <button type="button" onClick={() => setSparklinePoints(v => Math.max(10, v - 10))} className="px-3 py-2 text-ive-text-muted hover:text-ive-cyan hover:bg-ive-cyan/10 transition-colors text-base font-bold">−</button>
+                  <span className="w-12 py-2 flex items-center justify-center text-base font-bold text-ive-text border-x border-ive-border">{sparklinePoints}</span>
+                  <button type="button" onClick={() => setSparklinePoints(v => Math.min(200, v + 10))} className="px-3 py-2 text-ive-text-muted hover:text-ive-cyan hover:bg-ive-cyan/10 transition-colors text-base font-bold">+</button>
                 </div>
                 <div className="flex gap-1 flex-1">
                   {[30, 60, 120].map(v => (
                     <button key={v} type="button" onClick={() => setSparklinePoints(v)}
-                      className={`flex-1 py-2 rounded-lg text-sm font-black border transition-all ${sparklinePoints === v ? 'bg-ive-cyan/10 border-ive-cyan text-ive-cyan' : 'bg-ive-bg-card border-ive-border-subtle text-ive-text-dim'}`}
+                      className={`flex-1 py-2 rounded-lg text-sm font-bold border transition-all ${sparklinePoints === v ? 'bg-ive-cyan/10 border-ive-cyan text-ive-cyan' : 'bg-ive-bg-card border-ive-border-subtle text-ive-text-dim'}`}
                     >{v}</button>
                   ))}
                 </div>
@@ -447,14 +447,14 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
               </label>
               <div className="flex items-center gap-2">
                 <div className="flex bg-ive-bg-input border border-ive-border rounded-lg overflow-hidden">
-                  <button type="button" onClick={() => setStatsRetention(v => Math.max(1, v - 1))} className="px-3 py-2 text-ive-text-muted hover:text-ive-cyan hover:bg-ive-cyan/10 transition-colors text-base font-black">−</button>
-                  <span className="w-12 py-2 flex items-center justify-center text-base font-black text-ive-text border-x border-ive-border">{statsRetention}</span>
-                  <button type="button" onClick={() => setStatsRetention(v => Math.min(90, v + 1))} className="px-3 py-2 text-ive-text-muted hover:text-ive-cyan hover:bg-ive-cyan/10 transition-colors text-base font-black">+</button>
+                  <button type="button" onClick={() => setStatsRetention(v => Math.max(1, v - 1))} className="px-3 py-2 text-ive-text-muted hover:text-ive-cyan hover:bg-ive-cyan/10 transition-colors text-base font-bold">−</button>
+                  <span className="w-12 py-2 flex items-center justify-center text-base font-bold text-ive-text border-x border-ive-border">{statsRetention}</span>
+                  <button type="button" onClick={() => setStatsRetention(v => Math.min(90, v + 1))} className="px-3 py-2 text-ive-text-muted hover:text-ive-cyan hover:bg-ive-cyan/10 transition-colors text-base font-bold">+</button>
                 </div>
                 <div className="flex gap-1 flex-1">
                   {[7, 14, 30].map(v => (
                     <button key={v} type="button" onClick={() => setStatsRetention(v)}
-                      className={`flex-1 py-2 rounded-lg text-sm font-black border transition-all ${statsRetention === v ? 'bg-ive-cyan/10 border-ive-cyan text-ive-cyan' : 'bg-ive-bg-card border-ive-border-subtle text-ive-text-dim'}`}
+                      className={`flex-1 py-2 rounded-lg text-sm font-bold border transition-all ${statsRetention === v ? 'bg-ive-cyan/10 border-ive-cyan text-ive-cyan' : 'bg-ive-bg-card border-ive-border-subtle text-ive-text-dim'}`}
                     >{v}d</button>
                   ))}
                 </div>
@@ -475,7 +475,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
             <i className={`fa-solid ${showSharing ? 'fa-chevron-down' : 'fa-chevron-right'} text-sm`} />
             <i className="fa-solid fa-share-nodes mr-0.5" />
             {t('shareProject')}
-            {shares.length > 0 && <span className="text-xs font-black bg-ive-purple/20 text-ive-purple px-1.5 py-0.5 rounded-full">{shares.length}</span>}
+            {shares.length > 0 && <span className="text-xs font-bold bg-ive-purple/20 text-ive-purple px-1.5 py-0.5 rounded-full">{shares.length}</span>}
           </button>
 
           {showSharing && (
@@ -494,12 +494,12 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
                         <button
                           type="button"
                           onClick={() => handleChangeShareRole(s.id, 'viewer')}
-                          className={`px-2 py-1 text-xs font-black transition-all ${s.role === 'viewer' ? 'bg-ive-cyan/15 text-ive-cyan' : 'text-ive-text-dim hover:text-ive-text'}`}
+                          className={`px-2 py-1 text-xs font-bold transition-all ${s.role === 'viewer' ? 'bg-ive-cyan/15 text-ive-cyan' : 'text-ive-text-dim hover:text-ive-text'}`}
                         >{t('viewer')}</button>
                         <button
                           type="button"
                           onClick={() => handleChangeShareRole(s.id, 'editor')}
-                          className={`px-2 py-1 text-xs font-black transition-all border-l border-ive-border ${s.role === 'editor' ? 'bg-ive-amber/15 text-ive-amber' : 'text-ive-text-dim hover:text-ive-text'}`}
+                          className={`px-2 py-1 text-xs font-bold transition-all border-l border-ive-border ${s.role === 'editor' ? 'bg-ive-amber/15 text-ive-amber' : 'text-ive-text-dim hover:text-ive-text'}`}
                         >{t('editor')}</button>
                       </div>
                       <button
@@ -523,12 +523,12 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
                     <button
                       type="button"
                       onClick={() => setShareRole('viewer')}
-                      className={`flex-1 py-2 text-sm font-black transition-all ${shareRole === 'viewer' ? 'bg-ive-cyan/15 text-ive-cyan' : 'text-ive-text-dim hover:text-ive-text'}`}
+                      className={`flex-1 py-2 text-sm font-bold transition-all ${shareRole === 'viewer' ? 'bg-ive-cyan/15 text-ive-cyan' : 'text-ive-text-dim hover:text-ive-text'}`}
                     >{t('viewer')}</button>
                     <button
                       type="button"
                       onClick={() => setShareRole('editor')}
-                      className={`flex-1 py-2 text-sm font-black transition-all border-l border-ive-border ${shareRole === 'editor' ? 'bg-ive-amber/15 text-ive-amber' : 'text-ive-text-dim hover:text-ive-text'}`}
+                      className={`flex-1 py-2 text-sm font-bold transition-all border-l border-ive-border ${shareRole === 'editor' ? 'bg-ive-amber/15 text-ive-amber' : 'text-ive-text-dim hover:text-ive-text'}`}
                     >{t('editor')}</button>
                   </div>
                   {/* 사용자 목록 — 클릭하면 바로 추가 */}
@@ -571,7 +571,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
       {/* 버튼 */}
       <button
         type="submit"
-        className="w-full bg-ive-green-dark text-white font-black py-4 rounded-xl text-base active:shadow-inner active:opacity-90 transition-all mt-2 shadow-lg shadow-ive-green/10"
+        className="w-full bg-ive-green-dark text-white font-bold py-4 rounded-lg text-base active:opacity-90 transition-all mt-2"
       >
         <i className={`fa-solid ${existing ? 'fa-check' : 'fa-plus'} mr-2`} />
         {existing ? t('settingsUpdated') : t('createProject')}

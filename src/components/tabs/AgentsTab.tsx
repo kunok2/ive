@@ -39,7 +39,7 @@ export default function AgentsTab({ onAdd }: { onAdd?: () => void }) {
             {onAdd && (
               <button
                 onClick={onAdd}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-ive-green text-ive-bg-deep font-bold text-sm rounded-xl active:scale-95 transition-transform"
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-ive-green text-ive-bg-deep font-bold text-sm rounded-lg active:scale-95 transition-transform"
               >
                 <i className="fa-solid fa-plus" />{t('addDeveloper')}
               </button>

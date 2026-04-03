@@ -83,7 +83,7 @@ export default function ChangePasswordForm({ email, onSuccess, onCancel }: Props
     <form onSubmit={handleSubmit} className="flex flex-col gap-3">
       {/* 이메일 + 인증 버튼 */}
       <div>
-        <label className="block text-sm font-semibold text-ive-text-muted mb-1">{t('email')}</label>
+        <label className="block text-sm font-bold text-ive-text-muted mb-1">{t('email')}</label>
         <div className="flex gap-2">
           <input
             type="email"
@@ -109,7 +109,7 @@ export default function ChangePasswordForm({ email, onSuccess, onCancel }: Props
       {/* 인증 코드 입력 */}
       {codeSent && (
         <div>
-          <label className="block text-sm font-semibold text-ive-text-muted mb-1">{t('verificationCode')}</label>
+          <label className="block text-sm font-bold text-ive-text-muted mb-1">{t('verificationCode')}</label>
           <input
             type="text"
             value={code}
@@ -124,7 +124,7 @@ export default function ChangePasswordForm({ email, onSuccess, onCancel }: Props
       )}
 
       <div>
-        <label className="block text-sm font-semibold text-ive-text-muted mb-1">{t('currentPassword')}</label>
+        <label className="block text-sm font-bold text-ive-text-muted mb-1">{t('currentPassword')}</label>
         <input
           type="password"
           value={currentPassword}
@@ -134,7 +134,7 @@ export default function ChangePasswordForm({ email, onSuccess, onCancel }: Props
         />
       </div>
       <div>
-        <label className="block text-sm font-semibold text-ive-text-muted mb-1">{t('newPassword')}</label>
+        <label className="block text-sm font-bold text-ive-text-muted mb-1">{t('newPassword')}</label>
         <input
           type="password"
           value={newPassword}
@@ -146,7 +146,7 @@ export default function ChangePasswordForm({ email, onSuccess, onCancel }: Props
         />
       </div>
       <div>
-        <label className="block text-sm font-semibold text-ive-text-muted mb-1">{t('newPasswordConfirm')}</label>
+        <label className="block text-sm font-bold text-ive-text-muted mb-1">{t('newPasswordConfirm')}</label>
         <input
           type="password"
           value={newPasswordConfirm}

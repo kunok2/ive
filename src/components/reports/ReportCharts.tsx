@@ -23,12 +23,12 @@ function pctChange(cur: number, prev: number): number | 'new' | null {
 
 function Badge({ value, invert }: { value: number | 'new' | null; invert?: boolean }) {
   if (value == null) return null
-  if (value === 'new') return <span className="text-[10px] font-bold px-1.5 py-0.5 rounded text-ive-cyan bg-ive-cyan/10">NEW</span>
+  if (value === 'new') return <span className="text-xs font-bold px-1.5 py-0.5 rounded text-ive-cyan bg-ive-cyan/10">NEW</span>
   const color = invert
     ? (value > 0 ? 'text-ive-red bg-ive-red/10' : value < 0 ? 'text-ive-green bg-ive-green/10' : 'text-ive-text-dim bg-white/5')
     : (value > 0 ? 'text-ive-green bg-ive-green/10' : value < 0 ? 'text-ive-red bg-ive-red/10' : 'text-ive-text-dim bg-white/5')
   return (
-    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${color}`}>
+    <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${color}`}>
       {value > 0 ? '+' : ''}{value.toLocaleString()}%
     </span>
   )
@@ -71,7 +71,7 @@ export function DailyTrendChart({ data, prevData, type }: {
   const costPrev = prevData.reduce((s, d) => s + d.cost, 0)
 
   return (
-    <div className="bg-ive-bg-card border border-ive-border-subtle rounded-xl p-3 space-y-2">
+    <div className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-3 space-y-2">
       {/* 요약 한 줄 */}
       <div className="flex items-center gap-3">
         <span className="text-xs font-bold text-ive-text">{t('count')} {totalCur.toLocaleString()}</span>
@@ -98,7 +98,7 @@ export function DailyTrendChart({ data, prevData, type }: {
       </ResponsiveContainer>
 
       {/* 범례 */}
-      <div className="flex items-center justify-center gap-3 text-[10px] text-ive-text-dim">
+      <div className="flex items-center justify-center gap-3 text-xs text-ive-text-dim">
         <span><span className="inline-block w-2 h-2 rounded-sm bg-[#34d399] mr-0.5" />{t('success')}</span>
         <span><span className="inline-block w-2 h-2 rounded-sm bg-[#f87171] mr-0.5" />{t('failed')}</span>
         <span><span className="inline-block w-3 h-0.5 bg-[#fbbf24] mr-0.5 align-middle" />{t('cost')}</span>
@@ -120,13 +120,13 @@ export function CompareTable({ title, data, icon }: { title: string; data: Compa
   if (data.length === 0) return null
 
   return (
-    <div className="bg-ive-bg-card border border-ive-border-subtle rounded-xl overflow-hidden">
+    <div className="bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden">
       <div className="px-3 py-2 text-xs font-bold text-ive-text-dim border-b border-ive-border-dark flex items-center gap-1.5">
-        <i className={`fa-solid ${icon} text-[10px]`} />
+        <i className={`fa-solid ${icon} text-xs`} />
         {title}
       </div>
       {/* 헤더 */}
-      <div className="grid grid-cols-[1fr_60px_50px_60px_50px] px-3 py-1.5 text-[10px] font-bold text-ive-text-dim border-b border-ive-border-dark/50">
+      <div className="grid grid-cols-[1fr_60px_50px_60px_50px] px-3 py-1.5 text-xs font-bold text-ive-text-dim border-b border-ive-border-dark/50">
         <span></span>
         <span className="text-right">{t('count')}</span>
         <span className="text-right">{t('change')}</span>
@@ -151,11 +151,11 @@ export function CompareTable({ title, data, icon }: { title: string; data: Compa
               ) : null}
               <span className="text-xs font-bold text-ive-text truncate">{d.name}</span>
             </div>
-            <span className="text-xs font-extrabold text-ive-text text-right">{d.tasks.toLocaleString()}</span>
+            <span className="text-xs font-bold text-ive-text text-right">{d.tasks.toLocaleString()}</span>
             <div className="flex justify-end">
               <Badge value={taskDiff} />
             </div>
-            <span className="text-xs font-extrabold text-ive-amber text-right">${formatCost(d.cost)}</span>
+            <span className="text-xs font-bold text-ive-amber text-right">${formatCost(d.cost)}</span>
             <div className="flex justify-end">
               <Badge value={costDiff} invert />
             </div>
@@ -165,11 +165,11 @@ export function CompareTable({ title, data, icon }: { title: string; data: Compa
       {/* 합계 */}
       <div className="grid grid-cols-[1fr_60px_50px_60px_50px] items-center px-3 py-2 bg-ive-bg-deep/50 border-t border-ive-border-dark">
         <span className="text-xs font-bold text-ive-text-dim">합계</span>
-        <span className="text-xs font-extrabold text-ive-text text-right">{data.reduce((s, d) => s + d.tasks, 0).toLocaleString()}</span>
+        <span className="text-xs font-bold text-ive-text text-right">{data.reduce((s, d) => s + d.tasks, 0).toLocaleString()}</span>
         <div className="flex justify-end">
           <Badge value={pctChange(data.reduce((s, d) => s + d.tasks, 0), data.reduce((s, d) => s + d.prevTasks, 0))} />
         </div>
-        <span className="text-xs font-extrabold text-ive-amber text-right">${formatCost(data.reduce((s, d) => s + d.cost, 0))}</span>
+        <span className="text-xs font-bold text-ive-amber text-right">${formatCost(data.reduce((s, d) => s + d.cost, 0))}</span>
         <div className="flex justify-end">
           <Badge value={pctChange(data.reduce((s, d) => s + d.cost, 0), data.reduce((s, d) => s + d.prevCost, 0))} invert />
         </div>
@@ -227,7 +227,7 @@ export function WaitingTrendChart({ data, prevData, type }: {
   const allZero = data.every(d => d.total === 0) && prevData.every(d => d.total === 0)
 
   return (
-    <div className="bg-ive-bg-card border border-ive-border-subtle rounded-xl p-3 space-y-2">
+    <div className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-3 space-y-2">
       {/* 요약 한 줄 */}
       <div className="flex items-center gap-3">
         <span className="text-xs font-bold text-ive-text">{t('waitingCurrent')} {latestTotal.toLocaleString()}{t('waitingUnit')}</span>
@@ -272,7 +272,7 @@ export function WaitingTrendChart({ data, prevData, type }: {
       </ResponsiveContainer>
 
       {/* 범례 — 프로젝트별 */}
-      <div className="flex items-center justify-center gap-3 flex-wrap text-[10px] text-ive-text-dim">
+      <div className="flex items-center justify-center gap-3 flex-wrap text-xs text-ive-text-dim">
         {projects.map(([pid, info]) => (
           <span key={pid}>
             <span className="inline-block w-2 h-2 rounded-sm mr-0.5" style={{ background: info.color }} />

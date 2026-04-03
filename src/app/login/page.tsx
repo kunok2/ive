@@ -62,7 +62,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-extrabold text-ive-green mb-1">Spring <span className="text-ive-amber">IVE</span></h1>
+          <h1 className="text-3xl font-bold text-ive-green mb-1">Spring <span className="text-ive-amber">IVE</span></h1>
           <p className="text-base text-ive-text-muted">Integrated Value Environment</p>
         </div>
 
@@ -74,7 +74,7 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div>
-            <label className="block text-base font-semibold text-ive-text-muted mb-1.5">{tAuth('email')}</label>
+            <label className="block text-base font-bold text-ive-text-muted mb-1.5">{tAuth('email')}</label>
             <input
               type="email"
               value={email}
@@ -86,7 +86,7 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <label className="block text-base font-semibold text-ive-text-muted mb-1.5">{tAuth('password')}</label>
+            <label className="block text-base font-bold text-ive-text-muted mb-1.5">{tAuth('password')}</label>
             <input
               type="password"
               value={password}
@@ -114,12 +114,12 @@ export default function LoginPage() {
         </form>
 
         <div className="flex justify-center gap-4 mt-6 text-base text-ive-text-muted">
-          <Link href="/register" className="text-ive-green font-semibold">{tAuth('register')}</Link>
-          <button onClick={() => setShowChangePassword(true)} className="text-ive-cyan font-semibold">{tAuth('changePassword')}</button>
+          <Link href="/register" className="text-ive-green font-bold">{tAuth('register')}</Link>
+          <button onClick={() => setShowChangePassword(true)} className="text-ive-cyan font-bold">{tAuth('changePassword')}</button>
         </div>
 
         {showChangePassword && (
-          <div className="mt-6 bg-ive-bg-card border border-ive-border-subtle rounded-xl p-4">
+          <div className="mt-6 bg-ive-bg-card border border-ive-border-subtle rounded-lg p-4">
             <h3 className="text-sm font-bold text-ive-text mb-3">{tAuth('changePassword')}</h3>
             <ChangePasswordForm onSuccess={() => setShowChangePassword(false)} onCancel={() => setShowChangePassword(false)} />
           </div>
