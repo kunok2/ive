@@ -41,9 +41,10 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  // accessToken이 비어있으면 기존 토큰 유지
-  const accessToken = body.accessToken?.trim()
-    ? encrypt(body.accessToken.trim())
+  // accessToken이 비어있거나 마스킹된 값이면 기존 토큰 유지
+  const rawToken = body.accessToken?.trim()
+  const accessToken = rawToken && rawToken !== '••••••'
+    ? encrypt(rawToken)
     : existing.accessToken
 
   const updatedProject = {

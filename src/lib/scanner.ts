@@ -326,8 +326,9 @@ export function startScanner() {
   // 서버 재시작으로 고착된 실행 복구
   resetStuckExecutions();
 
-  // 1분마다 전체 프로젝트 체크 (각 프로젝트의 checkInterval에 따라 실제 작업 수행 결정)
-  global.scanInterval = setInterval(runScan, 60 * 1000);
+  // 30초마다 전체 프로젝트 체크 (각 프로젝트의 checkInterval에 따라 실제 작업 수행 결정)
+  // 1분 주기 프로젝트를 안정적으로 잡기 위해 폴링 주기를 30초로 설정
+  global.scanInterval = setInterval(runScan, 30 * 1000);
 
   // 첫 실행은 약간의 지연 후 실행 (서버 초기화 완료 대기)
   setTimeout(runScan, 5000);
@@ -383,11 +384,12 @@ export async function scanProject(project: Project, force: boolean = false) {
 
     const now = new Date();
 
-    // 체크 주기 확인
+    // 체크 주기 확인 (10초 여유를 두어 setInterval 타이밍 오차 방지)
     if (!force && project.lastCheckedAt) {
       const lastChecked = new Date(project.lastCheckedAt);
-      const diffMinutes = (now.getTime() - lastChecked.getTime()) / (1000 * 60);
-      if (diffMinutes < project.checkInterval) {
+      const diffMs = now.getTime() - lastChecked.getTime();
+      const thresholdMs = project.checkInterval * 60 * 1000 - 10000;
+      if (diffMs < thresholdMs) {
         return; // 아직 체크할 시간이 아님
       }
     }
