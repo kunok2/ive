@@ -34,7 +34,7 @@ function buildSegments(
 
   for (let i = 0; i < totalSlots; i++) {
     const v = data[i]
-    const x = padding + (i / (totalSlots - 1)) * (w - padding * 2)
+    const x = totalSlots <= 1 ? w / 2 : padding + (i / (totalSlots - 1)) * (w - padding * 2)
     if (v !== null) {
       const y = padding + (1 - (v - min) / range) * (height - padding * 2)
       current.push({ x, y })
@@ -63,9 +63,9 @@ export default function Sparkline({ data, bgData, width = 48, height = 16, color
     return () => ro.disconnect()
   }, [isFluid])
 
-  // non-null 값만 추출해서 최소 2개 필요
+  // non-null 값만 추출해서 최소 1개 필요
   const validData = data.filter((v): v is number => v !== null)
-  if (!data || validData.length < 2) {
+  if (!data || validData.length < 1) {
     if (isFluid) return <div ref={containerRef} className={className} style={{ width: '100%', height }} />
     return <svg width={width as number} height={height} className={className} />
   }
@@ -80,13 +80,13 @@ export default function Sparkline({ data, bgData, width = 48, height = 16, color
   const max = Math.max(...allValid)
   const range = max - min || 1
 
-  // 추세 판별: non-null 값 기준 전반/후반
+  // 추세 판별: non-null 값 기준 전반/후반 (1개일 때는 추세 없음)
   const mid = Math.floor(validData.length / 2)
   const firstHalf = validData.slice(0, mid)
   const secondHalf = validData.slice(mid)
-  const avgFirst = firstHalf.reduce((a, b) => a + b, 0) / firstHalf.length
-  const avgSecond = secondHalf.reduce((a, b) => a + b, 0) / secondHalf.length
-  const diff = avgSecond - avgFirst
+  const avgFirst = firstHalf.length > 0 ? firstHalf.reduce((a, b) => a + b, 0) / firstHalf.length : 0
+  const avgSecond = secondHalf.length > 0 ? secondHalf.reduce((a, b) => a + b, 0) / secondHalf.length : 0
+  const diff = validData.length < 2 ? 0 : avgSecond - avgFirst
 
   let lineColor: string
   if (color === 'auto') {
@@ -98,7 +98,7 @@ export default function Sparkline({ data, bgData, width = 48, height = 16, color
   }
 
   const segments = buildSegments(data, w, height, min, range, padding)
-  const bgSegments = bgData && validBgData.length >= 2
+  const bgSegments = bgData && validBgData.length >= 1
     ? buildSegments(bgData, w, height, min, range, padding)
     : null
 
@@ -108,6 +108,9 @@ export default function Sparkline({ data, bgData, width = 48, height = 16, color
     <svg width={w} height={height} viewBox={`0 0 ${w} ${height}`} style={isFluid ? { display: 'block', width: '100%' } : undefined}>
       {/* 배경: 이전 기간 데이터 */}
       {bgSegments?.map((seg, si) => {
+        if (seg.length === 1) {
+          return <circle key={`bg-${si}`} cx={seg[0].x} cy={seg[0].y} r={1.5} fill={lineColor} opacity={0.25} />
+        }
         if (seg.length < 2) return null
         const linePoints = seg.map(p => `${p.x},${p.y}`).join(' ')
         return (
@@ -126,6 +129,9 @@ export default function Sparkline({ data, bgData, width = 48, height = 16, color
       })}
       {/* 전경: 현재 기간 데이터 */}
       {segments.map((seg, si) => {
+        if (seg.length === 1) {
+          return <circle key={si} cx={seg[0].x} cy={seg[0].y} r={2} fill={lineColor} />
+        }
         if (seg.length < 2) return null
         const linePoints = seg.map(p => `${p.x},${p.y}`).join(' ')
         const areaPoints = `${seg[0].x},${bottomY} ${linePoints} ${seg[seg.length - 1].x},${bottomY}`
