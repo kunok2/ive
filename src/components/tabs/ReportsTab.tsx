@@ -913,7 +913,6 @@ export default function ReportsTab() {
                         {/* 프로젝트별 건수/비용 추이 */}
                         {pt && pt.daily.length >= 2 && (
                           <div className="mt-2 bg-ive-bg-deep rounded-lg p-2">
-                            <div className="text-xs font-bold text-ive-text-dim mb-1.5">{t('countCostTrend')}</div>
                             <div className="grid grid-cols-2 gap-2">
                               <div className="flex items-center gap-1.5">
                                 <span className="text-xs text-ive-text-dim shrink-0">{t('countLabel')}</span>
@@ -990,7 +989,6 @@ export default function ReportsTab() {
                         {/* 작업자별 건수/비용 추이 */}
                         {at && at.daily.length >= 2 && (
                           <div className="mt-2 bg-ive-bg-deep rounded-lg p-2">
-                            <div className="text-xs font-bold text-ive-text-dim mb-1.5">{t('countCostTrend')}</div>
                             <div className="grid grid-cols-2 gap-2">
                               <div className="flex items-center gap-1.5">
                                 <span className="text-xs text-ive-text-dim shrink-0">{t('countLabel')}</span>
@@ -1057,7 +1055,6 @@ export default function ReportsTab() {
                         {/* 사용자별 건수/비용 추이 */}
                         {ut && ut.daily.length >= 2 && (
                           <div className="mt-2 bg-ive-bg-deep rounded-lg p-2">
-                            <div className="text-xs font-bold text-ive-text-dim mb-1.5">{t('countCostTrend')}</div>
                             <div className="grid grid-cols-2 gap-2">
                               <div className="flex items-center gap-1.5">
                                 <span className="text-xs text-ive-text-dim shrink-0">{t('countLabel')}</span>
