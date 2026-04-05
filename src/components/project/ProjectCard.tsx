@@ -144,7 +144,7 @@ export default function ProjectCard({ project }: Props) {
 
   const toggleScanner = async (e: React.MouseEvent) => {
     e.preventDefault(); e.stopPropagation()
-    await updateProject({ ...project, scannerActive: !project.scannerActive, lastCheckedAt: !project.scannerActive ? new Date().toISOString() : project.lastCheckedAt })
+    await updateProject({ ...project, accessToken: '', scannerActive: !project.scannerActive, lastCheckedAt: !project.scannerActive ? new Date().toISOString() : project.lastCheckedAt })
   }
 
   const handleManualScan = async (e: React.MouseEvent) => {
