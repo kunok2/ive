@@ -183,7 +183,7 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
                   {closing ? (
                     <i className="fa-solid fa-spinner fa-spin" />
                   ) : (
-                    <><i className="fa-solid fa-xmark mr-1.5" />닫기</>
+                    <><i className="fa-solid fa-xmark mr-1.5" />버림</>
                   )}
                 </button>
               </div>
@@ -211,9 +211,9 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
         open={showCloseConfirm}
         onClose={() => setShowCloseConfirm(false)}
         onConfirm={handleCloseMR}
-        title="MR 닫기"
-        message={`!${mr?.iid} ${mr?.source_branch}\n\n머지하지 않고 이 MR을 닫을까요?`}
-        confirmLabel="닫기"
+        title="MR 버림"
+        message={`!${mr?.iid} ${mr?.source_branch}\n\n머지하지 않고 이 MR을 버릴까요?`}
+        confirmLabel="버림"
         danger
       />
 

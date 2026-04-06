@@ -323,9 +323,9 @@
     "selectedCount": "{count}건 선택",
     "sequentialMerge": "순차 머지",
     "merging": "머지 중...",
-    "closeMR": "MR 닫기",
-    "closingMR": "닫는 중...",
-    "closed": "닫기 완료"
+    "closeMR": "MR 버림",
+    "closingMR": "버리는 중...",
+    "closed": "버림 완료"
   },
   "issue": {
     "issues": "이슈",
@@ -540,8 +540,8 @@
     "limitExceededTitle": "제한 초과",
     "mrMergeTitle": "MR 머지 확인",
     "mrMergeConfirm": "!{iid} {source} → {target}\n\n이 MR을 머지할까요?",
-    "mrCloseTitle": "MR 닫기",
-    "mrCloseConfirm": "!{iid} {source}\n\n머지하지 않고 이 MR을 닫을까요?"
+    "mrCloseTitle": "MR 버림",
+    "mrCloseConfirm": "!{iid} {source}\n\n머지하지 않고 이 MR을 버릴까요?"
   },
   "color": {
     "green": "초록",
@@ -587,7 +587,7 @@
     "merging": "머지 중...",
     "cannotMerge": "머지 불가",
     "merge": "머지",
-    "closeMR": "닫기"
+    "closeMR": "버림"
   },
   "report": {
     "weekly": "주간",

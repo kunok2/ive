@@ -323,9 +323,9 @@
     "selectedCount": "{count} selected",
     "sequentialMerge": "Sequential Merge",
     "merging": "Merging...",
-    "closeMR": "Close MR",
-    "closingMR": "Closing...",
-    "closed": "Closed"
+    "closeMR": "Discard MR",
+    "closingMR": "Discarding...",
+    "closed": "Discarded"
   },
   "issue": {
     "issues": "Issues",
@@ -539,8 +539,8 @@
     "limitExceededTitle": "Limit Exceeded",
     "mrMergeTitle": "Confirm MR Merge",
     "mrMergeConfirm": "!{iid} {source} → {target}\n\nMerge this MR?",
-    "mrCloseTitle": "Close MR",
-    "mrCloseConfirm": "!{iid} {source}\n\nClose this MR without merging?"
+    "mrCloseTitle": "Discard MR",
+    "mrCloseConfirm": "!{iid} {source}\n\nDiscard this MR without merging?"
   },
   "color": {
     "green": "Green",
@@ -586,7 +586,7 @@
     "merging": "Merging...",
     "cannotMerge": "Cannot Merge",
     "merge": "Merge",
-    "closeMR": "Close"
+    "closeMR": "Discard"
   },
   "report": {
     "weekly": "Weekly",
