@@ -956,11 +956,15 @@ function SendLogView() {
 
 // ── Settings Panel ──
 
+interface SettingField {
+  key: string; label: string; type: 'text' | 'password' | 'number' | 'textarea' | 'model-select'
+  placeholder?: string; defaultValue?: string; rows?: number; cliName?: string
+}
 interface SettingGroup {
   key: string
   label: string
   icon: string
-  fields: { key: string; label: string; type: 'text' | 'password' | 'number' | 'textarea'; placeholder?: string; defaultValue?: string; rows?: number }[]
+  fields: SettingField[]
 }
 
 const SETTING_GROUPS: SettingGroup[] = [
@@ -968,7 +972,9 @@ const SETTING_GROUPS: SettingGroup[] = [
     key: 'cli_paths', label: 'cliPathLabel', icon: 'fa-solid fa-terminal',
     fields: [
       { key: 'cli.claude.path', label: 'Claude Code', type: 'text', placeholder: '/usr/local/bin/claude', defaultValue: '/usr/local/bin/claude' },
+      { key: 'cli.claude.model', label: 'Claude Model', type: 'model-select', cliName: 'claude' },
       { key: 'cli.opencode.path', label: 'OpenCode', type: 'text', placeholder: '/usr/local/bin/opencode', defaultValue: '/usr/local/bin/opencode' },
+      { key: 'cli.opencode.model', label: 'OpenCode Model', type: 'model-select', cliName: 'opencode' },
     ],
   },
   {
@@ -1014,6 +1020,52 @@ const CLI_ICONS: Record<string, string> = {
   codex: 'fa-solid fa-code',
 }
 
+function ModelSelect({ models, value, onChange }: { models: string[]; value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  const options = [{ value: '', label: 'CLI 기본값' }, ...models.map(m => ({ value: m, label: m }))]
+  const selected = options.find(o => o.value === value) || options[0]
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2 text-sm text-left flex items-center justify-between focus:outline-none focus:border-ive-green/50"
+      >
+        <span className={value ? 'text-ive-text' : 'text-ive-text-dim'}>{selected.label}</span>
+        <i className={`fa-solid fa-chevron-${open ? 'up' : 'down'} text-xs text-ive-text-dim`} />
+      </button>
+      {open && (
+        <div className="absolute z-50 mt-1 w-full bg-[#1c1c20] border border-ive-border rounded-lg shadow-lg max-h-52 overflow-y-auto overscroll-contain [&::-webkit-scrollbar]:w-[3px] [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-ive-text-dim/30 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-ive-text-dim/50">
+          {options.map(o => (
+            <button
+              key={o.value}
+              type="button"
+              onClick={() => { onChange(o.value); setOpen(false) }}
+              className={`w-full px-3 py-2 text-sm text-left hover:bg-white/[0.05] ${
+                o.value === value ? 'text-ive-green font-bold' : 'text-ive-text'
+              } ${o.value === '' ? 'text-ive-text-dim' : ''}`}
+            >
+              {o.value === value && <i className="fa-solid fa-check text-xs mr-2" />}
+              {o.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function SettingsPanel() {
   const t = useTranslations('admin')
   const tc = useTranslations('common')
@@ -1030,6 +1082,8 @@ function SettingsPanel() {
   const [pricingFetching, setPricingFetching] = useState(false)
   const [pricingSaving, setPricingSaving] = useState(false)
   const [pricingSaved, setPricingSaved] = useState(false)
+  // CLI 모델 목록
+  const [cliModels, setCliModels] = useState<Record<string, string[]>>({})
 
   useEffect(() => {
     fetch('/api/admin/env')
@@ -1048,6 +1102,7 @@ function SettingsPanel() {
       })
       .catch(() => setLoading(false))
     fetch('/api/settings/pricing').then(r => r.json()).then(setPricingItems).catch(() => {})
+    fetch('/api/settings/cli-models').then(r => r.json()).then(setCliModels).catch(() => {})
   }, [])
 
   function updateSetting(key: string, value: string) {
@@ -1112,7 +1167,7 @@ function SettingsPanel() {
       </div>
 
       {SETTING_GROUPS.map(group => (
-        <div key={group.key} className="bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden">
+        <div key={group.key} className="bg-ive-bg-card border border-ive-border-subtle rounded-lg">
           <button
             onClick={() => setExpandedGroup(expandedGroup === group.key ? null : group.key)}
             className="w-full px-4 py-3 flex items-center gap-2 text-left hover:bg-white/[0.02]"
@@ -1130,7 +1185,13 @@ function SettingsPanel() {
               {group.fields.map(field => (
                 <div key={field.key}>
                   <label className="block text-xs font-bold text-ive-text-muted mb-1">{field.label}</label>
-                  {field.type === 'textarea' ? (
+                  {field.type === 'model-select' ? (
+                    <ModelSelect
+                      models={cliModels[field.cliName || ''] || []}
+                      value={settings[field.key] || ''}
+                      onChange={v => updateSetting(field.key, v)}
+                    />
+                  ) : field.type === 'textarea' ? (
                     <textarea
                       value={settings[field.key] || ''}
                       onChange={e => updateSetting(field.key, e.target.value)}

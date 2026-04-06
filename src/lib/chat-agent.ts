@@ -111,6 +111,7 @@ async function prepareChatSpawn(opts: ChatAgentOptions) {
 
   const isFirstMessage = !cliSessionId
   const resolvedCliPath = await resolveCliPath(agent)
+  const systemCliModel = getSystemSetting(`cli.${agent.cliName}.model`)
   const isOpenCode = agent.cliName === 'opencode'
   const cliParts = resolvedCliPath.split(' ')
   const mainCmd = cliParts[0]
@@ -148,7 +149,7 @@ ${userMessage}
 
   if (isOpenCode) {
     const opencodeConfig: any = {
-      agent: { coder: { steps: 20, permission: 'allow' } },
+      agent: { coder: { steps: 20, permission: 'allow', ...(systemCliModel ? { model: systemCliModel } : {}) } },
       compaction: { auto: true },
     }
     if (mcpServers) opencodeConfig.mcp = mcpServers
@@ -187,6 +188,7 @@ ${userMessage}
       '--output-format', 'stream-json',
       '--verbose',
       '--max-turns', '20',
+      ...(systemCliModel ? ['--model', systemCliModel] : []),
       '--allowedTools', 'Read', 'Edit', 'Write', 'Grep', 'Glob', 'Bash', 'WebFetch',
     ]
     if (cliSessionId) {

@@ -156,10 +156,13 @@ function formatOpenCodeEventMarkdown(event: any): string | null {
 function extractMeta(event: any, usage?: any): string | null {
   const meta: string[] = [];
   const u = usage || {};
-  const inputT = u.input_tokens ?? u.inputTokens ?? event.input_tokens;
+  const baseInput = u.input_tokens ?? u.inputTokens ?? event.input_tokens ?? 0;
+  const cacheCreate = u.cache_creation_input_tokens ?? 0;
+  const cacheRead = u.cache_read_input_tokens ?? 0;
+  const inputT = Number(baseInput) + Number(cacheCreate) + Number(cacheRead);
   const outputT = u.output_tokens ?? u.outputTokens ?? event.output_tokens;
   if (inputT || outputT) meta.push(`입력 ${Number(inputT||0).toLocaleString()} + 출력 ${Number(outputT||0).toLocaleString()} 토큰`);
-  const cost = event.cost_usd ?? event.costUsd ?? event.cost;
+  const cost = event.total_cost_usd ?? event.cost_usd ?? event.costUsd ?? event.cost;
   if (cost) meta.push(`비용 $${Number(cost).toFixed(4)}`);
   const dur = event.duration_ms ?? event.durationMs ?? event.duration_api_ms;
   if (dur) meta.push(`응답 ${(Number(dur) / 1000).toFixed(1)}초`);
@@ -912,8 +915,9 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
 - When designing UI, provide text-art mockups of the result where possible.
 - IMPORTANT: ${langInstruction}`;
 
-    // 5. 에이전트 CLI 실행 (시스템 설정의 CLI 경로 우선 사용)
+    // 5. 에이전트 CLI 실행 (시스템 설정의 CLI 경로/모델 우선 사용)
     const systemCliPath = getSystemSetting(`cli.${agent.cliName}.path`);
+    const systemCliModel = getSystemSetting(`cli.${agent.cliName}.model`);
     let resolvedCliPath = systemCliPath || agent.cliPath;
     // CLI 경로가 존재하지 않으면 which로 자동 탐색
     const mainBin = resolvedCliPath.split(' ')[0];
@@ -948,7 +952,7 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
         // opencode run --format json "prompt"
         // max-turns, permissions, MCP는 OPENCODE_CONFIG_CONTENT 환경변수로 전달
         const opencodeConfig: any = {
-          agent: { coder: { steps: agent.maxTurns || 200, permission: 'allow' } },
+          agent: { coder: { steps: agent.maxTurns || 200, permission: 'allow', ...(systemCliModel ? { model: systemCliModel } : {}) } },
           compaction: { auto: true },
         };
         if (mcpServers) opencodeConfig.mcp = mcpServers;
@@ -1002,6 +1006,7 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
           '--output-format', 'stream-json',
           '--verbose',
           '--max-turns', String(agent.maxTurns || 200),
+          ...(systemCliModel ? ['--model', systemCliModel] : []),
           '--allowedTools', ...allowedTools,
           '-p', prompt,
         ];
@@ -1107,9 +1112,10 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
           }
           // 토큰/비용/턴 누적
           if (event.type === 'result') {
-            const iT = event.input_tokens ?? event.inputTokens ?? event.usage?.input_tokens ?? 0;
-            const oT = event.output_tokens ?? event.outputTokens ?? event.usage?.output_tokens ?? 0;
-            const cost = event.cost_usd ?? event.costUsd ?? event.cost ?? 0;
+            const u = event.usage ?? {};
+            const iT = (u.input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0);
+            const oT = u.output_tokens ?? event.output_tokens ?? event.outputTokens ?? 0;
+            const cost = event.total_cost_usd ?? event.cost_usd ?? event.costUsd ?? event.cost ?? 0;
             const turns = event.num_turns ?? event.numTurns ?? 0;
             totalInputTokens += Number(iT);
             totalOutputTokens += Number(oT);
