@@ -1166,8 +1166,8 @@ function SettingsPanel() {
         {t('systemSettingsDesc')}
       </div>
 
-      {SETTING_GROUPS.map(group => (
-        <div key={group.key} className="bg-ive-bg-card border border-ive-border-subtle rounded-lg">
+      {SETTING_GROUPS.map((group, groupIdx) => (
+        <div key={group.key} className="bg-ive-bg-card border border-ive-border-subtle rounded-lg relative" style={{ zIndex: SETTING_GROUPS.length - groupIdx }}>
           <button
             onClick={() => setExpandedGroup(expandedGroup === group.key ? null : group.key)}
             className="w-full px-4 py-3 flex items-center gap-2 text-left hover:bg-white/[0.02]"
