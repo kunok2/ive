@@ -1036,7 +1036,7 @@ function ModelSelect({ models, value, onChange }: { models: string[]; value: str
   const selected = options.find(o => o.value === value) || options[0]
 
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref} className={`relative ${open ? 'z-50' : ''}`}>
       <button
         type="button"
         onClick={() => setOpen(!open)}
@@ -1046,7 +1046,7 @@ function ModelSelect({ models, value, onChange }: { models: string[]; value: str
         <i className={`fa-solid fa-chevron-${open ? 'up' : 'down'} text-xs text-ive-text-dim`} />
       </button>
       {open && (
-        <div className="absolute z-50 mt-1 w-full bg-[#1c1c20] border border-ive-border rounded-lg shadow-lg max-h-52 overflow-y-auto overscroll-contain [&::-webkit-scrollbar]:w-[3px] [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-ive-text-dim/30 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-ive-text-dim/50">
+        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden shadow-lg shadow-black/30 max-h-52 overflow-y-auto overscroll-contain [&::-webkit-scrollbar]:w-[3px] [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-ive-text-dim/30 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-ive-text-dim/50">
           {options.map(o => (
             <button
               key={o.value}
