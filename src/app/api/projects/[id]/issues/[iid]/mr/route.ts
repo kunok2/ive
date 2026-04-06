@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
-import { getProject } from '@/lib/db'
+import { getProject, markIssueVerified, touchProjectActivity } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { decrypt } from '@/lib/crypto'
-import { fetchMRByBranch, mergeMR, closeMR } from '@/lib/provider'
+import { fetchMRByBranch, mergeMR, closeMR, fetchSingleIssue, addIssueLabels, removeIssueLabels } from '@/lib/provider'
+import { logActivity } from '@/lib/activity'
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string; iid: string }> }) {
   const user = await getCurrentUser()
@@ -65,6 +66,33 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     try {
       const result = await mergeMR(project, decryptedToken, mr.iid)
+
+      // 머지 성공 시 IVE-V → IVE-E 레이블 자동 전환
+      try {
+        const labelV = project.labelVerify || 'IVE-V'
+        const labelE = project.labelEnd || 'IVE-E'
+        const issue = await fetchSingleIssue(project, Number(iid), decryptedToken)
+        if (issue) {
+          const labels: string[] = issue.labels || []
+          if (labels.includes(labelV) && !labels.includes(labelE)) {
+            await removeIssueLabels(project, Number(iid), decryptedToken, [labelV])
+            await addIssueLabels(project, Number(iid), decryptedToken, [labelE])
+            markIssueVerified(id, Number(iid))
+            touchProjectActivity(id)
+            logActivity({
+              userId: user.id,
+              category: 'task',
+              action: 'task_complete',
+              detail: `머지 완료 → 자동 전환 (이슈 #${iid}, ${project.name})`,
+              targetType: 'issue',
+              targetId: `${id}:${iid}`,
+            })
+          }
+        }
+      } catch (labelErr) {
+        console.error(`[MR] 이슈 #${iid} 레이블 전환 실패:`, labelErr)
+      }
+
       return NextResponse.json({ success: true, mr: result })
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
