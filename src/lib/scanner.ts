@@ -1020,6 +1020,7 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
       }
 
       log(`CMD: ${mainCmd} ${args.slice(0, isOpenCode ? -1 : -2).join(' ')} [prompt omitted]`, 'system');
+      if (systemCliModel) log(`MODEL: ${systemCliModel}`, 'system');
       log(`CWD: ${workspacePath}`, 'system');
 
       const child = spawn(mainCmd, args, {
@@ -1046,7 +1047,8 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
 
       const processEvent = (event: any) => {
         // 모델명 캡처 (어떤 이벤트든 model 필드가 있으면 저장)
-        const eventModel = event.model ?? event.modelId ?? event.model_id ?? '';
+        const eventModel = event.model ?? event.modelId ?? event.model_id
+          ?? event.message?.model ?? event.session?.model ?? '';
         if (eventModel && !detectedModel) detectedModel = eventModel;
 
         if (isOpenCode) {
@@ -1159,11 +1161,15 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
         // 토큰/비용/턴 DB 저장 (CLI가 cost를 제공하지 않으면 토큰 수로 환산)
         // result 이벤트에서 turns를 못 가져왔으면 assistant 이벤트 카운트를 사용
         const finalTurns = totalTurns > 0 ? totalTurns : assistantTurnCount;
+        const finalModel = detectedModel || systemCliModel || undefined;
         if (totalInputTokens || totalOutputTokens || totalCostUsd || finalTurns) {
           const finalCost = totalCostUsd > 0
             ? totalCostUsd
-            : calcCostFromDb(agent.cliName, totalInputTokens, totalOutputTokens, detectedModel || undefined);
-          updateExecutionTokens(executionId, totalInputTokens, totalOutputTokens, finalCost, finalTurns, detectedModel || undefined);
+            : calcCostFromDb(agent.cliName, totalInputTokens, totalOutputTokens, finalModel);
+          updateExecutionTokens(executionId, totalInputTokens, totalOutputTokens, finalCost, finalTurns, finalModel);
+        } else if (finalModel) {
+          // 토큰 데이터가 없어도 모델명은 저장
+          updateExecutionTokens(executionId, 0, 0, 0, 0, finalModel);
         }
         if (code === 0) resolve();
         else reject(new Error(`Agent CLI exited with code ${code}`));

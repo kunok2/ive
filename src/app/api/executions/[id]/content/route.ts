@@ -32,5 +32,6 @@ export async function GET(
     startedAt: execution.startedAt,
     agentName: agent?.name ?? execution.agentName ?? '',
     agentAvatar: agent?.avatar ?? 'av-01',
+    modelName: execution.modelName ?? '',
   })
 }

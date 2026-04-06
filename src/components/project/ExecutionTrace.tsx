@@ -113,11 +113,18 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
                       {ex.status === 'running' ? '실행 중' : ex.status === 'success' ? '완료' : '실패'}
                     </span>
                   </div>
-                  {ex.agentName && (
+                  {(ex.agentName || ex.modelName) && (
                     <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                      <span className="text-sm font-bold text-ive-green/70 bg-ive-green/10 border border-ive-green/20 px-1.5 py-0.5 rounded">
-                        <i className="fa-solid fa-robot mr-1 text-sm" />{ex.agentName}
-                      </span>
+                      {ex.agentName && (
+                        <span className="text-sm font-bold text-ive-green/70 bg-ive-green/10 border border-ive-green/20 px-1.5 py-0.5 rounded">
+                          <i className="fa-solid fa-robot mr-1 text-sm" />{ex.agentName}
+                        </span>
+                      )}
+                      {ex.modelName && (
+                        <span className="text-sm font-mono text-ive-cyan bg-ive-cyan/10 border border-ive-cyan/20 px-1.5 py-0.5 rounded">
+                          <i className="fa-solid fa-microchip mr-1 text-sm" />{ex.modelName}
+                        </span>
+                      )}
                     </div>
                   )}
                   <div className="flex items-center justify-end text-sm text-ive-text-muted group-hover:text-ive-text-dim">
