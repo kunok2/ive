@@ -408,9 +408,9 @@ interface SendLogEntry {
 }
 
 const REPORT_TYPE_OPTIONS_STATIC = [
-  { value: 'weekly', labelKey: 'weekly' as const, icon: 'fa-solid fa-calendar-week', scheduleKey: 'scheduleWeekly' as const },
-  { value: 'monthly', labelKey: 'monthly' as const, icon: 'fa-solid fa-calendar', scheduleKey: 'scheduleMonthly' as const },
-  { value: 'yearly', labelKey: 'yearly' as const, icon: 'fa-solid fa-calendar-check', scheduleKey: 'scheduleYearly' as const },
+  { value: 'weekly', labelKey: 'weekly' as const, icon: 'fa-solid fa-calendar-week', scheduleKey: 'scheduleWeekly' as const, sendDayKey: 'sendDayWeekly' as const },
+  { value: 'monthly', labelKey: 'monthly' as const, icon: 'fa-solid fa-calendar', scheduleKey: 'scheduleMonthly' as const, sendDayKey: 'sendDayMonthly' as const },
+  { value: 'yearly', labelKey: 'yearly' as const, icon: 'fa-solid fa-calendar-check', scheduleKey: 'scheduleYearly' as const, sendDayKey: 'sendDayYearly' as const },
 ]
 
 function MailPanel() {
@@ -792,9 +792,10 @@ function ReportScheduleView() {
                   </button>
                 </div>
 
-                {/* 발송 시각 */}
+                {/* 발송 시점: 발송일(고정) + 시각(선택) */}
                 <div className="flex items-center gap-3">
                   <label className="text-xs font-bold text-ive-text-muted w-20 shrink-0">{t('sendTime')}</label>
+                  <span className="text-xs font-bold text-ive-text">{t(opt.sendDayKey)}</span>
                   <select
                     value={form.sendHour ?? 9}
                     onChange={e => setEditForm(prev => ({ ...prev, sendHour: Number(e.target.value) }))}
