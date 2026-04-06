@@ -85,6 +85,11 @@ export default function ExecutionList({ executions, showAgent = true, onKill, ki
               )}
               <span className="text-sm font-bold text-ive-green">#{ex.issueIid}</span>
               <span className="text-xs font-mono font-bold text-ive-text-muted">{formatTimeWithSeconds(ex.startedAt, userLocale, userTz)}</span>
+              {ex.modelName && (
+                <span className="text-xs font-mono text-ive-cyan bg-ive-cyan/10 border border-ive-cyan/20 px-1 py-0.5 rounded shrink-0">
+                  <i className="fa-solid fa-microchip mr-0.5" />{ex.modelName}
+                </span>
+              )}
             </div>
             <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
               ex.status === 'running' ? 'bg-ive-amber/20 text-ive-amber animate-pulse' :

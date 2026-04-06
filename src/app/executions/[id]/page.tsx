@@ -22,6 +22,7 @@ interface ExecInfo {
   startedAt: string
   agentName: string
   agentAvatar: string
+  modelName: string
 }
 
 export default function ExecutionDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -55,6 +56,7 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
             startedAt: data.startedAt,
             agentName: data.agentName,
             agentAvatar: data.agentAvatar,
+            modelName: data.modelName ?? '',
           })
         }
       })
@@ -120,6 +122,11 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
                 </div>
                 <div className="flex items-center gap-2 text-xs text-ive-text-dim">
                   <span className="font-bold">{execInfo.agentName}</span>
+                  {execInfo.modelName && (
+                    <span className="font-mono text-ive-cyan bg-ive-cyan/10 border border-ive-cyan/20 px-1.5 py-0.5 rounded">
+                      <i className="fa-solid fa-microchip mr-0.5" />{execInfo.modelName}
+                    </span>
+                  )}
                   {connected && activity && (
                     <span className="text-xs bg-ive-bg-deep px-1.5 py-0.5 rounded font-mono truncate max-w-[140px]">
                       {activity.tool === 'thinking' ? te('thinking') : activity.tool}
