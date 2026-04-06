@@ -7,7 +7,6 @@ import AgentAvatar from '@/components/agent/AgentAvatar'
 import type { ToolActivity } from '@/lib/tool-activity'
 import { useTranslations } from 'next-intl'
 import { useStore } from '@/lib/store'
-import { formatTimeWithSeconds } from '@/lib/format-date'
 
 function formatDuration(startedAt: string): string {
   const s = Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000)
@@ -115,7 +114,6 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5 min-w-0">
                   <span className="text-sm font-bold text-ive-green">#{execInfo.issueIid}</span>
-                  <span className="text-xs font-mono font-bold text-ive-text-muted">{formatTimeWithSeconds(execInfo.startedAt, userLocale, userTz)}</span>
                   {execInfo.issueTitle && (
                     <span className="text-sm text-ive-text font-bold truncate">{execInfo.issueTitle}</span>
                   )}

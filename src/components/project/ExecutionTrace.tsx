@@ -5,7 +5,6 @@ import { TaskExecution } from '@/types'
 import LogViewer from '@/components/ui/LogViewer'
 import MarqueeText from '@/components/ui/MarqueeText'
 import { useStore } from '@/lib/store'
-import { formatTimeWithSeconds } from '@/lib/format-date'
 
 function formatDuration(startedAt: string, endedAt?: string): string {
   const start = new Date(startedAt).getTime()
@@ -104,7 +103,7 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
                   className="w-full text-left bg-ive-bg-card border border-ive-border-subtle p-4 rounded-lg hover:border-ive-green/50 hover:bg-ive-green/5 transition-all group cursor-pointer"
                 >
                   <div className="flex items-center justify-between mb-1.5 gap-2">
-                    <MarqueeText className="text-base font-bold text-ive-green-pale">Issue #{ex.issueIid} <span className="text-ive-text-muted font-mono text-sm font-bold">{formatTimeWithSeconds(ex.startedAt, userLocale, userTz)}</span>{ex.issueTitle && ` — ${ex.issueTitle}`}</MarqueeText>
+                    <MarqueeText className="text-base font-bold text-ive-green-pale">Issue #{ex.issueIid}{ex.issueTitle && ` — ${ex.issueTitle}`}</MarqueeText>
                     <span className={`text-sm font-bold px-2 py-0.5 rounded-full tracking-tighter ${
                       ex.status === 'running' ? 'bg-ive-amber/20 text-ive-amber animate-pulse' :
                       ex.status === 'success' ? 'bg-ive-green/20 text-ive-green' :
