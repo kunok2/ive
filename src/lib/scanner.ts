@@ -724,12 +724,12 @@ async function executeTask(
       year: 'numeric', month: '2-digit', day: '2-digit',
       hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
     });
-    log(`\x1b[1;36m${'═'.repeat(50)}\x1b[0m`, 'info');
+    log(`\x1b[1;36m${'═'.repeat(30)}\x1b[0m`, 'info');
     log(`Started: ${startDateStr} (${ownerTz})`, 'system');
     log(`Issue #${iid}: ${issue.title}`, 'system');
     log(`Agent : ${agent.name}`, 'system');
     log(`Project: ${project.name}`, 'system');
-    log(`\x1b[1;36m${'═'.repeat(50)}\x1b[0m`, 'info');
+    log(`\x1b[1;36m${'═'.repeat(30)}\x1b[0m`, 'info');
 
     // 1. 작업 디렉토리 준비
     log("작업 디렉토리 준비 중...", 'system');
