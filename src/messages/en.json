@@ -377,6 +377,7 @@
     "commentPlaceholder": "Comment...",
     "postCommentOnly": "Post Comment Only",
     "postComment": "Post Comment",
+    "postCommentShort": "Post",
     "postAndRetryHint": "Post comment then AI retries",
     "postAndRetry": "Post Comment & Retry",
     "postAndDoneHint": "Post comment and mark as done",
