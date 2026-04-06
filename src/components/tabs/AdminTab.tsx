@@ -415,7 +415,18 @@ const REPORT_TYPE_OPTIONS_STATIC = [
 
 function MailPanel() {
   const t = useTranslations('admin')
-  const [view, setView] = useState<MailSubView>('broadcast')
+  const [view, setView] = useState<MailSubView>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('admin-mail-subview')
+      if (saved === 'broadcast' || saved === 'reports' || saved === 'logs') return saved
+    }
+    return 'broadcast'
+  })
+
+  const handleSetView = (v: MailSubView) => {
+    setView(v)
+    localStorage.setItem('admin-mail-subview', v)
+  }
 
   const views: { key: MailSubView; label: string; icon: string }[] = [
     { key: 'broadcast', label: t('mailSend'), icon: 'fa-solid fa-paper-plane' },
@@ -430,7 +441,7 @@ function MailPanel() {
         {views.map(v => (
           <button
             key={v.key}
-            onClick={() => setView(v.key)}
+            onClick={() => handleSetView(v.key)}
             className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
               view === v.key
                 ? 'bg-ive-green/15 text-ive-green border border-ive-green/30'
