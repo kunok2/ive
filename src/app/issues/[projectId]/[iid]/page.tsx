@@ -1110,7 +1110,6 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
           {/* Comment mode input */}
           {mode === 'comment' && (
             <div className="flex flex-col gap-2">
-            <div className="flex gap-2 items-end">
               <textarea
                 value={comment}
                 onChange={e => {
@@ -1131,40 +1130,41 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                 }}
                 placeholder={tIssue('commentPlaceholder')}
                 rows={1}
-                className="flex-1 min-h-10 bg-ive-bg-card border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-green/50 overflow-hidden"
+                className="w-full min-h-10 bg-ive-bg-card border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-green/50 overflow-hidden"
               />
-              <button
-                onClick={handlePostComment}
-                disabled={posting || !comment.trim()}
-                className="shrink-0 w-10 h-10 rounded-lg bg-ive-green text-ive-bg-deep flex items-center justify-center active:scale-95 transition-all disabled:opacity-40"
-                title={tIssue('postCommentOnly')}
-                aria-label={tIssue('postComment')}
-              >
-                {postingType === 'comment' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <i className="fa-solid fa-paper-plane" />}
-              </button>
-              {issue.stage !== 'dev' && (
+              <div className="flex gap-2 justify-end">
                 <button
-                  onClick={() => handleCommentAndRetry()}
+                  onClick={handlePostComment}
                   disabled={posting || !comment.trim()}
-                  className="shrink-0 h-10 px-3 rounded-lg bg-ive-cyan text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold whitespace-nowrap"
-                  title={tIssue('postAndRetryHint')}
-                  aria-label={tIssue('postAndRetry')}
+                  className="shrink-0 h-10 px-3 rounded-lg bg-ive-green text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold whitespace-nowrap"
+                  title={tIssue('postCommentOnly')}
+                  aria-label={tIssue('postComment')}
                 >
-                  {postingType === 'retry' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-paper-plane" /><span>{issue.stage === 'none' ? tIssue('run') : tIssue('rerun')}</span></>}
+                  {postingType === 'comment' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-paper-plane" /><span>{tIssue('postCommentShort')}</span></>}
                 </button>
-              )}
-              {issue.stage === 'verifying' && (
-                <button
-                  onClick={handleCommentAndDone}
-                  disabled={posting || !comment.trim()}
-                  className="shrink-0 h-10 px-3 rounded-lg bg-emerald-500 text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold whitespace-nowrap"
-                  title={tIssue('postAndDoneHint')}
-                  aria-label={tIssue('postAndDone')}
-                >
-                  {postingType === 'done' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-circle-check" /><span>{tIssue('done')}</span></>}
-                </button>
-              )}
-            </div>
+                {issue.stage !== 'dev' && (
+                  <button
+                    onClick={() => handleCommentAndRetry()}
+                    disabled={posting || !comment.trim()}
+                    className="shrink-0 h-10 px-3 rounded-lg bg-ive-cyan text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold whitespace-nowrap"
+                    title={tIssue('postAndRetryHint')}
+                    aria-label={tIssue('postAndRetry')}
+                  >
+                    {postingType === 'retry' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-paper-plane" /><span>{issue.stage === 'none' ? tIssue('run') : tIssue('rerun')}</span></>}
+                  </button>
+                )}
+                {issue.stage === 'verifying' && (
+                  <button
+                    onClick={handleCommentAndDone}
+                    disabled={posting || !comment.trim()}
+                    className="shrink-0 h-10 px-3 rounded-lg bg-emerald-500 text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold whitespace-nowrap"
+                    title={tIssue('postAndDoneHint')}
+                    aria-label={tIssue('postAndDone')}
+                  >
+                    {postingType === 'done' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-circle-check" /><span>{tIssue('done')}</span></>}
+                  </button>
+                )}
+              </div>
             {/* 작업자 선택 — 버튼 행 아래 */}
             {issue.stage !== 'dev' && projectAgents.length > 0 && (
               <div ref={retryAgentPickerRef} className="relative flex items-center">

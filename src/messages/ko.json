@@ -378,6 +378,7 @@
     "commentPlaceholder": "코멘트...",
     "postCommentOnly": "코멘트만 등록",
     "postComment": "코멘트 등록",
+    "postCommentShort": "등록",
     "postAndRetryHint": "코멘트 등록 후 AI가 다시 작업합니다",
     "postAndRetry": "코멘트 등록 및 재실행",
     "postAndDoneHint": "코멘트 등록 후 검증 완료 처리합니다",
