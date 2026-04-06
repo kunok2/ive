@@ -1132,11 +1132,11 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                 rows={1}
                 className="w-full min-h-10 bg-ive-bg-card border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-green/50 overflow-hidden"
               />
-              <div className="flex gap-2 justify-end">
+              <div className="flex gap-2 justify-end overflow-hidden">
                 <button
                   onClick={handlePostComment}
                   disabled={posting || !comment.trim()}
-                  className="shrink-0 h-10 px-3 rounded-lg bg-ive-green text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold whitespace-nowrap"
+                  className="shrink-0 h-10 px-3 rounded-lg bg-ive-green text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-40 text-xs font-bold whitespace-nowrap"
                   title={tIssue('postCommentOnly')}
                   aria-label={tIssue('postComment')}
                 >
@@ -1146,7 +1146,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                   <button
                     onClick={() => handleCommentAndRetry()}
                     disabled={posting || !comment.trim()}
-                    className="shrink-0 h-10 px-3 rounded-lg bg-ive-cyan text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold whitespace-nowrap"
+                    className="shrink-0 h-10 px-3 rounded-lg bg-ive-cyan text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-40 text-xs font-bold whitespace-nowrap"
                     title={tIssue('postAndRetryHint')}
                     aria-label={tIssue('postAndRetry')}
                   >
@@ -1157,7 +1157,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                   <button
                     onClick={handleCommentAndDone}
                     disabled={posting || !comment.trim()}
-                    className="shrink-0 h-10 px-3 rounded-lg bg-emerald-500 text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold whitespace-nowrap"
+                    className="shrink-0 h-10 px-3 rounded-lg bg-emerald-500 text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-40 text-xs font-bold whitespace-nowrap"
                     title={tIssue('postAndDoneHint')}
                     aria-label={tIssue('postAndDone')}
                   >
