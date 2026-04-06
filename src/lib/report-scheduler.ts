@@ -3,9 +3,6 @@ import { sendReport } from './report-mailer'
 
 let schedulerStarted = false
 
-/** 고정 발송 시점 (KST 09:00) */
-const SEND_HOUR = 9
-
 export function startReportScheduler() {
   if (schedulerStarted) return
   schedulerStarted = true
@@ -35,27 +32,28 @@ function checkAndSendReports() {
   // 정시 0~4분 사이에만 체크 (중복 실행 방지)
   if (kstMinute > 4) return
 
-  // 발송 시각이 아니면 건너뜀
-  if (kstHour !== SEND_HOUR) return
-
   const schedules = getAllReportSchedules()
 
   for (const schedule of schedules) {
     if (!schedule.enabled || schedule.recipients.length === 0) continue
 
+    // 각 스케줄의 발송 시각 확인
+    const sendHour = schedule.sendHour ?? 9
+    if (kstHour !== sendHour) continue
+
     let shouldSend = false
 
     switch (schedule.reportType) {
       case 'weekly':
-        // 매주 월요일 09시 → 지난주(월~일) 보고서
+        // 매주 월요일 → 지난주(월~일) 보고서
         shouldSend = kstDayOfWeek === 1
         break
       case 'monthly':
-        // 매월 1일 09시 → 지난달 보고서
+        // 매월 1일 → 지난달 보고서
         shouldSend = kstDayOfMonth === 1
         break
       case 'yearly':
-        // 매년 1월 1일 09시 → 작년 보고서
+        // 매년 1월 1일 → 작년 보고서
         shouldSend = kstMonth === 1 && kstDayOfMonth === 1
         break
     }

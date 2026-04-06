@@ -398,7 +398,7 @@ type MailSubView = 'broadcast' | 'reports' | 'logs'
 
 interface ReportScheduleState {
   id: string; reportType: string; enabled: boolean
-  recipients: string[]
+  recipients: string[]; sendHour: number
 }
 
 interface SendLogEntry {
@@ -670,6 +670,7 @@ function ReportScheduleView() {
           reportType,
           enabled: form.enabled ?? true,
           recipients: form.recipients || [],
+          sendHour: form.sendHour ?? 9,
         }),
       })
       if (res.ok) {
@@ -763,7 +764,7 @@ function ReportScheduleView() {
                   onClick={() => {
                     const newSchedule: ReportScheduleState = {
                       id: `rs-${opt.value}`, reportType: opt.value, enabled: true,
-                      recipients: [],
+                      recipients: [], sendHour: 9,
                     }
                     setSchedules(prev => [...prev, newSchedule])
                     startEdit(newSchedule)
@@ -791,13 +792,19 @@ function ReportScheduleView() {
                   </button>
                 </div>
 
-                {/* 발송 시점 (고정) */}
+                {/* 발송 시각 */}
                 <div className="flex items-center gap-3">
                   <label className="text-xs font-bold text-ive-text-muted w-20 shrink-0">{t('sendTime')}</label>
-                  <span className="text-xs text-ive-cyan font-bold">{t(opt.scheduleKey)} KST</span>
-                  <span className="text-xs text-ive-text-dim">
-                    {t('sendTimeDesc', { label: optLabel })}
-                  </span>
+                  <select
+                    value={form.sendHour ?? 9}
+                    onChange={e => setEditForm(prev => ({ ...prev, sendHour: Number(e.target.value) }))}
+                    className="bg-ive-bg-deep border border-ive-border-subtle rounded-lg px-2 py-1.5 text-xs font-bold text-ive-cyan outline-none"
+                  >
+                    {Array.from({ length: 24 }, (_, h) => (
+                      <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
+                    ))}
+                  </select>
+                  <span className="text-xs text-ive-text-dim">KST</span>
                 </div>
 
                 {/* 수신자 */}
@@ -844,7 +851,7 @@ function ReportScheduleView() {
             {/* 요약 정보 (편집 중 아닐 때) */}
             {!isEditing && schedule && schedule.recipients.length > 0 && (
               <div className="px-4 pb-3 text-xs text-ive-text-dim">
-                {t(opt.scheduleKey)} KST | {schedule.recipients.slice(0, 3).join(', ')}
+                {t(opt.scheduleKey, { hour: String(schedule.sendHour ?? 9).padStart(2, '0') })} KST | {schedule.recipients.slice(0, 3).join(', ')}
                 {schedule.recipients.length > 3 && ` +${schedule.recipients.length - 3}`}
               </div>
             )}

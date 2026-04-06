@@ -1610,6 +1610,7 @@ function mapReportSchedule(r: any): ReportSchedule {
     reportType: r.report_type,
     enabled: !!r.enabled,
     recipients: JSON.parse(r.recipients || '[]'),
+    sendHour: r.send_hour ?? 9,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   }
@@ -1630,14 +1631,16 @@ export function getReportScheduleByType(reportType: string): ReportSchedule | nu
 }
 
 export function upsertReportSchedule(s: ReportSchedule) {
+  const sendHour = s.sendHour ?? 9
   getDb().prepare(`
     INSERT INTO report_schedules (id, report_type, enabled, recipients, send_day, send_hour, created_at, updated_at)
-    VALUES (?, ?, ?, ?, 1, 9, ?, datetime('now'))
+    VALUES (?, ?, ?, ?, 1, ?, ?, datetime('now'))
     ON CONFLICT(id) DO UPDATE SET
       enabled = excluded.enabled,
       recipients = excluded.recipients,
+      send_hour = excluded.send_hour,
       updated_at = datetime('now')
-  `).run(s.id, s.reportType, s.enabled ? 1 : 0, JSON.stringify(s.recipients), s.createdAt || new Date().toISOString())
+  `).run(s.id, s.reportType, s.enabled ? 1 : 0, JSON.stringify(s.recipients), sendHour, s.createdAt || new Date().toISOString())
 }
 
 export function deleteReportSchedule(id: string) {

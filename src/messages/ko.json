@@ -526,9 +526,9 @@
     "smtpMail": "SMTP 메일",
     "dataRetention": "데이터 보관",
     "mcpServer": "MCP 서버",
-    "scheduleWeekly": "매주 월요일 09:00",
-    "scheduleMonthly": "매월 1일 09:00",
-    "scheduleYearly": "매년 1월 1일 09:00"
+    "scheduleWeekly": "매주 월요일 {hour}:00",
+    "scheduleMonthly": "매월 1일 {hour}:00",
+    "scheduleYearly": "매년 1월 1일 {hour}:00"
   },
   "dialog": {
     "notification": "알림",

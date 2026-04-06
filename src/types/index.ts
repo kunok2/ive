@@ -188,6 +188,7 @@ export interface ReportSchedule {
   reportType: ReportType
   enabled: boolean
   recipients: string[]       // 수신자 이메일 목록
+  sendHour: number           // 발송 시각 (0~23, KST)
   createdAt: string
   updatedAt: string
 }

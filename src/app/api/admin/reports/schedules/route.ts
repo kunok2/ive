@@ -16,7 +16,7 @@ export async function POST(req: Request) {
   if (!user?.isAdmin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const body = await req.json()
-  const { reportType, enabled, recipients } = body
+  const { reportType, enabled, recipients, sendHour } = body
 
   if (!reportType || !['weekly', 'monthly', 'yearly'].includes(reportType)) {
     return NextResponse.json({ error: '유효하지 않은 보고서 유형입니다.' }, { status: 400 })
@@ -36,6 +36,7 @@ export async function POST(req: Request) {
     reportType,
     enabled: enabled ?? true,
     recipients: recipientEmails,
+    sendHour: sendHour ?? 9,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   }

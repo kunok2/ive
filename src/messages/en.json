@@ -525,9 +525,9 @@
     "smtpMail": "SMTP Mail",
     "dataRetention": "Data Retention",
     "mcpServer": "MCP Server",
-    "scheduleWeekly": "Every Monday 09:00",
-    "scheduleMonthly": "1st of every month 09:00",
-    "scheduleYearly": "January 1st every year 09:00"
+    "scheduleWeekly": "Every Monday {hour}:00",
+    "scheduleMonthly": "1st of every month {hour}:00",
+    "scheduleYearly": "January 1st every year {hour}:00"
   },
   "dialog": {
     "notification": "Notice",
