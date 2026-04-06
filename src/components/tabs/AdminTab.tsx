@@ -905,7 +905,7 @@ function SendLogView() {
               </span>
             </div>
             <div className="flex items-center gap-2 mt-1 text-xs text-ive-text-dim">
-              <span>{log.periodStart} ~ {log.periodEnd}</span>
+              <span>{log.periodStart} ~ {new Date(new Date(log.periodEnd).getTime() - 86400000).toISOString().slice(0, 10)}</span>
               <span className="ml-auto">{formatDateFull(log.sentAt, userLocale, userTz)}</span>
             </div>
             {log.errorMessage && (
