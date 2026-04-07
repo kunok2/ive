@@ -302,6 +302,14 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
       </div>
     </div>
 
+    ${total > 0 ? `
+    <!-- 총평 -->
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:20px;margin-bottom:20px;">
+      <h3 style="color:#14532d;font-size:14px;margin:0 0 12px;font-weight:700;">📋 총평</h3>
+      <p style="color:#166534;font-size:13px;line-height:1.8;margin:0;">${summary}</p>
+    </div>
+    ` : ''}
+
     ${hasPrev ? `
     <!-- 전 기간 비교 요약 -->
     <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:16px;margin-bottom:20px;">
@@ -515,14 +523,6 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
     ${total === 0 ? `
     <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:32px;text-align:center;margin-bottom:20px;">
       <p style="color:#6b7280;font-size:14px;margin:0;">해당 기간에 실행된 작업이 없습니다.</p>
-    </div>
-    ` : ''}
-
-    ${total > 0 ? `
-    <!-- 총평 -->
-    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:20px;margin-bottom:20px;">
-      <h3 style="color:#14532d;font-size:14px;margin:0 0 12px;font-weight:700;">📋 총평</h3>
-      <p style="color:#166534;font-size:13px;line-height:1.8;margin:0;">${summary}</p>
     </div>
     ` : ''}
 
