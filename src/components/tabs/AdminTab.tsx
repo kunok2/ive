@@ -1071,6 +1071,7 @@ function SettingsPanel() {
   const tc = useTranslations('common')
   const { alert } = useDialog()
   const [settings, setSettings] = useState<Record<string, string>>({})
+  const [passwordsSet, setPasswordsSet] = useState<Record<string, boolean>>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -1090,13 +1091,20 @@ function SettingsPanel() {
       .then(r => r.json())
       .then(data => {
         const s = data.settings || {}
+        const pwSet: Record<string, boolean> = {}
         for (const group of SETTING_GROUPS) {
           for (const field of group.fields) {
             if (field.defaultValue && !s[field.key]) {
               s[field.key] = field.defaultValue
             }
+            // 비밀번호 마스크 처리: __password_set__ 값은 "저장됨" 표시용으로 변환
+            if (field.type === 'password' && s[field.key] === '__password_set__') {
+              pwSet[field.key] = true
+              s[field.key] = ''
+            }
           }
         }
+        setPasswordsSet(pwSet)
         setSettings(s)
         setLoading(false)
       })
@@ -1175,13 +1183,21 @@ function SettingsPanel() {
             <i className={`${group.icon} text-sm text-ive-text-dim`} />
             <span className="text-sm font-bold text-ive-text flex-1">{t(group.label as any)}</span>
             <span className="text-xs text-ive-text-dim">
-              {group.fields.filter(f => settings[f.key]).length}/{group.fields.length}
+              {group.fields.filter(f => settings[f.key] || passwordsSet[f.key]).length}/{group.fields.length}
             </span>
             <i className={`fa-solid fa-chevron-${expandedGroup === group.key ? 'up' : 'down'} text-xs text-ive-text-dim`} />
           </button>
 
           {expandedGroup === group.key && (
             <div className="px-4 pb-4 border-t border-ive-border-dark space-y-3 pt-3">
+              {/* Gmail 앱 비밀번호 안내 */}
+              {group.key === 'mail' && (
+                <div className="bg-ive-amber/10 border border-ive-amber/30 rounded-lg px-3 py-2.5 text-xs text-ive-amber leading-relaxed">
+                  <i className="fa-solid fa-triangle-exclamation mr-1.5" />
+                  {t('gmailAppPasswordGuide')}
+                </div>
+              )}
+
               {group.fields.map(field => (
                 <div key={field.key}>
                   <label className="block text-xs font-bold text-ive-text-muted mb-1">{field.label}</label>
@@ -1199,6 +1215,32 @@ function SettingsPanel() {
                       rows={field.rows ?? 5}
                       className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green/50 font-mono resize-y"
                     />
+                  ) : field.type === 'password' ? (
+                    // 비밀번호 필드: 저장된 경우 "저장됨" 표시 + 변경 버튼
+                    passwordsSet[field.key] && !settings[field.key] ? (
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2 text-xs text-ive-green flex items-center gap-1.5">
+                          <i className="fa-solid fa-circle-check" />
+                          <span>{t('passwordSaved')}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setPasswordsSet(prev => ({ ...prev, [field.key]: false }))}
+                          className="px-3 py-2 text-xs font-bold bg-ive-bg-deep border border-ive-border-subtle text-ive-text-dim rounded-lg active:scale-[0.98] transition-all"
+                        >
+                          {t('changePassword')}
+                        </button>
+                      </div>
+                    ) : (
+                      <input
+                        type="password"
+                        value={settings[field.key] || ''}
+                        onChange={e => updateSetting(field.key, e.target.value)}
+                        placeholder={passwordsSet[field.key] ? t('newPasswordPlaceholder') : field.placeholder}
+                        autoComplete="new-password"
+                        className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green/50"
+                      />
+                    )
                   ) : (
                     <input
                       type={field.type}
