@@ -1374,9 +1374,14 @@ function ElapsedTimer({ startTime }: { startTime: number | null }) {
   )
 }
 
-/** 노트 본문 정리: 도구 태그 제거, HTML 태그를 MD로 변환 */
+/** 노트 본문 정리: 도구 태그 제거, HTML 태그를 MD로 변환, ANSI 이스케이프 제거 */
 function cleanNoteBody(body: string): string {
   return body
+    // ANSI 이스케이프 시퀀스 제거 (터미널 출력이 노트에 포함된 경우)
+    .replace(/\x1b\[[0-9;?]*[A-Za-z@]/g, '')
+    .replace(/\x1b\][^\x07\x1b]*\x07/g, '')
+    .replace(/\x1b[a-zA-Z]/g, '')
+    .replace(/\r/g, '')
     .split('\n')
     .filter(line => !line.match(/^>\s*\*{0,2}🔧/))
     .join('\n')

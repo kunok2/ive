@@ -2,6 +2,200 @@
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 
+// ── 가상 터미널 버퍼 (커서 이동·CR·줄 지우기 지원) ──
+
+/** ANSI 이스케이프를 제외한 가시적 문자 길이 */
+function visualLen(s: string): number {
+  let len = 0, i = 0
+  while (i < s.length) {
+    if (s[i] === '\x1b') {
+      const m = s.slice(i).match(/^\x1b(?:\[[0-9;?]*[A-Za-z@]|\][^\x07\x1b]*\x07|[()][A-Z0-9]|[a-zA-Z])/)
+      if (m) { i += m[0].length; continue }
+      i++
+    } else { len++; i++ }
+  }
+  return len
+}
+
+/** 가시적 열 위치에 해당하는 바이트 위치 반환 */
+function findBytePos(s: string, visualCol: number): number {
+  let vc = 0, i = 0
+  while (i < s.length && vc < visualCol) {
+    if (s[i] === '\x1b') {
+      const m = s.slice(i).match(/^\x1b(?:\[[0-9;?]*[A-Za-z@]|\][^\x07\x1b]*\x07|[()][A-Z0-9]|[a-zA-Z])/)
+      if (m) { i += m[0].length; continue }
+      i++
+    } else { vc++; i++ }
+  }
+  return i
+}
+
+/** 가시적 col 위치에 newText를 덧씌우기 (기존 문자 대체) */
+function overlayText(line: string, col: number, newText: string): string {
+  if (!newText) return line
+  const newVL = visualLen(newText)
+  const start = findBytePos(line, col)
+  const end = findBytePos(line, col + newVL)
+  if (start > line.length) return line + ' '.repeat(start - line.length) + newText
+  return line.slice(0, start) + newText + line.slice(end)
+}
+
+/** 가시적 col 위치부터 줄 끝까지 삭제 */
+function eraseLineFrom(line: string, col: number): string {
+  return line.slice(0, findBytePos(line, col))
+}
+
+interface TermRow { raw: string; timestamp?: number }
+
+/**
+ * 가상 터미널 버퍼:
+ * 로그 파일의 각 줄을 처리하며 CR·커서 이동·줄 지우기를 해석해
+ * 최종 렌더링될 화면 상태를 유지합니다.
+ */
+class TerminalBuffer {
+  rows: TermRow[] = []
+  curRow = 0
+  curCol = 0
+  private savedRow = 0
+  private savedCol = 0
+
+  private ensureRow(r: number) {
+    // 너무 큰 값 방어 (비정상 이스케이프 시퀀스 대비)
+    const safeR = Math.min(r, this.rows.length + 500)
+    while (this.rows.length <= safeR) this.rows.push({ raw: '' })
+  }
+
+  /**
+   * 로그 파일의 한 엔트리(줄) 처리.
+   * 암시적 개행이 끝에 추가됩니다 (로그 파일은 \n으로 분리되므로).
+   */
+  writeEntry(content: string, timestamp?: number) {
+    let i = 0
+    let chunk = ''
+
+    const flush = () => {
+      if (!chunk) return
+      this.ensureRow(this.curRow)
+      if (timestamp !== undefined) this.rows[this.curRow].timestamp = timestamp
+      this.rows[this.curRow].raw = overlayText(this.rows[this.curRow].raw, this.curCol, chunk)
+      this.curCol += visualLen(chunk)
+      chunk = ''
+    }
+
+    while (i < content.length) {
+      const ch = content[i]
+
+      // 캐리지 리턴: 현재 줄의 처음으로 이동
+      if (ch === '\r') { flush(); this.curCol = 0; i++; continue }
+
+      // 개행: 다음 줄로 이동
+      if (ch === '\n') {
+        flush(); this.curRow++; this.ensureRow(this.curRow); this.curCol = 0; i++; continue
+      }
+
+      // 이스케이프 시퀀스
+      if (ch === '\x1b') {
+        // CSI 시퀀스: \x1b[...X
+        if (content[i + 1] === '[') {
+          const m = content.slice(i).match(/^\x1b\[([0-9;?]*)([A-Za-z@])/)
+          if (m) {
+            const rawParam = m[1].replace(/\?/g, '')
+            const cmd = m[2]
+
+            // SGR(색상/스타일)은 chunk에 포함해 renderAnsiSpan에서 처리
+            if (cmd === 'm') { chunk += m[0]; i += m[0].length; continue }
+
+            flush()
+            const parts = rawParam.split(';')
+            const n = Math.max(1, parseInt(parts[0]) || 1)
+            const n2 = Math.max(1, parseInt(parts[1] || '1') || 1)
+
+            switch (cmd) {
+              case 'A': this.curRow = Math.max(0, this.curRow - n); break
+              case 'B': this.curRow += n; this.ensureRow(this.curRow); break
+              case 'C': this.curCol += n; break
+              case 'D': this.curCol = Math.max(0, this.curCol - n); break
+              case 'E': this.curRow++; this.ensureRow(this.curRow); this.curCol = 0; break
+              case 'F': this.curRow = Math.max(0, this.curRow - n); this.curCol = 0; break
+              case 'G': this.curCol = Math.max(0, n - 1); break
+              case 'H': case 'f': {
+                this.curRow = Math.max(0, n - 1)
+                this.curCol = Math.max(0, n2 - 1)
+                this.ensureRow(this.curRow)
+                break
+              }
+              case 'J': {
+                const p = parseInt(rawParam) || 0
+                if (p === 2 || p === 3) {
+                  // 전체 화면 지우기
+                  this.rows = [{ raw: '' }]; this.curRow = 0; this.curCol = 0
+                } else if (p === 0) {
+                  // 커서~끝 지우기
+                  this.ensureRow(this.curRow)
+                  this.rows[this.curRow].raw = eraseLineFrom(this.rows[this.curRow].raw, this.curCol)
+                  this.rows.splice(this.curRow + 1)
+                }
+                break
+              }
+              case 'K': {
+                const p = parseInt(rawParam) || 0
+                this.ensureRow(this.curRow)
+                if (p === 0) {
+                  // 커서~줄 끝 지우기
+                  this.rows[this.curRow].raw = eraseLineFrom(this.rows[this.curRow].raw, this.curCol)
+                } else if (p === 1) {
+                  // 줄 시작~커서 지우기
+                  const pos = findBytePos(this.rows[this.curRow].raw, this.curCol)
+                  this.rows[this.curRow].raw = ' '.repeat(this.curCol) + this.rows[this.curRow].raw.slice(pos)
+                } else if (p === 2) {
+                  this.rows[this.curRow].raw = ''; this.curCol = 0
+                }
+                break
+              }
+              case 's': this.savedRow = this.curRow; this.savedCol = this.curCol; break
+              case 'u': this.curRow = this.savedRow; this.curCol = this.savedCol; break
+              // 나머지 CSI 코드는 무시 (커서 표시/숨기기 등)
+            }
+            i += m[0].length; continue
+          }
+        } else if (content[i + 1] === ']') {
+          // OSC 시퀀스 (제목 설정 등) 건너뜀
+          flush()
+          const bel = content.indexOf('\x07', i)
+          if (bel !== -1) { i = bel + 1; continue }
+          const st = content.indexOf('\x1b\\', i)
+          if (st !== -1) { i = st + 2; continue }
+        }
+        // 기타 이스케이프: 건너뜀
+        i++; continue
+      }
+
+      chunk += ch; i++
+    }
+
+    flush()
+    // 각 로그 엔트리는 \n으로 끝나므로 암시적 개행 처리
+    this.curRow++
+    this.ensureRow(this.curRow)
+    this.curCol = 0
+  }
+
+  trimToMax(max: number): void {
+    if (this.rows.length > max) {
+      const remove = this.rows.length - max
+      this.rows.splice(0, remove)
+      this.curRow = Math.max(0, this.curRow - remove)
+    }
+  }
+
+  /** 후행 빈 줄을 제외한 표시용 줄 반환 */
+  getDisplayLines(): TermRow[] {
+    let end = this.rows.length
+    while (end > 0 && !this.rows[end - 1].raw) end--
+    return this.rows.slice(0, end)
+  }
+}
+
 // ── ANSI 이스케이프 시퀀스 파서 ──
 
 interface AnsiSpan {
@@ -88,7 +282,13 @@ function parseAnsi(text: string): AnsiSpan[] {
         i++
       }
     } else if (part.length > 0) {
-      const cleaned = part.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').replace(/\x1b\][^\x07]*\x07/g, '')
+      // TerminalBuffer가 처리했지만 혹시 남은 커서 이동·제어 코드 제거
+      const cleaned = part
+        .replace(/\x1b\[[0-9;?]*[A-Za-z@]/g, '')
+        .replace(/\x1b\][^\x07]*\x07/g, '')
+        .replace(/\x1b[()][A-Z0-9]/g, '')
+        .replace(/\x1b[a-zA-Z]/g, '')
+        .replace(/\r/g, '')
       if (cleaned.length > 0) {
         spans.push({ text: cleaned, bold, italic, underline, dim, strikethrough, fg, bg })
       }
@@ -331,31 +531,43 @@ export default function LogViewer({
   const containerRef = useRef<HTMLDivElement>(null)
   const autoScrollRef = useRef(initialAutoScroll)
   const linesRef = useRef<LineData[]>([])
+  const vtermRef = useRef<TerminalBuffer | null>(null)
   const initialLoadedRef = useRef(false)
   const [connected, setConnected] = useState(false)
 
   const TIMESTAMP_PREFIX_RE = /^(\d{13,})\t(.*)$/
   const appendLines = useCallback((text: string) => {
     if (!text) return
-    const newLines = text.split('\n').map((raw: string): LineData => {
+
+    if (!vtermRef.current) vtermRef.current = new TerminalBuffer()
+    const vterm = vtermRef.current
+
+    const entries = text.split('\n')
+    // 마지막 빈 항목 제거 (trailing newline)
+    if (entries.length > 0 && entries[entries.length - 1] === '') entries.pop()
+    if (entries.length === 0) return
+
+    for (const raw of entries) {
       const m = raw.match(TIMESTAMP_PREFIX_RE)
       if (m) {
-        const content = m[2]
-        return { raw: content, hasAnsi: ANSI_ESCAPE_RE.test(content), timestamp: Number(m[1]) }
+        vterm.writeEntry(m[2], Number(m[1]))
+      } else {
+        vterm.writeEntry(raw)
       }
-      return { raw, hasAnsi: ANSI_ESCAPE_RE.test(raw) }
-    })
-    if (newLines.length > 0 && newLines[newLines.length - 1].raw === '') {
-      newLines.pop()
     }
-    if (newLines.length === 0) return
 
-    linesRef.current = [...linesRef.current, ...newLines]
-    if (linesRef.current.length > maxLines) {
-      linesRef.current = linesRef.current.slice(-maxLines)
-    }
-    setLines([...linesRef.current])
-    onLineCountChange?.(linesRef.current.length)
+    vterm.trimToMax(maxLines)
+
+    const termLines = vterm.getDisplayLines()
+    const newLines: LineData[] = termLines.map(r => ({
+      raw: r.raw,
+      hasAnsi: ANSI_ESCAPE_RE.test(r.raw),
+      timestamp: r.timestamp,
+    }))
+
+    linesRef.current = newLines
+    setLines([...newLines])
+    onLineCountChange?.(newLines.length)
   }, [maxLines, onLineCountChange])
 
   const scrollToBottom = useCallback(() => {
