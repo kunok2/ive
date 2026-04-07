@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { getExecutionsInRange, getAllTokenPricing, getDailyWaitingTrend } from '@/lib/db'
-import { calcCost } from '@/lib/token-pricing'
+import { resolveExecutionCost } from '@/lib/token-pricing'
 import { getKSTTodayString, utcISOToKSTDate, utcISOToKSTMonth } from '@/lib/date-utils'
 
 function getWeekRange(date: Date): { start: string; end: string } {
@@ -112,7 +112,7 @@ export async function GET(req: NextRequest) {
   const avgDurationMin = finishedCount > 0 ? totalDurationMin / finishedCount : 0
   const totalInputTokens = execs.reduce((s, e) => s + e.inputTokens, 0)
   const totalOutputTokens = execs.reduce((s, e) => s + e.outputTokens, 0)
-  const totalCost = execs.reduce((s, e) => s + calcCost(pricingMap, e.cliName, e.inputTokens, e.outputTokens), 0)
+  const totalCost = execs.reduce((s, e) => s + resolveExecutionCost(e, pricingMap), 0)
   const successRate = totalTasks > 0 ? (successCount / (successCount + failedCount || 1)) * 100 : 0
 
   // 이전 기간 요약
@@ -121,7 +121,7 @@ export async function GET(req: NextRequest) {
   const prevFailedCount = prevExecs.filter(e => e.status === 'failed').length
   const prevTotalDurationMin = prevExecs.reduce((s, e) => s + durationMin(e.startedAt, e.endedAt), 0)
   const prevFinished = prevSuccessCount + prevFailedCount
-  const prevTotalCost = prevExecs.reduce((s, e) => s + calcCost(pricingMap, e.cliName, e.inputTokens, e.outputTokens), 0)
+  const prevTotalCost = prevExecs.reduce((s, e) => s + resolveExecutionCost(e, pricingMap), 0)
   const prevSuccessRate = prevTotalTasks > 0 ? (prevSuccessCount / (prevFinished || 1)) * 100 : 0
 
   // 이전 기간 프로젝트별
@@ -133,7 +133,7 @@ export async function GET(req: NextRequest) {
   const prevByProject = Array.from(prevProjectMap.entries()).map(([pid, pExecs]) => ({
     projectId: pid, projectName: pExecs[0].projectName,
     tasks: pExecs.length,
-    cost: Math.round(pExecs.reduce((s, e) => s + calcCost(pricingMap, e.cliName, e.inputTokens, e.outputTokens), 0) * 100) / 100,
+    cost: Math.round(pExecs.reduce((s, e) => s + resolveExecutionCost(e, pricingMap), 0) * 100) / 100,
   }))
 
   // 이전 기간 작업자별
@@ -145,7 +145,7 @@ export async function GET(req: NextRequest) {
   const prevByAgent = Array.from(prevAgentMap.entries()).map(([aid, aExecs]) => ({
     agentId: aid, agentName: aExecs[0].agentName,
     tasks: aExecs.length,
-    cost: Math.round(aExecs.reduce((s, e) => s + calcCost(pricingMap, e.cliName, e.inputTokens, e.outputTokens), 0) * 100) / 100,
+    cost: Math.round(aExecs.reduce((s, e) => s + resolveExecutionCost(e, pricingMap), 0) * 100) / 100,
   }))
 
   // 이전 기간 사용자별
@@ -159,7 +159,7 @@ export async function GET(req: NextRequest) {
     userId: uid, userName: uExecs[0].developerName,
     tasks: uExecs.length,
     issueCount: new Set(uExecs.map(e => `${e.projectId}:${e.issueIid}`)).size,
-    cost: Math.round(uExecs.reduce((s, e) => s + calcCost(pricingMap, e.cliName, e.inputTokens, e.outputTokens), 0) * 100) / 100,
+    cost: Math.round(uExecs.reduce((s, e) => s + resolveExecutionCost(e, pricingMap), 0) * 100) / 100,
   }))
 
   // 이전 기간 일별 트렌드 — 전체 기간 버킷 채움 (waitAvg, procAvg 포함)
@@ -171,7 +171,7 @@ export async function GET(req: NextRequest) {
     if (!prevDayMap.has(key)) prevDayMap.set(key, { tasks: 0, cost: 0, waitTimes: [], procTimes: [], verifyTimes: [] })
     const d = prevDayMap.get(key)!
     d.tasks++
-    d.cost += calcCost(pricingMap, e.cliName, e.inputTokens, e.outputTokens)
+    d.cost += resolveExecutionCost(e, pricingMap)
     if ((e.status === 'success' || e.status === 'failed') && e.endedAt) {
       const proc = durationMin(e.startedAt, e.endedAt)
       if (proc > 0) d.procTimes.push(proc)
@@ -209,7 +209,7 @@ export async function GET(req: NextRequest) {
     const pFailed = pExecs.filter(e => e.status === 'failed').length
     const pDur = pExecs.reduce((s, e) => s + durationMin(e.startedAt, e.endedAt), 0)
     const pFinished = pSuccess + pFailed
-    const pCost = pExecs.reduce((s, e) => s + calcCost(pricingMap, e.cliName, e.inputTokens, e.outputTokens), 0)
+    const pCost = pExecs.reduce((s, e) => s + resolveExecutionCost(e, pricingMap), 0)
 
     // By agent within project
     const agentMap = new Map<string, typeof pExecs>()
@@ -222,7 +222,7 @@ export async function GET(req: NextRequest) {
       const aFailed = aExecs.filter(e => e.status === 'failed').length
       const aDur = aExecs.reduce((s, e) => s + durationMin(e.startedAt, e.endedAt), 0)
       const aFinished = aSuccess + aFailed
-      const aCost = aExecs.reduce((s, e) => s + calcCost(pricingMap, e.cliName, e.inputTokens, e.outputTokens), 0)
+      const aCost = aExecs.reduce((s, e) => s + resolveExecutionCost(e, pricingMap), 0)
       return {
         agentId: aid, agentName: aExecs[0].agentName, agentAvatar: aExecs[0].agentAvatar, cliName: aExecs[0].cliName,
         tasks: aExecs.length, success: aSuccess, failed: aFailed,
@@ -258,7 +258,7 @@ export async function GET(req: NextRequest) {
     const aFailed = aExecs.filter(e => e.status === 'failed').length
     const aDur = aExecs.reduce((s, e) => s + durationMin(e.startedAt, e.endedAt), 0)
     const aFinished = aSuccess + aFailed
-    const aCost = aExecs.reduce((s, e) => s + calcCost(pricingMap, e.cliName, e.inputTokens, e.outputTokens), 0)
+    const aCost = aExecs.reduce((s, e) => s + resolveExecutionCost(e, pricingMap), 0)
     return {
       agentId: aid, agentName: aExecs[0].agentName, agentAvatar: aExecs[0].agentAvatar, cliName: aExecs[0].cliName,
       tasks: aExecs.length, success: aSuccess, failed: aFailed,
@@ -283,7 +283,7 @@ export async function GET(req: NextRequest) {
     const uFailed = uExecs.filter(e => e.status === 'failed').length
     const uDur = uExecs.reduce((s, e) => s + durationMin(e.startedAt, e.endedAt), 0)
     const uFinished = uSuccess + uFailed
-    const uCost = uExecs.reduce((s, e) => s + calcCost(pricingMap, e.cliName, e.inputTokens, e.outputTokens), 0)
+    const uCost = uExecs.reduce((s, e) => s + resolveExecutionCost(e, pricingMap), 0)
     const uniqueIssues = new Set(uExecs.map(e => `${e.projectId}:${e.issueIid}`))
     const uniqueProjects = new Set(uExecs.map(e => e.projectId))
     return {
@@ -314,7 +314,7 @@ export async function GET(req: NextRequest) {
     d.tasks++
     if (e.status === 'success') d.success++
     if (e.status === 'failed') d.failed++
-    d.cost += calcCost(pricingMap, e.cliName, e.inputTokens, e.outputTokens)
+    d.cost += resolveExecutionCost(e, pricingMap)
     if ((e.status === 'success' || e.status === 'failed') && e.endedAt) {
       const proc = durationMin(e.startedAt, e.endedAt)
       if (proc > 0) d.procTimes.push(proc)
@@ -357,7 +357,7 @@ export async function GET(req: NextRequest) {
     if (!pMap.has(key)) pMap.set(key, { tasks: 0, cost: 0 })
     const d = pMap.get(key)!
     d.tasks++
-    d.cost += calcCost(pricingMap, e.cliName, e.inputTokens, e.outputTokens)
+    d.cost += resolveExecutionCost(e, pricingMap)
   }
   const projectTrend = Array.from(projectDayMap.entries()).map(([pid, pMap]) => {
     const pInfo = execs.find(e => e.projectId === pid)!
@@ -386,7 +386,7 @@ export async function GET(req: NextRequest) {
     if (!aMap.has(key)) aMap.set(key, { tasks: 0, cost: 0 })
     const d = aMap.get(key)!
     d.tasks++
-    d.cost += calcCost(pricingMap, e.cliName, e.inputTokens, e.outputTokens)
+    d.cost += resolveExecutionCost(e, pricingMap)
   }
   const agentTrend = Array.from(agentDayMap.entries()).map(([aid, aMap]) => {
     const aInfo = execs.find(e => e.agentId === aid)!
@@ -416,7 +416,7 @@ export async function GET(req: NextRequest) {
     if (!uMap.has(key)) uMap.set(key, { tasks: 0, cost: 0 })
     const d = uMap.get(key)!
     d.tasks++
-    d.cost += calcCost(pricingMap, e.cliName, e.inputTokens, e.outputTokens)
+    d.cost += resolveExecutionCost(e, pricingMap)
   }
   const userTrend = Array.from(userDayMap.entries()).map(([uid, uMap]) => {
     const uInfo = execs.find(e => (e.developerUserId || e.developerName) === uid)!
@@ -458,7 +458,7 @@ export async function GET(req: NextRequest) {
           status: e.status as 'success' | 'failed',
           startedAt: e.startedAt,
           durationMin: Math.round(durationMin(e.startedAt, e.endedAt) * 10) / 10,
-          cost: Math.round(calcCost(pricingMap, e.cliName, e.inputTokens, e.outputTokens) * 100) / 100,
+          cost: Math.round(resolveExecutionCost(e, pricingMap) * 100) / 100,
           waitMin: (() => {
             const ws = e.issueCreatedAt
             return ws ? Math.round(durationMin(ws, e.startedAt) * 10) / 10 : null
