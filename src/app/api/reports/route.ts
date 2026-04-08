@@ -99,8 +99,8 @@ export async function GET(req: NextRequest) {
     return (new Date(endedAt).getTime() - new Date(startedAt).getTime()) / 60000
   }
 
-  // 대기시간 = issue_created_at(이슈 생성 시점) → started_at(실행 시작 시점)
-  // scanner.ts가 GitLab/GitHub 이슈의 created_at를 issue_created_at에 저장
+  // 대기시간 = issue_created_at(IVE-S 레이블 최초 감지 시각) → started_at(IVE-D, 에이전트 시작 시각)
+  // scanner.ts가 IVE-S 감지 시각을 issue_stages.scheduled_at에 저장하고, 이를 issue_created_at에 기록
 
   // Summary
   const totalTasks = execs.length

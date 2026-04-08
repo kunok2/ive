@@ -393,6 +393,10 @@ function initSchema(db: Database.Database) {
   try {
     db.exec(`ALTER TABLE issue_stages ADD COLUMN preferred_agent_id TEXT DEFAULT NULL`)
   } catch { /* 이미 존재 */ }
+  // scheduled_at 컬럼 마이그레이션 — IVE-S 레이블 최초 감지 시각
+  try {
+    db.exec(`ALTER TABLE issue_stages ADD COLUMN scheduled_at TEXT DEFAULT NULL`)
+  } catch { /* 이미 존재 */ }
 
   // 보고서 스케줄 테이블
   db.exec(`
@@ -1545,6 +1549,28 @@ export function getIssueStageUpdatedAt(_projectId: string, _issueIid: number): s
   return null
 }
 
+/**
+ * IVE-S 레이블이 스캐너에 최초 감지된 시각을 반환합니다.
+ * 대기시간 계산 기준점으로 사용됩니다 (issue.created_at 대신).
+ */
+export function getIssueScheduledAt(projectId: string, issueIid: number): string | null {
+  const r = getDb().prepare('SELECT scheduled_at FROM issue_stages WHERE project_id = ? AND issue_iid = ?').get(projectId, issueIid) as any
+  return r?.scheduled_at || null
+}
+
+/**
+ * IVE-S 레이블 최초 감지 시각을 기록합니다.
+ * 이미 기록되어 있으면 보존합니다 (COALESCE로 덮어쓰지 않음).
+ */
+export function recordIssueScheduledAt(projectId: string, issueIid: number, scheduledAt: string) {
+  getDb().prepare(`
+    INSERT INTO issue_stages (project_id, issue_iid, stage, scheduled_at, updated_at)
+    VALUES (?, ?, 'waiting', ?, datetime('now'))
+    ON CONFLICT(project_id, issue_iid) DO UPDATE SET
+      scheduled_at = COALESCE(issue_stages.scheduled_at, excluded.scheduled_at)
+  `).run(projectId, issueIid, scheduledAt)
+}
+
 export function setIssueStage(_projectId: string, _issueIid: number, _stage: IssueStage, _failReason?: string, _updatedAt?: string) {
   // no-op: 레이블 기반으로 전환됨
 }
@@ -1576,11 +1602,11 @@ export function getPreferredAgentMap(projectId: string): Map<number, string | nu
 }
 
 export function setPreferredAgent(projectId: string, issueIid: number, agentId: string | null) {
-  // UPSERT: 행이 없으면 생성, 있으면 업데이트 (stage는 빈 문자열로 — 더 이상 사용 안 함)
+  // UPSERT: 행이 없으면 생성, 있으면 preferred_agent_id만 업데이트 (scheduled_at, updated_at 보존)
   getDb().prepare(`
     INSERT INTO issue_stages (project_id, issue_iid, stage, preferred_agent_id, updated_at)
     VALUES (?, ?, '', ?, datetime('now'))
-    ON CONFLICT(project_id, issue_iid) DO UPDATE SET preferred_agent_id = excluded.preferred_agent_id, updated_at = excluded.updated_at
+    ON CONFLICT(project_id, issue_iid) DO UPDATE SET preferred_agent_id = excluded.preferred_agent_id
   `).run(projectId, issueIid, agentId)
 }
 

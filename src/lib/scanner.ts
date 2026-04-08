@@ -23,6 +23,8 @@ import {
   createActivityLog,
   setPreferredAgent,
   touchProjectActivity,
+  recordIssueScheduledAt,
+  getIssueScheduledAt,
 } from "./db";
 import { decrypt } from "./crypto";
 import { defaultLocale } from "@/i18n/config";
@@ -466,6 +468,11 @@ export async function scanProject(project: Project, force: boolean = false) {
       const stage = stageFromLabels(labels, project, { hasActiveExec: activeExec });
 
       if (stage === 'waiting') {
+        // IVE-S 최초 감지 시각 기록 (이미 기록된 경우 보존 — 대기시간 계산 기준)
+        try {
+          recordIssueScheduledAt(project.id, iid, now.toISOString());
+        } catch (e) { console.error('[Scanner] Failed to record scheduled_at:', e); }
+
         // 신규 이슈 감지 로그 (처음 발견된 이슈만)
         if (!hasAnyExecution(project.id, iid)) {
           try {
@@ -587,8 +594,8 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
       const assignType = preferredAgentId ? ' (지정 작업자)' : '';
       console.log(`[Scanner] [ASSIGN] Project: ${project.name}, Issue: #${issue.iid}, Agent: ${availableAgent.name}${assignType}${agentToken !== decryptedToken ? ' (자체 토큰)' : ''}`);
 
-      // 대기시간 계산 기준: 이슈 생성 시점
-      const waitingSince = issue.created_at || new Date().toISOString();
+      // 대기시간 계산 기준: IVE-S 레이블 최초 감지 시각 (이슈 생성 시각이 아님)
+      const waitingSince = getIssueScheduledAt(project.id, issue.iid) || new Date().toISOString();
 
       // 비동기로 태스크 실행 (개발자별 토큰 우선) — 트랜잭션은 executeTask 내에서 처리
       executeTask(project, issue, availableAgent, agentToken, waitingSince)
@@ -634,7 +641,7 @@ async function executeTask(
   updateAgentStatus(agent.id, 'busy');
 
   // 0. DB에 실행 시작 기록 — 트랜잭션으로 중복 배정 방지
-  // 대기시간 기준: 이슈가 대기 큐에 진입한 시점(issue_stages.updated_at)을 사용
+  // 대기시간 기준: IVE-S 레이블 최초 감지 시각 (issue_stages.scheduled_at)
   const effectiveCreatedAt = waitingSince || new Date().toISOString();
   const execution: Parameters<typeof createExecution>[0] = {
     id: executionId,
