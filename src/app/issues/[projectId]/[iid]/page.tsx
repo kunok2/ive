@@ -70,18 +70,23 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   const tAuth = useTranslations('auth')
 
   const STAGE_INFO: Record<string, { label: string; color: string; icon: string; bg: string }> = {
-    waiting:    { label: tStage('waiting'),    color: 'text-ive-green',    icon: 'fa-clock',              bg: 'bg-ive-green/10' },
-    dev:        { label: tStage('dev'),        color: 'text-ive-cyan',     icon: 'fa-code',               bg: 'bg-ive-cyan/10' },
-    dev_fail:   { label: tStage('dev_fail'),   color: 'text-ive-red',     icon: 'fa-circle-xmark',       bg: 'bg-ive-red/10' },
-    verifying:  { label: tStage('verifying'),  color: 'text-orange-400',  icon: 'fa-magnifying-glass',   bg: 'bg-orange-500/10' },
-    done:       { label: tStage('done'),       color: 'text-emerald-400', icon: 'fa-circle-check',       bg: 'bg-emerald-500/10' },
-    closed:     { label: tStage('closed'),     color: 'text-gray-400',    icon: 'fa-lock',               bg: 'bg-gray-500/10' },
-    rejected:   { label: tStage('rejected'),   color: 'text-rose-400',    icon: 'fa-rotate-left',        bg: 'bg-rose-500/10' },
-    unknown:    { label: tStage('unknown'),    color: 'text-ive-text-dim', icon: 'fa-question',         bg: 'bg-white/5' },
+    waiting:        { label: tStage('waiting'),        color: 'text-ive-green',    icon: 'fa-clock',              bg: 'bg-ive-green/10' },
+    verify_waiting: { label: tStage('verify_waiting'), color: 'text-yellow-400',   icon: 'fa-hourglass-half',     bg: 'bg-yellow-500/10' },
+    dev:            { label: tStage('dev'),            color: 'text-ive-cyan',     icon: 'fa-code',               bg: 'bg-ive-cyan/10' },
+    dev_fail:       { label: tStage('dev_fail'),       color: 'text-ive-red',     icon: 'fa-circle-xmark',       bg: 'bg-ive-red/10' },
+    verifying:      { label: tStage('verifying'),      color: 'text-orange-400',  icon: 'fa-magnifying-glass',   bg: 'bg-orange-500/10' },
+    done:           { label: tStage('done'),           color: 'text-emerald-400', icon: 'fa-circle-check',       bg: 'bg-emerald-500/10' },
+    closed:         { label: tStage('closed'),         color: 'text-gray-400',    icon: 'fa-lock',               bg: 'bg-gray-500/10' },
+    rejected:       { label: tStage('rejected'),       color: 'text-rose-400',    icon: 'fa-rotate-left',        bg: 'bg-rose-500/10' },
+    unknown:        { label: tStage('unknown'),        color: 'text-ive-text-dim', icon: 'fa-question',         bg: 'bg-white/5' },
   }
 
   const STAGE_ACTIONS: Record<string, StageAction[]> = {
     waiting: [],
+    verify_waiting: [
+      { action: 'start_verification', label: tIssue('startVerification'), icon: 'fa-play' },
+      { action: 'cancel', label: tIssue('cancelToWaiting'), icon: 'fa-rotate-left', danger: true },
+    ],
     dev: [
       { action: 'cancel', label: tIssue('cancelToDev'), icon: 'fa-rotate-left', danger: true },
     ],
@@ -897,7 +902,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
             </div>
           )}
           {/* MR 리뷰 섹션 - 스크롤 영역 안에 배치 */}
-          {(issue.stage === 'done' || issue.stage === 'dev' || issue.stage === 'verifying') && (
+          {(issue.stage === 'done' || issue.stage === 'dev' || issue.stage === 'verify_waiting' || issue.stage === 'verifying') && (
             <div className="pr-2">
               <MRReviewSection projectId={projectId} issueIid={Number(iid)} />
             </div>

@@ -414,22 +414,24 @@ export async function scanProject(project: Project, force: boolean = false) {
     const labelTarget = project.labelTarget;
     const labelS = project.labelSchedule || 'IVE-S';
     const labelD = project.labelDev || 'IVE-D';
+    const labelW = project.labelVerifyWait || 'IVE-W';
     const labelV = project.labelVerify || 'IVE-V';
     const labelE = project.labelEnd || 'IVE-E';
 
     // IVE 레이블이 있는 이슈를 기본으로 조회 (모든 IVE 관리 이슈)
     // + 상태 레이블 이슈도 병합 (IVE 없이 상태 레이블만 남은 경우 정리용)
-    const [targetIssues, sIssues, dIssues, vIssues, eIssues] = await Promise.all([
+    const [targetIssues, sIssues, dIssues, wIssues, vIssues, eIssues] = await Promise.all([
       fetchIssues(project, decryptedToken, labelTarget),
       fetchIssues(project, decryptedToken, labelS),
       fetchIssues(project, decryptedToken, labelD),
+      fetchIssues(project, decryptedToken, labelW),
       fetchIssues(project, decryptedToken, labelV),
       fetchIssues(project, decryptedToken, labelE),
     ]);
 
     // 이슈를 Map으로 병합 (iid → issue), closed 제외
     const issueMap = new Map<number, any>();
-    for (const issue of [...targetIssues, ...sIssues, ...dIssues, ...vIssues, ...eIssues]) {
+    for (const issue of [...targetIssues, ...sIssues, ...dIssues, ...wIssues, ...vIssues, ...eIssues]) {
       if (issue.state === 'closed') continue;
       issueMap.set(issue.iid, issue);
     }
@@ -442,7 +444,7 @@ export async function scanProject(project: Project, force: boolean = false) {
 
       if (!hasTarget) {
         // IVE 레이블 없음 — 고아 상태 레이블 정리
-        const orphanLabels = [labelS, labelD, labelV, labelE].filter(l => labels.includes(l));
+        const orphanLabels = [labelS, labelD, labelW, labelV, labelE].filter(l => labels.includes(l));
         if (orphanLabels.length > 0) {
           try { await removeIssueLabels(project, iid, decryptedToken, orphanLabels); } catch { /* ignore */ }
           console.log(`[Scanner] Issue #${iid} — orphan labels removed (no ${labelTarget}): ${orphanLabels.join(', ')}`);
@@ -453,7 +455,7 @@ export async function scanProject(project: Project, force: boolean = false) {
 
       // IVE-E가 있으면서 이전 단계 레이블 잔류 → 정리
       if (labels.includes(labelE)) {
-        const staleLabels = [labelS, labelD, labelV].filter(l => labels.includes(l));
+        const staleLabels = [labelS, labelD, labelW, labelV].filter(l => labels.includes(l));
         if (staleLabels.length > 0) {
           try { await removeIssueLabels(project, iid, decryptedToken, staleLabels); } catch { /* ignore */ }
           console.log(`[Scanner] Issue #${iid} — cleaned stale labels (has ${labelE}): ${staleLabels.join(', ')}`);
@@ -468,8 +470,8 @@ export async function scanProject(project: Project, force: boolean = false) {
       const activeExec = hasActiveExecution(project.id, iid);
       const stage = stageFromLabels(labels, project, { hasActiveExec: activeExec });
 
-      // 사람 작업 완료 감지: 담당자가 Git에서 레이블을 IVE-V 또는 IVE-E로 변경한 경우
-      if (activeExec && (stage === 'verifying' || stage === 'done')) {
+      // 사람 작업 완료 감지: 담당자가 Git에서 레이블을 IVE-W, IVE-V 또는 IVE-E로 변경한 경우
+      if (activeExec && (stage === 'verify_waiting' || stage === 'verifying' || stage === 'done')) {
         const userExec = getAssignedUserExecution(project.id, iid);
         if (userExec) {
           updateExecutionStatus(userExec.id, 'success', new Date().toISOString());
@@ -502,6 +504,9 @@ export async function scanProject(project: Project, force: boolean = false) {
           } catch (e) { console.error('[Scanner] Failed to log detect_issue activity:', e); }
         }
         waitingIssues.push(issue);
+      } else if (stage === 'verify_waiting') {
+        // 검증대기 이슈는 대기로 간주하여 카운트에 포함 (에이전트 배정은 하지 않음)
+        issueCount++;
       }
     }
 
@@ -513,7 +518,7 @@ export async function scanProject(project: Project, force: boolean = false) {
       issueCount += waiting;
     }
 
-    // 마지막 체크 시간 및 대기 이슈 수 업데이트 (waiting만 카운트)
+    // 마지막 체크 시간 및 대기 이슈 수 업데이트 (waiting + verify_waiting 카운트)
     updateProjectLastChecked(project.id, now.toISOString(), issueCount);
 
     // 충돌 감지 작업 배정: done 상태 이슈가 2개 이상이면 MR 충돌 가능성 있음
@@ -1378,12 +1383,12 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
         await addGitLabSpentTime(project, iid, token, durationStr);
       }
 
-      // 레이블 전환: IVE-D 제거, IVE-V 부착 (검증 대기)
+      // 레이블 전환: IVE-D 제거, IVE-W 부착 (검증대기)
       try {
         await removeIssueLabels(project, iid, token, [project.labelDev || 'IVE-D']);
-        await addIssueLabels(project, iid, token, [project.labelVerify || 'IVE-V']);
+        await addIssueLabels(project, iid, token, [project.labelVerifyWait || 'IVE-W']);
       } catch (e) { console.warn(`[Scanner] Label switch failed:`, e); }
-      log("작업 완료 → 검증 대기 (IVE-V).", 'system');
+      log("작업 완료 → 검증대기 (IVE-W). 검증자가 검증시작을 클릭하면 검증이 시작됩니다.", 'system');
       updateExecutionStatus(executionId, 'success', new Date().toISOString());
     } else {
       log("코드 변경사항 없음. 작업 완료로 처리.", 'system');
@@ -1397,10 +1402,10 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
           await addGitLabSpentTime(project, iid, token, durationStr);
         }
       } catch (e) { console.warn(`[Scanner] Remote comment failed:`, e); }
-      // 코드 변경 없음 → IVE-D 제거, IVE-V 부착 (검증 대기)
+      // 코드 변경 없음 → IVE-D 제거, IVE-W 부착 (검증대기)
       try {
         await removeIssueLabels(project, iid, token, [project.labelDev || 'IVE-D']);
-        await addIssueLabels(project, iid, token, [project.labelVerify || 'IVE-V']);
+        await addIssueLabels(project, iid, token, [project.labelVerifyWait || 'IVE-W']);
       } catch (e) { console.warn(`[Scanner] Label switch failed:`, e); }
       updateExecutionStatus(executionId, 'success', new Date().toISOString());
     }
