@@ -22,6 +22,10 @@ interface ExecInfo {
   agentName: string
   agentAvatar: string
   modelName: string
+  status: string
+  assigneeType: 'agent' | 'user'
+  userName: string | null
+  userAvatar: string | null
 }
 
 export default function ExecutionDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -48,7 +52,7 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
     fetch(`/api/executions/${id}/content`)
       .then(r => r.json())
       .then(data => {
-        if (data.agentName) {
+        if (data.agentName || data.assigneeType === 'user') {
           setExecInfo({
             issueIid: data.issueIid,
             issueTitle: data.issueTitle,
@@ -56,6 +60,10 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
             agentName: data.agentName,
             agentAvatar: data.agentAvatar,
             modelName: data.modelName ?? '',
+            status: data.status,
+            assigneeType: data.assigneeType ?? 'agent',
+            userName: data.userName ?? null,
+            userAvatar: data.userAvatar ?? null,
           })
         }
       })
@@ -106,31 +114,47 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
           </button>
           {execInfo ? (
             <div className="flex items-center gap-2 min-w-0">
-              <AgentAvatar
-                avatar={execInfo.agentAvatar}
-                size="sm"
-                toolBadge={connected && activity ? activity.category : null}
-              />
+              {execInfo.assigneeType === 'user' ? (
+                execInfo.userAvatar ? (
+                  <img src={execInfo.userAvatar} alt="" className="w-7 h-7 rounded-full border border-ive-cyan/30 shrink-0" />
+                ) : (
+                  <div className="w-7 h-7 rounded-full bg-ive-cyan/20 flex items-center justify-center shrink-0">
+                    <i className="fa-solid fa-user text-ive-cyan text-xs" />
+                  </div>
+                )
+              ) : (
+                <AgentAvatar
+                  avatar={execInfo.agentAvatar}
+                  size="sm"
+                  toolBadge={connected && activity ? activity.category : null}
+                />
+              )}
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="text-sm font-bold text-ive-green">#{execInfo.issueIid}</span>
+                  <span className={`text-sm font-bold ${execInfo.assigneeType === 'user' ? 'text-ive-cyan' : 'text-ive-green'}`}>#{execInfo.issueIid}</span>
                   {execInfo.issueTitle && (
                     <span className="text-sm text-ive-text font-bold truncate">{execInfo.issueTitle}</span>
                   )}
                 </div>
                 <div className="flex items-center gap-2 text-xs text-ive-text-dim">
-                  <span className="font-bold">{execInfo.agentName}</span>
-                  {execInfo.modelName && (
-                    <span className="font-mono text-ive-cyan bg-ive-cyan/10 border border-ive-cyan/20 px-1.5 py-0.5 rounded">
-                      <i className="fa-solid fa-microchip mr-0.5" />{execInfo.modelName}
-                    </span>
+                  {execInfo.assigneeType === 'user' ? (
+                    <span className="font-bold text-ive-cyan"><i className="fa-solid fa-user mr-1" />{execInfo.userName}</span>
+                  ) : (
+                    <>
+                      <span className="font-bold">{execInfo.agentName}</span>
+                      {execInfo.modelName && (
+                        <span className="font-mono text-ive-cyan bg-ive-cyan/10 border border-ive-cyan/20 px-1.5 py-0.5 rounded">
+                          <i className="fa-solid fa-microchip mr-0.5" />{execInfo.modelName}
+                        </span>
+                      )}
+                      {connected && activity && (
+                        <span className="text-xs bg-ive-bg-deep px-1.5 py-0.5 rounded font-mono truncate max-w-[140px]">
+                          {activity.tool === 'thinking' ? te('thinking') : activity.tool}
+                        </span>
+                      )}
+                    </>
                   )}
-                  {connected && activity && (
-                    <span className="text-xs bg-ive-bg-deep px-1.5 py-0.5 rounded font-mono truncate max-w-[140px]">
-                      {activity.tool === 'thinking' ? te('thinking') : activity.tool}
-                    </span>
-                  )}
-                  <span className="font-mono font-bold text-ive-amber">
+                  <span className={`font-mono font-bold ${execInfo.assigneeType === 'user' ? 'text-ive-cyan' : 'text-ive-amber'}`}>
                     {formatDuration(execInfo.startedAt)}
                     {tick >= 0 ? '' : ''}
                   </span>
@@ -148,7 +172,7 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
           )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {connected && (
+          {connected && execInfo?.assigneeType !== 'user' && (
             <button
               onClick={handleKill}
               disabled={killing}
@@ -160,29 +184,55 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
         </div>
       </div>
 
-      <div ref={containerRef} className="flex-1 min-h-0">
-        <LogViewer
-          sseUrl={`/api/executions/${id}/logs`}
-          initialFetchUrl={`/api/executions/${id}/content`}
-          fontSize={13}
-          maxLines={50000}
-          className="h-full"
-          onConnectionChange={setConnected}
-          onLineCountChange={setLineCount}
-          isLive={connected}
-          timezone={userTz}
-        />
-      </div>
+      {execInfo?.assigneeType === 'user' ? (
+        <div ref={containerRef} className="flex-1 min-h-0 flex flex-col items-center justify-center gap-4">
+          <div className="text-center">
+            {execInfo.userAvatar ? (
+              <img src={execInfo.userAvatar} alt="" className="w-20 h-20 rounded-full mx-auto mb-3 border-2 border-ive-cyan/30" />
+            ) : (
+              <i className="fa-solid fa-user-circle text-6xl text-ive-cyan/50 mb-3 block" />
+            )}
+            <div className="text-lg font-bold text-ive-text">{execInfo.userName}</div>
+            <div className="text-sm text-ive-cyan mt-2">
+              <i className="fa-solid fa-user-check mr-1" />{te('assignedToUser')}
+            </div>
+            <div className={`text-xs mt-2 px-3 py-1 rounded-full inline-block font-bold ${
+              execInfo.status === 'assigned' ? 'bg-ive-cyan/20 text-ive-cyan' :
+              execInfo.status === 'success' ? 'bg-ive-green/20 text-ive-green' :
+              'bg-ive-red/20 text-ive-red'
+            }`}>
+              {execInfo.status === 'assigned' ? te('assigned') : execInfo.status === 'success' ? te('completed') : te('failed')}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div ref={containerRef} className="flex-1 min-h-0">
+          <LogViewer
+            sseUrl={`/api/executions/${id}/logs`}
+            initialFetchUrl={`/api/executions/${id}/content`}
+            fontSize={13}
+            maxLines={50000}
+            className="h-full"
+            onConnectionChange={setConnected}
+            onLineCountChange={setLineCount}
+            isLive={connected}
+            timezone={userTz}
+          />
+        </div>
+      )}
 
       <div className="bg-ive-bg-card border-t border-ive-border-dark px-4 py-2 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-3 text-xs text-ive-text-dim">
-          <span><i className="fa-solid fa-lines-leaning mr-1" />{lineCount} lines</span>
-          <span className="text-ive-text-dim/30">|</span>
-          <span className={connected ? 'text-ive-green' : 'text-ive-text-dim'}>
-            <i className={`fa-solid ${connected ? 'fa-circle' : 'fa-circle-xmark'} mr-1`} />
-            {connected ? te('connected') : te('terminated')}
-          </span>
-        </div>
+        {execInfo?.assigneeType !== 'user' && (
+          <div className="flex items-center gap-3 text-xs text-ive-text-dim">
+            <span><i className="fa-solid fa-lines-leaning mr-1" />{lineCount} lines</span>
+            <span className="text-ive-text-dim/30">|</span>
+            <span className={connected ? 'text-ive-green' : 'text-ive-text-dim'}>
+              <i className={`fa-solid ${connected ? 'fa-circle' : 'fa-circle-xmark'} mr-1`} />
+              {connected ? te('connected') : te('terminated')}
+            </span>
+          </div>
+        )}
+        {execInfo?.assigneeType === 'user' && <div />}
         <button
           onClick={scrollToBottom}
           className="text-xs px-2 py-1 rounded border transition-colors text-ive-text-dim border-ive-border-dark hover:text-ive-green hover:border-ive-green/30"

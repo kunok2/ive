@@ -45,9 +45,9 @@ function collectSnapshots() {
   const projects = getAllProjects()
 
   for (const project of projects) {
-    // 프로젝트별 running 수
+    // 프로젝트별 running 수 (assigned 포함)
     const running = (db.prepare(
-      "SELECT COUNT(*) as cnt FROM task_executions WHERE project_id = ? AND status = 'running'"
+      "SELECT COUNT(*) as cnt FROM task_executions WHERE project_id = ? AND status IN ('running', 'assigned')"
     ).get(project.id) as { cnt: number }).cnt
 
     // 대기 이슈 수 (마지막 스캔 결과)

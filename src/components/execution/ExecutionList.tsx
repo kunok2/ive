@@ -78,7 +78,11 @@ export default function ExecutionList({ executions, showAgent = true, onKill, ki
         >
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-2 min-w-0">
-              {showAgent && ex.agentName && (
+              {ex.assigneeType === 'user' ? (
+                <span className="text-xs font-bold text-ive-cyan/70 bg-ive-cyan/10 border border-ive-cyan/20 px-1.5 py-0.5 rounded shrink-0">
+                  <i className="fa-solid fa-user mr-0.5" />{ex.userName || ''}
+                </span>
+              ) : showAgent && ex.agentName && (
                 <span className="text-xs font-bold text-ive-green/70 bg-ive-green/10 border border-ive-green/20 px-1.5 py-0.5 rounded shrink-0">
                   <i className="fa-solid fa-robot mr-0.5" />{ex.agentName}
                 </span>
@@ -92,11 +96,12 @@ export default function ExecutionList({ executions, showAgent = true, onKill, ki
               )}
             </div>
             <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+              ex.status === 'assigned' ? 'bg-ive-cyan/20 text-ive-cyan' :
               ex.status === 'running' ? 'bg-ive-amber/20 text-ive-amber animate-pulse' :
               ex.status === 'success' ? 'bg-ive-green/20 text-ive-green' :
               'bg-ive-red/20 text-ive-red'
             }`}>
-              {ex.status === 'running' ? te('running') : ex.status === 'success' ? te('completed') : te('failed')}
+              {ex.status === 'assigned' ? te('assigned') : ex.status === 'running' ? te('running') : ex.status === 'success' ? te('completed') : te('failed')}
             </span>
           </div>
 
@@ -111,21 +116,21 @@ export default function ExecutionList({ executions, showAgent = true, onKill, ki
               <i className="fa-solid fa-calendar-day mr-0.5" />
               {formatDateShort(ex.startedAt, userLocale, userTz)}
             </span>
-            <span className={`font-mono font-bold ${ex.status === 'running' ? 'text-ive-amber' : ''}`}>
+            <span className={`font-mono font-bold ${ex.status === 'running' ? 'text-ive-amber' : ex.status === 'assigned' ? 'text-ive-cyan' : ''}`}>
               {formatDuration(ex.startedAt, ex.endedAt)}
             </span>
-            {ex.turns > 0 && (
+            {ex.assigneeType !== 'user' && ex.turns > 0 && (
               <span><i className="fa-solid fa-rotate mr-0.5" />{ex.turns} {te('turns')}</span>
             )}
-            {(ex.inputTokens + ex.outputTokens > 0) && (
+            {ex.assigneeType !== 'user' && (ex.inputTokens + ex.outputTokens > 0) && (
               <span>{formatTokens(ex.inputTokens + ex.outputTokens)} tok</span>
             )}
-            {ex.costUsd > 0 && (
+            {ex.assigneeType !== 'user' && ex.costUsd > 0 && (
               <span>${ex.costUsd.toFixed(4)}</span>
             )}
           </div>
 
-          {ex.status === 'running' && onKill && (
+          {(ex.status === 'running' || ex.status === 'assigned') && onKill && (
             <div className="mt-2 pt-2 border-t border-ive-border-dark">
               <button
                 onClick={(e) => { e.stopPropagation(); onKill(ex.id) }}

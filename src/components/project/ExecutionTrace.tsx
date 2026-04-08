@@ -26,7 +26,7 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
   const userTz = state.user?.timezone
 
   useEffect(() => {
-    const hasRunning = executions.some(e => e.status === 'running')
+    const hasRunning = executions.some(e => e.status === 'running' || e.status === 'assigned')
     if (!hasRunning) return
     const timer = setInterval(() => setTick(t => t + 1), 1000)
     return () => clearInterval(timer)
@@ -65,8 +65,8 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
                 const elapsed = formatDuration(ex.startedAt, ex.endedAt)
                 return (
                   <span className="text-ive-text-muted font-mono normal-case tracking-normal">
-                    {ex.status === 'running' && <span className="text-ive-amber">{elapsed}{tick >= 0 ? '' : ''}</span>}
-                    {ex.status !== 'running' && <span className="text-ive-text-dim">{elapsed}</span>}
+                    {(ex.status === 'running' || ex.status === 'assigned') && <span className={ex.status === 'assigned' ? 'text-ive-cyan' : 'text-ive-amber'}>{elapsed}{tick >= 0 ? '' : ''}</span>}
+                    {ex.status !== 'running' && ex.status !== 'assigned' && <span className="text-ive-text-dim">{elapsed}</span>}
                   </span>
                 )
               })()}
@@ -84,7 +84,7 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
             fontSize={12}
             maxLines={10000}
             className="flex-1 min-h-0"
-            initialAutoScroll={executions.find(e => e.id === selectedId)?.status === 'running'}
+            initialAutoScroll={['running', 'assigned'].includes(executions.find(e => e.id === selectedId)?.status ?? '')}
             timezone={userTz}
           />
         </div>
@@ -105,16 +105,21 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
                   <div className="flex items-center justify-between mb-1.5 gap-2">
                     <MarqueeText className="text-base font-bold text-ive-green-pale">Issue #{ex.issueIid}{ex.issueTitle && ` — ${ex.issueTitle}`}</MarqueeText>
                     <span className={`text-sm font-bold px-2 py-0.5 rounded-full tracking-tighter ${
+                      ex.status === 'assigned' ? 'bg-ive-cyan/20 text-ive-cyan' :
                       ex.status === 'running' ? 'bg-ive-amber/20 text-ive-amber animate-pulse' :
                       ex.status === 'success' ? 'bg-ive-green/20 text-ive-green' :
                       'bg-ive-red/20 text-ive-red'
                     }`}>
-                      {ex.status === 'running' ? '실행 중' : ex.status === 'success' ? '완료' : '실패'}
+                      {ex.status === 'assigned' ? '배정됨' : ex.status === 'running' ? '실행 중' : ex.status === 'success' ? '완료' : '실패'}
                     </span>
                   </div>
-                  {(ex.agentName || ex.modelName) && (
+                  {(ex.agentName || ex.modelName || ex.assigneeType === 'user') && (
                     <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                      {ex.agentName && (
+                      {ex.assigneeType === 'user' ? (
+                        <span className="text-sm font-bold text-ive-cyan/70 bg-ive-cyan/10 border border-ive-cyan/20 px-1.5 py-0.5 rounded">
+                          <i className="fa-solid fa-user mr-1 text-sm" />{ex.userName || ''}
+                        </span>
+                      ) : ex.agentName && (
                         <span className="text-sm font-bold text-ive-green/70 bg-ive-green/10 border border-ive-green/20 px-1.5 py-0.5 rounded">
                           <i className="fa-solid fa-robot mr-1 text-sm" />{ex.agentName}
                         </span>
@@ -127,13 +132,13 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
                     </div>
                   )}
                   <div className="flex items-center justify-end text-sm text-ive-text-muted group-hover:text-ive-text-dim">
-                    <span className={`font-mono font-bold ${ex.status === 'running' ? 'text-ive-amber' : 'text-ive-text-dim'}`}>
-                      {ex.status === 'running' && <i className="fa-solid fa-stopwatch mr-1 text-sm" />}
+                    <span className={`font-mono font-bold ${ex.status === 'running' ? 'text-ive-amber' : ex.status === 'assigned' ? 'text-ive-cyan' : 'text-ive-text-dim'}`}>
+                      {(ex.status === 'running' || ex.status === 'assigned') && <i className="fa-solid fa-stopwatch mr-1 text-sm" />}
                       {formatDuration(ex.startedAt, ex.endedAt)}
-                      {ex.status === 'running' && tick >= 0 ? '' : ''}
+                      {(ex.status === 'running' || ex.status === 'assigned') && tick >= 0 ? '' : ''}
                     </span>
                   </div>
-                  {ex.status === 'running' && (
+                  {(ex.status === 'running' || ex.status === 'assigned') && (
                     <div className="mt-2 pt-2 border-t border-ive-border-dark">
                       <button
                         onClick={(e) => {

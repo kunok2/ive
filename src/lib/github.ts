@@ -772,3 +772,43 @@ export async function fetchGitHubIssue(project: Project, issueNumber: number, de
   }
   return normalizeIssue(await res.json());
 }
+
+/**
+ * GitHub 저장소에 브랜치를 생성합니다.
+ */
+export async function createGitHubBranch(project: Project, decryptedToken: string, branchName: string, ref: string): Promise<boolean> {
+  const headers = getGitHubAuthHeaders(project, decryptedToken);
+  // 먼저 ref의 SHA를 가져옴
+  const refRes = await fetch(apiUrl(project, `/git/ref/heads/${ref}`), { headers });
+  if (!refRes.ok) {
+    console.warn(`[GitHub] Failed to get ref SHA for ${ref}: ${refRes.status}`);
+    return false;
+  }
+  const refData = await refRes.json();
+  const sha = refData.object?.sha;
+  if (!sha) return false;
+
+  const res = await fetch(apiUrl(project, '/git/refs'), {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ref: `refs/heads/${branchName}`, sha }),
+  });
+  if (res.ok) return true;
+  // 이미 존재하면 성공으로 처리
+  if (res.status === 422) return true;
+  console.warn(`[GitHub] Failed to create branch ${branchName}: ${res.status}`);
+  return false;
+}
+
+/**
+ * GitHub 저장소의 기본 브랜치를 조회합니다.
+ */
+export async function getGitHubDefaultBranch(project: Project, decryptedToken: string): Promise<string> {
+  const headers = getGitHubAuthHeaders(project, decryptedToken);
+  const res = await fetch(apiUrl(project, ''), { headers });
+  if (res.ok) {
+    const data = await res.json();
+    return data.default_branch || 'main';
+  }
+  return 'main';
+}

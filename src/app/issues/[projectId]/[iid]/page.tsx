@@ -102,7 +102,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   const [issue, setIssue] = useState<IssueDetail | null>(null)
   const [notes, setNotes] = useState<Note[]>([])
   const [loading, setLoading] = useState(true)
-  const [preferredAgent, setPreferredAgent] = useState<{ preferredAgentId: string | null; preferredAgentName: string | null; preferredAgentAvatar: string | null; preferredAgentCliName: string | null } | null>(null)
+  const [preferredAgent, setPreferredAgent] = useState<{ assignMode?: string; preferredAgentId: string | null; preferredAgentName: string | null; preferredAgentAvatar: string | null; preferredAgentCliName: string | null } | null>(null)
   const [projectAgents, setProjectAgents] = useState<{ agentId: string; agent: { id: string; name: string; avatar: string; cliName: string; status: string } }[]>([])
   const [retryAgentPickerOpen, setRetryAgentPickerOpen] = useState(false)
   const retryAgentPickerRef = useRef<HTMLDivElement>(null)
@@ -232,11 +232,19 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
     })
   }
 
-  async function handleChangePreferredAgent(agentId: string | null) {
+  async function handleChangePreferredAgent(agentIdOrMode: string | null) {
+    let body: any
+    if (agentIdOrMode === 'assignee') {
+      body = { assignMode: 'assignee' }
+    } else if (agentIdOrMode === null) {
+      body = { assignMode: 'auto' }
+    } else {
+      body = { assignMode: 'agent', agentId: agentIdOrMode }
+    }
     const res = await fetch(`/api/projects/${projectId}/issues/${iid}/preferred-agent`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ agentId }),
+      body: JSON.stringify(body),
     })
     if (res.ok) setPreferredAgent(await res.json())
   }
@@ -1174,7 +1182,9 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                   className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border border-dashed border-ive-border-subtle hover:border-ive-green/30 transition-all"
                 >
                   <i className="fa-solid fa-user-gear text-ive-green" />
-                  {preferredAgent?.preferredAgentId ? (
+                  {preferredAgent?.assignMode === 'assignee' ? (
+                    <span className="font-bold text-ive-cyan"><i className="fa-solid fa-user mr-0.5" />{tIssue('assigneeHandles')}</span>
+                  ) : preferredAgent?.preferredAgentId ? (
                     <>
                       <AgentAvatar avatar={preferredAgent.preferredAgentAvatar || ''} size="sm" />
                       <span className="font-bold text-ive-text">{preferredAgent.preferredAgentName}</span>
@@ -1189,11 +1199,20 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                     <button
                       onClick={() => { setRetryAgentPickerOpen(false); handleChangePreferredAgent(null) }}
                       className={`w-full px-3 py-2.5 text-left text-xs flex items-center gap-2 transition-colors ${
-                        !preferredAgent?.preferredAgentId ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text hover:bg-white/5'
+                        preferredAgent?.assignMode !== 'assignee' && !preferredAgent?.preferredAgentId ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text hover:bg-white/5'
                       }`}
                     >
                       <i className="fa-solid fa-shuffle" />
                       <span className="font-bold">{tIssue('noPreference')}</span>
+                    </button>
+                    <button
+                      onClick={() => { setRetryAgentPickerOpen(false); handleChangePreferredAgent('assignee') }}
+                      className={`w-full px-3 py-2.5 text-left text-xs flex items-center gap-2 transition-colors ${
+                        preferredAgent?.assignMode === 'assignee' ? 'bg-ive-cyan/10 text-ive-cyan' : 'text-ive-text hover:bg-white/5'
+                      }`}
+                    >
+                      <i className="fa-solid fa-user" />
+                      <span className="font-bold">{tIssue('assigneeHandles')}</span>
                     </button>
                     {projectAgents.map(pa => {
                       const isOffline = pa.agent.status === 'offline'

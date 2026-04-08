@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAccess, getPreferredAgentId, setPreferredAgent, getProjectAssignments, getAgent, hasActiveExecution, stageFromLabels } from '@/lib/db';
+import { getProject, getProjectAccess, getAssignMode, setAssignMode, getProjectAssignments, getAgent, hasActiveExecution, stageFromLabels } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { decrypt } from '@/lib/crypto';
 import { fetchSingleIssue } from '@/lib/provider';
@@ -12,11 +12,11 @@ export async function GET(
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { id: projectId, iid } = await params;
-  const agentId = getPreferredAgentId(projectId, Number(iid));
-  if (!agentId) return NextResponse.json({ preferredAgentId: null });
+  const { mode, agentId } = getAssignMode(projectId, Number(iid));
 
-  const agent = getAgent(agentId);
+  const agent = agentId ? getAgent(agentId) : null;
   return NextResponse.json({
+    assignMode: mode,
     preferredAgentId: agentId,
     preferredAgentName: agent?.name || null,
     preferredAgentAvatar: agent?.avatar || null,
@@ -54,21 +54,28 @@ export async function PATCH(
     }
   } catch { /* 조회 실패 시 허용 */ }
 
-  const { agentId } = await req.json();
+  const { assignMode, agentId } = await req.json();
+
+  // assignMode 유효성 검사
+  const mode = assignMode || (agentId ? 'agent' : 'auto');
+  if (!['auto', 'assignee', 'agent'].includes(mode)) {
+    return NextResponse.json({ error: 'Invalid assign mode' }, { status: 400 });
+  }
 
   // agentId가 있으면 프로젝트에 배정된 에이전트인지 검증
-  if (agentId) {
+  if (mode === 'agent' && agentId) {
     const assignments = getProjectAssignments(projectId);
     if (!assignments.find(a => a.agentId === agentId)) {
       return NextResponse.json({ error: '이 프로젝트에 배정되지 않은 개발자입니다.' }, { status: 400 });
     }
   }
 
-  setPreferredAgent(projectId, Number(iid), agentId || null);
+  setAssignMode(projectId, Number(iid), mode, agentId || null);
 
-  const agent = agentId ? getAgent(agentId) : null;
+  const agent = (mode === 'agent' && agentId) ? getAgent(agentId) : null;
   return NextResponse.json({
-    preferredAgentId: agentId || null,
+    assignMode: mode,
+    preferredAgentId: (mode === 'agent' ? agentId : null) || null,
     preferredAgentName: agent?.name || null,
     preferredAgentAvatar: agent?.avatar || null,
     preferredAgentCliName: agent?.cliName || null,

@@ -205,6 +205,7 @@ export default function LiveTracePanel({ agents, projectId, onKill, onAllComplet
 
       {(() => {
         const isChat = current.execution!.id.startsWith('exec-chat-')
+        const isUserTask = current.execution!.assigneeType === 'user'
         return (
           <div key={current.execution!.id} className="flex-1 flex flex-col min-h-0 p-3 gap-2">
             <div className="flex items-center justify-between shrink-0">
@@ -212,6 +213,8 @@ export default function LiveTracePanel({ agents, projectId, onKill, onAllComplet
                 <MarqueeText className="text-sm font-bold text-ive-text">
                   {isChat ? (
                     <span className="font-bold text-purple-400">💬 #{current.execution!.issueIid}</span>
+                  ) : isUserTask ? (
+                    <span className="font-bold text-ive-cyan">#{current.execution!.issueIid}</span>
                   ) : (
                     <span className="font-bold text-ive-green">#{current.execution!.issueIid}</span>
                   )}
@@ -222,7 +225,7 @@ export default function LiveTracePanel({ agents, projectId, onKill, onAllComplet
                 </MarqueeText>
               </div>
               <div className="flex items-center gap-2 shrink-0 ml-2">
-                {!isChat && (() => {
+                {!isChat && !isUserTask && (() => {
                   const activity = activities[current.agent.id]
                   if (!activity) return null
                   return (
@@ -231,14 +234,28 @@ export default function LiveTracePanel({ agents, projectId, onKill, onAllComplet
                     </span>
                   )
                 })()}
-                <span className={`text-xs font-mono font-bold ${isChat ? 'text-purple-400' : 'text-ive-amber'}`}>
+                <span className={`text-xs font-mono font-bold ${isChat ? 'text-purple-400' : isUserTask ? 'text-ive-cyan' : 'text-ive-amber'}`}>
                   {formatDuration(current.execution!.startedAt)}
                   {tick >= 0 ? '' : ''}
                 </span>
               </div>
             </div>
 
-            {isChat ? (
+            {isUserTask ? (
+              <div className="flex-1 flex flex-col items-center justify-center gap-3 min-h-0">
+                <div className="text-center">
+                  {current.execution!.userAvatar ? (
+                    <img src={current.execution!.userAvatar} alt="" className="w-12 h-12 rounded-full mx-auto mb-2 border-2 border-ive-cyan/30" />
+                  ) : (
+                    <i className="fa-solid fa-user-circle text-4xl text-ive-cyan/50 mb-2" />
+                  )}
+                  <div className="text-sm font-bold text-ive-text">{current.execution!.userName}</div>
+                  <div className="text-xs text-ive-cyan mt-1">
+                    <i className="fa-solid fa-user-check mr-1" />담당자에게 배정됨
+                  </div>
+                </div>
+              </div>
+            ) : isChat ? (
               <ChatViewer projectId={projectId} execution={current.execution!} agent={current.agent} />
             ) : (
               <LogViewer

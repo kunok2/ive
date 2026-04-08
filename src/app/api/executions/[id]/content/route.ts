@@ -13,7 +13,7 @@ export async function GET(
   const { id } = await params
   const execution = getExecution(id)
 
-  if (!execution || !fs.existsSync(execution.logPath)) {
+  if (!execution) {
     return NextResponse.json({ content: '', status: 'not_found' }, { status: 404 })
   }
 
@@ -22,8 +22,8 @@ export async function GET(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const agent = getAgent(execution.agentId)
-  const content = fs.readFileSync(execution.logPath, 'utf-8')
+  const agent = execution.agentId ? getAgent(execution.agentId) : null
+  const content = fs.existsSync(execution.logPath) ? fs.readFileSync(execution.logPath, 'utf-8') : ''
   return Response.json({
     content,
     status: execution.status,
@@ -33,5 +33,9 @@ export async function GET(
     agentName: agent?.name ?? execution.agentName ?? '',
     agentAvatar: agent?.avatar ?? 'av-01',
     modelName: execution.modelName ?? '',
+    assigneeType: execution.assigneeType ?? 'agent',
+    userId: execution.userId ?? null,
+    userName: execution.userName ?? null,
+    userAvatar: execution.userAvatar ?? null,
   })
 }

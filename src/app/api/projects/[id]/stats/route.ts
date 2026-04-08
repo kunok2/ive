@@ -17,7 +17,7 @@ export async function GET(
   }
 
   const todayExecs = getTodayExecutionsByProject(id)
-  const running = todayExecs.filter(e => e.status === 'running')
+  const running = todayExecs.filter(e => e.status === 'running' || e.status === 'assigned')
   const completed = todayExecs.filter(e => e.status === 'success')
   const failed = todayExecs.filter(e => e.status === 'failed')
 

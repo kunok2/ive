@@ -157,3 +157,16 @@ export function fetchIssuesByLabel(project: Project, token: string, label: strin
     ? github.fetchGitHubIssues(project, token, label)
     : gitlab.fetchGitLabIssues(project, token, label);
 }
+
+// Branch
+export function createBranch(project: Project, token: string, branchName: string, ref: string) {
+  return project.provider === 'github'
+    ? github.createGitHubBranch(project, token, branchName, ref)
+    : gitlab.createGitLabBranch(project, token, branchName, ref);
+}
+
+export function getDefaultBranch(project: Project, token: string) {
+  return project.provider === 'github'
+    ? github.getGitHubDefaultBranch(project, token)
+    : gitlab.getGitLabDefaultBranch(project, token);
+}

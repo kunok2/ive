@@ -106,7 +106,7 @@ export async function GET(req: NextRequest) {
   const totalTasks = execs.length
   const successCount = execs.filter(e => e.status === 'success').length
   const failedCount = execs.filter(e => e.status === 'failed').length
-  const runningCount = execs.filter(e => e.status === 'running').length
+  const runningCount = execs.filter(e => e.status === 'running' || e.status === 'assigned').length
   const totalDurationMin = execs.reduce((s, e) => s + durationMin(e.startedAt, e.endedAt), 0)
   const finishedCount = successCount + failedCount
   const avgDurationMin = finishedCount > 0 ? totalDurationMin / finishedCount : 0

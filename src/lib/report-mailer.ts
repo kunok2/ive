@@ -105,7 +105,7 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
   const total = executions.length
   const success = executions.filter(e => e.status === 'success').length
   const failed = executions.filter(e => e.status === 'failed').length
-  const running = executions.filter(e => e.status === 'running').length
+  const running = executions.filter(e => e.status === 'running' || e.status === 'assigned').length
   const totalTokens = executions.reduce((s, e) => s + e.inputTokens + e.outputTokens, 0)
   const totalCost = executions.reduce((s, e) => s + e.costUsd, 0)
 

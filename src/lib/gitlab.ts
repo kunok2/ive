@@ -701,3 +701,38 @@ export async function fetchGitLabProjectMembers(project: Project, decryptedToken
       avatarUrl: m.avatar_url,
     }));
 }
+
+/**
+ * GitLab 저장소에 브랜치를 생성합니다.
+ */
+export async function createGitLabBranch(project: Project, decryptedToken: string, branchName: string, ref: string): Promise<boolean> {
+  const headers = getAuthHeaders(project, decryptedToken);
+  const url = apiUrl(project, '/repository/branches');
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ branch: branchName, ref }),
+  });
+  if (res.ok) return true;
+  // 이미 존재하면 성공으로 처리
+  if (res.status === 400) {
+    const data = await res.json().catch(() => ({}));
+    if (data.message?.includes('already exists')) return true;
+  }
+  console.warn(`[GitLab] Failed to create branch ${branchName}: ${res.status}`);
+  return false;
+}
+
+/**
+ * GitLab 저장소의 기본 브랜치를 조회합니다.
+ */
+export async function getGitLabDefaultBranch(project: Project, decryptedToken: string): Promise<string> {
+  const headers = getAuthHeaders(project, decryptedToken);
+  const url = apiUrl(project, '');
+  const res = await fetch(url, { headers });
+  if (res.ok) {
+    const data = await res.json();
+    return data.default_branch || 'main';
+  }
+  return 'main';
+}

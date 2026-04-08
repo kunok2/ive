@@ -276,6 +276,38 @@ function initSchema(db: Database.Database) {
         console.log(`[DB] Backfilled verified_at for ${result.changes} executions`)
       } catch (e) { console.error("[DB] verified_at backfill failed:", e) }
     }
+    // assignee_type, user_id 컬럼 + agent_id nullable + status에 'assigned' 추가 — 테이블 재생성
+    if (!tableInfo.some((col: any) => col.name === 'assignee_type')) {
+      console.log('[DB] Migrating task_executions: adding assignee_type, user_id, user_name, user_avatar + making agent_id nullable + adding assigned status')
+      db.exec(`CREATE TABLE task_executions_new (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        agent_id TEXT DEFAULT NULL,
+        issue_iid INTEGER NOT NULL,
+        status TEXT NOT NULL CHECK(status IN ('running', 'success', 'failed', 'assigned')),
+        started_at TEXT NOT NULL DEFAULT (datetime('now')),
+        ended_at TEXT,
+        log_path TEXT NOT NULL DEFAULT '',
+        pid INTEGER,
+        input_tokens INTEGER NOT NULL DEFAULT 0,
+        output_tokens INTEGER NOT NULL DEFAULT 0,
+        cost_usd REAL NOT NULL DEFAULT 0,
+        issue_title TEXT,
+        turns INTEGER NOT NULL DEFAULT 0,
+        issue_created_at TEXT,
+        model_name TEXT,
+        verified_at TEXT,
+        assignee_type TEXT NOT NULL DEFAULT 'agent' CHECK(assignee_type IN ('agent', 'user')),
+        user_id TEXT DEFAULT NULL,
+        user_name TEXT DEFAULT NULL,
+        user_avatar TEXT DEFAULT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      )`)
+      db.exec(`INSERT INTO task_executions_new (id, project_id, agent_id, issue_iid, status, started_at, ended_at, log_path, pid, input_tokens, output_tokens, cost_usd, issue_title, turns, issue_created_at, model_name, verified_at, assignee_type) SELECT id, project_id, agent_id, issue_iid, status, started_at, ended_at, log_path, pid, input_tokens, output_tokens, cost_usd, issue_title, turns, issue_created_at, model_name, verified_at, 'agent' FROM task_executions`)
+      db.exec(`DROP TABLE task_executions`)
+      db.exec(`ALTER TABLE task_executions_new RENAME TO task_executions`)
+      console.log('[DB] task_executions migration complete')
+    }
   } catch (e) { console.error("Migration failed for task_executions:", e) }
 
   // 프로젝트 모니터링 설정
@@ -396,6 +428,11 @@ function initSchema(db: Database.Database) {
   // scheduled_at 컬럼 마이그레이션 — IVE-S 레이블 최초 감지 시각
   try {
     db.exec(`ALTER TABLE issue_stages ADD COLUMN scheduled_at TEXT DEFAULT NULL`)
+  } catch { /* 이미 존재 */ }
+  // assign_mode 컬럼 마이그레이션 — 'auto'(기본), 'assignee'(담당자), 'agent'(지정 에이전트)
+  try {
+    db.exec(`ALTER TABLE issue_stages ADD COLUMN assign_mode TEXT DEFAULT 'auto'`)
+    db.exec(`UPDATE issue_stages SET assign_mode = 'agent' WHERE preferred_agent_id IS NOT NULL`)
   } catch { /* 이미 존재 */ }
 
   // 보고서 스케줄 테이블
@@ -872,7 +909,7 @@ export function unassignAgentFromProject(projectId: string, agentId: string) {
 
 export function countActiveExecutionsByProject(projectId: string): number {
   const r = getDb().prepare(
-    "SELECT COUNT(*) as cnt FROM task_executions WHERE project_id = ? AND status = 'running'"
+    "SELECT COUNT(*) as cnt FROM task_executions WHERE project_id = ? AND status IN ('running', 'assigned')"
   ).get(projectId) as { cnt: number }
   return r.cnt
 }
@@ -895,7 +932,7 @@ export function getLastCompletedAt(agentId: string): string | null {
 
 function mapExecution(r: any): TaskExecution {
   return {
-    id: r.id, projectId: r.project_id, agentId: r.agent_id,
+    id: r.id, projectId: r.project_id, agentId: r.agent_id ?? '',
     issueIid: r.issue_iid, issueTitle: r.issue_title ?? undefined,
     modelName: r.model_name ?? undefined,
     status: r.status, startedAt: r.started_at, endedAt: r.ended_at,
@@ -904,13 +941,17 @@ function mapExecution(r: any): TaskExecution {
     inputTokens: r.input_tokens ?? 0, outputTokens: r.output_tokens ?? 0,
     costUsd: r.cost_usd ?? 0, turns: r.turns ?? 0,
     issueCreatedAt: r.issue_created_at ?? undefined,
+    assigneeType: r.assignee_type ?? 'agent',
+    userId: r.user_id ?? null,
+    userName: r.user_name ?? null,
+    userAvatar: r.user_avatar ?? null,
   }
 }
 
 export function createExecution(ex: TaskExecution) {
   getDb().prepare(
-    'INSERT INTO task_executions (id, project_id, agent_id, issue_iid, issue_title, status, started_at, log_path, issue_created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-  ).run(ex.id, ex.projectId, ex.agentId, ex.issueIid, ex.issueTitle ?? null, ex.status, ex.startedAt, ex.logPath, ex.issueCreatedAt ?? null)
+    'INSERT INTO task_executions (id, project_id, agent_id, issue_iid, issue_title, status, started_at, log_path, issue_created_at, assignee_type, user_id, user_name, user_avatar) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(ex.id, ex.projectId, ex.agentId || null, ex.issueIid, ex.issueTitle ?? null, ex.status, ex.startedAt, ex.logPath, ex.issueCreatedAt ?? null, ex.assigneeType ?? 'agent', ex.userId ?? null, ex.userName ?? null, ex.userAvatar ?? null)
 }
 
 export function updateExecutionStatus(id: string, status: TaskStatus, endedAt?: string) {
@@ -944,6 +985,11 @@ export function updateExecutionPid(id: string, pid: number) {
 export function killExecution(id: string): boolean {
   const r = getDb().prepare('SELECT * FROM task_executions WHERE id = ?').get(id) as any
   if (!r) return false
+  if (r.assignee_type === 'user') {
+    // 사람 작업: PID 없음, status만 변경
+    getDb().prepare("UPDATE task_executions SET status = 'failed', ended_at = ? WHERE id = ?").run(new Date().toISOString(), id)
+    return true
+  }
   if (r.pid) {
     try {
       process.kill(-r.pid, 'SIGKILL')
@@ -954,12 +1000,15 @@ export function killExecution(id: string): boolean {
   }
   getDb().prepare("UPDATE task_executions SET status = 'failed', ended_at = ? WHERE id = ?").run(new Date().toISOString(), id)
   // 에이전트 상태를 'available'로 복원
-  getDb().prepare("UPDATE agents SET status = 'available' WHERE id = ? AND status = 'busy'").run(r.agent_id)
+  if (r.agent_id) {
+    getDb().prepare("UPDATE agents SET status = 'available' WHERE id = ? AND status = 'busy'").run(r.agent_id)
+  }
   return true
 }
 
 export function resetStuckExecutions() {
-  const stuckRows = getDb().prepare("SELECT * FROM task_executions WHERE status = 'running'").all() as any[]
+  // 사람 작업(assignee_type='user')은 stuck 판정 제외
+  const stuckRows = getDb().prepare("SELECT * FROM task_executions WHERE status = 'running' AND (assignee_type IS NULL OR assignee_type = 'agent')").all() as any[]
   for (const r of stuckRows) {
     if (r.pid) {
       try { process.kill(-r.pid, 'SIGKILL') } catch (e: any) {
@@ -968,7 +1017,9 @@ export function resetStuckExecutions() {
     }
     getDb().prepare("UPDATE task_executions SET status = 'failed', ended_at = ? WHERE id = ?").run(new Date().toISOString(), r.id)
     // 고착된 에이전트 상태도 'available'로 복원
-    getDb().prepare("UPDATE agents SET status = 'available' WHERE id = ? AND status = 'busy'").run(r.agent_id)
+    if (r.agent_id) {
+      getDb().prepare("UPDATE agents SET status = 'available' WHERE id = ? AND status = 'busy'").run(r.agent_id)
+    }
     console.log(`[DB] Reset stuck execution ${r.id}`)
   }
   if (stuckRows.length > 0) console.log(`[DB] Reset ${stuckRows.length} stuck execution(s).`)
@@ -993,9 +1044,16 @@ export function hasAnyExecution(projectId: string, issueIid: number): boolean {
 
 export function hasActiveExecution(projectId: string, issueIid: number): boolean {
   const r = getDb().prepare(
-    "SELECT id FROM task_executions WHERE project_id = ? AND issue_iid = ? AND status = 'running' LIMIT 1"
+    "SELECT id FROM task_executions WHERE project_id = ? AND issue_iid = ? AND status IN ('running', 'assigned') LIMIT 1"
   ).get(projectId, issueIid)
   return !!r
+}
+
+export function getAssignedUserExecution(projectId: string, issueIid: number): TaskExecution | null {
+  const r = getDb().prepare(
+    "SELECT * FROM task_executions WHERE project_id = ? AND issue_iid = ? AND status = 'assigned' AND assignee_type = 'user' LIMIT 1"
+  ).get(projectId, issueIid) as any
+  return r ? mapExecution(r) : null
 }
 
 export function hasPastExecution(projectId: string, issueIid: number): boolean {
@@ -1430,10 +1488,11 @@ export function getExecutionsInRange(userId: string, start: string, end: string)
            u.name as developer_name, a.user_id as developer_user_id,
            te.issue_iid, te.issue_title, te.status,
            te.started_at, te.ended_at, te.input_tokens, te.output_tokens, te.cost_usd, te.turns,
-           te.issue_created_at, te.verified_at
+           te.issue_created_at, te.verified_at,
+           te.assignee_type, te.user_id as te_user_id, te.user_name as te_user_name, te.user_avatar as te_user_avatar
     FROM task_executions te
     JOIN projects p ON p.id = te.project_id
-    JOIN agents a ON a.id = te.agent_id
+    LEFT JOIN agents a ON a.id = te.agent_id
     LEFT JOIN users u ON u.id = a.user_id
     WHERE (p.user_id = ? OR EXISTS (SELECT 1 FROM project_shares ps WHERE ps.project_id = p.id AND ps.user_id = ?))
       AND te.started_at >= ? AND te.started_at < ?
@@ -1442,8 +1501,8 @@ export function getExecutionsInRange(userId: string, start: string, end: string)
   return rows.map(r => ({
     id: r.id, projectId: r.project_id, projectName: r.project_name,
     projectColor: r.project_color, projectAvatarUrl: r.project_avatar_url || '', projectProvider: r.project_provider || 'gitlab',
-    agentId: r.agent_id, agentName: r.agent_name, agentAvatar: r.agent_avatar || 'av-01',
-    cliName: r.cli_name, developerName: r.developer_name || r.agent_name,
+    agentId: r.agent_id ?? '', agentName: r.agent_name ?? r.te_user_name ?? '', agentAvatar: r.agent_avatar || 'av-01',
+    cliName: r.cli_name ?? '', developerName: r.developer_name || r.agent_name || r.te_user_name || '',
     developerUserId: r.developer_user_id ?? null,
     issueIid: r.issue_iid, issueTitle: r.issue_title,
     status: r.status, startedAt: r.started_at, endedAt: r.ended_at,
@@ -1583,31 +1642,32 @@ export function countIssuesByStage(_projectId: string, _stage: IssueStage): numb
   return 0 // 더 이상 DB에서 stage를 카운트하지 않음
 }
 
-// ── Preferred Agent (선호 에이전트) ──
-// issue_stages 테이블은 preferred_agent_id 저장 용도로만 사용합니다.
+// ── Assign Mode (작업자 지정 모드) ──
+// issue_stages 테이블은 assign_mode + preferred_agent_id 저장 용도로 사용합니다.
 
-export function getPreferredAgentId(projectId: string, issueIid: number): string | null {
-  const r = getDb().prepare('SELECT preferred_agent_id FROM issue_stages WHERE project_id = ? AND issue_iid = ?').get(projectId, issueIid) as any
-  return r?.preferred_agent_id || null
+export function getAssignMode(projectId: string, issueIid: number): { mode: 'auto' | 'assignee' | 'agent'; agentId: string | null } {
+  const r = getDb().prepare('SELECT assign_mode, preferred_agent_id FROM issue_stages WHERE project_id = ? AND issue_iid = ?').get(projectId, issueIid) as any
+  return { mode: (r?.assign_mode as 'auto' | 'assignee' | 'agent') || 'auto', agentId: r?.preferred_agent_id || null }
 }
 
-/** 프로젝트 내 모든 이슈의 선호 에이전트 맵을 반환합니다 (iid → preferredAgentId) */
-export function getPreferredAgentMap(projectId: string): Map<number, string | null> {
+/** 프로젝트 내 모든 이슈의 배정 모드 맵을 반환합니다 (iid → { mode, agentId }) */
+export function getAssignModeMap(projectId: string): Map<number, { mode: 'auto' | 'assignee' | 'agent'; agentId: string | null }> {
   const rows = getDb().prepare(
-    'SELECT issue_iid, preferred_agent_id FROM issue_stages WHERE project_id = ? AND preferred_agent_id IS NOT NULL'
+    'SELECT issue_iid, assign_mode, preferred_agent_id FROM issue_stages WHERE project_id = ?'
   ).all(projectId) as any[]
-  const map = new Map<number, string | null>()
-  for (const r of rows) map.set(r.issue_iid, r.preferred_agent_id || null)
+  const map = new Map<number, { mode: 'auto' | 'assignee' | 'agent'; agentId: string | null }>()
+  for (const r of rows) map.set(r.issue_iid, { mode: r.assign_mode || 'auto', agentId: r.preferred_agent_id || null })
   return map
 }
 
-export function setPreferredAgent(projectId: string, issueIid: number, agentId: string | null) {
-  // UPSERT: 행이 없으면 생성, 있으면 preferred_agent_id만 업데이트 (scheduled_at, updated_at 보존)
+export function setAssignMode(projectId: string, issueIid: number, mode: 'auto' | 'assignee' | 'agent', agentId?: string | null) {
+  // UPSERT: 행이 없으면 생성, 있으면 assign_mode + preferred_agent_id 업데이트 (scheduled_at, updated_at 보존)
+  const effectiveAgentId = mode === 'agent' ? (agentId || null) : null
   getDb().prepare(`
-    INSERT INTO issue_stages (project_id, issue_iid, stage, preferred_agent_id, updated_at)
-    VALUES (?, ?, '', ?, datetime('now'))
-    ON CONFLICT(project_id, issue_iid) DO UPDATE SET preferred_agent_id = excluded.preferred_agent_id
-  `).run(projectId, issueIid, agentId)
+    INSERT INTO issue_stages (project_id, issue_iid, stage, assign_mode, preferred_agent_id, updated_at)
+    VALUES (?, ?, '', ?, ?, datetime('now'))
+    ON CONFLICT(project_id, issue_iid) DO UPDATE SET assign_mode = excluded.assign_mode, preferred_agent_id = excluded.preferred_agent_id
+  `).run(projectId, issueIid, mode, effectiveAgentId)
 }
 
 export function countPreferredIssuesByAgent(agentId: string): number {
@@ -1971,7 +2031,7 @@ export function assignIssueAtomically(
   const tx = getDb().transaction(() => {
     // 트랜잭션 내에서 다시 확인 — 다른 프로세스가 먼저 배정했는지 체크
     const active = getDb().prepare(
-      "SELECT id FROM task_executions WHERE project_id = ? AND issue_iid = ? AND status = 'running' LIMIT 1"
+      "SELECT id FROM task_executions WHERE project_id = ? AND issue_iid = ? AND status IN ('running', 'assigned') LIMIT 1"
     ).get(projectId, issueIid)
     if (active) return false
 

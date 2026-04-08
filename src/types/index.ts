@@ -127,7 +127,9 @@ export interface ProjectAssignment {
   assignedAt: string
 }
 
-export type TaskStatus = 'running' | 'success' | 'failed'
+export type TaskStatus = 'running' | 'success' | 'failed' | 'assigned'
+
+export type AssignMode = 'auto' | 'assignee' | 'agent'
 
 export interface TaskExecution {
   id: string
@@ -147,6 +149,10 @@ export interface TaskExecution {
   costUsd: number
   turns: number
   issueCreatedAt?: string
+  assigneeType?: 'agent' | 'user'
+  userId?: string | null
+  userName?: string | null
+  userAvatar?: string | null
 }
 
 export interface StatSnapshot {

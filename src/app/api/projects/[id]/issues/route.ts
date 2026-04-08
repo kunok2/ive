@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAccess, getPreferredAgentMap, setPreferredAgent, getAgent, hasActiveExecution, hasAnyExecution, stageFromLabels, touchProjectActivity } from '@/lib/db';
+import { getProject, getProjectAccess, getAssignModeMap, setAssignMode, getAgent, hasActiveExecution, hasAnyExecution, stageFromLabels, touchProjectActivity } from '@/lib/db';
 import { checkLabelsExist } from '@/lib/provider';
 import { getCurrentUser } from '@/lib/auth';
 import { decrypt } from '@/lib/crypto';
@@ -28,8 +28,8 @@ export async function GET(
       ? await fetchClosedProjectIssues(project, decryptedToken)
       : await fetchAllProjectIssues(project, decryptedToken);
 
-    // 선호 에이전트 맵 로드
-    const preferredAgentMap = getPreferredAgentMap(projectId);
+    // 배정 모드 맵 로드
+    const assignModeMap = getAssignModeMap(projectId);
 
     const isClosed = stateParam === 'closed';
 
@@ -51,8 +51,9 @@ export async function GET(
         const stage = stageFromLabels(issueLabels, project, { hasActiveExec: activeExec })
           || (isClosed ? 'done' : 'none');
 
-        // 선호 에이전트 정보 조회
-        let preferredAgentId = preferredAgentMap.get(issue.iid) || null;
+        // 배정 모드 + 선호 에이전트 정보 조회
+        const assignInfo = assignModeMap.get(issue.iid) || { mode: 'auto' as const, agentId: null };
+        let preferredAgentId = assignInfo.mode === 'agent' ? assignInfo.agentId : null;
         let preferredAgentName: string | null = null;
         let preferredAgentAvatar: string | null = null;
         let preferredAgentCliName: string | null = null;
@@ -82,6 +83,7 @@ export async function GET(
           state: issue.state,
           stage,
           failReason: null, // 실패 사유는 이슈 코멘트에서 확인
+          assignMode: assignInfo.mode,
           preferredAgentId,
           preferredAgentName,
           preferredAgentAvatar,
@@ -117,7 +119,7 @@ export async function POST(
     return NextResponse.json({ error: '작업 생성 권한이 없습니다.' }, { status: 403 });
   }
 
-  const { title, description, asDev, preferredAgentId, assigneeIds, assigneeUsernames } = await req.json();
+  const { title, description, asDev, preferredAgentId, assignMode: reqAssignMode, assigneeIds, assigneeUsernames } = await req.json();
   if (!title?.trim()) return NextResponse.json({ error: '제목을 입력하세요.' }, { status: 400 });
 
   try {
@@ -143,9 +145,13 @@ export async function POST(
       ? { ids: assigneeIds, usernames: assigneeUsernames } : undefined;
     const issue = await createIssue(project, decryptedToken, title.trim(), description?.trim() ?? '', labels, assignees);
 
-    // 선호 에이전트 지정 (레이블 기반이므로 DB에는 preferred_agent_id만 저장)
-    if (preferredAgentId && issue.iid) {
-      setPreferredAgent(projectId, issue.iid, preferredAgentId);
+    // 배정 모드 지정
+    if (issue.iid) {
+      if (reqAssignMode === 'assignee') {
+        setAssignMode(projectId, issue.iid, 'assignee');
+      } else if (preferredAgentId) {
+        setAssignMode(projectId, issue.iid, 'agent', preferredAgentId);
+      }
     }
 
     touchProjectActivity(projectId);

@@ -22,6 +22,7 @@ interface IveIssue {
   createdAt: string
   updatedAt: string
   author: string
+  assignMode?: string
   preferredAgentId?: string | null
   preferredAgentName?: string | null
   preferredAgentAvatar?: string | null
@@ -128,7 +129,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   const [creating, setCreating] = useState(false)
   const [issueSearchQuery, setIssueSearchQuery] = useState('')
   const [closing, setClosing] = useState<number | null>(null)
-  const [preferredAgentId, setPreferredAgentId] = useState<string | null>(null) // null=자동배정, 'none'=배정안함, agentId=지정
+  const [preferredAgentId, setPreferredAgentId] = useState<string | null>(null) // null=자동배정, 'none'=배정안함, 'assignee'=담당자처리, agentId=지정
   const [projectAgents, setProjectAgents] = useState<ProjectAgent[]>([])
   const [agentDropdownOpen, setAgentDropdownOpen] = useState(false)
   const agentDropdownRef = useRef<HTMLDivElement>(null)
@@ -425,7 +426,8 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
         body: JSON.stringify({
           title, description,
           asDev: preferredAgentId !== 'none',
-          preferredAgentId: (preferredAgentId && preferredAgentId !== 'none') ? preferredAgentId : undefined,
+          assignMode: preferredAgentId === 'assignee' ? 'assignee' : preferredAgentId === 'none' ? undefined : preferredAgentId ? 'agent' : 'auto',
+          preferredAgentId: (preferredAgentId && preferredAgentId !== 'none' && preferredAgentId !== 'assignee') ? preferredAgentId : undefined,
           assigneeIds: selectedAssignees.length > 0 ? selectedAssignees.map(a => a.id) : undefined,
           assigneeUsernames: selectedAssignees.length > 0 ? selectedAssignees.map(a => a.username) : undefined,
         }),
@@ -446,7 +448,8 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
           createdAt: created.created_at || new Date().toISOString(),
           updatedAt: created.updated_at || new Date().toISOString(),
           author: created.author?.name || '',
-          preferredAgentId: preferredAgentId || null,
+          assignMode: preferredAgentId === 'assignee' ? 'assignee' : preferredAgentId && preferredAgentId !== 'none' ? 'agent' : 'auto',
+          preferredAgentId: (preferredAgentId && preferredAgentId !== 'none' && preferredAgentId !== 'assignee') ? preferredAgentId : null,
           preferredAgentName: selectedAgent?.agent.name || null,
           preferredAgentAvatar: selectedAgent?.agent.avatar || null,
           preferredAgentCliName: selectedAgent?.agent.cliName || null,
@@ -698,6 +701,33 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                     autoFocus
                   />
                 </div>
+                {/* 담당자 */}
+                {gitMembers.length > 0 && (
+                  <div className="mb-2">
+                    <label className="text-xs font-bold text-ive-text-dim mb-1 block">
+                      <i className="fa-solid fa-user-tag mr-1" />{tIssue('assignee')}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => openAssigneeModal([-1])}
+                      className="w-full bg-ive-bg-deep border border-ive-border-dark border-dashed rounded-lg px-3 py-2 text-left flex items-center gap-2 text-sm focus:outline-none hover:border-ive-green/50 transition-colors"
+                    >
+                      {selectedAssignees.length > 0 ? (
+                        <span className="flex items-center gap-1.5 flex-wrap">
+                          {selectedAssignees.map(a => (
+                            <span key={a.id} className="flex items-center gap-1 bg-ive-bg-card rounded px-1.5 py-0.5">
+                              {a.avatarUrl ? <img src={a.avatarUrl} className="w-4 h-4 rounded-full" alt="" /> : <i className="fa-solid fa-user text-xs text-ive-text-dim" />}
+                              <span className="text-ive-text font-bold text-xs">{a.name || a.username}</span>
+                            </span>
+                          ))}
+                          <i className="fa-solid fa-pen text-[10px] text-ive-text-dim ml-auto" />
+                        </span>
+                      ) : (
+                        <span className="text-ive-text-dim font-bold"><i className="fa-solid fa-user-plus mr-1.5" />{tIssue('selectAssignee')}</span>
+                      )}
+                    </button>
+                  </div>
+                )}
                 {/* 작업자 지정 드롭다운 */}
                 <div ref={agentDropdownRef} className="relative mb-2">
                   <label className="text-xs font-bold text-ive-text-dim mb-1 block">
@@ -706,10 +736,12 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                   <button
                     type="button"
                     onClick={() => setAgentDropdownOpen(v => !v)}
-                    className="w-full bg-ive-bg-deep border border-ive-border-dark rounded-lg px-3 py-2 text-left flex items-center gap-2 text-sm focus:outline-none focus:border-ive-green/50 transition-colors"
+                    className="w-full bg-ive-bg-card border border-ive-border-dark rounded-lg px-3 py-2 text-left flex items-center gap-2 text-sm focus:outline-none focus:border-ive-green/50 transition-colors"
                   >
                     {preferredAgentId === 'none' ? (
                       <span className="text-ive-text font-bold"><i className="fa-solid fa-ban mr-1 text-ive-text-muted" />{tIssue('noAssignment')}</span>
+                    ) : preferredAgentId === 'assignee' ? (
+                      <span className="text-ive-text font-bold"><i className="fa-solid fa-user mr-1 text-ive-cyan" />{tIssue('assigneeHandles')}</span>
                     ) : preferredAgentId ? (() => {
                       const pa = projectAgents.find(a => a.agentId === preferredAgentId)
                       if (!pa) return <span className="text-ive-text font-bold">{tIssue('noPreference')}</span>
@@ -744,6 +776,15 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                         <i className="fa-solid fa-shuffle" />
                         <span className="font-bold">{tIssue('noPreference')}</span>
                       </button>
+                      <button
+                        onClick={() => { setPreferredAgentId('assignee'); setAgentDropdownOpen(false) }}
+                        className={`w-full px-3 py-2.5 text-left text-sm flex items-center gap-2 transition-colors ${
+                          preferredAgentId === 'assignee' ? 'bg-ive-cyan/10 text-ive-cyan' : 'text-ive-text-dim hover:bg-white/5'
+                        }`}
+                      >
+                        <i className="fa-solid fa-user" />
+                        <span className="font-bold">{tIssue('assigneeHandles')}</span>
+                      </button>
                       {projectAgents.map(pa => {
                         const cli = CLI_CONFIG[pa.agent.cliName]
                         const isOffline = pa.agent.status === 'offline'
@@ -767,31 +808,11 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                     </div>
                   )}
                 </div>
-                {/* 담당자 */}
-                {gitMembers.length > 0 && (
-                  <div className="mb-2">
-                    <label className="text-xs font-bold text-ive-text-dim mb-1 block">
-                      <i className="fa-solid fa-user-tag mr-1" />{tIssue('assignee')}
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => openAssigneeModal([-1])}
-                      className="w-full bg-ive-bg-deep border border-ive-border-dark border-dashed rounded-lg px-3 py-2 text-left flex items-center gap-2 text-sm focus:outline-none hover:border-ive-green/50 transition-colors"
-                    >
-                      {selectedAssignees.length > 0 ? (
-                        <span className="flex items-center gap-1.5 flex-wrap">
-                          {selectedAssignees.map(a => (
-                            <span key={a.id} className="flex items-center gap-1 bg-ive-bg-card rounded px-1.5 py-0.5">
-                              {a.avatarUrl ? <img src={a.avatarUrl} className="w-4 h-4 rounded-full" alt="" /> : <i className="fa-solid fa-user text-xs text-ive-text-dim" />}
-                              <span className="text-ive-text font-bold text-xs">{a.name || a.username}</span>
-                            </span>
-                          ))}
-                          <i className="fa-solid fa-pen text-[10px] text-ive-text-dim ml-auto" />
-                        </span>
-                      ) : (
-                        <span className="text-ive-text-dim font-bold"><i className="fa-solid fa-user-plus mr-1.5" />{tIssue('selectAssignee')}</span>
-                      )}
-                    </button>
+                {/* 담당자가 처리 모드인데 담당자 미지정 시 안내 */}
+                {preferredAgentId === 'assignee' && selectedAssignees.length === 0 && (
+                  <div className="mb-2 px-2.5 py-1.5 rounded-lg bg-ive-amber/10 border border-ive-amber/20 text-xs text-ive-amber">
+                    <i className="fa-solid fa-triangle-exclamation mr-1" />
+                    {tIssue('assigneeRequiredWarning')}
                   </div>
                 )}
                 <button
@@ -989,7 +1010,16 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                         </div>
                       )}
                       <div className="flex items-center gap-3 text-xs text-ive-text-dim">
-                        {issue.preferredAgentId && issue.preferredAgentAvatar && (
+                        {issue.assignMode === 'assignee' ? (
+                          <span className="flex items-center gap-1 text-ive-cyan">
+                            {issue.assignees?.[0]?.avatarUrl ? (
+                              <img src={issue.assignees[0].avatarUrl} className="w-4 h-4 rounded-full" alt="" />
+                            ) : (
+                              <i className="fa-solid fa-user text-[10px]" />
+                            )}
+                            <span className="font-bold">{issue.assignees?.[0]?.name || issue.assignees?.[0]?.username || tIssue('assigneeHandles')}</span>
+                          </span>
+                        ) : issue.preferredAgentId && issue.preferredAgentAvatar && (
                           <span className="flex items-center gap-1">
                             <AgentAvatar avatar={issue.preferredAgentAvatar} size="sm" />
                             <span className="font-bold text-ive-text-muted">{issue.preferredAgentName}</span>

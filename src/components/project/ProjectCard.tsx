@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Project, ProjectAssignment, Agent, TaskExecution, StatSnapshot } from '@/types'
 import { useEffect, useState, useCallback } from 'react'
 import { useStore } from '@/lib/store'
@@ -51,12 +52,14 @@ export default function ProjectCard({ project }: Props) {
   const agentCount = project.assignedAgents?.length ?? 0
   const isOwner = !project.shareRole
   const canEdit = isOwner || project.shareRole === 'editor'
+  const router = useRouter()
   const { updateProject, scanProjectNow, state } = useStore()
   const userLocale = state.user?.locale
   const userTz = state.user?.timezone
   const { alert: showAlert } = useDialog()
   const { navigateToAddIssue } = useTab()
   const tp = useTranslations('project')
+  const te = useTranslations('execution')
   const [scanning, setScanning] = useState(false)
   const [expandedPanel, _setExpandedPanel] = useState<'running' | 'done' | 'waiting' | 'conflicts' | null>(() => {
     if (typeof window === 'undefined') return null
@@ -166,8 +169,8 @@ export default function ProjectCard({ project }: Props) {
     } finally { setKilling(null) }
   }
 
-  const runningExecs = executions.filter(e => e.status === 'running')
-  const doneExecs = executions.filter(e => e.status !== 'running')
+  const runningExecs = executions.filter(e => e.status === 'running' || e.status === 'assigned')
+  const doneExecs = executions.filter(e => e.status !== 'running' && e.status !== 'assigned')
   const todayStartISO = getKSTTodayStartISO()
   const todayDoneExecs = doneExecs.filter(e => e.startedAt >= todayStartISO)
 
@@ -408,19 +411,37 @@ export default function ProjectCard({ project }: Props) {
       )}
 
       {/* 작업 현황 패널 */}
-      {expandedPanel === 'running' && (
-        <div className="flex-1 flex flex-col min-h-0">
-          <LiveTracePanel
-            agents={(project.assignedAgents ?? []).map(pa => ({
-              agent: pa.agent,
-              execution: runningExecs.find(e => e.agentId === pa.agentId) ?? null,
-            }))}
-            projectId={project.id}
-            onKill={handleKill}
-            onAllCompleted={() => setExpandedPanel(null)}
-          />
-        </div>
-      )}
+      {expandedPanel === 'running' && (() => {
+        const userExecs = runningExecs.filter(e => e.assigneeType === 'user')
+        const agentExecs = runningExecs.filter(e => e.assigneeType !== 'user')
+        const hasAgentWork = agentExecs.length > 0 || (project.assignedAgents ?? []).some(pa => agentExecs.find(e => e.agentId === pa.agentId))
+        return (
+          <div className="flex-1 flex flex-col min-h-0">
+            {/* 사람 작업 — AI와 동일한 탭+컨텐츠 레이아웃 */}
+            {userExecs.length > 0 && (
+              <UserTaskPanel
+                executions={userExecs}
+                projectId={project.id}
+                onKill={handleKill}
+                formatDuration={formatDuration}
+                te={te}
+              />
+            )}
+            {/* 에이전트 작업 */}
+            {(hasAgentWork || userExecs.length === 0) && (
+              <LiveTracePanel
+                agents={(project.assignedAgents ?? []).map(pa => ({
+                  agent: pa.agent,
+                  execution: agentExecs.find(e => e.agentId === pa.agentId) ?? null,
+                }))}
+                projectId={project.id}
+                onKill={handleKill}
+                onAllCompleted={userExecs.length === 0 ? () => setExpandedPanel(null) : undefined}
+              />
+            )}
+          </div>
+        )
+      })()}
 
       {/* 대기 이슈 패널 */}
       {expandedPanel === 'waiting' && (
@@ -441,7 +462,7 @@ export default function ProjectCard({ project }: Props) {
                 {waitingIssues.map((issue: any) => (
                   <div
                     key={issue.iid}
-                    onClick={() => window.open(issue.webUrl, '_blank')}
+                    onClick={() => router.push(`/issues/${project.id}/${issue.iid}`)}
                     className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-3 hover:border-ive-cyan/40 transition-all cursor-pointer active:scale-[0.98]"
                   >
                     <div className="flex items-center gap-2 mb-1">
@@ -489,6 +510,148 @@ export default function ProjectCard({ project }: Props) {
           onClose={() => setExpandedPanel(null)}
         />
       )}
+    </div>
+  )
+}
+
+// ── 사람 작업 패널 (AI 트레이스와 동일한 레이아웃, 트레이스 대신 Git 이슈 노트 표시) ──
+
+function UserTaskPanel({ executions, projectId, onKill, formatDuration, te }: {
+  executions: TaskExecution[]
+  projectId: string
+  onKill: (id: string) => void
+  formatDuration: (startedAt: string) => string
+  te: (key: string) => string
+}) {
+  const router = useRouter()
+  const [activeIdx, setActiveIdx] = useState(0)
+  const [notes, setNotes] = useState<{ author: string; body: string; createdAt: string }[]>([])
+  const [notesLoading, setNotesLoading] = useState(false)
+  const [tick, setTick] = useState(0)
+  const { state } = useStore()
+  const userTz = state.user?.timezone
+
+  const current = executions[activeIdx < executions.length ? activeIdx : 0]
+
+  useEffect(() => {
+    const timer = setInterval(() => setTick(t => t + 1), 1000)
+    return () => clearInterval(timer)
+  }, [])
+
+  // 이슈 노트(Git 히스토리) 로드
+  useEffect(() => {
+    if (!current) return
+    setNotesLoading(true)
+    fetch(`/api/projects/${projectId}/issues/${current.issueIid}/notes`)
+      .then(r => r.ok ? r.json() : [])
+      .then(data => setNotes(data))
+      .catch(() => setNotes([]))
+      .finally(() => setNotesLoading(false))
+    const timer = setInterval(() => {
+      fetch(`/api/projects/${projectId}/issues/${current.issueIid}/notes`)
+        .then(r => r.ok ? r.json() : [])
+        .then(data => setNotes(data))
+        .catch(() => {})
+    }, 30000)
+    return () => clearInterval(timer)
+  }, [current?.id, projectId])
+
+  if (!current) return null
+
+  return (
+    <div className="border-t border-ive-cyan/20 flex-1 flex flex-col min-h-0">
+      {/* 탭 바 */}
+      {executions.length > 0 && (
+        <div className="flex border-b border-ive-border-dark bg-ive-bg-deep/50 shrink-0">
+          {executions.map((ex, idx) => (
+            <button
+              key={ex.id}
+              onClick={() => setActiveIdx(idx)}
+              className={`flex-1 px-2 py-1.5 text-sm font-bold flex items-center justify-center gap-1.5 transition-all ${
+                idx === activeIdx ? 'text-ive-cyan border-b-2 border-ive-cyan bg-ive-cyan/5' : 'text-ive-text-dim hover:text-ive-text-muted'
+              }`}
+            >
+              {ex.userAvatar ? (
+                <img src={ex.userAvatar} alt="" className="w-5 h-5 rounded-full shrink-0" />
+              ) : (
+                <div className="w-5 h-5 rounded-full bg-ive-cyan/20 flex items-center justify-center shrink-0">
+                  <i className="fa-solid fa-user text-ive-cyan text-[8px]" />
+                </div>
+              )}
+              <span className="truncate min-w-0"><MarqueeText className="text-sm">{ex.userName || `#${ex.issueIid}`}</MarqueeText></span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* 컨텐츠 */}
+      <div className="flex-1 flex flex-col min-h-0 p-3 gap-2">
+        {/* 헤더 */}
+        <div className="flex items-center justify-between shrink-0">
+          <div className="min-w-0 flex-1">
+            <MarqueeText className="text-sm font-bold text-ive-text">
+              <span className="font-bold text-ive-cyan">#{current.issueIid}</span>
+              {current.issueTitle && <span className="ml-1.5">{current.issueTitle}</span>}
+            </MarqueeText>
+          </div>
+          <div className="flex items-center gap-2 shrink-0 ml-2">
+            <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-ive-cyan/20 text-ive-cyan">
+              {te('assigned')}
+            </span>
+            <span className="text-xs font-mono font-bold text-ive-cyan">
+              {formatDuration(current.startedAt)}
+              {tick >= 0 ? '' : ''}
+            </span>
+          </div>
+        </div>
+
+        {/* Git 이슈 노트 (트레이스 대신) */}
+        <div className="flex-1 min-h-0 overflow-y-auto bg-ive-bg-deep rounded-lg border border-ive-border-dark">
+          {notesLoading ? (
+            <div className="text-center py-6 text-ive-text-dim text-xs">
+              <i className="fa-solid fa-circle-notch fa-spin mr-1" />로딩 중...
+            </div>
+          ) : notes.length === 0 ? (
+            <div className="text-center py-6 text-ive-text-dim text-xs">
+              <i className="fa-solid fa-comment-slash text-lg mb-2 block" />
+              아직 활동 내역이 없습니다
+            </div>
+          ) : (
+            <div className="p-2.5 space-y-3">
+              {notes.map((note: any, i: number) => (
+                <div key={note.id || i} className="flex gap-2.5 border-b border-ive-border-dark pb-3 last:border-0 last:pb-0">
+                  {note.avatarUrl ? (
+                    <img src={note.avatarUrl} alt="" className="w-8 h-8 rounded-full shrink-0 mt-0.5 border border-ive-border-subtle" />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-ive-cyan/20 flex items-center justify-center shrink-0 mt-0.5 border border-ive-border-subtle">
+                      <i className="fa-solid fa-user text-ive-cyan text-xs" />
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span className="text-xs font-bold text-ive-text">{note.author}</span>
+                      <span className="text-[10px] text-ive-text-dim font-mono">
+                        {new Date(note.createdAt || note.created_at).toLocaleString(undefined, { timeZone: userTz || undefined })}
+                      </span>
+                    </div>
+                    <div className="text-xs text-ive-text-muted whitespace-pre-wrap break-words">{(note.body || '').replace(/<!--.*?-->\n?/g, '').replace(/\*\*(.+?)\*\*/g, '$1').trim()}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* 이슈 보기 버튼 */}
+        <div className="flex gap-2 shrink-0">
+          <button
+            onClick={() => router.push(`/issues/${projectId}/${current.issueIid}`)}
+            className="flex-1 text-xs font-bold text-ive-cyan border border-ive-cyan/30 py-1.5 rounded-lg bg-ive-bg-deep hover:bg-ive-cyan/10 transition-colors"
+          >
+            <i className="fa-solid fa-arrow-up-right-from-square mr-1" />이슈 보기
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
