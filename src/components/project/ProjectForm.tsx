@@ -27,6 +27,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
   const [labelTarget, setLabelTarget] = useState(existing?.labelTarget ?? 'IVE')
   const [labelSchedule, setLabelSchedule] = useState(existing?.labelSchedule ?? 'IVE-S')
   const [labelDev, setLabelDev] = useState(existing?.labelDev ?? 'IVE-D')
+  const [labelVerifyWait, setLabelVerifyWait] = useState(existing?.labelVerifyWait ?? 'IVE-W')
   const [labelVerify, setLabelVerify] = useState(existing?.labelVerify ?? 'IVE-V')
   const [labelEnd, setLabelEnd] = useState(existing?.labelEnd ?? 'IVE-E')
   const [labelStatus, setLabelStatus] = useState<{ label: string; exists: boolean }[] | null>(null)
@@ -168,6 +169,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
       labelTarget: labelTarget.trim(),
       labelSchedule: labelSchedule.trim() || 'IVE-S',
       labelDev: labelDev.trim() || 'IVE-D',
+      labelVerifyWait: labelVerifyWait.trim() || 'IVE-W',
       labelVerify: labelVerify.trim() || 'IVE-V',
       labelEnd: labelEnd.trim() || 'IVE-E',
       showToolUsage,
@@ -406,6 +408,17 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
               className="flex-1 bg-ive-bg-deep border border-ive-border rounded-lg px-3 py-1.5 text-sm text-ive-text focus:outline-none focus:border-ive-green font-bold"
             />
             <span className="text-xs text-ive-text-dim shrink-0 w-16 text-right">{t('labelDev')}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-3 h-3 rounded-full bg-yellow-400 shrink-0" />
+            <input
+              type="text"
+              value={labelVerifyWait}
+              onChange={e => setLabelVerifyWait(e.target.value)}
+              placeholder="IVE-W"
+              className="flex-1 bg-ive-bg-deep border border-ive-border rounded-lg px-3 py-1.5 text-sm text-ive-text focus:outline-none focus:border-ive-green font-bold"
+            />
+            <span className="text-xs text-ive-text-dim shrink-0 w-16 text-right">{t('labelVerifyWait')}</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded-full bg-orange-400 shrink-0" />

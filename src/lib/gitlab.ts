@@ -70,9 +70,10 @@ export async function ensureGitLabLabels(project: Project, decryptedToken: strin
   const headers = getAuthHeaders(project, decryptedToken);
   const labelsToEnsure = [
     { name: project.labelTarget, color: '#34d399', description: 'IVE 관리 대상 이슈 표시.' },
-    { name: project.labelSchedule || 'IVE-S', color: '#fbbf24', description: '스케줄 대상. 스캐너가 이 레이블의 이슈를 에이전트에 배정합니다.' },
+    { name: project.labelSchedule || 'IVE-S', color: '#fbbf24', description: '스케줄 대기. 스캐너가 이 레이블의 이슈를 에이전트에 배정합니다.' },
     { name: project.labelDev || 'IVE-D', color: '#22d3ee', description: '개발 중. 에이전트가 작업을 시작하면 자동 부착됩니다.' },
-    { name: project.labelVerify || 'IVE-V', color: '#fb923c', description: '검증 대기. 개발이 완료되어 리뷰가 필요합니다.' },
+    { name: project.labelVerifyWait || 'IVE-W', color: '#eab308', description: '검증대기. 개발이 완료되어 검증자의 검증시작을 기다리고 있습니다.' },
+    { name: project.labelVerify || 'IVE-V', color: '#fb923c', description: '검증 중. 검증자가 검증을 진행하고 있습니다.' },
     { name: project.labelEnd || 'IVE-E', color: '#60a5fa', description: '처리 완료. 코드가 수정되었으면 MR/PR 머지 대상입니다.' },
   ];
 
@@ -128,7 +129,7 @@ export async function checkGitLabLabelsExist(project: Project, decryptedToken: s
   const labelsToCheck = [
     project.labelTarget,
     project.labelSchedule || 'IVE-S', project.labelDev || 'IVE-D',
-    project.labelVerify || 'IVE-V', project.labelEnd || 'IVE-E',
+    project.labelVerifyWait || 'IVE-W', project.labelVerify || 'IVE-V', project.labelEnd || 'IVE-E',
   ];
   try {
     const res = await fetch(apiUrl(project, '/labels?per_page=100'), { headers });

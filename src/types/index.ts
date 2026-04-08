@@ -55,7 +55,8 @@ export interface Project {
   labelTarget: string      // IVE 관리 대상 표시 (예: IVE)
   labelSchedule: string   // 스케줄 대상 (예: IVE-S) — 스캐너가 이 레이블의 이슈를 배정
   labelDev: string         // 개발 중 (예: IVE-D) — 에이전트 배정 시 부착
-  labelVerify: string      // 검증 대기 (예: IVE-V) — 개발 완료 후 부착
+  labelVerifyWait: string  // 검증 대기 (예: IVE-W) — 개발 완료 후 부착 (검증자 시작 전)
+  labelVerify: string      // 검증 중 (예: IVE-V) — 검증자가 검증시작 클릭 후 부착
   labelEnd: string         // 처리 완료 (예: IVE-E) — 검증 완료 후 부착
   showToolUsage: boolean   // 트레이스에 툴 사용 표시 여부
   checkInterval: number    // 체크 간격 (분)

@@ -6,7 +6,7 @@ import { reopenIssue, fetchSingleIssue, addIssueLabels, removeIssueLabels } from
 import { logActivity } from '@/lib/activity';
 
 // 허용되는 stage 전환 (레이블 기반)
-// IVE-S: 스케줄 → IVE-D: 개발 → IVE-V: 검증 → IVE-E: 완료
+// IVE-S: 스케줄 → IVE-D: 개발 → IVE-W: 검증대기 → IVE-V: 검증 → IVE-E: 완료
 const TRANSITIONS: Record<string, { action: string; description: string; removeLabels: (p: any) => string[]; addLabels: (p: any) => string[] }[]> = {
   none: [
     {
@@ -26,9 +26,9 @@ const TRANSITIONS: Record<string, { action: string; description: string; removeL
     },
     {
       action: 'complete',
-      description: '머지 완료 → 완료',
-      removeLabels: (p) => [p.labelDev || 'IVE-D', p.labelVerify || 'IVE-V'],
-      addLabels: (p) => [p.labelEnd || 'IVE-E'],
+      description: '머지 완료 → 검증대기',
+      removeLabels: (p) => [p.labelDev || 'IVE-D'],
+      addLabels: (p) => [p.labelVerifyWait || 'IVE-W'],
     },
   ],
   dev_fail: [
@@ -36,6 +36,20 @@ const TRANSITIONS: Record<string, { action: string; description: string; removeL
       action: 'retry',
       description: '재시도 → 스케줄',
       removeLabels: (p) => [p.labelDev || 'IVE-D'],
+      addLabels: (p) => [p.labelSchedule || 'IVE-S'],
+    },
+  ],
+  verify_waiting: [
+    {
+      action: 'start_verification',
+      description: '검증시작 → 검증 중',
+      removeLabels: (p) => [p.labelVerifyWait || 'IVE-W'],
+      addLabels: (p) => [p.labelVerify || 'IVE-V'],
+    },
+    {
+      action: 'cancel',
+      description: '검증대기 취소 → 스케줄',
+      removeLabels: (p) => [p.labelVerifyWait || 'IVE-W'],
       addLabels: (p) => [p.labelSchedule || 'IVE-S'],
     },
   ],
@@ -135,8 +149,8 @@ export async function POST(
       }
     }
 
-    // 검증 완료 시 실행 기록에 verified_at 기록
-    if (action === 'approve' || action === 'complete') {
+    // 검증 완료 시 실행 기록에 verified_at 기록 (verifying 상태에서만)
+    if (action === 'approve' || (action === 'complete' && stage === 'verifying')) {
       markIssueVerified(projectId, Number(iid));
     }
 
@@ -157,6 +171,7 @@ export async function POST(
       approve: '검증 승인',
       complete: '머지 완료',
       reject: '검증 반려',
+      start_verification: '검증 시작',
     };
     logActivity({
       userId: user.id,

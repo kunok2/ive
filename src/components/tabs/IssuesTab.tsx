@@ -55,14 +55,15 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   const tCommon = useTranslations('common')
 
   const STAGE_INFO: Record<string, { label: string; color: string; icon: string }> = useMemo(() => ({
-    waiting:    { label: tStage('waiting'),    color: 'bg-ive-green/20 text-ive-green border-ive-green/30', icon: 'fa-clock' },
-    dev:        { label: tStage('dev'),        color: 'bg-ive-cyan/20 text-ive-cyan border-ive-cyan/30', icon: 'fa-code' },
-    dev_fail:   { label: tStage('dev_fail'),   color: 'bg-ive-red/20 text-ive-red border-ive-red/30', icon: 'fa-circle-xmark' },
-    verifying:  { label: tStage('verifying'),  color: 'bg-orange-500/20 text-orange-400 border-orange-500/30', icon: 'fa-magnifying-glass' },
-    done:       { label: tStage('done'),       color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30', icon: 'fa-circle-check' },
-    closed:     { label: tStage('closed'),     color: 'bg-gray-500/20 text-gray-400 border-gray-500/30', icon: 'fa-lock' },
-    rejected:   { label: tStage('rejected'),   color: 'bg-rose-500/20 text-rose-400 border-rose-500/30', icon: 'fa-rotate-left' },
-    unknown:    { label: tStage('unknown'),    color: 'bg-white/10 text-ive-text-dim border-white/20', icon: 'fa-question' },
+    waiting:        { label: tStage('waiting'),        color: 'bg-ive-green/20 text-ive-green border-ive-green/30', icon: 'fa-clock' },
+    verify_waiting: { label: tStage('verify_waiting'), color: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30', icon: 'fa-hourglass-half' },
+    dev:            { label: tStage('dev'),            color: 'bg-ive-cyan/20 text-ive-cyan border-ive-cyan/30', icon: 'fa-code' },
+    dev_fail:       { label: tStage('dev_fail'),       color: 'bg-ive-red/20 text-ive-red border-ive-red/30', icon: 'fa-circle-xmark' },
+    verifying:      { label: tStage('verifying'),      color: 'bg-orange-500/20 text-orange-400 border-orange-500/30', icon: 'fa-magnifying-glass' },
+    done:           { label: tStage('done'),           color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30', icon: 'fa-circle-check' },
+    closed:         { label: tStage('closed'),         color: 'bg-gray-500/20 text-gray-400 border-gray-500/30', icon: 'fa-lock' },
+    rejected:       { label: tStage('rejected'),       color: 'bg-rose-500/20 text-rose-400 border-rose-500/30', icon: 'fa-rotate-left' },
+    unknown:        { label: tStage('unknown'),        color: 'bg-white/10 text-ive-text-dim border-white/20', icon: 'fa-question' },
   }), [tStage])
 
   const FILTER_TABS = useMemo(() => [
@@ -77,6 +78,10 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
 
   const BULK_ACTIONS: Record<string, { action: string; label: string; icon: string; danger?: boolean }[]> = useMemo(() => ({
     waiting: [],
+    verify_waiting: [
+      { action: 'start_verification', label: tIssue('startVerification'), icon: 'fa-play' },
+      { action: 'cancel', label: tIssue('cancelToWaiting'), icon: 'fa-rotate-left', danger: true },
+    ],
     dev: [
       { action: 'cancel', label: tIssue('toWaiting'), icon: 'fa-rotate-left', danger: true },
     ],
@@ -331,7 +336,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
 
   const filtered = (isHistoryTab ? closedIssues : issues.filter(issue => {
     if (filter === 'all') return true
-    if (filter === 'waiting') return issue.stage === 'waiting'
+    if (filter === 'waiting') return issue.stage === 'waiting' || issue.stage === 'verify_waiting'
     if (filter === 'active') return issue.stage === 'dev'
     if (filter === 'verifying') return issue.stage === 'verifying'
     if (filter === 'failed') return issue.stage === 'dev_fail' || issue.stage === 'rejected'
@@ -637,7 +642,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                   {tab.label}
                   {(() => {
                     const count = tab.key === 'all' ? issues.length
-                      : tab.key === 'waiting' ? issues.filter(i => i.stage === 'waiting').length
+                      : tab.key === 'waiting' ? issues.filter(i => i.stage === 'waiting' || i.stage === 'verify_waiting').length
                       : tab.key === 'active' ? issues.filter(i => i.stage === 'dev').length
                       : tab.key === 'verifying' ? issues.filter(i => i.stage === 'verifying').length
                       : tab.key === 'failed' ? issues.filter(i => i.stage === 'dev_fail' || i.stage === 'rejected').length

@@ -376,6 +376,10 @@ function initSchema(db: Database.Database) {
       db.exec("ALTER TABLE projects ADD COLUMN label_verify TEXT NOT NULL DEFAULT 'IVE-V'")
       db.exec("ALTER TABLE projects ADD COLUMN label_end TEXT NOT NULL DEFAULT 'IVE-E'")
     }
+    // label_verify_wait 컬럼: 검증대기 단계 (IVE-W)
+    if (!tableInfo.some((col: any) => col.name === 'label_verify_wait')) {
+      db.exec("ALTER TABLE projects ADD COLUMN label_verify_wait TEXT NOT NULL DEFAULT 'IVE-W'")
+    }
     // 기존 레이블(IVE-DS/DE/VS/VE 등)을 새 체계로 강제 마이그레이션
     db.exec("UPDATE projects SET label_schedule = 'IVE-S' WHERE label_schedule IN ('IVE-DS', 'IVE-VS', '')")
     db.exec("UPDATE projects SET label_dev = 'IVE-D' WHERE label_dev IN ('IVE-DE', 'IVE-DS', '')")
@@ -679,6 +683,7 @@ type ProjectRow = {
   last_activity_at: string | null;
   label_schedule: string;
   label_dev: string;
+  label_verify_wait: string;
   label_verify: string;
   label_end: string;
 }
@@ -693,6 +698,7 @@ function mapProject(r: ProjectRow): Project {
     labelTarget: r.label_target,
     labelSchedule: r.label_schedule || 'IVE-S',
     labelDev: r.label_dev || 'IVE-D',
+    labelVerifyWait: r.label_verify_wait || 'IVE-W',
     labelVerify: r.label_verify || 'IVE-V',
     labelEnd: r.label_end || 'IVE-E',
     showToolUsage: r.show_tool_usage === 1,
@@ -742,15 +748,15 @@ export function createProject(p: Project) {
   getDb().prepare(
     `INSERT INTO projects (
       id, user_id, name, provider, repo_url, auth_type, git_username, access_token, color,
-      label_target, label_schedule, label_dev, label_verify, label_end, show_tool_usage,
+      label_target, label_schedule, label_dev, label_verify_wait, label_verify, label_end, show_tool_usage,
       check_interval, last_checked_at, last_scanned_issue_count, scanner_active, sort_order,
       avatar_url, snapshot_interval, sparkline_points, stats_retention, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     p.id, p.userId, p.name, p.provider, p.repoUrl, p.authType || 'token', p.gitUsername || '',
     p.accessToken, p.color || '#4ade80',
     p.labelTarget, p.labelSchedule || 'IVE-S', p.labelDev || 'IVE-D',
-    p.labelVerify || 'IVE-V', p.labelEnd || 'IVE-E', p.showToolUsage ? 1 : 0,
+    p.labelVerifyWait || 'IVE-W', p.labelVerify || 'IVE-V', p.labelEnd || 'IVE-E', p.showToolUsage ? 1 : 0,
     p.checkInterval, p.lastCheckedAt, p.lastScannedIssueCount, p.scannerActive ? 1 : 0, sortOrder,
     p.avatarUrl || '', p.snapshotInterval ?? 1, p.sparklinePoints ?? 60, p.statsRetention ?? 7, p.createdAt
   )
@@ -762,7 +768,7 @@ export function updateProject(p: Project) {
       name = ?, repo_url = ?, access_token = ?, color = ?,
       auth_type = ?, git_username = ?,
       label_target = ?, label_schedule = ?, label_dev = ?,
-      label_verify = ?, label_end = ?, show_tool_usage = ?,
+      label_verify_wait = ?, label_verify = ?, label_end = ?, show_tool_usage = ?,
       check_interval = ?, last_checked_at = ?, last_scanned_issue_count = ?,
       scanner_active = ?, sort_order = ?, avatar_url = ?,
       snapshot_interval = ?, sparkline_points = ?, stats_retention = ?
@@ -771,7 +777,7 @@ export function updateProject(p: Project) {
     p.name, p.repoUrl, p.accessToken, p.color || '#4ade80',
     p.authType || 'token', p.gitUsername || '',
     p.labelTarget, p.labelSchedule || 'IVE-S', p.labelDev || 'IVE-D',
-    p.labelVerify || 'IVE-V', p.labelEnd || 'IVE-E', p.showToolUsage ? 1 : 0,
+    p.labelVerifyWait || 'IVE-W', p.labelVerify || 'IVE-V', p.labelEnd || 'IVE-E', p.showToolUsage ? 1 : 0,
     p.checkInterval, p.lastCheckedAt, p.lastScannedIssueCount,
     p.scannerActive ? 1 : 0, p.sortOrder ?? 0, p.avatarUrl || '',
     p.snapshotInterval ?? 1, p.sparklinePoints ?? 60, p.statsRetention ?? 7,
@@ -1553,18 +1559,19 @@ export function setSystemSettings(settings: Record<string, string>) {
 // 이슈 상태는 DB가 아닌 Git 레이블로만 관리됩니다.
 // issue_stages 테이블은 preferred_agent_id 저장 용도로만 사용합니다.
 
-export type IssueStage = 'waiting' | 'dev' | 'dev_fail' | 'verifying' | 'done' | 'rejected'
+export type IssueStage = 'waiting' | 'verify_waiting' | 'dev' | 'dev_fail' | 'verifying' | 'done' | 'rejected'
 
 /**
  * Git 레이블로부터 이슈 상태를 판정합니다.
  * IVE 레이블이 없으면 null (IVE에서 관리하지 않는 이슈).
- * 우선순위: IVE-E > IVE-V > IVE-D > IVE-S > (IVE only)
+ * 우선순위: IVE-E > IVE-V > IVE-W > IVE-D > IVE-S > (IVE only)
  *
- * IVE-S: 스케줄 대상 → waiting
+ * IVE-S: 스케줄 대기 → waiting
  * IVE-D: 개발 중 → dev (활성 실행 없으면 dev_fail)
- * IVE-V: 검증 대기 → verifying
+ * IVE-W: 검증대기 → verify_waiting (개발 완료, 검증자 시작 전)
+ * IVE-V: 검증 중 → verifying (검증자가 검증시작 클릭 후)
  * IVE-E: 처리 완료 → done
- * IVE만: 관리 대상이지만 스케줄 미등록 → null이 아닌 'none' 상태
+ * IVE만: 관리 대상이지만 스케줄 미등록 → null
  */
 export function stageFromLabels(
   labels: string[],
@@ -1575,11 +1582,13 @@ export function stageFromLabels(
 
   const labelS = project.labelSchedule || 'IVE-S'
   const labelD = project.labelDev || 'IVE-D'
+  const labelW = project.labelVerifyWait || 'IVE-W'
   const labelV = project.labelVerify || 'IVE-V'
   const labelE = project.labelEnd || 'IVE-E'
 
   if (labels.includes(labelE)) return 'done'
   if (labels.includes(labelV)) return 'verifying'
+  if (labels.includes(labelW)) return 'verify_waiting'
   if (labels.includes(labelD)) {
     // IVE-D가 있지만 활성 실행이 없으면 → dev_fail
     if (options?.hasActiveExec === false) return 'dev_fail'
