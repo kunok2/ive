@@ -724,7 +724,9 @@
     "waitingUnit": "건",
     "waitingAvg": "기간 평균",
     "prevWaiting": "이전 대기",
-    "noWaitingHistory": "현재 대기에 대한 이력이 없습니다."
+    "noWaitingHistory": "현재 대기에 대한 이력이 없습니다.",
+    "waitingTrendByAgent": "대기 건수 추이 (개발자별)",
+    "waitingCurrentByAgent": "현재 대기 건수 (개발자별)"
   },
   "pull": {
     "loading": "조회 중...",

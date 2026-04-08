@@ -1327,6 +1327,72 @@ export function getDailyWaitingTrend(startDate: string, endDate: string): {
   return { daily }
 }
 
+export function getDailyWaitingTrendByAgent(startDate: string, endDate: string): {
+  daily: { date: string; total: number; byAgent: { agentId: string; agentName: string; agentAvatar: string; waiting: number }[] }[]
+} {
+  const db = getDb()
+
+  // 에이전트 목록 (이름, 아바타)
+  const agents = db.prepare('SELECT id, name, avatar FROM agents').all() as { id: string; name: string; avatar: string }[]
+  const agentMap = new Map(agents.map(a => [a.id, { name: a.name, avatar: a.avatar }]))
+
+  // 1. daily_summaries에서 장기 데이터 조회
+  const summaryRows = db.prepare(`
+    SELECT date as day, entity_id as agent_id, avg_waiting
+    FROM stat_daily_summaries
+    WHERE entity_type = 'agent'
+      AND date >= ? AND date < ?
+    ORDER BY day ASC
+  `).all(startDate, endDate) as { day: string; agent_id: string; avg_waiting: number }[]
+
+  // 2. raw 스냅샷에서 최근 데이터 조회
+  const snapshotRows = db.prepare(`
+    SELECT
+      DATE(timestamp, '+9 hours') as day,
+      entity_id as agent_id,
+      ROUND(AVG(waiting)) as avg_waiting
+    FROM stat_snapshots
+    WHERE entity_type = 'agent'
+      AND DATE(timestamp, '+9 hours') >= ? AND DATE(timestamp, '+9 hours') < ?
+    GROUP BY DATE(timestamp, '+9 hours'), entity_id
+    ORDER BY day ASC
+  `).all(startDate, endDate) as { day: string; agent_id: string; avg_waiting: number }[]
+
+  // 날짜별 그룹화
+  const dayMap = new Map<string, Map<string, number>>()
+  for (const r of summaryRows) {
+    if (!dayMap.has(r.day)) dayMap.set(r.day, new Map())
+    dayMap.get(r.day)!.set(r.agent_id, r.avg_waiting)
+  }
+  for (const r of snapshotRows) {
+    if (!dayMap.has(r.day)) dayMap.set(r.day, new Map())
+    dayMap.get(r.day)!.set(r.agent_id, r.avg_waiting)
+  }
+
+  // 모든 날짜 버킷 생성
+  const daily: { date: string; total: number; byAgent: { agentId: string; agentName: string; agentAvatar: string; waiting: number }[] }[] = []
+  const cur = new Date(startDate)
+  const end = new Date(endDate)
+  while (cur < end) {
+    const dateStr = cur.toISOString().slice(0, 10)
+    const agentData = dayMap.get(dateStr)
+    const byAgent: { agentId: string; agentName: string; agentAvatar: string; waiting: number }[] = []
+    let total = 0
+
+    for (const [aid, info] of agentMap) {
+      const waiting = agentData?.get(aid) ?? 0
+      byAgent.push({ agentId: aid, agentName: info.name, agentAvatar: info.avatar, waiting })
+      total += waiting
+    }
+
+    byAgent.sort((a, b) => b.waiting - a.waiting)
+    daily.push({ date: dateStr, total, byAgent })
+    cur.setDate(cur.getDate() + 1)
+  }
+
+  return { daily }
+}
+
 export function cleanOldSnapshots(retentionDays: number = 7) {
   // 삭제 전 일별 요약으로 집계
   aggregateSnapshotsToDailySummaries()

@@ -425,13 +425,15 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
         </button>
 
         {/* 대기 (지정 작업) */}
-        {pendingQueue.count > 0 && (
+        {(pendingQueue.count > 0 || snapshots.some(s => s.waiting > 0)) && (
           <button
             onClick={() => setExpandedPanel(expandedPanel === 'pending' ? null : 'pending')}
             className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'pending' ? 'bg-ive-amber/5' : 'hover:bg-white/[0.02]'}`}
           >
-            <span className="text-sm font-bold text-ive-amber">{pendingQueue.count}</span>
-            <i className="fa-solid fa-clock text-xs text-ive-amber/60" />
+            <span className={`text-sm font-bold ${pendingQueue.count > 0 ? 'text-ive-amber animate-pulse' : 'text-ive-text-dim'}`}>
+              {pendingQueue.count}
+            </span>
+            <Sparkline data={snapshots.map(s => s.waiting)} width={40} height={12} color="amber" />
             <span className="text-xs text-ive-text-dim font-bold">{t('pendingQueue')}</span>
           </button>
         )}
