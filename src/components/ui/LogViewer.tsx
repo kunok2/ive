@@ -620,6 +620,8 @@ export default function LogViewer({
 
     return () => {
       eventSource.close()
+      vtermRef.current = null
+      linesRef.current = []
     }
   }, [sseUrl, appendLines, onConnectionChange])
 
