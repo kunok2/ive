@@ -287,7 +287,7 @@ export async function GET(req: NextRequest) {
     const uniqueIssues = new Set(uExecs.map(e => `${e.projectId}:${e.issueIid}`))
     const uniqueProjects = new Set(uExecs.map(e => e.projectId))
     return {
-      userId: uid, userName: uExecs[0].developerName,
+      userId: uid, userName: uExecs[0].developerName, userAvatar: uExecs[0].agentAvatar,
       tasks: uExecs.length, success: uSuccess, failed: uFailed,
       issueCount: uniqueIssues.size,
       projectCount: uniqueProjects.size,
@@ -423,6 +423,7 @@ export async function GET(req: NextRequest) {
     return {
       userId: uid,
       userName: uInfo.developerName,
+      userAvatar: uInfo.agentAvatar,
       daily: allKeys.map(key => {
         const isFuture = key > todayKey
         const d = uMap.get(key) ?? { tasks: 0, cost: 0 }

@@ -1501,7 +1501,7 @@ export function getExecutionsInRange(userId: string, start: string, end: string)
   return rows.map(r => ({
     id: r.id, projectId: r.project_id, projectName: r.project_name,
     projectColor: r.project_color, projectAvatarUrl: r.project_avatar_url || '', projectProvider: r.project_provider || 'gitlab',
-    agentId: r.agent_id ?? '', agentName: r.agent_name ?? r.te_user_name ?? '', agentAvatar: r.agent_avatar || 'av-01',
+    agentId: r.agent_id ?? '', agentName: r.agent_name ?? r.te_user_name ?? '', agentAvatar: r.agent_avatar || r.te_user_avatar || 'av-01',
     cliName: r.cli_name ?? '', developerName: r.developer_name || r.agent_name || r.te_user_name || '',
     developerUserId: r.developer_user_id ?? null,
     issueIid: r.issue_iid, issueTitle: r.issue_title,

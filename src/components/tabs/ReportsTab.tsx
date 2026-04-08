@@ -68,7 +68,7 @@ interface AgentTrend {
 }
 
 interface UserStat {
-  userId: string; userName: string
+  userId: string; userName: string; userAvatar?: string
   tasks: number; success: number; failed: number
   issueCount: number; projectCount: number
   totalDurationMin: number; avgDurationMin: number
@@ -76,7 +76,7 @@ interface UserStat {
 }
 
 interface UserTrend {
-  userId: string; userName: string
+  userId: string; userName: string; userAvatar?: string
   daily: TrendDaily[]
 }
 
@@ -1026,9 +1026,7 @@ export default function ReportsTab() {
                   return (
                   <div key={u.userId} className="bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden">
                     <button onClick={() => toggleUser(u.userId)} className="w-full px-3 py-2.5 flex items-center gap-2 text-left">
-                      <span className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 bg-ive-bg-deep border border-ive-border-dark">
-                        <i className="fa-solid fa-user text-xs text-ive-text-dim" />
-                      </span>
+                      <AgentAvatar avatar={u.userAvatar || 'av-01'} size="sm" className="!w-6 !h-6 !text-sm" />
                       <span className="text-sm font-bold text-ive-text flex-1 truncate">{u.userName}</span>
                       <span className="text-xs text-ive-text-dim">{t('itemsUnit', { count: u.tasks.toLocaleString() })}</span>
                       {taskDiff != null && <span className={`text-xs font-bold ${taskDiff > 0 ? 'text-ive-green' : taskDiff < 0 ? 'text-ive-red' : 'text-ive-text-dim'}`}>{taskDiff > 0 ? '+' : ''}{taskDiff.toLocaleString()}%</span>}
@@ -1295,7 +1293,7 @@ function CustomSelect({ value, onChange, options }: {
         <i className={`fa-solid fa-chevron-down text-[8px] text-ive-text-dim transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-ive-bg-card border border-ive-border-subtle rounded-lg shadow-xl z-50 max-h-48 overflow-y-auto">
+        <div className="absolute top-full left-0 right-0 mt-1 bg-[#1a1a1e] border border-ive-border-subtle rounded-lg shadow-xl z-50 max-h-48 overflow-y-auto">
           {options.map(o => (
             <button
               key={o.value}

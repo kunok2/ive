@@ -534,7 +534,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
               <i className={`fa-solid fa-chevron-down text-xs text-ive-text-dim transition-transform ${projectDropdownOpen ? 'rotate-180' : ''}`} />
             </button>
             {projectDropdownOpen && (
-              <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden shadow-lg shadow-black/30">
+              <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-[#1a1a1e] border border-ive-border-subtle rounded-lg overflow-hidden shadow-xl shadow-black">
                 {state.projects.map(p => (
                   <button
                     key={p.id}
@@ -757,7 +757,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                     <i className={`fa-solid fa-chevron-down text-xs text-ive-text-dim ml-auto transition-transform ${agentDropdownOpen ? 'rotate-180' : ''}`} />
                   </button>
                   {agentDropdownOpen && (
-                    <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden shadow-lg shadow-black/30">
+                    <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-[#1a1a1e] border border-ive-border-subtle rounded-lg overflow-hidden shadow-xl shadow-black">
                       <button
                         onClick={() => { setPreferredAgentId('none'); setAgentDropdownOpen(false) }}
                         className={`w-full px-3 py-2.5 text-left text-sm flex items-center gap-2 transition-colors ${
