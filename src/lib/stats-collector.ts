@@ -1,7 +1,7 @@
 import {
   getDb, getAllProjects, getAgentsByUser,
   createSnapshot, cleanOldSnapshots, cleanOldExecutions, cleanOldActivityLogs,
-  getSystemSetting
+  getSystemSetting, countPreferredIssuesByAgent
 } from './db'
 import { getKSTTodayStartISO } from './date-utils'
 
@@ -102,13 +102,16 @@ function collectSnapshots() {
         WHERE agent_id = ? AND started_at >= ? AND status != 'running'
       `).get(agent.id, todayStartISO) as { completed: number; failed: number; total_tokens: number; cost_usd: number }
 
+      // 에이전트에 지정된 대기(preferred) 이슈 수
+      const waiting = countPreferredIssuesByAgent(agent.id)
+
       createSnapshot({
         id: `snap-a-${agent.id}-${Date.now()}`,
         entityType: 'agent',
         entityId: agent.id,
         timestamp: now,
         running,
-        waiting: 0, // 에이전트에는 대기 개념 없음
+        waiting,
         completed: todayStats.completed,
         failed: todayStats.failed,
         totalTokens: todayStats.total_tokens,

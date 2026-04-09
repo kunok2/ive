@@ -727,7 +727,9 @@
     "waitingUnit": "",
     "waitingAvg": "Period Avg",
     "prevWaiting": "Prev Pending",
-    "noWaitingHistory": "No pending history available."
+    "noWaitingHistory": "No pending history available.",
+    "waitingTrendByAgent": "Pending Trend (By Agent)",
+    "waitingCurrentByAgent": "Current Pending (By Agent)"
   },
   "pull": {
     "loading": "Loading...",

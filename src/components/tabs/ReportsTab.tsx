@@ -7,7 +7,7 @@ import { DEFAULT_AVATARS } from '@/types'
 import PullToRefresh from '@/components/ui/PullToRefresh'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 import Sparkline from '@/components/ui/Sparkline'
-import { DailyTrendChart, WaitingTrendChart } from '@/components/reports/ReportCharts'
+import { DailyTrendChart, WaitingTrendChart, WaitingByAgentChart, WaitingSummaryBar } from '@/components/reports/ReportCharts'
 import { getKSTTodayString } from '@/lib/date-utils'
 
 const REPORT_STATE_KEY = 'ive-report-state'
@@ -86,6 +86,12 @@ interface WaitingDay {
   byProject: { projectId: string; projectName: string; projectColor: string; waiting: number }[]
 }
 
+interface AgentWaitingDay {
+  date: string
+  total: number
+  byAgent: { agentId: string; agentName: string; agentAvatar: string; waiting: number }[]
+}
+
 interface ResolvedIssue {
   issueIid: number; issueTitle: string; projectId: string; projectName: string; projectColor: string
   agentName: string; agentAvatar: string; status: 'success' | 'failed'; startedAt: string; durationMin: number; cost: number
@@ -135,6 +141,8 @@ interface ReportData {
   insights: string[]
   waitingTrend: WaitingDay[]
   prevWaitingTrend: WaitingDay[]
+  agentWaitingTrend: AgentWaitingDay[]
+  prevAgentWaitingTrend: AgentWaitingDay[]
 }
 
 type SectionSortKey = 'tasks' | 'cost'
@@ -580,7 +588,7 @@ export default function ReportsTab() {
             )
           })()}
 
-          {/* 대기 건수 추이 */}
+          {/* 대기 건수 추이 — 프로젝트별 */}
           {data.waitingTrend && data.waitingTrend.length > 0 ? (
             <section>
               <div className="text-xs font-bold text-ive-text-dim mb-2 uppercase tracking-wider">
@@ -599,6 +607,38 @@ export default function ReportsTab() {
               </div>
             </section>
           )}
+
+          {/* 대기 건수 추이 — 개발자(에이전트)별 */}
+          {data.agentWaitingTrend && data.agentWaitingTrend.length > 0 && (() => {
+            // 현재 기간 마지막 데이터로 요약 바 구성
+            const lastDay = [...data.agentWaitingTrend].reverse().find(d => d.total > 0)
+            const prevLastDay = [...(data.prevAgentWaitingTrend || [])].reverse().find(d => d.total > 0)
+            const barItems = (lastDay?.byAgent ?? []).map(a => {
+              const prev = prevLastDay?.byAgent.find(x => x.agentId === a.agentId)
+              return { name: a.agentName, avatar: a.agentAvatar, waiting: a.waiting, prevWaiting: prev?.waiting ?? 0 }
+            }).filter(x => x.waiting > 0 || x.prevWaiting > 0)
+
+            const hasAnyData = data.agentWaitingTrend.some(d => d.total > 0) || (data.prevAgentWaitingTrend || []).some(d => d.total > 0)
+            if (!hasAnyData) return null
+
+            return (
+              <section>
+                <div className="text-xs font-bold text-ive-text-dim mb-2 uppercase tracking-wider">
+                  {t('waitingTrendByAgent')}
+                </div>
+                <div className="space-y-2">
+                  <WaitingByAgentChart data={data.agentWaitingTrend} prevData={data.prevAgentWaitingTrend || []} type={type} />
+                  {barItems.length > 0 && (
+                    <WaitingSummaryBar
+                      title={t('waitingCurrentByAgent')}
+                      icon="fa-user-clock"
+                      data={barItems}
+                    />
+                  )}
+                </div>
+              </section>
+            )
+          })()}
 
           {/* Summary Cards */}
           <section>

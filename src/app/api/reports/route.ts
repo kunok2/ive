@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
-import { getExecutionsInRange, getAllTokenPricing, getDailyWaitingTrend } from '@/lib/db'
+import { getExecutionsInRange, getAllTokenPricing, getDailyWaitingTrend, getDailyWaitingTrendByAgent } from '@/lib/db'
 import { resolveExecutionCost } from '@/lib/token-pricing'
 import { getKSTTodayString, utcISOToKSTDate, utcISOToKSTMonth } from '@/lib/date-utils'
 
@@ -682,6 +682,8 @@ export async function GET(req: NextRequest) {
   // 대기건수 추이 (stat_snapshots 기반)
   const waitingTrend = getDailyWaitingTrend(range.start, range.end)
   const prevWaitingTrend = getDailyWaitingTrend(prevRange.start, prevRange.end)
+  const agentWaitingTrend = getDailyWaitingTrendByAgent(range.start, range.end)
+  const prevAgentWaitingTrend = getDailyWaitingTrendByAgent(prevRange.start, prevRange.end)
 
   // 대기건수 인사이트
   const waitingDays = waitingTrend.daily.filter(d => d.date <= todayKey)
@@ -740,5 +742,7 @@ export async function GET(req: NextRequest) {
     insights,
     waitingTrend: waitingTrend.daily,
     prevWaitingTrend: prevWaitingTrend.daily,
+    agentWaitingTrend: agentWaitingTrend.daily,
+    prevAgentWaitingTrend: prevAgentWaitingTrend.daily,
   })
 }
