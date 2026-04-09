@@ -255,7 +255,11 @@ export function diagnose(data: ReportData, prevWeeklyData?: ReportData[]): Diagn
       const ac = agentCapacities.find(c => c.agentId === a.agentId)
       return ac?.dailyCap ?? 0
     })
-    const pCapacity = pAgentCaps.reduce((s, c) => s + c, 0)
+    const activeAgentCap = pAgentCaps.reduce((s, c) => s + c, 0)
+    // 배정됐으나 이번 기간 작업이 없는 유휴 에이전트의 처리 용량도 포함
+    // 미포함 시 pCapacity=0이 되어 pUtil=Infinity → 잘못된 "에이전트 추가 필요" 진단 발생
+    const idleAgentCount = Math.max(0, p.assignedAgentCount - p.byAgent.length)
+    const pCapacity = activeAgentCap + idleAgentCount * avgAgentCap
     const pUtil = pCapacity > 0 ? (pInflow / elapsedDays) / pCapacity : (pInflow > 0 ? Infinity : 0)
     const prevP = data.prevByProject?.find(pp => pp.projectId === p.projectId)
     const pPrevCPT = prevP && prevP.tasks > 0 ? prevP.cost / prevP.tasks : 0
