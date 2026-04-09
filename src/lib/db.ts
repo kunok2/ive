@@ -1955,10 +1955,10 @@ export function getGlobalExecutionsInRange(start: string, end: string): ReportEx
            te.issue_iid, te.issue_title, te.status,
            te.started_at, te.ended_at, te.input_tokens, te.output_tokens, te.cost_usd, te.turns,
            te.issue_created_at, te.verified_at, te.verify_started_at, te.rejected_at,
-           te.verifier_name, te.verifier_avatar
+           te.assignee_type, te.verifier_name, te.verifier_avatar
     FROM task_executions te
     JOIN projects p ON p.id = te.project_id
-    JOIN agents a ON a.id = te.agent_id
+    LEFT JOIN agents a ON a.id = te.agent_id
     LEFT JOIN users u ON u.id = a.user_id
     WHERE te.started_at >= ? AND te.started_at < ?
     ORDER BY te.started_at ASC
@@ -1966,8 +1966,8 @@ export function getGlobalExecutionsInRange(start: string, end: string): ReportEx
   return rows.map(r => ({
     id: r.id, projectId: r.project_id, projectName: r.project_name,
     projectColor: r.project_color, projectAvatarUrl: r.project_avatar_url || '', projectProvider: r.project_provider || 'gitlab',
-    agentId: r.agent_id, agentName: r.agent_name, agentAvatar: r.agent_avatar || 'av-01',
-    cliName: r.cli_name, developerName: r.developer_name || r.agent_name,
+    agentId: r.agent_id ?? '', agentName: r.agent_name ?? '', agentAvatar: r.agent_avatar || 'av-01',
+    cliName: r.cli_name ?? '', developerName: r.developer_name || r.agent_name || '',
     developerUserId: r.developer_user_id ?? null,
     issueIid: r.issue_iid, issueTitle: r.issue_title,
     status: r.status, startedAt: r.started_at, endedAt: r.ended_at,
@@ -1979,6 +1979,7 @@ export function getGlobalExecutionsInRange(start: string, end: string): ReportEx
     rejectedAt: r.rejected_at ?? null,
     verifierName: r.verifier_name ?? null,
     verifierAvatar: r.verifier_avatar ?? null,
+    assigneeType: r.assignee_type ?? 'agent',
   }))
 }
 
