@@ -616,24 +616,23 @@ export default function ReportsTab() {
             <section>
               <div className="text-xs font-bold text-ive-text-dim mb-2 uppercase tracking-wider">담당자별 현황</div>
               <div className="space-y-2">
-                {data.byUser.sort((a, b) => b.issueCount - a.issueCount).map(u => {
+                {data.byUser.sort((a, b) => b.tasks - a.tasks).map(u => {
                   const prev = data.prevByUser?.find(p => p.userId === u.userId)
-                  const badge = prev ? diffBadge(u.issueCount, prev.issueCount) : null
-                  const badgeColor = prev ? diffColor(u.issueCount, prev.issueCount) : ''
+                  const badge = prev != null ? diffBadge(u.tasks, prev.tasks) : null
+                  const badgeColor = prev != null ? diffColor(u.tasks, prev.tasks) : 'text-ive-cyan'
                   return (
                     <div key={u.userId} className="bg-ive-bg-card border border-ive-border-subtle rounded-lg px-3 py-2.5">
                       <div className="flex items-center gap-2">
-                        <span className="w-5 h-5 rounded-lg flex items-center justify-center shrink-0 bg-ive-bg-deep">
-                          <i className="fa-solid fa-user text-xs text-ive-text-dim" />
-                        </span>
-                        <span className="text-sm font-bold text-ive-text flex-1 truncate">{u.userName || '미지정'}</span>
-                        <span className="text-xs text-ive-text-dim">이슈 {u.issueCount}건</span>
+                        <AgentAvatar avatar={u.userAvatar} size="sm" className="!w-5 !h-5 !text-xs" />
+                        <span className="text-sm font-bold text-ive-text flex-1 truncate">{u.userName}</span>
+                        <span className="text-sm font-bold text-ive-text">{u.tasks}건</span>
                         {badge && <span className={`text-xs font-bold ${badgeColor}`}>{badge}</span>}
                       </div>
-                      <div className="flex items-center gap-3 mt-1 text-xs text-ive-text-dim">
-                        {u.avgWaitMin > 0 && <span><span className="text-ive-cyan">대기 {fmtDur(u.avgWaitMin)}</span></span>}
-                        {u.avgDurationMin > 0 && <span><span className="text-emerald-400">수행 {fmtDur(u.avgDurationMin)}</span></span>}
-                        {u.cost > 0 && <span className="text-ive-amber ml-auto">${fmtCost(u.cost)}</span>}
+                      <div className="flex items-center gap-3 mt-1.5 text-xs text-ive-text-dim flex-wrap">
+                        {u.avgWaitMin > 0 && <span><span className="text-ive-cyan font-bold">대기</span> {fmtDur(u.avgWaitMin)}</span>}
+                        {u.avgDurationMin > 0 && <span><span className="text-ive-green font-bold">처리</span> {fmtDur(u.avgDurationMin)}</span>}
+                        {u.verifyTasks > 0 && <span><span className="text-ive-amber font-bold">검토</span> {u.verifyTasks}건{u.avgVerifyMin > 0 ? ` · ${fmtDur(u.avgVerifyMin)}` : ''}</span>}
+                        <span className="ml-auto text-ive-amber">${fmtCost(u.cost)}</span>
                       </div>
                     </div>
                   )
@@ -642,35 +641,7 @@ export default function ReportsTab() {
             </section>
           )}
 
-          {/* ⑩ 검토자별 현황 */}
-          {data.byVerifier && data.byVerifier.length > 0 && (
-            <section>
-              <div className="text-xs font-bold text-ive-text-dim mb-2 uppercase tracking-wider">검토자별 현황</div>
-              <div className="space-y-2">
-                {data.byVerifier.sort((a, b) => b.tasks - a.tasks).map(v => {
-                  const prev = data.prevByVerifier?.find(p => p.verifierName === v.verifierName)
-                  const badge = prev ? diffBadge(v.tasks, prev.tasks) : null
-                  const badgeColor = prev ? diffColor(v.tasks, prev.tasks) : ''
-                  return (
-                    <div key={v.verifierName} className="bg-ive-bg-card border border-ive-border-subtle rounded-lg px-3 py-2.5">
-                      <div className="flex items-center gap-2">
-                        <AgentAvatar avatar={v.verifierAvatar} size="sm" className="!w-5 !h-5 !text-xs" />
-                        <span className="text-sm font-bold text-ive-text flex-1 truncate">{v.verifierName}</span>
-                        <span className="text-xs text-ive-text-dim">검증 {v.tasks}건</span>
-                        {badge && <span className={`text-xs font-bold ${badgeColor}`}>{badge}</span>}
-                      </div>
-                      <div className="flex items-center gap-3 mt-1 text-xs text-ive-text-dim">
-                        {(v.avgWaitMin ?? 0) > 0 && <span><span className="text-ive-cyan">대기 {fmtDur(v.avgWaitMin!)}</span></span>}
-                        {v.avgVerifyMin > 0 && <span><span className="text-orange-400">검증 {fmtDur(v.avgVerifyMin)}</span></span>}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </section>
-          )}
-
-          {/* ⑪ 추이 차트 (접이식) */}
+          {/* ⑩ 추이 차트 (접이식) */}
           {data.dailyTrend.length > 0 && (
             <section>
               <button onClick={() => setShowTrend(!showTrend)} className="w-full flex items-center gap-2 text-xs font-bold text-ive-text-dim uppercase tracking-wider py-2">
@@ -686,7 +657,7 @@ export default function ReportsTab() {
             </section>
           )}
 
-          {/* ⑩ 이슈 목록 (접이식) */}
+          {/* ⑪ 이슈 목록 (접이식) */}
           {data.resolvedIssues && data.resolvedIssues.length > 0 && (
             <section>
               <button onClick={() => { setShowIssues(!showIssues); setVisibleCount(20) }} className="w-full flex items-center gap-2 text-xs font-bold text-ive-text-dim uppercase tracking-wider py-2">
