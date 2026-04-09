@@ -59,17 +59,49 @@ export function calcCostFromDb(cliName: string, inputTokens: number, outputToken
  * - 모델명도 없으면 CLI명 기반 단가(관리자 설정)로 폴백
  */
 export function resolveExecutionCost(
-  e: { costUsd: number; cliName: string; inputTokens: number; outputTokens: number; modelName?: string },
+  e: { costUsd: number; cliName: string; inputTokens: number; outputTokens: number; modelName?: string; assigneeType?: string; startedAt?: string; endedAt?: string | null; verifyStartedAt?: string | null; verifiedAt?: string | null; rejectedAt?: string | null },
   pricingMap: Record<string, { input: number; output: number }>,
 ): number {
-  if (e.costUsd > 0) return e.costUsd
-  if (e.modelName) {
-    const builtin = getBuiltinPricingByModel(e.modelName)
-    if (builtin) {
-      return (e.inputTokens * builtin.input + e.outputTokens * builtin.output) / 1_000_000
+  let cost = e.costUsd > 0 ? e.costUsd : 0
+  
+  if (cost === 0 && e.assigneeType !== 'user') {
+    if (e.modelName) {
+      const builtin = getBuiltinPricingByModel(e.modelName)
+      if (builtin) {
+        cost = (e.inputTokens * builtin.input + e.outputTokens * builtin.output) / 1_000_000
+      }
+    }
+    if (cost === 0) {
+      cost = calcCost(pricingMap, e.cliName, e.inputTokens, e.outputTokens)
     }
   }
-  return calcCost(pricingMap, e.cliName, e.inputTokens, e.outputTokens)
+
+  // Add human cost using 'human' preset
+  const humanSalary = pricingMap['human']?.input || 0
+  if (humanSalary > 0) {
+    // Convert monthly USD to per-minute
+    // month = 160 hours (approx. 20 working days * 8h)
+    // minute cost = monthly / 9600 (160 * 60)
+    const humanCostPerMin = humanSalary / 9600
+
+    // 1) Human is the developer 
+    if (e.assigneeType === 'user' && e.startedAt && e.endedAt) {
+      const ms = new Date(e.endedAt).getTime() - new Date(e.startedAt).getTime()
+      if (ms > 0) cost += (ms / 60000) * humanCostPerMin
+    }
+
+    // 2) Human verified it
+    const verifyEnd = e.verifiedAt || e.rejectedAt
+    if (verifyEnd) {
+      const vStart = e.verifyStartedAt || e.endedAt
+      if (vStart) {
+        const ms = new Date(verifyEnd).getTime() - new Date(vStart).getTime()
+        if (ms > 0) cost += (ms / 60000) * humanCostPerMin
+      }
+    }
+  }
+
+  return cost
 }
 
 /** 모든 CLI 단가를 맵으로 반환 */
@@ -104,6 +136,8 @@ const LATEST_PRICING: { cliName: string; modelName: string; input: number; outpu
   { cliName: 'codex',  modelName: 'GPT-4.1',           input: 2.00,  output:  8.00 },
   // OpenCode - 기본 모델
   { cliName: 'opencode', modelName: 'Claude Sonnet 4.6', input: 3.00, output: 15.00 },
+  // 사람 (관리자/검증자 월급)
+  { cliName: 'human', modelName: '관리자 (월급 USD)', input: 5000.00, output: 0.00 },
 ]
 
 /** 최신 단가로 DB를 업데이트하고 결과 반환 */

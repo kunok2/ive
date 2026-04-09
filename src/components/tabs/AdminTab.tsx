@@ -1299,7 +1299,7 @@ function SettingsPanel() {
               {pricingItems.map(it => (
                 <div key={it.cliName} className="bg-ive-bg-deep border border-ive-border-dark rounded-lg px-3 py-2.5">
                   <div className="flex items-center gap-2 mb-2">
-                    <i className={`${CLI_ICONS[it.cliName] || 'fa-solid fa-robot'} text-sm text-ive-text-dim`} />
+                    <i className={`${CLI_ICONS[it.cliName] || (it.cliName === 'human' ? 'fa-solid fa-user-tie' : 'fa-solid fa-robot')} text-sm text-ive-text-dim`} />
                     <span className="text-xs font-bold text-ive-text uppercase">{it.cliName}</span>
                     <input
                       value={it.modelName}
@@ -1310,7 +1310,7 @@ function SettingsPanel() {
                   </div>
                   <div className="flex gap-3">
                     <div className="flex-1">
-                      <div className="text-xs text-ive-text-dim mb-0.5">{t('input')}</div>
+                      <div className="text-xs text-ive-text-dim mb-0.5">{it.cliName === 'human' ? '월급 (USD)' : t('input')}</div>
                       <input
                         type="number" step="0.01" min="0"
                         value={it.inputPrice}
@@ -1319,13 +1319,19 @@ function SettingsPanel() {
                       />
                     </div>
                     <div className="flex-1">
-                      <div className="text-xs text-ive-text-dim mb-0.5">{t('output')}</div>
-                      <input
-                        type="number" step="0.01" min="0"
-                        value={it.outputPrice}
-                        onChange={e => { setPricingItems(prev => prev.map(p => p.cliName === it.cliName ? { ...p, outputPrice: parseFloat(e.target.value) || 0 } : p)); setPricingSaved(false) }}
-                        className="w-full text-sm font-bold text-ive-amber bg-ive-bg-input border border-ive-border rounded-lg px-2 py-1.5 text-right focus:outline-none focus:border-ive-green"
-                      />
+                      <div className="text-xs text-ive-text-dim mb-0.5">{it.cliName === 'human' ? '시급 (160h 기준계산)' : t('output')}</div>
+                      {it.cliName === 'human' ? (
+                        <div className="w-full text-sm font-bold text-ive-amber bg-ive-bg-deep border border-ive-border rounded-lg px-2 py-1.5 text-right cursor-not-allowed">
+                          {((it.inputPrice || 0) / 160).toFixed(2)}
+                        </div>
+                      ) : (
+                        <input
+                          type="number" step="0.01" min="0"
+                          value={it.outputPrice}
+                          onChange={e => { setPricingItems(prev => prev.map(p => p.cliName === it.cliName ? { ...p, outputPrice: parseFloat(e.target.value) || 0 } : p)); setPricingSaved(false) }}
+                          className="w-full text-sm font-bold text-ive-amber bg-ive-bg-input border border-ive-border rounded-lg px-2 py-1.5 text-right focus:outline-none focus:border-ive-green"
+                        />
+                      )}
                     </div>
                   </div>
                   <div className="text-xs text-ive-text-dim mt-1.5 text-right">

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
-import { getExecutionsInRange, getAllTokenPricing, getDailyWaitingTrend, getDailyWaitingTrendByAgent } from '@/lib/db'
+import { getExecutionsInRange, getAllTokenPricing, getDailyWaitingTrend, getDailyWaitingTrendByAgent, getProjectAssignmentCounts, getAgentAssignmentInfo } from '@/lib/db'
 import { resolveExecutionCost } from '@/lib/token-pricing'
 import { getKSTTodayString, utcISOToKSTDate, utcISOToKSTMonth } from '@/lib/date-utils'
 
@@ -87,6 +87,8 @@ export async function GET(req: NextRequest) {
 
   const execs = getExecutionsInRange(user.id, range.start, range.end)
   const prevExecs = getExecutionsInRange(user.id, prevRange.start, prevRange.end)
+  const projectAssignCounts = getProjectAssignmentCounts(user.id)
+  const agentAssignInfo = getAgentAssignmentInfo(user.id)
   const pricingList = getAllTokenPricing()
   const pricingMap: Record<string, { input: number; output: number }> = {}
   for (const p of pricingList) {
@@ -248,6 +250,7 @@ export async function GET(req: NextRequest) {
       inputTokens: pExecs.reduce((s, e) => s + e.inputTokens, 0),
       outputTokens: pExecs.reduce((s, e) => s + e.outputTokens, 0),
       cost: Math.round(pCost * 100) / 100,
+      assignedAgentCount: projectAssignCounts[pid] ?? 0,
       byAgent,
     }
   })
@@ -264,6 +267,7 @@ export async function GET(req: NextRequest) {
     const aDur = aExecs.reduce((s, e) => s + durationMin(e.startedAt, e.endedAt), 0)
     const aFinished = aSuccess + aFailed
     const aCost = aExecs.reduce((s, e) => s + resolveExecutionCost(e, pricingMap), 0)
+    const aInfo = agentAssignInfo[aid]
     return {
       agentId: aid, agentName: aExecs[0].agentName, agentAvatar: aExecs[0].agentAvatar, cliName: aExecs[0].cliName,
       tasks: aExecs.length, success: aSuccess, failed: aFailed,
@@ -273,6 +277,9 @@ export async function GET(req: NextRequest) {
       outputTokens: aExecs.reduce((s, e) => s + e.outputTokens, 0),
       cost: Math.round(aCost * 100) / 100,
       avgTurns: aFinished > 0 ? Math.round(aExecs.reduce((s, e) => s + e.turns, 0) / aFinished * 10) / 10 : 0,
+      assignedProjectId: aInfo?.projectId ?? '',
+      assignedProjectName: aInfo?.projectName ?? '',
+      currentStatus: aInfo?.status ?? 'offline',
     }
   })
 

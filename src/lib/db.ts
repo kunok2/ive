@@ -618,6 +618,7 @@ function seedTokenPricing(db: Database.Database) {
     { id: 'tp-gemini', cli: 'gemini', model: 'Gemini 2.5 Pro', input: 1.25, output: 10.00 },
     { id: 'tp-codex', cli: 'codex', model: 'GPT-4.1', input: 2.00, output: 8.00 },
     { id: 'tp-opencode', cli: 'opencode', model: 'Claude Sonnet 4.6', input: 3.00, output: 15.00 },
+    { id: 'tp-human', cli: 'human', model: 'validator (monthly)', input: 5000.00, output: 0.00 },
   ]
   const stmt = db.prepare('INSERT OR IGNORE INTO token_pricing (id, cli_name, model_name, input_price, output_price) VALUES (?, ?, ?, ?, ?)')
   for (const d of defaults) {
@@ -928,6 +929,36 @@ export function getProjectAssignments(projectId: string): (ProjectAssignment & {
 export function getAgentProjectId(agentId: string): string | null {
   const r = getDb().prepare('SELECT project_id FROM project_assignments WHERE agent_id = ?').get(agentId) as { project_id: string } | undefined
   return r?.project_id ?? null
+}
+
+/** 프로젝트별 배정 에이전트 수 (reports용) */
+export function getProjectAssignmentCounts(userId: string): Record<string, number> {
+  const rows = getDb().prepare(`
+    SELECT pa.project_id, COUNT(*) as cnt
+    FROM project_assignments pa
+    JOIN projects p ON p.id = pa.project_id
+    WHERE p.user_id = ?
+    GROUP BY pa.project_id
+  `).all(userId) as { project_id: string; cnt: number }[]
+  const map: Record<string, number> = {}
+  for (const r of rows) map[r.project_id] = r.cnt
+  return map
+}
+
+/** 에이전트별 담당 프로젝트 + 현재 상태 (reports용) */
+export function getAgentAssignmentInfo(userId: string): Record<string, { projectId: string; projectName: string; status: string }> {
+  const rows = getDb().prepare(`
+    SELECT a.id as agent_id, pa.project_id, p.name as project_name, a.status
+    FROM agents a
+    LEFT JOIN project_assignments pa ON pa.agent_id = a.id
+    LEFT JOIN projects p ON p.id = pa.project_id
+    WHERE a.user_id = ?
+  `).all(userId) as { agent_id: string; project_id: string | null; project_name: string | null; status: string }[]
+  const map: Record<string, { projectId: string; projectName: string; status: string }> = {}
+  for (const r of rows) {
+    map[r.agent_id] = { projectId: r.project_id || '', projectName: r.project_name || '', status: r.status }
+  }
+  return map
 }
 
 export function assignAgentToProject(pa: ProjectAssignment) {
@@ -1608,6 +1639,7 @@ export interface ReportExecution {
   rejectedAt: string | null
   verifierName: string | null
   verifierAvatar: string | null
+  assigneeType: string
 }
 
 export function getExecutionsInRange(userId: string, start: string, end: string): ReportExecution[] {
@@ -1647,6 +1679,7 @@ export function getExecutionsInRange(userId: string, start: string, end: string)
     rejectedAt: r.rejected_at ?? null,
     verifierName: r.verifier_name ?? null,
     verifierAvatar: r.verifier_avatar ?? null,
+    assigneeType: r.assignee_type ?? 'agent',
   }))
 }
 
