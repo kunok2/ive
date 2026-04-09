@@ -61,12 +61,12 @@ export function FlowCompareChart({ data, type }: { data: FlowDay[]; type: string
           <XAxis dataKey="label" tick={{ fill: '#6b7280', fontSize: 10 }} axisLine={false} tickLine={false} />
           <YAxis tick={{ fill: '#6b7280', fontSize: 10 }} axisLine={false} tickLine={false} width={24} allowDecimals={false} />
           <Tooltip {...tooltipStyle} />
-          <Area dataKey="inflow" name="유입" fill="#22d3ee" fillOpacity={0.15} stroke="#22d3ee" strokeWidth={2} dot={{ r: 2, fill: '#22d3ee' }} />
-          <Area dataKey="throughput" name="처리" fill="#34d399" fillOpacity={0.15} stroke="#34d399" strokeWidth={2} dot={{ r: 2, fill: '#34d399' }} />
+          <Area dataKey="inflow" name="유입" fill="#60a5fa" fillOpacity={0.18} stroke="#60a5fa" strokeWidth={2} dot={{ r: 2, fill: '#60a5fa' }} />
+          <Area dataKey="throughput" name="처리" fill="#34d399" fillOpacity={0.18} stroke="#34d399" strokeWidth={2} dot={{ r: 2, fill: '#34d399' }} />
         </AreaChart>
       </ResponsiveContainer>
       <div className="flex items-center justify-center gap-3 mt-1 text-xs text-ive-text-dim">
-        <span><span className="inline-block w-2 h-2 rounded-sm bg-[#22d3ee] mr-0.5" />유입</span>
+        <span><span className="inline-block w-2 h-2 rounded-sm bg-[#60a5fa] mr-0.5" />유입</span>
         <span><span className="inline-block w-2 h-2 rounded-sm bg-[#34d399] mr-0.5" />처리</span>
       </div>
     </div>
