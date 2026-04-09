@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAccess, hasActiveExecution, stageFromLabels, markIssueVerifyStarted, markIssueVerified, touchProjectActivity, assignIssueAtomically, getAssignModeMap, getIssueScheduledAt, type IssueStage } from '@/lib/db';
+import { getProject, getProjectAccess, hasActiveExecution, stageFromLabels, markIssueVerifyStarted, markIssueVerified, markIssueVerifyRejected, resetIssueScheduledAt, touchProjectActivity, assignIssueAtomically, getAssignModeMap, getIssueScheduledAt, type IssueStage } from '@/lib/db';
 import type { TaskExecution } from '@/types';
 import { getCurrentUser } from '@/lib/auth';
 import { decrypt } from '@/lib/crypto';
@@ -216,6 +216,16 @@ export async function POST(
     // 검증 완료 시 실행 기록에 verified_at + 검증자 기록 (verifying 상태에서만)
     if (action === 'approve' || (action === 'complete' && stage === 'verifying')) {
       markIssueVerified(projectId, Number(iid), { name: user.name, avatar: user.avatar });
+    }
+
+    // 검증 반려 시 rejected_at 기록
+    if (action === 'reject') {
+      markIssueVerifyRejected(projectId, Number(iid));
+    }
+
+    // 스케줄로 되돌아갈 때 scheduled_at 리셋 (재시도 execution의 대기시간 정확 계산)
+    if (isBackToSchedule) {
+      resetIssueScheduledAt(projectId, Number(iid));
     }
 
     // 프로젝트 최종 활동 시각 갱신

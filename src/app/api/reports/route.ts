@@ -184,8 +184,9 @@ export async function GET(req: NextRequest) {
         }
         if (wait >= 0) d.waitTimes.push(wait)
       }
-      if (e.verifiedAt) {
-        const vt = e.verifyStartedAt ? durationMin(e.verifyStartedAt, e.verifiedAt) : durationMin(e.endedAt, e.verifiedAt)
+      const verifyEnd = e.verifiedAt || e.rejectedAt
+      if (verifyEnd) {
+        const vt = e.verifyStartedAt ? durationMin(e.verifyStartedAt, verifyEnd) : durationMin(e.endedAt, verifyEnd)
         if (vt >= 0) d.verifyTimes.push(vt)
       }
     }
@@ -314,7 +315,11 @@ export async function GET(req: NextRequest) {
   const byVerifier = Array.from(verifierMap.entries()).map(([vName, vExecs]) => {
     const verifyTimes = vExecs
       .filter(e => e.verifiedAt && e.endedAt)
-      .map(e => (new Date(e.verifiedAt!).getTime() - new Date(e.endedAt!).getTime()) / 60000)
+      .map(e => {
+        // verify_started_at이 있으면 순수 검증시간, 없으면 하위호환 (ended_at 기준)
+        const start = e.verifyStartedAt || e.endedAt!
+        return (new Date(e.verifiedAt!).getTime() - new Date(start).getTime()) / 60000
+      })
       .filter(t => t >= 0)
     return {
       verifierName: vName,
@@ -365,8 +370,9 @@ export async function GET(req: NextRequest) {
         }
         if (wait >= 0) d.waitTimes.push(wait)
       }
-      if (e.verifiedAt) {
-        const vt = e.verifyStartedAt ? durationMin(e.verifyStartedAt, e.verifiedAt) : durationMin(e.endedAt, e.verifiedAt)
+      const verifyEnd = e.verifiedAt || e.rejectedAt
+      if (verifyEnd) {
+        const vt = e.verifyStartedAt ? durationMin(e.verifyStartedAt, verifyEnd) : durationMin(e.endedAt, verifyEnd)
         if (vt >= 0) d.verifyTimes.push(vt)
       }
     }
@@ -533,15 +539,21 @@ export async function GET(req: NextRequest) {
   const procTimes = finishedExecs
     .map(e => durationMin(e.startedAt, e.endedAt!))
     .filter(v => v > 0)
-  // 검증시간: verify_started_at → verified_at (순수 검증 작업), 없으면 ended_at → verified_at (하위호환)
+  // 검증시간: verify_started_at → verified_at/rejected_at (승인/반려 모두 포함)
   const verifyTimes = finishedExecs
-    .filter(e => e.verifiedAt)
-    .map(e => e.verifyStartedAt ? durationMin(e.verifyStartedAt, e.verifiedAt!) : durationMin(e.endedAt!, e.verifiedAt!))
+    .filter(e => e.verifiedAt || e.rejectedAt)
+    .map(e => {
+      const verifyEnd = (e.verifiedAt || e.rejectedAt)!
+      return e.verifyStartedAt ? durationMin(e.verifyStartedAt, verifyEnd) : durationMin(e.endedAt!, verifyEnd)
+    })
     .filter(v => v >= 0)
-  // 총시간: issue_created_at(큐 진입 시점) → verified_at (있으면) 또는 ended_at
+  // 총시간: execution별 자체 생애주기 (대기 + 개발 + 검증대기 + 검증)
   const totalTimes = finishedExecs
     .filter(e => e.issueCreatedAt)
-    .map(e => durationMin(e.issueCreatedAt!, e.verifiedAt || e.endedAt!))
+    .map(e => {
+      const endPoint = e.verifiedAt || e.rejectedAt || e.endedAt!
+      return durationMin(e.issueCreatedAt!, endPoint)
+    })
     .filter(v => v >= 0)
 
   // 이슈별 실행 횟수
@@ -592,12 +604,18 @@ export async function GET(req: NextRequest) {
     .map(e => durationMin(e.startedAt, e.endedAt!))
     .filter(v => v > 0)
   const prevVerifyTimes = prevFinishedExecs
-    .filter(e => e.verifiedAt)
-    .map(e => e.verifyStartedAt ? durationMin(e.verifyStartedAt, e.verifiedAt!) : durationMin(e.endedAt!, e.verifiedAt!))
+    .filter(e => e.verifiedAt || e.rejectedAt)
+    .map(e => {
+      const verifyEnd = (e.verifiedAt || e.rejectedAt)!
+      return e.verifyStartedAt ? durationMin(e.verifyStartedAt, verifyEnd) : durationMin(e.endedAt!, verifyEnd)
+    })
     .filter(v => v >= 0)
   const prevTotalTimes = prevFinishedExecs
     .filter(e => e.issueCreatedAt)
-    .map(e => durationMin(e.issueCreatedAt!, e.verifiedAt || e.endedAt!))
+    .map(e => {
+      const endPoint = e.verifiedAt || e.rejectedAt || e.endedAt!
+      return durationMin(e.issueCreatedAt!, endPoint)
+    })
     .filter(v => v >= 0)
 
   const prevLifecycle = {

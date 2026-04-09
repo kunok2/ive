@@ -331,6 +331,10 @@ function initSchema(db: Database.Database) {
       db.exec("ALTER TABLE task_executions ADD COLUMN verify_started_at TEXT DEFAULT NULL")
       console.log('[DB] Added verify_started_at to task_executions')
     }
+    if (!tableInfo.some((col: any) => col.name === 'rejected_at')) {
+      db.exec("ALTER TABLE task_executions ADD COLUMN rejected_at TEXT DEFAULT NULL")
+      console.log('[DB] Added rejected_at to task_executions')
+    }
   } catch (e) { console.error("Migration failed for verifier columns:", e) }
 
   // 프로젝트 모니터링 설정
@@ -1077,6 +1081,22 @@ export function markIssueVerified(projectId: string, issueIid: number, verifier?
   ).run(now, verifier?.name ?? null, verifier?.avatar ?? null, projectId, issueIid)
 }
 
+/** 검증 반려 시 rejected_at 기록 (verify_started_at이 있고 verified_at/rejected_at이 없는 실행만) */
+export function markIssueVerifyRejected(projectId: string, issueIid: number) {
+  const now = new Date().toISOString()
+  getDb().prepare(
+    "UPDATE task_executions SET rejected_at = ? WHERE project_id = ? AND issue_iid = ? AND status IN ('success', 'failed') AND ended_at IS NOT NULL AND verify_started_at IS NOT NULL AND verified_at IS NULL AND rejected_at IS NULL"
+  ).run(now, projectId, issueIid)
+}
+
+/** 반려/재오픈 시 scheduled_at을 현재 시각으로 갱신 (재시도 execution의 대기시간을 정확히 계산하기 위해) */
+export function resetIssueScheduledAt(projectId: string, issueIid: number) {
+  const now = new Date().toISOString()
+  getDb().prepare(
+    "UPDATE issue_stages SET scheduled_at = ?, updated_at = datetime('now') WHERE project_id = ? AND issue_iid = ?"
+  ).run(now, projectId, issueIid)
+}
+
 export function hasAnyExecution(projectId: string, issueIid: number): boolean {
   const r = getDb().prepare(
     "SELECT id FROM task_executions WHERE project_id = ? AND issue_iid = ? LIMIT 1"
@@ -1585,6 +1605,7 @@ export interface ReportExecution {
   issueCreatedAt: string | null
   verifiedAt: string | null
   verifyStartedAt: string | null
+  rejectedAt: string | null
   verifierName: string | null
   verifierAvatar: string | null
 }
@@ -1599,7 +1620,7 @@ export function getExecutionsInRange(userId: string, start: string, end: string)
            u.name as developer_name, a.user_id as developer_user_id,
            te.issue_iid, te.issue_title, te.status,
            te.started_at, te.ended_at, te.input_tokens, te.output_tokens, te.cost_usd, te.turns,
-           te.issue_created_at, te.verified_at, te.verify_started_at,
+           te.issue_created_at, te.verified_at, te.verify_started_at, te.rejected_at,
            te.assignee_type, te.user_id as te_user_id, te.user_name as te_user_name, te.user_avatar as te_user_avatar,
            te.verifier_name, te.verifier_avatar
     FROM task_executions te
@@ -1623,6 +1644,7 @@ export function getExecutionsInRange(userId: string, start: string, end: string)
     issueCreatedAt: r.issue_created_at ?? null,
     verifiedAt: r.verified_at ?? null,
     verifyStartedAt: r.verify_started_at ?? null,
+    rejectedAt: r.rejected_at ?? null,
     verifierName: r.verifier_name ?? null,
     verifierAvatar: r.verifier_avatar ?? null,
   }))
@@ -1899,7 +1921,7 @@ export function getGlobalExecutionsInRange(start: string, end: string): ReportEx
            u.name as developer_name, a.user_id as developer_user_id,
            te.issue_iid, te.issue_title, te.status,
            te.started_at, te.ended_at, te.input_tokens, te.output_tokens, te.cost_usd, te.turns,
-           te.issue_created_at, te.verified_at, te.verify_started_at,
+           te.issue_created_at, te.verified_at, te.verify_started_at, te.rejected_at,
            te.verifier_name, te.verifier_avatar
     FROM task_executions te
     JOIN projects p ON p.id = te.project_id
@@ -1921,6 +1943,7 @@ export function getGlobalExecutionsInRange(start: string, end: string): ReportEx
     issueCreatedAt: r.issue_created_at ?? null,
     verifiedAt: r.verified_at ?? null,
     verifyStartedAt: r.verify_started_at ?? null,
+    rejectedAt: r.rejected_at ?? null,
     verifierName: r.verifier_name ?? null,
     verifierAvatar: r.verifier_avatar ?? null,
   }))
