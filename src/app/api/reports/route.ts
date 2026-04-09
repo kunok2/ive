@@ -283,7 +283,40 @@ export async function GET(req: NextRequest) {
     }
   })
 
-  // By user (사용자별)
+  // By verifier (검증자별) — byUser 합산용 먼저 계산
+  const verifierMap = new Map<string, typeof execs>()
+  for (const e of execs) {
+    if (e.verifierName) {
+      if (!verifierMap.has(e.verifierName)) verifierMap.set(e.verifierName, [])
+      verifierMap.get(e.verifierName)!.push(e)
+    }
+  }
+  // verifierName → { tasks, avgVerifyMin, avgWaitMin } 룩업맵
+  const verifierLookup = new Map<string, { tasks: number; avgVerifyMin: number; avgWaitMin: number }>()
+  for (const [vName, vExecs] of verifierMap.entries()) {
+    const verifyTimes = vExecs
+      .filter(e => e.verifiedAt && e.endedAt)
+      .map(e => {
+        const start = e.verifyStartedAt || e.endedAt!
+        return (new Date(e.verifiedAt!).getTime() - new Date(start).getTime()) / 60000
+      })
+      .filter(t => t >= 0)
+    const waitTimes = vExecs
+      .filter(e => e.verifyStartedAt && e.endedAt)
+      .map(e => (new Date(e.verifyStartedAt!).getTime() - new Date(e.endedAt!).getTime()) / 60000)
+      .filter(t => t >= 0 && t < 60 * 24 * 7)
+    verifierLookup.set(vName, {
+      tasks: vExecs.length,
+      avgVerifyMin: verifyTimes.length > 0 ? Math.round(verifyTimes.reduce((s, t) => s + t, 0) / verifyTimes.length * 10) / 10 : 0,
+      avgWaitMin: waitTimes.length > 0 ? Math.round(waitTimes.reduce((s, t) => s + t, 0) / waitTimes.length * 10) / 10 : 0,
+    })
+  }
+  const byVerifier = Array.from(verifierLookup.entries()).map(([verifierName, v]) => {
+    const vExecs = verifierMap.get(verifierName)!
+    return { verifierName, verifierAvatar: vExecs[0].verifierAvatar || 'av-01', tasks: v.tasks, avgVerifyMin: v.avgVerifyMin, avgWaitMin: v.avgWaitMin }
+  })
+
+  // By user (담당자별) — 담당자가 곧 검토자이므로 검증 통계도 합산
   const userMap = new Map<string, typeof execs>()
   for (const e of execs) {
     const uid = e.developerUserId || e.developerName
@@ -297,50 +330,22 @@ export async function GET(req: NextRequest) {
     const uFinished = uSuccess + uFailed
     const uCost = uExecs.reduce((s, e) => s + resolveExecutionCost(e, pricingMap), 0)
     const uniqueIssues = new Set(uExecs.map(e => `${e.projectId}:${e.issueIid}`))
-    const uniqueProjects = new Set(uExecs.map(e => e.projectId))
-    // 이슈 생성 → AI 시작까지의 대기 시간 (이슈를 올리고 AI가 시작할 때까지 기다리는 시간)
+    // 이슈 생성 → AI 시작까지의 대기 시간
     const waitTimes = uExecs
       .filter(e => e.issueCreatedAt && e.startedAt)
       .map(e => (new Date(e.startedAt!).getTime() - new Date(e.issueCreatedAt!).getTime()) / 60000)
-      .filter(t => t >= 0 && t < 60 * 24 * 7) // 1주일 이내만 유효
+      .filter(t => t >= 0 && t < 60 * 24 * 7)
+    const userName = uExecs[0].developerName
+    const vInfo = verifierLookup.get(userName) ?? { tasks: 0, avgVerifyMin: 0, avgWaitMin: 0 }
     return {
-      userId: uid, userName: uExecs[0].developerName,
+      userId: uid, userName, userAvatar: uExecs[0].agentAvatar || 'av-01',
       tasks: uExecs.length, success: uSuccess, failed: uFailed,
       issueCount: uniqueIssues.size,
-      projectCount: uniqueProjects.size,
       avgDurationMin: uFinished > 0 ? Math.round((uDur / uFinished) * 10) / 10 : 0,
-      avgWaitMin: waitTimes.length > 0 ? Math.round(waitTimes.reduce((s, t) => s + t, 0) / waitTimes.length * 10) / 10 : 0,
       cost: Math.round(uCost * 100) / 100,
-    }
-  })
-
-  // By verifier (검증자별) — 검증 완료된 건만
-  const verifierMap = new Map<string, typeof execs>()
-  for (const e of execs) {
-    if (e.verifierName) {
-      if (!verifierMap.has(e.verifierName)) verifierMap.set(e.verifierName, [])
-      verifierMap.get(e.verifierName)!.push(e)
-    }
-  }
-  const byVerifier = Array.from(verifierMap.entries()).map(([vName, vExecs]) => {
-    const verifyTimes = vExecs
-      .filter(e => e.verifiedAt && e.endedAt)
-      .map(e => {
-        const start = e.verifyStartedAt || e.endedAt!
-        return (new Date(e.verifiedAt!).getTime() - new Date(start).getTime()) / 60000
-      })
-      .filter(t => t >= 0)
-    // AI 완료 → 검토 시작까지의 대기 시간 (검토자가 결과물을 기다리는 시간)
-    const waitTimes = vExecs
-      .filter(e => e.verifyStartedAt && e.endedAt)
-      .map(e => (new Date(e.verifyStartedAt!).getTime() - new Date(e.endedAt!).getTime()) / 60000)
-      .filter(t => t >= 0 && t < 60 * 24 * 7)
-    return {
-      verifierName: vName,
-      verifierAvatar: vExecs[0].verifierAvatar || 'av-01',
-      tasks: vExecs.length,
-      avgVerifyMin: verifyTimes.length > 0 ? Math.round(verifyTimes.reduce((s, t) => s + t, 0) / verifyTimes.length * 10) / 10 : 0,
       avgWaitMin: waitTimes.length > 0 ? Math.round(waitTimes.reduce((s, t) => s + t, 0) / waitTimes.length * 10) / 10 : 0,
+      verifyTasks: vInfo.tasks,
+      avgVerifyMin: vInfo.avgVerifyMin,
     }
   })
 
