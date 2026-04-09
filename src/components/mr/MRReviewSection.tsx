@@ -72,21 +72,6 @@ export default function MRReviewSection({ projectId, issueIid }: Props) {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Merge failed')
-      // 머지 성공 → IVE-E(완료) 상태로 전환
-      try {
-        const issueRes = await fetch(`/api/projects/${projectId}/issues/${issueIid}`)
-        if (issueRes.ok) {
-          const issueData = await issueRes.json()
-          const stage = issueData.stage
-          if (stage === 'dev' || stage === 'verifying') {
-            await fetch(`/api/projects/${projectId}/issues/${issueIid}/stage`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ stage, action: 'complete' }),
-            })
-          }
-        }
-      } catch { /* 상태 전환 실패해도 머지는 성공 */ }
       await fetchMR()
       if (mr) {
         watchPipeline({

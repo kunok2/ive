@@ -67,23 +67,28 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     try {
       const result = await mergeMR(project, decryptedToken, mr.iid)
 
-      // 머지 성공 시 IVE-V → IVE-E 레이블 자동 전환
+      // 머지 성공 시 현재 단계(IVE-D/IVE-W/IVE-V) → IVE-E 레이블 자동 전환
       try {
+        const labelD = project.labelDev || 'IVE-D'
+        const labelW = project.labelVerifyWait || 'IVE-W'
         const labelV = project.labelVerify || 'IVE-V'
         const labelE = project.labelEnd || 'IVE-E'
         const issue = await fetchSingleIssue(project, Number(iid), decryptedToken)
         if (issue) {
           const labels: string[] = issue.labels || []
-          if (labels.includes(labelV) && !labels.includes(labelE)) {
-            await removeIssueLabels(project, Number(iid), decryptedToken, [labelV])
+          if (!labels.includes(labelE)) {
+            const labelsToRemove = [labelD, labelW, labelV].filter(l => labels.includes(l))
+            if (labelsToRemove.length > 0) {
+              await removeIssueLabels(project, Number(iid), decryptedToken, labelsToRemove)
+            }
             await addIssueLabels(project, Number(iid), decryptedToken, [labelE])
-            markIssueVerified(id, Number(iid))
+            markIssueVerified(id, Number(iid), { name: user.name, avatar: user.avatar })
             touchProjectActivity(id)
             logActivity({
               userId: user.id,
               category: 'task',
               action: 'task_complete',
-              detail: `머지 완료 → 자동 전환 (이슈 #${iid}, ${project.name})`,
+              detail: `머지 완료 → 자동 완료 전환 (이슈 #${iid}, ${project.name})`,
               targetType: 'issue',
               targetId: `${id}:${iid}`,
             })
