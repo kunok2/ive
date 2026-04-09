@@ -298,15 +298,18 @@ export async function GET(req: NextRequest) {
     const uCost = uExecs.reduce((s, e) => s + resolveExecutionCost(e, pricingMap), 0)
     const uniqueIssues = new Set(uExecs.map(e => `${e.projectId}:${e.issueIid}`))
     const uniqueProjects = new Set(uExecs.map(e => e.projectId))
+    // 이슈 생성 → AI 시작까지의 대기 시간 (이슈를 올리고 AI가 시작할 때까지 기다리는 시간)
+    const waitTimes = uExecs
+      .filter(e => e.issueCreatedAt && e.startedAt)
+      .map(e => (new Date(e.startedAt!).getTime() - new Date(e.issueCreatedAt!).getTime()) / 60000)
+      .filter(t => t >= 0 && t < 60 * 24 * 7) // 1주일 이내만 유효
     return {
-      userId: uid, userName: uExecs[0].developerName, userAvatar: uExecs[0].agentAvatar,
+      userId: uid, userName: uExecs[0].developerName,
       tasks: uExecs.length, success: uSuccess, failed: uFailed,
       issueCount: uniqueIssues.size,
       projectCount: uniqueProjects.size,
-      totalDurationMin: Math.round(uDur * 10) / 10,
       avgDurationMin: uFinished > 0 ? Math.round((uDur / uFinished) * 10) / 10 : 0,
-      inputTokens: uExecs.reduce((s, e) => s + e.inputTokens, 0),
-      outputTokens: uExecs.reduce((s, e) => s + e.outputTokens, 0),
+      avgWaitMin: waitTimes.length > 0 ? Math.round(waitTimes.reduce((s, t) => s + t, 0) / waitTimes.length * 10) / 10 : 0,
       cost: Math.round(uCost * 100) / 100,
     }
   })
@@ -323,16 +326,21 @@ export async function GET(req: NextRequest) {
     const verifyTimes = vExecs
       .filter(e => e.verifiedAt && e.endedAt)
       .map(e => {
-        // verify_started_at이 있으면 순수 검증시간, 없으면 하위호환 (ended_at 기준)
         const start = e.verifyStartedAt || e.endedAt!
         return (new Date(e.verifiedAt!).getTime() - new Date(start).getTime()) / 60000
       })
       .filter(t => t >= 0)
+    // AI 완료 → 검토 시작까지의 대기 시간 (검토자가 결과물을 기다리는 시간)
+    const waitTimes = vExecs
+      .filter(e => e.verifyStartedAt && e.endedAt)
+      .map(e => (new Date(e.verifyStartedAt!).getTime() - new Date(e.endedAt!).getTime()) / 60000)
+      .filter(t => t >= 0 && t < 60 * 24 * 7)
     return {
       verifierName: vName,
       verifierAvatar: vExecs[0].verifierAvatar || 'av-01',
       tasks: vExecs.length,
       avgVerifyMin: verifyTimes.length > 0 ? Math.round(verifyTimes.reduce((s, t) => s + t, 0) / verifyTimes.length * 10) / 10 : 0,
+      avgWaitMin: waitTimes.length > 0 ? Math.round(waitTimes.reduce((s, t) => s + t, 0) / waitTimes.length * 10) / 10 : 0,
     }
   })
 

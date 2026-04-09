@@ -13,9 +13,11 @@ export interface ReportData {
   byProject: ProjectStat[]
   byAgent: AgentStat[]
   byVerifier: VerifierStat[]
+  byUser: UserStat[]
   prevByProject: { projectId: string; projectName: string; tasks: number; cost: number }[]
   prevByAgent: { agentId: string; agentName: string; tasks: number; cost: number }[]
   prevByVerifier: { verifierName: string; tasks: number }[]
+  prevByUser: { userId: string; userName: string; tasks: number; issueCount: number; cost: number }[]
   dailyTrend: DailyTrend[]
   prevDailyTrend: { date: string; tasks: number; cost: number }[]
   agentTrend: { agentId: string; agentName: string; agentAvatar: string; daily: { date: string; tasks: number; cost: number }[] }[]
@@ -46,7 +48,8 @@ export interface AgentStat {
   assignedProjectId: string; assignedProjectName: string; currentStatus: string
 }
 
-export interface VerifierStat { verifierName: string; verifierAvatar: string; tasks: number; avgVerifyMin: number }
+export interface VerifierStat { verifierName: string; verifierAvatar: string; tasks: number; avgVerifyMin: number; avgWaitMin?: number }
+export interface UserStat { userId: string; userName: string; tasks: number; issueCount: number; projectCount: number; avgDurationMin: number; avgWaitMin: number; cost: number }
 export interface DailyTrend { date: string; tasks: number | null; success: number | null; failed: number | null; cost: number | null; waitAvg: number | null; procAvg: number | null; verifyAvg: number | null }
 export interface WaitingDay { date: string; total: number; byProject: { projectId: string; projectName: string; projectColor: string; waiting: number }[] }
 export interface AgentWaitingDay { date: string; total: number; byAgent: { agentId: string; agentName: string; agentAvatar: string; waiting: number }[] }
