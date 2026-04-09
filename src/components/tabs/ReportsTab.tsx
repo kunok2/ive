@@ -708,7 +708,7 @@ export default function ReportsTab() {
                 })()}
                 {/* 재시도 */}
                 <div className="flex justify-center gap-4 text-xs text-ive-text-dim">
-                  <span>{t('issueCount', { count: data.lifecycle.uniqueIssues.toLocaleString() })}</span>
+                  <span>{t('issueCountUnit', { count: data.lifecycle.uniqueIssues.toLocaleString() })}</span>
                   <span>{t('avgAttempts', { count: data.lifecycle.avgAttempts.toFixed(1) })}</span>
                   <span>{t('retryRateLabel', { rate: data.lifecycle.retryRate.toFixed(1) })}</span>
                 </div>

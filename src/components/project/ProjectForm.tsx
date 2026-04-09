@@ -378,69 +378,87 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded-full bg-emerald-400 shrink-0" />
+            <span className="flex flex-row items-baseline gap-1.5 flex-1 min-w-0">
+              <span className="text-xs text-ive-text-dim shrink-0">{t('labelTarget')}</span>
+              <span className="text-[10px] text-ive-text-dim/60 truncate">{t('labelTargetDesc')}</span>
+            </span>
             <input
               type="text"
               value={labelTarget}
               onChange={e => setLabelTarget(e.target.value)}
               placeholder="IVE"
-              className="flex-1 bg-ive-bg-deep border border-ive-border rounded-lg px-3 py-1.5 text-sm text-ive-text focus:outline-none focus:border-ive-green font-bold"
+              className="w-24 shrink-0 bg-ive-bg-deep border border-ive-border rounded-lg px-3 py-1.5 text-sm text-ive-text focus:outline-none focus:border-ive-green font-bold"
             />
-            <span className="text-xs text-ive-text-dim shrink-0 w-16 text-right">{t('labelTarget')}</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded-full bg-yellow-400 shrink-0" />
+            <span className="flex flex-row items-baseline gap-1.5 flex-1 min-w-0">
+              <span className="text-xs text-ive-text-dim shrink-0">{t('labelSchedule')}</span>
+              <span className="text-[10px] text-ive-text-dim/60 truncate">{t('labelScheduleDesc')}</span>
+            </span>
             <input
               type="text"
               value={labelSchedule}
               onChange={e => setLabelSchedule(e.target.value)}
               placeholder="IVE-S"
-              className="flex-1 bg-ive-bg-deep border border-ive-border rounded-lg px-3 py-1.5 text-sm text-ive-text focus:outline-none focus:border-ive-green font-bold"
+              className="w-24 shrink-0 bg-ive-bg-deep border border-ive-border rounded-lg px-3 py-1.5 text-sm text-ive-text focus:outline-none focus:border-ive-green font-bold"
             />
-            <span className="text-xs text-ive-text-dim shrink-0 w-16 text-right">{t('labelSchedule')}</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded-full bg-cyan-400 shrink-0" />
+            <span className="flex flex-row items-baseline gap-1.5 flex-1 min-w-0">
+              <span className="text-xs text-ive-text-dim shrink-0">{t('labelDev')}</span>
+              <span className="text-[10px] text-ive-text-dim/60 truncate">{t('labelDevDesc')}</span>
+            </span>
             <input
               type="text"
               value={labelDev}
               onChange={e => setLabelDev(e.target.value)}
               placeholder="IVE-D"
-              className="flex-1 bg-ive-bg-deep border border-ive-border rounded-lg px-3 py-1.5 text-sm text-ive-text focus:outline-none focus:border-ive-green font-bold"
+              className="w-24 shrink-0 bg-ive-bg-deep border border-ive-border rounded-lg px-3 py-1.5 text-sm text-ive-text focus:outline-none focus:border-ive-green font-bold"
             />
-            <span className="text-xs text-ive-text-dim shrink-0 w-16 text-right">{t('labelDev')}</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded-full bg-yellow-400 shrink-0" />
+            <span className="flex flex-row items-baseline gap-1.5 flex-1 min-w-0">
+              <span className="text-xs text-ive-text-dim shrink-0">{t('labelVerifyWait')}</span>
+              <span className="text-[10px] text-ive-text-dim/60 truncate">{t('labelVerifyWaitDesc')}</span>
+            </span>
             <input
               type="text"
               value={labelVerifyWait}
               onChange={e => setLabelVerifyWait(e.target.value)}
               placeholder="IVE-W"
-              className="flex-1 bg-ive-bg-deep border border-ive-border rounded-lg px-3 py-1.5 text-sm text-ive-text focus:outline-none focus:border-ive-green font-bold"
+              className="w-24 shrink-0 bg-ive-bg-deep border border-ive-border rounded-lg px-3 py-1.5 text-sm text-ive-text focus:outline-none focus:border-ive-green font-bold"
             />
-            <span className="text-xs text-ive-text-dim shrink-0 w-16 text-right">{t('labelVerifyWait')}</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded-full bg-orange-400 shrink-0" />
+            <span className="flex flex-row items-baseline gap-1.5 flex-1 min-w-0">
+              <span className="text-xs text-ive-text-dim shrink-0">{t('labelVerify')}</span>
+              <span className="text-[10px] text-ive-text-dim/60 truncate">{t('labelVerifyDesc')}</span>
+            </span>
             <input
               type="text"
               value={labelVerify}
               onChange={e => setLabelVerify(e.target.value)}
               placeholder="IVE-V"
-              className="flex-1 bg-ive-bg-deep border border-ive-border rounded-lg px-3 py-1.5 text-sm text-ive-text focus:outline-none focus:border-ive-green font-bold"
+              className="w-24 shrink-0 bg-ive-bg-deep border border-ive-border rounded-lg px-3 py-1.5 text-sm text-ive-text focus:outline-none focus:border-ive-green font-bold"
             />
-            <span className="text-xs text-ive-text-dim shrink-0 w-16 text-right">{t('labelVerify')}</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded-full bg-blue-400 shrink-0" />
+            <span className="flex flex-row items-baseline gap-1.5 flex-1 min-w-0">
+              <span className="text-xs text-ive-text-dim shrink-0">{t('labelEnd')}</span>
+              <span className="text-[10px] text-ive-text-dim/60 truncate">{t('labelEndDesc')}</span>
+            </span>
             <input
               type="text"
               value={labelEnd}
               onChange={e => setLabelEnd(e.target.value)}
               placeholder="IVE-E"
-              className="flex-1 bg-ive-bg-deep border border-ive-border rounded-lg px-3 py-1.5 text-sm text-ive-text focus:outline-none focus:border-ive-green font-bold"
+              className="w-24 shrink-0 bg-ive-bg-deep border border-ive-border rounded-lg px-3 py-1.5 text-sm text-ive-text focus:outline-none focus:border-ive-green font-bold"
             />
-            <span className="text-xs text-ive-text-dim shrink-0 w-16 text-right">{t('labelEnd')}</span>
           </div>
         </div>
         {/* 레이블 생성 버튼 — 기존 프로젝트에서만 표시 */}
