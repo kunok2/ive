@@ -177,11 +177,15 @@ export async function GET(req: NextRequest) {
       if (proc > 0) d.procTimes.push(proc)
       const ws = e.issueCreatedAt
       if (ws) {
-        const wait = durationMin(ws, e.startedAt)
+        let wait = durationMin(ws, e.startedAt)
+        if (e.endedAt && e.verifyStartedAt) {
+          const vw = durationMin(e.endedAt, e.verifyStartedAt)
+          if (vw >= 0) wait += vw
+        }
         if (wait >= 0) d.waitTimes.push(wait)
       }
       if (e.verifiedAt) {
-        const vt = durationMin(e.endedAt, e.verifiedAt)
+        const vt = e.verifyStartedAt ? durationMin(e.verifyStartedAt, e.verifiedAt) : durationMin(e.endedAt, e.verifiedAt)
         if (vt >= 0) d.verifyTimes.push(vt)
       }
     }
@@ -299,6 +303,40 @@ export async function GET(req: NextRequest) {
     }
   })
 
+  // By verifier (검증자별) — 검증 완료된 건만
+  const verifierMap = new Map<string, typeof execs>()
+  for (const e of execs) {
+    if (e.verifierName) {
+      if (!verifierMap.has(e.verifierName)) verifierMap.set(e.verifierName, [])
+      verifierMap.get(e.verifierName)!.push(e)
+    }
+  }
+  const byVerifier = Array.from(verifierMap.entries()).map(([vName, vExecs]) => {
+    const verifyTimes = vExecs
+      .filter(e => e.verifiedAt && e.endedAt)
+      .map(e => (new Date(e.verifiedAt!).getTime() - new Date(e.endedAt!).getTime()) / 60000)
+      .filter(t => t >= 0)
+    return {
+      verifierName: vName,
+      verifierAvatar: vExecs[0].verifierAvatar || 'av-01',
+      tasks: vExecs.length,
+      avgVerifyMin: verifyTimes.length > 0 ? Math.round(verifyTimes.reduce((s, t) => s + t, 0) / verifyTimes.length * 10) / 10 : 0,
+    }
+  })
+
+  // prevByVerifier
+  const prevVerifierMap = new Map<string, typeof prevExecs>()
+  for (const e of prevExecs) {
+    if (e.verifierName) {
+      if (!prevVerifierMap.has(e.verifierName)) prevVerifierMap.set(e.verifierName, [])
+      prevVerifierMap.get(e.verifierName)!.push(e)
+    }
+  }
+  const prevByVerifier = Array.from(prevVerifierMap.entries()).map(([vName, vExecs]) => ({
+    verifierName: vName,
+    tasks: vExecs.length,
+  }))
+
   // User trend (daily breakdown per user) — 전체 기간 버킷 채움 (아래에서 allKeys 사용)
 
   // Daily trend (extended with waitAvg, procAvg) — 전체 기간 버킷 채움
@@ -320,11 +358,15 @@ export async function GET(req: NextRequest) {
       if (proc > 0) d.procTimes.push(proc)
       const ws = e.issueCreatedAt
       if (ws) {
-        const wait = durationMin(ws, e.startedAt)
+        let wait = durationMin(ws, e.startedAt)
+        if (e.endedAt && e.verifyStartedAt) {
+          const vw = durationMin(e.endedAt, e.verifyStartedAt)
+          if (vw >= 0) wait += vw
+        }
         if (wait >= 0) d.waitTimes.push(wait)
       }
       if (e.verifiedAt) {
-        const vt = durationMin(e.endedAt, e.verifiedAt)
+        const vt = e.verifyStartedAt ? durationMin(e.verifyStartedAt, e.verifiedAt) : durationMin(e.endedAt, e.verifiedAt)
         if (vt >= 0) d.verifyTimes.push(vt)
       }
     }
@@ -474,19 +516,27 @@ export async function GET(req: NextRequest) {
   // 이슈 생애주기 집계
   const finishedExecs = execs.filter(e => (e.status === 'success' || e.status === 'failed') && e.endedAt)
 
-  // 대기시간: issue_created_at(큐 진입 시점) → started_at
+  // 대기시간: 개발대기(issue_created_at → started_at) + 검증대기(ended_at → verify_started_at)
   const waitTimes = finishedExecs
     .filter(e => e.issueCreatedAt)
-    .map(e => durationMin(e.issueCreatedAt!, e.startedAt))
+    .map(e => {
+      let wait = durationMin(e.issueCreatedAt!, e.startedAt)
+      // 검증대기 시간 추가 (verify_started_at가 있으면 ended_at → verify_started_at)
+      if (e.endedAt && e.verifyStartedAt) {
+        const verifyWait = durationMin(e.endedAt, e.verifyStartedAt)
+        if (verifyWait >= 0) wait += verifyWait
+      }
+      return wait
+    })
     .filter(v => v >= 0)
-  // 처리시간: started_at → ended_at
+  // 작업시간: started_at → ended_at
   const procTimes = finishedExecs
     .map(e => durationMin(e.startedAt, e.endedAt!))
     .filter(v => v > 0)
-  // 검증시간: ended_at → verified_at
+  // 검증시간: verify_started_at → verified_at (순수 검증 작업), 없으면 ended_at → verified_at (하위호환)
   const verifyTimes = finishedExecs
     .filter(e => e.verifiedAt)
-    .map(e => durationMin(e.endedAt!, e.verifiedAt!))
+    .map(e => e.verifyStartedAt ? durationMin(e.verifyStartedAt, e.verifiedAt!) : durationMin(e.endedAt!, e.verifiedAt!))
     .filter(v => v >= 0)
   // 총시간: issue_created_at(큐 진입 시점) → verified_at (있으면) 또는 ended_at
   const totalTimes = finishedExecs
@@ -529,14 +579,21 @@ export async function GET(req: NextRequest) {
   const prevFinishedExecs = prevExecs.filter(e => (e.status === 'success' || e.status === 'failed') && e.endedAt)
   const prevWaitTimes = prevFinishedExecs
     .filter(e => e.issueCreatedAt)
-    .map(e => durationMin(e.issueCreatedAt!, e.startedAt))
+    .map(e => {
+      let wait = durationMin(e.issueCreatedAt!, e.startedAt)
+      if (e.endedAt && e.verifyStartedAt) {
+        const vw = durationMin(e.endedAt, e.verifyStartedAt)
+        if (vw >= 0) wait += vw
+      }
+      return wait
+    })
     .filter(v => v >= 0)
   const prevProcTimes = prevFinishedExecs
     .map(e => durationMin(e.startedAt, e.endedAt!))
     .filter(v => v > 0)
   const prevVerifyTimes = prevFinishedExecs
     .filter(e => e.verifiedAt)
-    .map(e => durationMin(e.endedAt!, e.verifiedAt!))
+    .map(e => e.verifyStartedAt ? durationMin(e.verifyStartedAt, e.verifiedAt!) : durationMin(e.endedAt!, e.verifiedAt!))
     .filter(v => v >= 0)
   const prevTotalTimes = prevFinishedExecs
     .filter(e => e.issueCreatedAt)
@@ -728,11 +785,13 @@ export async function GET(req: NextRequest) {
     prevByProject,
     prevByAgent,
     prevByUser,
+    prevByVerifier,
     prevDailyTrend,
     prevLifecycle,
     byProject,
     byAgent,
     byUser,
+    byVerifier,
     dailyTrend,
     projectTrend,
     agentTrend,

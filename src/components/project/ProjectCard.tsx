@@ -136,7 +136,7 @@ export default function ProjectCard({ project }: Props) {
         const res = await fetch(`/api/projects/${project.id}/issues`)
         if (res.ok) {
           const all = await res.json()
-          setWaitingIssues(all.filter((i: any) => i.stage === 'waiting'))
+          setWaitingIssues(all.filter((i: any) => i.stage === 'waiting' || i.stage === 'verify_waiting'))
         }
       } catch { /* ignore */ }
     }

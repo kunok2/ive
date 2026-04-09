@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { setSystemSetting, updateUserLocale, updateUserTimezone } from '@/lib/db'
+import { setSystemSetting, updateUserLocale, updateUserTimezone, updateUserGitUsernames } from '@/lib/db'
 import { locales, Locale } from '@/i18n/config'
 import { getCurrentUser } from '@/lib/auth'
 
@@ -43,6 +43,25 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: 'Invalid timezone' }, { status: 400 })
     }
     updateUserTimezone(user.id, timezone)
+  }
+
+  // Git username 업데이트
+  if ((body.gitlabUsername !== undefined || body.githubUsername !== undefined) && user) {
+    const gitlab = body.gitlabUsername !== undefined
+      ? (typeof body.gitlabUsername === 'string' ? body.gitlabUsername.trim() || null : null)
+      : undefined
+    const github = body.githubUsername !== undefined
+      ? (typeof body.githubUsername === 'string' ? body.githubUsername.trim() || null : null)
+      : undefined
+    // 둘 다 전달된 경우 한번에 업데이트, 하나만 전달된 경우 기존 값 유지
+    if (gitlab !== undefined || github !== undefined) {
+      const current = await import('@/lib/db').then(m => m.getUserById(user.id))
+      updateUserGitUsernames(
+        user.id,
+        gitlab !== undefined ? gitlab : (current?.gitlabUsername || null),
+        github !== undefined ? github : (current?.githubUsername || null),
+      )
+    }
   }
 
   return NextResponse.json({ ok: true })

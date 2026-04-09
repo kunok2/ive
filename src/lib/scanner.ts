@@ -478,12 +478,90 @@ export async function scanProject(project: Project, force: boolean = false) {
           console.log(`[Scanner] [USER-COMPLETE] Issue #${iid} — 담당자가 레이블 전환, 작업 완료 처리 (${stage})`);
         }
       }
-      // 사람 작업 실패 감지: 담당자가 레이블을 제거하여 dev_fail 상태가 된 경우
-      if (stage === 'dev_fail') {
+      // 사람 작업 실패 감지: IVE-D가 제거되어 dev_fail, waiting, 또는 레이블 없음(null) 상태가 된 경우
+      if (activeExec && (stage === 'dev_fail' || stage === 'waiting' || stage === null)) {
         const userExec = getAssignedUserExecution(project.id, iid);
         if (userExec) {
           updateExecutionStatus(userExec.id, 'failed', new Date().toISOString());
-          console.log(`[Scanner] [USER-FAIL] Issue #${iid} — dev_fail 감지, 작업 실패 처리`);
+          console.log(`[Scanner] [USER-FAIL] Issue #${iid} — 레이블 변경 감지 (stage: ${stage}), 작업 실패 처리`);
+        }
+      }
+
+      // 담당자 모드: 담당자가 Git에서 IVE-D를 직접 부여한 경우 → 브랜치 생성 + execution 생성
+      // dev_fail = IVE-D 있지만 활성 execution 없음 → assignee 모드이면 execution 생성
+      if (stage === 'dev_fail' && !activeExec) {
+        const assignModeMap = getAssignModeMap(project.id);
+        const assignInfo = assignModeMap.get(iid);
+        if (assignInfo?.mode === 'assignee') {
+          const issueAssignees = issue.assignees || [];
+          if (issueAssignees.length > 0) {
+            const assignee = issueAssignees[0];
+            const executionId = `ex-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+            const logDir = path.join(process.cwd(), 'data', 'logs');
+            if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
+            const logPath = path.join(logDir, `${executionId}.log`);
+            fs.writeFileSync(logPath, '');
+
+            const waitingSince = getIssueScheduledAt(project.id, iid) || new Date().toISOString();
+            const execution: Parameters<typeof createExecution>[0] = {
+              id: executionId,
+              projectId: project.id,
+              agentId: '',
+              issueIid: iid,
+              issueTitle: issue.title,
+              status: 'assigned',
+              startedAt: new Date().toISOString(),
+              logPath,
+              inputTokens: 0, outputTokens: 0, costUsd: 0, turns: 0,
+              issueCreatedAt: waitingSince,
+              assigneeType: 'user',
+              userId: String(assignee.id),
+              userName: assignee.name || assignee.username || assignee.login,
+              userAvatar: assignee.avatar_url,
+            };
+
+            if (assignIssueAtomically(project.id, iid, 'dev', execution)) {
+              const branchName = `dev-${iid}`;
+
+              // 브랜치 생성
+              try {
+                const defaultBranch = await getDefaultBranch(project, decryptedToken);
+                const created = await createBranch(project, decryptedToken, branchName, defaultBranch);
+                if (created) {
+                  console.log(`[Scanner] [BRANCH] Created branch '${branchName}' for assignee issue #${iid}`);
+                }
+              } catch (e) { console.warn(`[Scanner] Failed to create branch for #${iid}:`, e); }
+
+              // IVE-S 잔류 레이블 정리 (담당자가 IVE-S를 안 지웠을 수 있음)
+              try {
+                const hasScheduleLabel = labels.includes(project.labelSchedule || 'IVE-S');
+                if (hasScheduleLabel) {
+                  await removeIssueLabels(project, iid, decryptedToken, [project.labelSchedule || 'IVE-S']);
+                }
+              } catch (e) { console.warn(`[Scanner] Failed to clean IVE-S on #${iid}:`, e); }
+
+              // 브랜치 안내 코멘트
+              try {
+                const commentBody = `<!-- ive-bot -->\n**작업 브랜치가 생성되었습니다.**\n\n브랜치: \`${branchName}\`\n담당자: ${execution.userName}\n\n**작업 방법:**\n1. \`${branchName}\` 브랜치에서 작업\n2. MR/PR 생성 시 제목에 \`resolve #${iid}\` 포함 (머지 시 이슈 자동 닫힘)\n3. 작업 완료 후 레이블을 \`${project.labelDev || 'IVE-D'}\` → \`${project.labelVerifyWait || 'IVE-W'}\`로 변경`;
+                await addIssueComment(project, iid, decryptedToken, commentBody);
+              } catch (e) { console.warn(`[Scanner] Failed to add branch comment on #${iid}:`, e); }
+
+              try {
+                createActivityLog({
+                  userId: 'system',
+                  category: 'task',
+                  action: 'create_task',
+                  detail: `작업 배정 (이슈 #${iid}, ${project.name}, 담당자: ${execution.userName}, 브랜치: ${branchName})`,
+                  targetType: 'execution',
+                  targetId: executionId,
+                });
+              } catch (e) { console.error('[Scanner] Failed to log task activity:', e); }
+
+              console.log(`[Scanner] [ASSIGN-USER] Project: ${project.name}, Issue: #${iid}, Assignee: ${execution.userName}, Branch: ${branchName}`);
+            }
+          } else {
+            console.log(`[Scanner] [SKIP] Issue #${iid} — assignee 모드 IVE-D 감지, 담당자 미지정`);
+          }
         }
       }
 
@@ -567,78 +645,10 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
     const assignInfo = assignModeMap.get(issue.iid) || { mode: 'auto' as const, agentId: null };
 
     // ── 담당자가 처리 (assignee 모드) ──
+    // assignee 모드는 자동 배정하지 않음. 담당자가 Git에서 IVE-D를 직접 부여하면 처리됨.
     if (assignInfo.mode === 'assignee') {
-      const issueAssignees = issue.assignees || [];
-      if (issueAssignees.length === 0) {
-        console.log(`[Scanner] [SKIP] Issue #${issue.iid} — assignee 모드이지만 Git 담당자 미지정, 대기`);
-        waitingCount++;
-        continue;
-      }
-      const assignee = issueAssignees[0];
-      const executionId = `ex-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-      const logDir = path.join(process.cwd(), 'data', 'logs');
-      if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
-      const logPath = path.join(logDir, `${executionId}.log`);
-      fs.writeFileSync(logPath, '');
-
-      const waitingSince = getIssueScheduledAt(project.id, issue.iid) || new Date().toISOString();
-      const execution: Parameters<typeof createExecution>[0] = {
-        id: executionId,
-        projectId: project.id,
-        agentId: '',
-        issueIid: issue.iid,
-        issueTitle: issue.title,
-        status: 'assigned',
-        startedAt: new Date().toISOString(),
-        logPath,
-        inputTokens: 0, outputTokens: 0, costUsd: 0, turns: 0,
-        issueCreatedAt: waitingSince,
-        assigneeType: 'user',
-        userId: String(assignee.id),
-        userName: assignee.name || assignee.username || assignee.login,
-        userAvatar: assignee.avatar_url,
-      };
-
-      if (assignIssueAtomically(project.id, issue.iid, 'dev', execution)) {
-        const branchName = `dev-${issue.iid}`;
-
-        // 브랜치 생성 (AI와 동일한 네이밍: dev-{iid})
-        try {
-          const defaultBranch = await getDefaultBranch(project, decryptedToken);
-          const created = await createBranch(project, decryptedToken, branchName, defaultBranch);
-          if (created) {
-            console.log(`[Scanner] [BRANCH] Created branch '${branchName}' for issue #${issue.iid}`);
-          } else {
-            console.warn(`[Scanner] [BRANCH] Failed to create branch '${branchName}' for issue #${issue.iid}`);
-          }
-        } catch (e) { console.warn(`[Scanner] Failed to create branch for #${issue.iid}:`, e); }
-
-        // 레이블 전환: IVE-S → IVE-D
-        try {
-          await removeIssueLabels(project, issue.iid, decryptedToken, [project.labelSchedule || 'IVE-S']);
-          await addIssueLabels(project, issue.iid, decryptedToken, [project.labelDev || 'IVE-D']);
-        } catch (e) { console.warn(`[Scanner] Failed to switch labels on #${issue.iid}:`, e); }
-
-        // 이슈에 브랜치 안내 코멘트 작성
-        try {
-          const commentBody = `<!-- ive-bot -->\n**작업 브랜치가 생성되었습니다.**\n\n브랜치: \`${branchName}\`\n담당자: ${execution.userName}\n\n**작업 방법:**\n1. \`${branchName}\` 브랜치에서 작업\n2. MR/PR 생성 시 제목에 \`resolve #${issue.iid}\` 포함 (머지 시 이슈 자동 닫힘)\n3. 레이블을 \`${project.labelDev || 'IVE-D'}\` → \`${project.labelVerify || 'IVE-V'}\`로 변경`;
-          await addIssueComment(project, issue.iid, decryptedToken, commentBody);
-        } catch (e) { console.warn(`[Scanner] Failed to add branch comment on #${issue.iid}:`, e); }
-
-        try {
-          createActivityLog({
-            userId: 'system',
-            category: 'task',
-            action: 'create_task',
-            detail: `작업 배정 (이슈 #${issue.iid}, ${project.name}, 담당자: ${execution.userName}, 브랜치: ${branchName})`,
-            targetType: 'execution',
-            targetId: executionId,
-          })
-        } catch (e) { console.error('[Scanner] Failed to log task activity:', e) }
-
-        console.log(`[Scanner] [ASSIGN-USER] Project: ${project.name}, Issue: #${issue.iid}, Assignee: ${execution.userName}, Branch: ${branchName}`);
-        assignedCount++;
-      }
+      console.log(`[Scanner] [WAIT] Issue #${issue.iid} — assignee 모드, 담당자가 IVE-D 레이블 부여 대기`);
+      waitingCount++;
       continue;
     }
 

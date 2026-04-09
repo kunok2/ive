@@ -9,6 +9,8 @@ export interface User {
   allowedClis: CliName[]  // 사용 가능한 CLI 도구 목록
   locale?: string      // 사용자 지정 언어
   timezone?: string    // 사용자 지정 타임존 (예: 'Asia/Seoul')
+  gitlabUsername?: string // GitLab 사용자명 (검증자 매칭용)
+  githubUsername?: string // GitHub 사용자명 (검증자 매칭용)
   createdAt: string
 }
 

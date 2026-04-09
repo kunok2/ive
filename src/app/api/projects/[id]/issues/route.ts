@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getProject, getProjectAccess, getAssignModeMap, setAssignMode, getAgent, hasActiveExecution, hasAnyExecution, stageFromLabels, touchProjectActivity } from '@/lib/db';
-import { checkLabelsExist } from '@/lib/provider';
+import { checkLabelsExist, addIssueComment } from '@/lib/provider';
 import { getCurrentUser } from '@/lib/auth';
 import { decrypt } from '@/lib/crypto';
 import { fetchAllProjectIssues, fetchClosedProjectIssues, createIssue } from '@/lib/provider';
@@ -138,6 +138,7 @@ export async function POST(
     }
 
     // IVE 레이블 항상 부착 + asDev면 IVE-S(스케줄 대상)도 부착
+    const isAssigneeMode = reqAssignMode === 'assignee';
     const labels = asDev
       ? [project.labelTarget, project.labelSchedule || 'IVE-S']
       : [project.labelTarget];
@@ -147,10 +148,25 @@ export async function POST(
 
     // 배정 모드 지정
     if (issue.iid) {
-      if (reqAssignMode === 'assignee') {
+      if (isAssigneeMode) {
         setAssignMode(projectId, issue.iid, 'assignee');
       } else if (preferredAgentId) {
         setAssignMode(projectId, issue.iid, 'agent', preferredAgentId);
+      }
+    }
+
+    // assignee 모드: 가이드 노트 작성 (담당자에게 레이블 변경 안내)
+    if (issue.iid && isAssigneeMode) {
+      try {
+        const labelS = project.labelSchedule || 'IVE-S';
+        const labelD = project.labelDev || 'IVE-D';
+        const labelW = project.labelVerifyWait || 'IVE-W';
+        const labelV = project.labelVerify || 'IVE-V';
+        const labelE = project.labelEnd || 'IVE-E';
+        const guideNote = `<!-- ive-bot -->\n## 🔖 작업 진행 가이드\n\n이 이슈는 **담당자가 직접 처리**하는 작업입니다.\n레이블을 변경하여 단계를 진행해주세요. (현재: \`${labelS}\` 대기 중)\n\n| 순서 | 레이블 | 단계 | 설명 |\n|:---:|:---:|---|---|\n| ✅ | \`${labelS}\` | 대기 | 현재 단계 — 개발 대기 중 |\n| 2 | \`${labelD}\` | 개발 | 개발 진행 중 (브랜치 자동 생성) |\n| 3 | \`${labelW}\` | 검증대기 | 개발 완료, 검증 대기 |\n| 4 | \`${labelV}\` | 검증 | 검증 진행 중 |\n| 5 | \`${labelE}\` | 완료 | 모든 작업 완료 |\n\n### 진행 방법\n1. 개발을 시작하려면 **\`${labelS}\`** → **\`${labelD}\`** 로 변경하세요 (작업 브랜치가 자동 생성됩니다)\n2. 개발이 완료되면 **\`${labelD}\`** → **\`${labelW}\`** 로 변경하세요\n3. 검증을 시작하면 **\`${labelW}\`** → **\`${labelV}\`** 로 변경하세요\n4. 모든 작업이 끝나면 **\`${labelV}\`** → **\`${labelE}\`** 로 변경하세요`;
+        await addIssueComment(project, issue.iid, decryptedToken, guideNote);
+      } catch (e) {
+        console.warn(`[Issues] Failed to add guide note on #${issue.iid}:`, e);
       }
     }
 

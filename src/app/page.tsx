@@ -153,7 +153,7 @@ export default function HomePage() {
         <AgentForm onSuccess={() => setShowNewAgent(false)} />
       </Modal>
       <Modal open={showChangePassword} onClose={() => setShowChangePassword(false)} title={tAuth('myInfo')}>
-        <UserProfileForm userId={state.user.id} email={state.user.email} name={state.user.name} avatar={state.user.avatar} locale={state.user.locale} timezone={state.user.timezone} onSuccess={() => setShowChangePassword(false)} onCancel={() => setShowChangePassword(false)} onEmailChanged={() => refreshUser()} onAvatarChanged={() => { setAvatarTs(Date.now()); refreshUser() }} onSettingsChanged={() => refreshUser()} />
+        <UserProfileForm userId={state.user.id} email={state.user.email} name={state.user.name} avatar={state.user.avatar} locale={state.user.locale} timezone={state.user.timezone} gitlabUsername={state.user.gitlabUsername} githubUsername={state.user.githubUsername} onSuccess={() => setShowChangePassword(false)} onCancel={() => setShowChangePassword(false)} onEmailChanged={() => refreshUser()} onAvatarChanged={() => { setAvatarTs(Date.now()); refreshUser() }} onSettingsChanged={() => refreshUser()} />
       </Modal>
     </>
   )

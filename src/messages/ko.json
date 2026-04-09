@@ -624,8 +624,8 @@
     "totalDuration": "총 소요시간",
     "avgDuration": "평균 소요시간",
     "issueLifecycle": "이슈 생애주기",
-    "createToAssign": "생성→배정",
-    "processTime": "처리시간",
+    "createToAssign": "대기시간",
+    "processTime": "작업시간",
     "verifyTime": "검증시간",
     "max": "최대",
     "totalTime": "총 소요",
@@ -666,7 +666,10 @@
     "dailyTrend": "{label} 추이",
     "byProject": "프로젝트별",
     "byAgent": "작업자별",
+    "byVerifier": "검증자별",
     "byUser": "사용자별",
+    "verifiedCount": "검증 {count}건",
+    "avgVerifyTime": "평균 검증시간",
     "issueCount": "이슈 수",
     "projectCount": "프로젝트 수",
     "trendAnalysis": "추이 분석",
@@ -735,7 +738,8 @@
     "prevWaiting": "이전 대기",
     "noWaitingHistory": "현재 대기에 대한 이력이 없습니다.",
     "waitingTrendByAgent": "대기 건수 추이 (개발자별)",
-    "waitingCurrentByAgent": "현재 대기 건수 (개발자별)"
+    "waitingCurrentByAgent": "현재 대기 건수 (개발자별)",
+    "waitingLabel": "대기"
   },
   "pull": {
     "loading": "조회 중...",

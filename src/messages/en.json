@@ -618,8 +618,8 @@
     "totalDuration": "Total Duration",
     "avgDuration": "Avg Duration",
     "issueLifecycle": "Issue Lifecycle",
-    "createToAssign": "Created→Assigned",
-    "processTime": "Process Time",
+    "createToAssign": "Wait Time",
+    "processTime": "Work Time",
     "verifyTime": "Verify Time",
     "max": "Max",
     "totalTime": "Total Time",
@@ -660,7 +660,10 @@
     "dailyTrend": "{label} Trend",
     "byProject": "By Project",
     "byAgent": "By Agent",
+    "byVerifier": "By Verifier",
     "byUser": "By User",
+    "verifiedCount": "{count} verified",
+    "avgVerifyTime": "Avg verify time",
     "issueCount": "Issues",
     "projectCount": "Projects",
     "trendAnalysis": "Trend Analysis",
@@ -729,7 +732,8 @@
     "prevWaiting": "Prev Pending",
     "noWaitingHistory": "No pending history available.",
     "waitingTrendByAgent": "Pending Trend (By Agent)",
-    "waitingCurrentByAgent": "Current Pending (By Agent)"
+    "waitingCurrentByAgent": "Current Pending (By Agent)",
+    "waitingLabel": "Pending"
   },
   "pull": {
     "loading": "Loading...",

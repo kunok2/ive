@@ -122,7 +122,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
     return ''
   })
   const [posting, setPosting] = useState(false)
-  const [postingType, setPostingType] = useState<'comment' | 'retry' | 'done' | null>(null)
+  const [postingType, setPostingType] = useState<'comment' | 'retry' | 'done' | 'next' | null>(null)
   const [stageChanging, setStageChanging] = useState(false)
   const [showDesc, setShowDesc] = useState(true)
   const [isClosing, setIsClosing] = useState(false)
@@ -380,6 +380,53 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ stage: 'verifying', action: 'approve' }),
+      })
+      await fetchIssue()
+      await fetchNotes()
+    } finally {
+      postingRef.current = false
+      setPosting(false)
+      setPostingType(null)
+    }
+  }
+
+  // 로그인 사용자가 이슈 담당자인지 확인 (Git username 매칭)
+  const isAssignee = (() => {
+    if (!issue?.assignees?.length || !state.user) return false
+    const userGitNames = [state.user.gitlabUsername, state.user.githubUsername].filter(Boolean).map(n => n!.toLowerCase())
+    return issue.assignees.some(a => userGitNames.includes(a.username.toLowerCase()))
+  })()
+  const canProgressStage = state.user?.isAdmin || isAssignee
+
+  // 담당자 모드: 코멘트 작성 + 다음 단계로 진행
+  const NEXT_STAGE: Record<string, { stage: string; action: string; label: string }> = {
+    waiting:        { stage: 'waiting',        action: 'start_dev',          label: '개발 시작' },
+    dev:            { stage: 'dev',            action: 'complete',           label: '검증대기' },
+    verify_waiting: { stage: 'verify_waiting', action: 'start_verification', label: '검증 시작' },
+    verifying:      { stage: 'verifying',      action: 'approve',           label: '완료' },
+  }
+
+  async function handleCommentAndNextStage() {
+    if (!issue || postingRef.current) return
+    const next = NEXT_STAGE[issue.stage]
+    if (!next) return
+    postingRef.current = true
+    setPosting(true)
+    setPostingType('next')
+    try {
+      if (comment.trim()) {
+        const res = await fetch(`/api/projects/${projectId}/issues/${iid}/notes`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ body: comment.trim() }),
+        })
+        if (!res.ok) return
+        setComment(''); localStorage.removeItem(commentKey)
+      }
+      await fetch(`/api/projects/${projectId}/issues/${iid}/stage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stage: next.stage, action: next.action }),
       })
       await fetchIssue()
       await fetchNotes()
@@ -1112,10 +1159,73 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
               {chatSessionId && mode === 'chat' && (
                 <button
                   onClick={handleEndChat}
-                  className="text-xs font-bold px-2 py-1 rounded-lg text-ive-red/70 hover:text-ive-red hover:bg-ive-red/10 transition-all ml-auto"
+                  className="text-xs font-bold px-2 py-1 rounded-lg text-ive-red/70 hover:text-ive-red hover:bg-ive-red/10 transition-all"
                 >
                   <i className="fa-solid fa-xmark mr-0.5" />{tIssue('endChat')}
                 </button>
+              )}
+              {/* 작업자 선택 — 탭 행 우측 */}
+              {issue.stage !== 'dev' && projectAgents.length > 0 && (
+                <div ref={retryAgentPickerRef} className="relative flex items-center ml-auto">
+                  <button
+                    type="button"
+                    onClick={() => setRetryAgentPickerOpen(v => !v)}
+                    className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg border border-dashed border-ive-border-subtle hover:border-ive-green/30 transition-all"
+                  >
+                    <i className="fa-solid fa-user-gear text-ive-green" />
+                    {preferredAgent?.assignMode === 'assignee' ? (
+                      <span className="font-bold text-ive-cyan"><i className="fa-solid fa-user mr-0.5" />{tIssue('assigneeHandles')}</span>
+                    ) : preferredAgent?.preferredAgentId ? (
+                      <>
+                        <AgentAvatar avatar={preferredAgent.preferredAgentAvatar || ''} size="sm" />
+                        <span className="font-bold text-ive-text">{preferredAgent.preferredAgentName}</span>
+                      </>
+                    ) : (
+                      <span className="text-ive-text-muted font-bold">{tIssue('noPreference')}</span>
+                    )}
+                    <i className="fa-solid fa-chevron-down text-[10px] text-ive-text-dim ml-0.5" />
+                  </button>
+                  {retryAgentPickerOpen && (
+                    <div className="absolute z-50 bottom-full right-0 mb-1 bg-ive-bg-deep border border-ive-border-subtle rounded-lg overflow-hidden shadow-lg shadow-black/30 min-w-[200px]">
+                      <button
+                        onClick={() => { setRetryAgentPickerOpen(false); handleChangePreferredAgent(null) }}
+                        className={`w-full px-3 py-2.5 text-left text-xs flex items-center gap-2 transition-colors ${
+                          preferredAgent?.assignMode !== 'assignee' && !preferredAgent?.preferredAgentId ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text hover:bg-white/5'
+                        }`}
+                      >
+                        <i className="fa-solid fa-shuffle" />
+                        <span className="font-bold">{tIssue('noPreference')}</span>
+                      </button>
+                      <button
+                        onClick={() => { setRetryAgentPickerOpen(false); handleChangePreferredAgent('assignee') }}
+                        className={`w-full px-3 py-2.5 text-left text-xs flex items-center gap-2 transition-colors ${
+                          preferredAgent?.assignMode === 'assignee' ? 'bg-ive-cyan/10 text-ive-cyan' : 'text-ive-text hover:bg-white/5'
+                        }`}
+                      >
+                        <i className="fa-solid fa-user" />
+                        <span className="font-bold">{tIssue('assigneeHandles')}</span>
+                      </button>
+                      {projectAgents.map(pa => {
+                        const isOffline = pa.agent.status === 'offline'
+                        return (
+                          <button
+                            key={pa.agentId}
+                            onClick={() => { setRetryAgentPickerOpen(false); handleChangePreferredAgent(pa.agentId) }}
+                            className={`w-full px-3 py-2.5 text-left text-xs flex items-center gap-2 transition-colors ${
+                              preferredAgent?.preferredAgentId === pa.agentId ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text hover:bg-white/5'
+                            }`}
+                          >
+                            <AgentAvatar avatar={pa.agent.avatar} size="sm" />
+                            <span className="font-bold">{pa.agent.name}</span>
+                            {isOffline && <span className="text-ive-red ml-auto"><i className="fa-solid fa-circle-exclamation" /></span>}
+                            {!isOffline && pa.agent.status === 'busy' && <span className="ml-auto w-2 h-2 rounded-full bg-ive-cyan animate-pulse" />}
+                            {!isOffline && pa.agent.status === 'available' && <span className="ml-auto w-2 h-2 rounded-full bg-ive-green" />}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           )}
@@ -1155,92 +1265,42 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                 >
                   {postingType === 'comment' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-paper-plane" /><span>{tIssue('postCommentShort')}</span></>}
                 </button>
-                {issue.stage !== 'dev' && (
+                {preferredAgent?.assignMode === 'assignee' && NEXT_STAGE[issue.stage] ? (
                   <button
-                    onClick={() => handleCommentAndRetry()}
-                    disabled={posting || !comment.trim()}
+                    onClick={handleCommentAndNextStage}
+                    disabled={posting || !canProgressStage}
+                    title={!canProgressStage ? '담당자 또는 관리자만 단계를 진행할 수 있습니다' : undefined}
                     className="shrink-0 h-10 px-3 rounded-lg bg-ive-cyan text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-40 text-xs font-bold whitespace-nowrap"
-                    title={tIssue('postAndRetryHint')}
-                    aria-label={tIssue('postAndRetry')}
                   >
-                    {postingType === 'retry' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-paper-plane" /><span>{issue.stage === 'none' ? tIssue('run') : tIssue('rerun')}</span></>}
+                    {postingType === 'next' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-forward-step" /><span>{NEXT_STAGE[issue.stage].label}</span></>}
                   </button>
-                )}
-                {issue.stage === 'verifying' && (
-                  <button
-                    onClick={handleCommentAndDone}
-                    disabled={posting || !comment.trim()}
-                    className="shrink-0 h-10 px-3 rounded-lg bg-emerald-500 text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-40 text-xs font-bold whitespace-nowrap"
-                    title={tIssue('postAndDoneHint')}
-                    aria-label={tIssue('postAndDone')}
-                  >
-                    {postingType === 'done' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-circle-check" /><span>{tIssue('done')}</span></>}
-                  </button>
+                ) : (
+                  <>
+                    {issue.stage !== 'dev' && (
+                      <button
+                        onClick={() => handleCommentAndRetry()}
+                        disabled={posting || !comment.trim()}
+                        className="shrink-0 h-10 px-3 rounded-lg bg-ive-cyan text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-40 text-xs font-bold whitespace-nowrap"
+                        title={tIssue('postAndRetryHint')}
+                        aria-label={tIssue('postAndRetry')}
+                      >
+                        {postingType === 'retry' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-paper-plane" /><span>{issue.stage === 'none' ? tIssue('run') : tIssue('rerun')}</span></>}
+                      </button>
+                    )}
+                    {issue.stage === 'verifying' && (
+                      <button
+                        onClick={handleCommentAndDone}
+                        disabled={posting || !comment.trim()}
+                        className="shrink-0 h-10 px-3 rounded-lg bg-emerald-500 text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-40 text-xs font-bold whitespace-nowrap"
+                        title={tIssue('postAndDoneHint')}
+                        aria-label={tIssue('postAndDone')}
+                      >
+                        {postingType === 'done' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-circle-check" /><span>{tIssue('done')}</span></>}
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
-            {/* 작업자 선택 — 버튼 행 아래 */}
-            {issue.stage !== 'dev' && projectAgents.length > 0 && (
-              <div ref={retryAgentPickerRef} className="relative flex items-center">
-                <button
-                  type="button"
-                  onClick={() => setRetryAgentPickerOpen(v => !v)}
-                  className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border border-dashed border-ive-border-subtle hover:border-ive-green/30 transition-all"
-                >
-                  <i className="fa-solid fa-user-gear text-ive-green" />
-                  {preferredAgent?.assignMode === 'assignee' ? (
-                    <span className="font-bold text-ive-cyan"><i className="fa-solid fa-user mr-0.5" />{tIssue('assigneeHandles')}</span>
-                  ) : preferredAgent?.preferredAgentId ? (
-                    <>
-                      <AgentAvatar avatar={preferredAgent.preferredAgentAvatar || ''} size="sm" />
-                      <span className="font-bold text-ive-text">{preferredAgent.preferredAgentName}</span>
-                    </>
-                  ) : (
-                    <span className="text-ive-text-muted font-bold">{tIssue('noPreference')}</span>
-                  )}
-                  <i className="fa-solid fa-chevron-down text-[10px] text-ive-text-dim ml-0.5" />
-                </button>
-                {retryAgentPickerOpen && (
-                  <div className="absolute z-50 bottom-full left-0 mb-1 bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden shadow-lg shadow-black/30 min-w-[200px]">
-                    <button
-                      onClick={() => { setRetryAgentPickerOpen(false); handleChangePreferredAgent(null) }}
-                      className={`w-full px-3 py-2.5 text-left text-xs flex items-center gap-2 transition-colors ${
-                        preferredAgent?.assignMode !== 'assignee' && !preferredAgent?.preferredAgentId ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text hover:bg-white/5'
-                      }`}
-                    >
-                      <i className="fa-solid fa-shuffle" />
-                      <span className="font-bold">{tIssue('noPreference')}</span>
-                    </button>
-                    <button
-                      onClick={() => { setRetryAgentPickerOpen(false); handleChangePreferredAgent('assignee') }}
-                      className={`w-full px-3 py-2.5 text-left text-xs flex items-center gap-2 transition-colors ${
-                        preferredAgent?.assignMode === 'assignee' ? 'bg-ive-cyan/10 text-ive-cyan' : 'text-ive-text hover:bg-white/5'
-                      }`}
-                    >
-                      <i className="fa-solid fa-user" />
-                      <span className="font-bold">{tIssue('assigneeHandles')}</span>
-                    </button>
-                    {projectAgents.map(pa => {
-                      const isOffline = pa.agent.status === 'offline'
-                      return (
-                        <button
-                          key={pa.agentId}
-                          onClick={() => { setRetryAgentPickerOpen(false); handleChangePreferredAgent(pa.agentId) }}
-                          className={`w-full px-3 py-2.5 text-left text-xs flex items-center gap-2 transition-colors ${
-                            preferredAgent?.preferredAgentId === pa.agentId ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text hover:bg-white/5'
-                          }`}
-                        >
-                          <AgentAvatar avatar={pa.agent.avatar} size="sm" />
-                          <span className="font-bold">{pa.agent.name}</span>
-                          {isOffline && <span className="text-ive-red ml-auto"><i className="fa-solid fa-circle-exclamation" /></span>}
-                          {!isOffline && pa.agent.status === 'busy' && <span className="ml-auto w-2 h-2 rounded-full bg-ive-cyan animate-pulse" />}
-                          {!isOffline && pa.agent.status === 'available' && <span className="ml-auto w-2 h-2 rounded-full bg-ive-green" />}
-                        </button>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
             </div>
           )}
 
@@ -1414,6 +1474,7 @@ function cleanNoteBody(body: string): string {
     .replace(/<summary>(.*?)<\/summary>/gi, '**$1**')
     .replace(/<\/?br\s*\/?>/gi, '\n')
     .replace(/<\/?(?:div|span|p)[^>]*>/gi, '')
+    .replace(/<!--[\s\S]*?-->/g, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
 }

@@ -241,6 +241,15 @@ function initSchema(db: Database.Database) {
     if (!tableInfo.some((col: any) => col.name === 'timezone')) {
       db.exec("ALTER TABLE users ADD COLUMN timezone TEXT")
     }
+    if (!tableInfo.some((col: any) => col.name === 'git_username')) {
+      db.exec("ALTER TABLE users ADD COLUMN git_username TEXT")
+    }
+    if (!tableInfo.some((col: any) => col.name === 'gitlab_username')) {
+      db.exec("ALTER TABLE users ADD COLUMN gitlab_username TEXT")
+    }
+    if (!tableInfo.some((col: any) => col.name === 'github_username')) {
+      db.exec("ALTER TABLE users ADD COLUMN github_username TEXT")
+    }
   } catch (e) { console.error("Migration failed for users:", e) }
 
   try {
@@ -309,6 +318,20 @@ function initSchema(db: Database.Database) {
       console.log('[DB] task_executions migration complete')
     }
   } catch (e) { console.error("Migration failed for task_executions:", e) }
+
+  // 검증자 정보 컬럼 추가
+  try {
+    const tableInfo = db.prepare("PRAGMA table_info(task_executions)").all() as any[]
+    if (!tableInfo.some((col: any) => col.name === 'verifier_name')) {
+      db.exec("ALTER TABLE task_executions ADD COLUMN verifier_name TEXT DEFAULT NULL")
+      db.exec("ALTER TABLE task_executions ADD COLUMN verifier_avatar TEXT DEFAULT NULL")
+      console.log('[DB] Added verifier_name, verifier_avatar to task_executions')
+    }
+    if (!tableInfo.some((col: any) => col.name === 'verify_started_at')) {
+      db.exec("ALTER TABLE task_executions ADD COLUMN verify_started_at TEXT DEFAULT NULL")
+      console.log('[DB] Added verify_started_at to task_executions')
+    }
+  } catch (e) { console.error("Migration failed for verifier columns:", e) }
 
   // 프로젝트 모니터링 설정
   try {
@@ -632,6 +655,8 @@ function mapUser(r: any): User {
     allowedClis: parseAllowedClis(r.allowed_clis) as User['allowedClis'],
     locale: r.locale,
     timezone: r.timezone,
+    gitlabUsername: r.gitlab_username,
+    githubUsername: r.github_username,
     createdAt: r.created_at,
   }
 }
@@ -661,6 +686,10 @@ export function updateUserLocale(id: string, locale: string) {
 
 export function updateUserTimezone(id: string, timezone: string) {
   getDb().prepare('UPDATE users SET timezone = ? WHERE id = ?').run(timezone, id)
+}
+
+export function updateUserGitUsernames(id: string, gitlabUsername: string | null, githubUsername: string | null) {
+  getDb().prepare('UPDATE users SET gitlab_username = ?, github_username = ? WHERE id = ?').run(gitlabUsername, githubUsername, id)
 }
 
 export function createUser(u: any) {
@@ -1034,11 +1063,18 @@ export function resetStuckExecutions() {
   // (IVE-DS 레이블이 붙어있지만 활성 실행 없음 → dev_fail로 자동 판정됨)
 }
 
-export function markIssueVerified(projectId: string, issueIid: number) {
+export function markIssueVerifyStarted(projectId: string, issueIid: number) {
   const now = new Date().toISOString()
   getDb().prepare(
-    "UPDATE task_executions SET verified_at = ? WHERE project_id = ? AND issue_iid = ? AND status IN ('success', 'failed') AND ended_at IS NOT NULL AND verified_at IS NULL"
+    "UPDATE task_executions SET verify_started_at = ? WHERE project_id = ? AND issue_iid = ? AND status IN ('success', 'failed') AND ended_at IS NOT NULL AND verify_started_at IS NULL"
   ).run(now, projectId, issueIid)
+}
+
+export function markIssueVerified(projectId: string, issueIid: number, verifier?: { name: string; avatar?: string }) {
+  const now = new Date().toISOString()
+  getDb().prepare(
+    "UPDATE task_executions SET verified_at = ?, verifier_name = ?, verifier_avatar = ? WHERE project_id = ? AND issue_iid = ? AND status IN ('success', 'failed') AND ended_at IS NOT NULL AND verified_at IS NULL"
+  ).run(now, verifier?.name ?? null, verifier?.avatar ?? null, projectId, issueIid)
 }
 
 export function hasAnyExecution(projectId: string, issueIid: number): boolean {
@@ -1548,6 +1584,9 @@ export interface ReportExecution {
   turns: number
   issueCreatedAt: string | null
   verifiedAt: string | null
+  verifyStartedAt: string | null
+  verifierName: string | null
+  verifierAvatar: string | null
 }
 
 export function getExecutionsInRange(userId: string, start: string, end: string): ReportExecution[] {
@@ -1560,8 +1599,9 @@ export function getExecutionsInRange(userId: string, start: string, end: string)
            u.name as developer_name, a.user_id as developer_user_id,
            te.issue_iid, te.issue_title, te.status,
            te.started_at, te.ended_at, te.input_tokens, te.output_tokens, te.cost_usd, te.turns,
-           te.issue_created_at, te.verified_at,
-           te.assignee_type, te.user_id as te_user_id, te.user_name as te_user_name, te.user_avatar as te_user_avatar
+           te.issue_created_at, te.verified_at, te.verify_started_at,
+           te.assignee_type, te.user_id as te_user_id, te.user_name as te_user_name, te.user_avatar as te_user_avatar,
+           te.verifier_name, te.verifier_avatar
     FROM task_executions te
     JOIN projects p ON p.id = te.project_id
     LEFT JOIN agents a ON a.id = te.agent_id
@@ -1582,6 +1622,9 @@ export function getExecutionsInRange(userId: string, start: string, end: string)
     costUsd: r.cost_usd ?? 0, turns: r.turns ?? 0,
     issueCreatedAt: r.issue_created_at ?? null,
     verifiedAt: r.verified_at ?? null,
+    verifyStartedAt: r.verify_started_at ?? null,
+    verifierName: r.verifier_name ?? null,
+    verifierAvatar: r.verifier_avatar ?? null,
   }))
 }
 
@@ -1856,7 +1899,8 @@ export function getGlobalExecutionsInRange(start: string, end: string): ReportEx
            u.name as developer_name, a.user_id as developer_user_id,
            te.issue_iid, te.issue_title, te.status,
            te.started_at, te.ended_at, te.input_tokens, te.output_tokens, te.cost_usd, te.turns,
-           te.issue_created_at, te.verified_at
+           te.issue_created_at, te.verified_at, te.verify_started_at,
+           te.verifier_name, te.verifier_avatar
     FROM task_executions te
     JOIN projects p ON p.id = te.project_id
     JOIN agents a ON a.id = te.agent_id
@@ -1876,6 +1920,9 @@ export function getGlobalExecutionsInRange(start: string, end: string): ReportEx
     costUsd: r.cost_usd ?? 0, turns: r.turns ?? 0,
     issueCreatedAt: r.issue_created_at ?? null,
     verifiedAt: r.verified_at ?? null,
+    verifyStartedAt: r.verify_started_at ?? null,
+    verifierName: r.verifier_name ?? null,
+    verifierAvatar: r.verifier_avatar ?? null,
   }))
 }
 

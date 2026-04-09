@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAccess, hasActiveExecution, stageFromLabels, markIssueVerified, touchProjectActivity, type IssueStage } from '@/lib/db';
+import { getProject, getProjectAccess, hasActiveExecution, stageFromLabels, markIssueVerifyStarted, markIssueVerified, touchProjectActivity, assignIssueAtomically, getAssignModeMap, getIssueScheduledAt, type IssueStage } from '@/lib/db';
+import type { TaskExecution } from '@/types';
 import { getCurrentUser } from '@/lib/auth';
 import { decrypt } from '@/lib/crypto';
-import { reopenIssue, fetchSingleIssue, addIssueLabels, removeIssueLabels } from '@/lib/provider';
+import { reopenIssue, fetchSingleIssue, addIssueLabels, removeIssueLabels, addIssueComment, createBranch, getDefaultBranch } from '@/lib/provider';
 import { logActivity } from '@/lib/activity';
+import fs from 'fs';
+import path from 'path';
 
 // 허용되는 stage 전환 (레이블 기반)
 // IVE-S: 스케줄 → IVE-D: 개발 → IVE-W: 검증대기 → IVE-V: 검증 → IVE-E: 완료
@@ -16,7 +19,14 @@ const TRANSITIONS: Record<string, { action: string; description: string; removeL
       addLabels: (p) => [p.labelSchedule || 'IVE-S'],
     },
   ],
-  waiting: [],
+  waiting: [
+    {
+      action: 'start_dev',
+      description: '개발 시작 → 개발 중',
+      removeLabels: (p) => [p.labelSchedule || 'IVE-S'],
+      addLabels: (p) => [p.labelDev || 'IVE-D'],
+    },
+  ],
   dev: [
     {
       action: 'cancel',
@@ -149,9 +159,63 @@ export async function POST(
       }
     }
 
-    // 검증 완료 시 실행 기록에 verified_at 기록 (verifying 상태에서만)
+    // 담당자 모드 개발 시작: execution 생성 + 브랜치 생성
+    if (action === 'start_dev') {
+      const assignModeMap = getAssignModeMap(projectId);
+      const assignInfo = assignModeMap.get(Number(iid));
+      if (assignInfo?.mode === 'assignee') {
+        const issue = await fetchSingleIssue(project, Number(iid), token);
+        const assignees = issue?.assignees || [];
+        const assignee = assignees[0];
+        const executionId = `ex-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+        const logDir = path.join(process.cwd(), 'data', 'logs');
+        if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
+        const logPath = path.join(logDir, `${executionId}.log`);
+        fs.writeFileSync(logPath, '');
+
+        const waitingSince = getIssueScheduledAt(projectId, Number(iid)) || new Date().toISOString();
+        const execution: TaskExecution = {
+          id: executionId,
+          projectId,
+          agentId: '',
+          issueIid: Number(iid),
+          issueTitle: issue?.title || '',
+          status: 'assigned',
+          startedAt: new Date().toISOString(),
+          logPath,
+          inputTokens: 0, outputTokens: 0, costUsd: 0, turns: 0,
+          issueCreatedAt: waitingSince,
+          assigneeType: 'user',
+          userId: assignee ? String(assignee.id) : user.id,
+          userName: assignee ? (assignee.name || assignee.username || assignee.login) : user.name,
+          userAvatar: assignee?.avatar_url || user.avatar,
+        };
+
+        assignIssueAtomically(projectId, Number(iid), 'dev', execution);
+
+        // 브랜치 생성
+        const branchName = `dev-${iid}`;
+        try {
+          const defaultBranch = await getDefaultBranch(project, token);
+          await createBranch(project, token, branchName, defaultBranch);
+        } catch (e) { console.warn(`[Stage] Failed to create branch for #${iid}:`, e); }
+
+        // 브랜치 안내 코멘트
+        try {
+          const commentBody = `<!-- ive-bot -->\n**작업 브랜치가 생성되었습니다.**\n\n브랜치: \`${branchName}\`\n담당자: ${execution.userName}\n\n**작업 방법:**\n1. \`${branchName}\` 브랜치에서 작업\n2. MR/PR 생성 시 제목에 \`resolve #${iid}\` 포함 (머지 시 이슈 자동 닫힘)\n3. 작업 완료 후 레이블을 \`${project.labelDev || 'IVE-D'}\` → \`${project.labelVerifyWait || 'IVE-W'}\`로 변경`;
+          await addIssueComment(project, Number(iid), token, commentBody);
+        } catch (e) { console.warn(`[Stage] Failed to add branch comment on #${iid}:`, e); }
+      }
+    }
+
+    // 검증 시작 시 verify_started_at 기록
+    if (action === 'start_verification') {
+      markIssueVerifyStarted(projectId, Number(iid));
+    }
+
+    // 검증 완료 시 실행 기록에 verified_at + 검증자 기록 (verifying 상태에서만)
     if (action === 'approve' || (action === 'complete' && stage === 'verifying')) {
-      markIssueVerified(projectId, Number(iid));
+      markIssueVerified(projectId, Number(iid), { name: user.name, avatar: user.avatar });
     }
 
     // 프로젝트 최종 활동 시각 갱신
@@ -172,6 +236,8 @@ export async function POST(
       complete: '머지 완료',
       reject: '검증 반려',
       start_verification: '검증 시작',
+      start_dev: '개발 시작',
+      schedule: '스케줄 등록',
     };
     logActivity({
       userId: user.id,

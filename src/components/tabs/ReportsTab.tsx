@@ -116,6 +116,11 @@ interface PrevLifecycle {
   verifyAvg: number; verifyCount: number
   totalAvg: number; totalCount: number
 }
+interface VerifierStat {
+  verifierName: string; verifierAvatar: string
+  tasks: number; avgVerifyMin: number
+}
+
 interface PrevByItem { tasks: number; cost: number }
 interface PrevDaily { date: string; tasks: number; cost: number; waitAvg?: number | null; procAvg?: number | null; verifyAvg?: number | null }
 
@@ -127,11 +132,13 @@ interface ReportData {
   prevByProject: (PrevByItem & { projectId: string; projectName: string })[]
   prevByAgent: (PrevByItem & { agentId: string; agentName: string })[]
   prevByUser: (PrevByItem & { userId: string; userName: string; issueCount: number })[]
+  prevByVerifier: { verifierName: string; tasks: number }[]
   prevDailyTrend: PrevDaily[]
   prevLifecycle: PrevLifecycle
   byProject: ProjectStat[]
   byAgent: AgentGlobal[]
   byUser: UserStat[]
+  byVerifier: VerifierStat[]
   dailyTrend: DailyTrend[]
   projectTrend: ProjectTrend[]
   agentTrend: AgentTrend[]
@@ -610,7 +617,6 @@ export default function ReportsTab() {
 
           {/* 대기 건수 추이 — 개발자(에이전트)별 */}
           {data.agentWaitingTrend && data.agentWaitingTrend.length > 0 && (() => {
-            // 현재 기간 마지막 데이터로 요약 바 구성
             const lastDay = [...data.agentWaitingTrend].reverse().find(d => d.total > 0)
             const prevLastDay = [...(data.prevAgentWaitingTrend || [])].reverse().find(d => d.total > 0)
             const barItems = (lastDay?.byAgent ?? []).map(a => {
@@ -919,6 +925,8 @@ export default function ReportsTab() {
                   const prev = data.prevByProject?.find(pp => pp.projectId === p.projectId)
                   const taskDiff = diffPct(p.tasks, prev?.tasks ?? 0)
                   const costDiff = diffPct(p.cost, prev?.cost ?? 0)
+                  const pwt = data.waitingTrend?.map(d => d.byProject.find(bp => bp.projectId === p.projectId)?.waiting ?? 0) ?? []
+                  const pwtCurrent = pwt.length > 0 ? pwt[pwt.length - 1] : 0
                   return (
                   <div key={p.projectId} className="bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden">
                     <button onClick={() => toggleProject(p.projectId)} className="w-full px-3 py-2.5 flex items-center gap-2 text-left">
@@ -934,14 +942,16 @@ export default function ReportsTab() {
                       {taskDiff != null && <span className={`text-xs font-bold ${taskDiff > 0 ? 'text-ive-green' : taskDiff < 0 ? 'text-ive-red' : 'text-ive-text-dim'}`}>{taskDiff > 0 ? '+' : ''}{taskDiff.toLocaleString()}%</span>}
                       <span className="text-xs text-ive-amber">${formatCost(p.cost)}</span>
                       {costDiff != null && <span className={`text-xs font-bold ${costDiff > 0 ? 'text-ive-red' : costDiff < 0 ? 'text-ive-green' : 'text-ive-text-dim'}`}>{costDiff > 0 ? '+' : ''}{costDiff.toLocaleString()}%</span>}
+                      <span className="text-xs text-ive-cyan"><i className="fa-solid fa-clock mr-0.5" />{pwtCurrent}</span>
                       <i className={`fa-solid fa-chevron-${expandedProjects.has(p.projectId) ? 'up' : 'down'} text-xs text-ive-text-dim`} />
                     </button>
                     {expandedProjects.has(p.projectId) && (
                       <div className="px-3 pb-3 border-t border-ive-border-dark">
-                        <div className="grid grid-cols-3 gap-1 mt-2 text-center">
+                        <div className="grid grid-cols-4 gap-1 mt-2 text-center">
                           <MiniStat label={t('success')} value={p.success.toLocaleString()} color="text-ive-green" />
                           <MiniStat label={t('failed')} value={p.failed.toLocaleString()} color="text-ive-red" />
                           <MiniStat label={t('costLabel')} value={`$${formatCost(p.cost)}`} color="text-ive-amber" />
+                          <MiniStat label={t('waitingLabel')} value={pwtCurrent.toLocaleString()} color="text-ive-cyan" />
                         </div>
                         <div className="grid grid-cols-2 gap-1 mt-1 text-center">
                           <MiniStat label={t('totalLabel')} value={formatDuration(p.totalDurationMin)} color="text-ive-text-muted" />
@@ -950,17 +960,25 @@ export default function ReportsTab() {
                         <div className="text-xs text-ive-text-dim mt-1 text-center">
                           {t('inputOutputTokens', { input: formatTokens(p.inputTokens), output: formatTokens(p.outputTokens) })}
                         </div>
-                        {/* 프로젝트별 건수/비용 추이 */}
-                        {pt && pt.daily.length >= 2 && (
+                        {/* 프로젝트별 건수/비용/대기 추이 */}
+                        {((pt && pt.daily.length >= 2) || pwt.length > 0) && (
                           <div className="mt-2 bg-ive-bg-deep rounded-lg p-2">
-                            <div className="grid grid-cols-2 gap-2">
+                            <div className="grid grid-cols-3 gap-2">
+                              {pt && pt.daily.length >= 2 && (
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-xs text-ive-text-dim shrink-0">{t('countLabel')}</span>
+                                  <Sparkline data={pt.daily.map(d => d.tasks)} width={80} height={20} color="auto" />
+                                </div>
+                              )}
+                              {pt && pt.daily.length >= 2 && (
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-xs text-ive-text-dim shrink-0">{t('costSmall')}</span>
+                                  <Sparkline data={pt.daily.map(d => d.cost)} width={80} height={20} color="amber" />
+                                </div>
+                              )}
                               <div className="flex items-center gap-1.5">
-                                <span className="text-xs text-ive-text-dim shrink-0">{t('countLabel')}</span>
-                                <Sparkline data={pt.daily.map(d => d.tasks)} width={100} height={20} color="auto" />
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-xs text-ive-text-dim shrink-0">{t('costSmall')}</span>
-                                <Sparkline data={pt.daily.map(d => d.cost)} width={100} height={20} color="amber" />
+                                <span className="text-xs text-ive-text-dim shrink-0">{t('waitingLabel')}</span>
+                                <Sparkline data={pwt.length > 0 ? pwt : [0]} width={80} height={20} color="cyan" />
                               </div>
                             </div>
                           </div>
@@ -1000,6 +1018,8 @@ export default function ReportsTab() {
                   const prev = data.prevByAgent?.find(pa => pa.agentId === a.agentId)
                   const taskDiff = diffPct(a.tasks, prev?.tasks ?? 0)
                   const costDiff = diffPct(a.cost, prev?.cost ?? 0)
+                  const awt = data.agentWaitingTrend?.map(d => d.byAgent.find(ba => ba.agentId === a.agentId)?.waiting ?? 0) ?? []
+                  const awtCurrent = awt.length > 0 ? awt[awt.length - 1] : 0
                   return (
                   <div key={a.agentId} className="bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden">
                     <button onClick={() => toggleAgent(a.agentId)} className="w-full px-3 py-2.5 flex items-center gap-2 text-left">
@@ -1009,14 +1029,16 @@ export default function ReportsTab() {
                       {taskDiff != null && <span className={`text-xs font-bold ${taskDiff > 0 ? 'text-ive-green' : taskDiff < 0 ? 'text-ive-red' : 'text-ive-text-dim'}`}>{taskDiff > 0 ? '+' : ''}{taskDiff.toLocaleString()}%</span>}
                       <span className="text-xs text-ive-amber">${formatCost(a.cost)}</span>
                       {costDiff != null && <span className={`text-xs font-bold ${costDiff > 0 ? 'text-ive-red' : costDiff < 0 ? 'text-ive-green' : 'text-ive-text-dim'}`}>{costDiff > 0 ? '+' : ''}{costDiff.toLocaleString()}%</span>}
+                      <span className="text-xs text-ive-cyan"><i className="fa-solid fa-clock mr-0.5" />{awtCurrent}</span>
                       <i className={`fa-solid fa-chevron-${expandedAgents.has(a.agentId) ? 'up' : 'down'} text-xs text-ive-text-dim`} />
                     </button>
                     {expandedAgents.has(a.agentId) && (
                       <div className="px-3 pb-3 border-t border-ive-border-dark">
-                        <div className="grid grid-cols-3 gap-1 mt-2 text-center">
+                        <div className="grid grid-cols-4 gap-1 mt-2 text-center">
                           <MiniStat label={t('success')} value={a.success.toLocaleString()} color="text-ive-green" />
                           <MiniStat label={t('failed')} value={a.failed.toLocaleString()} color="text-ive-red" />
                           <MiniStat label={t('costLabel')} value={`$${formatCost(a.cost)}`} color="text-ive-amber" />
+                          <MiniStat label={t('waitingLabel')} value={awtCurrent.toLocaleString()} color="text-ive-cyan" />
                         </div>
                         <div className="grid grid-cols-3 gap-1 mt-1 text-center">
                           <MiniStat label={t('totalLabel')} value={formatDuration(a.totalDurationMin)} color="text-ive-text-muted" />
@@ -1026,17 +1048,25 @@ export default function ReportsTab() {
                         <div className="text-xs text-ive-text-dim mt-1 text-center">
                           {t('inputOutputTokens', { input: formatTokens(a.inputTokens), output: formatTokens(a.outputTokens) })}
                         </div>
-                        {/* 작업자별 건수/비용 추이 */}
-                        {at && at.daily.length >= 2 && (
+                        {/* 작업자별 건수/비용/대기 추이 */}
+                        {((at && at.daily.length >= 2) || awt.length > 0) && (
                           <div className="mt-2 bg-ive-bg-deep rounded-lg p-2">
-                            <div className="grid grid-cols-2 gap-2">
+                            <div className="grid grid-cols-3 gap-2">
+                              {at && at.daily.length >= 2 && (
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-xs text-ive-text-dim shrink-0">{t('countLabel')}</span>
+                                  <Sparkline data={at.daily.map(d => d.tasks)} width={80} height={20} color="auto" />
+                                </div>
+                              )}
+                              {at && at.daily.length >= 2 && (
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-xs text-ive-text-dim shrink-0">{t('costSmall')}</span>
+                                  <Sparkline data={at.daily.map(d => d.cost)} width={80} height={20} color="amber" />
+                                </div>
+                              )}
                               <div className="flex items-center gap-1.5">
-                                <span className="text-xs text-ive-text-dim shrink-0">{t('countLabel')}</span>
-                                <Sparkline data={at.daily.map(d => d.tasks)} width={100} height={20} color="auto" />
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-xs text-ive-text-dim shrink-0">{t('costSmall')}</span>
-                                <Sparkline data={at.daily.map(d => d.cost)} width={100} height={20} color="amber" />
+                                <span className="text-xs text-ive-text-dim shrink-0">{t('waitingLabel')}</span>
+                                <Sparkline data={awt.length > 0 ? awt : [0]} width={80} height={20} color="cyan" />
                               </div>
                             </div>
                           </div>
@@ -1044,6 +1074,30 @@ export default function ReportsTab() {
                       </div>
                     )}
                   </div>
+                  )
+                })}
+              </div>
+            </section>
+          )}
+
+          {/* By Verifier (검증자별) */}
+          {data.byVerifier && data.byVerifier.length > 0 && (
+            <section>
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-xs font-bold text-ive-text-dim uppercase tracking-wider">{t('byVerifier')}</div>
+              </div>
+              <div className="space-y-2">
+                {[...data.byVerifier].sort((a, b) => b.tasks - a.tasks).map(v => {
+                  const prev = data.prevByVerifier?.find(pv => pv.verifierName === v.verifierName)
+                  const taskDiff = diffPct(v.tasks, prev?.tasks ?? 0)
+                  return (
+                    <div key={v.verifierName} className="bg-ive-bg-card border border-ive-border-subtle rounded-lg px-3 py-2.5 flex items-center gap-2">
+                      <AgentAvatar avatar={v.verifierAvatar} size="sm" className="!w-6 !h-6 !text-sm" />
+                      <span className="text-sm font-bold text-ive-text flex-1 truncate">{v.verifierName}</span>
+                      <span className="text-xs text-ive-text-dim">{t('verifiedCount', { count: v.tasks.toLocaleString() })}</span>
+                      {taskDiff != null && <span className={`text-xs font-bold ${taskDiff > 0 ? 'text-ive-green' : taskDiff < 0 ? 'text-ive-red' : 'text-ive-text-dim'}`}>{taskDiff > 0 ? '+' : ''}{taskDiff.toLocaleString()}%</span>}
+                      {v.avgVerifyMin > 0 && <span className="text-xs text-ive-text-muted">{formatDuration(v.avgVerifyMin)}</span>}
+                    </div>
                   )
                 })}
               </div>
