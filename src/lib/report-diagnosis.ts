@@ -22,6 +22,7 @@ export interface ReportData {
   prevDailyTrend: { date: string; tasks: number; cost: number }[]
   agentTrend: { agentId: string; agentName: string; agentAvatar: string; daily: { date: string; tasks: number; cost: number }[] }[]
   projectTrend: { projectId: string; projectName: string; projectColor: string; daily: { date: string; tasks: number; cost: number }[] }[]
+  userTrend?: { userId: string; userName: string; userAvatar: string; daily: { date: string; tasks: number | null; cost: number | null; verified: number | null }[] }[]
   lifecycle: Lifecycle
   prevLifecycle: { waitAvg: number; waitCount: number; procAvg: number; procCount: number; verifyAvg: number; verifyCount: number; totalAvg: number; totalCount: number }
   waitingTrend: WaitingDay[]
@@ -29,6 +30,7 @@ export interface ReportData {
   agentWaitingTrend: AgentWaitingDay[]
   prevAgentWaitingTrend: AgentWaitingDay[]
   resolvedIssues?: ResolvedIssue[]
+  totalAssignedAgents?: number
 }
 
 export interface ProjectStat {
@@ -37,6 +39,7 @@ export interface ProjectStat {
   totalDurationMin: number; avgDurationMin: number
   inputTokens: number; outputTokens: number; cost: number
   assignedAgentCount: number
+  assignedAgentIds: string[]
   byAgent: { agentId: string; agentName: string; agentAvatar: string; cliName: string; tasks: number; success: number; failed: number; durationMin: number; avgDurationMin: number; cost: number; avgTurns: number }[]
 }
 
@@ -48,10 +51,10 @@ export interface AgentStat {
   assignedProjectId: string; assignedProjectName: string; currentStatus: string
 }
 
-export interface UserStat { userId: string; userName: string; userAvatar: string; tasks: number; success: number; failed: number; issueCount: number; avgDurationMin: number; cost: number; avgWaitMin: number; verifyTasks: number; avgVerifyMin: number }
+export interface UserStat { userId: string; userName: string; userAvatar: string; tasks: number; success: number; failed: number; issueCount: number; avgDurationMin: number; cost: number; avgWaitMin: number; verifyTasks: number; avgVerifyMin: number; verifyAvgWaitMin: number; verifyWaiting: number; verifyApproved: number; verifyRejected: number }
 export interface VerifierStat { verifierName: string; verifierAvatar: string; tasks: number; avgVerifyMin: number; avgWaitMin?: number }
 export interface DailyTrend { date: string; tasks: number | null; success: number | null; failed: number | null; cost: number | null; waitAvg: number | null; procAvg: number | null; verifyAvg: number | null }
-export interface WaitingDay { date: string; total: number; byProject: { projectId: string; projectName: string; projectColor: string; waiting: number }[] }
+export interface WaitingDay { date: string; total: number; totalWaiting: number; totalVerifyWaiting: number; byProject: { projectId: string; projectName: string; projectColor: string; waiting: number; verifyWaiting: number }[] }
 export interface AgentWaitingDay { date: string; total: number; byAgent: { agentId: string; agentName: string; agentAvatar: string; waiting: number }[] }
 export interface Lifecycle { waitAvg: number; waitMax: number; waitCount: number; procAvg: number; procMax: number; procCount: number; verifyAvg: number; verifyMax: number; verifyCount: number; totalAvg: number; totalMax: number; totalCount: number; avgAttempts: number; retryRate: number; uniqueIssues: number }
 export interface ResolvedIssue { issueIid: number; issueTitle: string; projectId: string; projectName: string; projectColor: string; agentName: string; agentAvatar: string; status: string; startedAt: string; durationMin: number; cost: number; waitMin: number | null; turns: number; attempts: number; attemptNo: number }
@@ -98,6 +101,7 @@ export interface ProjectFlow {
   cost: number; costPerTask: number; prevCostPerTask: number
   assignedAgents: number; utilization: number; healthLevel: HealthLevel
   retryRate: number
+  hasBacklog: boolean
   annotation: string | null
 }
 
@@ -166,11 +170,13 @@ function getElapsedDays(start: string, type: string): number {
   return Math.min(days, totalDays)
 }
 
+// peak 기반 capacity에서는 정상 가동 시 util ≈ 0.3~0.6
+// (capacity = 최대 관측 처리량이므로 평균 운영 시 자연히 낮음)
 function healthFromUtil(u: number): HealthLevel {
-  if (u < 0.40) return 'idle'
-  if (u < 0.65) return 'relaxed'
-  if (u < 0.85) return 'optimal'
-  if (u < 0.95) return 'tight'
+  if (u < 0.25) return 'idle'
+  if (u < 0.50) return 'relaxed'
+  if (u < 0.75) return 'optimal'
+  if (u < 0.90) return 'tight'
   return 'overloaded'
 }
 
@@ -182,6 +188,32 @@ function fmtDur(min: number): string {
 
 function fmtCost(n: number): string { return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
 function pctChange(cur: number, prev: number): number | null { return prev === 0 ? null : Math.round(((cur - prev) / prev) * 100) }
+
+/**
+ * 적정 에이전트 수 계산: "1대씩 빼면서 남은 능력이 유입을 감당하는지" 확인
+ * @param caps  에이전트별 dailyCap 배열 (오름차순 정렬됨)
+ * @param dailyInflow  일일 유입량
+ * @param margin  여유 마진 (기본 1.2 = 20% 버퍼)
+ * @returns 적정 에이전트 수 (최소 1)
+ */
+function calcOptimalAgents(caps: number[], dailyInflow: number, margin = 1.2): number {
+  if (dailyInflow <= 0) return Math.min(caps.length, 1)
+  const sorted = [...caps].sort((a, b) => a - b)  // 한가한 에이전트부터
+  const required = dailyInflow * margin
+  let total = sorted.reduce((s, c) => s + c, 0)
+  let count = sorted.length
+  // 가장 한가한 에이전트부터 하나씩 빼면서 감당 가능한지 확인
+  for (const cap of sorted) {
+    if (count <= 1) break
+    if (total - cap >= required) {
+      total -= cap
+      count--
+    } else {
+      break
+    }
+  }
+  return Math.max(1, count)
+}
 
 // ─── 메인 진단 함수 ───
 
@@ -195,27 +227,46 @@ export function diagnose(data: ReportData, prevWeeklyData?: ReportData[]): Diagn
   // ─── 1. 흐름 지표 ───
 
   const pastWaiting = waitingTrend.filter(d => d.date <= today)
+  // 표시용 대기 (처리대기 + 검증대기)
   const startWaiting = pastWaiting.length > 0 ? pastWaiting[0].total : 0
   const endWaiting = pastWaiting.length > 0 ? pastWaiting[pastWaiting.length - 1].total : 0
-  const totalInflow = summary.totalTasks + (endWaiting - startWaiting)
+  // 유입 공식에는 처리대기만 사용 (검증대기는 이미 summary.totalTasks에 포함된 건이 재이동한 것)
+  const startProcWaiting = pastWaiting.length > 0 ? pastWaiting[0].totalWaiting : 0
+  const endProcWaiting = pastWaiting.length > 0 ? pastWaiting[pastWaiting.length - 1].totalWaiting : 0
+  const totalInflow = summary.totalTasks + (endProcWaiting - startProcWaiting)
   const dailyInflow = elapsedDays > 0 ? totalInflow / elapsedDays : 0
 
-  // 에이전트별 일일 처리량 계산
+  // 에이전트별 일일 처리 능력 (capacity) 계산
+  // 실측 peak 기반: 관측된 일일 최대 처리량 = "이만큼은 처리 가능하다"는 하한 증거
+  // (평균 기반은 자기참조 — throughput과 같아져서 대기 없어도 util≈1이 나옴)
   const agentCapacities: { agentId: string; dailyCap: number; cost: number }[] = []
   for (const a of byAgent) {
     const trend = data.agentTrend?.find(t => t.agentId === a.agentId)
-    const activeDays = trend ? trend.daily.filter(d => d.date <= today && d.tasks > 0).length : elapsedDays
-    const cap = activeDays > 0 ? a.tasks / activeDays : 0
+    const dailyTasks = trend ? trend.daily.filter(d => d.date <= today).map(d => d.tasks ?? 0) : []
+    const peak = dailyTasks.length > 0 ? Math.max(...dailyTasks) : 0
+    // peak이 0이면(이 에이전트가 드물게 실행됨) 전체 기간 평균으로 폴백
+    const cap = peak > 0 ? peak : (elapsedDays > 0 ? a.tasks / elapsedDays : 0)
     agentCapacities.push({ agentId: a.agentId, dailyCap: cap, cost: a.cost })
   }
-  const dailyCapacity = agentCapacities.reduce((s, a) => s + a.dailyCap, 0)
+  // 전체 에이전트 수: 실행 이력이 있는 에이전트뿐 아니라 배정된 유휴 에이전트도 포함
+  const totalAssigned = data.totalAssignedAgents ?? byAgent.length
+  const idleGlobalAgents = Math.max(0, totalAssigned - byAgent.length)
+
+  // avgAgentCap을 먼저 계산 (유휴 에이전트 capacity 추정에 필요)
+  const avgAgentCap = agentCapacities.length > 0
+    ? agentCapacities.reduce((s, a) => s + a.dailyCap, 0) / agentCapacities.length
+    : 2 // 기본값
+
+  // 전체 dailyCapacity에 유휴 에이전트 용량 포함
+  const activeCapacity = agentCapacities.reduce((s, a) => s + a.dailyCap, 0)
+  const dailyCapacity = activeCapacity + idleGlobalAgents * avgAgentCap
   const utilization = dailyCapacity > 0 ? dailyInflow / dailyCapacity : (dailyInflow > 0 ? Infinity : 0)
   const healthLevel = healthFromUtil(utilization)
 
   const costPerTask = summary.totalTasks > 0 ? summary.totalCost / summary.totalTasks : 0
   const prevCostPerTask = prevSummary.totalTasks > 0 ? prevSummary.totalCost / prevSummary.totalTasks : 0
-  const prevStartWaiting = data.prevWaitingTrend.length > 0 ? data.prevWaitingTrend[0].total : 0
-  const prevEndWaiting = data.prevWaitingTrend.length > 0 ? data.prevWaitingTrend[data.prevWaitingTrend.length - 1].total : 0
+  const prevStartWaiting = data.prevWaitingTrend.length > 0 ? (data.prevWaitingTrend[0].totalWaiting ?? 0) : 0
+  const prevEndWaiting = data.prevWaitingTrend.length > 0 ? (data.prevWaitingTrend[data.prevWaitingTrend.length - 1].totalWaiting ?? 0) : 0
   const prevInflow = prevSummary.totalTasks + (prevEndWaiting - prevStartWaiting)
 
   const flow: FlowMetrics = {
@@ -235,11 +286,13 @@ export function diagnose(data: ReportData, prevWeeklyData?: ReportData[]): Diagn
 
   // ─── 2. 자원 진단 ───
 
-  const avgAgentCap = agentCapacities.length > 0
-    ? agentCapacities.reduce((s, a) => s + a.dailyCap, 0) / agentCapacities.length
-    : 2 // 기본값
-  const currentAgents = byAgent.length || 1
-  const optimalAgents = dailyInflow > 0 ? Math.ceil(dailyInflow / avgAgentCap / 0.75) : 1
+  const currentAgents = Math.max(totalAssigned, byAgent.length) || 1
+  // 전체 에이전트 능력 목록 (유휴 에이전트는 avgAgentCap으로 추정)
+  const allAgentCaps = [
+    ...agentCapacities.map(a => a.dailyCap),
+    ...Array(idleGlobalAgents).fill(avgAgentCap),
+  ]
+  const optimalAgents = calcOptimalAgents(allAgentCaps, dailyInflow)
   const gap = currentAgents - optimalAgents
   const queueDrainDays = dailyCapacity > dailyInflow && endWaiting > 0
     ? Math.round(endWaiting / (dailyCapacity - dailyInflow) * 10) / 10
@@ -247,19 +300,26 @@ export function diagnose(data: ReportData, prevWeeklyData?: ReportData[]): Diagn
 
   // 프로젝트별 수급
   const projectFlows: ProjectFlow[] = byProject.map(p => {
-    const pTrend = waitingTrend.map(d => d.byProject.find(bp => bp.projectId === p.projectId)?.waiting ?? 0)
-    const pStartW = pTrend.length > 0 ? pTrend[0] : 0
-    const pEndW = pTrend.length > 0 ? pTrend[pTrend.length - 1] : 0
-    const pInflow = p.tasks + (pEndW - pStartW)
-    const pAgentCaps = p.byAgent.map(a => {
-      const ac = agentCapacities.find(c => c.agentId === a.agentId)
-      return ac?.dailyCap ?? 0
-    })
-    const activeAgentCap = pAgentCaps.reduce((s, c) => s + c, 0)
-    // 배정됐으나 이번 기간 작업이 없는 유휴 에이전트의 처리 용량도 포함
-    // 미포함 시 pCapacity=0이 되어 pUtil=Infinity → 잘못된 "에이전트 추가 필요" 진단 발생
-    const idleAgentCount = Math.max(0, p.assignedAgentCount - p.byAgent.length)
-    const pCapacity = activeAgentCap + idleAgentCount * avgAgentCap
+    // 미래 날짜 제외. 처리대기(waiting)와 검증대기(verifyWaiting)를 분리 추적
+    const pastDays = waitingTrend.filter(d => d.date <= today)
+    const pProcTrend = pastDays.map(d => d.byProject.find(bp => bp.projectId === p.projectId)?.waiting ?? 0)
+    const pVerifyTrend = pastDays.map(d => d.byProject.find(bp => bp.projectId === p.projectId)?.verifyWaiting ?? 0)
+    // 처리대기만 유입 공식에 사용
+    const pStartProcW = pProcTrend.length > 0 ? pProcTrend[0] : 0
+    const pEndProcW = pProcTrend.length > 0 ? pProcTrend[pProcTrend.length - 1] : 0
+    // 화면 표시용 대기건(처리+검증) — 이 값이 프로젝트 카드에 노출됨
+    const pStartW = pStartProcW + (pVerifyTrend.length > 0 ? pVerifyTrend[0] : 0)
+    const pEndW = pEndProcW + (pVerifyTrend.length > 0 ? pVerifyTrend[pVerifyTrend.length - 1] : 0)
+    const pInflow = p.tasks + (pEndProcW - pStartProcW)
+    // 프로젝트 처리 능력은 "현재 배정된" 에이전트들의 dailyCap 합으로 계산해야 함
+    // (과거 실행 이력이 있더라도 지금 다른 프로젝트로 재배정된 에이전트는 제외)
+    // 배정은 됐지만 실측 데이터가 없는 에이전트는 avgAgentCap으로 대체
+    const pCapacity = p.assignedAgentIds.length > 0
+      ? p.assignedAgentIds.reduce((s, aid) => {
+          const ac = agentCapacities.find(c => c.agentId === aid)
+          return s + (ac?.dailyCap ?? avgAgentCap)
+        }, 0)
+      : 0
     const pUtil = pCapacity > 0 ? (pInflow / elapsedDays) / pCapacity : (pInflow > 0 ? Infinity : 0)
     const prevP = data.prevByProject?.find(pp => pp.projectId === p.projectId)
     const pPrevCPT = prevP && prevP.tasks > 0 ? prevP.cost / prevP.tasks : 0
@@ -276,16 +336,29 @@ export function diagnose(data: ReportData, prevWeeklyData?: ReportData[]): Diagn
     const pIssues = Array.from(issueMap.values())
     const pRetryRate = pIssues.length > 0 ? (pIssues.filter(a => a > 1).length / pIssues.length) * 100 : 0
 
+    // 프로젝트 에이전트 caps 배열 (calcOptimalAgents용)
+    const pAgentCaps = p.assignedAgentIds.map(aid => {
+      const ac = agentCapacities.find(c => c.agentId === aid)
+      return ac?.dailyCap ?? avgAgentCap
+    })
+    const pDailyInflow = elapsedDays > 0 ? pInflow / elapsedDays : 0
+    const pOptimal = calcOptimalAgents(pAgentCaps, pDailyInflow)
+
+    // 실제 적체 신호: 대기가 의미있게 쌓여 있거나 증가 중
+    const hasBacklog = pEndW >= 3 || (pEndW - pStartW) >= 2
+
     let annotation: string | null = null
-    if (pUtil >= 0.95 && p.assignedAgentCount > 0) {
-      const needed = Math.ceil((pInflow / elapsedDays) / avgAgentCap / 0.75)
-      const addNeeded = Math.max(1, needed - p.assignedAgentCount)
-      const urgency = pCapacity > 0 && pCapacity < pInflow / elapsedDays
-        ? Math.round((10 - pEndW) / ((pInflow / elapsedDays) - pCapacity))
+    if (hasBacklog && p.assignedAgentCount > 0 && pCapacity < pDailyInflow) {
+      // 대기가 실제로 쌓이고 있고, 처리 능력이 유입에 못 미침
+      const addNeeded = Math.max(1, Math.ceil((pDailyInflow * 1.2 - pCapacity) / avgAgentCap))
+      const urgency = pCapacity > 0
+        ? Math.round((10 - pEndW) / (pDailyInflow - pCapacity))
         : null
       annotation = `부족 — ${addNeeded}대 추가 필요` + (urgency != null && urgency > 0 ? ` (${urgency}일 내)` : '')
-    } else if (pUtil < 0.40 && p.assignedAgentCount >= 2) {
-      annotation = `과잉 — ${Math.max(1, p.assignedAgentCount - Math.ceil((pInflow / elapsedDays) / avgAgentCap / 0.75))}대 재배치 가능`
+    } else if (pOptimal < p.assignedAgentCount && pInflow > 0 && pEndW === 0) {
+      // 1대 빼도 감당 가능 + 대기 없음 → 재배치 가능
+      const removable = p.assignedAgentCount - pOptimal
+      annotation = `과잉 — ${removable}대 재배치 가능`
     } else if (pRetryRate >= 30) {
       annotation = `재시도율 ${Math.round(pRetryRate)}% — 이슈 품질 점검`
     } else if (pEndW >= 5) {
@@ -298,13 +371,15 @@ export function diagnose(data: ReportData, prevWeeklyData?: ReportData[]): Diagn
       cost: p.cost, costPerTask: p.tasks > 0 ? Math.round(p.cost / p.tasks * 100) / 100 : 0, prevCostPerTask: Math.round(pPrevCPT * 100) / 100,
       assignedAgents: p.assignedAgentCount, utilization: Math.round(pUtil * 100) / 100, healthLevel: healthFromUtil(pUtil),
       retryRate: Math.round(pRetryRate * 10) / 10,
+      hasBacklog,
       annotation,
     }
   })
 
-  // 재배치 / 충원 / 감축 판단
-  const shortageProjects = projectFlows.filter(p => p.utilization >= 0.95 && p.assignedAgents > 0)
-  const surplusProjects = projectFlows.filter(p => p.utilization < 0.40 && p.assignedAgents >= 2)
+  // 재배치 / 충원 / 감축 판단 — annotation 결과 기반
+  // annotation에서 "부족"/"과잉"이 판정된 프로젝트를 기준으로 시나리오 결정
+  const shortageProjects = projectFlows.filter(p => p.annotation?.startsWith('부족'))
+  const surplusProjects = projectFlows.filter(p => p.annotation?.startsWith('과잉'))
   const unassigned = projectFlows.filter(p => p.assignedAgents === 0 && p.currentWaiting > 0)
 
   let scenario: ResourceDiagnosis['scenario'] = 'optimal'
@@ -314,9 +389,14 @@ export function diagnose(data: ReportData, prevWeeklyData?: ReportData[]): Diagn
 
   if (shortageProjects.length > 0 && surplusProjects.length > 0) {
     scenario = 'rebalance'
-    // 과잉 프로젝트에서 유휴 에이전트 찾기
     for (const sp of surplusProjects) {
-      const surplus = sp.assignedAgents - Math.max(1, Math.ceil((sp.inflow / elapsedDays) / avgAgentCap / 0.75))
+      const spP = byProject.find(bp => bp.projectId === sp.projectId)
+      const spCaps = spP?.assignedAgentIds.map(aid => {
+        const ac = agentCapacities.find(c => c.agentId === aid)
+        return ac?.dailyCap ?? avgAgentCap
+      }) ?? []
+      const spOptimal = calcOptimalAgents(spCaps, sp.inflow / elapsedDays)
+      const surplus = sp.assignedAgents - spOptimal
       const agents = byAgent.filter(a => a.assignedProjectId === sp.projectId).sort((a, b) => a.tasks - b.tasks)
       for (let i = 0; i < Math.min(surplus, agents.length, shortageProjects.length); i++) {
         const target = shortageProjects[i]
@@ -337,13 +417,14 @@ export function diagnose(data: ReportData, prevWeeklyData?: ReportData[]): Diagn
   } else if (shortageProjects.length > 0 || unassigned.length > 0) {
     scenario = 'shortage'
     for (const sp of [...unassigned, ...shortageProjects]) {
-      const needed = Math.ceil((sp.inflow / elapsedDays) / avgAgentCap / 0.75)
-      const add = Math.max(1, needed - sp.assignedAgents)
+      const spDailyInflow = sp.inflow / elapsedDays
+      const add = Math.max(1, Math.ceil((spDailyInflow * 1.2 - (sp.assignedAgents > 0 ? sp.utilization * spDailyInflow / (sp.utilization || 1) : 0)) / avgAgentCap) || 1)
       const capNow = agentCapacities.filter(c => byAgent.find(a => a.agentId === c.agentId && a.assignedProjectId === sp.projectId)).reduce((s, c) => s + c.dailyCap, 0)
-      const urgency = capNow > 0 && capNow < sp.inflow / elapsedDays ? Math.round((10 - sp.currentWaiting) / ((sp.inflow / elapsedDays) - capNow)) : null
+      const urgency = capNow > 0 && capNow < spDailyInflow ? Math.round((10 - sp.currentWaiting) / (spDailyInflow - capNow)) : null
+      const afterCap = capNow + add * avgAgentCap
       shortagePlan.push({
         projectId: sp.projectId, projectName: sp.projectName, needed: add,
-        currentUtil: Math.round(sp.utilization * 100), targetUtil: needed > 0 ? Math.round((sp.inflow / elapsedDays) / (needed * avgAgentCap) * 100) : 0,
+        currentUtil: Math.round(sp.utilization * 100), targetUtil: afterCap > 0 ? Math.round(spDailyInflow / afterCap * 100) : 0,
         urgencyDays: urgency != null && urgency > 0 ? urgency : null,
       })
     }
@@ -399,14 +480,17 @@ export function diagnose(data: ReportData, prevWeeklyData?: ReportData[]): Diagn
   if (byVerifier && byVerifier.length > 0 && lifecycle.verifyCount > 0) {
     const verifierCount = byVerifier.length
     const dailyVerifyInflow = elapsedDays > 0 ? lifecycle.verifyCount / elapsedDays : 0
-    const dailyVerifyCap = byVerifier.reduce((s, v) => s + (v.tasks / elapsedDays), 0)
-    const verifyUtil = dailyVerifyCap > 0 ? dailyVerifyInflow / dailyVerifyCap : 0
-    // 검증 대기 = 전체 대기 중 verify_waiting 부분 (근사: 검증 유입 - 검증 완료 비율로 추정)
-    const verifyWaiting = 0 // 정확한 값은 별도 API 필요, 일단 0
+    // 검증자 capacity는 throughput에서 역산 불가 (자기참조: cap≈throughput → util≈1.0 항상)
+    // 표시용 수치로만 사용
+    const dailyVerifyCap = elapsedDays > 0 ? byVerifier.reduce((s, v) => s + (v.tasks / elapsedDays), 0) : 0
+    const verifyUtil = 0 // 실제 가동률은 대기 데이터 없이 측정 불가
+    const verifyWaiting = 0
 
     let ann: string | null = null
-    if (verifyUtil >= 0.90) ann = `검증자 부족 — 1명 추가 시 안정`
-    else if (prevLifecycle.verifyCount > 0 && lifecycle.verifyAvg > prevLifecycle.verifyAvg * 1.5) ann = `검증 시간 증가 — 확인 필요`
+    // 검증 시간이 전기 대비 50% 이상 증가하면 실질적 병목 신호
+    if (prevLifecycle.verifyCount > 0 && lifecycle.verifyAvg > prevLifecycle.verifyAvg * 1.5) {
+      ann = `검증 시간 ${Math.round((lifecycle.verifyAvg / prevLifecycle.verifyAvg - 1) * 100)}% 증가 — 확인 필요`
+    }
 
     verifier = { verifierCount, dailyVerifyInflow: Math.round(dailyVerifyInflow * 10) / 10, dailyVerifyCapacity: Math.round(dailyVerifyCap * 10) / 10, verifyUtilization: Math.round(verifyUtil * 100) / 100, verifyWaiting, annotation: ann }
   }
@@ -467,19 +551,16 @@ export function diagnose(data: ReportData, prevWeeklyData?: ReportData[]): Diagn
     }
   }
 
-  // 7-2. 적체 (유입 > 처리 3일 연속)
-  const pastDays = dailyTrend.filter(d => d.tasks !== null && d.date <= today)
-  if (pastDays.length >= 3) {
-    const last3 = pastDays.slice(-3)
-    const last3Inflow: number[] = []
-    for (let i = 0; i < last3.length; i++) {
-      const wIdx = waitingTrend.findIndex(w => w.date === last3[i].date)
-      if (wIdx > 0) {
-        last3Inflow.push((last3[i].tasks ?? 0) + waitingTrend[wIdx].total - waitingTrend[wIdx - 1].total)
-      }
-    }
-    if (last3Inflow.length >= 3 && last3Inflow.every((inf, i) => inf > (last3[i].tasks ?? 0))) {
-      alerts.push({ severity: 'critical', title: '유입 대비 처리 부족', detail: '3일 연속 유입이 처리를 초과하고 있습니다. 대기가 계속 늘어나고 있습니다.', action: '에이전트 추가 배정', actionTarget: '/agents' })
+  // 7-2. 적체 — 대기가 3일 연속 의미 있게 증가 (스냅샷 노이즈 제외)
+  // 기존 로직은 inflow=tasks+delta를 tasks와 비교하여 delta>0이면 항상 true였음
+  // 수정: 실제 대기 수치가 3일 연속 순증가하고, 마지막 날 대기가 2건 이상일 때만 알림
+  const pastWaitingDays = waitingTrend.filter(d => d.date <= today)
+  if (pastWaitingDays.length >= 4) {
+    const last4 = pastWaitingDays.slice(-4) // 3일간의 변화를 보려면 4개 포인트 필요
+    const deltas = [last4[1].total - last4[0].total, last4[2].total - last4[1].total, last4[3].total - last4[2].total]
+    const lastWaiting = last4[3].total
+    if (deltas.every(d => d >= 1) && lastWaiting >= 2) {
+      alerts.push({ severity: 'critical', title: '유입 대비 처리 부족', detail: `3일 연속 대기가 증가하여 현재 ${lastWaiting}건입니다.`, action: '에이전트 추가 배정', actionTarget: '/agents' })
     }
   }
 
@@ -515,9 +596,9 @@ export function diagnose(data: ReportData, prevWeeklyData?: ReportData[]): Diagn
     alerts.push({ severity: 'warning', title: '처리 시간 증가', detail: `평균 ${fmtDur(lifecycle.procAvg)} (전기 ${fmtDur(prevLifecycle.procAvg)} 대비 ${Math.round((lifecycle.procAvg / prevLifecycle.procAvg - 1) * 100)}% 증가)`, action: '이슈 복잡도 확인' })
   }
 
-  // 7-8. 검증 병목
-  if (verifier?.annotation?.includes('부족')) {
-    alerts.push({ severity: 'warning', title: '검증 병목', detail: `검증 가동률 ${Math.round(verifier.verifyUtilization * 100)}%`, action: '검증자 추가 배정 검토' })
+  // 7-8. 검증 병목 (검증 시간 증가 기반)
+  if (verifier?.annotation) {
+    alerts.push({ severity: 'warning', title: '검증 병목', detail: verifier.annotation, action: '검증 프로세스 확인' })
   }
 
   // ─── 8. 브리핑 텍스트 ───

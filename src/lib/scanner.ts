@@ -403,7 +403,8 @@ export async function scanProject(project: Project, force: boolean = false) {
     console.log(`[Scanner] ${force ? 'FORCED ' : ''}Scanning project: ${project.name}`);
     
     const decryptedToken = decrypt(project.accessToken);
-    let issueCount = 0;
+    let issueCount = 0;           // 처리 대기 (waiting) 이슈 수
+    let verifyWaitingCount = 0;   // 검증 대기 이슈 수
 
     // 레이블 동기화는 프로젝트 설정에서 수동으로 수행
     // (스캐너에서 자동 생성하지 않음 — 권한 없을 수 있음)
@@ -583,8 +584,8 @@ export async function scanProject(project: Project, force: boolean = false) {
         }
         waitingIssues.push(issue);
       } else if (stage === 'verify_waiting') {
-        // 검증대기 이슈는 대기로 간주하여 카운트에 포함 (에이전트 배정은 하지 않음)
-        issueCount++;
+        // 검증대기 이슈는 별도 카운터로 추적 (처리대기와 구분)
+        verifyWaitingCount++;
       }
     }
 
@@ -596,8 +597,8 @@ export async function scanProject(project: Project, force: boolean = false) {
       issueCount += waiting;
     }
 
-    // 마지막 체크 시간 및 대기 이슈 수 업데이트 (waiting + verify_waiting 카운트)
-    updateProjectLastChecked(project.id, now.toISOString(), issueCount);
+    // 마지막 체크 시간 및 대기 이슈 수 업데이트 (처리대기와 검증대기 분리 저장)
+    updateProjectLastChecked(project.id, now.toISOString(), issueCount, verifyWaitingCount);
 
     // 충돌 감지 작업 배정: done 상태 이슈가 2개 이상이면 MR 충돌 가능성 있음
     // TODO: processConflictCheck not yet implemented
@@ -1283,7 +1284,7 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
         if (totalInputTokens || totalOutputTokens || totalCostUsd || finalTurns) {
           const finalCost = totalCostUsd > 0
             ? totalCostUsd
-            : calcCostFromDb(agent.cliName, totalInputTokens, totalOutputTokens, finalModel);
+            : calcCostFromDb(totalInputTokens, totalOutputTokens, finalModel);
           updateExecutionTokens(executionId, totalInputTokens, totalOutputTokens, finalCost, finalTurns, finalModel);
         } else if (finalModel) {
           // 토큰 데이터가 없어도 모델명은 저장

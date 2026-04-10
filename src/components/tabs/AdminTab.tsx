@@ -1014,12 +1014,6 @@ interface PricingItem {
   inputPrice: number; outputPrice: number; updatedAt: string
 }
 
-const CLI_ICONS: Record<string, string> = {
-  claude: 'fa-solid fa-c',
-  gemini: 'fa-solid fa-g',
-  codex: 'fa-solid fa-code',
-}
-
 function ModelSelect({ models, value, onChange }: { models: string[]; value: string; onChange: (v: string) => void }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -1280,67 +1274,85 @@ function SettingsPanel() {
         </div>
       ))}
 
-      {/* 단가 설정 섹션 */}
+      {/* 모델 단가 설정 섹션 */}
       <div className="bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden">
         <button
-          onClick={() => setExpandedGroup(expandedGroup === 'pricing' ? null : 'pricing')}
+          onClick={() => setExpandedGroup(expandedGroup === 'pricing-model' ? null : 'pricing-model')}
           className="w-full px-4 py-3 flex items-center gap-2 text-left hover:bg-white/[0.02]"
         >
           <i className="fa-solid fa-coins text-sm text-ive-text-dim" />
-          <span className="text-sm font-bold text-ive-text flex-1">{t('pricing')}</span>
-          <span className="text-xs text-ive-text-dim">{pricingItems.length}</span>
-          <i className={`fa-solid fa-chevron-${expandedGroup === 'pricing' ? 'up' : 'down'} text-xs text-ive-text-dim`} />
+          <span className="text-sm font-bold text-ive-text flex-1">{t('modelPricing')}</span>
+          <span className="text-xs text-ive-text-dim">{pricingItems.filter(it => it.cliName !== 'human').length}</span>
+          <i className={`fa-solid fa-chevron-${expandedGroup === 'pricing-model' ? 'up' : 'down'} text-xs text-ive-text-dim`} />
         </button>
 
-        {expandedGroup === 'pricing' && (
+        {expandedGroup === 'pricing-model' && (
           <div className="px-4 pb-4 border-t border-ive-border-dark pt-3">
-            <div className="text-xs text-ive-text-dim mb-2">{t('pricingDesc')}</div>
-            <div className="space-y-2.5">
-              {pricingItems.map(it => (
-                <div key={it.cliName} className="bg-ive-bg-deep border border-ive-border-dark rounded-lg px-3 py-2.5">
+            <div className="text-xs text-ive-text-dim mb-2">{t('modelPricingDesc')}</div>
+            <div className="space-y-1.5">
+              {pricingItems.filter(it => it.cliName !== 'human').map(it => (
+                <div key={it.id} className="bg-ive-bg-deep border border-ive-border-dark rounded-lg px-3 py-2.5">
                   <div className="flex items-center gap-2 mb-2">
-                    <i className={`${CLI_ICONS[it.cliName] || (it.cliName === 'human' ? 'fa-solid fa-user-tie' : 'fa-solid fa-robot')} text-sm text-ive-text-dim`} />
-                    <span className="text-xs font-bold text-ive-text uppercase">{it.cliName}</span>
                     <input
                       value={it.modelName}
-                      onChange={e => { setPricingItems(prev => prev.map(p => p.cliName === it.cliName ? { ...p, modelName: e.target.value } : p)); setPricingSaved(false) }}
-                      className="flex-1 text-xs text-ive-text-muted bg-transparent border-b border-ive-border-dark focus:border-ive-green focus:outline-none px-1 py-0.5 text-right"
+                      onChange={e => { setPricingItems(prev => prev.map(p => p.id === it.id ? { ...p, modelName: e.target.value } : p)); setPricingSaved(false) }}
+                      className="flex-1 text-xs font-bold text-ive-text bg-transparent border-b border-ive-border-dark focus:border-ive-green focus:outline-none px-1 py-0.5"
                       placeholder={t('modelName')}
                     />
+                    <button
+                      onClick={async () => {
+                        if (it.id.startsWith('tp-new-')) {
+                          setPricingItems(prev => prev.filter(p => p.id !== it.id))
+                          setPricingSaved(false)
+                          return
+                        }
+                        try {
+                          const res = await fetch('/api/settings/pricing', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: it.id }) })
+                          if (res.ok) setPricingItems(await res.json())
+                          else { const data = await res.json(); await alert({ message: data.error || tc('saveFailed'), variant: 'error' }) }
+                        } catch {}
+                      }}
+                      className="text-xs text-ive-text-dim hover:text-red-400 p-1"
+                      title={tc('delete')}
+                    >
+                      <i className="fa-solid fa-xmark" />
+                    </button>
                   </div>
                   <div className="flex gap-3">
                     <div className="flex-1">
-                      <div className="text-xs text-ive-text-dim mb-0.5">{it.cliName === 'human' ? '월급 (USD)' : t('input')}</div>
+                      <div className="text-xs text-ive-text-dim mb-0.5">{t('input')}</div>
                       <input
                         type="number" step="0.01" min="0"
                         value={it.inputPrice}
-                        onChange={e => { setPricingItems(prev => prev.map(p => p.cliName === it.cliName ? { ...p, inputPrice: parseFloat(e.target.value) || 0 } : p)); setPricingSaved(false) }}
+                        onChange={e => { setPricingItems(prev => prev.map(p => p.id === it.id ? { ...p, inputPrice: parseFloat(e.target.value) || 0 } : p)); setPricingSaved(false) }}
                         className="w-full text-sm font-bold text-ive-cyan bg-ive-bg-input border border-ive-border rounded-lg px-2 py-1.5 text-right focus:outline-none focus:border-ive-green"
                       />
                     </div>
                     <div className="flex-1">
-                      <div className="text-xs text-ive-text-dim mb-0.5">{it.cliName === 'human' ? '시급 (160h 기준계산)' : t('output')}</div>
-                      {it.cliName === 'human' ? (
-                        <div className="w-full text-sm font-bold text-ive-amber bg-ive-bg-deep border border-ive-border rounded-lg px-2 py-1.5 text-right cursor-not-allowed">
-                          {((it.inputPrice || 0) / 160).toFixed(2)}
-                        </div>
-                      ) : (
-                        <input
-                          type="number" step="0.01" min="0"
-                          value={it.outputPrice}
-                          onChange={e => { setPricingItems(prev => prev.map(p => p.cliName === it.cliName ? { ...p, outputPrice: parseFloat(e.target.value) || 0 } : p)); setPricingSaved(false) }}
-                          className="w-full text-sm font-bold text-ive-amber bg-ive-bg-input border border-ive-border rounded-lg px-2 py-1.5 text-right focus:outline-none focus:border-ive-green"
-                        />
-                      )}
+                      <div className="text-xs text-ive-text-dim mb-0.5">{t('output')}</div>
+                      <input
+                        type="number" step="0.01" min="0"
+                        value={it.outputPrice}
+                        onChange={e => { setPricingItems(prev => prev.map(p => p.id === it.id ? { ...p, outputPrice: parseFloat(e.target.value) || 0 } : p)); setPricingSaved(false) }}
+                        className="w-full text-sm font-bold text-ive-amber bg-ive-bg-input border border-ive-border rounded-lg px-2 py-1.5 text-right focus:outline-none focus:border-ive-green"
+                      />
                     </div>
-                  </div>
-                  <div className="text-xs text-ive-text-dim mt-1.5 text-right">
-                    {t('modified')}: {new Date(it.updatedAt).toLocaleDateString('ko-KR')}
                   </div>
                 </div>
               ))}
             </div>
             <div className="flex gap-2 mt-3">
+              <button
+                onClick={() => {
+                  const id = `tp-new-${Date.now()}`
+                  setPricingItems(prev => [...prev, { id, cliName: 'model', modelName: '', inputPrice: 0, outputPrice: 0, updatedAt: new Date().toISOString() }])
+                  setPricingSaved(false)
+                }}
+                className="py-2 px-3 rounded-lg text-xs font-bold bg-ive-bg-deep border border-ive-border-subtle text-ive-text-dim active:scale-[0.98] transition-all"
+              >
+                <i className="fa-solid fa-plus mr-1" />{t('addModel')}
+              </button>
+              <div className="flex-1" />
               <button
                 onClick={async () => {
                   setPricingFetching(true)
@@ -1351,7 +1363,7 @@ function SettingsPanel() {
                   } finally { setPricingFetching(false) }
                 }}
                 disabled={pricingFetching}
-                className="flex-1 py-2 rounded-lg text-xs font-bold bg-ive-bg-deep border border-ive-border-subtle text-ive-cyan active:scale-[0.98] transition-all disabled:opacity-40"
+                className="py-2 px-3 rounded-lg text-xs font-bold bg-ive-bg-deep border border-ive-border-subtle text-ive-cyan active:scale-[0.98] transition-all disabled:opacity-40"
               >
                 {pricingFetching
                   ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />{t('fetching')}</>
@@ -1362,13 +1374,13 @@ function SettingsPanel() {
                 onClick={async () => {
                   setPricingSaving(true)
                   try {
-                    const res = await fetch('/api/settings/pricing', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: pricingItems.map(it => ({ cliName: it.cliName, modelName: it.modelName, inputPrice: it.inputPrice, outputPrice: it.outputPrice })) }) })
+                    const res = await fetch('/api/settings/pricing', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: pricingItems.map(it => ({ id: it.id, cliName: it.cliName, modelName: it.modelName, inputPrice: it.inputPrice, outputPrice: it.outputPrice })) }) })
                     if (res.ok) { setPricingItems(await res.json()); setPricingSaved(true); setTimeout(() => setPricingSaved(false), 2000) }
                     else { const data = await res.json(); await alert({ message: data.error || tc('saveFailed'), variant: 'error' }) }
                   } finally { setPricingSaving(false) }
                 }}
                 disabled={pricingSaving}
-                className={`flex-1 py-2 rounded-lg text-xs font-bold active:scale-[0.98] transition-all disabled:opacity-40 ${pricingSaved ? 'bg-ive-green/20 text-ive-green' : 'bg-ive-green-dark text-white'}`}
+                className={`py-2 px-3 rounded-lg text-xs font-bold active:scale-[0.98] transition-all disabled:opacity-40 ${pricingSaved ? 'bg-ive-green/20 text-ive-green' : 'bg-ive-green-dark text-white'}`}
               >
                 {pricingSaving
                   ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />{t('saving')}</>
@@ -1378,6 +1390,64 @@ function SettingsPanel() {
                 }
               </button>
             </div>
+          </div>
+        )}
+      </div>
+
+      {/* 사람 단가 설정 섹션 */}
+      <div className="bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden">
+        <button
+          onClick={() => setExpandedGroup(expandedGroup === 'pricing-human' ? null : 'pricing-human')}
+          className="w-full px-4 py-3 flex items-center gap-2 text-left hover:bg-white/[0.02]"
+        >
+          <i className="fa-solid fa-user-tie text-sm text-ive-text-dim" />
+          <span className="text-sm font-bold text-ive-text flex-1">{t('humanPricing')}</span>
+          <i className={`fa-solid fa-chevron-${expandedGroup === 'pricing-human' ? 'up' : 'down'} text-xs text-ive-text-dim`} />
+        </button>
+
+        {expandedGroup === 'pricing-human' && (
+          <div className="px-4 pb-4 border-t border-ive-border-dark pt-3">
+            <div className="text-xs text-ive-text-dim mb-2">{t('humanPricingDesc')}</div>
+            {pricingItems.filter(it => it.cliName === 'human').map(it => (
+              <div key={it.id} className="bg-ive-bg-deep border border-ive-border-dark rounded-lg px-3 py-2.5">
+                <div className="flex gap-3">
+                  <div className="flex-1">
+                    <div className="text-xs text-ive-text-dim mb-0.5">월급 (USD)</div>
+                    <input
+                      type="number" step="100" min="0"
+                      value={it.inputPrice}
+                      onChange={e => { setPricingItems(prev => prev.map(p => p.id === it.id ? { ...p, inputPrice: parseFloat(e.target.value) || 0 } : p)); setPricingSaved(false) }}
+                      className="w-full text-sm font-bold text-ive-cyan bg-ive-bg-input border border-ive-border rounded-lg px-2 py-1.5 text-right focus:outline-none focus:border-ive-green"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-xs text-ive-text-dim mb-0.5">시급 (160h 기준)</div>
+                    <div className="w-full text-sm font-bold text-ive-amber bg-ive-bg-deep border border-ive-border rounded-lg px-2 py-1.5 text-right cursor-not-allowed">
+                      {((it.inputPrice || 0) / 160).toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+            <button
+              onClick={async () => {
+                setPricingSaving(true)
+                try {
+                  const res = await fetch('/api/settings/pricing', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: pricingItems.map(it => ({ id: it.id, cliName: it.cliName, modelName: it.modelName, inputPrice: it.inputPrice, outputPrice: it.outputPrice })) }) })
+                  if (res.ok) { setPricingItems(await res.json()); setPricingSaved(true); setTimeout(() => setPricingSaved(false), 2000) }
+                  else { const data = await res.json(); await alert({ message: data.error || tc('saveFailed'), variant: 'error' }) }
+                } finally { setPricingSaving(false) }
+              }}
+              disabled={pricingSaving}
+              className={`w-full mt-3 py-2 rounded-lg text-xs font-bold active:scale-[0.98] transition-all disabled:opacity-40 ${pricingSaved ? 'bg-ive-green/20 text-ive-green' : 'bg-ive-green-dark text-white'}`}
+            >
+              {pricingSaving
+                ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />{t('saving')}</>
+                : pricingSaved
+                  ? <><i className="fa-solid fa-check mr-1" />{t('saved')}</>
+                  : <><i className="fa-solid fa-floppy-disk mr-1" />{tc('save')}</>
+              }
+            </button>
           </div>
         )}
       </div>

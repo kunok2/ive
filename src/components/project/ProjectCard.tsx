@@ -467,8 +467,12 @@ export default function ProjectCard({ project }: Props) {
                   >
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-sm font-bold text-ive-cyan">#{issue.iid}</span>
-                      <span className="text-xs font-bold text-ive-cyan/70 bg-ive-cyan/10 border border-ive-cyan/20 px-1.5 py-0.5 rounded shrink-0">
-                        {tp('waitingBadge')}
+                      <span className={`text-xs font-bold px-1.5 py-0.5 rounded shrink-0 border ${
+                        issue.stage === 'verify_waiting'
+                          ? 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20'
+                          : 'text-ive-cyan/70 bg-ive-cyan/10 border-ive-cyan/20'
+                      }`}>
+                        {tp(issue.stage === 'verify_waiting' ? 'verifyWaitBadge' : 'waitingBadge')}
                       </span>
                     </div>
                     <MarqueeText className="text-sm text-ive-text font-bold">{issue.title}</MarqueeText>

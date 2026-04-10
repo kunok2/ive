@@ -57,6 +57,7 @@ export default function ReportsTab() {
   const [diagnosis, setDiagnosis] = useState<DiagnosisResult | null>(null)
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set())
   const [expandedAgents, setExpandedAgents] = useState<Set<string>>(new Set())
+  const [expandedUsers, setExpandedUsers] = useState<Set<string>>(new Set())
   const [showTrend, setShowTrend] = useState(false)
   const [showIssues, setShowIssues] = useState(false)
   const [issueProjectFilter, setIssueProjectFilter] = useState('all')
@@ -233,26 +234,26 @@ export default function ReportsTab() {
                   <i className="fa-solid fa-gauge-high text-ive-text-dim" /> 가동률 (Utilization)
                 </div>
                 <p className="text-[11px] text-ive-text-dim leading-relaxed">
-                  일일 유입량 대비 에이전트들의 처리 여력을 나타냅니다. 게이지 안의 진한 청록색 구간(65~85%)은 자원의 낭비나 작업 지연이 발생하지 않는 가장 이상적인 상태를 의미합니다.
+                  일일 유입량 대비 에이전트들의 처리 여력을 나타냅니다. 게이지 안의 진한 청록색 구간(50~75%)은 자원의 낭비나 작업 지연이 발생하지 않는 가장 이상적인 상태를 의미합니다.
                 </p>
               </div>
               {/* 게이지 바 */}
               <div>
                 <div className="flex w-full text-[10px] text-ive-text-dim mb-1">
-                  <div className="flex justify-center" style={{ width: '40%' }}>유휴</div>
+                  <div className="flex justify-center" style={{ width: '25%' }}>유휴</div>
                   <div className="flex justify-center" style={{ width: '25%' }}>여유</div>
-                  <div className="flex justify-center" style={{ width: '20%' }}>적정</div>
-                  <div className="flex justify-center" style={{ width: '10%' }}>빠듯</div>
-                  <div className="flex justify-end overflow-visible whitespace-nowrap" style={{ width: '5%' }}>과부하</div>
+                  <div className="flex justify-center" style={{ width: '25%' }}>적정</div>
+                  <div className="flex justify-center" style={{ width: '15%' }}>빠듯</div>
+                  <div className="flex justify-end overflow-visible whitespace-nowrap" style={{ width: '10%' }}>과부하</div>
                 </div>
                 <div className="relative h-3 rounded-full bg-ive-bg-deep overflow-hidden">
                   {/* 적정 구간 하이라이트 */}
-                  <div className="absolute h-full bg-ive-green/10" style={{ left: '65%', width: '20%' }} />
+                  <div className="absolute h-full bg-ive-green/10" style={{ left: '50%', width: '25%' }} />
                   {/* 현재 위치 */}
                   <div className="absolute top-0 h-full w-1 rounded-full bg-ive-text transition-all"
                     style={{ left: `${Math.min(Math.round(d.flow.utilization * 100), 110)}%` }} />
                   {/* 구간 구분선 */}
-                  {[40, 65, 85, 95].map(v => <div key={v} className="absolute top-0 h-full w-px bg-ive-border-dark" style={{ left: `${v}%` }} />)}
+                  {[25, 50, 75, 90].map(v => <div key={v} className="absolute top-0 h-full w-px bg-ive-border-dark" style={{ left: `${v}%` }} />)}
                 </div>
                 <div className="text-center mt-1">
                   <span className={`text-lg font-bold ${d.flow.healthLevel === 'overloaded' ? 'text-ive-red' : d.flow.healthLevel === 'tight' ? 'text-ive-amber' : d.flow.healthLevel === 'idle' ? 'text-ive-cyan' : 'text-ive-green'}`}>
@@ -611,29 +612,86 @@ export default function ReportsTab() {
             </section>
           )}
 
-          {/* ⑨ 담당자별 현황 */}
+          {/* ⑨ 담당자별 검증 현황 */}
           {data.byUser && data.byUser.length > 0 && (
             <section>
-              <div className="text-xs font-bold text-ive-text-dim mb-2 uppercase tracking-wider">담당자별 현황</div>
+              <div className="text-xs font-bold text-ive-text-dim mb-2 uppercase tracking-wider">담당자별 검증 현황</div>
               <div className="space-y-2">
-                {data.byUser.sort((a, b) => b.tasks - a.tasks).map(u => {
+                {data.byUser.sort((a, b) => (b.verifyWaiting - a.verifyWaiting) || (b.verifyTasks - a.verifyTasks) || (b.tasks - a.tasks)).map(u => {
+                  const hasVerify = u.verifyTasks > 0 || u.verifyWaiting > 0
                   const prev = data.prevByUser?.find(p => p.userId === u.userId)
-                  const badge = prev != null ? diffBadge(u.tasks, prev.tasks) : null
-                  const badgeColor = prev != null ? diffColor(u.tasks, prev.tasks) : 'text-ive-cyan'
+                  const approvalRate = u.verifyApproved + u.verifyRejected > 0 ? Math.round(u.verifyApproved / (u.verifyApproved + u.verifyRejected) * 100) : null
                   return (
-                    <div key={u.userId} className="bg-ive-bg-card border border-ive-border-subtle rounded-lg px-3 py-2.5">
-                      <div className="flex items-center gap-2">
-                        <AgentAvatar avatar={u.userAvatar} size="sm" className="!w-5 !h-5 !text-xs" />
-                        <span className="text-sm font-bold text-ive-text flex-1 truncate">{u.userName}</span>
-                        <span className="text-sm font-bold text-ive-text">{u.tasks}건</span>
-                        {badge && <span className={`text-xs font-bold ${badgeColor}`}>{badge}</span>}
-                      </div>
-                      <div className="flex items-center gap-3 mt-1.5 text-xs text-ive-text-dim flex-wrap">
-                        {u.avgWaitMin > 0 && <span><span className="text-ive-cyan font-bold">대기</span> {fmtDur(u.avgWaitMin)}</span>}
-                        {u.avgDurationMin > 0 && <span><span className="text-ive-green font-bold">처리</span> {fmtDur(u.avgDurationMin)}</span>}
-                        {u.verifyTasks > 0 && <span><span className="text-ive-amber font-bold">검토</span> {u.verifyTasks}건{u.avgVerifyMin > 0 ? ` · ${fmtDur(u.avgVerifyMin)}` : ''}</span>}
-                        <span className="ml-auto text-ive-amber">${fmtCost(u.cost)}</span>
-                      </div>
+                    <div key={u.userId} className={`bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden ${u.verifyWaiting >= 5 ? 'bg-ive-red/3' : u.verifyWaiting >= 3 ? 'bg-ive-amber/3' : ''}`}>
+                      <button onClick={() => { const n = new Set(expandedUsers); n.has(u.userId) ? n.delete(u.userId) : n.add(u.userId); setExpandedUsers(n) }}
+                        className="w-full px-3 py-2.5 text-left">
+                        <div className="flex items-center gap-2">
+                          <AgentAvatar avatar={u.userAvatar} size="sm" className="!w-5 !h-5 !text-xs" />
+                          <span className="text-sm font-bold text-ive-text flex-1 truncate">{u.userName}</span>
+                          {u.verifyWaiting > 0 && <span className={`text-xs font-bold ${u.verifyWaiting >= 5 ? 'text-ive-red' : u.verifyWaiting >= 3 ? 'text-ive-amber' : 'text-ive-cyan'}`}><i className="fa-solid fa-clock mr-0.5" />대기 {u.verifyWaiting}</span>}
+                          <span className="text-sm font-bold text-ive-text">{u.tasks}건</span>
+                          {prev != null && (() => { const b = diffBadge(u.tasks, prev.tasks); return b ? <span className={`text-xs font-bold ${diffColor(u.tasks, prev.tasks)}`}>{b}</span> : null })()}
+                          <i className={`fa-solid fa-chevron-${expandedUsers.has(u.userId) ? 'up' : 'down'} text-xs text-ive-text-dim`} />
+                        </div>
+                        <div className="flex items-center gap-3 mt-1.5 text-xs text-ive-text-dim flex-wrap">
+                          {hasVerify ? (<>
+                            <span><span className="text-ive-green font-bold">승인</span> {u.verifyApproved}</span>
+                            {u.verifyRejected > 0 && <span><span className="text-ive-red font-bold">반려</span> {u.verifyRejected}</span>}
+                            {u.avgVerifyMin > 0 && <span><span className="text-ive-text-dim font-bold">검증</span> {fmtDur(u.avgVerifyMin)}</span>}
+                            {approvalRate != null && <span className={`font-bold ${approvalRate >= 80 ? 'text-ive-green' : approvalRate >= 50 ? 'text-ive-amber' : 'text-ive-red'}`}>{approvalRate}%</span>}
+                          </>) : (<>
+                            <span>성공 {u.success} / 실패 {u.failed}</span>
+                            {u.avgDurationMin > 0 && <span>평균 {fmtDur(u.avgDurationMin)}</span>}
+                          </>)}
+                          <span className="ml-auto text-ive-amber">${fmtCost(u.cost)}</span>
+                        </div>
+                      </button>
+                      {expandedUsers.has(u.userId) && (
+                        <div className="px-3 pb-3 border-t border-ive-border-dark">
+                          {hasVerify ? (<>
+                            {/* 검증 상세 */}
+                            <div className="grid grid-cols-4 gap-1 mt-2 text-center text-xs">
+                              <div><div className="text-ive-text-dim">검증</div><div className="font-bold text-ive-text">{u.verifyTasks}건</div></div>
+                              <div><div className="text-ive-text-dim">승인</div><div className="font-bold text-ive-green">{u.verifyApproved}건</div></div>
+                              <div><div className="text-ive-text-dim">반려</div><div className={`font-bold ${u.verifyRejected > 0 ? 'text-ive-red' : 'text-ive-text'}`}>{u.verifyRejected}건</div></div>
+                              <div><div className="text-ive-text-dim">대기중</div><div className={`font-bold ${u.verifyWaiting >= 5 ? 'text-ive-red' : u.verifyWaiting >= 3 ? 'text-ive-amber' : 'text-ive-text'}`}>{u.verifyWaiting}건</div></div>
+                            </div>
+                            <div className="grid grid-cols-3 gap-1 mt-2 text-center text-xs">
+                              <div><div className="text-ive-text-dim">검증시간</div><div className="font-bold text-ive-text">{u.avgVerifyMin > 0 ? fmtDur(u.avgVerifyMin) : '-'}</div></div>
+                              <div><div className="text-ive-text-dim">검증대기</div><div className={`font-bold ${u.verifyAvgWaitMin > 60 ? 'text-ive-red' : u.verifyAvgWaitMin > 30 ? 'text-ive-amber' : 'text-ive-text'}`}>{u.verifyAvgWaitMin > 0 ? fmtDur(u.verifyAvgWaitMin) : '-'}</div></div>
+                              <div><div className="text-ive-text-dim">배정이슈</div><div className="font-bold text-ive-text">{u.tasks}건</div></div>
+                            </div>
+                          </>) : (<>
+                            {/* 검증 데이터 없을 때 — 이슈 배정 상세 */}
+                            <div className="grid grid-cols-3 gap-1 mt-2 text-center text-xs">
+                              <div><div className="text-ive-text-dim">성공</div><div className="font-bold text-ive-green">{u.success}건</div></div>
+                              <div><div className="text-ive-text-dim">실패</div><div className={`font-bold ${u.failed > 0 ? 'text-ive-red' : 'text-ive-text'}`}>{u.failed}건</div></div>
+                              <div><div className="text-ive-text-dim">이슈</div><div className="font-bold text-ive-text">{u.issueCount}건</div></div>
+                            </div>
+                            {u.avgWaitMin > 0 && (
+                              <div className="mt-2 text-center text-xs">
+                                <span className="text-ive-text-dim">이슈 배정 → 처리 대기 평균 </span>
+                                <span className="font-bold text-ive-cyan">{fmtDur(u.avgWaitMin)}</span>
+                              </div>
+                            )}
+                          </>)}
+                          {/* 추이 스파크라인 */}
+                          {(() => {
+                            const ut = data.userTrend?.find(t => t.userId === u.userId)
+                            if (!ut || ut.daily.length < 2) return null
+                            const hasVerifyData = ut.daily.some(d => (d.verified ?? 0) > 0)
+                            return (
+                              <div className="mt-2 bg-ive-bg-deep rounded-lg p-2">
+                                <div className={`grid ${hasVerifyData ? 'grid-cols-3' : 'grid-cols-2'} gap-2`}>
+                                  <div className="flex items-center gap-1.5"><span className="text-xs text-ive-text-dim shrink-0">이슈</span><Sparkline data={ut.daily.map(d => d.tasks ?? 0)} width={80} height={20} color="auto" /></div>
+                                  {hasVerifyData && <div className="flex items-center gap-1.5"><span className="text-xs text-ive-text-dim shrink-0">검증</span><Sparkline data={ut.daily.map(d => d.verified ?? 0)} width={80} height={20} color="green" /></div>}
+                                  <div className="flex items-center gap-1.5"><span className="text-xs text-ive-text-dim shrink-0">비용</span><Sparkline data={ut.daily.map(d => d.cost ?? 0)} width={80} height={20} color="amber" /></div>
+                                </div>
+                              </div>
+                            )
+                          })()}
+                        </div>
+                      )}
                     </div>
                   )
                 })}

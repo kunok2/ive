@@ -47,8 +47,8 @@ function ToolBadge({ category, size }: { category: ToolCategory; size: 'sm' | 'm
 export default function AgentAvatar({ avatar, size = 'md', className = '', toolBadge }: Props) {
   const wh = sizeMap[size].split(' ').slice(0, 2).join(' ')
 
-  // URL인 경우 (GitLab 아바타)
-  if (avatar.startsWith('http')) {
+  // URL인 경우 (GitLab 아바타, 업로드된 IVE 사용자 사진, data URL)
+  if (avatar.startsWith('http') || avatar.startsWith('/') || avatar.startsWith('data:')) {
     return (
       <div className={`relative shrink-0 ${wh} ${className}`}>
         <img

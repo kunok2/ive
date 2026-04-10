@@ -176,6 +176,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
       checkInterval: Number(checkInterval) || 10,
       lastCheckedAt: existing?.lastCheckedAt ?? null,
       lastScannedIssueCount: existing?.lastScannedIssueCount ?? null,
+      lastVerifyWaitingCount: existing?.lastVerifyWaitingCount ?? null,
       scannerActive: existing?.scannerActive ?? false,
       lastError: existing?.lastError ?? null,
       lastErrorAt: existing?.lastErrorAt ?? null,

@@ -53,6 +53,7 @@ function initSchema(db: Database.Database) {
       check_interval INTEGER NOT NULL DEFAULT 10,
       last_checked_at TEXT,
       last_scanned_issue_count INTEGER,
+      last_verify_waiting_count INTEGER,
       scanner_active INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -102,6 +103,7 @@ function initSchema(db: Database.Database) {
       timestamp TEXT NOT NULL,
       running INTEGER NOT NULL DEFAULT 0,
       waiting INTEGER NOT NULL DEFAULT 0,
+      verify_waiting INTEGER NOT NULL DEFAULT 0,
       completed INTEGER NOT NULL DEFAULT 0,
       failed INTEGER NOT NULL DEFAULT 0,
       total_tokens INTEGER NOT NULL DEFAULT 0,
@@ -116,6 +118,7 @@ function initSchema(db: Database.Database) {
       date TEXT NOT NULL,
       avg_running REAL NOT NULL DEFAULT 0,
       avg_waiting REAL NOT NULL DEFAULT 0,
+      avg_verify_waiting REAL NOT NULL DEFAULT 0,
       avg_completed REAL NOT NULL DEFAULT 0,
       avg_failed REAL NOT NULL DEFAULT 0,
       avg_total_tokens REAL NOT NULL DEFAULT 0,
@@ -127,8 +130,8 @@ function initSchema(db: Database.Database) {
 
     CREATE TABLE IF NOT EXISTS token_pricing (
       id TEXT PRIMARY KEY,
-      cli_name TEXT NOT NULL UNIQUE,
-      model_name TEXT NOT NULL,
+      cli_name TEXT NOT NULL,
+      model_name TEXT NOT NULL UNIQUE,
       input_price REAL NOT NULL,
       output_price REAL NOT NULL,
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -185,6 +188,9 @@ function initSchema(db: Database.Database) {
     }
     if (!tableInfo.some((col: any) => col.name === 'last_scanned_issue_count')) {
       db.exec("ALTER TABLE projects ADD COLUMN last_scanned_issue_count INTEGER")
+    }
+    if (!tableInfo.some((col: any) => col.name === 'last_verify_waiting_count')) {
+      db.exec("ALTER TABLE projects ADD COLUMN last_verify_waiting_count INTEGER")
     }
     if (!tableInfo.some((col: any) => col.name === 'scanner_active')) {
       db.exec("ALTER TABLE projects ADD COLUMN scanner_active INTEGER NOT NULL DEFAULT 1")
@@ -543,6 +549,20 @@ function initSchema(db: Database.Database) {
     }
   } catch (e) { console.warn('[DB] Activity logs migration skipped:', e) }
 
+  // stat_snapshots: verify_waiting 컬럼 추가
+  try {
+    const snapCols = db.prepare("PRAGMA table_info(stat_snapshots)").all() as any[]
+    if (!snapCols.some((c: any) => c.name === 'verify_waiting')) {
+      db.exec("ALTER TABLE stat_snapshots ADD COLUMN verify_waiting INTEGER NOT NULL DEFAULT 0")
+      console.log('[DB] stat_snapshots: added verify_waiting column')
+    }
+    const summaryCols = db.prepare("PRAGMA table_info(stat_daily_summaries)").all() as any[]
+    if (!summaryCols.some((c: any) => c.name === 'avg_verify_waiting')) {
+      db.exec("ALTER TABLE stat_daily_summaries ADD COLUMN avg_verify_waiting REAL NOT NULL DEFAULT 0")
+      console.log('[DB] stat_daily_summaries: added avg_verify_waiting column')
+    }
+  } catch (e) { console.warn('[DB] stat_snapshots migration skipped:', e) }
+
   // Chat sessions & messages (Issue Chat feature)
   db.exec(`
     CREATE TABLE IF NOT EXISTS chat_sessions (
@@ -608,17 +628,57 @@ function initSchema(db: Database.Database) {
     }
   } catch (e) { console.error('[DB] agents migration failed:', e) }
 
+  // token_pricing 마이그레이션: cli_name UNIQUE → model_name UNIQUE (모델별 다중 단가 지원)
+  try {
+    const tpSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='token_pricing'").get() as any
+    if (tpSql && tpSql.sql && tpSql.sql.includes('cli_name TEXT NOT NULL UNIQUE')) {
+      console.log('[DB] Migrating token_pricing: cli_name UNIQUE → model_name UNIQUE')
+      // 기존 CLI당 1개 데이터는 관리자가 수정했을 수 있으므로 inputPrice/outputPrice 보존
+      const oldRows = db.prepare('SELECT * FROM token_pricing').all() as any[]
+      db.pragma('foreign_keys = OFF')
+      db.exec('DROP TABLE token_pricing')
+      db.exec(`CREATE TABLE token_pricing (
+        id TEXT PRIMARY KEY,
+        cli_name TEXT NOT NULL,
+        model_name TEXT NOT NULL UNIQUE,
+        input_price REAL NOT NULL,
+        output_price REAL NOT NULL,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )`)
+      db.pragma('foreign_keys = ON')
+      // 기존 관리자 설정값 복원 (cli_name → 'model'/'human', 중복 model_name 방지)
+      const seen = new Set<string>()
+      const ins = db.prepare('INSERT OR IGNORE INTO token_pricing (id, cli_name, model_name, input_price, output_price, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
+      for (const r of oldRows) {
+        const modelLower = (r.model_name || '').toLowerCase()
+        if (seen.has(modelLower)) continue
+        seen.add(modelLower)
+        const isHuman = r.cli_name === 'human'
+        const newId = isHuman ? 'tp-human' : `tp-${(r.model_name || 'default').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+$/, '')}`
+        ins.run(newId, isHuman ? 'human' : 'model', r.model_name, r.input_price, r.output_price, r.updated_at || new Date().toISOString())
+      }
+      console.log('[DB] token_pricing migration complete')
+    }
+  } catch (e) { console.error('[DB] token_pricing migration failed:', e) }
+
   seedAdmin(db)
   seedTokenPricing(db)
 }
 
 function seedTokenPricing(db: Database.Database) {
   const defaults = [
-    { id: 'tp-claude', cli: 'claude', model: 'Claude Sonnet 4.6', input: 3.00, output: 15.00 },
-    { id: 'tp-gemini', cli: 'gemini', model: 'Gemini 2.5 Pro', input: 1.25, output: 10.00 },
-    { id: 'tp-codex', cli: 'codex', model: 'GPT-4.1', input: 2.00, output: 8.00 },
-    { id: 'tp-opencode', cli: 'opencode', model: 'Claude Sonnet 4.6', input: 3.00, output: 15.00 },
-    { id: 'tp-human', cli: 'human', model: 'validator (monthly)', input: 5000.00, output: 0.00 },
+    // Anthropic Claude
+    { id: 'tp-sonnet', cli: 'model', model: 'Claude Sonnet 4.6', input: 3.00, output: 15.00 },
+    { id: 'tp-opus',   cli: 'model', model: 'Claude Opus 4',     input: 15.00, output: 75.00 },
+    { id: 'tp-haiku',  cli: 'model', model: 'Claude Haiku 4.5',  input: 0.80, output: 4.00 },
+    // Google Gemini
+    { id: 'tp-gemini-pro',   cli: 'model', model: 'Gemini 2.5 Pro',   input: 1.25, output: 10.00 },
+    { id: 'tp-gemini-flash', cli: 'model', model: 'Gemini 2.5 Flash', input: 0.075, output: 0.30 },
+    // OpenAI
+    { id: 'tp-gpt41', cli: 'model', model: 'GPT-4.1',  input: 2.00, output: 8.00 },
+    { id: 'tp-o3',    cli: 'model', model: 'o3',       input: 10.00, output: 40.00 },
+    // 사람 (월급)
+    { id: 'tp-human', cli: 'human', model: '관리자 (월급 USD)', input: 5000.00, output: 0.00 },
   ]
   const stmt = db.prepare('INSERT OR IGNORE INTO token_pricing (id, cli_name, model_name, input_price, output_price) VALUES (?, ?, ?, ?, ?)')
   for (const d of defaults) {
@@ -709,7 +769,9 @@ type ProjectRow = {
   access_token: string; color: string; created_at: string;
   label_target: string; show_tool_usage: number;
   check_interval: number; last_checked_at: string | null;
-  last_scanned_issue_count: number | null; scanner_active: number;
+  last_scanned_issue_count: number | null;
+  last_verify_waiting_count: number | null;
+  scanner_active: number;
   last_error: string | null; last_error_at: string | null;
   sort_order: number; avatar_url: string;
   snapshot_interval: number; sparkline_points: number; stats_retention: number;
@@ -739,6 +801,7 @@ function mapProject(r: ProjectRow): Project {
     checkInterval: r.check_interval,
     lastCheckedAt: r.last_checked_at,
     lastScannedIssueCount: r.last_scanned_issue_count,
+    lastVerifyWaitingCount: r.last_verify_waiting_count,
     scannerActive: r.scanner_active === 1,
     lastError: r.last_error ?? null,
     lastErrorAt: r.last_error_at ?? null,
@@ -829,8 +892,8 @@ export function updateProjectSortOrders(userId: string, orders: { id: string; so
   tx()
 }
 
-export function updateProjectLastChecked(id: string, timestamp: string, issueCount: number) {
-  getDb().prepare('UPDATE projects SET last_checked_at = ?, last_scanned_issue_count = ?, last_error = NULL, last_error_at = NULL WHERE id = ?').run(timestamp, issueCount, id)
+export function updateProjectLastChecked(id: string, timestamp: string, issueCount: number, verifyWaitingCount: number = 0) {
+  getDb().prepare('UPDATE projects SET last_checked_at = ?, last_scanned_issue_count = ?, last_verify_waiting_count = ?, last_error = NULL, last_error_at = NULL WHERE id = ?').run(timestamp, issueCount, verifyWaitingCount, id)
 }
 
 export function updateProjectError(id: string, error: string) {
@@ -942,6 +1005,22 @@ export function getProjectAssignmentCounts(userId: string): Record<string, numbe
   `).all(userId) as { project_id: string; cnt: number }[]
   const map: Record<string, number> = {}
   for (const r of rows) map[r.project_id] = r.cnt
+  return map
+}
+
+/** 프로젝트별 현재 배정된 에이전트 ID 목록 (reports용) */
+export function getProjectAssignmentAgentIds(userId: string): Record<string, string[]> {
+  const rows = getDb().prepare(`
+    SELECT pa.project_id, pa.agent_id
+    FROM project_assignments pa
+    JOIN projects p ON p.id = pa.project_id
+    WHERE p.user_id = ?
+  `).all(userId) as { project_id: string; agent_id: string }[]
+  const map: Record<string, string[]> = {}
+  for (const r of rows) {
+    if (!map[r.project_id]) map[r.project_id] = []
+    map[r.project_id].push(r.agent_id)
+  }
   return map
 }
 
@@ -1220,8 +1299,8 @@ export function getYesterdayCompletedCount(entityType: 'project' | 'agent', enti
 
 export function createSnapshot(s: StatSnapshot) {
   getDb().prepare(
-    'INSERT INTO stat_snapshots (id, entity_type, entity_id, timestamp, running, waiting, completed, failed, total_tokens, cost_usd) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-  ).run(s.id, s.entityType, s.entityId, s.timestamp, s.running, s.waiting, s.completed, s.failed, s.totalTokens, s.costUsd)
+    'INSERT INTO stat_snapshots (id, entity_type, entity_id, timestamp, running, waiting, verify_waiting, completed, failed, total_tokens, cost_usd) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(s.id, s.entityType, s.entityId, s.timestamp, s.running, s.waiting, s.verifyWaiting, s.completed, s.failed, s.totalTokens, s.costUsd)
 }
 
 export function getSnapshots(entityType: 'project' | 'agent', entityId: string, limit: number = 60): StatSnapshot[] {
@@ -1234,6 +1313,7 @@ export function getSnapshots(entityType: 'project' | 'agent', entityId: string, 
   return rows.map(r => ({
     id: r.id, entityType: r.entity_type, entityId: r.entity_id,
     timestamp: r.timestamp, running: r.running, waiting: r.waiting,
+    verifyWaiting: r.verify_waiting ?? 0,
     completed: r.completed, failed: r.failed,
     totalTokens: r.total_tokens, costUsd: r.cost_usd,
   })).reverse()
@@ -1245,6 +1325,7 @@ export function getDailyAvgSnapshots(entityType: 'project' | 'agent', entityId: 
       DATE(timestamp) as day,
       ROUND(AVG(running), 2) as running,
       ROUND(AVG(waiting), 2) as waiting,
+      ROUND(AVG(verify_waiting), 2) as verify_waiting,
       ROUND(AVG(completed), 2) as completed,
       ROUND(AVG(failed), 2) as failed,
       ROUND(AVG(total_tokens), 2) as total_tokens,
@@ -1262,6 +1343,7 @@ export function getDailyAvgSnapshots(entityType: 'project' | 'agent', entityId: 
     timestamp: r.day,
     running: r.running,
     waiting: r.waiting,
+    verifyWaiting: r.verify_waiting ?? 0,
     completed: r.completed,
     failed: r.failed,
     totalTokens: r.total_tokens,
@@ -1275,6 +1357,7 @@ export function getHourlyAvgSnapshots(entityType: 'project' | 'agent', entityId:
       STRFTIME('%Y-%m-%d %H:00', timestamp) as hour,
       ROUND(AVG(running), 2) as running,
       ROUND(AVG(waiting), 2) as waiting,
+      ROUND(AVG(verify_waiting), 2) as verify_waiting,
       ROUND(AVG(completed), 2) as completed,
       ROUND(AVG(failed), 2) as failed,
       ROUND(AVG(total_tokens), 2) as total_tokens,
@@ -1292,6 +1375,7 @@ export function getHourlyAvgSnapshots(entityType: 'project' | 'agent', entityId:
     timestamp: r.hour,
     running: r.running,
     waiting: r.waiting,
+    verifyWaiting: r.verify_waiting ?? 0,
     completed: r.completed,
     failed: r.failed,
     totalTokens: r.total_tokens,
@@ -1310,6 +1394,7 @@ export function aggregateSnapshotsToDailySummaries() {
       DATE(timestamp, '+9 hours') as kst_date,
       ROUND(AVG(running), 2) as avg_running,
       ROUND(AVG(waiting), 2) as avg_waiting,
+      ROUND(AVG(verify_waiting), 2) as avg_verify_waiting,
       ROUND(AVG(completed), 2) as avg_completed,
       ROUND(AVG(failed), 2) as avg_failed,
       ROUND(AVG(total_tokens), 2) as avg_total_tokens,
@@ -1320,11 +1405,12 @@ export function aggregateSnapshotsToDailySummaries() {
   `).all() as any[]
 
   const upsert = db.prepare(`
-    INSERT INTO stat_daily_summaries (id, entity_type, entity_id, date, avg_running, avg_waiting, avg_completed, avg_failed, avg_total_tokens, avg_cost_usd, sample_count)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO stat_daily_summaries (id, entity_type, entity_id, date, avg_running, avg_waiting, avg_verify_waiting, avg_completed, avg_failed, avg_total_tokens, avg_cost_usd, sample_count)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(entity_type, entity_id, date) DO UPDATE SET
       avg_running = excluded.avg_running,
       avg_waiting = excluded.avg_waiting,
+      avg_verify_waiting = excluded.avg_verify_waiting,
       avg_completed = excluded.avg_completed,
       avg_failed = excluded.avg_failed,
       avg_total_tokens = excluded.avg_total_tokens,
@@ -1337,7 +1423,8 @@ export function aggregateSnapshotsToDailySummaries() {
       upsert.run(
         `ds-${r.entity_type}-${r.entity_id}-${r.kst_date}`,
         r.entity_type, r.entity_id, r.kst_date,
-        r.avg_running, r.avg_waiting, r.avg_completed, r.avg_failed,
+        r.avg_running, r.avg_waiting, r.avg_verify_waiting,
+        r.avg_completed, r.avg_failed,
         r.avg_total_tokens, r.avg_cost_usd, r.sample_count
       )
     }
@@ -1351,69 +1438,93 @@ export function aggregateSnapshotsToDailySummaries() {
 
 /* stat_daily_summaries는 적재량이 적으므로 영구 보관 — 연도별 히스토리 조회용 */
 
-/** 기간 내 일별 대기건수 추이 (전체 + 프로젝트별) — daily_summaries 우선, raw 스냅샷 보완 */
+/** 기간 내 일별 대기건수 추이 (전체 + 프로젝트별) — daily_summaries 우선, raw 스냅샷 보완
+ *  각 프로젝트에 대해 waiting(처리대기)과 verifyWaiting(검증대기)을 분리해서 반환.
+ *  total = waiting + verifyWaiting (화면 표시용 전체 대기건수)
+ */
 export function getDailyWaitingTrend(startDate: string, endDate: string): {
-  daily: { date: string; total: number; byProject: { projectId: string; projectName: string; projectColor: string; waiting: number }[] }[]
+  daily: { date: string; total: number; totalWaiting: number; totalVerifyWaiting: number; byProject: { projectId: string; projectName: string; projectColor: string; waiting: number; verifyWaiting: number }[] }[]
 } {
   const db = getDb()
 
-  // 프로젝트 목록 가져오기
   const projects = db.prepare('SELECT id, name, color FROM projects').all() as { id: string; name: string; color: string }[]
   const projectMap = new Map(projects.map(p => [p.id, { name: p.name, color: p.color }]))
 
-  // 1. daily_summaries에서 장기 데이터 조회 (KST 날짜 기준)
+  // 1. daily_summaries (장기 데이터)
   const summaryRows = db.prepare(`
-    SELECT date as day, entity_id as project_id, avg_waiting
+    SELECT date as day, entity_id as project_id, avg_waiting, avg_verify_waiting
     FROM stat_daily_summaries
     WHERE entity_type = 'project'
       AND date >= ? AND date < ?
     ORDER BY day ASC
-  `).all(startDate, endDate) as { day: string; project_id: string; avg_waiting: number }[]
+  `).all(startDate, endDate) as { day: string; project_id: string; avg_waiting: number; avg_verify_waiting: number }[]
 
-  // 2. raw 스냅샷에서 최근 데이터 조회 (KST 기준 날짜 변환)
+  // 2. raw 스냅샷 (지난 날 — 평균)
+  const kstToday = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
   const snapshotRows = db.prepare(`
     SELECT
       DATE(timestamp, '+9 hours') as day,
       entity_id as project_id,
-      ROUND(AVG(waiting)) as avg_waiting
+      ROUND(AVG(waiting)) as avg_waiting,
+      ROUND(AVG(verify_waiting)) as avg_verify_waiting
     FROM stat_snapshots
     WHERE entity_type = 'project'
       AND DATE(timestamp, '+9 hours') >= ? AND DATE(timestamp, '+9 hours') < ?
+      AND DATE(timestamp, '+9 hours') < ?
     GROUP BY DATE(timestamp, '+9 hours'), entity_id
     ORDER BY day ASC
-  `).all(startDate, endDate) as { day: string; project_id: string; avg_waiting: number }[]
+  `).all(startDate, endDate, kstToday) as { day: string; project_id: string; avg_waiting: number; avg_verify_waiting: number }[]
 
-  // 날짜별 그룹화 (스냅샷 데이터가 daily_summaries보다 최신이면 덮어씀)
-  const dayMap = new Map<string, Map<string, number>>()
+  // 오늘: 최신 스냅샷 값
+  const latestTodayRows = db.prepare(`
+    SELECT s.entity_id as project_id, s.waiting, s.verify_waiting
+    FROM stat_snapshots s
+    INNER JOIN (
+      SELECT entity_id, MAX(timestamp) as max_ts
+      FROM stat_snapshots
+      WHERE entity_type = 'project'
+        AND DATE(timestamp, '+9 hours') = ?
+      GROUP BY entity_id
+    ) latest ON s.entity_id = latest.entity_id AND s.timestamp = latest.max_ts
+    WHERE s.entity_type = 'project'
+  `).all(kstToday) as { project_id: string; waiting: number; verify_waiting: number }[]
+
+  // 날짜별 그룹화
+  const dayMap = new Map<string, Map<string, { waiting: number; verifyWaiting: number }>>()
   for (const r of summaryRows) {
     if (!dayMap.has(r.day)) dayMap.set(r.day, new Map())
-    dayMap.get(r.day)!.set(r.project_id, r.avg_waiting)
+    dayMap.get(r.day)!.set(r.project_id, { waiting: r.avg_waiting, verifyWaiting: r.avg_verify_waiting ?? 0 })
   }
   for (const r of snapshotRows) {
     if (!dayMap.has(r.day)) dayMap.set(r.day, new Map())
-    dayMap.get(r.day)!.set(r.project_id, r.avg_waiting)
+    dayMap.get(r.day)!.set(r.project_id, { waiting: r.avg_waiting, verifyWaiting: r.avg_verify_waiting ?? 0 })
+  }
+  if (latestTodayRows.length > 0 && kstToday >= startDate && kstToday < endDate) {
+    if (!dayMap.has(kstToday)) dayMap.set(kstToday, new Map())
+    for (const r of latestTodayRows) {
+      dayMap.get(kstToday)!.set(r.project_id, { waiting: r.waiting, verifyWaiting: r.verify_waiting ?? 0 })
+    }
   }
 
-  // 모든 날짜 버킷 생성
-  const daily: { date: string; total: number; byProject: { projectId: string; projectName: string; projectColor: string; waiting: number }[] }[] = []
+  const daily: { date: string; total: number; totalWaiting: number; totalVerifyWaiting: number; byProject: { projectId: string; projectName: string; projectColor: string; waiting: number; verifyWaiting: number }[] }[] = []
   const cur = new Date(startDate)
   const end = new Date(endDate)
   while (cur < end) {
     const dateStr = cur.toISOString().slice(0, 10)
     const projData = dayMap.get(dateStr)
-    const byProject: { projectId: string; projectName: string; projectColor: string; waiting: number }[] = []
-    let total = 0
+    const byProject: { projectId: string; projectName: string; projectColor: string; waiting: number; verifyWaiting: number }[] = []
+    let totalWaiting = 0
+    let totalVerifyWaiting = 0
 
-    // 모든 프로젝트에 대해 데이터가 있으면 사용, 없으면 0으로 채움
     for (const [pid, info] of projectMap) {
-      const waiting = projData?.get(pid) ?? 0
-      byProject.push({ projectId: pid, projectName: info.name, projectColor: info.color, waiting })
-      total += waiting
+      const d = projData?.get(pid) ?? { waiting: 0, verifyWaiting: 0 }
+      byProject.push({ projectId: pid, projectName: info.name, projectColor: info.color, waiting: d.waiting, verifyWaiting: d.verifyWaiting })
+      totalWaiting += d.waiting
+      totalVerifyWaiting += d.verifyWaiting
     }
 
-    // 프로젝트 이름순 정렬
     byProject.sort((a, b) => a.projectName.localeCompare(b.projectName))
-    daily.push({ date: dateStr, total, byProject })
+    daily.push({ date: dateStr, total: totalWaiting + totalVerifyWaiting, totalWaiting, totalVerifyWaiting, byProject })
     cur.setDate(cur.getDate() + 1)
   }
 
@@ -1438,7 +1549,8 @@ export function getDailyWaitingTrendByAgent(startDate: string, endDate: string):
     ORDER BY day ASC
   `).all(startDate, endDate) as { day: string; agent_id: string; avg_waiting: number }[]
 
-  // 2. raw 스냅샷에서 최근 데이터 조회
+  // 2. raw 스냅샷에서 최근 데이터 조회 (오늘 제외 — 오늘은 최신 값 사용)
+  const kstToday = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
   const snapshotRows = db.prepare(`
     SELECT
       DATE(timestamp, '+9 hours') as day,
@@ -1447,9 +1559,24 @@ export function getDailyWaitingTrendByAgent(startDate: string, endDate: string):
     FROM stat_snapshots
     WHERE entity_type = 'agent'
       AND DATE(timestamp, '+9 hours') >= ? AND DATE(timestamp, '+9 hours') < ?
+      AND DATE(timestamp, '+9 hours') < ?
     GROUP BY DATE(timestamp, '+9 hours'), entity_id
     ORDER BY day ASC
-  `).all(startDate, endDate) as { day: string; agent_id: string; avg_waiting: number }[]
+  `).all(startDate, endDate, kstToday) as { day: string; agent_id: string; avg_waiting: number }[]
+
+  // 오늘 날짜: 각 에이전트의 가장 최근 스냅샷 값
+  const latestTodayRows = db.prepare(`
+    SELECT s.entity_id as agent_id, s.waiting
+    FROM stat_snapshots s
+    INNER JOIN (
+      SELECT entity_id, MAX(timestamp) as max_ts
+      FROM stat_snapshots
+      WHERE entity_type = 'agent'
+        AND DATE(timestamp, '+9 hours') = ?
+      GROUP BY entity_id
+    ) latest ON s.entity_id = latest.entity_id AND s.timestamp = latest.max_ts
+    WHERE s.entity_type = 'agent'
+  `).all(kstToday) as { agent_id: string; waiting: number }[]
 
   // 날짜별 그룹화
   const dayMap = new Map<string, Map<string, number>>()
@@ -1460,6 +1587,13 @@ export function getDailyWaitingTrendByAgent(startDate: string, endDate: string):
   for (const r of snapshotRows) {
     if (!dayMap.has(r.day)) dayMap.set(r.day, new Map())
     dayMap.get(r.day)!.set(r.agent_id, r.avg_waiting)
+  }
+  // 오늘 데이터는 최신 스냅샷으로 덮어쓰기
+  if (latestTodayRows.length > 0 && kstToday >= startDate && kstToday < endDate) {
+    if (!dayMap.has(kstToday)) dayMap.set(kstToday, new Map())
+    for (const r of latestTodayRows) {
+      dayMap.get(kstToday)!.set(r.agent_id, r.waiting)
+    }
   }
 
   // 모든 날짜 버킷 생성
@@ -1527,12 +1661,7 @@ function mapPricing(r: any): TokenPricing {
 }
 
 export function getAllTokenPricing(): TokenPricing[] {
-  return (getDb().prepare('SELECT * FROM token_pricing ORDER BY cli_name ASC').all() as any[]).map(mapPricing)
-}
-
-export function getTokenPricingByCli(cliName: string): TokenPricing | null {
-  const r = getDb().prepare('SELECT * FROM token_pricing WHERE cli_name = ?').get(cliName) as any
-  return r ? mapPricing(r) : null
+  return (getDb().prepare('SELECT * FROM token_pricing ORDER BY cli_name ASC, model_name ASC').all() as any[]).map(mapPricing)
 }
 
 export function getTokenPricingByModel(modelName: string): TokenPricing | null {
@@ -1540,16 +1669,53 @@ export function getTokenPricingByModel(modelName: string): TokenPricing | null {
   return r ? mapPricing(r) : null
 }
 
+/** 실행 모델명으로 단가를 검색 — 정확 매칭 후 키워드 매칭 폴백 */
+export function findTokenPricingForModel(executionModelName: string): TokenPricing | null {
+  // 1) 정확 매칭 (case-insensitive)
+  const exact = getTokenPricingByModel(executionModelName)
+  if (exact) return exact
+
+  // 2) 키워드 매칭: DB 모델명의 핵심 키워드가 실행 모델명에 포함되는지 확인
+  const lower = executionModelName.toLowerCase()
+  const all = getAllTokenPricing().filter(p => p.cliName !== 'human')
+
+  // 구별력 있는 키워드 우선 매칭 (opus, haiku 등 → sonnet, pro 등보다 먼저)
+  const generic = new Set(['claude', 'gemini', 'openai', 'opencode', 'gpt', 'pro', 'the', 'cli'])
+  type Match = { pricing: TokenPricing; specificity: number }
+  const matches: Match[] = []
+
+  for (const p of all) {
+    const keywords = p.modelName.toLowerCase().split(/[\s.\-]+/).filter(k => k.length >= 2)
+    const distinctive = keywords.filter(k => !generic.has(k))
+    const matched = distinctive.filter(k => lower.includes(k))
+    if (matched.length > 0) {
+      matches.push({ pricing: p, specificity: matched.length })
+    }
+  }
+
+  if (matches.length > 0) {
+    matches.sort((a, b) => b.specificity - a.specificity)
+    return matches[0].pricing
+  }
+
+  return null
+}
+
 export function upsertTokenPricing(p: TokenPricing) {
   getDb().prepare(`
     INSERT INTO token_pricing (id, cli_name, model_name, input_price, output_price, updated_at)
     VALUES (?, ?, ?, ?, ?, ?)
-    ON CONFLICT(cli_name) DO UPDATE SET
+    ON CONFLICT(id) DO UPDATE SET
+      cli_name = excluded.cli_name,
       model_name = excluded.model_name,
       input_price = excluded.input_price,
       output_price = excluded.output_price,
       updated_at = excluded.updated_at
   `).run(p.id, p.cliName, p.modelName, p.inputPrice, p.outputPrice, p.updatedAt)
+}
+
+export function deleteTokenPricing(id: string) {
+  getDb().prepare('DELETE FROM token_pricing WHERE id = ?').run(id)
 }
 
 // ── Project Shares (프로젝트 공유) ──
@@ -1637,6 +1803,7 @@ export interface ReportExecution {
   verifiedAt: string | null
   verifyStartedAt: string | null
   rejectedAt: string | null
+  modelName: string | null
   verifierName: string | null
   verifierAvatar: string | null
   assigneeType: string
@@ -1652,7 +1819,7 @@ export function getExecutionsInRange(userId: string, start: string, end: string)
            u.name as developer_name, a.user_id as developer_user_id,
            te.issue_iid, te.issue_title, te.status,
            te.started_at, te.ended_at, te.input_tokens, te.output_tokens, te.cost_usd, te.turns,
-           te.issue_created_at, te.verified_at, te.verify_started_at, te.rejected_at,
+           te.issue_created_at, te.model_name, te.verified_at, te.verify_started_at, te.rejected_at,
            te.assignee_type, te.user_id as te_user_id, te.user_name as te_user_name, te.user_avatar as te_user_avatar,
            te.verifier_name, te.verifier_avatar
     FROM task_executions te
@@ -1674,6 +1841,7 @@ export function getExecutionsInRange(userId: string, start: string, end: string)
     inputTokens: r.input_tokens ?? 0, outputTokens: r.output_tokens ?? 0,
     costUsd: r.cost_usd ?? 0, turns: r.turns ?? 0,
     issueCreatedAt: r.issue_created_at ?? null,
+    modelName: r.model_name ?? null,
     verifiedAt: r.verified_at ?? null,
     verifyStartedAt: r.verify_started_at ?? null,
     rejectedAt: r.rejected_at ?? null,
@@ -1954,7 +2122,7 @@ export function getGlobalExecutionsInRange(start: string, end: string): ReportEx
            u.name as developer_name, a.user_id as developer_user_id,
            te.issue_iid, te.issue_title, te.status,
            te.started_at, te.ended_at, te.input_tokens, te.output_tokens, te.cost_usd, te.turns,
-           te.issue_created_at, te.verified_at, te.verify_started_at, te.rejected_at,
+           te.issue_created_at, te.model_name, te.verified_at, te.verify_started_at, te.rejected_at,
            te.assignee_type, te.verifier_name, te.verifier_avatar
     FROM task_executions te
     JOIN projects p ON p.id = te.project_id
@@ -1974,6 +2142,7 @@ export function getGlobalExecutionsInRange(start: string, end: string): ReportEx
     inputTokens: r.input_tokens ?? 0, outputTokens: r.output_tokens ?? 0,
     costUsd: r.cost_usd ?? 0, turns: r.turns ?? 0,
     issueCreatedAt: r.issue_created_at ?? null,
+    modelName: r.model_name ?? null,
     verifiedAt: r.verified_at ?? null,
     verifyStartedAt: r.verify_started_at ?? null,
     rejectedAt: r.rejected_at ?? null,

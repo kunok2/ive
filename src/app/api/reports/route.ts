@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
-import { getExecutionsInRange, getAllTokenPricing, getDailyWaitingTrend, getDailyWaitingTrendByAgent, getProjectAssignmentCounts, getAgentAssignmentInfo } from '@/lib/db'
-import { resolveExecutionCost } from '@/lib/token-pricing'
+import { getExecutionsInRange, getDailyWaitingTrend, getDailyWaitingTrendByAgent, getProjectAssignmentCounts, getProjectAssignmentAgentIds, getAgentAssignmentInfo } from '@/lib/db'
+import { resolveExecutionCost, getHumanMonthlySalary } from '@/lib/token-pricing'
 import { getKSTTodayString, utcISOToKSTDate, utcISOToKSTMonth } from '@/lib/date-utils'
 
 function getWeekRange(date: Date): { start: string; end: string } {
@@ -88,17 +88,14 @@ export async function GET(req: NextRequest) {
   const execs = getExecutionsInRange(user.id, range.start, range.end)
   const prevExecs = getExecutionsInRange(user.id, prevRange.start, prevRange.end)
   const projectAssignCounts = getProjectAssignmentCounts(user.id)
+  const projectAssignAgentIds = getProjectAssignmentAgentIds(user.id)
   const agentAssignInfo = getAgentAssignmentInfo(user.id)
-  const pricingList = getAllTokenPricing()
-  const pricingMap: Record<string, { input: number; output: number }> = {}
-  for (const p of pricingList) {
-    pricingMap[p.cliName] = { input: p.inputPrice, output: p.outputPrice }
-  }
+  const humanSalary = getHumanMonthlySalary()
 
   // Duration helper (minutes)
   function durationMin(startedAt: string, endedAt: string | null): number {
     if (!endedAt) return 0
-    return (new Date(endedAt).getTime() - new Date(startedAt).getTime()) / 60000
+    return Math.max(0, (new Date(endedAt).getTime() - new Date(startedAt).getTime()) / 60000)
   }
 
   // 대기시간 = issue_created_at(IVE-S 레이블 최초 감지 시각) → started_at(IVE-D, 에이전트 시작 시각)
@@ -114,7 +111,7 @@ export async function GET(req: NextRequest) {
   const avgDurationMin = finishedCount > 0 ? totalDurationMin / finishedCount : 0
   const totalInputTokens = execs.reduce((s, e) => s + e.inputTokens, 0)
   const totalOutputTokens = execs.reduce((s, e) => s + e.outputTokens, 0)
-  const totalCost = execs.reduce((s, e) => s + resolveExecutionCost(e, pricingMap), 0)
+  const totalCost = execs.reduce((s, e) => s + resolveExecutionCost(e, humanSalary), 0)
   const successRate = totalTasks > 0 ? (successCount / (successCount + failedCount || 1)) * 100 : 0
 
   // 이전 기간 요약
@@ -123,7 +120,7 @@ export async function GET(req: NextRequest) {
   const prevFailedCount = prevExecs.filter(e => e.status === 'failed').length
   const prevTotalDurationMin = prevExecs.reduce((s, e) => s + durationMin(e.startedAt, e.endedAt), 0)
   const prevFinished = prevSuccessCount + prevFailedCount
-  const prevTotalCost = prevExecs.reduce((s, e) => s + resolveExecutionCost(e, pricingMap), 0)
+  const prevTotalCost = prevExecs.reduce((s, e) => s + resolveExecutionCost(e, humanSalary), 0)
   const prevSuccessRate = prevTotalTasks > 0 ? (prevSuccessCount / (prevFinished || 1)) * 100 : 0
 
   // 이전 기간 프로젝트별
@@ -135,7 +132,7 @@ export async function GET(req: NextRequest) {
   const prevByProject = Array.from(prevProjectMap.entries()).map(([pid, pExecs]) => ({
     projectId: pid, projectName: pExecs[0].projectName,
     tasks: pExecs.length,
-    cost: Math.round(pExecs.reduce((s, e) => s + resolveExecutionCost(e, pricingMap), 0) * 100) / 100,
+    cost: Math.round(pExecs.reduce((s, e) => s + resolveExecutionCost(e, humanSalary), 0) * 100) / 100,
   }))
 
   // 이전 기간 작업자별
@@ -147,7 +144,7 @@ export async function GET(req: NextRequest) {
   const prevByAgent = Array.from(prevAgentMap.entries()).map(([aid, aExecs]) => ({
     agentId: aid, agentName: aExecs[0].agentName,
     tasks: aExecs.length,
-    cost: Math.round(aExecs.reduce((s, e) => s + resolveExecutionCost(e, pricingMap), 0) * 100) / 100,
+    cost: Math.round(aExecs.reduce((s, e) => s + resolveExecutionCost(e, humanSalary), 0) * 100) / 100,
   }))
 
   // 이전 기간 사용자별
@@ -161,7 +158,7 @@ export async function GET(req: NextRequest) {
     userId: uid, userName: uExecs[0].developerName,
     tasks: uExecs.length,
     issueCount: new Set(uExecs.map(e => `${e.projectId}:${e.issueIid}`)).size,
-    cost: Math.round(uExecs.reduce((s, e) => s + resolveExecutionCost(e, pricingMap), 0) * 100) / 100,
+    cost: Math.round(uExecs.reduce((s, e) => s + resolveExecutionCost(e, humanSalary), 0) * 100) / 100,
   }))
 
   // 이전 기간 일별 트렌드 — 전체 기간 버킷 채움 (waitAvg, procAvg 포함)
@@ -173,7 +170,7 @@ export async function GET(req: NextRequest) {
     if (!prevDayMap.has(key)) prevDayMap.set(key, { tasks: 0, cost: 0, waitTimes: [], procTimes: [], verifyTimes: [] })
     const d = prevDayMap.get(key)!
     d.tasks++
-    d.cost += resolveExecutionCost(e, pricingMap)
+    d.cost += resolveExecutionCost(e, humanSalary)
     if ((e.status === 'success' || e.status === 'failed') && e.endedAt) {
       const proc = durationMin(e.startedAt, e.endedAt)
       if (proc > 0) d.procTimes.push(proc)
@@ -216,7 +213,7 @@ export async function GET(req: NextRequest) {
     const pFailed = pExecs.filter(e => e.status === 'failed').length
     const pDur = pExecs.reduce((s, e) => s + durationMin(e.startedAt, e.endedAt), 0)
     const pFinished = pSuccess + pFailed
-    const pCost = pExecs.reduce((s, e) => s + resolveExecutionCost(e, pricingMap), 0)
+    const pCost = pExecs.reduce((s, e) => s + resolveExecutionCost(e, humanSalary), 0)
 
     // By agent within project
     const agentMap = new Map<string, typeof pExecs>()
@@ -229,7 +226,7 @@ export async function GET(req: NextRequest) {
       const aFailed = aExecs.filter(e => e.status === 'failed').length
       const aDur = aExecs.reduce((s, e) => s + durationMin(e.startedAt, e.endedAt), 0)
       const aFinished = aSuccess + aFailed
-      const aCost = aExecs.reduce((s, e) => s + resolveExecutionCost(e, pricingMap), 0)
+      const aCost = aExecs.reduce((s, e) => s + resolveExecutionCost(e, humanSalary), 0)
       return {
         agentId: aid, agentName: aExecs[0].agentName, agentAvatar: aExecs[0].agentAvatar, cliName: aExecs[0].cliName,
         tasks: aExecs.length, success: aSuccess, failed: aFailed,
@@ -251,6 +248,7 @@ export async function GET(req: NextRequest) {
       outputTokens: pExecs.reduce((s, e) => s + e.outputTokens, 0),
       cost: Math.round(pCost * 100) / 100,
       assignedAgentCount: projectAssignCounts[pid] ?? 0,
+      assignedAgentIds: projectAssignAgentIds[pid] ?? [],
       byAgent,
     }
   })
@@ -266,7 +264,7 @@ export async function GET(req: NextRequest) {
     const aFailed = aExecs.filter(e => e.status === 'failed').length
     const aDur = aExecs.reduce((s, e) => s + durationMin(e.startedAt, e.endedAt), 0)
     const aFinished = aSuccess + aFailed
-    const aCost = aExecs.reduce((s, e) => s + resolveExecutionCost(e, pricingMap), 0)
+    const aCost = aExecs.reduce((s, e) => s + resolveExecutionCost(e, humanSalary), 0)
     const aInfo = agentAssignInfo[aid]
     return {
       agentId: aid, agentName: aExecs[0].agentName, agentAvatar: aExecs[0].agentAvatar, cliName: aExecs[0].cliName,
@@ -291,24 +289,29 @@ export async function GET(req: NextRequest) {
       verifierMap.get(e.verifierName)!.push(e)
     }
   }
-  // verifierName → { tasks, avgVerifyMin, avgWaitMin } 룩업맵
-  const verifierLookup = new Map<string, { tasks: number; avgVerifyMin: number; avgWaitMin: number }>()
+  // verifierName → 검증 통계 룩업맵
+  const verifierLookup = new Map<string, { tasks: number; avgVerifyMin: number; avgWaitMin: number; verified: number; rejected: number; waiting: number }>()
   for (const [vName, vExecs] of verifierMap.entries()) {
     const verifyTimes = vExecs
-      .filter(e => e.verifiedAt && e.endedAt)
+      .filter(e => (e.verifiedAt || e.rejectedAt) && e.endedAt)
       .map(e => {
         const start = e.verifyStartedAt || e.endedAt!
-        return (new Date(e.verifiedAt!).getTime() - new Date(start).getTime()) / 60000
+        const end = (e.verifiedAt || e.rejectedAt)!
+        return (new Date(end).getTime() - new Date(start).getTime()) / 60000
       })
       .filter(t => t >= 0)
     const waitTimes = vExecs
       .filter(e => e.verifyStartedAt && e.endedAt)
       .map(e => (new Date(e.verifyStartedAt!).getTime() - new Date(e.endedAt!).getTime()) / 60000)
       .filter(t => t >= 0 && t < 60 * 24 * 7)
+    const verified = vExecs.filter(e => e.verifiedAt).length
+    const rejected = vExecs.filter(e => e.rejectedAt && !e.verifiedAt).length
+    const waiting = vExecs.filter(e => !e.verifiedAt && !e.rejectedAt && e.endedAt).length
     verifierLookup.set(vName, {
       tasks: vExecs.length,
       avgVerifyMin: verifyTimes.length > 0 ? Math.round(verifyTimes.reduce((s, t) => s + t, 0) / verifyTimes.length * 10) / 10 : 0,
       avgWaitMin: waitTimes.length > 0 ? Math.round(waitTimes.reduce((s, t) => s + t, 0) / waitTimes.length * 10) / 10 : 0,
+      verified, rejected, waiting,
     })
   }
   const byVerifier = Array.from(verifierLookup.entries()).map(([verifierName, v]) => {
@@ -328,7 +331,7 @@ export async function GET(req: NextRequest) {
     const uFailed = uExecs.filter(e => e.status === 'failed').length
     const uDur = uExecs.reduce((s, e) => s + durationMin(e.startedAt, e.endedAt), 0)
     const uFinished = uSuccess + uFailed
-    const uCost = uExecs.reduce((s, e) => s + resolveExecutionCost(e, pricingMap), 0)
+    const uCost = uExecs.reduce((s, e) => s + resolveExecutionCost(e, humanSalary), 0)
     const uniqueIssues = new Set(uExecs.map(e => `${e.projectId}:${e.issueIid}`))
     // 이슈 생성 → AI 시작까지의 대기 시간
     const waitTimes = uExecs
@@ -336,7 +339,7 @@ export async function GET(req: NextRequest) {
       .map(e => (new Date(e.startedAt!).getTime() - new Date(e.issueCreatedAt!).getTime()) / 60000)
       .filter(t => t >= 0 && t < 60 * 24 * 7)
     const userName = uExecs[0].developerName
-    const vInfo = verifierLookup.get(userName) ?? { tasks: 0, avgVerifyMin: 0, avgWaitMin: 0 }
+    const vInfo = verifierLookup.get(userName) ?? { tasks: 0, avgVerifyMin: 0, avgWaitMin: 0, verified: 0, rejected: 0, waiting: 0 }
     return {
       userId: uid, userName, userAvatar: uExecs[0].agentAvatar || 'av-01',
       tasks: uExecs.length, success: uSuccess, failed: uFailed,
@@ -346,6 +349,10 @@ export async function GET(req: NextRequest) {
       avgWaitMin: waitTimes.length > 0 ? Math.round(waitTimes.reduce((s, t) => s + t, 0) / waitTimes.length * 10) / 10 : 0,
       verifyTasks: vInfo.tasks,
       avgVerifyMin: vInfo.avgVerifyMin,
+      verifyAvgWaitMin: vInfo.avgWaitMin,
+      verifyWaiting: vInfo.waiting,
+      verifyApproved: vInfo.verified,
+      verifyRejected: vInfo.rejected,
     }
   })
 
@@ -377,7 +384,7 @@ export async function GET(req: NextRequest) {
     d.tasks++
     if (e.status === 'success') d.success++
     if (e.status === 'failed') d.failed++
-    d.cost += resolveExecutionCost(e, pricingMap)
+    d.cost += resolveExecutionCost(e, humanSalary)
     if ((e.status === 'success' || e.status === 'failed') && e.endedAt) {
       const proc = durationMin(e.startedAt, e.endedAt)
       if (proc > 0) d.procTimes.push(proc)
@@ -425,7 +432,7 @@ export async function GET(req: NextRequest) {
     if (!pMap.has(key)) pMap.set(key, { tasks: 0, cost: 0 })
     const d = pMap.get(key)!
     d.tasks++
-    d.cost += resolveExecutionCost(e, pricingMap)
+    d.cost += resolveExecutionCost(e, humanSalary)
   }
   const projectTrend = Array.from(projectDayMap.entries()).map(([pid, pMap]) => {
     const pInfo = execs.find(e => e.projectId === pid)!
@@ -454,7 +461,7 @@ export async function GET(req: NextRequest) {
     if (!aMap.has(key)) aMap.set(key, { tasks: 0, cost: 0 })
     const d = aMap.get(key)!
     d.tasks++
-    d.cost += resolveExecutionCost(e, pricingMap)
+    d.cost += resolveExecutionCost(e, humanSalary)
   }
   const agentTrend = Array.from(agentDayMap.entries()).map(([aid, aMap]) => {
     const aInfo = execs.find(e => e.agentId === aid)!
@@ -470,21 +477,37 @@ export async function GET(req: NextRequest) {
     }
   })
 
-  // User trend (daily breakdown per user)
-  const userDayMap = new Map<string, Map<string, { tasks: number; cost: number }>>()
+  // User trend (daily breakdown per user) + 검증 추이 포함
+  const userDayMap = new Map<string, Map<string, { tasks: number; cost: number; verified: number }>>()
   for (const e of execs) {
     const key = toBucketKey(e.startedAt, type)
     const uid = e.developerUserId || e.developerName
     if (!userDayMap.has(uid)) {
-      const m = new Map<string, { tasks: number; cost: number }>()
-      for (const k of allKeys) m.set(k, { tasks: 0, cost: 0 })
+      const m = new Map<string, { tasks: number; cost: number; verified: number }>()
+      for (const k of allKeys) m.set(k, { tasks: 0, cost: 0, verified: 0 })
       userDayMap.set(uid, m)
     }
     const uMap = userDayMap.get(uid)!
-    if (!uMap.has(key)) uMap.set(key, { tasks: 0, cost: 0 })
+    if (!uMap.has(key)) uMap.set(key, { tasks: 0, cost: 0, verified: 0 })
     const d = uMap.get(key)!
     d.tasks++
-    d.cost += resolveExecutionCost(e, pricingMap)
+    d.cost += resolveExecutionCost(e, humanSalary)
+  }
+  // 검증 완료 건수를 verifier 이름 → developer userId로 매핑하여 추가
+  for (const e of execs) {
+    if (!e.verifierName) continue
+    const verifyEnd = e.verifiedAt || e.rejectedAt
+    if (!verifyEnd) continue
+    const verifyKey = toBucketKey(verifyEnd, type)
+    // verifierName으로 해당 유저의 userDayMap 찾기
+    for (const [uid, uMap] of userDayMap.entries()) {
+      const uInfo = execs.find(ex => (ex.developerUserId || ex.developerName) === uid)
+      if (uInfo?.developerName === e.verifierName) {
+        if (!uMap.has(verifyKey)) uMap.set(verifyKey, { tasks: 0, cost: 0, verified: 0 })
+        uMap.get(verifyKey)!.verified++
+        break
+      }
+    }
   }
   const userTrend = Array.from(userDayMap.entries()).map(([uid, uMap]) => {
     const uInfo = execs.find(e => (e.developerUserId || e.developerName) === uid)!
@@ -494,8 +517,8 @@ export async function GET(req: NextRequest) {
       userAvatar: uInfo.agentAvatar,
       daily: allKeys.map(key => {
         const isFuture = key > todayKey
-        const d = uMap.get(key) ?? { tasks: 0, cost: 0 }
-        return { date: key, tasks: isFuture ? null : d.tasks, cost: isFuture ? null : Math.round(d.cost * 100) / 100 }
+        const d = uMap.get(key) ?? { tasks: 0, cost: 0, verified: 0 }
+        return { date: key, tasks: isFuture ? null : d.tasks, cost: isFuture ? null : Math.round(d.cost * 100) / 100, verified: isFuture ? null : d.verified }
       }),
     }
   })
@@ -527,7 +550,7 @@ export async function GET(req: NextRequest) {
           status: e.status as 'success' | 'failed',
           startedAt: e.startedAt,
           durationMin: Math.round(durationMin(e.startedAt, e.endedAt) * 10) / 10,
-          cost: Math.round(resolveExecutionCost(e, pricingMap) * 100) / 100,
+          cost: Math.round(resolveExecutionCost(e, humanSalary) * 100) / 100,
           waitMin: (() => {
             const ws = e.issueCreatedAt
             return ws ? Math.round(durationMin(ws, e.startedAt) * 10) / 10 : null
@@ -840,6 +863,7 @@ export async function GET(req: NextRequest) {
     waitingTrend: waitingTrend.daily,
     prevWaitingTrend: prevWaitingTrend.daily,
     agentWaitingTrend: agentWaitingTrend.daily,
+    totalAssignedAgents: Object.values(projectAssignCounts).reduce((s, c) => s + c, 0),
     prevAgentWaitingTrend: prevAgentWaitingTrend.daily,
   })
 }

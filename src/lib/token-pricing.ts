@@ -1,102 +1,66 @@
-import { getAllTokenPricing, upsertTokenPricing, getTokenPricingByModel } from './db'
+import { getAllTokenPricing, findTokenPricingForModel, upsertTokenPricing } from './db'
 import { TokenPricing } from '@/types'
 
 /**
- * 알려진 모델명 키워드 → 단가 매핑 (코드 내장 기본값)
- * DB에 일치하는 항목이 없을 때 모델명 패턴으로 단가를 결정합니다.
- * 단위: USD / 1M tokens
+ * 실행의 모델명으로 DB 단가를 조회하여 비용을 계산합니다.
+ *
+ * 우선순위:
+ *   1. modelName → DB 정확 매칭 (case-insensitive)
+ *   2. modelName → DB 키워드 매칭 (opus, haiku 등 구별력 있는 키워드)
+ *   3. 매칭 실패 시 0 반환 (단가 미등록 모델)
  */
-const BUILTIN_MODEL_PRICING: { pattern: RegExp; input: number; output: number }[] = [
-  // Anthropic Claude - Opus (가장 비쌈, 먼저 매칭)
-  { pattern: /opus/i,   input: 15.00,  output: 75.00  },
-  // Anthropic Claude - Haiku (가장 저렴, Sonnet보다 먼저)
-  { pattern: /haiku/i,  input:  0.80,  output:  4.00  },
-  // Anthropic Claude - Sonnet (기본)
-  { pattern: /sonnet/i, input:  3.00,  output: 15.00  },
-  // Google Gemini
-  { pattern: /flash/i,  input:  0.075, output:  0.30  },
-  { pattern: /gemini/i, input:  1.25,  output: 10.00  },
-  // OpenAI
-  { pattern: /gpt-4o/i, input:  2.50,  output: 10.00  },
-  { pattern: /gpt-4/i,  input:  2.00,  output:  8.00  },
-  { pattern: /o1/i,     input: 15.00,  output: 60.00  },
-  { pattern: /o3/i,     input: 10.00,  output: 40.00  },
-]
-
-/** 모델명으로 내장 단가를 조회합니다 (DB 조회 실패 시 폴백용) */
-export function getBuiltinPricingByModel(modelName: string): { input: number; output: number } | null {
-  for (const entry of BUILTIN_MODEL_PRICING) {
-    if (entry.pattern.test(modelName)) return { input: entry.input, output: entry.output }
-  }
-  return null
-}
-
-/** DB에서 모델명 우선, CLI명 차순으로 단가를 조회하여 비용 계산 */
-export function calcCostFromDb(cliName: string, inputTokens: number, outputTokens: number, modelName?: string): number {
-  // 1) DB에서 모델명 정확 매칭 시도
-  if (modelName) {
-    const dbPricing = getTokenPricingByModel(modelName)
-    if (dbPricing) {
-      return (inputTokens * dbPricing.inputPrice + outputTokens * dbPricing.outputPrice) / 1_000_000
-    }
-    // 2) DB에 없으면 내장 모델 키워드 매핑으로 폴백 (선택된 모델 기반 정확한 단가)
-    const builtin = getBuiltinPricingByModel(modelName)
-    if (builtin) {
-      return (inputTokens * builtin.input + outputTokens * builtin.output) / 1_000_000
-    }
-  }
-  // 3) CLI명으로 DB 조회 (관리자가 설정한 기본 단가)
-  const all = getAllTokenPricing()
-  const pricing = all.find(p => p.cliName === cliName) ?? all[0] ?? null
+export function calcCostFromDb(inputTokens: number, outputTokens: number, modelName?: string): number {
+  if (!modelName) return 0
+  const pricing = findTokenPricingForModel(modelName)
   if (!pricing) return 0
   return (inputTokens * pricing.inputPrice + outputTokens * pricing.outputPrice) / 1_000_000
 }
 
 /**
- * 실행 기록의 비용을 결정합니다.
- * - DB에 costUsd가 저장되어 있으면 그 값을 우선 사용 (CLI가 정확히 계산한 실제 비용)
- * - costUsd가 없으면 실제 사용 모델명 기반으로 계산 (선택된 모델 반영)
- * - 모델명도 없으면 CLI명 기반 단가(관리자 설정)로 폴백
+ * 실행 기록의 최종 비용을 결정합니다.
+ *
+ * CLI 비용:
+ *   - costUsd > 0 이면 CLI가 직접 계산한 실제 비용 사용
+ *   - 그 외 DB 단가 기반 계산 (calcCostFromDb)
+ *
+ * 사람 비용 (추가):
+ *   - 사람이 직접 개발한 시간 (assigneeType === 'user')
+ *   - 검증에 소요된 시간 (verifyStartedAt → verifiedAt/rejectedAt)
  */
 export function resolveExecutionCost(
-  e: { costUsd: number; cliName: string; inputTokens: number; outputTokens: number; modelName?: string; assigneeType?: string; startedAt?: string; endedAt?: string | null; verifyStartedAt?: string | null; verifiedAt?: string | null; rejectedAt?: string | null },
-  pricingMap: Record<string, { input: number; output: number }>,
+  e: {
+    costUsd: number; inputTokens: number; outputTokens: number;
+    modelName?: string | null; assigneeType?: string;
+    startedAt?: string; endedAt?: string | null;
+    verifyStartedAt?: string | null; verifiedAt?: string | null; rejectedAt?: string | null;
+  },
+  humanMonthlySalary: number,
 ): number {
   let cost = e.costUsd > 0 ? e.costUsd : 0
-  
+
+  // CLI 비용 계산
   if (cost === 0 && e.assigneeType !== 'user') {
-    if (e.modelName) {
-      const builtin = getBuiltinPricingByModel(e.modelName)
-      if (builtin) {
-        cost = (e.inputTokens * builtin.input + e.outputTokens * builtin.output) / 1_000_000
-      }
-    }
-    if (cost === 0) {
-      cost = calcCost(pricingMap, e.cliName, e.inputTokens, e.outputTokens)
-    }
+    cost = calcCostFromDb(e.inputTokens, e.outputTokens, e.modelName ?? undefined)
   }
 
-  // Add human cost using 'human' preset
-  const humanSalary = pricingMap['human']?.input || 0
-  if (humanSalary > 0) {
-    // Convert monthly USD to per-minute
-    // month = 160 hours (approx. 20 working days * 8h)
-    // minute cost = monthly / 9600 (160 * 60)
-    const humanCostPerMin = humanSalary / 9600
+  // 사람 비용 추가
+  if (humanMonthlySalary > 0) {
+    // 월급 → 분당 비용: 월 160시간 (20일 × 8h) = 9600분
+    const costPerMin = humanMonthlySalary / 9600
 
-    // 1) Human is the developer 
+    // 사람이 직접 개발한 시간
     if (e.assigneeType === 'user' && e.startedAt && e.endedAt) {
       const ms = new Date(e.endedAt).getTime() - new Date(e.startedAt).getTime()
-      if (ms > 0) cost += (ms / 60000) * humanCostPerMin
+      if (ms > 0) cost += (ms / 60000) * costPerMin
     }
 
-    // 2) Human verified it
+    // 검증 시간
     const verifyEnd = e.verifiedAt || e.rejectedAt
     if (verifyEnd) {
       const vStart = e.verifyStartedAt || e.endedAt
       if (vStart) {
         const ms = new Date(verifyEnd).getTime() - new Date(vStart).getTime()
-        if (ms > 0) cost += (ms / 60000) * humanCostPerMin
+        if (ms > 0) cost += (ms / 60000) * costPerMin
       }
     }
   }
@@ -104,40 +68,27 @@ export function resolveExecutionCost(
   return cost
 }
 
-/** 모든 CLI 단가를 맵으로 반환 */
-export function getPricingMap(): Record<string, { input: number; output: number }> {
+/** DB에서 human 단가의 월급(inputPrice)을 조회 */
+export function getHumanMonthlySalary(): number {
   const all = getAllTokenPricing()
-  const map: Record<string, { input: number; output: number }> = {}
-  for (const p of all) {
-    map[p.cliName] = { input: p.inputPrice, output: p.outputPrice }
-  }
-  return map
+  const human = all.find(p => p.cliName === 'human')
+  return human?.inputPrice ?? 0
 }
 
-/** 주어진 단가맵으로 비용 계산 */
-export function calcCost(
-  pricingMap: Record<string, { input: number; output: number }>,
-  cliName: string,
-  inputTokens: number,
-  outputTokens: number,
-): number {
-  const p = pricingMap[cliName] ?? Object.values(pricingMap)[0]
-  if (!p) return 0
-  return (inputTokens * p.input + outputTokens * p.output) / 1_000_000
-}
-
-/** 최신 단가 정보 (2026년 기준 공식 가격표) - 모델별 단가 정의 */
-const LATEST_PRICING: { cliName: string; modelName: string; input: number; output: number }[] = [
-  // Anthropic - Claude Code CLI (claude)
-  { cliName: 'claude', modelName: 'Claude Sonnet 4.6', input: 3.00,  output: 15.00 },
-  // Google - Gemini CLI
-  { cliName: 'gemini', modelName: 'Gemini 2.5 Pro',    input: 1.25,  output: 10.00 },
-  // OpenAI - Codex CLI
-  { cliName: 'codex',  modelName: 'GPT-4.1',           input: 2.00,  output:  8.00 },
-  // OpenCode - 기본 모델
-  { cliName: 'opencode', modelName: 'Claude Sonnet 4.6', input: 3.00, output: 15.00 },
-  // 사람 (관리자/검증자 월급)
-  { cliName: 'human', modelName: '관리자 (월급 USD)', input: 5000.00, output: 0.00 },
+/** 최신 단가 정보 (2026년 기준 공식 가격표) — 모델 기준, CLI 무관 */
+const LATEST_PRICING: { id: string; cliName: string; modelName: string; input: number; output: number }[] = [
+  // Anthropic Claude
+  { id: 'tp-sonnet', cliName: 'model', modelName: 'Claude Sonnet 4.6', input: 3.00, output: 15.00 },
+  { id: 'tp-opus',   cliName: 'model', modelName: 'Claude Opus 4',     input: 15.00, output: 75.00 },
+  { id: 'tp-haiku',  cliName: 'model', modelName: 'Claude Haiku 4.5',  input: 0.80, output: 4.00 },
+  // Google Gemini
+  { id: 'tp-gemini-pro',   cliName: 'model', modelName: 'Gemini 2.5 Pro',   input: 1.25, output: 10.00 },
+  { id: 'tp-gemini-flash', cliName: 'model', modelName: 'Gemini 2.5 Flash', input: 0.075, output: 0.30 },
+  // OpenAI
+  { id: 'tp-gpt41', cliName: 'model', modelName: 'GPT-4.1',  input: 2.00, output: 8.00 },
+  { id: 'tp-o3',    cliName: 'model', modelName: 'o3',       input: 10.00, output: 40.00 },
+  // 사람
+  { id: 'tp-human', cliName: 'human', modelName: '관리자 (월급 USD)', input: 5000.00, output: 0.00 },
 ]
 
 /** 최신 단가로 DB를 업데이트하고 결과 반환 */
@@ -145,7 +96,7 @@ export function applyLatestPricing(): TokenPricing[] {
   const now = new Date().toISOString()
   for (const lp of LATEST_PRICING) {
     upsertTokenPricing({
-      id: `tp-${lp.cliName}`,
+      id: lp.id,
       cliName: lp.cliName,
       modelName: lp.modelName,
       inputPrice: lp.input,

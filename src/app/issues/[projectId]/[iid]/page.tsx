@@ -48,6 +48,7 @@ interface Note {
   body: string
   author: string
   avatarUrl: string
+  iveAuthorAvatar?: string | null
   system: boolean
   createdAt: string
 }
@@ -988,7 +989,9 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
           ) : (
             <div className="space-y-1.5">
               {notes.map(note => {
-                const isBot = !note.system && (note.body.includes('<!-- ive-bot -->') || note.body.includes('IVE(봇)'))
+                // iveAuthorAvatar가 있으면 IVE 사용자가 작성한 노트 → 봇이 아님
+                const isIveUser = !!note.iveAuthorAvatar
+                const isBot = !note.system && !isIveUser && (note.body.includes('<!-- ive-bot -->') || note.body.includes('IVE(봇)'))
                 return (
                 <div key={note.id} className={`rounded-lg px-3 py-2 ${
                   note.system
@@ -1007,7 +1010,9 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                         <><i className="fa-solid fa-robot mr-0.5" />{tIssue('iveBot')}</>
                       ) : (
                         <>
-                          {note.avatarUrl ? (
+                          {isIveUser && note.iveAuthorAvatar ? (
+                            <AgentAvatar avatar={note.iveAuthorAvatar} size="sm" className="!w-4 !h-4" />
+                          ) : note.avatarUrl ? (
                             <img src={note.avatarUrl} alt="" className="w-4 h-4 rounded-full" />
                           ) : (
                             <i className="fa-solid fa-user" />

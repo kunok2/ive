@@ -50,8 +50,9 @@ function collectSnapshots() {
       "SELECT COUNT(*) as cnt FROM task_executions WHERE project_id = ? AND status IN ('running', 'assigned')"
     ).get(project.id) as { cnt: number }).cnt
 
-    // 대기 이슈 수 (마지막 스캔 결과)
+    // 대기 이슈 수 (마지막 스캔 결과) — 처리대기 / 검증대기 분리
     const waiting = project.lastScannedIssueCount ?? 0
+    const verifyWaiting = project.lastVerifyWaitingCount ?? 0
 
     // 금일 완료/실패 수, 토큰, 비용
     const todayStats = db.prepare(`
@@ -71,6 +72,7 @@ function collectSnapshots() {
       timestamp: now,
       running,
       waiting,
+      verifyWaiting,
       completed: todayStats.completed,
       failed: todayStats.failed,
       totalTokens: todayStats.total_tokens,
@@ -112,6 +114,7 @@ function collectSnapshots() {
         timestamp: now,
         running,
         waiting,
+        verifyWaiting: 0, // 에이전트 단위에서는 검증대기 의미 없음
         completed: todayStats.completed,
         failed: todayStats.failed,
         totalTokens: todayStats.total_tokens,

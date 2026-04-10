@@ -63,7 +63,8 @@ export interface Project {
   showToolUsage: boolean   // 트레이스에 툴 사용 표시 여부
   checkInterval: number    // 체크 간격 (분)
   lastCheckedAt: string | null // 마지막 체크 시간
-  lastScannedIssueCount: number | null // 마지막 스캔 이슈 수
+  lastScannedIssueCount: number | null       // 마지막 스캔 시 처리 대기(waiting) 이슈 수
+  lastVerifyWaitingCount: number | null      // 마지막 스캔 시 검증 대기(verify_waiting) 이슈 수
   scannerActive: boolean   // 스캐너 활성화 여부
   lastError: string | null      // 마지막 에러 메시지
   lastErrorAt: string | null    // 마지막 에러 시간
@@ -164,7 +165,8 @@ export interface StatSnapshot {
   entityId: string
   timestamp: string
   running: number
-  waiting: number
+  waiting: number          // 처리 대기 (에이전트 배정 기다림)
+  verifyWaiting: number    // 검증 대기 (사람 검증 기다림)
   completed: number
   failed: number
   totalTokens: number
