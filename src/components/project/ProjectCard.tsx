@@ -41,6 +41,7 @@ interface ProjectStats {
   completed: number
   failed: number
   waiting: number
+  verifyWaiting: number
   conflictCount: number
   totalTokens: number
   totalCost: number
@@ -331,8 +332,8 @@ export default function ProjectCard({ project }: Props) {
           onClick={() => setExpandedPanel(expandedPanel === 'waiting' ? null : 'waiting')}
           className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'waiting' ? 'bg-ive-cyan/5' : 'hover:bg-white/[0.02]'}`}
         >
-          <span className={`text-lg font-bold leading-none ${(stats?.waiting ?? 0) > 0 ? 'text-ive-cyan' : 'text-ive-text-dim'}`}>
-            {stats?.waiting ?? 0}
+          <span className={`text-lg font-bold leading-none ${((stats?.waiting ?? 0) + (stats?.verifyWaiting ?? 0)) > 0 ? 'text-ive-cyan' : 'text-ive-text-dim'}`}>
+            {(stats?.waiting ?? 0) + (stats?.verifyWaiting ?? 0)}
           </span>
           <Sparkline data={snapshots.map(s => s.waiting)} width={40} height={12} color="cyan" />
           <span className="text-xs text-ive-text-dim font-bold">{tp('waitingLabel')}</span>

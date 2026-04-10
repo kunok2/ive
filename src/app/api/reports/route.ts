@@ -103,6 +103,14 @@ export async function GET(req: NextRequest) {
 
   // Summary
   const totalTasks = execs.length
+  // 고유 이슈 수 (재시도는 1건으로 집계) — "유입" 계산용
+  const uniqueIssueKeys = new Set(execs.map(e => `${e.projectId}:${e.issueIid}`))
+  const uniqueInflow = uniqueIssueKeys.size
+  // 검증까지 마무리된 고유 이슈 수 — "처리" 계산용 (verified_at 또는 rejected_at 있어야 완료)
+  const verifiedIssueKeys = new Set(
+    execs.filter(e => e.verifiedAt || e.rejectedAt).map(e => `${e.projectId}:${e.issueIid}`)
+  )
+  const verifiedCount = verifiedIssueKeys.size
   const successCount = execs.filter(e => e.status === 'success').length
   const failedCount = execs.filter(e => e.status === 'failed').length
   const runningCount = execs.filter(e => e.status === 'running' || e.status === 'assigned').length
@@ -163,14 +171,32 @@ export async function GET(req: NextRequest) {
 
   // 이전 기간 일별 트렌드 — 전체 기간 버킷 채움 (waitAvg, procAvg 포함)
   const prevAllKeys = periodKeys(prevRange.start, prevRange.end, type)
-  const prevDayMap = new Map<string, { tasks: number; cost: number; waitTimes: number[]; procTimes: number[]; verifyTimes: number[] }>()
-  for (const key of prevAllKeys) prevDayMap.set(key, { tasks: 0, cost: 0, waitTimes: [], procTimes: [], verifyTimes: [] })
+  const prevDayMap = new Map<string, { tasks: number; cost: number; waitTimes: number[]; procTimes: number[]; verifyTimes: number[]; inflowIssues: Set<string>; verifiedIssues: Set<string> }>()
+  const mkPrevBucket = () => ({ tasks: 0, cost: 0, waitTimes: [] as number[], procTimes: [] as number[], verifyTimes: [] as number[], inflowIssues: new Set<string>(), verifiedIssues: new Set<string>() })
+  for (const key of prevAllKeys) prevDayMap.set(key, mkPrevBucket())
+  // 이전 기간: 이슈별 최초 유입일/검증 완료일 계산
+  const prevFirstStart = new Map<string, string>()
+  for (const e of prevExecs) {
+    const k = `${e.projectId}:${e.issueIid}`
+    const pv = prevFirstStart.get(k)
+    if (!pv || e.startedAt < pv) prevFirstStart.set(k, e.startedAt)
+  }
+  const prevVerifyDate = new Map<string, string>()
+  for (const e of prevExecs) {
+    const verifyEnd = e.verifiedAt || e.rejectedAt
+    if (!verifyEnd) continue
+    const k = `${e.projectId}:${e.issueIid}`
+    const pv = prevVerifyDate.get(k)
+    if (!pv || verifyEnd < pv) prevVerifyDate.set(k, verifyEnd)
+  }
   for (const e of prevExecs) {
     const key = toBucketKey(e.startedAt, type)
-    if (!prevDayMap.has(key)) prevDayMap.set(key, { tasks: 0, cost: 0, waitTimes: [], procTimes: [], verifyTimes: [] })
+    if (!prevDayMap.has(key)) prevDayMap.set(key, mkPrevBucket())
     const d = prevDayMap.get(key)!
     d.tasks++
     d.cost += resolveExecutionCost(e, humanSalary)
+    const ik = `${e.projectId}:${e.issueIid}`
+    if (prevFirstStart.get(ik) === e.startedAt) d.inflowIssues.add(ik)
     if ((e.status === 'success' || e.status === 'failed') && e.endedAt) {
       const proc = durationMin(e.startedAt, e.endedAt)
       if (proc > 0) d.procTimes.push(proc)
@@ -190,11 +216,19 @@ export async function GET(req: NextRequest) {
       }
     }
   }
+  // 검증 완료일 버킷 배정
+  for (const [ik, verifyEnd] of prevVerifyDate) {
+    const key = toBucketKey(verifyEnd, type)
+    if (!prevDayMap.has(key)) prevDayMap.set(key, mkPrevBucket())
+    prevDayMap.get(key)!.verifiedIssues.add(ik)
+  }
   const prevDailyTrend = prevAllKeys.map(key => {
     const d = prevDayMap.get(key)!
     return {
       date: key,
       tasks: d.tasks,
+      inflow: d.inflowIssues.size,
+      verified: d.verifiedIssues.size,
       cost: Math.round(d.cost * 100) / 100,
       waitAvg: d.waitTimes.length > 0 ? Math.round(d.waitTimes.reduce((a, b) => a + b, 0) / d.waitTimes.length * 10) / 10 : null,
       procAvg: d.procTimes.length > 0 ? Math.round(d.procTimes.reduce((a, b) => a + b, 0) / d.procTimes.length * 10) / 10 : null,
@@ -239,9 +273,12 @@ export async function GET(req: NextRequest) {
       }
     })
 
+    const pUniqueIssues = new Set(pExecs.map(e => `${e.projectId}:${e.issueIid}`)).size
+    const pVerified = new Set(pExecs.filter(e => e.verifiedAt || e.rejectedAt).map(e => `${e.projectId}:${e.issueIid}`)).size
+
     return {
       projectId: pid, projectName: pExecs[0].projectName, projectColor: pExecs[0].projectColor, projectAvatarUrl: pExecs[0].projectAvatarUrl || '', projectProvider: pExecs[0].projectProvider || 'gitlab',
-      tasks: pExecs.length, success: pSuccess, failed: pFailed,
+      tasks: pExecs.length, uniqueIssues: pUniqueIssues, verified: pVerified, success: pSuccess, failed: pFailed,
       totalDurationMin: Math.round(pDur * 10) / 10,
       avgDurationMin: pFinished > 0 ? Math.round((pDur / pFinished) * 10) / 10 : 0,
       inputTokens: pExecs.reduce((s, e) => s + e.inputTokens, 0),
@@ -374,17 +411,39 @@ export async function GET(req: NextRequest) {
   // Daily trend (extended with waitAvg, procAvg) — 전체 기간 버킷 채움
   const allKeys = periodKeys(range.start, range.end, type)
   const todayKey = toBucketKey(getKSTTodayString(), type)
-  type BucketData = { tasks: number; success: number; failed: number; cost: number; waitTimes: number[]; procTimes: number[]; verifyTimes: number[] }
+  type BucketData = { tasks: number; success: number; failed: number; cost: number; waitTimes: number[]; procTimes: number[]; verifyTimes: number[]; inflowIssues: Set<string>; verifiedIssues: Set<string> }
+  const mkBucket = (): BucketData => ({ tasks: 0, success: 0, failed: 0, cost: 0, waitTimes: [], procTimes: [], verifyTimes: [], inflowIssues: new Set(), verifiedIssues: new Set() })
   const dayMap = new Map<string, BucketData>()
-  for (const key of allKeys) dayMap.set(key, { tasks: 0, success: 0, failed: 0, cost: 0, waitTimes: [], procTimes: [], verifyTimes: [] })
+  for (const key of allKeys) dayMap.set(key, mkBucket())
+  // 각 이슈를 유입일(가장 이른 started_at)에만 카운트 — 재시도로 유입 중복 방지
+  const firstStartByIssue = new Map<string, string>()
+  for (const e of execs) {
+    const k = `${e.projectId}:${e.issueIid}`
+    const prev = firstStartByIssue.get(k)
+    if (!prev || e.startedAt < prev) firstStartByIssue.set(k, e.startedAt)
+  }
+  // 검증 완료일은 verifiedAt 또는 rejectedAt이 있는 exec 중 가장 이른 날짜로 귀속
+  const verifyDateByIssue = new Map<string, string>()
+  for (const e of execs) {
+    const verifyEnd = e.verifiedAt || e.rejectedAt
+    if (!verifyEnd) continue
+    const k = `${e.projectId}:${e.issueIid}`
+    const prev = verifyDateByIssue.get(k)
+    if (!prev || verifyEnd < prev) verifyDateByIssue.set(k, verifyEnd)
+  }
   for (const e of execs) {
     const key = toBucketKey(e.startedAt, type)
-    if (!dayMap.has(key)) dayMap.set(key, { tasks: 0, success: 0, failed: 0, cost: 0, waitTimes: [], procTimes: [], verifyTimes: [] })
+    if (!dayMap.has(key)) dayMap.set(key, mkBucket())
     const d = dayMap.get(key)!
     d.tasks++
     if (e.status === 'success') d.success++
     if (e.status === 'failed') d.failed++
     d.cost += resolveExecutionCost(e, humanSalary)
+    // 유입: 이슈별 최초 시작일에만 1회 카운트
+    const ik = `${e.projectId}:${e.issueIid}`
+    if (firstStartByIssue.get(ik) === e.startedAt) {
+      d.inflowIssues.add(ik)
+    }
     if ((e.status === 'success' || e.status === 'failed') && e.endedAt) {
       const proc = durationMin(e.startedAt, e.endedAt)
       if (proc > 0) d.procTimes.push(proc)
@@ -404,12 +463,20 @@ export async function GET(req: NextRequest) {
       }
     }
   }
+  // 검증 완료 이슈를 검증 완료일 버킷에 배정 (유입·시작일과 다를 수 있음)
+  for (const [ik, verifyEnd] of verifyDateByIssue) {
+    const key = toBucketKey(verifyEnd, type)
+    if (!dayMap.has(key)) dayMap.set(key, mkBucket())
+    dayMap.get(key)!.verifiedIssues.add(ik)
+  }
   const dailyTrend = allKeys.map(key => {
     const isFuture = key > todayKey
     const d = dayMap.get(key)!
     return {
       date: key,
       tasks: isFuture ? null : d.tasks,
+      inflow: isFuture ? null : d.inflowIssues.size,
+      verified: isFuture ? null : d.verifiedIssues.size,
       success: isFuture ? null : d.success,
       failed: isFuture ? null : d.failed,
       cost: isFuture ? null : Math.round(d.cost * 100) / 100,
@@ -824,6 +891,8 @@ export async function GET(req: NextRequest) {
     prevPeriod: { start: prevRange.start, end: prevRange.end },
     summary: {
       totalTasks,
+      uniqueInflow,
+      verifiedCount,
       successCount,
       failedCount,
       runningCount,

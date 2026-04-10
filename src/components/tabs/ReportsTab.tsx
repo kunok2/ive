@@ -135,17 +135,16 @@ export default function ReportsTab() {
   const today = getKSTTodayString()
 
   // 흐름도용 일별 데이터 계산
+  // 유입 = 당일 처음 유입된 고유 이슈 수 (재시도 제외)
+  // 처리 = 당일 검증까지 마무리된 고유 이슈 수 (verified_at / rejected_at 기준)
   function computeFlowDays() {
     if (!data) return []
-    const wt = data.waitingTrend || []
-    return data.dailyTrend.map((dt, i) => {
+    return data.dailyTrend.map(dt => {
       const label = data.period.type === 'yearly'
         ? `${parseInt(dt.date.slice(5, 7))}월`
         : data.period.type === 'weekly' ? DAY_LABELS[new Date(dt.date).getDay()] : `${new Date(dt.date).getDate()}`
-      if (dt.tasks === null || dt.date > today) return { label, inflow: null, throughput: null }
-      const wIdx = wt.findIndex(w => w.date === dt.date)
-      const inflow = wIdx > 0 ? (dt.tasks ?? 0) + wt[wIdx].total - wt[wIdx - 1].total : dt.tasks
-      return { label, inflow, throughput: dt.tasks }
+      if (dt.inflow === null || dt.date > today) return { label, inflow: null, throughput: null }
+      return { label, inflow: dt.inflow, throughput: dt.verified ?? 0 }
     })
   }
 
@@ -528,9 +527,9 @@ export default function ReportsTab() {
                         <span className="text-ive-cyan">유입 {p.inflow}</span>
                         <span className="text-ive-text-dim">→</span>
                         <span className="text-ive-green">처리 {p.throughput}</span>
-                        <span className={`font-bold ${p.waitingDelta > 0 ? 'text-ive-amber' : p.waitingDelta < 0 ? 'text-ive-green' : 'text-ive-text-dim'}`}>
-                          대기 {p.waitingDelta > 0 ? '+' : ''}{p.waitingDelta}
-                        </span>
+                        {p.currentWaiting > 0 && <span className={`font-bold ${p.currentWaiting >= 6 ? 'text-ive-red' : p.currentWaiting >= 3 ? 'text-ive-amber' : 'text-ive-cyan'}`}>
+                          대기 중 {p.currentWaiting}
+                        </span>}
                         <span className="text-ive-amber ml-auto">${fmtCost(p.cost)}</span>
                       </div>
                       {p.annotation && <div className="text-xs text-ive-amber mt-1">· {p.annotation}</div>}
@@ -583,7 +582,7 @@ export default function ReportsTab() {
                       <div className="flex items-center gap-3 mt-1 text-xs">
                         <span className="text-ive-text font-bold">{a.tasks}건</span>
                         <span className="text-ive-text-dim">{a.dailyCapacity}건/일</span>
-                        <span className={`font-bold ${a.currentWaiting >= 6 ? 'text-ive-red' : a.currentWaiting >= 3 ? 'text-ive-amber' : 'text-ive-text-dim'}`}>대기 {a.currentWaiting}</span>
+                        {a.currentWaiting > 0 && <span className={`font-bold ${a.currentWaiting >= 6 ? 'text-ive-red' : a.currentWaiting >= 3 ? 'text-ive-amber' : 'text-ive-cyan'}`}>대기 중 {a.currentWaiting}</span>}
                         <span className="text-ive-amber ml-auto">${fmtCost(a.cost)}</span>
                       </div>
                       {a.annotation && <div className="text-xs text-ive-amber mt-1">· {a.annotation}</div>}

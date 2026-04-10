@@ -31,14 +31,12 @@ export async function GET(
   const hoursElapsed = Math.max(0.5, (now.getTime() - todayStart.getTime()) / 3600000)
   const tasksPerHour = (completed.length + failed.length) / hoursElapsed
 
-  // verifying 카운트는 이제 lastScannedIssueCount에 포함됨 (스캐너에서 계산)
-
   return NextResponse.json({
     running: running.length,
     completed: completed.length,
     failed: failed.length,
     waiting: project.lastScannedIssueCount ?? 0,
-    verifying: 0, // 레이블 기반 — 스캐너에서 issueCount에 포함
+    verifyWaiting: project.lastVerifyWaitingCount ?? 0,
     conflictCount: project.conflictCount ?? 0,
     totalTokens,
     totalCost,

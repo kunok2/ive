@@ -12,8 +12,8 @@ const tooltipStyle = {
 
 // ───────────── 일별 추이 차트 (건수 바 + 비용 라인 + 이전 기간) ─────────────
 
-interface DailyTrend { date: string; tasks: number | null; success: number | null; failed: number | null; cost: number | null }
-interface PrevDaily { date: string; tasks: number; cost: number }
+interface DailyTrend { date: string; tasks: number | null; verified: number | null; success: number | null; failed: number | null; cost: number | null }
+interface PrevDaily { date: string; tasks: number; verified?: number; cost: number }
 
 export function DailyTrendChart({ data, prevData, type }: { data: DailyTrend[]; prevData: PrevDaily[]; type: string }) {
   const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토']
@@ -21,7 +21,8 @@ export function DailyTrendChart({ data, prevData, type }: { data: DailyTrend[]; 
     let label: string
     if (type === 'yearly') label = `${parseInt(d.date.slice(5, 7))}월`
     else { const dt = new Date(d.date); label = type === 'weekly' ? DAY_LABELS[dt.getDay()] : `${dt.getDate()}` }
-    return { label, tasks: d.tasks, cost: d.cost, prevTasks: prevData[i]?.tasks ?? 0, prevCost: prevData[i]?.cost ?? 0 }
+    // "처리" 바 = 검증까지 마무리된 고유 이슈 수 (verified ?? 0)
+    return { label, processed: d.verified ?? 0, cost: d.cost, prevProcessed: prevData[i]?.verified ?? 0, prevCost: prevData[i]?.cost ?? 0 }
   })
 
   return (
@@ -33,8 +34,8 @@ export function DailyTrendChart({ data, prevData, type }: { data: DailyTrend[]; 
           <YAxis yAxisId="tasks" tick={{ fill: '#6b7280', fontSize: 10 }} axisLine={false} tickLine={false} width={24} allowDecimals={false} />
           <YAxis yAxisId="cost" orientation="right" tick={{ fill: '#92702a', fontSize: 9 }} axisLine={false} tickLine={false} width={30} tickFormatter={v => `$${v}`} />
           <Tooltip {...tooltipStyle} />
-          <Area yAxisId="tasks" dataKey="prevTasks" name="이전 건수" fill="#6b7280" fillOpacity={0.12} stroke="#6b7280" strokeDasharray="3 3" strokeWidth={1} dot={false} />
-          <Bar yAxisId="tasks" dataKey="tasks" name="처리" fill="#34d399" radius={[2, 2, 0, 0]} />
+          <Area yAxisId="tasks" dataKey="prevProcessed" name="이전 처리" fill="#6b7280" fillOpacity={0.12} stroke="#6b7280" strokeDasharray="3 3" strokeWidth={1} dot={false} />
+          <Bar yAxisId="tasks" dataKey="processed" name="처리" fill="#34d399" radius={[2, 2, 0, 0]} />
           <Line yAxisId="cost" dataKey="cost" name="비용" stroke="#fbbf24" strokeWidth={2} dot={{ r: 2, fill: '#fbbf24' }} />
           <Line yAxisId="cost" dataKey="prevCost" name="이전 비용" stroke="#92702a" strokeDasharray="4 3" dot={false} strokeWidth={1} />
         </ComposedChart>

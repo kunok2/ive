@@ -8,7 +8,7 @@
 export interface ReportData {
   period: { start: string; end: string; type: string }
   prevPeriod: { start: string; end: string }
-  summary: { totalTasks: number; successCount: number; failedCount: number; runningCount: number; successRate: number; totalDurationMin: number; avgDurationMin: number; totalInputTokens: number; totalOutputTokens: number; totalCost: number }
+  summary: { totalTasks: number; uniqueInflow: number; verifiedCount: number; successCount: number; failedCount: number; runningCount: number; successRate: number; totalDurationMin: number; avgDurationMin: number; totalInputTokens: number; totalOutputTokens: number; totalCost: number }
   prevSummary: { totalTasks: number; successCount: number; failedCount: number; successRate: number; totalDurationMin: number; avgDurationMin: number; totalCost: number }
   byProject: ProjectStat[]
   byAgent: AgentStat[]
@@ -19,7 +19,7 @@ export interface ReportData {
   prevByUser: { userId: string; userName: string; tasks: number; issueCount: number; cost: number }[]
   prevByVerifier: { verifierName: string; tasks: number }[]
   dailyTrend: DailyTrend[]
-  prevDailyTrend: { date: string; tasks: number; cost: number }[]
+  prevDailyTrend: { date: string; tasks: number; inflow: number; verified: number; cost: number }[]
   agentTrend: { agentId: string; agentName: string; agentAvatar: string; daily: { date: string; tasks: number; cost: number }[] }[]
   projectTrend: { projectId: string; projectName: string; projectColor: string; daily: { date: string; tasks: number; cost: number }[] }[]
   userTrend?: { userId: string; userName: string; userAvatar: string; daily: { date: string; tasks: number | null; cost: number | null; verified: number | null }[] }[]
@@ -35,7 +35,7 @@ export interface ReportData {
 
 export interface ProjectStat {
   projectId: string; projectName: string; projectColor: string; projectAvatarUrl: string; projectProvider: string
-  tasks: number; success: number; failed: number
+  tasks: number; uniqueIssues: number; verified: number; success: number; failed: number
   totalDurationMin: number; avgDurationMin: number
   inputTokens: number; outputTokens: number; cost: number
   assignedAgentCount: number
@@ -53,7 +53,7 @@ export interface AgentStat {
 
 export interface UserStat { userId: string; userName: string; userAvatar: string; tasks: number; success: number; failed: number; issueCount: number; avgDurationMin: number; cost: number; avgWaitMin: number; verifyTasks: number; avgVerifyMin: number; verifyAvgWaitMin: number; verifyWaiting: number; verifyApproved: number; verifyRejected: number }
 export interface VerifierStat { verifierName: string; verifierAvatar: string; tasks: number; avgVerifyMin: number; avgWaitMin?: number }
-export interface DailyTrend { date: string; tasks: number | null; success: number | null; failed: number | null; cost: number | null; waitAvg: number | null; procAvg: number | null; verifyAvg: number | null }
+export interface DailyTrend { date: string; tasks: number | null; inflow: number | null; verified: number | null; success: number | null; failed: number | null; cost: number | null; waitAvg: number | null; procAvg: number | null; verifyAvg: number | null }
 export interface WaitingDay { date: string; total: number; totalWaiting: number; totalVerifyWaiting: number; byProject: { projectId: string; projectName: string; projectColor: string; waiting: number; verifyWaiting: number }[] }
 export interface AgentWaitingDay { date: string; total: number; byAgent: { agentId: string; agentName: string; agentAvatar: string; waiting: number }[] }
 export interface Lifecycle { waitAvg: number; waitMax: number; waitCount: number; procAvg: number; procMax: number; procCount: number; verifyAvg: number; verifyMax: number; verifyCount: number; totalAvg: number; totalMax: number; totalCount: number; avgAttempts: number; retryRate: number; uniqueIssues: number }
@@ -230,10 +230,12 @@ export function diagnose(data: ReportData, prevWeeklyData?: ReportData[]): Diagn
   // 표시용 대기 (처리대기 + 검증대기)
   const startWaiting = pastWaiting.length > 0 ? pastWaiting[0].total : 0
   const endWaiting = pastWaiting.length > 0 ? pastWaiting[pastWaiting.length - 1].total : 0
-  // 유입 공식에는 처리대기만 사용 (검증대기는 이미 summary.totalTasks에 포함된 건이 재이동한 것)
+  // 유입 = 고유 이슈 수(재시도 제외) + 처리대기 변화분
+  // 처리 = 검증까지 마무리된 고유 이슈 수 (verified_at 또는 rejected_at)
   const startProcWaiting = pastWaiting.length > 0 ? pastWaiting[0].totalWaiting : 0
   const endProcWaiting = pastWaiting.length > 0 ? pastWaiting[pastWaiting.length - 1].totalWaiting : 0
-  const totalInflow = summary.totalTasks + (endProcWaiting - startProcWaiting)
+  const totalInflow = summary.uniqueInflow + (endProcWaiting - startProcWaiting)
+  const totalThroughput = summary.verifiedCount
   const dailyInflow = elapsedDays > 0 ? totalInflow / elapsedDays : 0
 
   // 에이전트별 일일 처리 능력 (capacity) 계산
@@ -271,7 +273,7 @@ export function diagnose(data: ReportData, prevWeeklyData?: ReportData[]): Diagn
 
   const flow: FlowMetrics = {
     inflow: totalInflow,
-    throughput: summary.totalTasks,
+    throughput: totalThroughput,
     currentWaiting: endWaiting,
     dailyInflow,
     dailyCapacity,
@@ -310,7 +312,7 @@ export function diagnose(data: ReportData, prevWeeklyData?: ReportData[]): Diagn
     // 화면 표시용 대기건(처리+검증) — 이 값이 프로젝트 카드에 노출됨
     const pStartW = pStartProcW + (pVerifyTrend.length > 0 ? pVerifyTrend[0] : 0)
     const pEndW = pEndProcW + (pVerifyTrend.length > 0 ? pVerifyTrend[pVerifyTrend.length - 1] : 0)
-    const pInflow = p.tasks + (pEndProcW - pStartProcW)
+    const pInflow = p.uniqueIssues + (pEndProcW - pStartProcW)
     // 프로젝트 처리 능력은 "현재 배정된" 에이전트들의 dailyCap 합으로 계산해야 함
     // (과거 실행 이력이 있더라도 지금 다른 프로젝트로 재배정된 에이전트는 제외)
     // 배정은 됐지만 실측 데이터가 없는 에이전트는 avgAgentCap으로 대체
@@ -367,7 +369,7 @@ export function diagnose(data: ReportData, prevWeeklyData?: ReportData[]): Diagn
 
     return {
       projectId: p.projectId, projectName: p.projectName, projectColor: p.projectColor, projectAvatarUrl: p.projectAvatarUrl, projectProvider: p.projectProvider,
-      inflow: pInflow, throughput: p.tasks, waitingDelta: pEndW - pStartW, currentWaiting: pEndW,
+      inflow: pInflow, throughput: p.verified, waitingDelta: pEndW - pStartW, currentWaiting: pEndW,
       cost: p.cost, costPerTask: p.tasks > 0 ? Math.round(p.cost / p.tasks * 100) / 100 : 0, prevCostPerTask: Math.round(pPrevCPT * 100) / 100,
       assignedAgents: p.assignedAgentCount, utilization: Math.round(pUtil * 100) / 100, healthLevel: healthFromUtil(pUtil),
       retryRate: Math.round(pRetryRate * 10) / 10,
