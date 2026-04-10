@@ -143,6 +143,8 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   const [assigneeModalIids, setAssigneeModalIids] = useState<number[]>([]) // 빈 배열이면 닫힘, iid 목록이면 열림
   const [assigneeModalSearch, setAssigneeModalSearch] = useState('')
   const [assigneeModalPick, setAssigneeModalPick] = useState<{ id: number; username: string; name: string; avatarUrl: string } | null>(null)
+  const [agentPickerIid, setAgentPickerIid] = useState<number | null>(null) // null이면 닫힘, iid면 열림
+  const [agentPickerSaving, setAgentPickerSaving] = useState(false)
 
   const setSelectedProjectId = (id: string) => setIssuesProjectId(id)
   const setFilter = (f: string) => setIssuesFilter(f)
@@ -330,6 +332,33 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
       setAssigneeModalPick(null)
     }
     setAssigneeModalIids(iids)
+  }
+
+  // 대기 이슈의 작업자(에이전트) 변경
+  const handleChangeIssueAgent = async (iid: number, mode: 'auto' | 'assignee' | 'agent', agentId: string | null) => {
+    setAgentPickerSaving(true)
+    try {
+      const body: any = mode === 'agent' ? { assignMode: 'agent', agentId } : { assignMode: mode }
+      const res = await fetch(`/api/projects/${selectedProjectId}/issues/${iid}/preferred-agent`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setIssues(prev => prev.map(i => i.iid === iid ? {
+          ...i,
+          assignMode: data.assignMode,
+          preferredAgentId: data.preferredAgentId,
+          preferredAgentName: data.preferredAgentName,
+          preferredAgentAvatar: data.preferredAgentAvatar,
+          preferredAgentCliName: data.preferredAgentCliName,
+        } : i))
+        setAgentPickerIid(null)
+      }
+    } finally {
+      setAgentPickerSaving(false)
+    }
   }
 
   const isHistoryTab = filter === 'history'
@@ -1015,25 +1044,55 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                         </div>
                       )}
                       <div className="flex items-center gap-3 text-xs text-ive-text-dim">
-                        {issue.assignMode === 'assignee' ? (
-                          <span className="flex items-center gap-1 text-ive-cyan">
-                            {issue.assignees?.[0]?.avatarUrl ? (
-                              <img src={issue.assignees[0].avatarUrl} className="w-4 h-4 rounded-full" alt="" />
-                            ) : (
-                              <i className="fa-solid fa-user text-[10px]" />
-                            )}
-                            <span className="font-bold">{issue.assignees?.[0]?.name || issue.assignees?.[0]?.username || tIssue('assigneeHandles')}</span>
-                          </span>
-                        ) : issue.preferredAgentId && issue.preferredAgentAvatar && (
-                          <span className="flex items-center gap-1">
-                            <AgentAvatar avatar={issue.preferredAgentAvatar} size="sm" />
-                            <span className="font-bold text-ive-text-muted">{issue.preferredAgentName}</span>
-                            {issue.preferredAgentCliName && (() => {
-                              const cli = CLI_CONFIG[issue.preferredAgentCliName as CliName]
-                              return cli ? <i className={`${cli.icon} ${cli.color} text-[10px]`} /> : null
-                            })()}
-                          </span>
-                        )}
+                        {(() => {
+                          const agentEditable = canEdit && !bulkMode && issue.stage === 'waiting' && projectAgents.length > 0
+                          const onClickEdit = agentEditable ? (e: React.MouseEvent) => { e.stopPropagation(); setAgentPickerIid(issue.iid) } : undefined
+                          if (issue.assignMode === 'assignee') {
+                            return (
+                              <span
+                                className={`flex items-center gap-1 text-ive-cyan ${agentEditable ? 'cursor-pointer hover:text-ive-cyan/80' : ''}`}
+                                onClick={onClickEdit}
+                              >
+                                {issue.assignees?.[0]?.avatarUrl ? (
+                                  <img src={issue.assignees[0].avatarUrl} className="w-4 h-4 rounded-full" alt="" />
+                                ) : (
+                                  <i className="fa-solid fa-user text-[10px]" />
+                                )}
+                                <span className="font-bold">{issue.assignees?.[0]?.name || issue.assignees?.[0]?.username || tIssue('assigneeHandles')}</span>
+                                {agentEditable && <i className="fa-solid fa-pen-to-square text-[9px] opacity-60" />}
+                              </span>
+                            )
+                          }
+                          if (issue.preferredAgentId && issue.preferredAgentAvatar) {
+                            return (
+                              <span
+                                className={`flex items-center gap-1 ${agentEditable ? 'cursor-pointer hover:text-ive-text' : ''}`}
+                                onClick={onClickEdit}
+                              >
+                                <AgentAvatar avatar={issue.preferredAgentAvatar} size="sm" />
+                                <span className="font-bold text-ive-text-muted">{issue.preferredAgentName}</span>
+                                {issue.preferredAgentCliName && (() => {
+                                  const cli = CLI_CONFIG[issue.preferredAgentCliName as CliName]
+                                  return cli ? <i className={`${cli.icon} ${cli.color} text-[10px]`} /> : null
+                                })()}
+                                {agentEditable && <i className="fa-solid fa-pen-to-square text-[9px] opacity-60" />}
+                              </span>
+                            )
+                          }
+                          if (agentEditable) {
+                            return (
+                              <span
+                                className="flex items-center gap-1 cursor-pointer text-ive-text-dim hover:text-ive-green"
+                                onClick={onClickEdit}
+                              >
+                                <i className="fa-solid fa-user-gear text-[10px]" />
+                                <span className="font-bold">{tIssue('noPreference')}</span>
+                                <i className="fa-solid fa-pen-to-square text-[9px] opacity-60" />
+                              </span>
+                            )
+                          }
+                          return null
+                        })()}
                         <span>
                           <i className="fa-solid fa-user mr-1" />
                           {issue.author}
@@ -1143,6 +1202,60 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
             {tCommon('confirm')}
           </button>
         </div>
+      </Modal>
+      {/* 대기 이슈 작업자 선택 모달 */}
+      <Modal open={agentPickerIid !== null} onClose={() => setAgentPickerIid(null)} title={`#${agentPickerIid ?? ''} ${tIssue('preferredAgent')}`} size="sm">
+        {(() => {
+          const targetIssue = agentPickerIid !== null ? issues.find(i => i.iid === agentPickerIid) : null
+          const currentMode = targetIssue?.assignMode || 'auto'
+          const currentAgentId = targetIssue?.preferredAgentId || null
+          return (
+            <div className="max-h-[60vh] overflow-y-auto">
+              <button
+                disabled={agentPickerSaving}
+                onClick={() => agentPickerIid !== null && handleChangeIssueAgent(agentPickerIid, 'auto', null)}
+                className={`w-full px-4 py-3 text-left text-sm flex items-center gap-3 transition-colors disabled:opacity-40 ${
+                  currentMode === 'auto' ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text-dim hover:bg-white/5'
+                }`}
+              >
+                <i className="fa-solid fa-shuffle text-sm w-4" />
+                <span className="font-bold">{tIssue('noPreference')}</span>
+              </button>
+              <button
+                disabled={agentPickerSaving}
+                onClick={() => agentPickerIid !== null && handleChangeIssueAgent(agentPickerIid, 'assignee', null)}
+                className={`w-full px-4 py-3 text-left text-sm flex items-center gap-3 transition-colors disabled:opacity-40 ${
+                  currentMode === 'assignee' ? 'bg-ive-cyan/10 text-ive-cyan' : 'text-ive-text-dim hover:bg-white/5'
+                }`}
+              >
+                <i className="fa-solid fa-user text-sm w-4" />
+                <span className="font-bold">{tIssue('assigneeHandles')}</span>
+              </button>
+              {projectAgents.map(pa => {
+                const cli = CLI_CONFIG[pa.agent.cliName]
+                const isOffline = pa.agent.status === 'offline'
+                const isPicked = currentMode === 'agent' && currentAgentId === pa.agentId
+                return (
+                  <button
+                    key={pa.agentId}
+                    disabled={agentPickerSaving}
+                    onClick={() => agentPickerIid !== null && handleChangeIssueAgent(agentPickerIid, 'agent', pa.agentId)}
+                    className={`w-full px-4 py-3 text-left text-sm flex items-center gap-3 transition-colors disabled:opacity-40 ${
+                      isPicked ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text hover:bg-white/5'
+                    }`}
+                  >
+                    <AgentAvatar avatar={pa.agent.avatar} size="sm" />
+                    <span className="font-bold">{pa.agent.name}</span>
+                    <span className={`text-xs ${cli.color}`}><i className={`${cli.icon} mr-0.5`} />{cli.label}</span>
+                    {isOffline && <span className="text-xs text-ive-red ml-auto"><i className="fa-solid fa-circle-exclamation mr-0.5" />{tIssue('agentOfflineWarning')}</span>}
+                    {!isOffline && pa.agent.status === 'busy' && <span className="ml-auto w-2 h-2 rounded-full bg-ive-cyan animate-pulse" />}
+                    {!isOffline && pa.agent.status === 'available' && <span className="ml-auto w-2 h-2 rounded-full bg-ive-green" />}
+                  </button>
+                )
+              })}
+            </div>
+          )
+        })()}
       </Modal>
     </PullToRefresh>
   )
