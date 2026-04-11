@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import DiffViewer from '@/components/mr/DiffViewer'
 import ConfirmModal from '@/components/ui/ConfirmModal'
 import MobileTabBar from '@/components/layout/MobileTabBar'
+import { useToast } from '@/components/ui/Toast'
 
 interface MRInfo {
   iid: number
@@ -37,6 +38,7 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
   const [showMergeConfirm, setShowMergeConfirm] = useState(false)
   const [showCloseConfirm, setShowCloseConfirm] = useState(false)
   const [mergeError, setMergeError] = useState('')
+  const { toast } = useToast()
 
   const fetchChanges = useCallback(async () => {
     try {
@@ -64,7 +66,10 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
         body: JSON.stringify({ action: 'merge' }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Merge failed')
+      if (!res.ok) {
+        toast(data.error || 'Merge failed', 'error')
+        throw new Error(data.error || 'Merge failed')
+      }
       router.back()
     } catch (err) {
       setMergeError(err instanceof Error ? err.message : '머지 실패')
@@ -83,7 +88,10 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
         body: JSON.stringify({ action: 'close' }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Close failed')
+      if (!res.ok) {
+        toast(data.error || 'Close failed', 'error')
+        throw new Error(data.error || 'Close failed')
+      }
       router.back()
     } catch (err) {
       setMergeError(err instanceof Error ? err.message : 'MR 닫기 실패')

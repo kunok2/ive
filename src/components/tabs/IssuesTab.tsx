@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useStore } from '@/lib/store'
 import { useTab } from '@/lib/tab-context'
+import { useToast } from '@/components/ui/Toast'
 import { formatDateMedium } from '@/lib/format-date'
 import PullToRefresh from '@/components/ui/PullToRefresh'
 import { useDialog } from '@/components/ui/ConfirmDialog'
@@ -46,6 +47,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   const router = useRouter()
   const { confirm } = useDialog()
   const { state } = useStore()
+  const { toast } = useToast()
   const { activeTab, setActiveTab, issuesProjectId, setIssuesProjectId, issuesFilter, setIssuesFilter, issuesSort, setIssuesSort } = useTab()
   const tStage = useTranslations('stage')
   const tFilter = useTranslations('filter')
@@ -68,7 +70,6 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
 
   const FILTER_TABS = useMemo(() => [
     { key: 'all', label: tFilter('all') },
-    { key: 'mine', label: '내 검증' },
     { key: 'waiting', label: tFilter('waiting') },
     { key: 'active', label: tFilter('active') },
     { key: 'verifying', label: tFilter('verifying') },
@@ -79,11 +80,24 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
 
   // OAuth 로그인 유저의 Git provider user id (assignee 매칭용)
   const myGitUserId = state.user?.oauthUserId ? String(state.user.oauthUserId) : null
+  const canFilterMine = !!myGitUserId
 
-  // 이슈가 현재 로그인 유저의 검증 대기/중인지
-  const isMyVerification = useCallback((issue: IveIssue): boolean => {
+  // "내게 할당" 토글 — stage 필터와 교차 적용
+  const [onlyMine, setOnlyMine] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    return sessionStorage.getItem('issues-only-mine') === '1'
+  })
+  const toggleOnlyMine = () => {
+    setOnlyMine(prev => {
+      const next = !prev
+      sessionStorage.setItem('issues-only-mine', next ? '1' : '0')
+      return next
+    })
+  }
+
+  // 이슈가 현재 로그인 유저에게 할당되어 있는지 (stage 무관)
+  const isMine = useCallback((issue: IveIssue): boolean => {
     if (!myGitUserId) return false
-    if (issue.stage !== 'verify_waiting' && issue.stage !== 'verifying') return false
     return !!issue.assignees?.some(a => a.id != null && String(a.id) === myGitUserId)
   }, [myGitUserId])
 
@@ -262,6 +276,28 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     }
   }, [activeTab])
 
+  // 페이지 visibility 변화 시 자동 재조회 — 이슈 상세에서 검증·머지 후 돌아올 때 스테일 방지
+  useEffect(() => {
+    if (activeTab !== 'issues' || !selectedProjectId) return
+    const refresh = () => {
+      if (filter === 'history') fetchClosedIssues()
+      else fetchIssues()
+    }
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refresh()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('pageshow', refresh)
+    window.addEventListener('focus', refresh)
+    window.addEventListener('refresh-counts', refresh)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('pageshow', refresh)
+      window.removeEventListener('focus', refresh)
+      window.removeEventListener('refresh-counts', refresh)
+    }
+  }, [activeTab, selectedProjectId, filter, fetchIssues, fetchClosedIssues])
+
   useEffect(() => {
     if (addTrigger && addTrigger > 0 && selectedProjectId) {
       setShowAddForm(true)
@@ -310,15 +346,33 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   }, [agentDropdownOpen])
 
   // 담당자 모달 확인 — 선택된 1명을 대상 이슈들에 적용
-  const handleConfirmAssignee = () => {
+  const handleConfirmAssignee = async () => {
     const isCreateMode = assigneeModalIids.includes(-1)
     if (isCreateMode) {
       setSelectedAssignees(assigneeModalPick ? [assigneeModalPick] : [])
-    } else {
-      const updated = assigneeModalPick ? [assigneeModalPick] : []
-      for (const iid of assigneeModalIids) {
-        setIssues(prev => prev.map(i => i.iid === iid ? { ...i, assignees: updated } : i))
-        fetch(`/api/projects/${selectedProjectId}/issues/${iid}/assignees`, {
+      setAssigneeModalIids([])
+      return
+    }
+    if (!canEdit) {
+      toast('담당자 변경 권한이 없습니다. (뷰어 권한)', 'error')
+      setAssigneeModalIids([])
+      return
+    }
+    const updated = assigneeModalPick ? [assigneeModalPick] : []
+    // 낙관 업데이트를 위한 이전 상태 스냅샷
+    const prevSnapshots = new Map<number, IveIssue['assignees']>()
+    for (const iid of assigneeModalIids) {
+      const cur = issues.find(i => i.iid === iid)
+      if (cur) prevSnapshots.set(iid, cur.assignees)
+    }
+    // 낙관 업데이트
+    setIssues(prev => prev.map(i => assigneeModalIids.includes(i.iid) ? { ...i, assignees: updated } : i))
+    setAssigneeModalIids([])
+
+    // 서버 적용 (실패 시 롤백)
+    const results = await Promise.all(assigneeModalIids.map(async iid => {
+      try {
+        const res = await fetch(`/api/projects/${selectedProjectId}/issues/${iid}/assignees`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -326,9 +380,35 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
             assigneeUsernames: updated.map(a => a.username),
           }),
         })
+        if (!res.ok) {
+          let message = `담당자 변경 실패 (#${iid})`
+          if (res.status === 403) message = `담당자 변경 권한이 없습니다 (#${iid})`
+          else if (res.status === 401) message = '로그인이 필요합니다'
+          else {
+            try {
+              const data = await res.json()
+              if (data?.error) message = `${data.error} (#${iid})`
+            } catch { /* ignore */ }
+          }
+          return { iid, ok: false, message }
+        }
+        return { iid, ok: true }
+      } catch (e) {
+        return { iid, ok: false, message: `네트워크 오류 (#${iid}): ${(e as Error).message}` }
       }
+    }))
+
+    const failed = results.filter(r => !r.ok)
+    if (failed.length > 0) {
+      // 실패한 이슈 롤백
+      setIssues(prev => prev.map(i => {
+        if (prevSnapshots.has(i.iid) && failed.some(f => f.iid === i.iid)) {
+          return { ...i, assignees: prevSnapshots.get(i.iid)! }
+        }
+        return i
+      }))
+      toast(failed[0].message || '담당자 변경에 실패했습니다', 'error')
     }
-    setAssigneeModalIids([])
   }
 
   // 모달 열 때 기존 담당자를 초기값으로 설정
@@ -366,7 +446,12 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
           preferredAgentCliName: data.preferredAgentCliName,
         } : i))
         setAgentPickerIid(null)
+      } else {
+        const data = await res.json().catch(() => ({}))
+        toast(data.error || '설정 저장에 실패했습니다', 'error')
       }
+    } catch (err: any) {
+      toast(err.message || '네트워크 오류가 발생했습니다', 'error')
     } finally {
       setAgentPickerSaving(false)
     }
@@ -376,7 +461,6 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
 
   const filtered = (isHistoryTab ? closedIssues : issues.filter(issue => {
     if (filter === 'all') return true
-    if (filter === 'mine') return isMyVerification(issue)
     if (filter === 'waiting') return issue.stage === 'waiting' || issue.stage === 'verify_waiting'
     if (filter === 'active') return issue.stage === 'dev'
     if (filter === 'verifying') return issue.stage === 'verifying'
@@ -384,6 +468,8 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     if (filter === 'done') return issue.stage === 'done'
     return true
   })).filter(issue => {
+    // "내게 할당" 토글 — stage 필터와 교차 적용
+    if (onlyMine && canFilterMine && !isMine(issue)) return false
     if (!issueSearchQuery) return true
     const q = issueSearchQuery.toLowerCase()
     return issue.title.toLowerCase().includes(q) || String(issue.iid).includes(q) || (issue.author || '').toLowerCase().includes(q)
@@ -436,15 +522,28 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
           headers: { 'Content-Type': 'application/json' },
           ...(isClose ? {} : { body: JSON.stringify({ stage, action }) }),
         })
-        if (!res.ok) failed++
-        else done++
-      } catch {
+        if (!res.ok) {
+          failed++
+          const data = await res.json().catch(() => ({}))
+          console.error(`[Bulk] #${issue.iid} failed:`, data.error || res.statusText)
+        } else {
+          done++
+        }
+      } catch (err) {
         failed++
+        console.error(`[Bulk] #${issue.iid} error:`, err)
       }
       setBulkProgress({ total: selectedIssues.length, done: done + failed, failed })
     }
 
+    if (failed > 0) {
+      toast(`${failed}건의 작업이 실패했습니다.`, 'error')
+    } else if (done > 0) {
+      toast(`${done}건의 작업을 완료했습니다.`, 'success')
+    }
+
     fetchIssues()
+    window.dispatchEvent(new CustomEvent('refresh-counts'))
     setTimeout(() => {
       exitBulkMode()
     }, cancelRef.current ? 500 : 1000)
@@ -504,6 +603,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
           if (prev.some(i => i.iid === created.iid)) return prev
           return [newIssue, ...prev]
         })
+        toast('이슈가 생성되었습니다', 'success')
         setTimeout(() => {
           if (!selectedProjectId) return
           fetch(`/api/projects/${selectedProjectId}/issues`)
@@ -518,7 +618,12 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
               sessionStorage.setItem('issues-cache', JSON.stringify({ projectId: selectedProjectId, issues: data }))
             })
         }, 1500)
+      } else {
+        const data = await res.json().catch(() => ({}))
+        toast(data.error || '이슈 생성에 실패했습니다', 'error')
       }
+    } catch (err: any) {
+      toast(err.message || '네트워크 오류가 발생했습니다', 'error')
     } finally {
       setCreating(false)
     }
@@ -540,14 +645,24 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
       const res = await fetch(`/api/projects/${selectedProjectId}/issues/${iid}/close`, {
         method: 'POST',
       })
-      if (res.ok) fetchIssues()
+      if (res.ok) {
+        fetchIssues()
+        window.dispatchEvent(new CustomEvent('refresh-counts'))
+        toast('이슈가 종료되었습니다', 'success')
+      } else {
+        const data = await res.json().catch(() => ({}))
+        toast(data.error || '이슈 종료에 실패했습니다', 'error')
+      }
+    } catch (err: any) {
+      toast(err.message || '네트워크 오류가 발생했습니다', 'error')
     } finally {
       setClosing(null)
     }
   }
 
   const selectedProject = state.projects.find(p => p.id === selectedProjectId)
-  const canEdit = selectedProject ? !selectedProject.shareRole || selectedProject.shareRole === 'editor' : false
+  // 뷰어도 이슈 등록 및 담당자로서의 상태 변경은 가능해야 하므로 접근 권한이 있으면 허용
+  const canEdit = !!selectedProject
   const bulkActions = getAvailableBulkActions()
   const stages = selectedStages()
   const [projectDropdownOpen, setProjectDropdownOpen] = useState(false)
@@ -682,14 +797,14 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                 >
                   {tab.label}
                   {(() => {
-                    const count = tab.key === 'all' ? issues.length
-                      : tab.key === 'mine' ? issues.filter(isMyVerification).length
-                      : tab.key === 'waiting' ? issues.filter(i => i.stage === 'waiting' || i.stage === 'verify_waiting').length
-                      : tab.key === 'active' ? issues.filter(i => i.stage === 'dev').length
-                      : tab.key === 'verifying' ? issues.filter(i => i.stage === 'verifying').length
-                      : tab.key === 'failed' ? issues.filter(i => i.stage === 'dev_fail' || i.stage === 'rejected').length
-                      : tab.key === 'done' ? issues.filter(i => i.stage === 'done').length
-                      : tab.key === 'history' ? closedIssues.length
+                    const mineFilter = (i: IveIssue) => !onlyMine || !canFilterMine || isMine(i)
+                    const count = tab.key === 'all' ? issues.filter(mineFilter).length
+                      : tab.key === 'waiting' ? issues.filter(i => (i.stage === 'waiting' || i.stage === 'verify_waiting') && mineFilter(i)).length
+                      : tab.key === 'active' ? issues.filter(i => i.stage === 'dev' && mineFilter(i)).length
+                      : tab.key === 'verifying' ? issues.filter(i => i.stage === 'verifying' && mineFilter(i)).length
+                      : tab.key === 'failed' ? issues.filter(i => (i.stage === 'dev_fail' || i.stage === 'rejected') && mineFilter(i)).length
+                      : tab.key === 'done' ? issues.filter(i => i.stage === 'done' && mineFilter(i)).length
+                      : tab.key === 'history' ? closedIssues.filter(mineFilter).length
                       : 0
                     return count > 0 ? <span className="ml-1 text-xs opacity-60">{count}</span> : null
                   })()}
@@ -697,7 +812,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
               ))}
             </div>
 
-            {/* 검색 + 정렬 */}
+            {/* 검색 + 내게 할당 + 정렬 */}
             <div className="flex items-center gap-2 mb-3">
               <div className="flex-1 relative">
                 <i className="fa-solid fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-ive-text-dim" />
@@ -714,6 +829,20 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                   </button>
                 )}
               </div>
+              {canFilterMine && (
+                <button
+                  onClick={toggleOnlyMine}
+                  className={`text-sm font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg border transition-all shrink-0 ${
+                    onlyMine
+                      ? 'bg-ive-green/20 text-ive-green border-ive-green/40'
+                      : 'bg-ive-bg-card text-ive-text-dim border-ive-border-subtle hover:text-ive-text hover:border-ive-green/30'
+                  }`}
+                  title="내게 할당된 이슈만 보기"
+                >
+                  <i className={`fa-solid ${onlyMine ? 'fa-user-check' : 'fa-user'}`} />
+                  내게
+                </button>
+              )}
               <button
                 onClick={() => {
                   const next = sortOrder === 'newest' ? 'oldest' : 'newest'

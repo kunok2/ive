@@ -115,7 +115,7 @@ export async function POST(
   if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 });
 
   const access = getProjectAccess(projectId, user.id);
-  if (!access || access === 'viewer') {
+  if (!access) {
     return NextResponse.json({ error: '작업 생성 권한이 없습니다.' }, { status: 403 });
   }
 

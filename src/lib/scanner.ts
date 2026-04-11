@@ -28,6 +28,7 @@ import {
   getAssignedUserExecution,
   upsertIssueStageSnapshot,
   replaceProjectMembers,
+  getDb,
 } from "./db";
 import { fetchProjectMembers } from "./provider";
 import { decrypt } from "./crypto";
@@ -494,9 +495,11 @@ export async function scanProject(project: Project, force: boolean = false) {
     }
 
     // 레이블로 상태 판정 후, waiting 이슈를 processIssues로 전달
-    const waitingIssues: any[] = [];
+    const waitingIssues: any[] = []
+    const processedIids = new Set<number>()
     for (const [iid, issue] of issueMap) {
-      const labels: string[] = issue.labels || [];
+      processedIids.add(iid)
+      const labels: string[] = issue.labels || []
       const activeExec = hasActiveExecution(project.id, iid);
       const stage = stageFromLabels(labels, project, { hasActiveExec: activeExec });
 
@@ -641,6 +644,28 @@ export async function scanProject(project: Project, force: boolean = false) {
       console.log(`[Scanner] Found ${waitingIssues.length} waiting issues for ${project.name}`);
       const { assigned, waiting } = await processIssues(project, waitingIssues, decryptedToken);
       issueCount += waiting;
+    }
+
+    // 이번 스캔에서 발견되지 않은 기존 이슈(좀비) 정리
+    const staleRows = getDb().prepare(`
+      SELECT issue_iid, cached_stage FROM issue_stages 
+      WHERE project_id = ? AND cached_stage IS NOT NULL AND cached_stage NOT IN ('done', 'none')
+    `).all(project.id) as { issue_iid: number, cached_stage: string }[]
+
+    for (const row of staleRows) {
+      if (!processedIids.has(row.issue_iid)) {
+        // 이번 스캔 결과(Open 이슈)에 없음 -> Closed 되었거나 IVE 레이블이 제거됨
+        console.log(`[Scanner] Cleaning stale issue #${row.issue_iid} in project ${project.name} (last stage: ${row.cached_stage})`)
+        upsertIssueStageSnapshot(project.id, row.issue_iid, {
+          cachedStage: 'done',
+          assigneeUsername: null,
+          assigneeName: null,
+          assigneeAvatar: null,
+          assigneeProvider: project.provider,
+          assigneeGitUserId: null,
+          issueTitle: null,
+        })
+      }
     }
 
     // 마지막 체크 시간 및 대기 이슈 수 업데이트 (처리대기와 검증대기 분리 저장)

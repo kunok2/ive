@@ -1,0 +1,48 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { getCurrentUser } from '@/lib/auth'
+import { getProject } from '@/lib/db'
+import { decrypt } from '@/lib/crypto'
+import { deleteIssueComment } from '@/lib/provider'
+import { getUserOAuthTokenRaw, getOAuthProviderById } from '@/lib/db'
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string; iid: string; noteId: string }> }
+) {
+  const user = await getCurrentUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { id: projectId, iid, noteId } = await params
+  const project = getProject(projectId)
+  if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+
+  try {
+    // 1. OAuth 토큰 시도 (본인인지 확인하는 겸 가장 확실한 방법)
+    let tokenToUse: string | null = null
+    let usingUserToken = false
+
+    if (user.oauthProviderId && user.oauthUserId) {
+      const provider = getOAuthProviderById(user.oauthProviderId)
+      if (provider && provider.type === project.provider) {
+        const raw = getUserOAuthTokenRaw(user.id)
+        if (raw?.encrypted) {
+          tokenToUse = decrypt(raw.encrypted)
+          usingUserToken = true
+        }
+      }
+    }
+
+    // 2. 관리자이거나 프로젝트 소유자라면 프로젝트 토큰으로라도 삭제 가능케 함
+    // (보통 GitLab/GitHub API는 관리자 토큰이면 다른 사람의 코멘트도 삭제 가능)
+    if (!tokenToUse) {
+      tokenToUse = decrypt(project.accessToken)
+    }
+
+    await deleteIssueComment(project, Number(iid), Number(noteId), tokenToUse, { isOAuth: usingUserToken })
+
+    return NextResponse.json({ success: true })
+  } catch (err) {
+    console.error(`[notes DELETE] Failed to delete note ${noteId}:`, err)
+    return NextResponse.json({ error: err instanceof Error ? err.message : '코멘트 삭제 실패' }, { status: 500 })
+  }
+}

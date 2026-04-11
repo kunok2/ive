@@ -49,16 +49,24 @@ export function reopenIssue(project: Project, iid: number, token: string) {
 }
 
 
-export function fetchIssueNotes(project: Project, iid: number, token: string) {
+export function fetchIssueNotes(project: Project, iid: number, token: string, options?: { isOAuth?: boolean; silent?: boolean }) {
   return project.provider === 'github'
     ? github.fetchGitHubIssueNotes(project, iid, token)
-    : gitlab.fetchGitLabIssueNotes(project, iid, token);
+    : gitlab.fetchGitLabIssueNotes(project, iid, token, options);
 }
 
-export function addIssueComment(project: Project, iid: number, token: string, body: string) {
-  return project.provider === 'github'
-    ? github.addGitHubIssueComment(project, iid, token, body)
-    : gitlab.addGitLabIssueComment(project, iid, token, body);
+export async function addIssueComment(project: Project, iid: number, token: string, body: string, options?: { isOAuth?: boolean; silent?: boolean }) {
+  if (project.provider === 'github') {
+    return await github.addGitHubIssueComment(project, iid, Number(token), body);
+  }
+  return await gitlab.addGitLabIssueComment(project, iid, token, body, options);
+}
+
+export async function deleteIssueComment(project: Project, iid: number, noteId: number, token: string, options?: { isOAuth?: boolean }) {
+  if (project.provider === 'github') {
+    return await github.deleteGitHubIssueComment(project, iid, noteId, token);
+  }
+  return await gitlab.deleteGitLabIssueNote(project, iid, noteId, token, options);
 }
 
 // MR / PR

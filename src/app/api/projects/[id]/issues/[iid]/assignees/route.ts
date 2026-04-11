@@ -16,7 +16,7 @@ export async function PATCH(
   if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 });
 
   const access = getProjectAccess(projectId, user.id);
-  if (!access || access === 'viewer') {
+  if (!access) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 

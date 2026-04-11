@@ -36,10 +36,10 @@ export async function PATCH(
   if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 });
 
   const access = getProjectAccess(projectId, user.id);
-  if (!access || access === 'viewer') {
+  if (!access) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
-  // 작업자 변경은 담당자 또는 관리자만
+  // 작업자 변경은 담당자 또는 관리자만 (viewer도 assignee면 허용)
   if (!user.isAdmin && !isIssueAssignee(projectId, Number(iid), user)) {
     return NextResponse.json(
       { error: '이 이슈의 담당자 또는 관리자만 작업자를 변경할 수 있습니다' },

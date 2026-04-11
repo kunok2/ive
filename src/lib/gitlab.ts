@@ -43,7 +43,10 @@ export function getApiBaseUrl(repoUrl: string): string {
 /**
  * 프로젝트의 인증 방식에 따라 적절한 HTTP 헤더를 반환합니다.
  */
-export function getAuthHeaders(project: Project, decryptedToken: string): Record<string, string> {
+export function getAuthHeaders(project: Project, decryptedToken: string, options?: { isOAuth?: boolean }): Record<string, string> {
+  if (options?.isOAuth) {
+    return { 'Authorization': `Bearer ${decryptedToken}` };
+  }
   if (project.authType === 'basic') {
     const encoded = Buffer.from(`${project.gitUsername}:${decryptedToken}`).toString('base64');
     return { 'Authorization': `Basic ${encoded}` };
@@ -173,50 +176,86 @@ export async function fetchGitLabIssues(project: Project, decryptedToken: string
 /**
  * 이슈에 코멘트를 추가합니다.
  */
-export async function addGitLabIssueComment(project: Project, issueIid: number, decryptedToken: string, body: string) {
+export async function addGitLabIssueComment(project: Project, issueIid: number, decryptedToken: string, body: string, options?: { isOAuth?: boolean; silent?: boolean }) {
   const projectPath = getProjectPath(project.repoUrl);
   if (!projectPath) return;
 
-  const headers = getAuthHeaders(project, decryptedToken);
+  const headers = getAuthHeaders(project, decryptedToken, options);
 
   try {
-    await fetch(apiUrl(project, `/issues/${issueIid}/notes`), {
+    const res = await fetch(apiUrl(project, `/issues/${issueIid}/notes`), {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ body })
     });
+    if (!res.ok) {
+      const errorBody = await res.text().catch(() => 'No body');
+      throw new Error(`GitLab 코멘트 등록 실패 (${res.status} ${res.statusText}): ${errorBody}`);
+    }
   } catch (err) {
-    console.error(`[GitLab] Error adding comment to issue #${issueIid}:`, err);
+    console.error(`[GitLab] Error adding comment to issue #${issueIid}:`, err instanceof Error ? err.message : err);
+    throw err;
   }
 }
 
 /**
  * 이슈의 노트(코멘트) 목록을 조회합니다.
  */
-export async function fetchGitLabIssueNotes(project: Project, issueIid: number, decryptedToken: string) {
+export async function fetchGitLabIssueNotes(project: Project, issueIid: number, decryptedToken: string, options?: { isOAuth?: boolean; silent?: boolean }) {
   const projectPath = getProjectPath(project.repoUrl);
   if (!projectPath) return [];
 
-  const headers = getAuthHeaders(project, decryptedToken);
+  const headers = getAuthHeaders(project, decryptedToken, options);
 
   try {
     const res = await fetch(apiUrl(project, `/issues/${issueIid}/notes?sort=asc&per_page=100`), { headers });
-    if (!res.ok) throw new Error(`Fetch notes failed: ${res.statusText}`);
+    if (!res.ok) {
+      if (!options?.silent) {
+        console.error(`[GitLab] Error fetching notes for issue #${issueIid}: ${res.statusText} (${res.status})`);
+      }
+      return [];
+    }
     return await res.json();
   } catch (err) {
-    console.error(`[GitLab] Error fetching notes for issue #${issueIid}:`, err);
+    if (!options?.silent) {
+      console.error(`[GitLab] Error fetching notes for issue #${issueIid}:`, err);
+    }
     return [];
+  }
+}
+
+/**
+ * 이슈의 노트를 삭제합니다.
+ */
+export async function deleteGitLabIssueNote(project: Project, issueIid: number, noteId: number, decryptedToken: string, options?: { isOAuth?: boolean }) {
+  const projectPath = getProjectPath(project.repoUrl);
+  if (!projectPath) return;
+
+  const headers = getAuthHeaders(project, decryptedToken, options);
+
+  try {
+    const res = await fetch(apiUrl(project, `/issues/${issueIid}/notes/${noteId}`), {
+      method: 'DELETE',
+      headers
+    });
+    if (!res.ok) {
+      const errorBody = await res.text().catch(() => 'No body');
+      throw new Error(`GitLab 코멘트 삭제 실패 (${res.status} ${res.statusText}): ${errorBody}`);
+    }
+  } catch (err) {
+    console.error(`[GitLab] Error deleting note ${noteId} for issue #${issueIid}:`, err);
+    throw err;
   }
 }
 
 /**
  * 이슈에 소요 시간을 등록합니다.
  */
-export async function addGitLabSpentTime(project: Project, issueIid: number, decryptedToken: string, duration: string) {
+export async function addGitLabSpentTime(project: Project, issueIid: number, decryptedToken: string, duration: string, options?: { isOAuth?: boolean }) {
   const projectPath = getProjectPath(project.repoUrl);
   if (!projectPath) return;
 
-  const headers = getAuthHeaders(project, decryptedToken);
+  const headers = getAuthHeaders(project, decryptedToken, options);
 
   try {
     await fetch(apiUrl(project, `/issues/${issueIid}/add_spent_time`), {

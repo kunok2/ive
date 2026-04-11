@@ -4,6 +4,36 @@ import { getCurrentUser } from '@/lib/auth'
 import { decrypt } from '@/lib/crypto'
 import { fetchMRByBranch, mergeMR, closeMR, fetchSingleIssue, addIssueLabels, removeIssueLabels } from '@/lib/provider'
 import { logActivity } from '@/lib/activity'
+import type { Project, User } from '@/types'
+
+async function syncLabelsToDone(project: Project, iid: number, token: string, user: any, projectId: string) {
+  const labelD = project.labelDev || 'IVE-D'
+  const labelW = project.labelVerifyWait || 'IVE-W'
+  const labelV = project.labelVerify || 'IVE-V'
+  const labelE = project.labelEnd || 'IVE-E'
+
+  const issue = await fetchSingleIssue(project, iid, token)
+  if (issue) {
+    const labels: string[] = issue.labels || []
+    if (!labels.includes(labelE)) {
+      const labelsToRemove = [labelD, labelW, labelV].filter(l => labels.includes(l))
+      if (labelsToRemove.length > 0) {
+        await removeIssueLabels(project, iid, token, labelsToRemove)
+      }
+      await addIssueLabels(project, iid, token, [labelE])
+      markIssueVerified(projectId, iid, { name: user.name, avatar: user.avatar })
+      touchProjectActivity(projectId)
+      logActivity({
+        userId: user.id,
+        category: 'task',
+        action: 'task_complete',
+        detail: `머지 완료 → 자동 완료 전환 (이슈 #${iid}, ${project.name})`,
+        targetType: 'issue',
+        targetId: `${projectId}:${iid}`,
+      })
+    }
+  }
+}
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string; iid: string }> }) {
   const user = await getCurrentUser()
@@ -58,8 +88,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   // 머지/MR 액션은 관리자 또는 이슈 담당자만
+  // (viewer 권한이어도 자기에게 할당된 이슈의 MR은 처리할 수 있어야 함)
   const access = getProjectAccess(id, user.id)
-  if (!access || access === 'viewer') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!access) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   if (!user.isAdmin && !isIssueAssignee(id, Number(iid), user)) {
     return NextResponse.json(
       { error: '이 이슈의 담당자 또는 관리자만 MR을 머지/처리할 수 있습니다' },
@@ -77,39 +108,22 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: 'MR not found' }, { status: 404 })
     }
 
+    // 이미 머지된 상태라면 성공으로 처리 (사용자가 Git에서 직접 머지한 경우 대응)
+    if (mr.state === 'merged') {
+      console.log(`[MR] Issue #${iid} already merged in Git. Syncing labels...`)
+      try {
+        await syncLabelsToDone(project, Number(iid), decryptedToken, user, id)
+      } catch (err) {
+        console.warn(`[MR] Label sync failed for #${iid}:`, err)
+      }
+      return NextResponse.json({ success: true, mr, alreadyMerged: true })
+    }
+
     try {
       const result = await mergeMR(project, decryptedToken, mr.iid)
 
       // 머지 성공 시 현재 단계(IVE-D/IVE-W/IVE-V) → IVE-E 레이블 자동 전환
-      try {
-        const labelD = project.labelDev || 'IVE-D'
-        const labelW = project.labelVerifyWait || 'IVE-W'
-        const labelV = project.labelVerify || 'IVE-V'
-        const labelE = project.labelEnd || 'IVE-E'
-        const issue = await fetchSingleIssue(project, Number(iid), decryptedToken)
-        if (issue) {
-          const labels: string[] = issue.labels || []
-          if (!labels.includes(labelE)) {
-            const labelsToRemove = [labelD, labelW, labelV].filter(l => labels.includes(l))
-            if (labelsToRemove.length > 0) {
-              await removeIssueLabels(project, Number(iid), decryptedToken, labelsToRemove)
-            }
-            await addIssueLabels(project, Number(iid), decryptedToken, [labelE])
-            markIssueVerified(id, Number(iid), { name: user.name, avatar: user.avatar })
-            touchProjectActivity(id)
-            logActivity({
-              userId: user.id,
-              category: 'task',
-              action: 'task_complete',
-              detail: `머지 완료 → 자동 완료 전환 (이슈 #${iid}, ${project.name})`,
-              targetType: 'issue',
-              targetId: `${id}:${iid}`,
-            })
-          }
-        }
-      } catch (labelErr) {
-        console.error(`[MR] 이슈 #${iid} 레이블 전환 실패:`, labelErr)
-      }
+      await syncLabelsToDone(project, Number(iid), decryptedToken, user, id)
 
       return NextResponse.json({ success: true, mr: result })
     } catch (err) {

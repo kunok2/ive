@@ -37,7 +37,7 @@ export default function MRReviewSection({ projectId, issueIid }: Props) {
   const userTz = state.user?.timezone
   const t = useTranslations('mr')
   const td = useTranslations('dialog')
-  const { watchPipeline } = useToast()
+  const { watchPipeline, toast } = useToast()
   const [mr, setMr] = useState<MRInfo | null>(null)
   const [loading, setLoading] = useState(true)
   const [merging, setMerging] = useState(false)
@@ -52,8 +52,9 @@ export default function MRReviewSection({ projectId, issueIid }: Props) {
       if (!res.ok) throw new Error('Failed to fetch MR')
       const data = await res.json()
       setMr(data.mr)
-    } catch {
+    } catch (err: any) {
       setMr(null)
+      setError(err.message || 'Failed to fetch MR')
     } finally {
       setLoading(false)
     }
@@ -71,7 +72,10 @@ export default function MRReviewSection({ projectId, issueIid }: Props) {
         body: JSON.stringify({ action: 'merge' }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Merge failed')
+      if (!res.ok) {
+        toast(data.error || 'Merge failed', 'error')
+        throw new Error(data.error || 'Merge failed')
+      }
       await fetchMR()
       if (mr) {
         watchPipeline({
@@ -98,7 +102,10 @@ export default function MRReviewSection({ projectId, issueIid }: Props) {
         body: JSON.stringify({ action: 'close' }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Close failed')
+      if (!res.ok) {
+        toast(data.error || 'Close failed', 'error')
+        throw new Error(data.error || 'Close failed')
+      }
       await fetchMR()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Close failed')

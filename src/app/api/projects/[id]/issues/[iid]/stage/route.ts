@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAccess, hasActiveExecution, stageFromLabels, markIssueVerifyStarted, markIssueVerified, markIssueVerifyRejected, resetIssueScheduledAt, touchProjectActivity, assignIssueAtomically, getAssignModeMap, getIssueScheduledAt, isIssueAssignee, type IssueStage } from '@/lib/db';
+import { getProject, getProjectAccess, hasActiveExecution, stageFromLabels, markIssueVerifyStarted, markIssueVerified, markIssueVerifyRejected, resetIssueScheduledAt, touchProjectActivity, assignIssueAtomically, getAssignModeMap, getIssueScheduledAt, isIssueAssignee, upsertIssueStageSnapshot, type IssueStage } from '@/lib/db';
 import type { TaskExecution } from '@/types';
 import { getCurrentUser } from '@/lib/auth';
 import { decrypt } from '@/lib/crypto';
@@ -40,6 +40,12 @@ const TRANSITIONS: Record<string, { action: string; description: string; removeL
       removeLabels: (p) => [p.labelDev || 'IVE-D'],
       addLabels: (p) => [p.labelVerifyWait || 'IVE-W'],
     },
+    {
+      action: 'retry',
+      description: '재시도 → 스케줄',
+      removeLabels: (p) => [p.labelDev || 'IVE-D'],
+      addLabels: (p) => [p.labelSchedule || 'IVE-S'],
+    },
   ],
   dev_fail: [
     {
@@ -62,6 +68,12 @@ const TRANSITIONS: Record<string, { action: string; description: string; removeL
       removeLabels: (p) => [p.labelVerifyWait || 'IVE-W'],
       addLabels: (p) => [p.labelSchedule || 'IVE-S'],
     },
+    {
+      action: 'retry',
+      description: '재시도 → 스케줄',
+      removeLabels: (p) => [p.labelVerifyWait || 'IVE-W'],
+      addLabels: (p) => [p.labelSchedule || 'IVE-S'],
+    },
   ],
   verifying: [
     {
@@ -79,6 +91,12 @@ const TRANSITIONS: Record<string, { action: string; description: string; removeL
     {
       action: 'reject',
       description: '검증 반려 → 스케줄',
+      removeLabels: (p) => [p.labelVerify || 'IVE-V'],
+      addLabels: (p) => [p.labelSchedule || 'IVE-S'],
+    },
+    {
+      action: 'retry',
+      description: '재시도 → 스케줄',
       removeLabels: (p) => [p.labelVerify || 'IVE-V'],
       addLabels: (p) => [p.labelSchedule || 'IVE-S'],
     },
@@ -112,12 +130,14 @@ export async function POST(
   const project = getProject(projectId);
   if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 });
 
+  // 프로젝트 접근 권한 체크 (viewer여도 허용 — 워크플로우 액션은 assignee 기반으로 판단)
   const access = getProjectAccess(projectId, user.id);
-  if (!access || access === 'viewer') {
+  if (!access) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   // 권한: 관리자이거나 해당 이슈의 Git assignee(검증자/담당자)만 단계 변경 가능
+  // (viewer 권한이어도 assignee이면 자신의 작업을 진행할 수 있어야 함)
   if (!user.isAdmin) {
     if (!isIssueAssignee(projectId, Number(iid), user)) {
       return NextResponse.json(
@@ -246,6 +266,19 @@ export async function POST(
     const newLabels = issue?.labels || [];
     const activeExec = hasActiveExecution(projectId, Number(iid));
     const newStage = stageFromLabels(newLabels, project, { hasActiveExec: activeExec }) || 'waiting';
+
+    // DB 스냅샷 즉시 업데이트 (탑바/목록 즉시 동기화용)
+    const firstAssignee = issue?.assignees?.[0];
+    const assigneeGitUserId = firstAssignee?.id ? String(firstAssignee.id) : null;
+    upsertIssueStageSnapshot(projectId, Number(iid), {
+      cachedStage: newStage,
+      assigneeUsername: firstAssignee?.username || null,
+      assigneeName: firstAssignee?.name || (firstAssignee as any)?.login || null,
+      assigneeAvatar: firstAssignee?.avatar_url || null,
+      assigneeProvider: project.provider,
+      assigneeGitUserId,
+      issueTitle: issue?.title || null,
+    });
 
     // 활동 로그 기록
     const actionLabels: Record<string, string> = {

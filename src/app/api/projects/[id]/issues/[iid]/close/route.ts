@@ -16,11 +16,11 @@ export async function POST(
   if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 });
 
   const access = getProjectAccess(projectId, user.id);
-  if (!access || access === 'viewer') {
+  if (!access) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  // 권한: 관리자이거나 해당 이슈의 Git assignee만 닫을 수 있음
+  // 권한: 관리자이거나 해당 이슈의 Git assignee만 닫을 수 있음 (viewer도 assignee면 허용)
   if (!user.isAdmin) {
     if (!isIssueAssignee(projectId, Number(iid), user)) {
       return NextResponse.json(

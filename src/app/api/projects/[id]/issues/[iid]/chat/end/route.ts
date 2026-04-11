@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getProject, getProjectAccess, getChatSession, endChatSession, updateExecutionStatus, updateAgentStatus, countActiveExecutionsByAgent } from '@/lib/db'
+import { getProject, getProjectAccess, getChatSession, endChatSession, updateExecutionStatus, updateAgentStatus, countActiveExecutionsByAgent, isIssueAssignee } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { killChatAgent } from '@/lib/chat-agent'
 
@@ -16,13 +16,20 @@ export async function POST(
   const user = await getCurrentUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { id: projectId } = await params
+  const { id: projectId, iid } = await params
   const project = getProject(projectId)
   if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
 
   const access = getProjectAccess(projectId, user.id)
-  if (!access || access === 'viewer') {
+  if (!access) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+  // 채팅 종료는 담당자 또는 관리자만 (viewer도 assignee면 허용)
+  if (!user.isAdmin && !isIssueAssignee(projectId, Number(iid), user)) {
+    return NextResponse.json(
+      { error: '이 이슈의 담당자 또는 관리자만 AI 채팅을 종료할 수 있습니다' },
+      { status: 403 }
+    )
   }
 
   const { sessionId } = await req.json()

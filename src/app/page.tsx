@@ -35,8 +35,16 @@ export default function HomePage() {
         .catch(() => { /* ignore */ })
     }
     fetchCount()
+    
+    // 30초마다 자동 갱신 및 외부 이벤트 수신 시 즉시 갱신
     const iv = setInterval(fetchCount, 30000)
-    return () => { cancelled = true; clearInterval(iv) }
+    window.addEventListener('refresh-counts', fetchCount)
+    
+    return () => { 
+      cancelled = true
+      clearInterval(iv)
+      window.removeEventListener('refresh-counts', fetchCount)
+    }
   }, [state.user])
   const { alert: showAlert, confirm: showConfirm } = useDialog()
   const tn = useTranslations('nav')

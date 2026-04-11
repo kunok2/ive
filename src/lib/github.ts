@@ -203,13 +203,33 @@ export async function fetchGitHubIssueNotes(project: Project, issueNumber: numbe
     return comments.map((c: any) => ({
       id: c.id,
       body: c.body,
-      author: { name: c.user?.login || 'unknown', avatar_url: c.user?.avatar_url || '' },
+      author: { id: c.user?.id, name: c.user?.login || 'unknown', avatar_url: c.user?.avatar_url || '' },
       system: false,
       created_at: c.created_at,
     }));
   } catch (err) {
     console.error(`[GitHub] Error fetching comments for issue #${issueNumber}:`, err);
     return [];
+  }
+}
+
+/**
+ * 이슈의 코멘트를 삭제합니다.
+ */
+export async function deleteGitHubIssueComment(project: Project, _issueNumber: number, commentId: number, decryptedToken: string) {
+  const headers = getGitHubAuthHeaders(project, decryptedToken);
+  try {
+    const res = await fetch(apiUrl(project, `/issues/comments/${commentId}`), {
+      method: 'DELETE',
+      headers
+    });
+    if (!res.ok) {
+      const errorBody = await res.text().catch(() => 'No body');
+      throw new Error(`GitHub 코멘트 삭제 실패 (${res.status} ${res.statusText}): ${errorBody}`);
+    }
+  } catch (err) {
+    console.error(`[GitHub] Error deleting comment ${commentId}:`, err);
+    throw err;
   }
 }
 

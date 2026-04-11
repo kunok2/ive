@@ -4,6 +4,7 @@ import { use, useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import MobileTabBar from '@/components/layout/MobileTabBar'
 import { useDialog } from '@/components/ui/ConfirmDialog'
+import { useToast } from '@/components/ui/Toast'
 import PullToRefresh from '@/components/ui/PullToRefresh'
 import MRReviewSection from '@/components/mr/MRReviewSection'
 import ReactMarkdown from 'react-markdown'
@@ -51,6 +52,7 @@ interface Note {
   iveAuthorAvatar?: string | null
   system: boolean
   createdAt: string
+  isMine?: boolean
 }
 
 interface StageAction {
@@ -64,6 +66,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   const { projectId, iid } = use(params)
   const router = useRouter()
   const { confirm } = useDialog()
+  const { toast } = useToast()
   const { state } = useStore()
   const tc = useTranslations('common')
   const tStage = useTranslations('stage')
@@ -180,7 +183,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
       return
     }
     setNotesLoading(true)
-    const res = await fetch(`/api/projects/${projectId}/issues/${iid}/notes`)
+    const res = await fetch(`/api/projects/${projectId}/issues/${iid}/notes?t=${Date.now()}`)
     if (res.ok) {
       const data = await res.json()
       setNotes(data)
@@ -190,6 +193,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
 
   const refreshAll = useCallback(async () => {
     await Promise.all([fetchIssue(), fetchNotes()])
+    window.dispatchEvent(new CustomEvent('refresh-counts'))
   }, [fetchIssue, fetchNotes])
 
   const fetchPreferredAgent = useCallback(async () => {
@@ -267,7 +271,12 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
       if (res.ok) {
         await fetchIssue()
         await fetchNotes()
+      } else {
+        const errorData = await res.json().catch(() => null)
+        toast(errorData?.error || `Error: ${res.status} ${res.statusText}`, 'error')
       }
+    } catch (e: any) {
+      toast(e.message || '네트워크 오류가 발생했습니다.', 'error')
     } finally {
       setStageChanging(false)
     }
@@ -309,12 +318,37 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
       })
       if (res.ok) {
         setComment(''); localStorage.removeItem(commentKey)
-        await fetchNotes()
+        setTimeout(() => refreshAll(), 500)
+        toast(tIssue('commentRegistered'), 'success')
+      } else {
+        const data = await res.json().catch(() => ({}))
+        toast(data.error || tIssue('commentFailed'), 'error')
       }
+    } catch (err: any) {
+      toast(err.message || tc('networkError'), 'error')
     } finally {
       postingRef.current = false
       setPosting(false)
       setPostingType(null)
+    }
+  }
+
+  async function handleDeleteNote(noteId: number) {
+    if (!(await confirm({ title: tIssue('deleteComment'), message: tIssue('deleteCommentConfirm'), confirmText: tc('delete'), danger: true }))) return
+    
+    try {
+      const res = await fetch(`/api/projects/${projectId}/issues/${iid}/notes/${noteId}`, {
+        method: 'DELETE'
+      })
+      if (res.ok) {
+        toast(tIssue('commentDeleted'), 'success')
+        refreshAll()
+      } else {
+        const data = await res.json().catch(() => ({}))
+        toast(data.error || tIssue('deleteCommentFailed'), 'error')
+      }
+    } catch (err) {
+      toast(tIssue('deleteCommentFailed'), 'error')
     }
   }
 
@@ -331,8 +365,13 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ body: comment.trim() }),
       })
-      if (!res.ok) return
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        toast(data.error || '코멘트 작성에 실패했습니다', 'error')
+        return
+      }
       setComment(''); localStorage.removeItem(commentKey)
+      await fetchNotes() // 코멘트 성공 시 즉시 목록 갱신
       // 2. 선호 에이전트 변경 (지정된 경우)
       if (agentId !== undefined) {
         const agentRes = await fetch(`/api/projects/${projectId}/issues/${iid}/preferred-agent`, {
@@ -340,7 +379,12 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ agentId }),
         })
-        if (agentRes.ok) setPreferredAgent(await agentRes.json())
+        if (agentRes.ok) {
+          setPreferredAgent(await agentRes.json())
+        } else {
+          const data = await agentRes.json().catch(() => ({}))
+          toast(data.error || '에이전트 설정 변경에 실패했습니다', 'error')
+        }
       }
       // 3. 스케줄 등록 (waiting이면 이미 스케줄이므로 스킵)
       if (issue?.stage !== 'waiting') {
@@ -348,14 +392,21 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
           : issue?.stage === 'verifying' ? 'reject'
           : issue?.stage === 'none' ? 'schedule'
           : 'retry'
-        await fetch(`/api/projects/${projectId}/issues/${iid}/stage`, {
+        const stageRes = await fetch(`/api/projects/${projectId}/issues/${iid}/stage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ stage: issue?.stage, action: stageAction }),
         })
+        if (!stageRes.ok) {
+          const errorData = await stageRes.json().catch(() => null)
+          toast(errorData?.error || `Error: ${stageRes.status} ${stageRes.statusText}`, 'error')
+          return
+        }
       }
-      await fetchIssue()
-      await fetchNotes()
+      await refreshAll()
+      toast('성공적으로 변경되었습니다', 'success')
+    } catch (err: any) {
+      toast(err.message || '네트워크 오류가 발생했습니다', 'error')
     } finally {
       postingRef.current = false
       setPosting(false)
@@ -375,15 +426,27 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ body: comment.trim() }),
       })
-      if (!res.ok) return
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        toast(data.error || '코멘트 작성에 실패했습니다', 'error')
+        return
+      }
       setComment(''); localStorage.removeItem(commentKey)
-      await fetch(`/api/projects/${projectId}/issues/${iid}/stage`, {
+      await fetchNotes() // 코멘트 성공 시 즉시 목록 갱신
+      const stageRes = await fetch(`/api/projects/${projectId}/issues/${iid}/stage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ stage: 'verifying', action: 'approve' }),
       })
-      await fetchIssue()
-      await fetchNotes()
+      if (!stageRes.ok) {
+        const errorData = await stageRes.json().catch(() => null)
+        toast(errorData?.error || `Error: ${stageRes.status} ${stageRes.statusText}`, 'error')
+        return
+      }
+      await refreshAll()
+      toast('승인 완료되었습니다', 'success')
+    } catch (err: any) {
+      toast(err.message || '네트워크 오류가 발생했습니다', 'error')
     } finally {
       postingRef.current = false
       setPosting(false)
@@ -431,14 +494,19 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
         })
         if (!res.ok) return
         setComment(''); localStorage.removeItem(commentKey)
+        await fetchNotes() // 코멘트 성공 시 즉시 목록 갱신
       }
-      await fetch(`/api/projects/${projectId}/issues/${iid}/stage`, {
+      const stageRes = await fetch(`/api/projects/${projectId}/issues/${iid}/stage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ stage: next.stage, action: next.action }),
       })
-      await fetchIssue()
-      await fetchNotes()
+      if (!stageRes.ok) {
+        const errorData = await stageRes.json().catch(() => null)
+        toast(errorData?.error || `Error: ${stageRes.status} ${stageRes.statusText}`, 'error')
+        return
+      }
+      await refreshAll()
     } finally {
       postingRef.current = false
       setPosting(false)
@@ -464,7 +532,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
       })
       if (res.ok) {
         setEditMode(false)
-        await fetchIssue()
+        await refreshAll()
       }
     } finally {
       setSaving(false)
@@ -1036,9 +1104,20 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                         </>
                       )}
                     </span>
-                    <span className="text-xs text-ive-text-dim ml-auto">
-                      {formatDateMedium(note.createdAt, state.user?.locale, state.user?.timezone)}
-                    </span>
+                    <div className="ml-auto flex items-center gap-2">
+                      <span className="text-xs text-ive-text-dim">
+                        {formatDateMedium(note.createdAt, state.user?.locale, state.user?.timezone)}
+                      </span>
+                      {note.isMine && (
+                        <button
+                          onClick={() => handleDeleteNote(note.id)}
+                          className="text-ive-text-dim hover:text-ive-red transition-colors ml-1"
+                          title={tc('delete')}
+                        >
+                          <i className="fa-solid fa-trash-can text-[10px]" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div className={`text-sm leading-relaxed break-words ${note.system ? 'text-ive-text-dim italic' : 'text-ive-text-muted'}`}>
                     {note.body.length > 500 ? <NoteBody body={note.body} /> : <MarkdownNote body={cleanNoteBody(note.body)} />}
