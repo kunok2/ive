@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAccess } from '@/lib/db';
+import { getProject, getProjectAuthToken, getProjectAccess } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
-import { decrypt } from '@/lib/crypto';
 import { fetchProjectMembers } from '@/lib/provider';
 
 export async function GET(
@@ -20,7 +19,7 @@ export async function GET(
   }
 
   try {
-    const token = decrypt(project.accessToken);
+    const token = getProjectAuthToken(projectId);
     const members = await fetchProjectMembers(project, token);
     return NextResponse.json(members);
   } catch {

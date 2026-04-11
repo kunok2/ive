@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
-import { getProject, getProjectAccess, updateProjectConflictCount, markIssueVerified, touchProjectActivity } from '@/lib/db'
-import { decrypt } from '@/lib/crypto'
+import { getProject, getProjectAuthToken, getProjectAccess, updateProjectConflictCount, markIssueVerified, touchProjectActivity } from '@/lib/db'
 import { fetchOpenMRs, mergeMR, closeMR, fetchSingleIssue, addIssueLabels, removeIssueLabels } from '@/lib/provider'
 import { logActivity } from '@/lib/activity'
 
@@ -20,7 +19,7 @@ export async function GET(
 
   let decryptedToken: string
   try {
-    decryptedToken = decrypt(project.accessToken)
+    decryptedToken = getProjectAuthToken(id)
   } catch {
     return NextResponse.json({ error: 'Token decryption failed' }, { status: 500 })
   }
@@ -54,7 +53,7 @@ export async function POST(
 
   let decryptedToken: string
   try {
-    decryptedToken = decrypt(project.accessToken)
+    decryptedToken = getProjectAuthToken(id)
   } catch {
     return NextResponse.json({ error: 'Token decryption failed' }, { status: 500 })
   }

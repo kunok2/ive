@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
-import { getProject, getProjectAccess, isIssueAssignee } from '@/lib/db'
+import { getProject, getProjectAuthToken, getProjectAccess, isIssueAssignee } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
-import { decrypt } from '@/lib/crypto'
 import { fetchMRByBranch, fetchBranchPipelines } from '@/lib/provider'
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string; iid: string }> }) {
@@ -18,9 +17,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const decryptedToken = decrypt(project.accessToken)
+  const token = getProjectAuthToken(id)
   const sourceBranch = `dev-${iid}`
-  const mr = await fetchMRByBranch(project, decryptedToken, sourceBranch)
+  const mr = await fetchMRByBranch(project, token, sourceBranch)
 
   if (!mr) {
     return NextResponse.json({ pipeline: null })
@@ -29,7 +28,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   // 머지된 MR → merge_commit_sha로 해당 머지의 파이프라인만 특정
   const mergeSha = mr.merge_commit_sha
   const targetBranch = mr.target_branch || 'main'
-  const pipelines = await fetchBranchPipelines(project, decryptedToken, targetBranch)
+  const pipelines = await fetchBranchPipelines(project, token, targetBranch)
 
   if (!pipelines || pipelines.length === 0) {
     return NextResponse.json({ pipeline: null })

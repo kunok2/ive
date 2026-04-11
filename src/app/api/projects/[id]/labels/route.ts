@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAccess } from '@/lib/db';
+import { getProject, getProjectAuthToken, getProjectAccess } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
-import { decrypt } from '@/lib/crypto';
 import { checkLabelsExist, ensureLabels } from '@/lib/provider';
 
 // 레이블 존재 확인
@@ -21,7 +20,7 @@ export async function GET(
   }
 
   try {
-    const token = decrypt(project.accessToken);
+    const token = getProjectAuthToken(projectId);
     const results = await checkLabelsExist(project, token);
     return NextResponse.json(results);
   } catch {
@@ -47,7 +46,7 @@ export async function POST(
   }
 
   try {
-    const token = decrypt(project.accessToken);
+    const token = getProjectAuthToken(projectId);
     await ensureLabels(project, token);
     const results = await checkLabelsExist(project, token);
     const allExist = results.every(r => r.exists);

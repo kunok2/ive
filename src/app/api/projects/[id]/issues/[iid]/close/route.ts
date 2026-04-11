@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAccess, isIssueAssignee } from '@/lib/db';
+import { getProject, getProjectAccess, getProjectAuthToken, isIssueAssignee } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
-import { decrypt } from '@/lib/crypto';
 import { closeIssue } from '@/lib/provider';
 
 export async function POST(
@@ -31,8 +30,8 @@ export async function POST(
   }
 
   try {
-    const decryptedToken = decrypt(project.accessToken);
-    await closeIssue(project, Number(iid), decryptedToken);
+    const token = getProjectAuthToken(projectId);
+    await closeIssue(project, Number(iid), token);
     return NextResponse.json({ success: true });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : '이슈 닫기 실패' }, { status: 500 });

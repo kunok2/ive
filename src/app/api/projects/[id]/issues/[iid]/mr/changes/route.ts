@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
-import { getProject, getProjectAccess, isIssueAssignee } from '@/lib/db'
+import { getProject, getProjectAuthToken, getProjectAccess, isIssueAssignee } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
-import { decrypt } from '@/lib/crypto'
 import { fetchMRByBranch, fetchMRChanges } from '@/lib/provider'
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string; iid: string }> }) {
@@ -18,15 +17,15 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const decryptedToken = decrypt(project.accessToken)
+  const token = getProjectAuthToken(id)
   const sourceBranch = `dev-${iid}`
-  const mr = await fetchMRByBranch(project, decryptedToken, sourceBranch)
+  const mr = await fetchMRByBranch(project, token, sourceBranch)
 
   if (!mr) {
     return NextResponse.json({ error: 'MR not found' }, { status: 404 })
   }
 
-  const changes = await fetchMRChanges(project, decryptedToken, mr.iid)
+  const changes = await fetchMRChanges(project, token, mr.iid)
   if (!changes) {
     return NextResponse.json({ error: 'Failed to fetch changes' }, { status: 500 })
   }

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAccess } from '@/lib/db';
+import { getProject, getProjectAccess, getProjectAuthToken } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
-import { decrypt } from '@/lib/crypto';
 import { updateIssue } from '@/lib/provider';
 
 export async function PATCH(
@@ -23,7 +22,7 @@ export async function PATCH(
   const { assigneeIds, assigneeUsernames } = await req.json();
 
   try {
-    const token = decrypt(project.accessToken);
+    const token = getProjectAuthToken(projectId);
     await updateIssue(project, Number(iid), token, {
       assigneeIds: assigneeIds || [],
       assignees: assigneeUsernames || [],

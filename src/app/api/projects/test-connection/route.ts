@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
-import { getProject, getProjectWithUserOAuth, getUserOAuthTokenRaw } from '@/lib/db'
+import { getProject, getProjectAuthToken, getProjectWithUserOAuth, getUserOAuthTokenRaw } from '@/lib/db'
 import { decrypt } from '@/lib/crypto'
 import { AuthType, detectProvider } from '@/types'
 
@@ -21,6 +21,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: '저장소 URL을 입력해주세요' }, { status: 400 })
   }
 
+  if (!projectId) {
+    return NextResponse.json({ error: '저장소 URL을 입력해주세요' }, { status: 400 })
+  }
+
   let token = accessToken
   let username = gitUsername
   let authMode = authType || 'token'
@@ -38,7 +42,7 @@ export async function POST(req: Request) {
 
   const usesOAuth = existingProject?.usesOAuthToken
 
-  if (!token && usesOAuth && existingProject) {
+  if (!token && usesOAuth && existingProject && projectId) {
     const full = getProjectWithUserOAuth(projectId)
     if (full?.oauth_access_token) {
       try {
@@ -50,11 +54,7 @@ export async function POST(req: Request) {
   }
 
   if (!token && !usesOAuth && existingProject) {
-    try {
-      token = decrypt(existingProject.accessToken)
-    } catch {
-      token = existingProject.accessToken
-    }
+    token = getProjectAuthToken(projectId)
   }
 
   if (!token && useOAuthToken) {

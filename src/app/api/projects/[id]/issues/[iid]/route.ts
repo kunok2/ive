@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getProject, getProjectAccess, hasActiveExecution, stageFromLabels } from '@/lib/db'
+import { getProject, getProjectAccess, getProjectAuthToken, hasActiveExecution, stageFromLabels } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
-import { decrypt } from '@/lib/crypto'
 import { updateIssue, fetchSingleIssue } from '@/lib/provider'
 
 export async function PUT(
@@ -25,8 +24,8 @@ export async function PUT(
     if (!title?.trim()) {
       return NextResponse.json({ error: '제목은 필수입니다' }, { status: 400 })
     }
-    const decryptedToken = decrypt(project.accessToken)
-    const updated = await updateIssue(project, Number(iid), decryptedToken, {
+    const token = getProjectAuthToken(projectId)
+    const updated = await updateIssue(project, Number(iid), token, {
       title: title.trim(),
       description: description ?? '',
     })
@@ -59,9 +58,9 @@ export async function GET(
   }
 
   try {
-    const decryptedToken = decrypt(project.accessToken)
+    const token = getProjectAuthToken(projectId)
 
-    const issue = await fetchSingleIssue(project, Number(iid), decryptedToken)
+    const issue = await fetchSingleIssue(project, Number(iid), token)
     if (!issue) return NextResponse.json({ error: '이슈를 찾을 수 없습니다' }, { status: 404 })
 
     // 레이블에서 stage 판정

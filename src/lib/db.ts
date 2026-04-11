@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs'
 import { User, Project, Agent, ProjectAssignment, TaskExecution, TaskStatus, StatSnapshot, TokenPricing, ProjectShare, ShareRole, ReportSchedule, ReportSendLog, UserActivityLog, ActivityCategory, OAuthProvider } from '@/types'
 import { getKSTTodayStartISO, getKSTYesterdayStartISO, kstDateToUTCISO } from './date-utils'
 import { startScanner } from './scanner'
+import { decrypt } from './crypto'
 
 declare global {
   var db: Database.Database | undefined;
@@ -1188,6 +1189,24 @@ export function touchProjectActivity(projectId: string) {
 export function getProject(id: string): Project | null {
   const r = getDb().prepare('SELECT * FROM projects WHERE id = ?').get(id) as ProjectRow | undefined
   return r ? mapProject(r) : null
+}
+
+/** 프로젝트의 인증 토큰을 반환 (OAuth 사용 시 소유주의 토큰) */
+export function getProjectAuthToken(projectId: string): string {
+  const p = getProject(projectId)
+  if (!p) return ''
+  if (p.usesOAuthToken) {
+    const full = getProjectWithUserOAuth(projectId)
+    if (full?.oauth_access_token) {
+      return decrypt(full.oauth_access_token)
+    }
+    return ''
+  }
+  try {
+    return decrypt(p.accessToken)
+  } catch {
+    return p.accessToken
+  }
 }
 
 export function createProject(p: Project) {

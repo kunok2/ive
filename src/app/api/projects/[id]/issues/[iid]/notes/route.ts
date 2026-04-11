@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAccess, getUserById, getUserOAuthTokenRaw, getOAuthProviderById, isIssueAssignee } from '@/lib/db';
+import { getProject, getProjectAuthToken, getProjectAccess, getUserById, getUserOAuthTokenRaw, getOAuthProviderById, isIssueAssignee } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { decrypt } from '@/lib/crypto';
 import { fetchIssueNotes, addIssueComment } from '@/lib/provider';
@@ -42,14 +42,14 @@ export async function GET(
       }
     }
     if (!tokenToUse) {
-      tokenToUse = decrypt(project.accessToken);
+      tokenToUse = getProjectAuthToken(projectId);
     }
 
     let notes = await fetchIssueNotes(project, Number(iid), tokenToUse, { isOAuth: usingUserToken, silent: usingUserToken });
     
     // 유저 토큰 사용 시 권한부족 등으로 실패하여 []가 반환된 경우, 프로젝트 토큰으로 재시도
     if (usingUserToken && notes.length === 0) {
-      const projectToken = decrypt(project.accessToken);
+      const projectToken = getProjectAuthToken(projectId);
       notes = await fetchIssueNotes(project, Number(iid), projectToken);
     }
 
@@ -147,7 +147,7 @@ export async function POST(
       }
     }
     if (!tokenToUse) {
-      tokenToUse = decrypt(project.accessToken);
+      tokenToUse = getProjectAuthToken(projectId);
     }
 
     // IVE 사용자 식별 마커 — 프로젝트 토큰 사용 시 필수 (작성자 복원용),
@@ -161,7 +161,7 @@ export async function POST(
     } catch (firstErr) {
       if (usingUserToken) {
         console.warn('[notes POST] User OAuth token failed, retrying with project token:', firstErr instanceof Error ? firstErr.message : firstErr);
-        const projectToken = decrypt(project.accessToken);
+        const projectToken = getProjectAuthToken(projectId);
         const fallbackBody = `<!-- ive-author:${user.id} -->\n${body.trim()}`;
         // 재시도는 실패 시 catch 하지 않고 밖으로 던져서 500 응답이 나가게 함
         await addIssueComment(project, Number(iid), projectToken, fallbackBody);

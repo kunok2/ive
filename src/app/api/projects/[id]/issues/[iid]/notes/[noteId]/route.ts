@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getProject, getProjectAuthToken } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
-import { getProject } from '@/lib/db'
 import { decrypt } from '@/lib/crypto'
 import { deleteIssueComment } from '@/lib/provider'
 import { getUserOAuthTokenRaw, getOAuthProviderById } from '@/lib/db'
@@ -35,7 +35,7 @@ export async function DELETE(
     // 2. 관리자이거나 프로젝트 소유자라면 프로젝트 토큰으로라도 삭제 가능케 함
     // (보통 GitLab/GitHub API는 관리자 토큰이면 다른 사람의 코멘트도 삭제 가능)
     if (!tokenToUse) {
-      tokenToUse = decrypt(project.accessToken)
+      tokenToUse = getProjectAuthToken(projectId)
     }
 
     await deleteIssueComment(project, Number(iid), Number(noteId), tokenToUse, { isOAuth: usingUserToken })

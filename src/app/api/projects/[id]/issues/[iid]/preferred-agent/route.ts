@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAccess, isIssueAssignee, getAssignMode, setAssignMode, getProjectAssignments, getAgent, hasActiveExecution, stageFromLabels } from '@/lib/db';
+import { getProject, getProjectAuthToken, getProjectAccess, isIssueAssignee, getAssignMode, setAssignMode, getProjectAssignments, getAgent, hasActiveExecution, stageFromLabels } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
-import { decrypt } from '@/lib/crypto';
 import { fetchSingleIssue } from '@/lib/provider';
 
 export async function GET(
@@ -49,8 +48,8 @@ export async function PATCH(
 
   // 실행 중(dev)인 이슈는 작업자 변경 불가
   try {
-    const decryptedToken = decrypt(project.accessToken);
-    const issue = await fetchSingleIssue(project, Number(iid), decryptedToken);
+    const token = getProjectAuthToken(projectId);
+    const issue = await fetchSingleIssue(project, Number(iid), token);
     if (issue) {
       const labels = issue.labels || [];
       const activeExec = hasActiveExecution(projectId, Number(iid));

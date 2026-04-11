@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
-import { getProject, markIssueVerified, touchProjectActivity, getProjectAccess, isIssueAssignee, getDb, updateExecutionStatus } from '@/lib/db'
+import { getProject, getProjectAuthToken, markIssueVerified, touchProjectActivity, getProjectAccess, isIssueAssignee, getDb, updateExecutionStatus } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
-import { decrypt } from '@/lib/crypto'
 import { fetchMRByBranch, mergeMR, closeMR, fetchSingleIssue, addIssueLabels, removeIssueLabels } from '@/lib/provider'
 import { logActivity } from '@/lib/activity'
 import type { Project, User } from '@/types'
@@ -61,9 +60,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const decryptedToken = decrypt(project.accessToken)
+  const token = getProjectAuthToken(id)
   const sourceBranch = `dev-${iid}`
-  const mr = await fetchMRByBranch(project, decryptedToken, sourceBranch)
+  const mr = await fetchMRByBranch(project, token, sourceBranch)
 
   if (!mr) {
     return NextResponse.json({ mr: null })
@@ -112,9 +111,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const body = await req.json()
 
   if (body.action === 'merge') {
-    const decryptedToken = decrypt(project.accessToken)
+    const token = getProjectAuthToken(id)
     const sourceBranch = `dev-${iid}`
-    const mr = await fetchMRByBranch(project, decryptedToken, sourceBranch)
+    const mr = await fetchMRByBranch(project, token, sourceBranch)
     if (!mr) {
       return NextResponse.json({ error: 'MR not found' }, { status: 404 })
     }
@@ -123,7 +122,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (mr.state === 'merged') {
       console.log(`[MR] Issue #${iid} already merged in Git. Syncing labels...`)
       try {
-        await syncLabelsToDone(project, Number(iid), decryptedToken, user, id)
+        await syncLabelsToDone(project, Number(iid), token, user, id)
       } catch (err) {
         console.warn(`[MR] Label sync failed for #${iid}:`, err)
       }
@@ -131,10 +130,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
 
     try {
-      const result = await mergeMR(project, decryptedToken, mr.iid)
+      const result = await mergeMR(project, token, mr.iid)
 
       // 머지 성공 시 현재 단계(IVE-D/IVE-W/IVE-V) → IVE-E 레이블 자동 전환
-      await syncLabelsToDone(project, Number(iid), decryptedToken, user, id)
+      await syncLabelsToDone(project, Number(iid), token, user, id)
 
       return NextResponse.json({ success: true, mr: result })
     } catch (err) {
@@ -144,9 +143,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   if (body.action === 'close') {
-    const decryptedToken = decrypt(project.accessToken)
+    const token = getProjectAuthToken(id)
     const sourceBranch = `dev-${iid}`
-    const mr = await fetchMRByBranch(project, decryptedToken, sourceBranch)
+    const mr = await fetchMRByBranch(project, token, sourceBranch)
     if (!mr) {
       return NextResponse.json({ error: 'MR not found' }, { status: 404 })
     }
@@ -155,7 +154,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
 
     try {
-      const result = await closeMR(project, decryptedToken, mr.iid)
+      const result = await closeMR(project, token, mr.iid)
       return NextResponse.json({ success: true, mr: result })
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
