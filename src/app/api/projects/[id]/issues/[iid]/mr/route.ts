@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getProject, markIssueVerified, touchProjectActivity, getProjectAccess, isIssueAssignee } from '@/lib/db'
+import { getProject, markIssueVerified, touchProjectActivity, getProjectAccess, isIssueAssignee, getDb, updateExecutionStatus } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { decrypt } from '@/lib/crypto'
 import { fetchMRByBranch, mergeMR, closeMR, fetchSingleIssue, addIssueLabels, removeIssueLabels } from '@/lib/provider'
@@ -22,6 +22,17 @@ async function syncLabelsToDone(project: Project, iid: number, token: string, us
       }
       await addIssueLabels(project, iid, token, [labelE])
       markIssueVerified(projectId, iid, { name: user.name, avatar: user.avatar })
+
+      // 이 이슈에 남아 있는 활성(running/assigned) execution 모두 success로 닫기
+      // (검증자 execution, 담당자 dev execution 등 — 머지 완료 = 검증 승인과 동일)
+      const db = getDb()
+      const activeExecs = db.prepare(
+        "SELECT id FROM task_executions WHERE project_id = ? AND issue_iid = ? AND status IN ('running', 'assigned')"
+      ).all(projectId, iid) as { id: string }[]
+      for (const ex of activeExecs) {
+        updateExecutionStatus(ex.id, 'success', new Date().toISOString())
+      }
+
       touchProjectActivity(projectId)
       logActivity({
         userId: user.id,

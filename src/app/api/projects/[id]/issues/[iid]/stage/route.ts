@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAccess, hasActiveExecution, stageFromLabels, markIssueVerifyStarted, markIssueVerified, markIssueVerifyRejected, resetIssueScheduledAt, touchProjectActivity, assignIssueAtomically, getAssignModeMap, getIssueScheduledAt, isIssueAssignee, upsertIssueStageSnapshot, type IssueStage } from '@/lib/db';
+import { getDb, getProject, getProjectAccess, hasActiveExecution, stageFromLabels, markIssueVerifyStarted, markIssueVerified, markIssueVerifyRejected, resetIssueScheduledAt, touchProjectActivity, assignIssueAtomically, getAssignModeMap, getIssueScheduledAt, isIssueAssignee, upsertIssueStageSnapshot, updateExecutionStatus, getVerifyWaitingCount, updateProjectLastChecked } from '@/lib/db';
 import type { TaskExecution } from '@/types';
 import { getCurrentUser } from '@/lib/auth';
 import { decrypt } from '@/lib/crypto';
@@ -108,6 +108,12 @@ const TRANSITIONS: Record<string, { action: string; description: string; removeL
       removeLabels: (p) => [p.labelEnd || 'IVE-E'],
       addLabels: (p) => [p.labelSchedule || 'IVE-S'],
     },
+    {
+      action: 'retry',
+      description: '재시도 → 스케줄',
+      removeLabels: (p) => [p.labelEnd || 'IVE-E'],
+      addLabels: (p) => [p.labelSchedule || 'IVE-S'],
+    },
   ],
   rejected: [
     {
@@ -164,6 +170,23 @@ export async function POST(
 
   try {
     const token = decrypt(project.accessToken);
+
+    // ── 서버측 stage 검증 ──
+    // 클라이언트가 보낸 stage가 Git의 실제 레이블에서 계산한 stage와 일치하는지 확인.
+    // 다중 사용자 환경에서 캐시된 오래된 stage로 액션이 들어오는 경우를 차단.
+    const currentIssue = await fetchSingleIssue(project, Number(iid), token);
+    const currentLabels: string[] = currentIssue?.labels || [];
+    const hasActive = hasActiveExecution(projectId, Number(iid));
+    const actualStage = stageFromLabels(currentLabels, project, { hasActiveExec: hasActive });
+    if (actualStage !== stage) {
+      return NextResponse.json(
+        {
+          error: `이슈 상태가 이미 변경되었습니다. (요청: ${stage}, 현재: ${actualStage ?? 'none'}) 화면을 새로고침한 후 다시 시도해주세요.`,
+          actualStage,
+        },
+        { status: 409 }
+      );
+    }
 
     // 레이블 전환 수행
     const labelsToRemove = transition.removeLabels(project);
@@ -238,9 +261,66 @@ export async function POST(
       }
     }
 
-    // 검증 시작 시 verify_started_at 기록
+    // dev 단계 종료 시 사람 작업 execution 닫기 (여러 개 있을 수 있으므로 전부 처리)
+    if (stage === 'dev' && (action === 'complete' || action === 'cancel' || action === 'retry')) {
+      const db = getDb();
+      const devExecs = db.prepare(
+        "SELECT id FROM task_executions WHERE project_id = ? AND issue_iid = ? AND status IN ('running', 'assigned') AND assignee_type = 'user'"
+      ).all(projectId, Number(iid)) as { id: string }[];
+      const endStatus = action === 'complete' ? 'success' : 'failed';
+      for (const ex of devExecs) {
+        updateExecutionStatus(ex.id, endStatus, new Date().toISOString());
+      }
+    }
+
+    // 검증 시작 시 verify_started_at 기록 + 검증자 execution 생성
     if (action === 'start_verification') {
+      // 1. 아직 실행 중인 dev/기타 작업을 먼저 success로 닫음 (ended_at 찍힘)
+      //    — 이 순서가 핵심: 방금 닫힌 execs도 아래 markIssueVerifyStarted 대상에 포함되어야 함
+      const db = getDb();
+      const allActiveExecs = db.prepare(
+        "SELECT id FROM task_executions WHERE project_id = ? AND issue_iid = ? AND status IN ('running', 'assigned')"
+      ).all(projectId, Number(iid)) as any[];
+      for (const exec of allActiveExecs) {
+        updateExecutionStatus(exec.id, 'success', new Date().toISOString());
+      }
+
+      // 2. 닫힌 dev exec에 verify_started_at 기록 (검증 타이머 시작점)
       markIssueVerifyStarted(projectId, Number(iid));
+
+      // 검증자 execution 생성 (작업중 카운팅 + 모니터링 패널 표시)
+      try {
+        const verifyIssue = await fetchSingleIssue(project, Number(iid), token);
+        const executionId = `ex-verify-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+        const logDir = path.join(process.cwd(), 'data', 'logs');
+        if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
+        const logPath = path.join(logDir, `${executionId}.log`);
+        fs.writeFileSync(logPath, '');
+
+        const verifyExecution: TaskExecution = {
+          id: executionId,
+          projectId,
+          agentId: '',
+          issueIid: Number(iid),
+          issueTitle: verifyIssue?.title || '',
+          status: 'assigned',
+          startedAt: new Date().toISOString(),
+          logPath,
+          inputTokens: 0, outputTokens: 0, costUsd: 0, turns: 0,
+          issueCreatedAt: new Date().toISOString(),
+          assigneeType: 'user',
+          userId: user.id,
+          userName: user.name,
+          userAvatar: user.avatar,
+        };
+        const created = assignIssueAtomically(projectId, Number(iid), 'verifying', verifyExecution);
+        console.log(`[Stage] Verify execution created for #${iid}: ${created}, executionId: ${executionId}`);
+        if (!created) {
+          console.warn(`[Stage] Failed to create verify execution for #${iid}: race condition detected`);
+        }
+      } catch (e) {
+        console.warn(`[Stage] Failed to create verify execution for #${iid}:`, e);
+      }
     }
 
     // 검증 완료 시 실행 기록에 verified_at + 검증자 기록 (verifying 상태에서만)
@@ -249,8 +329,21 @@ export async function POST(
     }
 
     // 검증 반려 시 rejected_at 기록
-    if (action === 'reject') {
+    // (명시적 reject뿐 아니라 검증 단계에서 재실행 클릭 시에도 반려로 집계 — 검증자가 "통과 못함" 판단)
+    if (action === 'reject' || (stage === 'verifying' && action === 'retry')) {
       markIssueVerifyRejected(projectId, Number(iid));
+    }
+
+    // verifying 단계 종료 시 검증자 execution 닫기 (여러 개 있을 수 있으므로 전부 처리)
+    if (stage === 'verifying' && (action === 'approve' || action === 'complete' || action === 'reject' || action === 'retry')) {
+      const db = getDb();
+      const verifyExecs = db.prepare(
+        "SELECT id FROM task_executions WHERE project_id = ? AND issue_iid = ? AND status IN ('running', 'assigned') AND assignee_type = 'user'"
+      ).all(projectId, Number(iid)) as { id: string }[];
+      const endStatus = (action === 'approve' || action === 'complete') ? 'success' : 'failed';
+      for (const ex of verifyExecs) {
+        updateExecutionStatus(ex.id, endStatus, new Date().toISOString());
+      }
     }
 
     // 스케줄로 되돌아갈 때 scheduled_at 리셋 (재시도 execution의 대기시간 정확 계산)
@@ -268,15 +361,34 @@ export async function POST(
     const newStage = stageFromLabels(newLabels, project, { hasActiveExec: activeExec }) || 'waiting';
 
     // DB 스냅샷 즉시 업데이트 (탑바/목록 즉시 동기화용)
-    const firstAssignee = issue?.assignees?.[0];
-    const assigneeGitUserId = firstAssignee?.id ? String(firstAssignee.id) : null;
+    // verifying 단계라면 검증자 정보 사용, 아니면 Git assignee 사용
+    let assigneeInfo = { username: null as string | null, name: null as string | null, avatar: null as string | null, gitUserId: null as string | null };
+    if (newStage === 'verifying') {
+      // 검증 단계: 현재 사용자(검증자) 정보 저장
+      assigneeInfo = {
+        username: user.email?.split('@')[0] || null,  // email에서 username 추출
+        name: user.name || null,
+        avatar: user.avatar || null,
+        gitUserId: user.oauthUserId ? String(user.oauthUserId) : null,  // OAuth user id (Git provider의 numeric id)
+      };
+    } else {
+      // 다른 단계: Git issue의 assignee 사용
+      const firstAssignee = issue?.assignees?.[0];
+      assigneeInfo = {
+        username: firstAssignee?.username || null,
+        name: firstAssignee?.name || (firstAssignee as any)?.login || null,
+        avatar: firstAssignee?.avatar_url || null,
+        gitUserId: firstAssignee?.id ? String(firstAssignee.id) : null,
+      };
+    }
+
     upsertIssueStageSnapshot(projectId, Number(iid), {
       cachedStage: newStage,
-      assigneeUsername: firstAssignee?.username || null,
-      assigneeName: firstAssignee?.name || (firstAssignee as any)?.login || null,
-      assigneeAvatar: firstAssignee?.avatar_url || null,
+      assigneeUsername: assigneeInfo.username,
+      assigneeName: assigneeInfo.name,
+      assigneeAvatar: assigneeInfo.avatar,
       assigneeProvider: project.provider,
-      assigneeGitUserId,
+      assigneeGitUserId: assigneeInfo.gitUserId,
       issueTitle: issue?.title || null,
     });
 
@@ -301,6 +413,15 @@ export async function POST(
       targetId: `${projectId}:${iid}`,
       req,
     });
+
+    // 검증 대기 수 즉시 갱신 (탑바 대기 건수 실시간 반영)
+    try {
+      const verifyWaitingCount = getVerifyWaitingCount(projectId);
+      const waitingCount = Number(project.lastScannedIssueCount ?? 0);
+      updateProjectLastChecked(projectId, new Date().toISOString(), waitingCount, verifyWaitingCount);
+    } catch (e) {
+      console.warn(`[Stage] Failed to update verify waiting count:`, e);
+    }
 
     return NextResponse.json({ success: true, stage: newStage });
   } catch (err) {

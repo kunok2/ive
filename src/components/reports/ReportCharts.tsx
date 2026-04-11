@@ -21,8 +21,16 @@ export function DailyTrendChart({ data, prevData, type }: { data: DailyTrend[]; 
     let label: string
     if (type === 'yearly') label = `${parseInt(d.date.slice(5, 7))}월`
     else { const dt = new Date(d.date); label = type === 'weekly' ? DAY_LABELS[dt.getDay()] : `${dt.getDate()}` }
-    // "처리" 바 = 검증까지 마무리된 고유 이슈 수 (verified ?? 0)
-    return { label, processed: d.verified ?? 0, cost: d.cost, prevProcessed: prevData[i]?.verified ?? 0, prevCost: prevData[i]?.cost ?? 0 }
+    // "작업" 바 = tasks, "검증" 바 = verified
+    return {
+      label,
+      tasks: d.tasks ?? 0,
+      verified: d.verified ?? 0,
+      cost: d.cost,
+      prevTasks: prevData[i]?.tasks ?? 0,
+      prevVerified: prevData[i]?.verified ?? 0,
+      prevCost: prevData[i]?.cost ?? 0,
+    }
   })
 
   return (
@@ -34,16 +42,18 @@ export function DailyTrendChart({ data, prevData, type }: { data: DailyTrend[]; 
           <YAxis yAxisId="tasks" tick={{ fill: '#6b7280', fontSize: 10 }} axisLine={false} tickLine={false} width={24} allowDecimals={false} />
           <YAxis yAxisId="cost" orientation="right" tick={{ fill: '#92702a', fontSize: 9 }} axisLine={false} tickLine={false} width={30} tickFormatter={v => `$${v}`} />
           <Tooltip {...tooltipStyle} />
-          <Area yAxisId="tasks" dataKey="prevProcessed" name="이전 처리" fill="#6b7280" fillOpacity={0.12} stroke="#6b7280" strokeDasharray="3 3" strokeWidth={1} dot={false} />
-          <Bar yAxisId="tasks" dataKey="processed" name="처리" fill="#34d399" radius={[2, 2, 0, 0]} />
+          <Bar yAxisId="tasks" dataKey="prevTasks" name="이전 작업" fill="#6b7280" fillOpacity={0.12} radius={[2, 2, 0, 0]} />
+          <Bar yAxisId="tasks" dataKey="prevVerified" name="이전 검증" fill="#8b5cf6" fillOpacity={0.12} radius={[2, 2, 0, 0]} />
+          <Bar yAxisId="tasks" dataKey="tasks" name="작업" fill="#60a5fa" radius={[2, 2, 0, 0]} />
+          <Bar yAxisId="tasks" dataKey="verified" name="검증" fill="#34d399" radius={[2, 2, 0, 0]} />
           <Line yAxisId="cost" dataKey="cost" name="비용" stroke="#fbbf24" strokeWidth={2} dot={{ r: 2, fill: '#fbbf24' }} />
           <Line yAxisId="cost" dataKey="prevCost" name="이전 비용" stroke="#92702a" strokeDasharray="4 3" dot={false} strokeWidth={1} />
         </ComposedChart>
       </ResponsiveContainer>
-      <div className="flex items-center justify-center gap-3 mt-1 text-xs text-ive-text-dim">
-        <span><span className="inline-block w-2 h-2 rounded-sm bg-[#34d399] mr-0.5" />처리</span>
+      <div className="flex items-center justify-center gap-3 mt-1 text-xs text-ive-text-dim flex-wrap">
+        <span><span className="inline-block w-2 h-2 rounded-sm bg-[#60a5fa] mr-0.5" />작업</span>
+        <span><span className="inline-block w-2 h-2 rounded-sm bg-[#34d399] mr-0.5" />검증</span>
         <span><span className="inline-block w-3 h-0.5 bg-[#fbbf24] mr-0.5 align-middle" />비용</span>
-        <span><span className="inline-block w-3 h-2 bg-[#6b7280]/20 border border-[#6b7280]/40 mr-0.5 align-middle" />이전 기간</span>
       </div>
     </div>
   )

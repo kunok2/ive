@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Project, ProjectAssignment, Agent, TaskExecution, StatSnapshot } from '@/types'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useStore } from '@/lib/store'
 import { formatDateShort, formatDateMedium } from '@/lib/format-date'
 import { useDialog } from '@/components/ui/ConfirmDialog'
@@ -14,6 +14,7 @@ import LiveTracePanel from '@/components/execution/LiveTracePanel'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 import MarqueeText from '@/components/ui/MarqueeText'
 import ConflictResolutionPanel from '@/components/mr/ConflictResolutionPanel'
+import MarkdownNote, { cleanNoteBody } from '@/components/ui/MarkdownNote'
 import type { ToolActivity } from '@/lib/tool-activity'
 import { useTranslations } from 'next-intl'
 import { useTab } from '@/lib/tab-context'
@@ -37,7 +38,8 @@ interface Props {
 }
 
 interface ProjectStats {
-  running: number
+  agentWorking: number
+  verifying: number
   completed: number
   failed: number
   waiting: number
@@ -62,12 +64,12 @@ export default function ProjectCard({ project }: Props) {
   const tp = useTranslations('project')
   const te = useTranslations('execution')
   const [scanning, setScanning] = useState(false)
-  const [expandedPanel, _setExpandedPanel] = useState<'running' | 'done' | 'waiting' | 'conflicts' | null>(() => {
+  const [expandedPanel, _setExpandedPanel] = useState<'running' | 'done' | 'waiting' | 'verifying' | 'conflicts' | null>(() => {
     if (typeof window === 'undefined') return null
     const saved = sessionStorage.getItem(`pc-panel-${project.id}`)
-    return (saved === 'running' || saved === 'done' || saved === 'waiting' || saved === 'conflicts') ? saved as any : null
+    return (saved === 'running' || saved === 'done' || saved === 'waiting' || saved === 'verifying' || saved === 'conflicts') ? saved as any : null
   })
-  const setExpandedPanel = (v: 'running' | 'done' | 'waiting' | 'conflicts' | null) => {
+  const setExpandedPanel = (v: 'running' | 'done' | 'waiting' | 'verifying' | 'conflicts' | null) => {
     _setExpandedPanel(v)
     if (v) sessionStorage.setItem(`pc-panel-${project.id}`, v)
     else sessionStorage.removeItem(`pc-panel-${project.id}`)
@@ -95,25 +97,28 @@ export default function ProjectCard({ project }: Props) {
 
   useEffect(() => {
     fetchStats()
-    const interval = (stats?.running ?? 0) > 0 ? 3000 : 10000
+    const totalActive = (stats?.agentWorking ?? 0) + (stats?.verifying ?? 0)
+    const interval = totalActive > 0 ? 3000 : 10000
     const timer = setInterval(fetchStats, interval)
     const onVisible = () => { if (document.visibilityState === 'visible') fetchStats() }
     document.addEventListener('visibilitychange', onVisible)
     return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVisible) }
-  }, [fetchStats, stats?.running])
+  }, [fetchStats, stats?.agentWorking, stats?.verifying])
 
-  // 경과 시간 실시간 업데이트 (running 작업 요약에 표시)
+  // 경과 시간 실시간 업데이트 (진행 중 작업 요약에 표시)
   useEffect(() => {
-    if ((stats?.running ?? 0) > 0 && !expandedPanel) {
+    const totalActive = (stats?.agentWorking ?? 0) + (stats?.verifying ?? 0)
+    if (totalActive > 0 && !expandedPanel) {
       const timer = setInterval(() => setTick(t => t + 1), 1000)
       return () => clearInterval(timer)
     }
-  }, [stats?.running, expandedPanel])
+  }, [stats?.agentWorking, stats?.verifying, expandedPanel])
 
-  // 실행 목록 로드: 패널 열렸을 때 또는 running 건이 있을 때
+  // 실행 목록 로드: 패널 열렸을 때 또는 진행 중 건이 있을 때
   useEffect(() => {
-    const needForPanel = expandedPanel === 'running' || expandedPanel === 'done'
-    const needForSummary = (stats?.running ?? 0) > 0 && !expandedPanel
+    const needForPanel = expandedPanel === 'running' || expandedPanel === 'done' || expandedPanel === 'verifying'
+    const totalActive = (stats?.agentWorking ?? 0) + (stats?.verifying ?? 0)
+    const needForSummary = totalActive > 0 && !expandedPanel
     if (!needForPanel && !needForSummary) {
       setExecutions([])
       return
@@ -127,7 +132,7 @@ export default function ProjectCard({ project }: Props) {
     fetchExecs()
     const timer = setInterval(fetchExecs, 5000)
     return () => clearInterval(timer)
-  }, [expandedPanel, project.id, stats?.running])
+  }, [expandedPanel, project.id, stats?.agentWorking, stats?.verifying])
 
   // 대기 패널 열릴 때 대기 이슈 목록 로드
   useEffect(() => {
@@ -177,7 +182,8 @@ export default function ProjectCard({ project }: Props) {
 
   const mergeCount = liveMRCount ?? 0
   const conflictCount = liveConflictCount ?? stats?.conflictCount ?? 0
-  const runningCount = stats?.running ?? 0
+  const agentWorkingCount = stats?.agentWorking ?? 0
+  const verifyingCount = stats?.verifying ?? 0
   const completedCount = stats?.completed ?? 0
   const failedCount = stats?.failed ?? 0
   const totalDone = completedCount + failedCount
@@ -200,9 +206,9 @@ export default function ProjectCard({ project }: Props) {
     return () => clearInterval(timer)
   }, [project.id])
 
-  // activities 폴링 (running 중일 때만)
+  // activities 폴링 (AI 에이전트 작업 중일 때만)
   useEffect(() => {
-    if (runningCount === 0) return
+    if (agentWorkingCount === 0) return
     const fetchActivities = async () => {
       try {
         const res = await fetch('/api/activities')
@@ -217,7 +223,7 @@ export default function ProjectCard({ project }: Props) {
     fetchActivities()
     const timer = setInterval(fetchActivities, 2000)
     return () => clearInterval(timer)
-  }, [runningCount])
+  }, [agentWorkingCount])
 
   return (
     <div
@@ -289,12 +295,12 @@ export default function ProjectCard({ project }: Props) {
               )}
             </div>
           </div>
-          {/* 작업 중 애니메이션 아이콘 — runningCount > 0 일 때만 표시 */}
-          {runningCount > 0 && (
+          {/* 작업 중 애니메이션 아이콘 — 진행 중 건이 있을 때만 표시 */}
+          {(agentWorkingCount + verifyingCount) > 0 && (
             <div className="shrink-0 flex items-center">
               <div className="relative w-10 h-10 flex items-center justify-center">
                 <i className="fa-solid fa-gear fa-spin text-xl text-ive-amber" style={{ animationDuration: '2s' }} />
-                <span className="absolute -bottom-0.5 -right-0.5 bg-ive-amber text-ive-bg-deep text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center">{runningCount}</span>
+                <span className="absolute -bottom-0.5 -right-0.5 bg-ive-amber text-ive-bg-deep text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center">{agentWorkingCount + verifyingCount}</span>
               </div>
             </div>
           )}
@@ -313,20 +319,6 @@ export default function ProjectCard({ project }: Props) {
 
       {/* 대시보드 통계 바 */}
       <div className="flex items-stretch border-t border-ive-border-dark">
-        {/* 작업중 */}
-        <button
-          onClick={() => setExpandedPanel(expandedPanel === 'running' ? null : 'running')}
-          className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'running' ? 'bg-ive-amber/5' : 'hover:bg-white/[0.02]'}`}
-        >
-          <div className="flex items-baseline gap-0.5">
-            <span className={`text-lg font-bold leading-none ${runningCount > 0 ? 'text-ive-amber animate-pulse' : 'text-ive-text-dim'}`}>
-              {runningCount}/{agentCount}
-            </span>
-          </div>
-          <Sparkline data={snapshots.map(s => s.running)} width={40} height={12} color="amber" />
-          <span className="text-xs text-ive-text-dim font-bold">{tp('workingLabel')}</span>
-        </button>
-
         {/* 대기 */}
         <button
           onClick={() => setExpandedPanel(expandedPanel === 'waiting' ? null : 'waiting')}
@@ -337,6 +329,32 @@ export default function ProjectCard({ project }: Props) {
           </span>
           <Sparkline data={snapshots.map(s => s.waiting)} width={40} height={12} color="cyan" />
           <span className="text-xs text-ive-text-dim font-bold">{tp('waitingLabel')}</span>
+        </button>
+
+        {/* 작업 (AI 에이전트) */}
+        <button
+          onClick={() => setExpandedPanel(expandedPanel === 'running' ? null : 'running')}
+          className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'running' ? 'bg-ive-amber/5' : 'hover:bg-white/[0.02]'}`}
+        >
+          <div className="flex items-baseline gap-0.5">
+            <span className={`text-lg font-bold leading-none ${agentWorkingCount > 0 ? 'text-ive-amber animate-pulse' : 'text-ive-text-dim'}`}>
+              {agentWorkingCount}/{agentCount}
+            </span>
+          </div>
+          <Sparkline data={snapshots.map(s => s.running)} width={40} height={12} color="amber" />
+          <span className="text-xs text-ive-text-dim font-bold">{tp('workingLabel')}</span>
+        </button>
+
+        {/* 검증 (사람) */}
+        <button
+          onClick={() => setExpandedPanel(expandedPanel === 'verifying' ? null : 'verifying')}
+          className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'verifying' ? 'bg-ive-cyan/5' : 'hover:bg-white/[0.02]'}`}
+        >
+          <span className={`text-lg font-bold leading-none ${verifyingCount > 0 ? 'text-ive-cyan animate-pulse' : 'text-ive-text-dim'}`}>
+            {verifyingCount}
+          </span>
+          <Sparkline data={snapshots.map(s => s.running)} width={40} height={12} color="cyan" />
+          <span className="text-xs text-ive-text-dim font-bold">{tp('verifyingLabel')}</span>
         </button>
 
         {/* 완료 (금일) */}
@@ -384,19 +402,27 @@ export default function ProjectCard({ project }: Props) {
       {runningExecs.length > 0 && !expandedPanel && (
         <div className="border-t border-ive-amber/15 px-3 py-1.5 space-y-1">
           {runningExecs.map(ex => {
-            const agent = (project.assignedAgents ?? []).find(pa => pa.agentId === ex.agentId)?.agent
-            const activity = agent ? activities[agent.id] : undefined
             const isChat = ex.id.startsWith('exec-chat-')
+            const isVerify = ex.assigneeType === 'user'
+            const agent = isVerify ? null : (project.assignedAgents ?? []).find(pa => pa.agentId === ex.agentId)?.agent
+            const activity = agent ? activities[agent.id] : undefined
+            const displayName = isVerify ? ex.userName : agent?.name
             return (
               <div key={ex.id} className="flex items-center gap-1.5 text-xs">
-                {agent && (
+                {isVerify ? (
+                  ex.userAvatar === 'photo' && ex.userId ? (
+                    <img src={`/api/auth/avatar/image?id=${ex.userId}`} alt="" className="w-7 h-7 rounded-lg object-cover shrink-0 border border-ive-border" />
+                  ) : ex.userAvatar ? (
+                    <AgentAvatar avatar={ex.userAvatar} size="sm" />
+                  ) : null
+                ) : agent ? (
                   <AgentAvatar
                     avatar={agent.avatar}
                     size="sm"
                     toolBadge={isChat ? null : (activity?.category ?? null)}
                   />
-                )}
-                {agent && <span className={`font-bold shrink-0 ${isChat ? 'text-purple-400/70' : 'text-ive-amber/70'}`}>{agent.name}</span>}
+                ) : null}
+                {displayName && <span className={`font-bold shrink-0 ${isChat ? 'text-purple-400/70' : 'text-ive-amber/70'}`}>{displayName}</span>}
                 <MarqueeText className={isChat ? 'text-purple-400/60' : 'text-ive-text-muted'}>
                   {isChat ? `💬 #${ex.issueIid} ${tp('chatLabel')}` : `#${ex.issueIid} `}
                   {!isChat && ex.issueTitle && `${ex.issueTitle}`}
@@ -411,15 +437,30 @@ export default function ProjectCard({ project }: Props) {
         </div>
       )}
 
-      {/* 작업 현황 패널 */}
+      {/* 작업 현황 패널 (AI 에이전트만) */}
       {expandedPanel === 'running' && (() => {
-        const userExecs = runningExecs.filter(e => e.assigneeType === 'user')
         const agentExecs = runningExecs.filter(e => e.assigneeType !== 'user')
-        const hasAgentWork = agentExecs.length > 0 || (project.assignedAgents ?? []).some(pa => agentExecs.find(e => e.agentId === pa.agentId))
         return (
           <div className="flex-1 flex flex-col min-h-0">
-            {/* 사람 작업 — AI와 동일한 탭+컨텐츠 레이아웃 */}
-            {userExecs.length > 0 && (
+            <LiveTracePanel
+              agents={(project.assignedAgents ?? []).map(pa => ({
+                agent: pa.agent,
+                execution: agentExecs.find(e => e.agentId === pa.agentId) ?? null,
+              }))}
+              projectId={project.id}
+              onKill={handleKill}
+              onAllCompleted={() => setExpandedPanel(null)}
+            />
+          </div>
+        )
+      })()}
+
+      {/* 검증 중 패널 (사람 검증) */}
+      {expandedPanel === 'verifying' && (() => {
+        const userExecs = runningExecs.filter(e => e.assigneeType === 'user')
+        return (
+          <div className="flex-1 flex flex-col min-h-0">
+            {userExecs.length > 0 ? (
               <UserTaskPanel
                 executions={userExecs}
                 projectId={project.id}
@@ -427,18 +468,11 @@ export default function ProjectCard({ project }: Props) {
                 formatDuration={formatDuration}
                 te={te}
               />
-            )}
-            {/* 에이전트 작업 */}
-            {(hasAgentWork || userExecs.length === 0) && (
-              <LiveTracePanel
-                agents={(project.assignedAgents ?? []).map(pa => ({
-                  agent: pa.agent,
-                  execution: agentExecs.find(e => e.agentId === pa.agentId) ?? null,
-                }))}
-                projectId={project.id}
-                onKill={handleKill}
-                onAllCompleted={userExecs.length === 0 ? () => setExpandedPanel(null) : undefined}
-              />
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center gap-2 text-ive-text-dim text-sm">
+                <i className="fa-solid fa-inbox text-2xl" />
+                <span>{tp('noVerifying')}</span>
+              </div>
             )}
           </div>
         )
@@ -447,16 +481,18 @@ export default function ProjectCard({ project }: Props) {
       {/* 대기 이슈 패널 */}
       {expandedPanel === 'waiting' && (
         <div className="flex-1 flex flex-col min-h-0 border-t border-ive-cyan/20">
-          <div className="px-3 py-2 bg-ive-bg-deep/50 border-b border-ive-border-dark shrink-0">
-            <span className="text-xs font-bold text-ive-cyan uppercase tracking-widest">
-              <i className="fa-solid fa-clock mr-1" />{tp('waitingIssuesTitle', { count: waitingIssues.length })}
-            </span>
-          </div>
-          <div className="flex-1 overflow-y-auto">
+          {waitingIssues.length > 0 && (
+            <div className="px-3 py-2 bg-ive-bg-deep/50 border-b border-ive-border-dark shrink-0">
+              <span className="text-xs font-bold text-ive-cyan uppercase tracking-widest">
+                <i className="fa-solid fa-clock mr-1" />{tp('waitingIssuesTitle', { count: waitingIssues.length })}
+              </span>
+            </div>
+          )}
+          <div className="flex-1 flex flex-col overflow-y-auto">
             {waitingIssues.length === 0 ? (
-              <div className="text-center py-10 text-ive-text-dim text-sm">
-                <i className="fa-solid fa-inbox text-2xl mb-2 block" />
-                {tp('noWaitingIssues')}
+              <div className="flex-1 flex flex-col items-center justify-center gap-2 text-ive-text-dim text-sm">
+                <i className="fa-solid fa-inbox text-2xl" />
+                <span>{tp('noWaitingIssues')}</span>
               </div>
             ) : (
               <div className="space-y-2 p-3">
@@ -496,12 +532,14 @@ export default function ProjectCard({ project }: Props) {
       {/* 수행기록 패널 */}
       {expandedPanel === 'done' && (
         <div className="flex-1 flex flex-col min-h-0 border-t border-ive-green/20">
-          <div className="px-3 py-2 bg-ive-bg-deep/50 border-b border-ive-border-dark shrink-0">
-            <span className="text-xs font-bold text-ive-green uppercase tracking-widest">
-              <i className="fa-solid fa-clock-rotate-left mr-1" />{tp('todayRecords', { count: todayDoneExecs.length })}
-            </span>
-          </div>
-          <div className="flex-1 overflow-y-auto" data-scroll-container>
+          {todayDoneExecs.length > 0 && (
+            <div className="px-3 py-2 bg-ive-bg-deep/50 border-b border-ive-border-dark shrink-0">
+              <span className="text-xs font-bold text-ive-green uppercase tracking-widest">
+                <i className="fa-solid fa-clock-rotate-left mr-1" />{tp('todayRecords', { count: todayDoneExecs.length })}
+              </span>
+            </div>
+          )}
+          <div className="flex-1 flex flex-col overflow-y-auto" data-scroll-container>
             <ExecutionList executions={todayDoneExecs} onKill={handleKill} killing={killing} scrollKey={`pc-done-${project.id}`} />
           </div>
         </div>
@@ -535,6 +573,8 @@ function UserTaskPanel({ executions, projectId, onKill, formatDuration, te }: {
   const [tick, setTick] = useState(0)
   const { state } = useStore()
   const userTz = state.user?.timezone
+  const notesScrollRef = useRef<HTMLDivElement>(null)
+  const wasAtBottomRef = useRef(true)
 
   const current = executions[activeIdx < executions.length ? activeIdx : 0]
 
@@ -547,6 +587,8 @@ function UserTaskPanel({ executions, projectId, onKill, formatDuration, te }: {
   useEffect(() => {
     if (!current) return
     setNotesLoading(true)
+    // 새 이슈 열렸을 땐 맨 아래(최신)로 스크롤하도록 초기화
+    wasAtBottomRef.current = true
     fetch(`/api/projects/${projectId}/issues/${current.issueIid}/notes`)
       .then(r => r.ok ? r.json() : [])
       .then(data => setNotes(data))
@@ -557,9 +599,25 @@ function UserTaskPanel({ executions, projectId, onKill, formatDuration, te }: {
         .then(r => r.ok ? r.json() : [])
         .then(data => setNotes(data))
         .catch(() => {})
-    }, 30000)
+    }, 3000)
     return () => clearInterval(timer)
   }, [current?.id, projectId])
+
+  // 노트 갱신 후 스크롤: 사용자가 맨 아래 근처였다면 맨 아래로 유지
+  useEffect(() => {
+    const el = notesScrollRef.current
+    if (!el || notes.length === 0) return
+    if (wasAtBottomRef.current) {
+      el.scrollTop = el.scrollHeight
+    }
+  }, [notes])
+
+  const handleNotesScroll = () => {
+    const el = notesScrollRef.current
+    if (!el) return
+    // 맨 아래에서 20px 이내면 "bottom 근처"로 판정
+    wasAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 20
+  }
 
   if (!current) return null
 
@@ -576,13 +634,11 @@ function UserTaskPanel({ executions, projectId, onKill, formatDuration, te }: {
                 idx === activeIdx ? 'text-ive-cyan border-b-2 border-ive-cyan bg-ive-cyan/5' : 'text-ive-text-dim hover:text-ive-text-muted'
               }`}
             >
-              {ex.userAvatar ? (
-                <img src={ex.userAvatar} alt="" className="w-5 h-5 rounded-full shrink-0" />
-              ) : (
-                <div className="w-5 h-5 rounded-full bg-ive-cyan/20 flex items-center justify-center shrink-0">
-                  <i className="fa-solid fa-user text-ive-cyan text-[8px]" />
-                </div>
-              )}
+              {ex.userAvatar === 'photo' && ex.userId ? (
+                <img src={`/api/auth/avatar/image?id=${ex.userId}`} alt="" className="w-7 h-7 rounded-lg object-cover shrink-0 border border-ive-border" />
+              ) : ex.userAvatar ? (
+                <AgentAvatar avatar={ex.userAvatar} size="sm" />
+              ) : null}
               <span className="truncate min-w-0"><MarqueeText className="text-sm">{ex.userName || `#${ex.issueIid}`}</MarqueeText></span>
             </button>
           ))}
@@ -611,38 +667,63 @@ function UserTaskPanel({ executions, projectId, onKill, formatDuration, te }: {
         </div>
 
         {/* Git 이슈 노트 (트레이스 대신) */}
-        <div className="flex-1 min-h-0 overflow-y-auto bg-ive-bg-deep rounded-lg border border-ive-border-dark">
+        <div ref={notesScrollRef} onScroll={handleNotesScroll} className="flex-1 min-h-0 overflow-y-auto bg-ive-bg-deep rounded-lg border border-ive-border-dark">
           {notesLoading ? (
-            <div className="text-center py-6 text-ive-text-dim text-xs">
-              <i className="fa-solid fa-circle-notch fa-spin mr-1" />로딩 중...
+            <div className="h-full flex flex-col items-center justify-center gap-2 text-ive-text-dim text-xs">
+              <i className="fa-solid fa-circle-notch fa-spin" />
+              <span>로딩 중...</span>
             </div>
           ) : notes.length === 0 ? (
-            <div className="text-center py-6 text-ive-text-dim text-xs">
-              <i className="fa-solid fa-comment-slash text-lg mb-2 block" />
-              아직 활동 내역이 없습니다
+            <div className="h-full flex flex-col items-center justify-center gap-2 text-ive-text-dim text-xs">
+              <i className="fa-solid fa-comment-slash text-lg" />
+              <span>아직 활동 내역이 없습니다</span>
             </div>
           ) : (
-            <div className="p-2.5 space-y-3">
-              {notes.map((note: any, i: number) => (
-                <div key={note.id || i} className="flex gap-2.5 border-b border-ive-border-dark pb-3 last:border-0 last:pb-0">
-                  {note.avatarUrl ? (
-                    <img src={note.avatarUrl} alt="" className="w-8 h-8 rounded-full shrink-0 mt-0.5 border border-ive-border-subtle" />
-                  ) : (
-                    <div className="w-8 h-8 rounded-full bg-ive-cyan/20 flex items-center justify-center shrink-0 mt-0.5 border border-ive-border-subtle">
-                      <i className="fa-solid fa-user text-ive-cyan text-xs" />
+            <div className="relative pl-6 pr-3 py-3">
+              {/* 타임라인 세로선 */}
+              <div className="absolute left-[14px] top-3 bottom-3 w-px bg-ive-border-dark" />
+              {notes.map((note: any, i: number) => {
+                const timestamp = new Date(note.createdAt || note.created_at).toLocaleString(undefined, { timeZone: userTz || undefined })
+                const noteAvatar = note.iveAuthorAvatar || note.avatarUrl
+                if (note.system) {
+                  // 시스템 노트: 작은 점 + 한 줄 텍스트
+                  return (
+                    <div key={note.id || i} className="relative mb-2 last:mb-0">
+                      <div className="absolute left-[-16px] top-[7px] w-2 h-2 rounded-full bg-ive-bg-deep border border-ive-border-dark" />
+                      <div className="flex items-start gap-1.5 text-[11px] text-ive-text-dim leading-relaxed">
+                        <span className="font-bold text-ive-text-muted shrink-0">{note.author}</span>
+                        <span className="flex-1 min-w-0 break-words">
+                          <MarkdownNote body={cleanNoteBody(note.body || '')} />
+                        </span>
+                        <span className="text-[10px] font-mono shrink-0 ml-1">{timestamp}</span>
+                      </div>
                     </div>
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5 mb-0.5">
-                      <span className="text-xs font-bold text-ive-text">{note.author}</span>
-                      <span className="text-[10px] text-ive-text-dim font-mono">
-                        {new Date(note.createdAt || note.created_at).toLocaleString(undefined, { timeZone: userTz || undefined })}
-                      </span>
+                  )
+                }
+                // 일반 댓글: 아바타 + 카드 박스
+                return (
+                  <div key={note.id || i} className="relative mb-3 last:mb-0">
+                    <div className="absolute left-[-22px] top-1">
+                      {noteAvatar ? (
+                        <img src={noteAvatar} alt="" className="w-5 h-5 rounded-full object-cover border border-ive-border-subtle bg-ive-bg-deep" onError={e => { e.currentTarget.style.display = 'none' }} />
+                      ) : (
+                        <div className="w-5 h-5 rounded-full bg-ive-cyan/20 flex items-center justify-center border border-ive-border-subtle">
+                          <i className="fa-solid fa-user text-ive-cyan text-[8px]" />
+                        </div>
+                      )}
                     </div>
-                    <div className="text-xs text-ive-text-muted whitespace-pre-wrap break-words">{(note.body || '').replace(/<!--.*?-->\n?/g, '').replace(/\*\*(.+?)\*\*/g, '$1').trim()}</div>
+                    <div className="border border-ive-border-dark rounded-lg bg-ive-bg-card overflow-hidden">
+                      <div className="flex items-center gap-1.5 px-2.5 py-1.5 border-b border-ive-border-dark bg-ive-bg-deep/40">
+                        <span className="text-xs font-bold text-ive-text">{note.author}</span>
+                        <span className="text-[10px] text-ive-text-dim font-mono ml-auto">{timestamp}</span>
+                      </div>
+                      <div className="px-2.5 py-2 text-xs text-ive-text-muted break-words">
+                        <MarkdownNote body={cleanNoteBody(note.body || '')} />
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>

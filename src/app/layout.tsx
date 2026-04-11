@@ -6,6 +6,7 @@ import { TabProvider } from "@/lib/tab-context";
 import { DialogProvider } from "@/components/ui/ConfirmDialog";
 import { ToastProvider } from "@/components/ui/Toast";
 import PWARegister from "@/components/PWARegister";
+import TopBar from "@/components/layout/TopBar";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -43,7 +44,7 @@ export default async function RootLayout({
       <body>
         <PWARegister />
         <NextIntlClientProvider locale={locale} messages={messages}>
-          <StoreProvider><TabProvider><DialogProvider><ToastProvider>{children}</ToastProvider></DialogProvider></TabProvider></StoreProvider>
+          <StoreProvider><TabProvider><DialogProvider><ToastProvider><TopBar />{children}</ToastProvider></DialogProvider></TabProvider></StoreProvider>
         </NextIntlClientProvider>
       </body>
     </html>

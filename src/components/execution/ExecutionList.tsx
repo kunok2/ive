@@ -61,9 +61,9 @@ export default function ExecutionList({ executions, showAgent = true, onKill, ki
 
   if (executions.length === 0) {
     return (
-      <div className="text-center py-10 text-ive-text-dim text-sm">
-        <i className="fa-solid fa-inbox text-2xl mb-2 block" />
-        {te('noRecords')}
+      <div className="flex-1 flex flex-col items-center justify-center gap-2 text-ive-text-dim text-sm">
+        <i className="fa-solid fa-inbox text-2xl" />
+        <span>{te('noRecords')}</span>
       </div>
     )
   }

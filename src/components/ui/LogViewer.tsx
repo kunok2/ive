@@ -392,6 +392,13 @@ function LogLine({ line, showLineNum, lineNum, timezone }: { line: LineData; lin
   const content = useMemo(() => {
     const raw = line.raw
 
+    // 장식용 구분선(═+)은 ANSI 색상으로 감싸져 있어도 화면 폭에 맞는 CSS 가로선으로 렌더
+    // → 모바일 좁은 폭에서 2줄로 줄바꿈되지 않도록
+    const stripped = raw.replace(/\x1b\[[0-9;]*m/g, '')
+    if (/^═+$/.test(stripped)) {
+      return <span className="block border-t border-ive-cyan/40 my-1" />
+    }
+
     if (line.hasAnsi) {
       const spans = parseAnsi(raw)
       return spans.map((s, i) => renderAnsiSpan(s, i))

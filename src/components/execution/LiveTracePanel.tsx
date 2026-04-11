@@ -167,9 +167,9 @@ export default function LiveTracePanel({ agents, projectId, onKill, onAllComplet
 
   if (runningAgents.length === 0) {
     return (
-      <div className="text-center py-10 text-ive-text-dim text-sm">
-        <i className="fa-solid fa-coffee text-xl mb-2 block" />
-        작업 중인 개발자가 없습니다
+      <div className="flex-1 flex flex-col items-center justify-center gap-2 text-ive-text-dim text-sm">
+        <i className="fa-solid fa-coffee text-2xl" />
+        <span>작업 중인 에이전트가 없습니다</span>
       </div>
     )
   }

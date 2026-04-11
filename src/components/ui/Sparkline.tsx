@@ -7,7 +7,7 @@ interface Props {
   bgData?: (number | null)[]
   width?: number | '100%'
   height?: number
-  color?: 'auto' | 'green' | 'red' | 'gray' | 'cyan' | 'amber'
+  color?: 'auto' | 'green' | 'red' | 'gray' | 'cyan' | 'amber' | 'blue'
   className?: string
 }
 
@@ -17,6 +17,7 @@ const COLORS = {
   gray: '#6b7280',
   cyan: '#22d3ee',
   amber: '#fbbf24',
+  blue: '#60a5fa',
 }
 
 function buildSegments(

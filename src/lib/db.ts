@@ -1208,6 +1208,13 @@ export function updateProjectSortOrders(userId: string, orders: { id: string; so
   tx()
 }
 
+export function getVerifyWaitingCount(projectId: string): number {
+  const r = getDb().prepare(
+    "SELECT COUNT(*) as cnt FROM issue_stages WHERE project_id = ? AND cached_stage = 'verify_waiting'"
+  ).get(projectId) as any
+  return Number(r?.cnt || 0)
+}
+
 export function updateProjectLastChecked(id: string, timestamp: string, issueCount: number, verifyWaitingCount: number = 0) {
   getDb().prepare('UPDATE projects SET last_checked_at = ?, last_scanned_issue_count = ?, last_verify_waiting_count = ?, last_error = NULL, last_error_at = NULL WHERE id = ?').run(timestamp, issueCount, verifyWaitingCount, id)
 }
@@ -1514,8 +1521,10 @@ export function markIssueVerified(projectId: string, issueIid: number, verifier?
       if (!avatar) avatar = cached.avatar || null
     }
   }
+  // verify_started_at IS NOT NULL: 검증을 시작했던 exec만 대상 (임의의 과거 exec가 아닌)
+  // verified_at IS NULL AND rejected_at IS NULL: 이미 검증/반려 처리된 exec는 제외 (덮어쓰기 방지)
   getDb().prepare(
-    "UPDATE task_executions SET verified_at = ?, verifier_name = ?, verifier_avatar = ?, verifier_username = ? WHERE project_id = ? AND issue_iid = ? AND status IN ('success', 'failed') AND ended_at IS NOT NULL AND verified_at IS NULL"
+    "UPDATE task_executions SET verified_at = ?, verifier_name = ?, verifier_avatar = ?, verifier_username = ? WHERE project_id = ? AND issue_iid = ? AND status IN ('success', 'failed') AND ended_at IS NOT NULL AND verify_started_at IS NOT NULL AND verified_at IS NULL AND rejected_at IS NULL"
   ).run(now, name, avatar, username, projectId, issueIid)
 }
 
@@ -2155,6 +2164,9 @@ export interface ReportExecution {
   cliName: string
   developerName: string
   developerUserId: string | null
+  userId: string | null
+  userName: string | null
+  userAvatar: string | null
   issueIid: number
   issueTitle: string | null
   status: string
@@ -2202,6 +2214,9 @@ export function getExecutionsInRange(userId: string, start: string, end: string)
     agentId: r.agent_id ?? '', agentName: r.agent_name ?? r.te_user_name ?? '', agentAvatar: r.agent_avatar || r.te_user_avatar || 'av-01',
     cliName: r.cli_name ?? '', developerName: r.developer_name || r.agent_name || r.te_user_name || '',
     developerUserId: r.developer_user_id ?? null,
+    userId: r.te_user_id ?? null,
+    userName: r.te_user_name ?? null,
+    userAvatar: r.te_user_avatar ?? null,
     issueIid: r.issue_iid, issueTitle: r.issue_title,
     status: r.status, startedAt: r.started_at, endedAt: r.ended_at,
     inputTokens: r.input_tokens ?? 0, outputTokens: r.output_tokens ?? 0,
@@ -2323,6 +2338,12 @@ export function getIssueStageUpdatedAt(_projectId: string, _issueIid: number): s
 export function getIssueScheduledAt(projectId: string, issueIid: number): string | null {
   const r = getDb().prepare('SELECT scheduled_at FROM issue_stages WHERE project_id = ? AND issue_iid = ?').get(projectId, issueIid) as any
   return r?.scheduled_at || null
+}
+
+/** 이슈의 이전 cached_stage 조회 (스캐너가 stage 전환 감지용으로 사용) */
+export function getCachedStage(projectId: string, issueIid: number): string | null {
+  const r = getDb().prepare('SELECT cached_stage FROM issue_stages WHERE project_id = ? AND issue_iid = ?').get(projectId, issueIid) as any
+  return r?.cached_stage || null
 }
 
 /**
@@ -2900,7 +2921,8 @@ export function getGlobalExecutionsInRange(start: string, end: string): ReportEx
            te.issue_iid, te.issue_title, te.status,
            te.started_at, te.ended_at, te.input_tokens, te.output_tokens, te.cost_usd, te.turns,
            te.issue_created_at, te.model_name, te.verified_at, te.verify_started_at, te.rejected_at,
-           te.assignee_type, te.verifier_name, te.verifier_avatar, te.verifier_username
+           te.assignee_type, te.user_id as te_user_id, te.user_name as te_user_name, te.user_avatar as te_user_avatar,
+           te.verifier_name, te.verifier_avatar, te.verifier_username
     FROM task_executions te
     JOIN projects p ON p.id = te.project_id
     LEFT JOIN agents a ON a.id = te.agent_id
@@ -2914,6 +2936,9 @@ export function getGlobalExecutionsInRange(start: string, end: string): ReportEx
     agentId: r.agent_id ?? '', agentName: r.agent_name ?? '', agentAvatar: r.agent_avatar || 'av-01',
     cliName: r.cli_name ?? '', developerName: r.developer_name || r.agent_name || '',
     developerUserId: r.developer_user_id ?? null,
+    userId: r.te_user_id ?? null,
+    userName: r.te_user_name ?? null,
+    userAvatar: r.te_user_avatar ?? null,
     issueIid: r.issue_iid, issueTitle: r.issue_title,
     status: r.status, startedAt: r.started_at, endedAt: r.ended_at,
     inputTokens: r.input_tokens ?? 0, outputTokens: r.output_tokens ?? 0,

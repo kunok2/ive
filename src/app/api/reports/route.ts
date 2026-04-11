@@ -155,18 +155,19 @@ export async function GET(req: NextRequest) {
     cost: Math.round(aExecs.reduce((s, e) => s + resolveExecutionCost(e, humanSalary), 0) * 100) / 100,
   }))
 
-  // 이전 기간 사용자별
+  // 이전 기간 사용자별 (담당자/검증자 — assigneeType='user'만)
   const prevUserMap = new Map<string, typeof prevExecs>()
   for (const e of prevExecs) {
-    const uid = e.developerUserId || e.developerName
+    if (e.assigneeType !== 'user') continue
+    const uid = e.userId || e.userName || ''
+    if (!uid) continue
     if (!prevUserMap.has(uid)) prevUserMap.set(uid, [])
     prevUserMap.get(uid)!.push(e)
   }
   const prevByUser = Array.from(prevUserMap.entries()).map(([uid, uExecs]) => ({
-    userId: uid, userName: uExecs[0].developerName,
+    userId: uid, userName: uExecs[0].userName || uExecs[0].developerName,
     tasks: uExecs.length,
     issueCount: new Set(uExecs.map(e => `${e.projectId}:${e.issueIid}`)).size,
-    cost: Math.round(uExecs.reduce((s, e) => s + resolveExecutionCost(e, humanSalary), 0) * 100) / 100,
   }))
 
   // 이전 기간 일별 트렌드 — 전체 기간 버킷 채움 (waitAvg, procAvg 포함)
@@ -290,9 +291,10 @@ export async function GET(req: NextRequest) {
     }
   })
 
-  // By agent (global)
+  // By agent (global) — 사람 작업(검증 등)은 제외: AI 에이전트만
   const globalAgentMap = new Map<string, typeof execs>()
   for (const e of execs) {
+    if (e.assigneeType === 'user' || !e.agentId) continue
     if (!globalAgentMap.has(e.agentId)) globalAgentMap.set(e.agentId, [])
     globalAgentMap.get(e.agentId)!.push(e)
   }
@@ -356,10 +358,13 @@ export async function GET(req: NextRequest) {
     return { verifierName, verifierAvatar: vExecs[0].verifierAvatar || 'av-01', tasks: v.tasks, avgVerifyMin: v.avgVerifyMin, avgWaitMin: v.avgWaitMin }
   })
 
-  // By user (담당자별) — 담당자가 곧 검토자이므로 검증 통계도 합산
+  // By user (담당자별 검증 현황) — 사람(assigneeType='user')이 수행한 exec만 그룹핑
+  // 검증 execution은 agentId=''로 생성됨. 검증자/담당자는 모두 assigneeType='user'.
   const userMap = new Map<string, typeof execs>()
   for (const e of execs) {
-    const uid = e.developerUserId || e.developerName
+    if (e.assigneeType !== 'user') continue
+    const uid = e.userId || e.userName || ''
+    if (!uid) continue
     if (!userMap.has(uid)) userMap.set(uid, [])
     userMap.get(uid)!.push(e)
   }
@@ -368,21 +373,21 @@ export async function GET(req: NextRequest) {
     const uFailed = uExecs.filter(e => e.status === 'failed').length
     const uDur = uExecs.reduce((s, e) => s + durationMin(e.startedAt, e.endedAt), 0)
     const uFinished = uSuccess + uFailed
-    const uCost = uExecs.reduce((s, e) => s + resolveExecutionCost(e, humanSalary), 0)
     const uniqueIssues = new Set(uExecs.map(e => `${e.projectId}:${e.issueIid}`))
-    // 이슈 생성 → AI 시작까지의 대기 시간
+    // 배정 → 시작까지의 대기 시간
     const waitTimes = uExecs
       .filter(e => e.issueCreatedAt && e.startedAt)
       .map(e => (new Date(e.startedAt!).getTime() - new Date(e.issueCreatedAt!).getTime()) / 60000)
       .filter(t => t >= 0 && t < 60 * 24 * 7)
-    const userName = uExecs[0].developerName
+    // 이름과 아바타는 user_* 컬럼에서 직접 취득 (폴백: 첫 exec의 userName/userAvatar)
+    const userName = uExecs[0].userName || uExecs[0].developerName
+    const userAvatar = uExecs[0].userAvatar || null
     const vInfo = verifierLookup.get(userName) ?? { tasks: 0, avgVerifyMin: 0, avgWaitMin: 0, verified: 0, rejected: 0, waiting: 0 }
     return {
-      userId: uid, userName, userAvatar: uExecs[0].agentAvatar || 'av-01',
+      userId: uid, userName, userAvatar,
       tasks: uExecs.length, success: uSuccess, failed: uFailed,
       issueCount: uniqueIssues.size,
       avgDurationMin: uFinished > 0 ? Math.round((uDur / uFinished) * 10) / 10 : 0,
-      cost: Math.round(uCost * 100) / 100,
       avgWaitMin: waitTimes.length > 0 ? Math.round(waitTimes.reduce((s, t) => s + t, 0) / waitTimes.length * 10) / 10 : 0,
       verifyTasks: vInfo.tasks,
       avgVerifyMin: vInfo.avgVerifyMin,

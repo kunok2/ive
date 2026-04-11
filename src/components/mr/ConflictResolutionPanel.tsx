@@ -183,27 +183,17 @@ export default function ConflictResolutionPanel({ projectId, projectColor, onClo
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 border-t border-ive-purple/20">
-      <div className="px-3 py-2 bg-ive-bg-deep/50 border-b border-ive-border-dark shrink-0 flex items-center justify-between">
-        <span className="text-xs font-bold text-ive-purple uppercase tracking-widest">
-          <i className="fa-solid fa-code-merge mr-1" />
-          {t('title')} —{conflicts.length > 0 && <>{' '}<span className="text-ive-red">{t('conflictCount', { count: conflicts.length })}</span> /</>} {t('totalMRs', { count: mrs.length })}
-        </span>
-        <button onClick={onClose} className="text-ive-text-dim hover:text-ive-text transition-colors">
-          <i className="fa-solid fa-xmark" />
-        </button>
-      </div>
-
-      <div className="flex-1 overflow-y-auto">
+    <div className="flex-1 flex flex-col min-h-0">
+      <div className="flex-1 flex flex-col overflow-y-auto">
         {loading ? (
-          <div className="text-center py-10 text-ive-text-dim text-sm">
-            <i className="fa-solid fa-circle-notch fa-spin text-2xl mb-2 block" />
-            {t('loading')}
+          <div className="flex-1 flex flex-col items-center justify-center gap-2 text-ive-text-dim text-sm">
+            <i className="fa-solid fa-circle-notch fa-spin text-2xl" />
+            <span>{t('loading')}</span>
           </div>
         ) : mrs.length === 0 ? (
-          <div className="text-center py-10 text-ive-text-dim text-sm">
-            <i className="fa-solid fa-check-circle text-2xl mb-2 block text-ive-green" />
-            {t('noMRs')}
+          <div className="flex-1 flex flex-col items-center justify-center gap-2 text-ive-text-dim text-sm">
+            <i className="fa-solid fa-check-circle text-2xl text-ive-green" />
+            <span>{t('noMRs')}</span>
           </div>
         ) : (
           <div className="p-3 space-y-3">

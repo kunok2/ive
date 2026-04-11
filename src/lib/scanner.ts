@@ -29,6 +29,11 @@ import {
   upsertIssueStageSnapshot,
   replaceProjectMembers,
   getDb,
+  getCachedStage,
+  markIssueVerifyStarted,
+  markIssueVerified,
+  markIssueVerifyRejected,
+  getIssueAssigneeUsername,
 } from "./db";
 import { fetchProjectMembers } from "./provider";
 import { decrypt } from "./crypto";
@@ -503,6 +508,38 @@ export async function scanProject(project: Project, force: boolean = false) {
       const activeExec = hasActiveExecution(project.id, iid);
       const stage = stageFromLabels(labels, project, { hasActiveExec: activeExec });
 
+      // ── 이전 stage와 비교해 Git UI에서 수동으로 검증 단계를 전환했는지 감지 ──
+      // 사용자가 Git UI에서 레이블을 직접 바꾼 경우에도 verify_started_at / verified_at / rejected_at이
+      // 정확히 기록되어야 보고서 검증 통계가 맞는다.
+      const prevStage = getCachedStage(project.id, iid);
+      try {
+        // 검증 시작 감지: 임의 단계 → verifying
+        if (stage === 'verifying' && prevStage !== 'verifying') {
+          markIssueVerifyStarted(project.id, iid);
+        }
+        // 검증 승인 감지: verifying → done (또는 verifying → verify_waiting 건너뛰고 done로)
+        if (stage === 'done' && prevStage === 'verifying') {
+          const verifierInfo = getIssueAssigneeUsername(project.id, iid);
+          markIssueVerified(project.id, iid, {
+            name: verifierInfo.name || '',
+            avatar: verifierInfo.avatar || undefined,
+            username: verifierInfo.username,
+          });
+        }
+        // 검증 반려 감지: verifying → 그 외(승인=done만 제외)
+        // null(IVE 레이블 전체 제거)도 포함 — 사용자가 검증을 포기한 경우로 간주
+        if (prevStage === 'verifying' && stage !== 'verifying' && stage !== 'done') {
+          const verifierInfo = getIssueAssigneeUsername(project.id, iid);
+          markIssueVerifyRejected(project.id, iid, {
+            name: verifierInfo.name,
+            avatar: verifierInfo.avatar,
+            username: verifierInfo.username,
+          });
+        }
+      } catch (e) {
+        console.warn(`[Scanner] verify marker update failed (#${iid}):`, (e as Error).message);
+      }
+
       // 검증자별 부하 집계용 스냅샷 — Git assignee + 현재 stage 저장
       try {
         const assignee = (issue.assignees && issue.assignees.length > 0) ? issue.assignees[0] : null;
@@ -520,16 +557,23 @@ export async function scanProject(project: Project, force: boolean = false) {
         console.warn(`[Scanner] upsertIssueStageSnapshot failed (#${iid}):`, (e as Error).message);
       }
 
-      // 사람 작업 완료 감지: 담당자가 Git에서 레이블을 IVE-W, IVE-V 또는 IVE-E로 변경한 경우
-      if (activeExec && (stage === 'verify_waiting' || stage === 'verifying' || stage === 'done')) {
-        const userExec = getAssignedUserExecution(project.id, iid);
-        if (userExec) {
-          updateExecutionStatus(userExec.id, 'success', new Date().toISOString());
-          console.log(`[Scanner] [USER-COMPLETE] Issue #${iid} — 담당자가 레이블 전환, 작업 완료 처리 (${stage})`);
+      // 사람 작업 완료 감지: 담당자가 Git에서 레이블을 IVE-W 또는 IVE-E로 변경한 경우
+      // ※ verifying 단계는 검증 중이므로 절대 자동 완료 처리하지 않음 — 검증자가 승인/반려할 때만 완료됨
+      if (activeExec && stage !== 'verifying' && (stage === 'verify_waiting' || stage === 'done')) {
+        // 여러 개의 활성 execution이 남아 있을 수 있으므로 전부 닫는다 (예: dev exec + verify exec)
+        const lingering = getDb().prepare(
+          "SELECT id FROM task_executions WHERE project_id = ? AND issue_iid = ? AND status IN ('running', 'assigned') AND assignee_type = 'user'"
+        ).all(project.id, iid) as { id: string }[];
+        for (const ex of lingering) {
+          updateExecutionStatus(ex.id, 'success', new Date().toISOString());
+        }
+        if (lingering.length > 0) {
+          console.log(`[Scanner] [USER-COMPLETE] Issue #${iid} — 레이블 전환 감지, 활성 사용자 execution ${lingering.length}건 완료 처리 (${stage})`);
         }
       }
       // 사람 작업 실패 감지: IVE-D가 제거되어 dev_fail, waiting, 또는 레이블 없음(null) 상태가 된 경우
-      if (activeExec && (stage === 'dev_fail' || stage === 'waiting' || stage === null)) {
+      // ※ verifying 단계는 검증 중이므로 실패 처리하지 않음
+      if (activeExec && stage !== 'verifying' && (stage === 'dev_fail' || stage === 'waiting' || stage === null)) {
         const userExec = getAssignedUserExecution(project.id, iid);
         if (userExec) {
           updateExecutionStatus(userExec.id, 'failed', new Date().toISOString());

@@ -1708,8 +1708,8 @@ function ActivityContent() {
       </div>
 
       {logs.length === 0 && (
-        <div className="text-center py-10 text-ive-text-dim text-sm">
-          <i className="fa-solid fa-clock-rotate-left text-2xl mb-2 block opacity-30" />
+        <div className="flex flex-col items-center justify-center py-10 gap-2 text-ive-text-dim text-sm">
+          <i className="fa-solid fa-clock-rotate-left text-2xl opacity-30" />
           {t('noActivityRecords')}
         </div>
       )}

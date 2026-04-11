@@ -119,6 +119,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     ],
     done: [
       { action: 'reopen', label: tIssue('reopenToWaiting'), icon: 'fa-rotate' },
+      { action: 'retry', label: tIssue('retryToWaiting'), icon: 'fa-rotate' },
     ],
     rejected: [
       { action: 'retry', label: tIssue('retryToWaiting'), icon: 'fa-rotate' },
@@ -748,7 +749,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                     <div className="text-lg font-bold text-ive-green-light">{issues.length}</div>
                     <div className="text-xs text-ive-text-dim">{tIssue('issues')}</div>
                   </div>
-                  {canEdit && !bulkMode && !isHistoryTab && (
+                  {canEdit && !bulkMode && (
                     <button
                       onClick={() => setShowAddForm(v => !v)}
                       className="w-9 h-9 rounded-full bg-ive-green/20 border border-ive-green/30 flex items-center justify-center text-ive-green hover:bg-ive-green/30 hover:scale-105 transition-all"

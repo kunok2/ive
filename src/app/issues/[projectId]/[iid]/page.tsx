@@ -7,8 +7,7 @@ import { useDialog } from '@/components/ui/ConfirmDialog'
 import { useToast } from '@/components/ui/Toast'
 import PullToRefresh from '@/components/ui/PullToRefresh'
 import MRReviewSection from '@/components/mr/MRReviewSection'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
+import MarkdownNote, { cleanNoteBody } from '@/components/ui/MarkdownNote'
 import { useTranslations } from 'next-intl'
 import { useStore } from '@/lib/store'
 import { formatDateMedium, formatTime } from '@/lib/format-date'
@@ -103,6 +102,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
     ],
     done: [
       { action: 'reopen', label: tIssue('reopenToWaiting'), icon: 'fa-rotate' },
+      { action: 'retry', label: tIssue('retryToWaiting'), icon: 'fa-rotate' },
     ],
     rejected: [
       { action: 'retry', label: tIssue('retryToWaiting'), icon: 'fa-rotate' },
@@ -128,6 +128,11 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   const [posting, setPosting] = useState(false)
   const [postingType, setPostingType] = useState<'comment' | 'retry' | 'done' | 'next' | null>(null)
   const [stageChanging, setStageChanging] = useState(false)
+  const [mrActionModal, setMrActionModal] = useState<{
+    mr: { iid: number; title: string; web_url: string; has_conflicts?: boolean }
+    finalApprove: () => Promise<void>
+  } | null>(null)
+  const [mrActionBusy, setMrActionBusy] = useState(false)
   const [showDesc, setShowDesc] = useState(true)
   const [isClosing, setIsClosing] = useState(false)
   const [editMode, setEditMode] = useState(false)
@@ -137,6 +142,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   const notesEndRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const postingRef = useRef(false)
+  const pendingScrollToBottomRef = useRef(false)
 
   // Chat state
   const [mode, setMode] = useState<'comment' | 'chat'>('comment')
@@ -259,27 +265,95 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
     if (res.ok) setPreferredAgent(await res.json())
   }
 
+  // 열린 MR이 있으면 사용자에게 선택(머지/닫기/상태만)을 먼저 묻는 approve 래퍼
+  async function runApproveWithMRCheck(finalApprove: () => Promise<void>) {
+    try {
+      const mrRes = await fetch(`/api/projects/${projectId}/issues/${iid}/mr`)
+      if (mrRes.ok) {
+        const data = await mrRes.json()
+        const mr = data?.mr
+        if (mr && mr.state === 'opened') {
+          setMrActionModal({ mr: { iid: mr.iid, title: mr.title, web_url: mr.web_url, has_conflicts: mr.has_conflicts }, finalApprove })
+          return
+        }
+      }
+    } catch { /* MR 조회 실패 시 그냥 진행 */ }
+    await finalApprove()
+  }
+
+  async function handleMrActionChoice(choice: 'merge' | 'close' | 'none') {
+    if (!mrActionModal) return
+    const { finalApprove } = mrActionModal
+    setMrActionBusy(true)
+    try {
+      if (choice === 'merge') {
+        // MR 머지 — 성공 시 서버의 syncLabelsToDone이 라벨/exec/verified 처리 전부 수행
+        const res = await fetch(`/api/projects/${projectId}/issues/${iid}/mr`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'merge' }),
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => null)
+          toast(err?.error || 'MR 머지에 실패했습니다', 'error')
+          return
+        }
+        toast('MR 머지 후 완료 처리되었습니다', 'success')
+        setMrActionModal(null)
+        await refreshAll()
+        return
+      }
+      if (choice === 'close') {
+        // MR 닫기 → 그 후 라벨만 변경(approve)
+        const res = await fetch(`/api/projects/${projectId}/issues/${iid}/mr`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'close' }),
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => null)
+          toast(err?.error || 'MR 닫기에 실패했습니다', 'error')
+          return
+        }
+      }
+      // 'close' 이후 또는 'none' — 라벨만 변경하는 approve 수행
+      setMrActionModal(null)
+      await finalApprove()
+    } finally {
+      setMrActionBusy(false)
+    }
+  }
+
   async function handleStageAction(action: string) {
     if (!issue) return
-    setStageChanging(true)
-    try {
-      const res = await fetch(`/api/projects/${projectId}/issues/${iid}/stage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stage: issue.stage, action }),
-      })
-      if (res.ok) {
-        await fetchIssue()
-        await fetchNotes()
-      } else {
-        const errorData = await res.json().catch(() => null)
-        toast(errorData?.error || `Error: ${res.status} ${res.statusText}`, 'error')
+    const doApprove = async () => {
+      setStageChanging(true)
+      try {
+        const res = await fetch(`/api/projects/${projectId}/issues/${iid}/stage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stage: issue.stage, action }),
+        })
+        if (res.ok) {
+          pendingScrollToBottomRef.current = true
+          await fetchIssue()
+          await fetchNotes()
+        } else {
+          const errorData = await res.json().catch(() => null)
+          toast(errorData?.error || `Error: ${res.status} ${res.statusText}`, 'error')
+        }
+      } catch (e: any) {
+        toast(e.message || '네트워크 오류가 발생했습니다.', 'error')
+      } finally {
+        setStageChanging(false)
       }
-    } catch (e: any) {
-      toast(e.message || '네트워크 오류가 발생했습니다.', 'error')
-    } finally {
-      setStageChanging(false)
     }
+    // verifying 단계의 approve는 MR 처리 먼저 묻는다
+    if (issue.stage === 'verifying' && action === 'approve') {
+      await runApproveWithMRCheck(doApprove)
+      return
+    }
+    await doApprove()
   }
 
   async function handleCloseIssue() {
@@ -371,6 +445,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
         return
       }
       setComment(''); localStorage.removeItem(commentKey)
+      pendingScrollToBottomRef.current = true
       await fetchNotes() // 코멘트 성공 시 즉시 목록 갱신
       // 2. 선호 에이전트 변경 (지정된 경우)
       if (agentId !== undefined) {
@@ -432,19 +507,24 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
         return
       }
       setComment(''); localStorage.removeItem(commentKey)
+      pendingScrollToBottomRef.current = true
       await fetchNotes() // 코멘트 성공 시 즉시 목록 갱신
-      const stageRes = await fetch(`/api/projects/${projectId}/issues/${iid}/stage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stage: 'verifying', action: 'approve' }),
-      })
-      if (!stageRes.ok) {
-        const errorData = await stageRes.json().catch(() => null)
-        toast(errorData?.error || `Error: ${stageRes.status} ${stageRes.statusText}`, 'error')
-        return
+
+      const doApprove = async () => {
+        const stageRes = await fetch(`/api/projects/${projectId}/issues/${iid}/stage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stage: 'verifying', action: 'approve' }),
+        })
+        if (!stageRes.ok) {
+          const errorData = await stageRes.json().catch(() => null)
+          toast(errorData?.error || `Error: ${stageRes.status} ${stageRes.statusText}`, 'error')
+          return
+        }
+        await refreshAll()
+        toast('승인 완료되었습니다', 'success')
       }
-      await refreshAll()
-      toast('승인 완료되었습니다', 'success')
+      await runApproveWithMRCheck(doApprove)
     } catch (err: any) {
       toast(err.message || '네트워크 오류가 발생했습니다', 'error')
     } finally {
@@ -494,19 +574,28 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
         })
         if (!res.ok) return
         setComment(''); localStorage.removeItem(commentKey)
+        pendingScrollToBottomRef.current = true
         await fetchNotes() // 코멘트 성공 시 즉시 목록 갱신
       }
-      const stageRes = await fetch(`/api/projects/${projectId}/issues/${iid}/stage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stage: next.stage, action: next.action }),
-      })
-      if (!stageRes.ok) {
-        const errorData = await stageRes.json().catch(() => null)
-        toast(errorData?.error || `Error: ${stageRes.status} ${stageRes.statusText}`, 'error')
-        return
+      const doNextStage = async () => {
+        const stageRes = await fetch(`/api/projects/${projectId}/issues/${iid}/stage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stage: next.stage, action: next.action }),
+        })
+        if (!stageRes.ok) {
+          const errorData = await stageRes.json().catch(() => null)
+          toast(errorData?.error || `Error: ${stageRes.status} ${stageRes.statusText}`, 'error')
+          return
+        }
+        await refreshAll()
       }
-      await refreshAll()
+      // verifying → approve 경로에서만 MR 처리를 먼저 묻는다
+      if (next.stage === 'verifying' && next.action === 'approve') {
+        await runApproveWithMRCheck(doNextStage)
+      } else {
+        await doNextStage()
+      }
     } finally {
       postingRef.current = false
       setPosting(false)
@@ -812,6 +901,16 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
       notesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }
   }, [chatMessages, chatStreamText, mode])
+
+  // 노트가 추가/갱신되어 DOM에 반영된 후, 요청된 경우 마지막 노트로 스크롤
+  useEffect(() => {
+    if (!pendingScrollToBottomRef.current) return
+    pendingScrollToBottomRef.current = false
+    // 레이아웃 확정 후 스크롤 (이미지/마크다운 렌더 여유)
+    requestAnimationFrame(() => {
+      notesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+    })
+  }, [notes])
 
   // Auto-close chat after 5 minutes of inactivity
   useEffect(() => {
@@ -1473,6 +1572,61 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
         </div>
       </div>
 
+      {/* 검증 완료 시 MR 처리 선택 모달 */}
+      <Modal open={!!mrActionModal} onClose={() => !mrActionBusy && setMrActionModal(null)} title="열려 있는 MR 처리" size="sm">
+        {mrActionModal && (
+          <div className="p-4 space-y-4">
+            <p className="text-sm text-ive-text-muted">
+              이 이슈에 아직 열려 있는 MR이 있습니다. 검증을 완료하기 전에 MR을 어떻게 처리할지 선택해주세요.
+            </p>
+            <a
+              href={mrActionModal.mr.web_url}
+              target="_blank"
+              rel="noreferrer"
+              className="block bg-ive-bg-deep border border-ive-border-dark rounded-lg px-3 py-2 hover:border-ive-cyan/40 transition-colors"
+            >
+              <div className="text-xs font-mono text-ive-cyan font-bold">!{mrActionModal.mr.iid}</div>
+              <div className="text-sm text-ive-text truncate">{mrActionModal.mr.title}</div>
+              {mrActionModal.mr.has_conflicts && (
+                <div className="text-xs text-ive-red font-bold mt-1">
+                  <i className="fa-solid fa-triangle-exclamation mr-1" />충돌 있음
+                </div>
+              )}
+            </a>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => handleMrActionChoice('merge')}
+                disabled={mrActionBusy || mrActionModal.mr.has_conflicts}
+                className="w-full px-3 py-2.5 rounded-lg text-sm font-bold text-ive-purple border border-ive-purple/30 bg-ive-purple/5 hover:bg-ive-purple/15 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <i className="fa-solid fa-code-merge mr-1.5" />MR 머지 후 완료
+              </button>
+              <button
+                onClick={() => handleMrActionChoice('close')}
+                disabled={mrActionBusy}
+                className="w-full px-3 py-2.5 rounded-lg text-sm font-bold text-ive-red border border-ive-red/30 bg-ive-red/5 hover:bg-ive-red/15 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <i className="fa-solid fa-xmark mr-1.5" />MR 닫기 후 완료
+              </button>
+              <button
+                onClick={() => handleMrActionChoice('none')}
+                disabled={mrActionBusy}
+                className="w-full px-3 py-2.5 rounded-lg text-sm font-bold text-ive-text-dim border border-ive-border-dark bg-ive-bg-deep hover:bg-white/5 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <i className="fa-solid fa-arrow-right mr-1.5" />MR 유지 · 상태만 변경
+              </button>
+              <button
+                onClick={() => !mrActionBusy && setMrActionModal(null)}
+                disabled={mrActionBusy}
+                className="w-full px-3 py-2 rounded-lg text-xs font-bold text-ive-text-dim hover:text-ive-text transition-colors disabled:opacity-40"
+              >
+                취소
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
       {/* 담당자 선택 모달 — 단일 선택 + 확인 */}
       <Modal open={assigneePickerOpen} onClose={() => setAssigneePickerOpen(false)} title={tIssue('assignee')} size="sm">
         <div className="p-1.5 border-b border-ive-border-dark">
@@ -1560,64 +1714,6 @@ function ElapsedTimer({ startTime }: { startTime: number | null }) {
   )
 }
 
-/** 노트 본문 정리: 도구 태그 제거, HTML 태그를 MD로 변환, ANSI 이스케이프 제거 */
-function cleanNoteBody(body: string): string {
-  return body
-    // ANSI 이스케이프 시퀀스 제거 (터미널 출력이 노트에 포함된 경우)
-    .replace(/\x1b\[[0-9;?]*[A-Za-z@]/g, '')
-    .replace(/\x1b\][^\x07\x1b]*\x07/g, '')
-    .replace(/\x1b[a-zA-Z]/g, '')
-    .replace(/\r/g, '')
-    .split('\n')
-    .filter(line => !line.match(/^>\s*\*{0,2}🔧/))
-    .join('\n')
-    .replace(/<details>/gi, '')
-    .replace(/<\/details>/gi, '')
-    .replace(/<summary>(.*?)<\/summary>/gi, '**$1**')
-    .replace(/<\/?br\s*\/?>/gi, '\n')
-    .replace(/<\/?(?:div|span|p)[^>]*>/gi, '')
-    .replace(/<!--[\s\S]*?-->/g, '')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
-}
-
-function MarkdownNote({ body }: { body: string }) {
-  return (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
-      components={{
-        h1: ({ children }) => <h1 className="text-base font-bold text-ive-text mt-2 mb-1">{children}</h1>,
-        h2: ({ children }) => <h2 className="text-sm font-bold text-ive-text mt-2 mb-1">{children}</h2>,
-        h3: ({ children }) => <h3 className="text-sm font-bold text-ive-text mt-1.5 mb-0.5">{children}</h3>,
-        p: ({ children }) => <p className="mb-1.5 last:mb-0" style={{ whiteSpace: 'pre-wrap' }}>{children}</p>,
-        ul: ({ children }) => <ul className="list-disc list-inside mb-1.5 space-y-0.5">{children}</ul>,
-        ol: ({ children }) => <ol className="list-decimal list-inside mb-1.5 space-y-0.5">{children}</ol>,
-        li: ({ children }) => <li>{children}</li>,
-        strong: ({ children }) => <strong className="font-bold text-ive-text">{children}</strong>,
-        em: ({ children }) => <em className="italic">{children}</em>,
-        code: ({ children, className }) => {
-          const isBlock = className?.includes('language-')
-          if (isBlock) {
-            return <code className="block bg-ive-bg-deep rounded-lg p-2 my-1.5 text-xs font-mono overflow-x-auto whitespace-pre">{children}</code>
-          }
-          return <code className="bg-ive-bg-deep px-1 py-0.5 rounded text-xs font-mono text-ive-cyan">{children}</code>
-        },
-        pre: ({ children }) => <pre className="mb-1.5">{children}</pre>,
-        blockquote: ({ children }) => <blockquote className="border-l-2 border-ive-border pl-2.5 my-1.5 text-ive-text-dim">{children}</blockquote>,
-        a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-ive-cyan hover:underline">{children}</a>,
-        hr: () => <hr className="border-ive-border-dark my-2" />,
-        table: ({ children }) => <table className="w-full border-collapse my-2 text-sm">{children}</table>,
-        thead: ({ children }) => <thead className="bg-ive-bg-deep">{children}</thead>,
-        tbody: ({ children }) => <tbody>{children}</tbody>,
-        tr: ({ children }) => <tr className="border-b border-ive-border-dark">{children}</tr>,
-        th: ({ children }) => <th className="border border-ive-border-dark px-2 py-1 text-left font-bold text-ive-text">{children}</th>,
-        td: ({ children }) => <td className="border border-ive-border-dark px-2 py-1 text-ive-text-dim">{children}</td>,
-      }}
-    >
-      {body}
-    </ReactMarkdown>
-  )
-}
 
 // 긴 노트를 접었다 펼 수 있는 컴포넌트
 function NoteBody({ body }: { body: string }) {

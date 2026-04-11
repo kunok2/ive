@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
-import { getProject, getTodayExecutionsByProject, getYesterdayCompletedCount, getProjectAccess } from '@/lib/db'
-import { getKSTTodayStart } from '@/lib/date-utils'
+import { getProject, getProjectAccess, getDb } from '@/lib/db'
+import { getKSTTodayStartISO } from '@/lib/date-utils'
 
 export async function GET(
-  req: NextRequest,
+  _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const user = await getCurrentUser()
@@ -16,31 +16,95 @@ export async function GET(
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
-  const todayExecs = getTodayExecutionsByProject(id)
-  const running = todayExecs.filter(e => e.status === 'running' || e.status === 'assigned')
-  const completed = todayExecs.filter(e => e.status === 'success')
-  const failed = todayExecs.filter(e => e.status === 'failed')
+  const db = getDb()
+  const todayStartISO = getKSTTodayStartISO()
 
-  const totalTokens = todayExecs.reduce((sum, e) => sum + e.inputTokens + e.outputTokens, 0)
-  const totalCost = todayExecs.reduce((sum, e) => sum + e.costUsd, 0)
-  const yesterdayCount = getYesterdayCompletedCount('project', id)
+  // AI 에이전트 작업 중 (assigneeType이 'user'가 아닌 것)
+  const agentWorkingExec = db.prepare(`
+    SELECT COUNT(*) as count FROM task_executions
+    WHERE project_id = ? AND status IN ('running', 'assigned') AND (assignee_type IS NULL OR assignee_type != 'user')
+  `).get(id) as any
+  const agentWorking = agentWorkingExec?.count ?? 0
 
-  // 건/h 계산
-  const now = new Date()
-  const todayStart = getKSTTodayStart(now)
-  const hoursElapsed = Math.max(0.5, (now.getTime() - todayStart.getTime()) / 3600000)
-  const tasksPerHour = (completed.length + failed.length) / hoursElapsed
+  // 사람 검증 중 (assigneeType = 'user')
+  const verifyingExec = db.prepare(`
+    SELECT COUNT(*) as count FROM task_executions
+    WHERE project_id = ? AND status IN ('running', 'assigned') AND assignee_type = 'user'
+  `).get(id) as any
+  const verifying = verifyingExec?.count ?? 0
+
+  // 오늘 완료된 execution 수
+  const completedExec = db.prepare(`
+    SELECT COUNT(*) as count FROM task_executions
+    WHERE project_id = ? AND status = 'success' AND started_at >= ?
+  `).get(id, todayStartISO) as any
+  const completed = completedExec?.count ?? 0
+
+  // 오늘 실패한 execution 수
+  const failedExec = db.prepare(`
+    SELECT COUNT(*) as count FROM task_executions
+    WHERE project_id = ? AND status = 'failed' AND started_at >= ?
+  `).get(id, todayStartISO) as any
+  const failed = failedExec?.count ?? 0
+
+  // 대기 중인 issue 수 (waiting 단계)
+  const waitingCount = db.prepare(`
+    SELECT COUNT(*) as count FROM issue_stages
+    WHERE project_id = ? AND cached_stage = 'waiting'
+  `).get(id) as any
+  const waiting = waitingCount?.count ?? 0
+
+  // 검증 대기 중인 issue 수 (verify_waiting 단계)
+  const verifyWaitingCount = db.prepare(`
+    SELECT COUNT(*) as count FROM issue_stages
+    WHERE project_id = ? AND cached_stage = 'verify_waiting'
+  `).get(id) as any
+  const verifyWaiting = verifyWaitingCount?.count ?? 0
+
+  // 병합 중인 MR 수
+  const mergeCount = db.prepare(`
+    SELECT COUNT(*) as count FROM issue_stages
+    WHERE project_id = ? AND cached_stage = 'merge'
+  `).get(id) as any
+  const conflicts = mergeCount?.count ?? 0
+
+  // 어제 완료한 execution 수
+  const yesterdayStartISO = new Date(new Date(todayStartISO).getTime() - 24 * 60 * 60 * 1000).toISOString()
+  const yesterdayExec = db.prepare(`
+    SELECT COUNT(*) as count FROM task_executions
+    WHERE project_id = ? AND status = 'success' AND started_at >= ? AND started_at < ?
+  `).get(id, yesterdayStartISO, todayStartISO) as any
+  const yesterdayCompleted = yesterdayExec?.count ?? 0
+
+  // 누적 토큰
+  const tokensResult = db.prepare(`
+    SELECT COALESCE(SUM(input_tokens + output_tokens), 0) as total FROM task_executions
+    WHERE project_id = ?
+  `).get(id) as any
+  const totalTokens = tokensResult?.total ?? 0
+
+  // 누적 비용
+  const costResult = db.prepare(`
+    SELECT COALESCE(SUM(cost_usd), 0) as total FROM task_executions
+    WHERE project_id = ?
+  `).get(id) as any
+  const totalCost = costResult?.total ?? 0
+
+  // 시간당 평균 작업 수
+  const totalActive = agentWorking + verifying
+  const tasksPerHour = totalActive > 0 ? (completed + failed) / 24 : 0
 
   return NextResponse.json({
-    running: running.length,
-    completed: completed.length,
-    failed: failed.length,
-    waiting: project.lastScannedIssueCount ?? 0,
-    verifyWaiting: project.lastVerifyWaitingCount ?? 0,
-    conflictCount: project.conflictCount ?? 0,
+    agentWorking,
+    verifying,
+    completed,
+    failed,
+    waiting,
+    verifyWaiting,
+    conflictCount: conflicts,
     totalTokens,
     totalCost,
-    yesterdayCompleted: yesterdayCount,
-    tasksPerHour: Math.round(tasksPerHour * 10) / 10,
+    yesterdayCompleted,
+    tasksPerHour,
   })
 }

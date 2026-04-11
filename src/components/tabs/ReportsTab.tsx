@@ -201,7 +201,7 @@ export default function ReportsTab() {
         </div>
       </div>
 
-      {loading && <div className="text-center py-10 text-ive-text-dim"><i className="fa-solid fa-circle-notch fa-spin mr-1" />로딩 중...</div>}
+      {loading && <div className="flex flex-col items-center justify-center py-10 gap-2 text-ive-text-dim"><i className="fa-solid fa-circle-notch fa-spin" />로딩 중...</div>}
 
       {data && !loading && d && (
         <main className="px-4 py-4 max-w-lg mx-auto space-y-3">
@@ -709,7 +709,13 @@ export default function ReportsTab() {
                       <button onClick={() => { const n = new Set(expandedUsers); n.has(u.userId) ? n.delete(u.userId) : n.add(u.userId); setExpandedUsers(n) }}
                         className="w-full px-3 py-2.5 text-left">
                         <div className="flex items-center gap-2">
-                          <AgentAvatar avatar={u.userAvatar} size="sm" className="!w-5 !h-5 !text-xs" />
+                          {u.userAvatar === 'photo' && u.userId ? (
+                            <img src={`/api/auth/avatar/image?id=${u.userId}`} alt="" className="w-5 h-5 rounded-lg object-cover shrink-0 border border-ive-border" />
+                          ) : u.userAvatar ? (
+                            <AgentAvatar avatar={u.userAvatar} size="sm" className="!w-5 !h-5 !text-xs" />
+                          ) : (
+                            <div className="w-5 h-5 rounded-lg bg-ive-bg-deep border border-ive-border flex items-center justify-center shrink-0"><i className="fa-solid fa-user text-xs text-ive-text-dim" /></div>
+                          )}
                           <span className="text-sm font-bold text-ive-text flex-1 truncate">{u.userName}</span>
                           {u.verifyWaiting > 0 && <span className={`text-xs font-bold ${u.verifyWaiting >= 5 ? 'text-ive-red' : u.verifyWaiting >= 3 ? 'text-ive-amber' : 'text-ive-cyan'}`}><i className="fa-solid fa-clock mr-0.5" />대기 {u.verifyWaiting}</span>}
                           <span className="text-sm font-bold text-ive-text">{u.tasks}건</span>
@@ -726,7 +732,6 @@ export default function ReportsTab() {
                             <span>성공 {u.success} / 실패 {u.failed}</span>
                             {u.avgDurationMin > 0 && <span>평균 {fmtDur(u.avgDurationMin)}</span>}
                           </>)}
-                          <span className="ml-auto text-ive-amber">${fmtCost(u.cost)}</span>
                         </div>
                       </button>
                       {expandedUsers.has(u.userId) && (
@@ -765,10 +770,9 @@ export default function ReportsTab() {
                             const hasVerifyData = ut.daily.some(d => (d.verified ?? 0) > 0)
                             return (
                               <div className="mt-2 bg-ive-bg-deep rounded-lg p-2">
-                                <div className={`grid ${hasVerifyData ? 'grid-cols-3' : 'grid-cols-2'} gap-2`}>
+                                <div className={`grid ${hasVerifyData ? 'grid-cols-2' : 'grid-cols-1'} gap-2`}>
                                   <div className="flex items-center gap-1.5"><span className="text-xs text-ive-text-dim shrink-0">이슈</span><Sparkline data={ut.daily.map(d => d.tasks ?? 0)} width={80} height={20} color="auto" /></div>
                                   {hasVerifyData && <div className="flex items-center gap-1.5"><span className="text-xs text-ive-text-dim shrink-0">검증</span><Sparkline data={ut.daily.map(d => d.verified ?? 0)} width={80} height={20} color="green" /></div>}
-                                  <div className="flex items-center gap-1.5"><span className="text-xs text-ive-text-dim shrink-0">비용</span><Sparkline data={ut.daily.map(d => d.cost ?? 0)} width={80} height={20} color="amber" /></div>
                                 </div>
                               </div>
                             )
