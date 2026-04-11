@@ -71,13 +71,15 @@ export async function ensureGitLabLabels(project: Project, decryptedToken: strin
   if (!projectPath) return;
 
   const headers = getAuthHeaders(project, decryptedToken);
+  // GitLab/GitHub 레이블 색상 — IVE 디자인 토큰과 동일한 의미 매핑
+  // (cyan=정보/대기, amber=진행/검증, green=완료) — 토큰 hex 값과 정확히 일치
   const labelsToEnsure = [
-    { name: project.labelTarget, color: '#34d399', description: 'IVE 관리 대상 이슈 표시.' },
-    { name: project.labelSchedule || 'IVE-S', color: '#fbbf24', description: '스케줄 대기. 스캐너가 이 레이블의 이슈를 에이전트에 배정합니다.' },
-    { name: project.labelDev || 'IVE-D', color: '#22d3ee', description: '개발 중. 에이전트가 작업을 시작하면 자동 부착됩니다.' },
-    { name: project.labelVerifyWait || 'IVE-W', color: '#eab308', description: '검증대기. 개발이 완료되어 검증자의 검증시작을 기다리고 있습니다.' },
-    { name: project.labelVerify || 'IVE-V', color: '#fb923c', description: '검증 중. 검증자가 검증을 진행하고 있습니다.' },
-    { name: project.labelEnd || 'IVE-E', color: '#60a5fa', description: '처리 완료. 코드가 수정되었으면 MR/PR 머지 대상입니다.' },
+    { name: project.labelTarget, color: '#22d3ee', description: 'IVE 관리 대상 이슈 표시.' },
+    { name: project.labelSchedule || 'IVE-S', color: '#22d3ee', description: '스케줄 대기. 스캐너가 이 레이블의 이슈를 에이전트에 배정합니다.' },
+    { name: project.labelDev || 'IVE-D', color: '#f59e0b', description: '개발 중. 에이전트가 작업을 시작하면 자동 부착됩니다.' },
+    { name: project.labelVerifyWait || 'IVE-W', color: '#f59e0b', description: '검증대기. 개발이 완료되어 검증자의 검증시작을 기다리고 있습니다.' },
+    { name: project.labelVerify || 'IVE-V', color: '#f59e0b', description: '검증 중. 검증자가 검증을 진행하고 있습니다.' },
+    { name: project.labelEnd || 'IVE-E', color: '#4ade80', description: '처리 완료. 코드가 수정되었으면 MR/PR 머지 대상입니다.' },
   ];
 
   try {

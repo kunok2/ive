@@ -121,8 +121,8 @@ export default function DiffViewer({ changes }: { changes: FileChange[] }) {
               <i className={`fa-solid fa-chevron-${isOpen ? 'down' : 'right'} text-xs text-ive-text-dim w-3`} />
               <span className="text-sm font-mono text-ive-text flex-1 break-all">{filePath}</span>
               <FileLabel change={change} />
-              {added > 0 && <span className="text-xs text-green-400 font-bold">+{added}</span>}
-              {removed > 0 && <span className="text-xs text-red-400 font-bold">-{removed}</span>}
+              {added > 0 && <span className="text-xs text-ive-green font-bold">+{added}</span>}
+              {removed > 0 && <span className="text-xs text-ive-red font-bold">-{removed}</span>}
             </button>
 
             {/* Diff 내용 */}
@@ -142,11 +142,11 @@ export default function DiffViewer({ changes }: { changes: FileChange[] }) {
                       }
 
                       const bgClass =
-                        line.type === 'add' ? 'bg-green-900/20' :
-                        line.type === 'del' ? 'bg-red-900/20' : ''
+                        line.type === 'add' ? 'bg-ive-green/10' :
+                        line.type === 'del' ? 'bg-ive-red/10' : ''
                       const textClass =
-                        line.type === 'add' ? 'text-green-300' :
-                        line.type === 'del' ? 'text-red-300' : 'text-ive-text'
+                        line.type === 'add' ? 'text-ive-green' :
+                        line.type === 'del' ? 'text-ive-red' : 'text-ive-text'
                       const prefix =
                         line.type === 'add' ? '+' :
                         line.type === 'del' ? '-' : ' '

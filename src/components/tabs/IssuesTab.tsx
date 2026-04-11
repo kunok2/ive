@@ -57,15 +57,15 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   const tCommon = useTranslations('common')
 
   const STAGE_INFO: Record<string, { label: string; color: string; icon: string }> = useMemo(() => ({
-    waiting:        { label: tStage('waiting'),        color: 'bg-ive-green/20 text-ive-green border-ive-green/30', icon: 'fa-clock' },
-    verify_waiting: { label: tStage('verify_waiting'), color: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30', icon: 'fa-hourglass-half' },
-    dev:            { label: tStage('dev'),            color: 'bg-ive-cyan/20 text-ive-cyan border-ive-cyan/30', icon: 'fa-code' },
-    dev_fail:       { label: tStage('dev_fail'),       color: 'bg-ive-red/20 text-ive-red border-ive-red/30', icon: 'fa-circle-xmark' },
-    verifying:      { label: tStage('verifying'),      color: 'bg-orange-500/20 text-orange-400 border-orange-500/30', icon: 'fa-magnifying-glass' },
-    done:           { label: tStage('done'),           color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30', icon: 'fa-circle-check' },
-    closed:         { label: tStage('closed'),         color: 'bg-gray-500/20 text-gray-400 border-gray-500/30', icon: 'fa-lock' },
-    rejected:       { label: tStage('rejected'),       color: 'bg-rose-500/20 text-rose-400 border-rose-500/30', icon: 'fa-rotate-left' },
-    unknown:        { label: tStage('unknown'),        color: 'bg-white/10 text-ive-text-dim border-white/20', icon: 'fa-question' },
+    waiting:        { label: tStage('waiting'),        color: 'bg-ive-cyan/20 text-ive-cyan border-ive-cyan/30',     icon: 'fa-clock' },
+    verify_waiting: { label: tStage('verify_waiting'), color: 'bg-ive-amber/20 text-ive-amber border-ive-amber/30',  icon: 'fa-hourglass-half' },
+    dev:            { label: tStage('dev'),            color: 'bg-ive-amber/20 text-ive-amber border-ive-amber/30',  icon: 'fa-code' },
+    dev_fail:       { label: tStage('dev_fail'),       color: 'bg-ive-red/20 text-ive-red border-ive-red/30',        icon: 'fa-circle-xmark' },
+    verifying:      { label: tStage('verifying'),      color: 'bg-ive-amber/20 text-ive-amber border-ive-amber/30',  icon: 'fa-magnifying-glass' },
+    done:           { label: tStage('done'),           color: 'bg-ive-green/20 text-ive-green border-ive-green/30',  icon: 'fa-circle-check' },
+    closed:         { label: tStage('closed'),         color: 'bg-white/5 text-ive-text-muted border-ive-border-subtle', icon: 'fa-lock' },
+    rejected:       { label: tStage('rejected'),       color: 'bg-ive-red/20 text-ive-red border-ive-red/30',        icon: 'fa-rotate-left' },
+    unknown:        { label: tStage('unknown'),        color: 'bg-white/5 text-ive-text-dim border-ive-border-subtle', icon: 'fa-question' },
   }), [tStage])
 
   const FILTER_TABS = useMemo(() => [
@@ -426,7 +426,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     setAssigneeModalIids(iids)
   }
 
-  // 대기 이슈의 작업자(에이전트) 변경
+  // 대기 이슈의 에이전트 변경
   const handleChangeIssueAgent = async (iid: number, mode: 'auto' | 'assignee' | 'agent', agentId: string | null) => {
     setAgentPickerSaving(true)
     try {
@@ -696,14 +696,14 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
               <i className={`fa-solid fa-chevron-down text-xs text-ive-text-dim transition-transform ${projectDropdownOpen ? 'rotate-180' : ''}`} />
             </button>
             {projectDropdownOpen && (
-              <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-[#1a1a1e] border border-ive-border-subtle rounded-lg overflow-hidden shadow-xl shadow-black">
+              <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden shadow-lg">
                 {state.projects.map(p => (
                   <button
                     key={p.id}
                     onClick={() => { setSelectedProjectId(p.id); setProjectDropdownOpen(false) }}
                     className={`w-full px-4 py-3 text-left text-base font-bold transition-colors ${
                       p.id === selectedProjectId
-                        ? 'bg-ive-green/10 text-ive-green'
+                        ? 'bg-ive-cyan/10 text-ive-cyan'
                         : 'text-ive-text hover:bg-white/5'
                     }`}
                   >
@@ -736,9 +736,9 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
           <>
             {selectedProject && (
               <div className="flex items-center gap-3 mb-3 bg-ive-bg-card border border-ive-border-subtle rounded-lg px-4 py-3">
-                <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${selectedProject.color || '#4ade80'}15` }}>
+                <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${selectedProject.color || '#22d3ee'}15` }}>
                   <i className={`fa-brands ${selectedProject.provider === 'github' ? 'fa-github' : 'fa-gitlab'} text-xl`}
-                     style={{ color: selectedProject.color || '#4ade80' }} />
+                     style={{ color: selectedProject.color || '#22d3ee' }} />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="text-base font-bold text-ive-text truncate">{selectedProject.name}</div>
@@ -905,7 +905,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                     </button>
                   </div>
                 )}
-                {/* 작업자 지정 드롭다운 */}
+                {/* 에이전트 지정 드롭다운 */}
                 <div ref={agentDropdownRef} className="relative mb-2">
                   <label className="text-xs font-bold text-ive-text-dim mb-1 block">
                     <i className="fa-solid fa-user-gear mr-1" />{tIssue('preferredAgent')}
@@ -916,32 +916,41 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                     className="w-full bg-ive-bg-card border border-ive-border-dark rounded-lg px-3 py-2 text-left flex items-center gap-2 text-sm focus:outline-none focus:border-ive-green/50 transition-colors"
                   >
                     {preferredAgentId === 'none' ? (
-                      <span className="text-ive-text font-bold"><i className="fa-solid fa-ban mr-1 text-ive-text-muted" />{tIssue('noAssignment')}</span>
+                      <>
+                        <span className="w-4 h-4 inline-flex items-center justify-center shrink-0 text-ive-text-muted"><i className="fa-solid fa-ban" /></span>
+                        <span className="text-ive-text font-bold">{tIssue('noAssignment')}</span>
+                      </>
                     ) : preferredAgentId === 'assignee' ? (
-                      <span className="text-ive-text font-bold"><i className="fa-solid fa-user mr-1 text-ive-cyan" />{tIssue('assigneeHandles')}</span>
+                      <>
+                        <span className="w-4 h-4 inline-flex items-center justify-center shrink-0 text-ive-cyan"><i className="fa-solid fa-user" /></span>
+                        <span className="text-ive-text font-bold">{tIssue('assigneeHandles')}</span>
+                      </>
                     ) : preferredAgentId ? (() => {
                       const pa = projectAgents.find(a => a.agentId === preferredAgentId)
                       if (!pa) return <span className="text-ive-text font-bold">{tIssue('noPreference')}</span>
                       const cli = CLI_CONFIG[pa.agent.cliName]
                       return <>
-                        <AgentAvatar avatar={pa.agent.avatar} size="sm" />
+                        <AgentAvatar avatar={pa.agent.avatar} size="xs" />
                         <span className="text-ive-text font-bold">{pa.agent.name}</span>
                         <span className={`text-xs ${cli.color}`}><i className={`${cli.icon} mr-0.5`} />{cli.label}</span>
                       </>
                     })() : (
-                      <span className="text-ive-text font-bold"><i className="fa-solid fa-shuffle mr-1 text-ive-green" />{tIssue('noPreference')}</span>
+                      <>
+                        <span className="w-4 h-4 inline-flex items-center justify-center shrink-0 text-ive-green"><i className="fa-solid fa-shuffle" /></span>
+                        <span className="text-ive-text font-bold">{tIssue('noPreference')}</span>
+                      </>
                     )}
                     <i className={`fa-solid fa-chevron-down text-xs text-ive-text-dim ml-auto transition-transform ${agentDropdownOpen ? 'rotate-180' : ''}`} />
                   </button>
                   {agentDropdownOpen && (
-                    <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-[#1a1a1e] border border-ive-border-subtle rounded-lg overflow-hidden shadow-xl shadow-black">
+                    <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-ive-bg-solid border border-ive-border-subtle rounded-lg overflow-hidden shadow-lg">
                       <button
                         onClick={() => { setPreferredAgentId('none'); setAgentDropdownOpen(false) }}
                         className={`w-full px-3 py-2.5 text-left text-sm flex items-center gap-2 transition-colors ${
                           preferredAgentId === 'none' ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text-dim hover:bg-white/5'
                         }`}
                       >
-                        <i className="fa-solid fa-ban" />
+                        <span className="w-4 h-4 inline-flex items-center justify-center shrink-0"><i className="fa-solid fa-ban" /></span>
                         <span className="font-bold">{tIssue('noAssignment')}</span>
                       </button>
                       <button
@@ -950,7 +959,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                           preferredAgentId === null ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text-dim hover:bg-white/5'
                         }`}
                       >
-                        <i className="fa-solid fa-shuffle" />
+                        <span className="w-4 h-4 inline-flex items-center justify-center shrink-0"><i className="fa-solid fa-shuffle" /></span>
                         <span className="font-bold">{tIssue('noPreference')}</span>
                       </button>
                       <button
@@ -959,7 +968,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                           preferredAgentId === 'assignee' ? 'bg-ive-cyan/10 text-ive-cyan' : 'text-ive-text-dim hover:bg-white/5'
                         }`}
                       >
-                        <i className="fa-solid fa-user" />
+                        <span className="w-4 h-4 inline-flex items-center justify-center shrink-0"><i className="fa-solid fa-user" /></span>
                         <span className="font-bold">{tIssue('assigneeHandles')}</span>
                       </button>
                       {projectAgents.map(pa => {
@@ -973,7 +982,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                               preferredAgentId === pa.agentId ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text hover:bg-white/5'
                             }`}
                           >
-                            <AgentAvatar avatar={pa.agent.avatar} size="sm" />
+                            <AgentAvatar avatar={pa.agent.avatar} size="xs" />
                             <span className="font-bold">{pa.agent.name}</span>
                             <span className={`text-xs ${cli.color}`}><i className={`${cli.icon} mr-0.5`} />{cli.label}</span>
                             {isOffline && <span className="text-xs text-ive-red ml-auto"><i className="fa-solid fa-circle-exclamation mr-0.5" />{tIssue('agentOfflineWarning')}</span>}
@@ -1212,7 +1221,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                                 className={`flex items-center gap-1 ${agentEditable ? 'cursor-pointer hover:text-ive-text' : ''}`}
                                 onClick={onClickEdit}
                               >
-                                <AgentAvatar avatar={issue.preferredAgentAvatar} size="sm" />
+                                <AgentAvatar avatar={issue.preferredAgentAvatar} size="xs" />
                                 <span className="font-bold text-ive-text-muted">{issue.preferredAgentName}</span>
                                 {issue.preferredAgentCliName && (() => {
                                   const cli = CLI_CONFIG[issue.preferredAgentCliName as CliName]
@@ -1304,7 +1313,9 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
             }`}
           >
             {!assigneeModalPick ? <i className="fa-solid fa-circle-dot text-xs shrink-0 w-4" /> : <i className="fa-regular fa-circle text-xs shrink-0 w-4 opacity-30" />}
-            <i className="fa-solid fa-ban text-sm" />
+            <div className="w-7 h-7 rounded-full bg-ive-bg-deep flex items-center justify-center shrink-0">
+              <i className="fa-solid fa-ban text-ive-text-dim text-xs" />
+            </div>
             <span className="font-bold">{tIssue('noAssignee')}</span>
           </button>
           {gitMembers.filter(m => {
@@ -1346,7 +1357,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
           </button>
         </div>
       </Modal>
-      {/* 대기 이슈 작업자 선택 모달 */}
+      {/* 대기 이슈 에이전트 선택 모달 */}
       <Modal open={agentPickerIid !== null} onClose={() => setAgentPickerIid(null)} title={`#${agentPickerIid ?? ''} ${tIssue('preferredAgent')}`} size="sm">
         {(() => {
           const targetIssue = agentPickerIid !== null ? issues.find(i => i.iid === agentPickerIid) : null
@@ -1361,7 +1372,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                   currentMode === 'auto' ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text-dim hover:bg-white/5'
                 }`}
               >
-                <i className="fa-solid fa-shuffle text-sm w-4" />
+                <span className="w-4 h-4 inline-flex items-center justify-center shrink-0"><i className="fa-solid fa-shuffle" /></span>
                 <span className="font-bold">{tIssue('noPreference')}</span>
               </button>
               <button
@@ -1371,7 +1382,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                   currentMode === 'assignee' ? 'bg-ive-cyan/10 text-ive-cyan' : 'text-ive-text-dim hover:bg-white/5'
                 }`}
               >
-                <i className="fa-solid fa-user text-sm w-4" />
+                <span className="w-4 h-4 inline-flex items-center justify-center shrink-0"><i className="fa-solid fa-user" /></span>
                 <span className="font-bold">{tIssue('assigneeHandles')}</span>
               </button>
               {projectAgents.map(pa => {
@@ -1387,7 +1398,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                       isPicked ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text hover:bg-white/5'
                     }`}
                   >
-                    <AgentAvatar avatar={pa.agent.avatar} size="sm" />
+                    <AgentAvatar avatar={pa.agent.avatar} size="xs" />
                     <span className="font-bold">{pa.agent.name}</span>
                     <span className={`text-xs ${cli.color}`}><i className={`${cli.icon} mr-0.5`} />{cli.label}</span>
                     {isOffline && <span className="text-xs text-ive-red ml-auto"><i className="fa-solid fa-circle-exclamation mr-0.5" />{tIssue('agentOfflineWarning')}</span>}

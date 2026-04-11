@@ -73,15 +73,15 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   const tAuth = useTranslations('auth')
 
   const STAGE_INFO: Record<string, { label: string; color: string; icon: string; bg: string }> = {
-    waiting:        { label: tStage('waiting'),        color: 'text-ive-green',    icon: 'fa-clock',              bg: 'bg-ive-green/10' },
-    verify_waiting: { label: tStage('verify_waiting'), color: 'text-yellow-400',   icon: 'fa-hourglass-half',     bg: 'bg-yellow-500/10' },
-    dev:            { label: tStage('dev'),            color: 'text-ive-cyan',     icon: 'fa-code',               bg: 'bg-ive-cyan/10' },
-    dev_fail:       { label: tStage('dev_fail'),       color: 'text-ive-red',     icon: 'fa-circle-xmark',       bg: 'bg-ive-red/10' },
-    verifying:      { label: tStage('verifying'),      color: 'text-orange-400',  icon: 'fa-magnifying-glass',   bg: 'bg-orange-500/10' },
-    done:           { label: tStage('done'),           color: 'text-emerald-400', icon: 'fa-circle-check',       bg: 'bg-emerald-500/10' },
-    closed:         { label: tStage('closed'),         color: 'text-gray-400',    icon: 'fa-lock',               bg: 'bg-gray-500/10' },
-    rejected:       { label: tStage('rejected'),       color: 'text-rose-400',    icon: 'fa-rotate-left',        bg: 'bg-rose-500/10' },
-    unknown:        { label: tStage('unknown'),        color: 'text-ive-text-dim', icon: 'fa-question',         bg: 'bg-white/5' },
+    waiting:        { label: tStage('waiting'),        color: 'text-ive-cyan',      icon: 'fa-clock',              bg: 'bg-ive-cyan/10' },
+    verify_waiting: { label: tStage('verify_waiting'), color: 'text-ive-amber',     icon: 'fa-hourglass-half',     bg: 'bg-ive-amber/10' },
+    dev:            { label: tStage('dev'),            color: 'text-ive-amber',     icon: 'fa-code',               bg: 'bg-ive-amber/10' },
+    dev_fail:       { label: tStage('dev_fail'),       color: 'text-ive-red',       icon: 'fa-circle-xmark',       bg: 'bg-ive-red/10' },
+    verifying:      { label: tStage('verifying'),      color: 'text-ive-amber',     icon: 'fa-magnifying-glass',   bg: 'bg-ive-amber/10' },
+    done:           { label: tStage('done'),           color: 'text-ive-green',     icon: 'fa-circle-check',       bg: 'bg-ive-green/10' },
+    closed:         { label: tStage('closed'),         color: 'text-ive-text-muted',icon: 'fa-lock',               bg: 'bg-white/5' },
+    rejected:       { label: tStage('rejected'),       color: 'text-ive-red',       icon: 'fa-rotate-left',        bg: 'bg-ive-red/10' },
+    unknown:        { label: tStage('unknown'),        color: 'text-ive-text-dim',  icon: 'fa-question',           bg: 'bg-white/5' },
   }
 
   const STAGE_ACTIONS: Record<string, StageAction[]> = {
@@ -408,7 +408,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   }
 
   async function handleDeleteNote(noteId: number) {
-    if (!(await confirm({ title: tIssue('deleteComment'), message: tIssue('deleteCommentConfirm'), confirmText: tc('delete'), danger: true }))) return
+    if (!(await confirm({ title: tIssue('deleteComment'), message: tIssue('deleteCommentConfirm'), confirmText: tc('delete'), variant: 'danger' }))) return
     
     try {
       const res = await fetch(`/api/projects/${projectId}/issues/${iid}/notes/${noteId}`, {
@@ -950,7 +950,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
             <button onClick={() => router.back()} className="text-ive-green font-bold p-1 hover:bg-ive-green/5 rounded shrink-0">
               <i className="fa-solid fa-arrow-left" />
             </button>
-            <span className="text-base font-bold text-ive-green shrink-0">#{iid}</span>
+            <span className="text-base font-bold text-ive-text-muted shrink-0">#{iid}</span>
           </div>
         </header>
         <div className="flex-1 flex items-center justify-center">
@@ -1193,7 +1193,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                       ) : (
                         <>
                           {isIveUser && note.iveAuthorAvatar ? (
-                            <AgentAvatar avatar={note.iveAuthorAvatar} size="sm" className="!w-4 !h-4" />
+                            <AgentAvatar avatar={note.iveAuthorAvatar} size="xs" />
                           ) : note.avatarUrl ? (
                             <img src={note.avatarUrl} alt="" className="w-4 h-4 rounded-full" />
                           ) : (
@@ -1229,11 +1229,11 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
               {mode === 'chat' && (chatSessionId || chatHistoryOnly) && (
                 <>
                   <div className="flex items-center gap-2 my-2">
-                    <div className="flex-1 border-t border-purple-500/30" />
-                    <span className="text-xs font-bold text-purple-400 uppercase tracking-widest">
+                    <div className="flex-1 border-t border-ive-cyan/30" />
+                    <span className="text-xs font-bold text-ive-cyan uppercase tracking-widest">
                       <i className="fa-solid fa-comments mr-1" />{tIssue('chatMode')}
                     </span>
-                    <div className="flex-1 border-t border-purple-500/30" />
+                    <div className="flex-1 border-t border-ive-cyan/30" />
                   </div>
 
                   {/* Agent greeting */}
@@ -1241,8 +1241,8 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                     <div className="shrink-0 mt-0.5">
                       <AgentAvatar avatar={chatAgentAvatar || 'av-01'} size="sm" />
                     </div>
-                    <div className="flex-1 rounded-lg px-3 py-2 bg-purple-500/[0.06] border border-purple-500/15">
-                      <div className="text-xs font-bold text-purple-300 mb-1">{chatAgentName || 'AI'}</div>
+                    <div className="flex-1 rounded-lg px-3 py-2 bg-ive-cyan/5 border border-ive-cyan/15">
+                      <div className="text-xs font-bold text-ive-cyan mb-1">{chatAgentName || 'AI'}</div>
                       <div className="text-sm leading-relaxed text-ive-text-muted">
                         {tIssue('chatGreeting', { agent: chatAgentName || 'AI', iid: iid })}
                       </div>
@@ -1260,12 +1260,12 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                       </div>
                       <div className={`rounded-lg px-3 py-2 ${msg.role === 'user' ? 'max-w-[80%]' : 'flex-1'} ${
                         msg.role === 'user'
-                          ? 'bg-sky-500/[0.12] border border-sky-500/25'
-                          : 'bg-ive-bg-card border border-purple-500/10'
+                          ? 'bg-white/5 border border-ive-border-subtle'
+                          : 'bg-ive-bg-card border border-ive-cyan/15'
                       }`}>
                         <div className={`flex items-center gap-2 mb-1 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
                           <span className={`text-xs font-bold ${
-                            msg.role === 'user' ? 'text-sky-400' : 'text-purple-300'
+                            msg.role === 'user' ? 'text-ive-text' : 'text-ive-cyan'
                           }`}>
                             {msg.role === 'user' ? (state.user?.name || 'You') : (chatAgentName || 'AI')}
                           </span>
@@ -1288,9 +1288,9 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                   <div className="shrink-0 mt-0.5">
                     <AgentAvatar avatar={chatAgentAvatar || 'av-01'} size="sm" />
                   </div>
-                  <div className="flex-1 rounded-lg px-3 py-2 bg-ive-bg-card border border-purple-500/10">
+                  <div className="flex-1 rounded-lg px-3 py-2 bg-ive-bg-card border border-ive-cyan/15">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs font-bold text-purple-300">
+                      <span className="text-xs font-bold text-ive-cyan">
                         {chatAgentName || 'AI'}
                         <i className="fa-solid fa-circle-notch fa-spin ml-1.5 text-xs" />
                       </span>
@@ -1344,7 +1344,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                   }}
                   disabled={chatStarting}
                   className={`text-xs font-bold px-2.5 py-1 rounded-lg transition-all ${
-                    mode === 'chat' ? 'bg-purple-500/15 text-purple-400' : 'text-ive-text-dim hover:text-ive-text'
+                    mode === 'chat' ? 'bg-ive-cyan/15 text-ive-cyan' : 'text-ive-text-dim hover:text-ive-text'
                   }`}
                 >
                   {chatStarting ? (
@@ -1377,7 +1377,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                       <span className="font-bold text-ive-cyan"><i className="fa-solid fa-user mr-0.5" />{tIssue('assigneeHandles')}</span>
                     ) : preferredAgent?.preferredAgentId ? (
                       <>
-                        <AgentAvatar avatar={preferredAgent.preferredAgentAvatar || ''} size="sm" />
+                        <AgentAvatar avatar={preferredAgent.preferredAgentAvatar || ''} size="xs" />
                         <span className="font-bold text-ive-text">{preferredAgent.preferredAgentName}</span>
                       </>
                     ) : (
@@ -1393,7 +1393,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                           preferredAgent?.assignMode !== 'assignee' && !preferredAgent?.preferredAgentId ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text hover:bg-white/5'
                         }`}
                       >
-                        <i className="fa-solid fa-shuffle" />
+                        <span className="w-4 h-4 inline-flex items-center justify-center shrink-0"><i className="fa-solid fa-shuffle" /></span>
                         <span className="font-bold">{tIssue('noPreference')}</span>
                       </button>
                       <button
@@ -1402,7 +1402,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                           preferredAgent?.assignMode === 'assignee' ? 'bg-ive-cyan/10 text-ive-cyan' : 'text-ive-text hover:bg-white/5'
                         }`}
                       >
-                        <i className="fa-solid fa-user" />
+                        <span className="w-4 h-4 inline-flex items-center justify-center shrink-0"><i className="fa-solid fa-user" /></span>
                         <span className="font-bold">{tIssue('assigneeHandles')}</span>
                       </button>
                       {projectAgents.map(pa => {
@@ -1415,7 +1415,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                               preferredAgent?.preferredAgentId === pa.agentId ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text hover:bg-white/5'
                             }`}
                           >
-                            <AgentAvatar avatar={pa.agent.avatar} size="sm" />
+                            <AgentAvatar avatar={pa.agent.avatar} size="xs" />
                             <span className="font-bold">{pa.agent.name}</span>
                             {isOffline && <span className="text-ive-red ml-auto"><i className="fa-solid fa-circle-exclamation" /></span>}
                             {!isOffline && pa.agent.status === 'busy' && <span className="ml-auto w-2 h-2 rounded-full bg-ive-cyan animate-pulse" />}
@@ -1492,7 +1492,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                       <button
                         onClick={handleCommentAndDone}
                         disabled={posting || !comment.trim()}
-                        className="shrink-0 h-10 px-3 rounded-lg bg-emerald-500 text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-40 text-xs font-bold whitespace-nowrap"
+                        className="shrink-0 h-10 px-3 rounded-lg bg-ive-green text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-40 text-xs font-bold whitespace-nowrap"
                         title={tIssue('postAndDoneHint')}
                         aria-label={tIssue('postAndDone')}
                       >
@@ -1526,13 +1526,13 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                 placeholder={tIssue('chatPlaceholder')}
                 rows={1}
                 disabled={chatSending}
-                className="flex-1 min-h-10 bg-ive-bg-card border border-purple-500/30 rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-purple-500/50 disabled:opacity-50"
+                className="flex-1 min-h-10 bg-ive-bg-card border border-ive-cyan/30 rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-cyan/50 disabled:opacity-50"
                 style={{ overflow: 'auto', scrollbarGutter: 'stable' }}
               />
               <button
                 onClick={handleSendChatMessage}
                 disabled={chatSending || !chatInput.trim()}
-                className="shrink-0 w-10 h-10 rounded-lg bg-purple-500 text-white flex items-center justify-center active:scale-95 transition-all disabled:opacity-40"
+                className="shrink-0 w-10 h-10 rounded-lg bg-ive-cyan text-ive-bg-deep flex items-center justify-center active:scale-95 transition-all disabled:opacity-40"
               >
                 {chatSending ? <i className="fa-solid fa-circle-notch fa-spin" /> : <i className="fa-solid fa-paper-plane" />}
               </button>
@@ -1551,7 +1551,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                   setChatMessages([])
                   handleStartChat()
                 }}
-                className="text-xs font-bold text-purple-400 hover:text-purple-300 transition-colors"
+                className="text-xs font-bold text-ive-cyan hover:opacity-80 transition-opacity"
               >
                 <i className="fa-solid fa-plus mr-1" />{tIssue('startNewChat')}
               </button>
@@ -1563,7 +1563,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
             <div className="text-center py-2">
               <button
                 onClick={() => handleStartChat()}
-                className="text-sm font-bold text-purple-400 hover:text-purple-300 transition-colors"
+                className="text-sm font-bold text-ive-cyan hover:opacity-80 transition-opacity"
               >
                 <i className="fa-solid fa-comments mr-1" />{tIssue('startChat')}
               </button>
@@ -1597,7 +1597,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
               <button
                 onClick={() => handleMrActionChoice('merge')}
                 disabled={mrActionBusy || mrActionModal.mr.has_conflicts}
-                className="w-full px-3 py-2.5 rounded-lg text-sm font-bold text-ive-purple border border-ive-purple/30 bg-ive-purple/5 hover:bg-ive-purple/15 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="w-full px-3 py-2.5 rounded-lg text-sm font-bold text-ive-cyan border border-ive-cyan/30 bg-ive-cyan/5 hover:bg-ive-cyan/15 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 <i className="fa-solid fa-code-merge mr-1.5" />MR 머지 후 완료
               </button>
@@ -1648,7 +1648,9 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
             }`}
           >
             {!assigneePick ? <i className="fa-solid fa-circle-dot text-xs shrink-0 w-4" /> : <i className="fa-regular fa-circle text-xs shrink-0 w-4 opacity-30" />}
-            <i className="fa-solid fa-ban text-sm" />
+            <div className="w-7 h-7 rounded-full bg-ive-bg-deep flex items-center justify-center shrink-0">
+              <i className="fa-solid fa-ban text-ive-text-dim text-xs" />
+            </div>
             <span className="font-bold">{tIssue('noAssignee')}</span>
           </button>
           {gitMembers.filter(m => {
@@ -1708,7 +1710,7 @@ function ElapsedTimer({ startTime }: { startTime: number | null }) {
     return () => clearInterval(interval)
   }, [startTime])
   return (
-    <span className="text-purple-400 text-sm">
+    <span className="text-ive-cyan text-sm">
       {tIssue('chatThinking', { seconds })}
     </span>
   )

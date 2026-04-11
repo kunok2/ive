@@ -130,8 +130,8 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
                   <code className="bg-ive-bg-deep px-1 rounded">{mr.source_branch}</code>
                   <i className="fa-solid fa-arrow-right text-[8px] text-ive-text-dim" />
                   <code className="bg-ive-bg-deep px-1 rounded">{mr.target_branch}</code>
-                  {totalAdded > 0 && <span className="text-green-400 ml-1">+{totalAdded}</span>}
-                  {totalRemoved > 0 && <span className="text-red-400 ml-1">-{totalRemoved}</span>}
+                  {totalAdded > 0 && <span className="text-ive-green ml-1">+{totalAdded}</span>}
+                  {totalRemoved > 0 && <span className="text-ive-red ml-1">-{totalRemoved}</span>}
                 </div>
               )}
             </div>
@@ -198,9 +198,9 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
             )}
 
             {isMerged && (
-              <div className="mt-6 mb-4 text-center py-3 bg-purple-500/10 rounded-lg border border-purple-500/20">
-                <i className="fa-solid fa-code-merge text-purple-300 mr-1.5" />
-                <span className="text-sm font-bold text-purple-300">이미 머지된 MR입니다</span>
+              <div className="mt-6 mb-4 text-center py-3 bg-ive-cyan/10 rounded-lg border border-ive-cyan/20">
+                <i className="fa-solid fa-code-merge text-ive-cyan mr-1.5" />
+                <span className="text-sm font-bold text-ive-cyan">이미 머지된 MR입니다</span>
               </div>
             )}
           </>

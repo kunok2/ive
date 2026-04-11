@@ -94,31 +94,51 @@ export interface Project {
 export type CliName = 'claude' | 'gemini' | 'codex' | 'opencode'
 export type AgentStatus = 'available' | 'busy' | 'offline'
 
-// 기본 아바타 20종 (FontAwesome 아이콘 + 색상)
-export const DEFAULT_AVATARS = [
-  { id: 'av-01', icon: 'fa-solid fa-user-astronaut', color: '#60a5fa' },
-  { id: 'av-02', icon: 'fa-solid fa-user-ninja', color: '#f472b6' },
-  { id: 'av-03', icon: 'fa-solid fa-user-secret', color: '#a78bfa' },
-  { id: 'av-04', icon: 'fa-solid fa-hat-wizard', color: '#c084fc' },
-  { id: 'av-05', icon: 'fa-solid fa-robot', color: '#22d3ee' },
-  { id: 'av-06', icon: 'fa-solid fa-ghost', color: '#e0e0e0' },
-  { id: 'av-07', icon: 'fa-solid fa-dragon', color: '#f87171' },
-  { id: 'av-08', icon: 'fa-solid fa-cat', color: '#fb923c' },
-  { id: 'av-09', icon: 'fa-solid fa-dog', color: '#fbbf24' },
-  { id: 'av-10', icon: 'fa-solid fa-hippo', color: '#a78bfa' },
-  { id: 'av-11', icon: 'fa-solid fa-crow', color: '#94a3b8' },
-  { id: 'av-12', icon: 'fa-solid fa-fish', color: '#22d3ee' },
-  { id: 'av-13', icon: 'fa-solid fa-spider', color: '#f87171' },
-  { id: 'av-14', icon: 'fa-solid fa-otter', color: '#a3e635' },
-  { id: 'av-15', icon: 'fa-solid fa-shield-halved', color: '#60a5fa' },
-  { id: 'av-16', icon: 'fa-solid fa-bolt', color: '#fbbf24' },
-  { id: 'av-17', icon: 'fa-solid fa-fire', color: '#fb923c' },
-  { id: 'av-18', icon: 'fa-solid fa-snowflake', color: '#67e8f9' },
-  { id: 'av-19', icon: 'fa-solid fa-gem', color: '#f472b6' },
-  { id: 'av-20', icon: 'fa-solid fa-leaf', color: '#4ade80' },
+// 기본 아바타 20종 — 아이콘으로 정체성 구분, 색은 브랜드(cyan) 변주로 통일.
+// 디자인 시스템 외 색(보라/핑크/주황) 사용하지 않음. 6가지 cyan 톤이 순환.
+const AVATAR_TONES = [
+  '#a5f3fc',  // cyan-200 — 가장 옅음
+  '#67e8f9',  // cyan-300
+  '#22d3ee',  // cyan-400 (브랜드)
+  '#06b6d4',  // cyan-500
+  '#0891b2',  // cyan-600
+  '#155e75',  // cyan-800 — 가장 짙음
 ] as const
 
-export type DefaultAvatarId = typeof DEFAULT_AVATARS[number]['id']
+const AVATAR_ICONS = [
+  'fa-solid fa-user-astronaut',
+  'fa-solid fa-user-ninja',
+  'fa-solid fa-user-secret',
+  'fa-solid fa-hat-wizard',
+  'fa-solid fa-robot',
+  'fa-solid fa-ghost',
+  'fa-solid fa-dragon',
+  'fa-solid fa-cat',
+  'fa-solid fa-dog',
+  'fa-solid fa-hippo',
+  'fa-solid fa-crow',
+  'fa-solid fa-fish',
+  'fa-solid fa-spider',
+  'fa-solid fa-otter',
+  'fa-solid fa-shield-halved',
+  'fa-solid fa-bolt',
+  'fa-solid fa-fire',
+  'fa-solid fa-snowflake',
+  'fa-solid fa-gem',
+  'fa-solid fa-leaf',
+] as const
+
+export const DEFAULT_AVATARS = AVATAR_ICONS.map((icon, i) => ({
+  id: `av-${String(i + 1).padStart(2, '0')}`,
+  icon,
+  color: AVATAR_TONES[i % AVATAR_TONES.length],
+})) as ReadonlyArray<{ id: string; icon: string; color: string }>
+
+export type DefaultAvatarId =
+  | 'av-01' | 'av-02' | 'av-03' | 'av-04' | 'av-05'
+  | 'av-06' | 'av-07' | 'av-08' | 'av-09' | 'av-10'
+  | 'av-11' | 'av-12' | 'av-13' | 'av-14' | 'av-15'
+  | 'av-16' | 'av-17' | 'av-18' | 'av-19' | 'av-20'
 
 export interface Agent {
   id: string

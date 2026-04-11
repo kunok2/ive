@@ -17,7 +17,7 @@ function ThinkingElapsed() {
     return () => clearInterval(interval)
   }, [])
   return (
-    <span className="text-purple-400 text-xs">
+    <span className="text-ive-cyan text-xs">
       {seconds}초 생각중...
     </span>
   )
@@ -75,11 +75,11 @@ function ChatViewer({ projectId, execution, agent }: { projectId: string; execut
           </div>
           <div className={`rounded-lg px-2.5 py-1.5 text-xs ${msg.role === 'user' ? 'max-w-[80%]' : 'flex-1'} ${
             msg.role === 'user'
-              ? 'bg-sky-500/[0.12] border border-sky-500/25'
-              : 'bg-ive-bg-card border border-purple-500/10'
+              ? 'bg-white/5 border border-ive-border-subtle'
+              : 'bg-ive-bg-card border border-ive-cyan/15'
           }`}>
             <div className={`flex items-center gap-1.5 mb-0.5 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-              <span className={`text-xs font-bold ${msg.role === 'user' ? 'text-sky-400' : 'text-purple-300'}`}>
+              <span className={`text-xs font-bold ${msg.role === 'user' ? 'text-ive-text' : 'text-ive-cyan'}`}>
                 {msg.role === 'user' ? 'You' : agent.name}
               </span>
               <span className="text-xs text-ive-text-dim">
@@ -183,7 +183,7 @@ export default function LiveTracePanel({ agents, projectId, onKill, onAllComplet
         {runningAgents.map((tab, idx) => {
           const activity = activities[tab.agent.id]
           const tabIsChat = tab.execution?.id.startsWith('exec-chat-')
-          const activeColor = tabIsChat ? 'text-purple-400 border-b-2 border-purple-400 bg-purple-500/5' : 'text-ive-cyan border-b-2 border-ive-cyan bg-ive-cyan/5'
+          const activeColor = 'text-ive-cyan border-b-2 border-ive-cyan bg-ive-cyan/5'
           return (
             <button
               key={tab.agent.id}
@@ -212,7 +212,7 @@ export default function LiveTracePanel({ agents, projectId, onKill, onAllComplet
               <div className="min-w-0 flex-1">
                 <MarqueeText className="text-sm font-bold text-ive-text">
                   {isChat ? (
-                    <span className="font-bold text-purple-400">💬 #{current.execution!.issueIid}</span>
+                    <span className="font-bold text-ive-cyan">💬 #{current.execution!.issueIid}</span>
                   ) : isUserTask ? (
                     <span className="font-bold text-ive-cyan">#{current.execution!.issueIid}</span>
                   ) : (
@@ -234,7 +234,7 @@ export default function LiveTracePanel({ agents, projectId, onKill, onAllComplet
                     </span>
                   )
                 })()}
-                <span className={`text-xs font-mono font-bold ${isChat ? 'text-purple-400' : isUserTask ? 'text-ive-cyan' : 'text-ive-amber'}`}>
+                <span className={`text-xs font-mono font-bold ${isChat || isUserTask ? 'text-ive-cyan' : 'text-ive-amber'}`}>
                   {formatDuration(current.execution!.startedAt)}
                   {tick >= 0 ? '' : ''}
                 </span>
@@ -275,7 +275,7 @@ export default function LiveTracePanel({ agents, projectId, onKill, onAllComplet
                 <button
                   onClick={() => onKill(current.execution!.id)}
                   className={`flex-1 text-xs font-bold py-1.5 rounded-lg bg-ive-bg-deep transition-colors ${
-                    isChat ? 'text-purple-400/70 border border-purple-500/30 hover:bg-purple-500/10' : 'text-ive-red/70 border border-ive-red/30 hover:bg-ive-red/10'
+                    isChat ? 'text-ive-cyan/70 border border-ive-cyan/30 hover:bg-ive-cyan/10' : 'text-ive-red/70 border border-ive-red/30 hover:bg-ive-red/10'
                   }`}
                 >
                   {isChat ? (

@@ -35,13 +35,13 @@ export default function IntroSlides({ onComplete }: IntroSlidesProps) {
     },
     {
       icon: 'fa-solid fa-list-check',
-      iconColor: 'text-ive-lime',
+      iconColor: 'text-ive-cyan',
       title: t('taskRegTitle'),
       description: t('taskRegDesc'),
     },
     {
       icon: 'fa-solid fa-wand-magic-sparkles',
-      iconColor: 'text-purple-400',
+      iconColor: 'text-ive-amber',
       title: t('aiResolveTitle'),
       description: t('aiResolveDesc'),
     },

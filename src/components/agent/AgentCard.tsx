@@ -43,11 +43,13 @@ interface AgentStats {
   avgTurnsPerTask: number
 }
 
+// CLI는 메타데이터(라벨)일 뿐 의미 신호가 아니므로 색을 부여하지 않음.
+// 구분이 필요하면 아이콘 형태로만.
 const cliConfig: Record<CliName, { label: string; icon: string; color: string; desc: string }> = {
-  claude: { label: 'Claude Code', icon: 'fa-solid fa-atom', color: 'text-ive-amber', desc: 'Anthropic' },
-  gemini: { label: 'Gemini CLI', icon: 'fa-brands fa-google', color: 'text-ive-cyan', desc: 'Google' },
-  codex: { label: 'Codex CLI', icon: 'fa-solid fa-brain', color: 'text-ive-green-light', desc: 'OpenAI' },
-  opencode: { label: 'OpenCode', icon: 'fa-solid fa-terminal', color: 'text-ive-cyan', desc: 'sst.dev' },
+  claude: { label: 'Claude Code', icon: 'fa-solid fa-atom', color: 'text-ive-text-muted', desc: 'Anthropic' },
+  gemini: { label: 'Gemini CLI', icon: 'fa-brands fa-google', color: 'text-ive-text-muted', desc: 'Google' },
+  codex: { label: 'Codex CLI', icon: 'fa-solid fa-brain', color: 'text-ive-text-muted', desc: 'OpenAI' },
+  opencode: { label: 'OpenCode', icon: 'fa-solid fa-terminal', color: 'text-ive-text-muted', desc: 'sst.dev' },
 }
 
 export default function AgentCard({ agent, onDelete, compact, assignedProjects, onRemove }: Props) {
@@ -218,7 +220,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
       <div className="flex items-center gap-3 bg-ive-bg-card rounded-lg p-3 border border-ive-border-subtle">
         <AgentAvatar avatar={agent.avatar} size="sm" />
         <div className="flex-1 min-w-0">
-          <div className="text-base font-bold text-ive-green-pale truncate">{agent.name}</div>
+          <div className="text-base font-bold text-ive-text truncate">{agent.name}</div>
           <div className="text-sm text-ive-text-muted truncate">{cli.label}</div>
         </div>
         <div className="flex items-center gap-1.5 shrink-0 whitespace-nowrap">
@@ -262,8 +264,8 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
           <AgentAvatar avatar={agent.avatar} size="md" toolBadge={toolBadge} />
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 min-w-0">
-              <span className="text-base font-bold text-ive-green-pale truncate">{agent.name}</span>
-              <span className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold bg-ive-green/20 text-ive-green">
+              <span className="text-base font-bold text-ive-text truncate">{agent.name}</span>
+              <span className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold bg-ive-cyan/20 text-ive-cyan">
                 <i className="fa-solid fa-robot" />{t('workerBadge')}
               </span>
             </div>
@@ -413,7 +415,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
               </span>
             )}
           </div>
-          <Sparkline data={snapshots.map(s => s.completed)} width={40} height={12} color="green" />
+          <Sparkline data={snapshots.map(s => s.completed)} width={40} height={12} color="cyan" />
           <span className="text-xs text-ive-text-dim font-bold">{t('completedLabel')}</span>
         </button>
 
@@ -536,7 +538,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
                   <div
                     className={`rounded-lg px-3 py-2 text-sm leading-relaxed ${
                       msg.role === 'user'
-                        ? 'max-w-[80%] bg-ive-green/15 text-ive-green-pale'
+                        ? 'max-w-[80%] bg-white/5 text-ive-text border border-ive-border-subtle'
                         : 'flex-1 bg-ive-bg-card text-ive-text border border-ive-border-subtle'
                     }`}
                     style={{ whiteSpace: 'pre-wrap' }}
@@ -559,7 +561,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
                             if (isBlock) {
                               return <code className="block bg-ive-bg-deep rounded-lg p-2 my-1.5 text-xs font-mono overflow-x-auto whitespace-pre">{children}</code>
                             }
-                            return <code className="bg-ive-bg-deep px-1 py-0.5 rounded text-xs font-mono text-ive-cyan">{children}</code>
+                            return <code className="bg-ive-bg-deep px-1 py-0.5 rounded text-xs font-mono text-ive-text">{children}</code>
                           },
                           pre: ({ children }) => <pre className="mb-1.5">{children}</pre>,
                           blockquote: ({ children }) => <blockquote className="border-l-2 border-ive-border pl-2.5 my-1.5 text-ive-text-dim">{children}</blockquote>,
@@ -680,7 +682,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
                 href={`/issues/${issue.projectId}/${issue.issueIid}`}
                 className="flex items-center gap-2 px-3 py-2.5 hover:bg-white/[0.02] transition-colors"
               >
-                <span className="text-xs font-bold text-ive-green">#{issue.issueIid}</span>
+                <span className="text-xs font-bold text-ive-text-muted">#{issue.issueIid}</span>
                 <span className="text-xs text-ive-text-dim truncate">{issue.projectName}</span>
               </a>
             ))}

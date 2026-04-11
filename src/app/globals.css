@@ -1,27 +1,43 @@
 @import "tailwindcss";
 
 @theme inline {
+  /* ──────────────────────────────────────────────────────────────
+   * IVE 디자인 토큰 (minimal / semantic)
+   *
+   * 원칙:
+   *   - 브랜드 1색 (ive-cyan == ive-green, 별칭 동일)
+   *   - 의미 2색 (ive-amber 경고/진행, ive-red 위험)
+   *   - 그 외는 전부 중립(text/bg/border) 으로 표현
+   *   - Tailwind 원시 팔레트(purple-*, orange-*, emerald-*, sky-*, rose-*, pink-*, slate-* …) 사용 금지
+   *   - 컴포넌트별 색상 추가 금지. 이 파일이 유일한 출처
+   * ────────────────────────────────────────────────────────────── */
+
+  /* 배경 */
   --color-ive-bg-deep: #0e0e11e0;
   --color-ive-bg: #141416d0;
   --color-ive-bg-card: #1c1c20c0;
   --color-ive-bg-input: #0f0f12f0;
+  /* opaque (alpha 없음) — 드롭다운/팝오버 등 underlying 콘텐츠를 가려야 하는 곳 */
+  --color-ive-bg-solid: #1c1c20;
 
+  /* 브랜드 (green / cyan — 동일 색, 별칭 유지) */
   --color-ive-green: #22d3ee;
   --color-ive-green-light: #67e8f9;
   --color-ive-green-dark: #0891b2;
   --color-ive-green-pale: #cffafe;
-
-  --color-ive-amber: #fbbf24;
-  --color-ive-lime: #a3e635;
-  --color-ive-red: #ef4444;
   --color-ive-cyan: #22d3ee;
-  --color-ive-purple: #a78bfa;
 
+  /* 의미색 */
+  --color-ive-amber: #f59e0b;   /* 경고 / 진행중 / 대기 */
+  --color-ive-red: #ef4444;     /* 위험 / 실패 / 감소 */
+
+  /* 텍스트 (dim < muted < secondary < text 순으로 밝아짐) */
   --color-ive-text: #e4e4e7;
   --color-ive-text-secondary: #a1a1aa;
   --color-ive-text-muted: #71717a;
-  --color-ive-text-dim: #92929b;
+  --color-ive-text-dim: #52525b;
 
+  /* 테두리 */
   --color-ive-border: #27272a80;
   --color-ive-border-dark: #1c1c2080;
   --color-ive-border-subtle: #23232780;
@@ -50,10 +66,10 @@ body::before {
   content: "";
   position: fixed;
   top: -20%; left: -20%; width: 140%; height: 140%;
-  background: 
-    radial-gradient(circle at 20% 30%, rgba(167, 139, 250, 0.15), transparent 40%),
-    radial-gradient(circle at 80% 70%, rgba(34, 211, 238, 0.12), transparent 40%),
-    radial-gradient(circle at 50% 10%, rgba(251, 191, 36, 0.05), transparent 30%);
+  background:
+    radial-gradient(circle at 20% 30%, rgba(34, 211, 238, 0.10), transparent 40%),
+    radial-gradient(circle at 80% 70%, rgba(34, 211, 238, 0.08), transparent 40%),
+    radial-gradient(circle at 50% 10%, rgba(245, 158, 11, 0.04), transparent 30%);
   animation: ambient-glow 20s ease-in-out infinite alternate;
   z-index: -1;
   pointer-events: none;

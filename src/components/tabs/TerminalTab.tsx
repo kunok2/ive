@@ -23,12 +23,14 @@ export default function TerminalTab() {
 
       if (destroyed || !containerRef.current) return
 
+      // xterm 테마는 runtime 값이 필요 — CSS 변수에서 읽어옴
+      const css = getComputedStyle(document.documentElement)
       const term = new Terminal({
         theme: {
-          background: '#0d1117',
-          foreground: '#e6edf3',
-          cursor: '#58a6ff',
-          selectionBackground: '#264f78',
+          background: css.getPropertyValue('--color-ive-bg-deep').trim() || '#0e0e11',
+          foreground: css.getPropertyValue('--color-ive-text').trim() || '#e4e4e7',
+          cursor: css.getPropertyValue('--color-ive-cyan').trim() || '#22d3ee',
+          selectionBackground: css.getPropertyValue('--color-ive-cyan').trim() || '#22d3ee',
         },
         fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
         fontSize: 14,
@@ -126,12 +128,12 @@ export default function TerminalTab() {
     <div className="min-h-screen pb-20">
       <main className="px-4 py-4 max-w-lg mx-auto">
         {error && (
-          <div className="bg-red-900/90 text-red-200 text-base px-4 py-2 rounded-lg flex items-center gap-2 mb-3">
+          <div className="bg-ive-red/15 text-ive-red text-base px-4 py-2 rounded-lg flex items-center gap-2 mb-3 border border-ive-red/30">
             <i className="fa-solid fa-triangle-exclamation" />
             {error}
           </div>
         )}
-        <div ref={containerRef} className="bg-[#0d1117] rounded-lg overflow-hidden" style={{ height: 'calc(100vh - 10rem)' }} />
+        <div ref={containerRef} className="bg-ive-bg-deep rounded-lg overflow-hidden border border-ive-border-dark" style={{ height: 'calc(100vh - 10rem)' }} />
       </main>
     </div>
   )

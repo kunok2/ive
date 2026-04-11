@@ -27,7 +27,14 @@ export function calcCostFromDb(inputTokens: number, outputTokens: number, modelN
  *   - 사람이 직접 개발한 시간 (assigneeType === 'user')
  *   - 검증에 소요된 시간 (verifyStartedAt → verifiedAt/rejectedAt)
  */
-export function resolveExecutionCost(
+export interface ExecutionCostBreakdown {
+  ai: number      // AI 모델 토큰 비용 (costUsd 또는 토큰×단가)
+  human: number   // 사람 작업 시간 비용 (user exec 의 duration × 분당 월급)
+  total: number
+}
+
+/** 단일 execution의 비용을 AI/사람으로 나누어 계산 */
+export function resolveExecutionCostBreakdown(
   e: {
     costUsd: number; inputTokens: number; outputTokens: number;
     modelName?: string | null; assigneeType?: string;
@@ -35,37 +42,34 @@ export function resolveExecutionCost(
     verifyStartedAt?: string | null; verifiedAt?: string | null; rejectedAt?: string | null;
   },
   humanMonthlySalary: number,
-): number {
-  let cost = e.costUsd > 0 ? e.costUsd : 0
+): ExecutionCostBreakdown {
+  let ai = 0
 
-  // CLI 비용 계산
-  if (cost === 0 && e.assigneeType !== 'user') {
-    cost = calcCostFromDb(e.inputTokens, e.outputTokens, e.modelName ?? undefined)
+  // AI CLI 비용: 실제 청구액이 있으면 우선 사용, 없으면 토큰 단가로 계산
+  if (e.assigneeType !== 'user') {
+    ai = e.costUsd > 0 ? e.costUsd : calcCostFromDb(e.inputTokens, e.outputTokens, e.modelName ?? undefined)
   }
 
-  // 사람 비용 추가
-  if (humanMonthlySalary > 0) {
-    // 월급 → 분당 비용: 월 160시간 (20일 × 8h) = 9600분
+  // 사람 비용: assigneeType='user' exec의 (ended - started) 구간만 계산
+  // 중복 집계 방지: 과거에는 모든 agent exec에도 검증 시간을 더했으나,
+  // markIssueVerified가 mass-update로 같은 verified_at을 여러 exec에 찍어
+  // 같은 구간이 exec 개수만큼 곱해졌다. user exec 하나에만 계산한다.
+  let human = 0
+  if (humanMonthlySalary > 0 && e.assigneeType === 'user' && e.startedAt && e.endedAt) {
     const costPerMin = humanMonthlySalary / 9600
-
-    // 사람이 직접 개발한 시간
-    if (e.assigneeType === 'user' && e.startedAt && e.endedAt) {
-      const ms = new Date(e.endedAt).getTime() - new Date(e.startedAt).getTime()
-      if (ms > 0) cost += (ms / 60000) * costPerMin
-    }
-
-    // 검증 시간
-    const verifyEnd = e.verifiedAt || e.rejectedAt
-    if (verifyEnd) {
-      const vStart = e.verifyStartedAt || e.endedAt
-      if (vStart) {
-        const ms = new Date(verifyEnd).getTime() - new Date(vStart).getTime()
-        if (ms > 0) cost += (ms / 60000) * costPerMin
-      }
-    }
+    const ms = new Date(e.endedAt).getTime() - new Date(e.startedAt).getTime()
+    if (ms > 0) human = (ms / 60000) * costPerMin
   }
 
-  return cost
+  return { ai, human, total: ai + human }
+}
+
+/** 하위 호환: 총 비용만 반환 */
+export function resolveExecutionCost(
+  e: Parameters<typeof resolveExecutionCostBreakdown>[0],
+  humanMonthlySalary: number,
+): number {
+  return resolveExecutionCostBreakdown(e, humanMonthlySalary).total
 }
 
 /** DB에서 human 단가의 월급(inputPrice)을 조회 */

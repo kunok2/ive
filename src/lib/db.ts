@@ -347,6 +347,11 @@ function initSchema(db: Database.Database) {
       db.exec("ALTER TABLE task_executions ADD COLUMN verifier_git_user_id TEXT DEFAULT NULL")
       console.log('[DB] Added verifier_git_user_id to task_executions')
     }
+    // IVE 사용자 id (사진 아바타 fetch 시 /api/auth/avatar/{id} 구성용)
+    if (!tableInfo.some((col: any) => col.name === 'verifier_user_id')) {
+      db.exec("ALTER TABLE task_executions ADD COLUMN verifier_user_id TEXT DEFAULT NULL")
+      console.log('[DB] Added verifier_user_id to task_executions')
+    }
   } catch (e) { console.error("Migration failed for verifier columns:", e) }
 
   // 프로젝트 모니터링 설정
@@ -1319,13 +1324,14 @@ export function getAgentProjectId(agentId: string): string | null {
 
 /** 프로젝트별 배정 에이전트 수 (reports용) */
 export function getProjectAssignmentCounts(userId: string): Record<string, number> {
+  // 소유한 프로젝트 + 공유받은 프로젝트 모두 포함 (reports의 접근 범위와 일치)
   const rows = getDb().prepare(`
     SELECT pa.project_id, COUNT(*) as cnt
     FROM project_assignments pa
     JOIN projects p ON p.id = pa.project_id
-    WHERE p.user_id = ?
+    WHERE p.user_id = ? OR EXISTS (SELECT 1 FROM project_shares ps WHERE ps.project_id = p.id AND ps.user_id = ?)
     GROUP BY pa.project_id
-  `).all(userId) as { project_id: string; cnt: number }[]
+  `).all(userId, userId) as { project_id: string; cnt: number }[]
   const map: Record<string, number> = {}
   for (const r of rows) map[r.project_id] = r.cnt
   return map
@@ -1333,12 +1339,13 @@ export function getProjectAssignmentCounts(userId: string): Record<string, numbe
 
 /** 프로젝트별 현재 배정된 에이전트 ID 목록 (reports용) */
 export function getProjectAssignmentAgentIds(userId: string): Record<string, string[]> {
+  // 소유 + 공유 프로젝트 모두 포함
   const rows = getDb().prepare(`
     SELECT pa.project_id, pa.agent_id
     FROM project_assignments pa
     JOIN projects p ON p.id = pa.project_id
-    WHERE p.user_id = ?
-  `).all(userId) as { project_id: string; agent_id: string }[]
+    WHERE p.user_id = ? OR EXISTS (SELECT 1 FROM project_shares ps WHERE ps.project_id = p.id AND ps.user_id = ?)
+  `).all(userId, userId) as { project_id: string; agent_id: string }[]
   const map: Record<string, string[]> = {}
   for (const r of rows) {
     if (!map[r.project_id]) map[r.project_id] = []
@@ -1507,12 +1514,13 @@ export function markIssueVerifyStarted(projectId: string, issueIid: number) {
   ).run(now, projectId, issueIid)
 }
 
-export function markIssueVerified(projectId: string, issueIid: number, verifier?: { name: string; avatar?: string; username?: string | null }) {
+export function markIssueVerified(projectId: string, issueIid: number, verifier?: { name: string; avatar?: string; username?: string | null; userId?: string | null }) {
   const now = new Date().toISOString()
   // verifier_username은 우선 호출자가 전달, 없으면 issue_stages의 현재 assignee에서 읽음
   let username = verifier?.username ?? null
   let name = verifier?.name ?? null
   let avatar = verifier?.avatar ?? null
+  const userId = verifier?.userId ?? null
   if (!username) {
     const cached = getIssueAssigneeUsername(projectId, issueIid)
     if (cached.username) {
@@ -1524,16 +1532,17 @@ export function markIssueVerified(projectId: string, issueIid: number, verifier?
   // verify_started_at IS NOT NULL: 검증을 시작했던 exec만 대상 (임의의 과거 exec가 아닌)
   // verified_at IS NULL AND rejected_at IS NULL: 이미 검증/반려 처리된 exec는 제외 (덮어쓰기 방지)
   getDb().prepare(
-    "UPDATE task_executions SET verified_at = ?, verifier_name = ?, verifier_avatar = ?, verifier_username = ? WHERE project_id = ? AND issue_iid = ? AND status IN ('success', 'failed') AND ended_at IS NOT NULL AND verify_started_at IS NOT NULL AND verified_at IS NULL AND rejected_at IS NULL"
-  ).run(now, name, avatar, username, projectId, issueIid)
+    "UPDATE task_executions SET verified_at = ?, verifier_name = ?, verifier_avatar = ?, verifier_username = ?, verifier_user_id = ? WHERE project_id = ? AND issue_iid = ? AND status IN ('success', 'failed') AND ended_at IS NOT NULL AND verify_started_at IS NOT NULL AND verified_at IS NULL AND rejected_at IS NULL"
+  ).run(now, name, avatar, username, userId, projectId, issueIid)
 }
 
 /** 검증 반려 시 rejected_at 기록 (verify_started_at이 있고 verified_at/rejected_at이 없는 실행만) */
-export function markIssueVerifyRejected(projectId: string, issueIid: number, verifier?: { name?: string | null; avatar?: string | null; username?: string | null }) {
+export function markIssueVerifyRejected(projectId: string, issueIid: number, verifier?: { name?: string | null; avatar?: string | null; username?: string | null; userId?: string | null }) {
   const now = new Date().toISOString()
   let username = verifier?.username ?? null
   let name = verifier?.name ?? null
   let avatar = verifier?.avatar ?? null
+  const userId = verifier?.userId ?? null
   if (!username) {
     const cached = getIssueAssigneeUsername(projectId, issueIid)
     if (cached.username) {
@@ -1543,8 +1552,8 @@ export function markIssueVerifyRejected(projectId: string, issueIid: number, ver
     }
   }
   getDb().prepare(
-    "UPDATE task_executions SET rejected_at = ?, verifier_name = COALESCE(verifier_name, ?), verifier_avatar = COALESCE(verifier_avatar, ?), verifier_username = COALESCE(verifier_username, ?) WHERE project_id = ? AND issue_iid = ? AND status IN ('success', 'failed') AND ended_at IS NOT NULL AND verify_started_at IS NOT NULL AND verified_at IS NULL AND rejected_at IS NULL"
-  ).run(now, name, avatar, username, projectId, issueIid)
+    "UPDATE task_executions SET rejected_at = ?, verifier_name = COALESCE(verifier_name, ?), verifier_avatar = COALESCE(verifier_avatar, ?), verifier_username = COALESCE(verifier_username, ?), verifier_user_id = COALESCE(verifier_user_id, ?) WHERE project_id = ? AND issue_iid = ? AND status IN ('success', 'failed') AND ended_at IS NOT NULL AND verify_started_at IS NOT NULL AND verified_at IS NULL AND rejected_at IS NULL"
+  ).run(now, name, avatar, username, userId, projectId, issueIid)
 }
 
 /** 반려/재오픈 시 scheduled_at을 현재 시각으로 갱신 (재시도 execution의 대기시간을 정확히 계산하기 위해) */
@@ -2184,6 +2193,7 @@ export interface ReportExecution {
   verifierName: string | null
   verifierAvatar: string | null
   verifierUsername: string | null
+  verifierUserId: string | null
   assigneeType: string
 }
 
@@ -2191,6 +2201,7 @@ export function getExecutionsInRange(userId: string, start: string, end: string)
   // start/end는 KST 날짜(YYYY-MM-DD) → KST 자정의 UTC ISO로 변환하여 비교
   const startISO = kstDateToUTCISO(start)
   const endISO = kstDateToUTCISO(end)
+  // verifier IVE 사용자 매칭: verifier_user_id 우선, 없으면 verifier_name → users.name 매칭(historical data fallback)
   const rows = getDb().prepare(`
     SELECT te.id, te.project_id, p.name as project_name, p.color as project_color, p.avatar_url as project_avatar_url, p.provider as project_provider,
            te.agent_id, a.name as agent_name, a.avatar as agent_avatar, a.cli_name,
@@ -2199,11 +2210,14 @@ export function getExecutionsInRange(userId: string, start: string, end: string)
            te.started_at, te.ended_at, te.input_tokens, te.output_tokens, te.cost_usd, te.turns,
            te.issue_created_at, te.model_name, te.verified_at, te.verify_started_at, te.rejected_at,
            te.assignee_type, te.user_id as te_user_id, te.user_name as te_user_name, te.user_avatar as te_user_avatar,
-           te.verifier_name, te.verifier_avatar, te.verifier_username
+           te.verifier_name, te.verifier_avatar, te.verifier_username,
+           COALESCE(te.verifier_user_id, vu.id) as verifier_user_id_resolved,
+           vu.avatar as verifier_user_avatar
     FROM task_executions te
     JOIN projects p ON p.id = te.project_id
     LEFT JOIN agents a ON a.id = te.agent_id
     LEFT JOIN users u ON u.id = a.user_id
+    LEFT JOIN users vu ON vu.id = te.verifier_user_id OR (te.verifier_user_id IS NULL AND vu.name = te.verifier_name)
     WHERE (p.user_id = ? OR EXISTS (SELECT 1 FROM project_shares ps WHERE ps.project_id = p.id AND ps.user_id = ?))
       AND te.started_at >= ? AND te.started_at < ?
     ORDER BY te.started_at ASC
@@ -2226,9 +2240,11 @@ export function getExecutionsInRange(userId: string, start: string, end: string)
     verifiedAt: r.verified_at ?? null,
     verifyStartedAt: r.verify_started_at ?? null,
     rejectedAt: r.rejected_at ?? null,
+    // 검증자 IVE 사용자 매칭: 매칭된 IVE user가 있으면 그 avatar 우선 (실제 사진 'photo' 등)
     verifierName: r.verifier_name ?? null,
-    verifierAvatar: r.verifier_avatar ?? null,
+    verifierAvatar: r.verifier_user_avatar ?? r.verifier_avatar ?? null,
     verifierUsername: r.verifier_username ?? null,
+    verifierUserId: r.verifier_user_id_resolved ?? null,
     assigneeType: r.assignee_type ?? 'agent',
   }))
 }
@@ -2922,11 +2938,14 @@ export function getGlobalExecutionsInRange(start: string, end: string): ReportEx
            te.started_at, te.ended_at, te.input_tokens, te.output_tokens, te.cost_usd, te.turns,
            te.issue_created_at, te.model_name, te.verified_at, te.verify_started_at, te.rejected_at,
            te.assignee_type, te.user_id as te_user_id, te.user_name as te_user_name, te.user_avatar as te_user_avatar,
-           te.verifier_name, te.verifier_avatar, te.verifier_username
+           te.verifier_name, te.verifier_avatar, te.verifier_username,
+           COALESCE(te.verifier_user_id, vu.id) as verifier_user_id_resolved,
+           vu.avatar as verifier_user_avatar
     FROM task_executions te
     JOIN projects p ON p.id = te.project_id
     LEFT JOIN agents a ON a.id = te.agent_id
     LEFT JOIN users u ON u.id = a.user_id
+    LEFT JOIN users vu ON vu.id = te.verifier_user_id OR (te.verifier_user_id IS NULL AND vu.name = te.verifier_name)
     WHERE te.started_at >= ? AND te.started_at < ?
     ORDER BY te.started_at ASC
   `).all(startISO, endISO) as any[]
@@ -2949,8 +2968,9 @@ export function getGlobalExecutionsInRange(start: string, end: string): ReportEx
     verifyStartedAt: r.verify_started_at ?? null,
     rejectedAt: r.rejected_at ?? null,
     verifierName: r.verifier_name ?? null,
-    verifierAvatar: r.verifier_avatar ?? null,
+    verifierAvatar: r.verifier_user_avatar ?? r.verifier_avatar ?? null,
     verifierUsername: r.verifier_username ?? null,
+    verifierUserId: r.verifier_user_id_resolved ?? null,
     assigneeType: r.assignee_type ?? 'agent',
   }))
 }

@@ -21,7 +21,7 @@ async function syncLabelsToDone(project: Project, iid: number, token: string, us
         await removeIssueLabels(project, iid, token, labelsToRemove)
       }
       await addIssueLabels(project, iid, token, [labelE])
-      markIssueVerified(projectId, iid, { name: user.name, avatar: user.avatar })
+      markIssueVerified(projectId, iid, { name: user.name, avatar: user.avatar, userId: user.id })
 
       // 이 이슈에 남아 있는 활성(running/assigned) execution 모두 success로 닫기
       // (검증자 execution, 담당자 dev execution 등 — 머지 완료 = 검증 승인과 동일)

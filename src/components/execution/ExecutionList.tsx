@@ -79,18 +79,18 @@ export default function ExecutionList({ executions, showAgent = true, onKill, ki
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-2 min-w-0">
               {ex.assigneeType === 'user' ? (
-                <span className="text-xs font-bold text-ive-cyan/70 bg-ive-cyan/10 border border-ive-cyan/20 px-1.5 py-0.5 rounded shrink-0">
+                <span className="text-xs font-bold text-ive-text-muted bg-white/5 border border-ive-border-subtle px-1.5 py-0.5 rounded shrink-0">
                   <i className="fa-solid fa-user mr-0.5" />{ex.userName || ''}
                 </span>
               ) : showAgent && ex.agentName && (
-                <span className="text-xs font-bold text-ive-green/70 bg-ive-green/10 border border-ive-green/20 px-1.5 py-0.5 rounded shrink-0">
+                <span className="text-xs font-bold text-ive-text-muted bg-white/5 border border-ive-border-subtle px-1.5 py-0.5 rounded shrink-0">
                   <i className="fa-solid fa-robot mr-0.5" />{ex.agentName}
                 </span>
               )}
-              <span className="text-sm font-bold text-ive-green">#{ex.issueIid}</span>
+              <span className="text-sm font-bold text-ive-text-muted">#{ex.issueIid}</span>
               <span className="text-xs font-mono font-bold text-ive-text-muted">{formatTimeWithSeconds(ex.startedAt, userLocale, userTz)}</span>
               {ex.modelName && (
-                <span className="text-xs font-mono text-ive-cyan bg-ive-cyan/10 border border-ive-cyan/20 px-1 py-0.5 rounded shrink-0">
+                <span className="text-xs font-mono text-ive-text-muted bg-white/5 border border-ive-border-subtle px-1 py-0.5 rounded shrink-0">
                   <i className="fa-solid fa-microchip mr-0.5" />{ex.modelName}
                 </span>
               )}
@@ -116,7 +116,7 @@ export default function ExecutionList({ executions, showAgent = true, onKill, ki
               <i className="fa-solid fa-calendar-day mr-0.5" />
               {formatDateShort(ex.startedAt, userLocale, userTz)}
             </span>
-            <span className={`font-mono font-bold ${ex.status === 'running' ? 'text-ive-amber' : ex.status === 'assigned' ? 'text-ive-cyan' : ''}`}>
+            <span className="font-mono font-bold text-ive-text-muted">
               {formatDuration(ex.startedAt, ex.endedAt)}
             </span>
             {ex.assigneeType !== 'user' && ex.turns > 0 && (

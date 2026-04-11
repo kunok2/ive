@@ -325,13 +325,13 @@ export async function POST(
 
     // 검증 완료 시 실행 기록에 verified_at + 검증자 기록 (verifying 상태에서만)
     if (action === 'approve' || (action === 'complete' && stage === 'verifying')) {
-      markIssueVerified(projectId, Number(iid), { name: user.name, avatar: user.avatar });
+      markIssueVerified(projectId, Number(iid), { name: user.name, avatar: user.avatar, userId: user.id });
     }
 
     // 검증 반려 시 rejected_at 기록
     // (명시적 reject뿐 아니라 검증 단계에서 재실행 클릭 시에도 반려로 집계 — 검증자가 "통과 못함" 판단)
     if (action === 'reject' || (stage === 'verifying' && action === 'retry')) {
-      markIssueVerifyRejected(projectId, Number(iid));
+      markIssueVerifyRejected(projectId, Number(iid), { name: user.name, avatar: user.avatar, userId: user.id });
     }
 
     // verifying 단계 종료 시 검증자 execution 닫기 (여러 개 있을 수 있으므로 전부 처리)

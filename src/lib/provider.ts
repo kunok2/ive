@@ -57,7 +57,7 @@ export function fetchIssueNotes(project: Project, iid: number, token: string, op
 
 export async function addIssueComment(project: Project, iid: number, token: string, body: string, options?: { isOAuth?: boolean; silent?: boolean }) {
   if (project.provider === 'github') {
-    return await github.addGitHubIssueComment(project, iid, Number(token), body);
+    return await github.addGitHubIssueComment(project, iid, token, body);
   }
   return await gitlab.addGitLabIssueComment(project, iid, token, body, options);
 }

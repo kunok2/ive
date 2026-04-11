@@ -422,7 +422,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
         </p>
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-emerald-400 shrink-0" />
+            <span className="w-3 h-3 rounded-full bg-ive-cyan shrink-0" />
             <span className="flex flex-row items-baseline gap-1.5 flex-1 min-w-0">
               <span className="text-xs text-ive-text-dim shrink-0">{t('labelTarget')}</span>
               <span className="text-[10px] text-ive-text-dim/60 truncate">{t('labelTargetDesc')}</span>
@@ -436,7 +436,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
             />
           </div>
           <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-yellow-400 shrink-0" />
+            <span className="w-3 h-3 rounded-full bg-ive-cyan shrink-0" />
             <span className="flex flex-row items-baseline gap-1.5 flex-1 min-w-0">
               <span className="text-xs text-ive-text-dim shrink-0">{t('labelSchedule')}</span>
               <span className="text-[10px] text-ive-text-dim/60 truncate">{t('labelScheduleDesc')}</span>
@@ -450,7 +450,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
             />
           </div>
           <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-cyan-400 shrink-0" />
+            <span className="w-3 h-3 rounded-full bg-ive-amber shrink-0" />
             <span className="flex flex-row items-baseline gap-1.5 flex-1 min-w-0">
               <span className="text-xs text-ive-text-dim shrink-0">{t('labelDev')}</span>
               <span className="text-[10px] text-ive-text-dim/60 truncate">{t('labelDevDesc')}</span>
@@ -464,7 +464,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
             />
           </div>
           <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-yellow-400 shrink-0" />
+            <span className="w-3 h-3 rounded-full bg-ive-amber shrink-0" />
             <span className="flex flex-row items-baseline gap-1.5 flex-1 min-w-0">
               <span className="text-xs text-ive-text-dim shrink-0">{t('labelVerifyWait')}</span>
               <span className="text-[10px] text-ive-text-dim/60 truncate">{t('labelVerifyWaitDesc')}</span>
@@ -478,7 +478,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
             />
           </div>
           <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-orange-400 shrink-0" />
+            <span className="w-3 h-3 rounded-full bg-ive-amber shrink-0" />
             <span className="flex flex-row items-baseline gap-1.5 flex-1 min-w-0">
               <span className="text-xs text-ive-text-dim shrink-0">{t('labelVerify')}</span>
               <span className="text-[10px] text-ive-text-dim/60 truncate">{t('labelVerifyDesc')}</span>
@@ -492,7 +492,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
             />
           </div>
           <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-blue-400 shrink-0" />
+            <span className="w-3 h-3 rounded-full bg-ive-green shrink-0" />
             <span className="flex flex-row items-baseline gap-1.5 flex-1 min-w-0">
               <span className="text-xs text-ive-text-dim shrink-0">{t('labelEnd')}</span>
               <span className="text-[10px] text-ive-text-dim/60 truncate">{t('labelEndDesc')}</span>
@@ -650,12 +650,12 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
           <button
             type="button"
             onClick={() => setShowSharing(!showSharing)}
-            className="flex items-center gap-1.5 text-base font-bold text-ive-purple mb-3"
+            className="flex items-center gap-1.5 text-base font-bold text-ive-cyan mb-3"
           >
             <i className={`fa-solid ${showSharing ? 'fa-chevron-down' : 'fa-chevron-right'} text-sm`} />
             <i className="fa-solid fa-share-nodes mr-0.5" />
             {t('shareProject')}
-            {shares.length > 0 && <span className="text-xs font-bold bg-ive-purple/20 text-ive-purple px-1.5 py-0.5 rounded-full">{shares.length}</span>}
+            {shares.length > 0 && <span className="text-xs font-bold bg-ive-cyan/20 text-ive-cyan px-1.5 py-0.5 rounded-full">{shares.length}</span>}
           </button>
 
           {showSharing && (
@@ -719,14 +719,14 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
                         type="button"
                         disabled={shareLoading}
                         onClick={() => { setShareError(''); handleAddShare(u.id) }}
-                        className="w-full text-left px-3 py-2.5 text-sm bg-ive-bg-deep rounded-lg border border-ive-border-dark hover:border-ive-purple/40 hover:bg-ive-purple/5 transition-all flex items-center gap-2 disabled:opacity-40"
+                        className="w-full text-left px-3 py-2.5 text-sm bg-ive-bg-deep rounded-lg border border-ive-border-dark hover:border-ive-cyan/40 hover:bg-ive-cyan/5 transition-all flex items-center gap-2 disabled:opacity-40"
                       >
                         <i className="fa-solid fa-user-circle text-lg text-ive-text-dim" />
                         <div className="flex-1 min-w-0">
                           <span className="font-bold text-ive-text">{u.name}</span>
                           <span className="text-ive-text-dim text-xs ml-1.5">{u.email}</span>
                         </div>
-                        <i className="fa-solid fa-plus text-xs text-ive-purple/60" />
+                        <i className="fa-solid fa-plus text-xs text-ive-cyan/60" />
                       </button>
                     ))}
                   </div>

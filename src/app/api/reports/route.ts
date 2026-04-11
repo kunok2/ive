@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { getExecutionsInRange, getDailyWaitingTrend, getDailyWaitingTrendByAgent, getProjectAssignmentCounts, getProjectAssignmentAgentIds, getAgentAssignmentInfo, getVerifierBacklogForReport } from '@/lib/db'
-import { resolveExecutionCost, getHumanMonthlySalary } from '@/lib/token-pricing'
+import { resolveExecutionCost, resolveExecutionCostBreakdown, getHumanMonthlySalary } from '@/lib/token-pricing'
 import { getKSTTodayString, utcISOToKSTDate, utcISOToKSTMonth } from '@/lib/date-utils'
 
 function getWeekRange(date: Date): { start: string; end: string } {
@@ -119,7 +119,24 @@ export async function GET(req: NextRequest) {
   const avgDurationMin = finishedCount > 0 ? totalDurationMin / finishedCount : 0
   const totalInputTokens = execs.reduce((s, e) => s + e.inputTokens, 0)
   const totalOutputTokens = execs.reduce((s, e) => s + e.outputTokens, 0)
-  const totalCost = execs.reduce((s, e) => s + resolveExecutionCost(e, humanSalary), 0)
+  // 비용 breakdown: AI 토큰 비용과 사람 시간 비용을 분리 집계
+  const costBreakdown = execs.reduce(
+    (acc, e) => {
+      const b = resolveExecutionCostBreakdown(e, humanSalary)
+      acc.ai += b.ai; acc.human += b.human
+      return acc
+    },
+    { ai: 0, human: 0 }
+  )
+  const totalCost = costBreakdown.ai + costBreakdown.human
+  const totalCostAi = costBreakdown.ai
+  const totalCostHuman = costBreakdown.human
+  // 사람 비용 계산 메타 (왜 이 금액이 나왔는지 설명용)
+  const humanMinutes = execs.reduce((s, e) => {
+    if (e.assigneeType !== 'user' || !e.startedAt || !e.endedAt) return s
+    const ms = new Date(e.endedAt).getTime() - new Date(e.startedAt).getTime()
+    return ms > 0 ? s + ms / 60000 : s
+  }, 0)
   const successRate = totalTasks > 0 ? (successCount / (successCount + failedCount || 1)) * 100 : 0
 
   // 이전 기간 요약
@@ -248,7 +265,15 @@ export async function GET(req: NextRequest) {
     const pFailed = pExecs.filter(e => e.status === 'failed').length
     const pDur = pExecs.reduce((s, e) => s + durationMin(e.startedAt, e.endedAt), 0)
     const pFinished = pSuccess + pFailed
-    const pCost = pExecs.reduce((s, e) => s + resolveExecutionCost(e, humanSalary), 0)
+    const pCostBreakdown = pExecs.reduce(
+      (acc, e) => {
+        const b = resolveExecutionCostBreakdown(e, humanSalary)
+        acc.ai += b.ai; acc.human += b.human
+        return acc
+      },
+      { ai: 0, human: 0 }
+    )
+    const pCost = pCostBreakdown.ai + pCostBreakdown.human
 
     // By agent within project
     const agentMap = new Map<string, typeof pExecs>()
@@ -285,6 +310,8 @@ export async function GET(req: NextRequest) {
       inputTokens: pExecs.reduce((s, e) => s + e.inputTokens, 0),
       outputTokens: pExecs.reduce((s, e) => s + e.outputTokens, 0),
       cost: Math.round(pCost * 100) / 100,
+      costAi: Math.round(pCostBreakdown.ai * 100) / 100,
+      costHuman: Math.round(pCostBreakdown.human * 100) / 100,
       assignedAgentCount: projectAssignCounts[pid] ?? 0,
       assignedAgentIds: projectAssignAgentIds[pid] ?? [],
       byAgent,
@@ -383,6 +410,20 @@ export async function GET(req: NextRequest) {
     const userName = uExecs[0].userName || uExecs[0].developerName
     const userAvatar = uExecs[0].userAvatar || null
     const vInfo = verifierLookup.get(userName) ?? { tasks: 0, avgVerifyMin: 0, avgWaitMin: 0, verified: 0, rejected: 0, waiting: 0 }
+
+    // 담당자 진단 (우선순위: 병목 > 반려율 > 너무 빠름 > 대기 적체 > 유휴)
+    let annotation: { key: string; params?: Record<string, string | number>; severity: 'critical' | 'warning' | 'info' } | null = null
+    const totalVerify = vInfo.verified + vInfo.rejected
+    if (vInfo.waiting >= 5 && vInfo.avgVerifyMin >= 60) {
+      annotation = { key: 'bottleneck', params: { waiting: vInfo.waiting, avgMin: Math.round(vInfo.avgVerifyMin) }, severity: 'critical' }
+    } else if (totalVerify >= 5 && vInfo.rejected / totalVerify >= 0.3) {
+      const pct = Math.round((vInfo.rejected / totalVerify) * 100)
+      annotation = { key: 'highReject', params: { percent: pct }, severity: 'warning' }
+    } else if (vInfo.verified >= 3 && vInfo.avgVerifyMin > 0 && vInfo.avgVerifyMin < 1) {
+      annotation = { key: 'tooFast', params: { seconds: Math.round(vInfo.avgVerifyMin * 60) }, severity: 'warning' }
+    } else if (vInfo.waiting >= 5) {
+      annotation = { key: 'backlog', params: { waiting: vInfo.waiting }, severity: 'warning' }
+    }
     return {
       userId: uid, userName, userAvatar,
       tasks: uExecs.length, success: uSuccess, failed: uFailed,
@@ -395,6 +436,7 @@ export async function GET(req: NextRequest) {
       verifyWaiting: vInfo.waiting,
       verifyApproved: vInfo.verified,
       verifyRejected: vInfo.rejected,
+      annotation,
     }
   })
 
@@ -617,11 +659,28 @@ export async function GET(req: NextRequest) {
           projectId: e.projectId,
           projectName: e.projectName,
           projectColor: e.projectColor,
+          projectProvider: (e.projectProvider || 'gitlab') as 'gitlab' | 'github',
           agentName: e.agentName,
           agentAvatar: e.agentAvatar,
+          verifierName: e.verifierName ?? null,
+          verifierAvatar: e.verifierAvatar ?? null,
+          verifierUserId: e.verifierUserId ?? null,
           status: e.status as 'success' | 'failed',
           startedAt: e.startedAt,
+          // 작업 시간 (에이전트가 코드를 만든 시간): startedAt → endedAt
           durationMin: Math.round(durationMin(e.startedAt, e.endedAt) * 10) / 10,
+          // 검증 시간 (사람이 검증한 시간): verifyStartedAt → verifiedAt | rejectedAt
+          verifyMin: (() => {
+            const verifyEnd = e.verifiedAt || e.rejectedAt
+            if (!e.verifyStartedAt || !verifyEnd) return null
+            return Math.round(durationMin(e.verifyStartedAt, verifyEnd) * 10) / 10
+          })(),
+          // 총 소요 시간: 이슈 생성 → 최종 종료 (검증 끝났으면 그 시점, 아니면 endedAt)
+          totalMin: (() => {
+            const start = e.issueCreatedAt || e.startedAt
+            const end = e.verifiedAt || e.rejectedAt || e.endedAt || e.startedAt
+            return Math.round(durationMin(start, end) * 10) / 10
+          })(),
           cost: Math.round(resolveExecutionCost(e, humanSalary) * 100) / 100,
           waitMin: (() => {
             const ws = e.issueCreatedAt
@@ -907,6 +966,11 @@ export async function GET(req: NextRequest) {
       totalInputTokens,
       totalOutputTokens,
       totalCost: Math.round(totalCost * 100) / 100,
+      // 비용 내역 분리 (AI 토큰 비용 vs 사람 시간 비용)
+      totalCostAi: Math.round(totalCostAi * 100) / 100,
+      totalCostHuman: Math.round(totalCostHuman * 100) / 100,
+      humanMinutes: Math.round(humanMinutes * 10) / 10,
+      humanMonthlySalary: humanSalary,
     },
     prevSummary: {
       totalTasks: prevTotalTasks,

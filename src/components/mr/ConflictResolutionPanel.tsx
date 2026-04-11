@@ -113,7 +113,7 @@ export default function ConflictResolutionPanel({ projectId, projectColor, onClo
         onClick={() => !merging && toggleSelect(mr.iid)}
         className={`flex items-center gap-2 p-3 rounded-lg border transition-all cursor-pointer ${
           isSelected
-            ? 'bg-ive-purple/10 border-ive-purple/40 ring-1 ring-ive-purple/30'
+            ? 'bg-ive-cyan/10 border-ive-cyan/40 ring-1 ring-ive-cyan/30'
             : mr.has_conflicts
               ? 'bg-ive-red/5 border-ive-red/20'
               : result?.success

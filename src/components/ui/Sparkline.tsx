@@ -7,17 +7,24 @@ interface Props {
   bgData?: (number | null)[]
   width?: number | '100%'
   height?: number
-  color?: 'auto' | 'green' | 'red' | 'gray' | 'cyan' | 'amber' | 'blue'
+  /**
+   * 색 정책 (DESIGN_GUIDE 준수):
+   *   - 기본값 'cyan': 단순 측정값. 모든 sparkline의 기본.
+   *   - 'amber': 사용자 행동/주의 필요한 신호 (예: 임계 초과 상태)
+   *   - 'red': 위험/실패
+   *   - 'gray': 비교용 보조 시리즈
+   *   - 'auto': 추세 의미가 명확할 때만 (긍정 맥락: 증가↑=cyan, 감소↓=red)
+   */
+  color?: 'cyan' | 'amber' | 'red' | 'gray' | 'auto'
   className?: string
 }
 
+// 모든 색은 디자인 토큰 CSS 변수 참조.
 const COLORS = {
-  green: '#4ade80',
-  red: '#f87171',
-  gray: '#6b7280',
-  cyan: '#22d3ee',
-  amber: '#fbbf24',
-  blue: '#60a5fa',
+  cyan:  'var(--color-ive-cyan)',
+  amber: 'var(--color-ive-amber)',
+  red:   'var(--color-ive-red)',
+  gray:  'var(--color-ive-text-muted)',
 }
 
 function buildSegments(
@@ -50,7 +57,7 @@ function buildSegments(
   return segments
 }
 
-export default function Sparkline({ data, bgData, width = 48, height = 16, color = 'auto', className }: Props) {
+export default function Sparkline({ data, bgData, width = 48, height = 16, color = 'cyan', className }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [measuredWidth, setMeasuredWidth] = useState(typeof width === 'number' ? width : 120)
   const isFluid = width === '100%'
@@ -91,8 +98,9 @@ export default function Sparkline({ data, bgData, width = 48, height = 16, color
 
   let lineColor: string
   if (color === 'auto') {
+    // 긍정 맥락 추세: 증가=cyan(좋음), 감소=red(나쁨), 미미=gray
     if (Math.abs(diff) < range * 0.1) lineColor = COLORS.gray
-    else if (diff > 0) lineColor = COLORS.green
+    else if (diff > 0) lineColor = COLORS.cyan
     else lineColor = COLORS.red
   } else {
     lineColor = COLORS[color]

@@ -8,7 +8,7 @@
 export interface ReportData {
   period: { start: string; end: string; type: string }
   prevPeriod: { start: string; end: string }
-  summary: { totalTasks: number; uniqueInflow: number; verifiedCount: number; successCount: number; failedCount: number; runningCount: number; successRate: number; totalDurationMin: number; avgDurationMin: number; totalInputTokens: number; totalOutputTokens: number; totalCost: number }
+  summary: { totalTasks: number; uniqueInflow: number; verifiedCount: number; successCount: number; failedCount: number; runningCount: number; successRate: number; totalDurationMin: number; avgDurationMin: number; totalInputTokens: number; totalOutputTokens: number; totalCost: number; totalCostAi?: number; totalCostHuman?: number; humanMinutes?: number; humanMonthlySalary?: number }
   prevSummary: { totalTasks: number; successCount: number; failedCount: number; successRate: number; totalDurationMin: number; avgDurationMin: number; totalCost: number }
   byProject: ProjectStat[]
   byAgent: AgentStat[]
@@ -64,13 +64,13 @@ export interface AgentStat {
   assignedProjectId: string; assignedProjectName: string; currentStatus: string
 }
 
-export interface UserStat { userId: string; userName: string; userAvatar: string; tasks: number; success: number; failed: number; issueCount: number; avgDurationMin: number; cost: number; avgWaitMin: number; verifyTasks: number; avgVerifyMin: number; verifyAvgWaitMin: number; verifyWaiting: number; verifyApproved: number; verifyRejected: number }
+export interface UserStat { userId: string; userName: string; userAvatar: string; tasks: number; success: number; failed: number; issueCount: number; avgDurationMin: number; cost: number; avgWaitMin: number; verifyTasks: number; avgVerifyMin: number; verifyAvgWaitMin: number; verifyWaiting: number; verifyApproved: number; verifyRejected: number; annotation?: UserAnnotation | null }
 export interface VerifierStat { verifierName: string; verifierAvatar: string; tasks: number; avgVerifyMin: number; avgWaitMin?: number }
 export interface DailyTrend { date: string; tasks: number | null; inflow: number | null; verified: number | null; success: number | null; failed: number | null; cost: number | null; waitAvg: number | null; procAvg: number | null; verifyAvg: number | null }
 export interface WaitingDay { date: string; total: number; totalWaiting: number; totalVerifyWaiting: number; byProject: { projectId: string; projectName: string; projectColor: string; waiting: number; verifyWaiting: number }[] }
 export interface AgentWaitingDay { date: string; total: number; byAgent: { agentId: string; agentName: string; agentAvatar: string; waiting: number }[] }
 export interface Lifecycle { waitAvg: number; waitMax: number; waitCount: number; procAvg: number; procMax: number; procCount: number; verifyAvg: number; verifyMax: number; verifyCount: number; totalAvg: number; totalMax: number; totalCount: number; avgAttempts: number; retryRate: number; uniqueIssues: number }
-export interface ResolvedIssue { issueIid: number; issueTitle: string; projectId: string; projectName: string; projectColor: string; agentName: string; agentAvatar: string; status: string; startedAt: string; durationMin: number; cost: number; waitMin: number | null; turns: number; attempts: number; attemptNo: number }
+export interface ResolvedIssue { issueIid: number; issueTitle: string; projectId: string; projectName: string; projectColor: string; projectProvider: 'gitlab' | 'github'; agentName: string; agentAvatar: string; verifierName: string | null; verifierAvatar: string | null; verifierUserId: string | null; status: string; startedAt: string; durationMin: number; verifyMin: number | null; totalMin: number; cost: number; waitMin: number | null; turns: number; attempts: number; attemptNo: number }
 
 // ─── 진단 결과 타입 ───
 
@@ -86,6 +86,10 @@ export interface FlowMetrics {
   utilization: number       // 가동률 (0~∞)
   healthLevel: HealthLevel
   totalCost: number
+  totalCostAi: number       // AI 모델 토큰 비용만
+  totalCostHuman: number    // 사람 시간 비용만
+  humanMinutes: number      // 집계된 사람 작업 시간 (분)
+  humanMonthlySalary: number // 적용된 월급 기준값 (USD)
   costPerTask: number
   prevCostPerTask: number
   resolutionTimeAvg: number // 평균 해결시간 (분)
@@ -106,8 +110,28 @@ export interface ResourceDiagnosis {
 
 export interface RebalanceItem { agentId: string; agentName: string; fromProject: string; fromProjectName: string; toProject: string; toProjectName: string; agentCapacity: number; resultFromUtil: number; resultToUtil: number }
 export interface ShortageItem { projectId: string; projectName: string; needed: number; currentUtil: number; targetUtil: number; urgencyDays: number | null }
-export interface SurplusItem { agentId: string; agentName: string; projectId: string; projectName: string; agentCapacity: number; savingsPerMonth: number }
+/**
+ * SurplusItem: 에이전트가 과잉 배정된 케이스.
+ * 주의: 에이전트를 제거해도 토큰 기반 AI 비용은 줄지 않는다 (일의 양이 같으면 비용 같음).
+ * 이 항목은 "재배치 가능성"을 알리는 용도이지 비용 절감 제안이 아니다.
+ * monthlyTokenCost는 참고용 — 이 에이전트가 월 기준으로 돌아갔을 때의 추정 토큰 비용.
+ */
+export interface SurplusItem { agentId: string; agentName: string; projectId: string; projectName: string; agentCapacity: number; monthlyTokenCost: number }
 
+export type AnnotationSeverity = 'critical' | 'warning' | 'info'
+/** 구조화된 진단 메시지 — UI에서 i18n 키 + params로 렌더링 */
+export type ProjectAnnotationKey =
+  | 'noAgent'         // 배정된 에이전트 없음
+  | 'shortage'        // 에이전트 부족
+  | 'shortageUrgent'  // 에이전트 부족 (긴급일 내)
+  | 'surplus'         // 에이전트 과잉
+  | 'highRetry'       // 재시도율 높음
+  | 'backlog'         // 대기 적체
+export interface ProjectAnnotation {
+  key: ProjectAnnotationKey
+  params?: Record<string, string | number>
+  severity: AnnotationSeverity
+}
 export interface ProjectFlow {
   projectId: string; projectName: string; projectColor: string; projectAvatarUrl: string; projectProvider: string
   inflow: number; throughput: number; waitingDelta: number; currentWaiting: number
@@ -115,17 +139,41 @@ export interface ProjectFlow {
   assignedAgents: number; utilization: number; healthLevel: HealthLevel
   retryRate: number
   hasBacklog: boolean
-  annotation: string | null
+  annotation: ProjectAnnotation | null
 }
 
+/** AI 에이전트 카드용 구조화 진단 */
+export type AgentAnnotationKey =
+  | 'overload'        // 처리 능력보다 대기가 많음
+  | 'concentrated'    // 전체 대기의 대부분이 이 에이전트에 몰림
+  | 'idle'            // 일이 거의 없음
+  | 'idleReassign'    // 유휴 + 재배치 추천 프로젝트 있음
+  | 'lowSuccess'      // 실패율이 높음
+export interface AgentAnnotation {
+  key: AgentAnnotationKey
+  params?: Record<string, string | number>
+  severity: AnnotationSeverity
+}
 export interface AgentLoad {
   agentId: string; agentName: string; agentAvatar: string; cliName: string
   assignedProjectId: string; assignedProjectName: string; currentStatus: string
   tasks: number; dailyCapacity: number; currentWaiting: number; cost: number
-  annotation: string | null
+  successRate: number          // 성공률 (0~100)
+  annotation: AgentAnnotation | null
 }
 
-/** Git assignee 기반 검증자 부하 */
+/** Git assignee 기반 검증자 부하 카드용 구조화 진단 */
+export type VerifierAnnotationKey =
+  | 'overload'        // 검증 대기가 많음
+  | 'delayed'         // 오래된 대기 존재
+  | 'concentrated'    // 전체 검증 대기가 이 검증자에 몰림
+  | 'tooFast'         // 검증이 너무 빨라 형식 검증 의심
+  | 'highReject'      // 반려율이 높음
+export interface VerifierAnnotation {
+  key: VerifierAnnotationKey
+  params?: Record<string, string | number>
+  severity: AnnotationSeverity
+}
 export interface VerifierLoad {
   username: string
   name: string
@@ -139,7 +187,20 @@ export interface VerifierLoad {
   dailyCapacity: number         // 일 평균 처리 능력 (승인+반려)
   oldestWaitMin: number         // 현재 가장 오래된 대기 경과 (분)
   assignedProjectNames: string[]
-  annotation: string | null     // '과부하', '지연' 등
+  annotation: VerifierAnnotation | null
+}
+
+/** 담당자별 검증 현황 카드용 구조화 진단 */
+export type UserAnnotationKey =
+  | 'bottleneck'      // 대기 많음 + 검증 느림 = 병목
+  | 'tooFast'         // 검증 시간이 비정상적으로 짧음 = 형식 검증 의심
+  | 'highReject'      // 반려율 높음
+  | 'backlog'         // 앞에 대기가 많이 쌓임
+  | 'idle'            // 최근 활동 거의 없음
+export interface UserAnnotation {
+  key: UserAnnotationKey
+  params?: Record<string, string | number>
+  severity: AnnotationSeverity
 }
 
 export interface AlertCard {
@@ -311,6 +372,10 @@ export function diagnose(data: ReportData, prevWeeklyData?: ReportData[]): Diagn
     utilization,
     healthLevel,
     totalCost: summary.totalCost,
+    totalCostAi: summary.totalCostAi ?? 0,
+    totalCostHuman: summary.totalCostHuman ?? 0,
+    humanMinutes: summary.humanMinutes ?? 0,
+    humanMonthlySalary: summary.humanMonthlySalary ?? 0,
     costPerTask: Math.round(costPerTask * 100) / 100,
     prevCostPerTask: Math.round(prevCostPerTask * 100) / 100,
     resolutionTimeAvg: lifecycle.totalAvg || 0,
@@ -380,39 +445,46 @@ export function diagnose(data: ReportData, prevWeeklyData?: ReportData[]): Diagn
     // 실제 적체 신호: 대기가 의미있게 쌓여 있거나 증가 중
     const hasBacklog = pEndW >= 3 || (pEndW - pStartW) >= 2
 
-    let annotation: string | null = null
-    if (hasBacklog && p.assignedAgentCount > 0 && pCapacity < pDailyInflow) {
-      // 대기가 실제로 쌓이고 있고, 처리 능력이 유입에 못 미침
+    let annotation: ProjectAnnotation | null = null
+    if (p.assignedAgentCount === 0 && pInflow > 0) {
+      annotation = { key: 'noAgent', severity: 'critical' }
+    } else if (hasBacklog && p.assignedAgentCount > 0 && pCapacity < pDailyInflow) {
       const addNeeded = Math.max(1, Math.ceil((pDailyInflow * 1.2 - pCapacity) / avgAgentCap))
       const urgency = pCapacity > 0
         ? Math.round((10 - pEndW) / (pDailyInflow - pCapacity))
         : null
-      annotation = `부족 — ${addNeeded}대 추가 필요` + (urgency != null && urgency > 0 ? ` (${urgency}일 내)` : '')
+      if (urgency != null && urgency > 0) {
+        annotation = { key: 'shortageUrgent', params: { count: addNeeded, days: urgency }, severity: 'critical' }
+      } else {
+        annotation = { key: 'shortage', params: { count: addNeeded }, severity: 'critical' }
+      }
     } else if (pOptimal < p.assignedAgentCount && pInflow > 0 && pEndW === 0) {
-      // 1대 빼도 감당 가능 + 대기 없음 → 재배치 가능
       const removable = p.assignedAgentCount - pOptimal
-      annotation = `과잉 — ${removable}대 재배치 가능`
+      annotation = { key: 'surplus', params: { count: removable }, severity: 'info' }
     } else if (pRetryRate >= 30) {
-      annotation = `재시도율 ${Math.round(pRetryRate)}% — 이슈 품질 점검`
+      annotation = { key: 'highRetry', params: { percent: Math.round(pRetryRate) }, severity: 'warning' }
     } else if (pEndW >= 5) {
-      annotation = `대기 ${pEndW}건 — 처리 지연 중`
+      annotation = { key: 'backlog', params: { count: pEndW }, severity: 'warning' }
     }
 
+    // utilization이 Infinity(배정 에이전트 0 + 유입 있음)면 -1로 마킹해 UI에서 특수 처리
+    const safeUtil = !isFinite(pUtil) ? -1 : Math.round(pUtil * 100) / 100
     return {
       projectId: p.projectId, projectName: p.projectName, projectColor: p.projectColor, projectAvatarUrl: p.projectAvatarUrl, projectProvider: p.projectProvider,
       inflow: pInflow, throughput: p.verified, waitingDelta: pEndW - pStartW, currentWaiting: pEndW,
       cost: p.cost, costPerTask: p.tasks > 0 ? Math.round(p.cost / p.tasks * 100) / 100 : 0, prevCostPerTask: Math.round(pPrevCPT * 100) / 100,
-      assignedAgents: p.assignedAgentCount, utilization: Math.round(pUtil * 100) / 100, healthLevel: healthFromUtil(pUtil),
+      assignedAgents: p.assignedAgentCount, utilization: safeUtil, healthLevel: healthFromUtil(pUtil),
       retryRate: Math.round(pRetryRate * 10) / 10,
       hasBacklog,
       annotation,
     }
   })
 
-  // 재배치 / 충원 / 감축 판단 — annotation 결과 기반
-  // annotation에서 "부족"/"과잉"이 판정된 프로젝트를 기준으로 시나리오 결정
-  const shortageProjects = projectFlows.filter(p => p.annotation?.startsWith('부족'))
-  const surplusProjects = projectFlows.filter(p => p.annotation?.startsWith('과잉'))
+  // 재배치 / 충원 / 감축 판단 — annotation.key 기반으로 필터링
+  const shortageProjects = projectFlows.filter(p =>
+    p.annotation?.key === 'shortage' || p.annotation?.key === 'shortageUrgent'
+  )
+  const surplusProjects = projectFlows.filter(p => p.annotation?.key === 'surplus')
   const unassigned = projectFlows.filter(p => p.assignedAgents === 0 && p.currentWaiting > 0)
 
   let scenario: ResourceDiagnosis['scenario'] = 'optimal'
@@ -468,7 +540,7 @@ export function diagnose(data: ReportData, prevWeeklyData?: ReportData[]): Diagn
       if (agents.length > 0) {
         const a = agents[0]
         const monthCost = a.cost > 0 && elapsedDays > 0 ? Math.round(a.cost / elapsedDays * 30 * 100) / 100 : 0
-        surplusPlan.push({ agentId: a.agentId, agentName: a.agentName, projectId: sp.projectId, projectName: sp.projectName, agentCapacity: agentCapacities.find(c => c.agentId === a.agentId)?.dailyCap ?? 0, savingsPerMonth: monthCost })
+        surplusPlan.push({ agentId: a.agentId, agentName: a.agentName, projectId: sp.projectId, projectName: sp.projectName, agentCapacity: agentCapacities.find(c => c.agentId === a.agentId)?.dailyCap ?? 0, monthlyTokenCost: monthCost })
       }
     }
   }
@@ -488,21 +560,28 @@ export function diagnose(data: ReportData, prevWeeklyData?: ReportData[]): Diagn
     const zeroDays = awt.filter(d => (d.byAgent.find(ba => ba.agentId === a.agentId)?.waiting ?? 0) === 0).length
     const zeroPct = awt.length > 0 ? zeroDays / awt.length : 0
     const totalWaiting = awt.length > 0 ? awt[awt.length - 1].total : 0
+    const finished = a.success + a.failed
+    const successRate = finished > 0 ? Math.round((a.success / finished) * 100) : 0
 
-    let annotation: string | null = null
-    if (lastAW >= 6) {
-      annotation = '과부하 — 지원 필요'
+    let annotation: AgentAnnotation | null = null
+    if (finished >= 5 && successRate < 60) {
+      annotation = { key: 'lowSuccess', params: { rate: successRate }, severity: 'critical' }
+    } else if (lastAW >= 6 || (dailyCap > 0 && lastAW > dailyCap * 1.5)) {
+      annotation = { key: 'overload', params: { waiting: lastAW }, severity: 'critical' }
     } else if (totalWaiting > 0 && lastAW / totalWaiting >= 0.6 && lastAW >= 3) {
-      annotation = `전체 대기의 ${Math.round(lastAW / totalWaiting * 100)}%가 집중`
+      annotation = { key: 'concentrated', params: { percent: Math.round(lastAW / totalWaiting * 100) }, severity: 'warning' }
     } else if (zeroPct >= 0.7 && a.tasks <= (byAgent.reduce((s, b) => s + b.tasks, 0) / byAgent.length) * 0.25) {
       const target = shortageProjects.length > 0 ? shortageProjects[0].projectName : null
-      annotation = target ? `유휴 — ${target}(으)로 재배치 검토` : '유휴 — 재배치 검토'
+      annotation = target
+        ? { key: 'idleReassign', params: { target }, severity: 'info' }
+        : { key: 'idle', severity: 'info' }
     }
 
     return {
       agentId: a.agentId, agentName: a.agentName, agentAvatar: a.agentAvatar, cliName: a.cliName,
       assignedProjectId: a.assignedProjectId, assignedProjectName: a.assignedProjectName, currentStatus: a.currentStatus,
       tasks: a.tasks, dailyCapacity: Math.round(dailyCap * 10) / 10, currentWaiting: lastAW, cost: a.cost,
+      successRate,
       annotation,
     }
   })
@@ -551,15 +630,22 @@ export function diagnose(data: ReportData, prevWeeklyData?: ReportData[]): Diagn
       const dailyCap = elapsedDays > 0 && approved > 0 ? approved / elapsedDays : 0
 
       const current = b.verifyWaiting + b.verifying
-      let annotation: string | null = null
+      let annotation: VerifierAnnotation | null = null
+      // 진단 우선순위: 과부하 > 지연 > 너무 빠름 > 반려 많음 > 집중
       if (b.verifyWaiting >= 6) {
-        annotation = '과부하 — 검증 지원 필요'
+        annotation = { key: 'overload', params: { waiting: b.verifyWaiting }, severity: 'critical' }
       } else if (b.oldestWaitMin > 60 * 24) {
-        annotation = `지연 — ${Math.round(b.oldestWaitMin / 60)}시간 이상 미검증`
+        annotation = { key: 'delayed', params: { hours: Math.round(b.oldestWaitMin / 60) }, severity: 'warning' }
+      } else if (approved >= 3 && avgVerifyMin > 0 && avgVerifyMin < 1) {
+        // 평균 검증 시간이 1분 미만 + 최소 3건 이상 검증 = 형식 검증 의심
+        annotation = { key: 'tooFast', params: { seconds: Math.round(avgVerifyMin * 60) }, severity: 'warning' }
+      } else if (approved + rejected >= 5 && rejected / (approved + rejected) >= 0.3) {
+        const pct = Math.round((rejected / (approved + rejected)) * 100)
+        annotation = { key: 'highReject', params: { percent: pct }, severity: 'warning' }
       } else {
         const totalVerifyBacklog = backlog.reduce((s, x) => s + x.verifyWaiting + x.verifying, 0)
         if (current >= 3 && totalVerifyBacklog >= 3 && (current / totalVerifyBacklog) >= 0.6) {
-          annotation = `전체 검증 대기의 ${Math.round(current / totalVerifyBacklog * 100)}%가 집중`
+          annotation = { key: 'concentrated', params: { percent: Math.round(current / totalVerifyBacklog * 100) }, severity: 'warning' }
         }
       }
 
@@ -668,7 +754,7 @@ export function diagnose(data: ReportData, prevWeeklyData?: ReportData[]): Diagn
   }
 
   // 7-4. 자원 유휴
-  const idleAgents = agentLoads.filter(a => a.annotation?.includes('유휴'))
+  const idleAgents = agentLoads.filter(a => a.annotation?.key === 'idle' || a.annotation?.key === 'idleReassign')
   if (idleAgents.length > 0 && byAgent.length >= 3) {
     alerts.push({ severity: 'info', title: '유휴 자원 감지', detail: `에이전트 ${byAgent.length}대 중 ${idleAgents.length}대가 유휴 상태입니다.`, action: '자원 조정 검토', actionTarget: '/agents' })
   }
@@ -700,24 +786,24 @@ export function diagnose(data: ReportData, prevWeeklyData?: ReportData[]): Diagn
   }
 
   // 7-9. 검증자 개별 병목 (대기 집중 / 장기 미처리)
-  const overloadedVerifiers = verifierLoads.filter(v => v.annotation?.includes('과부하'))
+  const overloadedVerifiers = verifierLoads.filter(v => v.annotation?.key === 'overload')
   if (overloadedVerifiers.length > 0) {
     const v = overloadedVerifiers[0]
     alerts.push({
       severity: 'critical',
       title: `${v.name}에 검증 대기 집중`,
-      detail: `검증 대기 ${v.verifyWaiting}건${v.verifying > 0 ? ` + 검증 중 ${v.verifying}건` : ''} — ${v.annotation}`,
+      detail: `검증 대기 ${v.verifyWaiting}건${v.verifying > 0 ? ` + 검증 중 ${v.verifying}건` : ''}`,
       action: '검증자 분산 또는 지원',
       actionTarget: '/agents',
     })
   }
-  const stalledVerifiers = verifierLoads.filter(v => v.annotation?.startsWith('지연'))
+  const stalledVerifiers = verifierLoads.filter(v => v.annotation?.key === 'delayed')
   if (stalledVerifiers.length > 0 && overloadedVerifiers.length === 0) {
     const v = stalledVerifiers[0]
     alerts.push({
       severity: 'warning',
       title: '검증 지연',
-      detail: `${v.name}: ${v.annotation}`,
+      detail: `${v.name}: 오래된 검증 대기 존재`,
       action: '검증자 확인',
       actionTarget: '/agents',
     })
@@ -754,12 +840,17 @@ export function diagnose(data: ReportData, prevWeeklyData?: ReportData[]): Diagn
   } else if (scenario === 'rebalance' && rebalancePlan.length > 0) {
     briefingLines.push(`${rebalancePlan[0].agentName}을 ${rebalancePlan[0].fromProjectName}에서 ${rebalancePlan[0].toProjectName}(으)로 재배치하면 추가 비용 없이 정상화됩니다.`)
   } else if (scenario === 'surplus' && surplusPlan.length > 0) {
-    briefingLines.push(`에이전트 ${surplusPlan.length}대 감축 시 월 ~$${fmtCost(surplusPlan.reduce((s, p) => s + p.savingsPerMonth, 0))} 절감 가능합니다.`)
+    // 에이전트 감축은 토큰 기반 비용을 줄이지 않는다. 재배치 제안만 한다.
+    briefingLines.push(`에이전트 ${surplusPlan.length}대가 여유 있습니다. 다른 바쁜 프로젝트로 재배치를 검토해보세요.`)
   }
 
   // 비용 이상
   if (costPerTask > 0 && prevCostPerTask > 0 && costPerTask > prevCostPerTask * 1.3) {
     briefingLines.push(`건당 비용이 $${fmtCost(costPerTask)}로 전기 대비 ${Math.round((costPerTask / prevCostPerTask - 1) * 100)}% 높습니다.`)
+  }
+  // 실제 비용 감소 경로: 재시도율이 높으면 품질 개선이 토큰 비용을 줄입니다
+  if (highRetryProject && highRetryProject.rate >= 40) {
+    briefingLines.push(`${highRetryProject.name}의 재시도율 ${Math.round(highRetryProject.rate)}%를 낮추면 토큰 비용이 실제로 줄어듭니다 (이슈 지시사항·테스트 품질 점검).`)
   }
 
   // 추세 예측

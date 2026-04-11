@@ -243,7 +243,7 @@ export default function ProjectCard({ project }: Props) {
             <div className="flex items-center gap-1.5 mb-1">
               <span className="font-bold text-base truncate leading-none" style={{ color: project.color || '#4ade80' }}>{project.name}</span>
               {project.shareRole && (
-                <span className={`shrink-0 text-xs font-bold px-1.5 py-0.5 rounded-full leading-none flex items-center gap-0.5 ${project.shareRole === 'editor' ? 'bg-ive-amber/15 text-ive-amber border border-ive-amber/30' : 'bg-ive-cyan/15 text-ive-cyan border border-ive-cyan/30'}`}>
+                <span className="shrink-0 text-xs font-bold px-1.5 py-0.5 rounded-full leading-none flex items-center gap-0.5 bg-white/5 text-ive-text-muted border border-ive-border-subtle">
                   <i className="fa-solid fa-share-nodes" />
                   {project.shareRole === 'editor' ? tp('shareEditor') : tp('shareViewer')}
                 </span>
@@ -254,7 +254,7 @@ export default function ProjectCard({ project }: Props) {
             </span>
             <div className="flex items-center gap-2 mt-1">
               {project.lastCheckedAt && (
-                <span className="text-sm text-ive-green/50 font-bold whitespace-nowrap flex items-center gap-1">
+                <span className="text-sm text-ive-text-dim font-bold whitespace-nowrap flex items-center gap-1">
                   <i className="fa-solid fa-bolt-lightning opacity-70" />
                   {formatDateShort(project.lastCheckedAt, userLocale, userTz).replace(',', '')}
                 </span>
@@ -300,7 +300,7 @@ export default function ProjectCard({ project }: Props) {
             <div className="shrink-0 flex items-center">
               <div className="relative w-10 h-10 flex items-center justify-center">
                 <i className="fa-solid fa-gear fa-spin text-xl text-ive-amber" style={{ animationDuration: '2s' }} />
-                <span className="absolute -bottom-0.5 -right-0.5 bg-ive-amber text-ive-bg-deep text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center">{agentWorkingCount + verifyingCount}</span>
+                <span className="absolute -bottom-0.5 -right-0.5 bg-ive-amber text-ive-bg-deep text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center">{agentWorkingCount + verifyingCount}</span>
               </div>
             </div>
           )}
@@ -345,15 +345,15 @@ export default function ProjectCard({ project }: Props) {
           <span className="text-xs text-ive-text-dim font-bold">{tp('workingLabel')}</span>
         </button>
 
-        {/* 검증 (사람) */}
+        {/* 검증 (사람) — 검증중은 행동/주의 필요 신호이므로 amber */}
         <button
           onClick={() => setExpandedPanel(expandedPanel === 'verifying' ? null : 'verifying')}
-          className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'verifying' ? 'bg-ive-cyan/5' : 'hover:bg-white/[0.02]'}`}
+          className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'verifying' ? 'bg-ive-amber/5' : 'hover:bg-white/[0.02]'}`}
         >
-          <span className={`text-lg font-bold leading-none ${verifyingCount > 0 ? 'text-ive-cyan animate-pulse' : 'text-ive-text-dim'}`}>
+          <span className={`text-lg font-bold leading-none ${verifyingCount > 0 ? 'text-ive-amber animate-pulse' : 'text-ive-text-dim'}`}>
             {verifyingCount}
           </span>
-          <Sparkline data={snapshots.map(s => s.running)} width={40} height={12} color="cyan" />
+          <Sparkline data={snapshots.map(s => s.running)} width={40} height={12} color="amber" />
           <span className="text-xs text-ive-text-dim font-bold">{tp('verifyingLabel')}</span>
         </button>
 
@@ -376,25 +376,25 @@ export default function ProjectCard({ project }: Props) {
           <span className="text-xs text-ive-text-dim font-bold">{tp('completedLabel')}</span>
         </button>
 
-        {/* 토큰 */}
+        {/* 토큰 — 측정값(상태 신호 아님) → 중립 */}
         <div className="flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5">
           <span className={`text-lg font-bold leading-none ${(stats?.totalTokens ?? 0) > 0 ? 'text-ive-text' : 'text-ive-text-dim'}`}>
             {formatTokens(stats?.totalTokens ?? 0)}
           </span>
-          <Sparkline data={snapshots.map(s => s.totalTokens)} width={40} height={12} />
+          <Sparkline data={snapshots.map(s => s.totalTokens)} width={40} height={12} color="gray" />
           <span className="text-xs text-ive-text-dim font-bold">{tp('tokensLabel')}</span>
         </div>
 
         {/* 취합 */}
         <button
           onClick={() => setExpandedPanel(expandedPanel === 'conflicts' ? null : 'conflicts')}
-          className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'conflicts' ? 'bg-ive-purple/5' : 'hover:bg-white/[0.02]'}`}
+          className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'conflicts' ? 'bg-ive-amber/5' : 'hover:bg-white/[0.02]'}`}
         >
-          <span className={`text-lg font-bold leading-none ${conflictCount > 0 ? 'text-ive-red animate-pulse' : mergeCount > 0 ? 'text-ive-purple' : 'text-ive-text-dim'}`}>
+          <span className={`text-lg font-bold leading-none ${conflictCount > 0 ? 'text-ive-red animate-pulse' : mergeCount > 0 ? 'text-ive-amber' : 'text-ive-text-dim'}`}>
             {mergeCount}
           </span>
-          <i className={`fa-solid fa-code-merge text-xs ${conflictCount > 0 ? 'text-ive-red' : mergeCount > 0 ? 'text-ive-purple' : 'text-ive-text-dim'}`} />
-          <span className={`text-xs font-bold ${conflictCount > 0 ? 'text-ive-red' : mergeCount > 0 ? 'text-ive-purple' : 'text-ive-text-dim'}`}>{tp('conflictLabel')}</span>
+          <i className={`fa-solid fa-code-merge text-xs ${conflictCount > 0 ? 'text-ive-red' : mergeCount > 0 ? 'text-ive-amber' : 'text-ive-text-dim'}`} />
+          <span className={`text-xs font-bold ${conflictCount > 0 ? 'text-ive-red' : mergeCount > 0 ? 'text-ive-amber' : 'text-ive-text-dim'}`}>{tp('conflictLabel')}</span>
         </button>
       </div>
 
@@ -422,12 +422,12 @@ export default function ProjectCard({ project }: Props) {
                     toolBadge={isChat ? null : (activity?.category ?? null)}
                   />
                 ) : null}
-                {displayName && <span className={`font-bold shrink-0 ${isChat ? 'text-purple-400/70' : 'text-ive-amber/70'}`}>{displayName}</span>}
-                <MarqueeText className={isChat ? 'text-purple-400/60' : 'text-ive-text-muted'}>
+                {displayName && <span className={`font-bold shrink-0 ${'text-ive-amber/70'}`}>{displayName}</span>}
+                <MarqueeText className="text-ive-text-muted">
                   {isChat ? `💬 #${ex.issueIid} ${tp('chatLabel')}` : `#${ex.issueIid} `}
                   {!isChat && ex.issueTitle && `${ex.issueTitle}`}
                 </MarqueeText>
-                <span className={`shrink-0 text-xs font-mono font-bold tabular-nums ml-auto ${isChat ? 'text-purple-400/70' : 'text-ive-amber/70'}`}>
+                <span className={`shrink-0 text-xs font-mono font-bold tabular-nums ml-auto ${'text-ive-amber/70'}`}>
                   {formatDuration(ex.startedAt)}
                   {tick >= 0 ? '' : ''}
                 </span>
@@ -503,10 +503,10 @@ export default function ProjectCard({ project }: Props) {
                     className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-3 hover:border-ive-cyan/40 transition-all cursor-pointer active:scale-[0.98]"
                   >
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="text-sm font-bold text-ive-cyan">#{issue.iid}</span>
+                      <span className="text-sm font-bold text-ive-text-muted">#{issue.iid}</span>
                       <span className={`text-xs font-bold px-1.5 py-0.5 rounded shrink-0 border ${
                         issue.stage === 'verify_waiting'
-                          ? 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20'
+                          ? 'text-ive-amber bg-ive-amber/10 border-ive-amber/20'
                           : 'text-ive-cyan/70 bg-ive-cyan/10 border-ive-cyan/20'
                       }`}>
                         {tp(issue.stage === 'verify_waiting' ? 'verifyWaitBadge' : 'waitingBadge')}
@@ -651,7 +651,7 @@ function UserTaskPanel({ executions, projectId, onKill, formatDuration, te }: {
         <div className="flex items-center justify-between shrink-0">
           <div className="min-w-0 flex-1">
             <MarqueeText className="text-sm font-bold text-ive-text">
-              <span className="font-bold text-ive-cyan">#{current.issueIid}</span>
+              <span className="font-bold text-ive-text-muted">#{current.issueIid}</span>
               {current.issueTitle && <span className="ml-1.5">{current.issueTitle}</span>}
             </MarqueeText>
           </div>
@@ -659,7 +659,7 @@ function UserTaskPanel({ executions, projectId, onKill, formatDuration, te }: {
             <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-ive-cyan/20 text-ive-cyan">
               {te('assigned')}
             </span>
-            <span className="text-xs font-mono font-bold text-ive-cyan">
+            <span className="text-xs font-mono font-bold text-ive-text-muted">
               {formatDuration(current.startedAt)}
               {tick >= 0 ? '' : ''}
             </span>
@@ -690,12 +690,12 @@ function UserTaskPanel({ executions, projectId, onKill, formatDuration, te }: {
                   return (
                     <div key={note.id || i} className="relative mb-2 last:mb-0">
                       <div className="absolute left-[-16px] top-[7px] w-2 h-2 rounded-full bg-ive-bg-deep border border-ive-border-dark" />
-                      <div className="flex items-start gap-1.5 text-[11px] text-ive-text-dim leading-relaxed">
+                      <div className="flex items-start gap-1.5 text-xs text-ive-text-dim leading-relaxed">
                         <span className="font-bold text-ive-text-muted shrink-0">{note.author}</span>
                         <span className="flex-1 min-w-0 break-words">
                           <MarkdownNote body={cleanNoteBody(note.body || '')} />
                         </span>
-                        <span className="text-[10px] font-mono shrink-0 ml-1">{timestamp}</span>
+                        <span className="text-xs font-mono shrink-0 ml-1">{timestamp}</span>
                       </div>
                     </div>
                   )
@@ -707,15 +707,15 @@ function UserTaskPanel({ executions, projectId, onKill, formatDuration, te }: {
                       {noteAvatar ? (
                         <img src={noteAvatar} alt="" className="w-5 h-5 rounded-full object-cover border border-ive-border-subtle bg-ive-bg-deep" onError={e => { e.currentTarget.style.display = 'none' }} />
                       ) : (
-                        <div className="w-5 h-5 rounded-full bg-ive-cyan/20 flex items-center justify-center border border-ive-border-subtle">
-                          <i className="fa-solid fa-user text-ive-cyan text-[8px]" />
+                        <div className="w-5 h-5 rounded-full bg-white/5 flex items-center justify-center border border-ive-border-subtle">
+                          <i className="fa-solid fa-user text-ive-text-dim text-xs" />
                         </div>
                       )}
                     </div>
                     <div className="border border-ive-border-dark rounded-lg bg-ive-bg-card overflow-hidden">
                       <div className="flex items-center gap-1.5 px-2.5 py-1.5 border-b border-ive-border-dark bg-ive-bg-deep/40">
                         <span className="text-xs font-bold text-ive-text">{note.author}</span>
-                        <span className="text-[10px] text-ive-text-dim font-mono ml-auto">{timestamp}</span>
+                        <span className="text-xs text-ive-text-dim font-mono ml-auto">{timestamp}</span>
                       </div>
                       <div className="px-2.5 py-2 text-xs text-ive-text-muted break-words">
                         <MarkdownNote body={cleanNoteBody(note.body || '')} />

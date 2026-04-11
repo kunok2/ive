@@ -210,10 +210,10 @@
     "pendingQueue": "Queue",
     "pendingQueueCount": "{count} pending",
     "noPendingIssues": "No pending issues assigned",
-    "workerBadge": "Worker",
+    "workerBadge": "Agent",
     "verifierBadge": "Verifier",
     "filterAll": "All",
-    "filterWorkers": "Workers",
+    "filterWorkers": "Agents",
     "filterVerifiers": "Verifiers",
     "noVerifiers": "No issues currently waiting for or under verification",
     "verifyingLabel": "Verifying",
@@ -725,7 +725,7 @@
     "totalLabel": "Total Time",
     "avgLabel": "Average",
     "avgTurnsLabel": "Avg Turns",
-    "workers": "Workers",
+    "workers": "Agents",
     "countCostTrend": "Count/Cost Trend",
     "countLabel": "Count",
     "costSmall": "Cost",
@@ -767,7 +767,50 @@
     "noWaitingHistory": "No pending history available.",
     "waitingTrendByAgent": "Pending Trend (By Agent)",
     "waitingCurrentByAgent": "Current Pending (By Agent)",
-    "waitingLabel": "Pending"
+    "waitingLabel": "Pending",
+    "annotation": {
+      "noAgent": "No agent is assigned. Issues aren't being processed — please assign an agent first.",
+      "shortage": "Work is piling up. Assign {count} more agent(s).",
+      "shortageUrgent": "Work is piling up. Assign {count} more agent(s). Needed within {days} days.",
+      "surplus": "You have spare capacity. {count} agent(s) can be reallocated to a busier project without falling behind here.",
+      "highRetry": "{percent}% of issues needed retries. Check whether instructions are ambiguous or tests are missing.",
+      "backlog": "{count} issues are piling up and processing is getting delayed."
+    },
+    "agentAnnotation": {
+      "overload": "{waiting} issues are queued up for this agent. Share the load with other agents or assign more.",
+      "concentrated": "{percent}% of all pending work is concentrated on this agent. Spread the load to others.",
+      "idle": "This agent is mostly idle. If another project is busier, consider reassigning.",
+      "idleReassign": "This agent is mostly idle. Project '{target}' is busy — reassigning would help.",
+      "lowSuccess": "Success rate is only {rate}%. Investigate root causes (prompt, environment, permissions)."
+    },
+    "verifierAnnotation": {
+      "overload": "{waiting} issues are waiting to be verified. Distribute to other verifiers or add support.",
+      "delayed": "There's an issue that hasn't been verified for over {hours} hours. Process it soon.",
+      "concentrated": "{percent}% of all verification backlog is on this verifier. Distribute to others.",
+      "tooFast": "Average verification time is {seconds}s — suspiciously fast. Check whether actual verification is happening.",
+      "highReject": "Rejection rate is {percent}%. Check development quality or verification criteria."
+    },
+    "userAnnotation": {
+      "bottleneck": "{waiting} issues waiting + avg {avgMin}m verification time. This person is the bottleneck.",
+      "tooFast": "Average verification time is only {seconds}s — too fast. Check if actual review is happening.",
+      "highReject": "Rejection rate is {percent}%. Check dev quality or verification criteria.",
+      "backlog": "{waiting} verification items are piling up.",
+      "idle": "Very little verification activity recently."
+    },
+    "metric": {
+      "utilization": "Utilization",
+      "costPerTask": "Cost / Task",
+      "retryRate": "Retry Rate",
+      "noAgentAssigned": "No agents",
+      "utilVeryLow": "Very low",
+      "utilLow": "Low",
+      "utilOk": "Optimal",
+      "utilHigh": "High",
+      "utilOverload": "Overload",
+      "retryLow": "Low",
+      "retryNormal": "Normal",
+      "retryHigh": "High"
+    }
   },
   "pull": {
     "loading": "Loading...",

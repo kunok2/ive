@@ -69,8 +69,8 @@ export default function TopBar() {
           >
             <div>
               <h1 className="text-xl font-bold leading-none">
-                <span className="text-ive-green">Spring</span>{' '}
-                <span className="text-orange-400">IVE</span>
+                <span className="text-ive-cyan">Spring</span>{' '}
+                <span className="text-ive-amber">IVE</span>
               </h1>
               <p className="text-xs text-ive-text-dim mt-0.5">{tn(activeTab as 'projects' | 'agents' | 'issues' | 'reports' | 'admin')}</p>
             </div>

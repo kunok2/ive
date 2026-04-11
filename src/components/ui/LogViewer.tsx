@@ -647,7 +647,7 @@ export default function LogViewer({
       ref={containerRef}
       onScroll={handleScroll}
       data-log-scroll
-      className={`overflow-y-auto overflow-x-hidden bg-[#0a0a0a] text-[#d4d4d4] custom-scrollbar ${className}`}
+      className={`overflow-y-auto overflow-x-hidden bg-ive-bg-deep text-ive-text custom-scrollbar ${className}`}
       style={{
         fontFamily: '"JetBrains Mono", "Fira Code", "Cascadia Code", Menlo, Monaco, monospace',
         fontSize: `${fontSize}px`,
@@ -660,7 +660,7 @@ export default function LogViewer({
             const startLine = lineNum + 1
             lineNum += block.lines.length
             return (
-              <div key={bi} className="my-2 rounded-lg border border-ive-border-dark bg-[#111] overflow-hidden">
+              <div key={bi} className="my-2 rounded-lg border border-ive-border-dark bg-ive-bg-card overflow-hidden">
                 {block.lang && (
                   <div className="px-3 py-1 text-[0.75em] text-ive-text-dim bg-white/[0.03] border-b border-ive-border-dark uppercase tracking-wider">
                     {block.lang}

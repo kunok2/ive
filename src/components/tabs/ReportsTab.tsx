@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import PullToRefresh from '@/components/ui/PullToRefresh'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 import Sparkline from '@/components/ui/Sparkline'
@@ -47,6 +48,7 @@ const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토']
 
 export default function ReportsTab() {
   const router = useRouter()
+  const tr = useTranslations('report')
   const [type, setType] = useState<ReportType>('weekly')
   const [date, setDate] = useState(getKSTTodayString())
   const [data, setData] = useState<ReportData | null>(null)
@@ -193,7 +195,7 @@ export default function ReportsTab() {
             <div className="flex items-center gap-2">
               <span className="text-sm font-bold text-ive-text">{data ? formatPeriodLabel(type, data.period.start, data.period.end) : '...'}</span>
               {!isCurrentPeriod() && (
-                <button onClick={() => setDate(getKSTTodayString())} className="px-2 py-0.5 text-xs font-bold rounded-lg bg-ive-green/20 text-ive-green hover:bg-ive-green/30 transition-colors">오늘</button>
+                <button onClick={() => setDate(getKSTTodayString())} className="px-2 py-0.5 text-xs font-bold rounded-lg bg-ive-cyan/20 text-ive-cyan hover:bg-ive-cyan/30 transition-colors">오늘</button>
               )}
             </div>
             <button onClick={() => navigate(1)} className="w-8 h-8 flex items-center justify-center text-ive-text-dim hover:text-ive-text"><i className="fa-solid fa-chevron-right" /></button>
@@ -304,12 +306,15 @@ export default function ReportsTab() {
               )}
               {d.resource.scenario === 'surplus' && d.resource.surplusPlan.length > 0 && (
                 <div className="bg-ive-bg-deep rounded-lg p-3 space-y-1">
-                  <div className="text-xs font-bold text-ive-cyan"><i className="fa-solid fa-minus-circle mr-1" />감축 가능</div>
+                  <div className="text-xs font-bold text-ive-cyan"><i className="fa-solid fa-arrows-left-right mr-1" />재배치 가능</div>
                   {d.resource.surplusPlan.map((s, i) => (
                     <div key={i} className="text-xs text-ive-text">
-                      {s.agentName} ({s.projectName}) · 월 ~${fmtCost(s.savingsPerMonth)} 절감
+                      {s.agentName} ({s.projectName}) · 여기선 일 {s.agentCapacity}건 처리 능력
                     </div>
                   ))}
+                  <div className="text-[10px] text-ive-text-dim pt-1 border-t border-ive-border-dark/50 mt-1">
+                    에이전트 제거는 토큰 비용을 줄이지 않습니다. 일의 양(유입·재시도)이 줄어야 비용이 감소합니다.
+                  </div>
                 </div>
               )}
             </section>
@@ -323,40 +328,54 @@ export default function ReportsTab() {
             return (
               <section className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-4">
                 <div className="flex items-center justify-between mb-4">
-                  {/* 유입 */}
+                  {/* 유입 — 단순 카운트(중립) */}
                   <div className="text-center flex-1 w-0">
                     <div className="text-xs text-ive-text-dim mb-1">유입</div>
-                    <div className="text-2xl font-bold text-ive-cyan mb-2">{d.flow.inflow}</div>
+                    <div className="text-2xl font-bold text-ive-text mb-2">{d.flow.inflow}</div>
                     <div className="h-6 mb-2 px-1"><Sparkline data={inflowData.length > 0 ? inflowData : [0]} width="100%" height={24} color="cyan" /></div>
                     <div className="text-xs text-ive-text-dim">{d.flow.dailyInflow.toFixed(1)}건/일</div>
                   </div>
                   <div className="text-ive-text-dim px-2"><i className="fa-solid fa-arrow-right" /></div>
-                  {/* 대기열 */}
+                  {/* 대기열 — 임계 기반 색(주의 신호) */}
                   <div className="text-center flex-1 w-0">
                     <div className="text-xs text-ive-text-dim mb-1">대기</div>
                     <div className={`text-2xl font-bold mb-2 ${d.flow.currentWaiting >= 8 ? 'text-ive-red' : d.flow.currentWaiting >= 4 ? 'text-ive-amber' : 'text-ive-text'}`}>
                       {d.flow.currentWaiting}
                     </div>
-                    <div className="h-6 mb-2 px-1"><Sparkline data={waitingData.length > 0 ? waitingData : [0]} width="100%" height={24} color={d.flow.currentWaiting >= 8 ? 'red' : d.flow.currentWaiting >= 4 ? 'amber' : 'auto'} /></div>
+                    <div className="h-6 mb-2 px-1"><Sparkline data={waitingData.length > 0 ? waitingData : [0]} width="100%" height={24} color={d.flow.currentWaiting >= 8 ? 'red' : d.flow.currentWaiting >= 4 ? 'amber' : 'cyan'} /></div>
                     <div className="text-xs text-ive-text-dim opacity-0">0</div>
                   </div>
                   <div className="text-ive-text-dim px-2"><i className="fa-solid fa-arrow-right" /></div>
-                  {/* 처리 */}
+                  {/* 처리 — 단순 카운트(중립) */}
                   <div className="text-center flex-1 w-0">
                     <div className="text-xs text-ive-text-dim mb-1">처리</div>
-                    <div className="text-2xl font-bold text-ive-green mb-2">{d.flow.throughput}</div>
-                    <div className="h-6 mb-2 px-1"><Sparkline data={throughputData.length > 0 ? throughputData : [0]} width="100%" height={24} color="green" /></div>
+                    <div className="text-2xl font-bold text-ive-text mb-2">{d.flow.throughput}</div>
+                    <div className="h-6 mb-2 px-1"><Sparkline data={throughputData.length > 0 ? throughputData : [0]} width="100%" height={24} color="cyan" /></div>
                     <div className="text-xs text-ive-text-dim">{d.flow.dailyCapacity.toFixed(1)}건/일</div>
                   </div>
                 </div>
-                {/* 비용 */}
-                <div className="flex items-center justify-center gap-3 text-xs bg-ive-bg-deep rounded-lg py-2">
-                  <span className="text-ive-text font-bold">비용 ${fmtCost(d.flow.totalCost)}</span>
-                  <span className="text-ive-text-dim">건당 ${fmtCost(d.flow.costPerTask)}</span>
-                  {d.flow.prevCostPerTask > 0 && (() => {
-                    const b = diffBadge(d.flow.costPerTask, d.flow.prevCostPerTask)
-                    return b ? <span className={`font-bold ${diffColor(d.flow.costPerTask, d.flow.prevCostPerTask, true)}`}>{b}</span> : null
-                  })()}
+                {/* 비용 — AI + 사람 분리 표기 */}
+                <div className="flex flex-col items-center gap-1 bg-ive-bg-deep rounded-lg py-2">
+                  <div className="flex items-center gap-3 text-xs">
+                    <span className="text-ive-text font-bold">비용 ${fmtCost(d.flow.totalCost)}</span>
+                    <span className="text-ive-text-dim">건당 ${fmtCost(d.flow.costPerTask)}</span>
+                    {d.flow.prevCostPerTask > 0 && (() => {
+                      const b = diffBadge(d.flow.costPerTask, d.flow.prevCostPerTask)
+                      return b ? <span className={`text-xs font-bold ${diffColor(d.flow.costPerTask, d.flow.prevCostPerTask, true)}`}>{b}</span> : null
+                    })()}
+                  </div>
+                  {(d.flow.totalCostAi > 0 || d.flow.totalCostHuman > 0) && (
+                    <div className="flex items-center gap-2 text-[10px] text-ive-text-dim">
+                      <span><i className="fa-solid fa-robot mr-0.5 text-ive-text-muted" />AI ${fmtCost(d.flow.totalCostAi)}</span>
+                      <span>+</span>
+                      <span>
+                        <i className="fa-solid fa-user mr-0.5 text-ive-text-muted" />사람 ${fmtCost(d.flow.totalCostHuman)}
+                        {d.flow.humanMinutes > 0 && (
+                          <span className="opacity-70"> ({fmtDur(d.flow.humanMinutes)} × ${(d.flow.humanMonthlySalary / 9600).toFixed(2)}/분)</span>
+                        )}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </section>
             )
@@ -397,6 +416,31 @@ export default function ReportsTab() {
                   return b ? <span className={`text-xs font-bold ${diffColor(d.flow.costPerTask, d.flow.prevCostPerTask, true)}`}>{b}</span> : null
                 })()}
               </div>
+              {/* 비용 내역: AI 토큰 + 사람 시간 분리 */}
+              {(d.flow.totalCostAi > 0 || d.flow.totalCostHuman > 0) && (
+                <div className="space-y-1 bg-ive-bg-deep rounded-lg px-2.5 py-2 border border-ive-border-dark">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-ive-text-dim"><i className="fa-solid fa-robot mr-1 text-ive-text-muted" />AI 모델 (토큰 사용)</span>
+                    <span className="font-mono font-bold text-ive-text">${fmtCost(d.flow.totalCostAi)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-ive-text-dim"><i className="fa-solid fa-user mr-1 text-ive-text-muted" />사람 시간 (개발/검증)</span>
+                    <span className="font-mono font-bold text-ive-text">${fmtCost(d.flow.totalCostHuman)}</span>
+                  </div>
+                  {d.flow.humanMinutes > 0 && d.flow.humanMonthlySalary > 0 && (
+                    <div className="text-[10px] text-ive-text-dim pt-1 border-t border-ive-border-dark/50 mt-1">
+                      산정 기준: 월급 ${d.flow.humanMonthlySalary.toLocaleString()} / 월 160시간 = ${(d.flow.humanMonthlySalary / 9600).toFixed(2)}/분
+                      <br />
+                      사람 작업 시간 합계 {fmtDur(d.flow.humanMinutes)} × ${(d.flow.humanMonthlySalary / 9600).toFixed(2)}/분 = ${fmtCost(d.flow.totalCostHuman)}
+                    </div>
+                  )}
+                  {d.flow.humanMonthlySalary === 0 && (
+                    <div className="text-[10px] text-ive-text-dim pt-1 border-t border-ive-border-dark/50 mt-1">
+                      사람 단가(관리자 월급)가 설정되지 않아 사람 시간은 0으로 계산됩니다. 설정에서 조정 가능합니다.
+                    </div>
+                  )}
+                </div>
+              )}
               {d.retryCostRatio > 0.05 && (
                 <div className="text-xs text-ive-text-dim">
                   재시도 비용 ~${fmtCost(d.retryCostAmount)} ({Math.round(d.retryCostRatio * 100)}%)
@@ -405,7 +449,7 @@ export default function ReportsTab() {
               )}
               {/* 일별 비용 스파크라인 */}
               {data.dailyTrend.length >= 2 && (
-                <Sparkline data={data.dailyTrend.map(d => d.cost)} width="100%" height={24} color="amber" />
+                <Sparkline data={data.dailyTrend.map(d => d.cost)} width="100%" height={24} color="cyan" />
               )}
             </section>
           )}
@@ -438,7 +482,7 @@ export default function ReportsTab() {
                 {data.lifecycle.waitCount > 0 && (
                   <div className="text-center">
                     <div className="text-xs text-ive-text-dim">대기</div>
-                    <div className="text-sm font-bold text-ive-cyan">{fmtDur(data.lifecycle.waitAvg)}</div>
+                    <div className="text-sm font-bold text-ive-text">{fmtDur(data.lifecycle.waitAvg)}</div>
                     {data.prevLifecycle.waitAvg > 0 && (() => {
                       const b = diffBadge(data.lifecycle.waitAvg, data.prevLifecycle.waitAvg)
                       return b ? <div className={`text-xs font-bold ${diffColor(data.lifecycle.waitAvg, data.prevLifecycle.waitAvg, true)}`}>{b}</div> : null
@@ -447,7 +491,7 @@ export default function ReportsTab() {
                 )}
                 <div className="text-center">
                   <div className="text-xs text-ive-text-dim">수행</div>
-                  <div className="text-sm font-bold text-emerald-400">{fmtDur(data.lifecycle.procAvg)}</div>
+                  <div className="text-sm font-bold text-ive-text">{fmtDur(data.lifecycle.procAvg)}</div>
                   {data.prevLifecycle.procAvg > 0 && (() => {
                     const b = diffBadge(data.lifecycle.procAvg, data.prevLifecycle.procAvg)
                     return b ? <div className={`text-xs font-bold ${diffColor(data.lifecycle.procAvg, data.prevLifecycle.procAvg, true)}`}>{b}</div> : null
@@ -456,7 +500,7 @@ export default function ReportsTab() {
                 {data.lifecycle.verifyCount > 0 && (
                   <div className="text-center">
                     <div className="text-xs text-ive-text-dim">검증</div>
-                    <div className="text-sm font-bold text-orange-400">{fmtDur(data.lifecycle.verifyAvg)}</div>
+                    <div className="text-sm font-bold text-ive-text">{fmtDur(data.lifecycle.verifyAvg)}</div>
                     {data.prevLifecycle.verifyAvg > 0 && (() => {
                       const b = diffBadge(data.lifecycle.verifyAvg, data.prevLifecycle.verifyAvg)
                       return b ? <div className={`text-xs font-bold ${diffColor(data.lifecycle.verifyAvg, data.prevLifecycle.verifyAvg, true)}`}>{b}</div> : null
@@ -472,10 +516,11 @@ export default function ReportsTab() {
                 const verifyPct = data.lifecycle.verifyCount > 0 ? Math.round((data.lifecycle.verifyAvg / data.lifecycle.totalAvg) * 100) : 0
                 return (
                   <div>
+                    {/* 라이프사이클 비율 — 측정값이라 단색 시안 + 농도로 단계 구분 */}
                     <div className="flex h-2 rounded-full overflow-hidden bg-ive-bg-deep">
-                      {waitPct > 0 && <div className="bg-ive-cyan/60" style={{ width: `${waitPct}%` }} />}
-                      <div className="bg-emerald-400/60" style={{ width: `${procPct}%` }} />
-                      {verifyPct > 0 && <div className="bg-orange-400/60" style={{ width: `${verifyPct}%` }} />}
+                      {waitPct > 0 && <div className="bg-ive-cyan/30" style={{ width: `${waitPct}%` }} />}
+                      <div className="bg-ive-cyan/60" style={{ width: `${procPct}%` }} />
+                      {verifyPct > 0 && <div className="bg-ive-cyan/90" style={{ width: `${verifyPct}%` }} />}
                     </div>
                     <div className="flex justify-between mt-1 text-xs text-ive-text-dim">
                       {waitPct > 0 && <span>대기 {waitPct}%</span>}
@@ -521,26 +566,74 @@ export default function ReportsTab() {
                           </span>
                         )}
                         <span className="text-sm font-bold text-ive-text flex-1 truncate">{p.projectName}</span>
-                        <span className="text-xs text-ive-text-dim">{p.assignedAgents}대</span>
+                        <span className="text-xs text-ive-text-dim">에이전트 {p.assignedAgents}대</span>
                         <i className={`fa-solid fa-chevron-${expandedProjects.has(p.projectId) ? 'up' : 'down'} text-xs text-ive-text-dim`} />
                       </div>
                       <div className="flex items-center gap-2 mt-1 text-xs">
-                        <span className="text-ive-cyan">유입 {p.inflow}</span>
+                        <span className="text-ive-text-muted">유입 {p.inflow}</span>
                         <span className="text-ive-text-dim">→</span>
-                        <span className="text-ive-green">처리 {p.throughput}</span>
-                        {p.currentWaiting > 0 && <span className={`font-bold ${p.currentWaiting >= 6 ? 'text-ive-red' : p.currentWaiting >= 3 ? 'text-ive-amber' : 'text-ive-cyan'}`}>
+                        <span className="text-ive-text-muted">처리 {p.throughput}</span>
+                        {p.currentWaiting > 0 && <span className={`font-bold ${p.currentWaiting >= 6 ? 'text-ive-red' : p.currentWaiting >= 3 ? 'text-ive-amber' : 'text-ive-text-muted'}`}>
                           대기 중 {p.currentWaiting}
                         </span>}
-                        <span className="text-ive-amber ml-auto">${fmtCost(p.cost)}</span>
+                        <span className="text-ive-text-muted ml-auto">${fmtCost(p.cost)}</span>
                       </div>
-                      {p.annotation && <div className="text-xs text-ive-amber mt-1">· {p.annotation}</div>}
+                      {p.annotation && (() => {
+                        const sev = p.annotation.severity
+                        const color = sev === 'critical' ? 'text-ive-red' : sev === 'warning' ? 'text-ive-amber' : 'text-ive-cyan'
+                        const icon = sev === 'critical' ? 'fa-triangle-exclamation' : sev === 'warning' ? 'fa-circle-exclamation' : 'fa-lightbulb'
+                        const msg = tr(`annotation.${p.annotation.key}` as any, p.annotation.params as any)
+                        return (
+                          <div className={`text-xs mt-1.5 ${color} leading-relaxed`}>
+                            <i className={`fa-solid ${icon} mr-1`} />{msg}
+                          </div>
+                        )
+                      })()}
                     </button>
                     {expandedProjects.has(p.projectId) && (
                       <div className="px-3 pb-3 border-t border-ive-border-dark">
                         <div className="grid grid-cols-3 gap-1 mt-2 text-center text-xs">
-                          <div><div className="text-ive-text-dim">가동률</div><div className={`font-bold ${p.healthLevel === 'overloaded' ? 'text-ive-red' : p.healthLevel === 'idle' ? 'text-ive-cyan' : 'text-ive-text'}`}>{Math.round(p.utilization * 100)}%</div></div>
-                          <div><div className="text-ive-text-dim">건당 비용</div><div className="font-bold text-ive-amber">${fmtCost(p.costPerTask)}</div></div>
-                          <div><div className="text-ive-text-dim">재시도율</div><div className="font-bold text-ive-text">{p.retryRate.toFixed(0)}%</div></div>
+                          <div>
+                            <div className="text-ive-text-dim">{tr('metric.utilization')}</div>
+                            {p.utilization < 0 ? (
+                              <div className="font-bold text-ive-text-dim">{tr('metric.noAgentAssigned')}</div>
+                            ) : (() => {
+                              const pct = Math.round(p.utilization * 100)
+                              const label = pct >= 100 ? tr('metric.utilOverload')
+                                : pct >= 80 ? tr('metric.utilHigh')
+                                : pct >= 60 ? tr('metric.utilOk')
+                                : pct >= 30 ? tr('metric.utilLow')
+                                : tr('metric.utilVeryLow')
+                              const cls = pct >= 100 ? 'text-ive-red'
+                                : pct >= 80 ? 'text-ive-amber'
+                                : pct >= 60 ? 'text-ive-green'
+                                : 'text-ive-cyan'
+                              return (
+                                <>
+                                  <div className={`font-bold ${cls}`}>{pct}%</div>
+                                  <div className="text-[10px] text-ive-text-dim">{label}</div>
+                                </>
+                              )
+                            })()}
+                          </div>
+                          <div>
+                            <div className="text-ive-text-dim">{tr('metric.costPerTask')}</div>
+                            <div className="font-bold text-ive-text">${fmtCost(p.costPerTask)}</div>
+                          </div>
+                          <div>
+                            <div className="text-ive-text-dim">{tr('metric.retryRate')}</div>
+                            {(() => {
+                              const r = p.retryRate
+                              const label = r >= 30 ? tr('metric.retryHigh') : r >= 10 ? tr('metric.retryNormal') : tr('metric.retryLow')
+                              const cls = r >= 30 ? 'text-ive-amber' : 'text-ive-text'
+                              return (
+                                <>
+                                  <div className={`font-bold ${cls}`}>{r.toFixed(0)}%</div>
+                                  <div className="text-[10px] text-ive-text-dim">{label}</div>
+                                </>
+                              )
+                            })()}
+                          </div>
                         </div>
                         {/* 프로젝트별 미니 추이 */}
                         {(() => {
@@ -551,7 +644,7 @@ export default function ReportsTab() {
                             <div className="mt-2 bg-ive-bg-deep rounded-lg p-2">
                               <div className="grid grid-cols-3 gap-2">
                                 <div className="flex items-center gap-1.5"><span className="text-xs text-ive-text-dim shrink-0">건수</span><Sparkline data={pt.daily.map(d => d.tasks)} width={80} height={20} color="auto" /></div>
-                                <div className="flex items-center gap-1.5"><span className="text-xs text-ive-text-dim shrink-0">비용</span><Sparkline data={pt.daily.map(d => d.cost)} width={80} height={20} color="amber" /></div>
+                                <div className="flex items-center gap-1.5"><span className="text-xs text-ive-text-dim shrink-0">비용</span><Sparkline data={pt.daily.map(d => d.cost)} width={80} height={20} color="cyan" /></div>
                                 <div className="flex items-center gap-1.5"><span className="text-xs text-ive-text-dim shrink-0">대기</span><Sparkline data={pwt.length > 0 ? pwt : [0]} width={80} height={20} color="cyan" /></div>
                               </div>
                             </div>
@@ -565,28 +658,42 @@ export default function ReportsTab() {
             </section>
           )}
 
-          {/* ⑧ 개발자별 부하 */}
+          {/* ⑧ 에이전트별 부하 */}
           {d.agents.length > 0 && (
             <section>
-              <div className="text-xs font-bold text-ive-text-dim mb-2 uppercase tracking-wider">개발자별 부하</div>
+              <div className="text-xs font-bold text-ive-text-dim mb-2 uppercase tracking-wider">에이전트별 부하</div>
               <div className="space-y-2">
-                {d.agents.sort((a, b) => b.tasks - a.tasks).map(a => (
-                  <div key={a.agentId} className={`bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden ${a.annotation?.includes('과부하') ? 'bg-ive-red/3' : a.annotation?.includes('유휴') ? 'bg-ive-cyan/3' : ''}`}>
+                {d.agents.sort((a, b) => b.tasks - a.tasks).map(a => {
+                  const sev = a.annotation?.severity
+                  const bgClass = sev === 'critical' ? 'bg-ive-red/3' : sev === 'warning' ? 'bg-ive-amber/3' : sev === 'info' ? 'bg-ive-cyan/3' : ''
+                  return (
+                  <div key={a.agentId} className={`bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden ${bgClass}`}>
                     <button onClick={() => { const n = new Set(expandedAgents); n.has(a.agentId) ? n.delete(a.agentId) : n.add(a.agentId); setExpandedAgents(n) }}
                       className="w-full px-3 py-2.5 text-left">
                       <div className="flex items-center gap-2">
-                        <AgentAvatar avatar={a.agentAvatar} size="sm" className="!w-5 !h-5 !text-xs" />
+                        <AgentAvatar avatar={a.agentAvatar} size="xs" />
                         <span className="text-sm font-bold text-ive-text flex-1 truncate">{a.agentName}</span>
                         {a.assignedProjectName && <span className="text-xs text-ive-text-dim truncate max-w-[80px]">→ {a.assignedProjectName}</span>}
                         <i className={`fa-solid fa-chevron-${expandedAgents.has(a.agentId) ? 'up' : 'down'} text-xs text-ive-text-dim`} />
                       </div>
                       <div className="flex items-center gap-3 mt-1 text-xs">
-                        <span className="text-ive-text font-bold">{a.tasks}건</span>
-                        <span className="text-ive-text-dim">{a.dailyCapacity}건/일</span>
-                        {a.currentWaiting > 0 && <span className={`font-bold ${a.currentWaiting >= 6 ? 'text-ive-red' : a.currentWaiting >= 3 ? 'text-ive-amber' : 'text-ive-cyan'}`}>대기 중 {a.currentWaiting}</span>}
-                        <span className="text-ive-amber ml-auto">${fmtCost(a.cost)}</span>
+                        <span className="text-ive-text font-bold">처리 {a.tasks}건</span>
+                        <span className="text-ive-text-dim">일 평균 {a.dailyCapacity}건</span>
+                        {a.currentWaiting > 0 && <span className={`font-bold ${a.currentWaiting >= 6 ? 'text-ive-red' : a.currentWaiting >= 3 ? 'text-ive-amber' : 'text-ive-text-muted'}`}>대기 {a.currentWaiting}</span>}
+                        {a.successRate > 0 && <span className={`font-bold ${a.successRate < 60 ? 'text-ive-red' : a.successRate < 80 ? 'text-ive-amber' : 'text-ive-green'}`}>성공 {a.successRate}%</span>}
+                        <span className="text-ive-text-muted ml-auto">${fmtCost(a.cost)}</span>
                       </div>
-                      {a.annotation && <div className="text-xs text-ive-amber mt-1">· {a.annotation}</div>}
+                      {a.annotation && (() => {
+                        const s = a.annotation.severity
+                        const color = s === 'critical' ? 'text-ive-red' : s === 'warning' ? 'text-ive-amber' : 'text-ive-cyan'
+                        const icon = s === 'critical' ? 'fa-triangle-exclamation' : s === 'warning' ? 'fa-circle-exclamation' : 'fa-lightbulb'
+                        const msg = tr(`agentAnnotation.${a.annotation.key}` as any, a.annotation.params as any)
+                        return (
+                          <div className={`text-xs mt-1.5 leading-relaxed ${color}`}>
+                            <i className={`fa-solid ${icon} mr-1`} />{msg}
+                          </div>
+                        )
+                      })()}
                     </button>
                     {expandedAgents.has(a.agentId) && (
                       <div className="px-3 pb-3 border-t border-ive-border-dark">
@@ -598,7 +705,7 @@ export default function ReportsTab() {
                             <div className="mt-2 bg-ive-bg-deep rounded-lg p-2">
                               <div className="grid grid-cols-3 gap-2">
                                 <div className="flex items-center gap-1.5"><span className="text-xs text-ive-text-dim shrink-0">건수</span><Sparkline data={at.daily.map(d => d.tasks)} width={80} height={20} color="auto" /></div>
-                                <div className="flex items-center gap-1.5"><span className="text-xs text-ive-text-dim shrink-0">비용</span><Sparkline data={at.daily.map(d => d.cost)} width={80} height={20} color="amber" /></div>
+                                <div className="flex items-center gap-1.5"><span className="text-xs text-ive-text-dim shrink-0">비용</span><Sparkline data={at.daily.map(d => d.cost)} width={80} height={20} color="cyan" /></div>
                                 <div className="flex items-center gap-1.5"><span className="text-xs text-ive-text-dim shrink-0">대기</span><Sparkline data={awt.length > 0 ? awt : [0]} width={80} height={20} color="cyan" /></div>
                               </div>
                             </div>
@@ -607,7 +714,8 @@ export default function ReportsTab() {
                       </div>
                     )}
                   </div>
-                ))}
+                  )
+                })}
               </div>
             </section>
           )}
@@ -618,16 +726,15 @@ export default function ReportsTab() {
               <div className="text-xs font-bold text-ive-text-dim mb-2 uppercase tracking-wider">검증자별 부하</div>
               <div className="space-y-2">
                 {d.verifierLoads.map(v => {
-                  const isOverloaded = v.annotation?.includes('과부하')
-                  const isDelayed = v.annotation?.startsWith('지연')
-                  const isConcentrated = v.annotation?.includes('집중')
+                  const sev = v.annotation?.severity
+                  const bgClass = sev === 'critical' ? 'bg-ive-red/3' : sev === 'warning' ? 'bg-ive-amber/3' : sev === 'info' ? 'bg-ive-cyan/3' : ''
                   const totalBacklog = v.verifyWaiting + v.verifying
                   return (
-                    <div key={v.username} className={`bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden ${isOverloaded ? 'bg-ive-red/3' : isDelayed ? 'bg-ive-amber/3' : ''}`}>
+                    <div key={v.username} className={`bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden ${bgClass}`}>
                       <button onClick={() => { const n = new Set(expandedVerifiers); n.has(v.username) ? n.delete(v.username) : n.add(v.username); setExpandedVerifiers(n) }}
                         className="w-full px-3 py-2.5 text-left">
                         <div className="flex items-center gap-2">
-                          <AgentAvatar avatar={v.avatar} size="sm" className="!w-5 !h-5 !text-xs" />
+                          <AgentAvatar avatar={v.avatar} size="xs" />
                           <span className="text-sm font-bold text-ive-text flex-1 truncate">{v.name}</span>
                           <span className="text-xs font-bold text-ive-text-dim">
                             <i className={`fa-brands ${v.provider === 'github' ? 'fa-github' : 'fa-gitlab'} mr-0.5`} />@{v.username}
@@ -635,19 +742,27 @@ export default function ReportsTab() {
                           <i className={`fa-solid fa-chevron-${expandedVerifiers.has(v.username) ? 'up' : 'down'} text-xs text-ive-text-dim`} />
                         </div>
                         <div className="flex items-center gap-3 mt-1 text-xs font-bold flex-wrap">
-                          <span className="text-ive-green">{v.approved}건 승인</span>
-                          {v.rejected > 0 && <span className="text-ive-red">{v.rejected}건 반려</span>}
-                          {v.dailyCapacity > 0 && <span className="text-ive-text-dim">{v.dailyCapacity}건/일</span>}
+                          <span className="text-ive-green">승인 {v.approved}</span>
+                          {v.rejected > 0 && <span className="text-ive-red">반려 {v.rejected}</span>}
+                          {v.dailyCapacity > 0 && <span className="text-ive-text-dim">일 평균 {v.dailyCapacity}건</span>}
                           {totalBacklog > 0 && (
                             <span className={`${v.verifyWaiting >= 6 ? 'text-ive-red' : v.verifyWaiting >= 3 ? 'text-ive-amber' : 'text-ive-cyan'}`}>
                               <i className="fa-solid fa-clock mr-0.5" />대기 {v.verifyWaiting}{v.verifying > 0 ? ` + 검증중 ${v.verifying}` : ''}
                             </span>
                           )}
-                          {v.avgVerifyMin > 0 && <span className="text-ive-text-dim ml-auto">평균 {fmtDur(v.avgVerifyMin)}</span>}
+                          {v.avgVerifyMin > 0 && <span className="text-ive-text-dim ml-auto">평균 검증 {fmtDur(v.avgVerifyMin)}</span>}
                         </div>
-                        {v.annotation && (
-                          <div className={`text-xs font-bold mt-1 ${isOverloaded ? 'text-ive-red' : isDelayed || isConcentrated ? 'text-ive-amber' : 'text-ive-text-dim'}`}>· {v.annotation}</div>
-                        )}
+                        {v.annotation && (() => {
+                          const s = v.annotation.severity
+                          const color = s === 'critical' ? 'text-ive-red' : s === 'warning' ? 'text-ive-amber' : 'text-ive-cyan'
+                          const icon = s === 'critical' ? 'fa-triangle-exclamation' : s === 'warning' ? 'fa-circle-exclamation' : 'fa-lightbulb'
+                          const msg = tr(`verifierAnnotation.${v.annotation.key}` as any, v.annotation.params as any)
+                          return (
+                            <div className={`text-xs mt-1.5 leading-relaxed ${color}`}>
+                              <i className={`fa-solid ${icon} mr-1`} />{msg}
+                            </div>
+                          )
+                        })()}
                       </button>
                       {expandedVerifiers.has(v.username) && (
                         <div className="px-3 pb-3 border-t border-ive-border-dark">
@@ -704,21 +819,23 @@ export default function ReportsTab() {
                   const hasVerify = u.verifyTasks > 0 || u.verifyWaiting > 0
                   const prev = data.prevByUser?.find(p => p.userId === u.userId)
                   const approvalRate = u.verifyApproved + u.verifyRejected > 0 ? Math.round(u.verifyApproved / (u.verifyApproved + u.verifyRejected) * 100) : null
+                  const sev = u.annotation?.severity
+                  const bgClass = sev === 'critical' ? 'bg-ive-red/3' : sev === 'warning' ? 'bg-ive-amber/3' : sev === 'info' ? 'bg-ive-cyan/3' : ''
                   return (
-                    <div key={u.userId} className={`bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden ${u.verifyWaiting >= 5 ? 'bg-ive-red/3' : u.verifyWaiting >= 3 ? 'bg-ive-amber/3' : ''}`}>
+                    <div key={u.userId} className={`bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden ${bgClass}`}>
                       <button onClick={() => { const n = new Set(expandedUsers); n.has(u.userId) ? n.delete(u.userId) : n.add(u.userId); setExpandedUsers(n) }}
                         className="w-full px-3 py-2.5 text-left">
                         <div className="flex items-center gap-2">
                           {u.userAvatar === 'photo' && u.userId ? (
                             <img src={`/api/auth/avatar/image?id=${u.userId}`} alt="" className="w-5 h-5 rounded-lg object-cover shrink-0 border border-ive-border" />
                           ) : u.userAvatar ? (
-                            <AgentAvatar avatar={u.userAvatar} size="sm" className="!w-5 !h-5 !text-xs" />
+                            <AgentAvatar avatar={u.userAvatar} size="xs" />
                           ) : (
                             <div className="w-5 h-5 rounded-lg bg-ive-bg-deep border border-ive-border flex items-center justify-center shrink-0"><i className="fa-solid fa-user text-xs text-ive-text-dim" /></div>
                           )}
                           <span className="text-sm font-bold text-ive-text flex-1 truncate">{u.userName}</span>
                           {u.verifyWaiting > 0 && <span className={`text-xs font-bold ${u.verifyWaiting >= 5 ? 'text-ive-red' : u.verifyWaiting >= 3 ? 'text-ive-amber' : 'text-ive-cyan'}`}><i className="fa-solid fa-clock mr-0.5" />대기 {u.verifyWaiting}</span>}
-                          <span className="text-sm font-bold text-ive-text">{u.tasks}건</span>
+                          <span className="text-sm font-bold text-ive-text">처리 {u.tasks}</span>
                           {prev != null && (() => { const b = diffBadge(u.tasks, prev.tasks); return b ? <span className={`text-xs font-bold ${diffColor(u.tasks, prev.tasks)}`}>{b}</span> : null })()}
                           <i className={`fa-solid fa-chevron-${expandedUsers.has(u.userId) ? 'up' : 'down'} text-xs text-ive-text-dim`} />
                         </div>
@@ -726,13 +843,24 @@ export default function ReportsTab() {
                           {hasVerify ? (<>
                             <span><span className="text-ive-green font-bold">승인</span> {u.verifyApproved}</span>
                             {u.verifyRejected > 0 && <span><span className="text-ive-red font-bold">반려</span> {u.verifyRejected}</span>}
-                            {u.avgVerifyMin > 0 && <span><span className="text-ive-text-dim font-bold">검증</span> {fmtDur(u.avgVerifyMin)}</span>}
-                            {approvalRate != null && <span className={`font-bold ${approvalRate >= 80 ? 'text-ive-green' : approvalRate >= 50 ? 'text-ive-amber' : 'text-ive-red'}`}>{approvalRate}%</span>}
+                            {u.avgVerifyMin > 0 && <span><span className="text-ive-text-dim font-bold">평균 검증</span> {fmtDur(u.avgVerifyMin)}</span>}
+                            {approvalRate != null && <span className={`font-bold ${approvalRate >= 80 ? 'text-ive-green' : approvalRate >= 50 ? 'text-ive-amber' : 'text-ive-red'}`}>승인율 {approvalRate}%</span>}
                           </>) : (<>
-                            <span>성공 {u.success} / 실패 {u.failed}</span>
-                            {u.avgDurationMin > 0 && <span>평균 {fmtDur(u.avgDurationMin)}</span>}
+                            <span>성공 {u.success} · 실패 {u.failed}</span>
+                            {u.avgDurationMin > 0 && <span>평균 처리 {fmtDur(u.avgDurationMin)}</span>}
                           </>)}
                         </div>
+                        {u.annotation && (() => {
+                          const s = u.annotation.severity
+                          const color = s === 'critical' ? 'text-ive-red' : s === 'warning' ? 'text-ive-amber' : 'text-ive-cyan'
+                          const icon = s === 'critical' ? 'fa-triangle-exclamation' : s === 'warning' ? 'fa-circle-exclamation' : 'fa-lightbulb'
+                          const msg = tr(`userAnnotation.${u.annotation.key}` as any, u.annotation.params as any)
+                          return (
+                            <div className={`text-xs mt-1.5 leading-relaxed ${color}`}>
+                              <i className={`fa-solid ${icon} mr-1`} />{msg}
+                            </div>
+                          )
+                        })()}
                       </button>
                       {expandedUsers.has(u.userId) && (
                         <div className="px-3 pb-3 border-t border-ive-border-dark">
@@ -759,7 +887,7 @@ export default function ReportsTab() {
                             {u.avgWaitMin > 0 && (
                               <div className="mt-2 text-center text-xs">
                                 <span className="text-ive-text-dim">이슈 배정 → 처리 대기 평균 </span>
-                                <span className="font-bold text-ive-cyan">{fmtDur(u.avgWaitMin)}</span>
+                                <span className="font-bold text-ive-text">{fmtDur(u.avgWaitMin)}</span>
                               </div>
                             )}
                           </>)}
@@ -772,7 +900,7 @@ export default function ReportsTab() {
                               <div className="mt-2 bg-ive-bg-deep rounded-lg p-2">
                                 <div className={`grid ${hasVerifyData ? 'grid-cols-2' : 'grid-cols-1'} gap-2`}>
                                   <div className="flex items-center gap-1.5"><span className="text-xs text-ive-text-dim shrink-0">이슈</span><Sparkline data={ut.daily.map(d => d.tasks ?? 0)} width={80} height={20} color="auto" /></div>
-                                  {hasVerifyData && <div className="flex items-center gap-1.5"><span className="text-xs text-ive-text-dim shrink-0">검증</span><Sparkline data={ut.daily.map(d => d.verified ?? 0)} width={80} height={20} color="green" /></div>}
+                                  {hasVerifyData && <div className="flex items-center gap-1.5"><span className="text-xs text-ive-text-dim shrink-0">검증</span><Sparkline data={ut.daily.map(d => d.verified ?? 0)} width={80} height={20} color="cyan" /></div>}
                                 </div>
                               </div>
                             )
@@ -823,7 +951,7 @@ export default function ReportsTab() {
                   <div className="flex gap-1">
                     {([['date', '일자'], ['duration', '시간'], ['cost', '비용']] as const).map(([key, label]) => (
                       <button key={key} onClick={() => { if (issueSort === key) setIssueSortDir(d => d === 'desc' ? 'asc' : 'desc'); else { setIssueSort(key); setIssueSortDir('desc') } }}
-                        className={`px-2 py-1 text-xs font-bold rounded-lg ${issueSort === key ? 'bg-ive-green/20 text-ive-green' : 'text-ive-text-dim'}`}>
+                        className={`px-2 py-1 text-xs font-bold rounded-lg ${issueSort === key ? 'bg-ive-cyan/20 text-ive-cyan' : 'text-ive-text-dim'}`}>
                         {label} {issueSort === key && (issueSortDir === 'desc' ? '↓' : '↑')}
                       </button>
                     ))}
@@ -831,18 +959,67 @@ export default function ReportsTab() {
                   {/* 목록 */}
                   <div className="space-y-1">
                     {filteredIssues.slice(0, visibleCount).map((issue, i) => (
-                      <div key={i} className="bg-ive-bg-card border border-ive-border-subtle rounded-lg px-3 py-2">
+                      <div
+                        key={i}
+                        onClick={() => router.push(`/issues/${issue.projectId}/${issue.issueIid}`)}
+                        className="bg-ive-bg-card border border-ive-border-subtle rounded-lg px-3 py-2.5 space-y-1 cursor-pointer hover:border-ive-cyan/40 active:scale-[0.99] transition-all"
+                      >
+                        {/* 1행: #ID + 제목 */}
                         <div className="flex items-center gap-2 text-xs">
-                          <span className="text-ive-text-dim">#{issue.issueIid}</span>
+                          <span className="text-ive-text-dim shrink-0">#{issue.issueIid}</span>
                           <span className="text-ive-text font-bold flex-1 truncate">{issue.issueTitle}</span>
+                          {issue.status === 'failed' && <i className="fa-solid fa-circle-xmark text-ive-red shrink-0" title="실패" />}
                         </div>
-                        <div className="flex items-center gap-2 mt-1 text-xs text-ive-text-dim">
-                          <span style={{ color: issue.projectColor }}>{issue.projectName}</span>
-                          <span>{issue.agentName}</span>
-                          {issue.waitMin != null && <span><i className="fa-solid fa-clock mr-0.5" />{fmtDur(issue.waitMin)}</span>}
-                          <span className="ml-auto">{fmtDur(issue.durationMin)}</span>
-                          <span className="text-ive-amber">${fmtCost(issue.cost)}</span>
-                          {issue.attempts > 1 && <span className="text-ive-red">{issue.attempts}회</span>}
+
+                        {/* 2행: 프로젝트 · 총시간 · 비용 · 회차 */}
+                        <div className="flex items-center gap-2 text-xs text-ive-text-dim">
+                          <span className="inline-flex items-center gap-1 min-w-0 flex-1" title={issue.projectName}>
+                            <span
+                              className="w-4 h-4 rounded flex items-center justify-center shrink-0"
+                              style={{ backgroundColor: `${issue.projectColor || '#22d3ee'}20` }}
+                            >
+                              <i
+                                className={`fa-brands ${issue.projectProvider === 'github' ? 'fa-github' : 'fa-gitlab'} text-[9px]`}
+                                style={{ color: issue.projectColor || '#22d3ee' }}
+                              />
+                            </span>
+                            <span className="truncate">{issue.projectName}</span>
+                          </span>
+                          <span
+                            className="inline-flex items-center gap-1 font-mono font-bold text-ive-text shrink-0"
+                            title={`총 소요 ${fmtDur(issue.totalMin)}${issue.waitMin != null ? ` (대기 ${fmtDur(issue.waitMin)} · 작업 ${fmtDur(issue.durationMin)}${issue.verifyMin != null ? ` · 검증 ${fmtDur(issue.verifyMin)}` : ''})` : ''}`}
+                          >
+                            <i className="fa-solid fa-clock text-ive-text-dim" />
+                            {fmtDur(issue.totalMin)}
+                          </span>
+                          <span className="font-mono text-ive-text-muted shrink-0">${fmtCost(issue.cost)}</span>
+                          {issue.attempts > 1 && (
+                            <span className="text-ive-text-dim font-bold shrink-0" title={`${issue.attemptNo}번째 시도 / 총 ${issue.attempts}회`}>
+                              {issue.attemptNo}/{issue.attempts}회
+                            </span>
+                          )}
+                        </div>
+
+                        {/* 3행: 처리 내용 — 에이전트(작업시간) → 검증자(검증시간) */}
+                        <div className="flex items-center justify-center gap-1.5 text-xs text-ive-text-dim pt-1 border-t border-ive-border-dark/40">
+                          <span className="inline-flex items-center gap-1 min-w-0" title={`에이전트 ${issue.agentName} — 작업 ${fmtDur(issue.durationMin)}`}>
+                            <AgentAvatar avatar={issue.agentAvatar} size="xs" />
+                            <span className="truncate max-w-[160px] text-ive-text-muted">
+                              {issue.agentName}<span className="text-ive-text-dim font-mono">({fmtDur(issue.durationMin)})</span>
+                            </span>
+                          </span>
+                          {issue.verifierName && (
+                            <>
+                              <i className="fa-solid fa-arrow-right text-[9px] text-ive-text-dim/60 shrink-0" />
+                              <span className="inline-flex items-center gap-1 min-w-0" title={`검증자 ${issue.verifierName}${issue.verifyMin != null ? ` — 검증 ${fmtDur(issue.verifyMin)}` : ''}`}>
+                                <AgentAvatar avatar={issue.verifierAvatar || 'av-01'} userId={issue.verifierUserId} size="xs" />
+                                <span className="truncate max-w-[160px] text-ive-text-muted">
+                                  {issue.verifierName}
+                                  {issue.verifyMin != null && <span className="text-ive-text-dim font-mono">({fmtDur(issue.verifyMin)})</span>}
+                                </span>
+                              </span>
+                            </>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -865,6 +1042,7 @@ export default function ReportsTab() {
           )}
         </main>
       )}
+
     </PullToRefresh>
   )
 }

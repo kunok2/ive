@@ -124,8 +124,8 @@ export default function VerifierCard({ verifier }: Props) {
           <AgentAvatar avatar={verifier.avatar} size="md" />
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
-              <span className="text-base font-bold text-ive-cyan truncate">{verifier.name}</span>
-              <span className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold bg-ive-purple/20 text-ive-purple">
+              <span className="text-base font-bold text-ive-text truncate">{verifier.name}</span>
+              <span className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold bg-ive-cyan/20 text-ive-cyan">
                 <i className="fa-solid fa-user-check" />{t('verifierBadge')}
               </span>
               {verifier.iveUser ? (
@@ -222,7 +222,7 @@ export default function VerifierCard({ verifier }: Props) {
             className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'approved' ? 'bg-ive-green/5' : 'hover:bg-white/[0.02]'}`}
           >
             <span className={`text-sm font-bold ${verifier.approvedToday > 0 ? 'text-ive-green' : 'text-ive-text-dim'}`}>{verifier.approvedToday}</span>
-            <Sparkline data={snapshots.map(s => s.completed)} width={40} height={12} color="green" />
+            <Sparkline data={snapshots.map(s => s.completed)} width={40} height={12} color="cyan" />
             <span className="text-xs text-ive-text-dim font-bold">{t('approvedLabel')}</span>
           </button>
 
@@ -272,7 +272,7 @@ export default function VerifierCard({ verifier }: Props) {
                     href={`/issues/${item.projectId}/${item.issueIid}`}
                     className="flex items-center gap-2 px-3 py-2.5 hover:bg-white/[0.02] transition-colors"
                   >
-                    <span className="text-xs font-bold text-ive-green shrink-0">#{item.issueIid}</span>
+                    <span className="text-xs font-bold text-ive-text-muted shrink-0">#{item.issueIid}</span>
                     <span className="text-sm font-bold text-ive-text flex-1 truncate">{item.issueTitle || '(제목 없음)'}</span>
                     <span className="text-xs font-bold text-ive-text-dim truncate max-w-32">{item.projectName}</span>
                   </a>
@@ -300,7 +300,7 @@ export default function VerifierCard({ verifier }: Props) {
                     href={`/issues/${item.projectId}/${item.issueIid}`}
                     className="flex items-center gap-2 px-3 py-2.5 hover:bg-white/[0.02] transition-colors"
                   >
-                    <span className="text-xs font-bold text-ive-green shrink-0">#{item.issueIid}</span>
+                    <span className="text-xs font-bold text-ive-text-muted shrink-0">#{item.issueIid}</span>
                     <span className="text-sm font-bold text-ive-text flex-1 truncate">{item.issueTitle || '(제목 없음)'}</span>
                     <span className="text-xs font-bold text-ive-text-dim truncate max-w-32">{item.projectName}</span>
                   </a>
@@ -351,11 +351,11 @@ export default function VerifierCard({ verifier }: Props) {
               </div>
               <div className="bg-ive-bg-deep rounded-lg p-2">
                 <div className="text-xs font-bold text-ive-text-dim">{t('last7Days')} {t('approvedLabel')}</div>
-                <div className="text-ive-green">{verifier.approved7d}건</div>
+                <div className="text-ive-text">{verifier.approved7d}건</div>
               </div>
               <div className="bg-ive-bg-deep rounded-lg p-2">
                 <div className="text-xs font-bold text-ive-text-dim">{t('last7Days')} {t('rejectedLabel')}</div>
-                <div className="text-ive-red">{verifier.rejected7d}건</div>
+                <div className="text-ive-text">{verifier.rejected7d}건</div>
               </div>
             </div>
           </div>

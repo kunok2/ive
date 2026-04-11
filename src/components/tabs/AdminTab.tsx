@@ -269,16 +269,16 @@ function UsersPanel() {
                 </div>
                 <div className="text-xs text-ive-text-dim break-all">{u.email}</div>
                 <div className="text-xs text-ive-text-dim">{new Date(u.createdAt).toLocaleDateString('ko-KR')} {t('joined')}</div>
-                <div className="flex items-center gap-x-2 text-xs mt-0.5">
-                  <span className="inline-flex items-center text-ive-cyan">
+                <div className="flex items-center gap-x-2 text-xs mt-0.5 text-ive-text-muted">
+                  <span className="inline-flex items-center">
                     <i className="fa-solid fa-robot mr-0.5" />{u.maxAgents || '∞'}
                   </span>
-                  <span className="inline-flex items-center text-ive-amber">
+                  <span className="inline-flex items-center">
                     <i className="fa-solid fa-repeat mr-0.5" />{u.maxTurns || '∞'}
                   </span>
                   <span className="text-ive-text-dim">|</span>
                   {(u.allowedClis || []).map(cli => (
-                    <span key={cli} className="inline-flex items-center text-ive-green">
+                    <span key={cli} className="inline-flex items-center">
                       <i className={`${cli === 'claude' ? 'fa-solid fa-atom' : 'fa-solid fa-terminal'} mr-0.5`} />{cli}
                     </span>
                   ))}
@@ -1043,7 +1043,7 @@ function ModelSelect({ models, value, onChange }: { models: string[]; value: str
         <i className={`fa-solid fa-chevron-${open ? 'up' : 'down'} text-xs text-ive-text-dim`} />
       </button>
       {open && (
-        <div className="absolute z-50 top-full left-0 right-0 mt-1 border border-ive-border-subtle rounded-lg overflow-hidden shadow-lg shadow-black/30 max-h-52 overflow-y-auto overscroll-contain [&::-webkit-scrollbar]:w-[3px] [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-ive-text-dim/30 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-ive-text-dim/50" style={{ backgroundColor: '#1c1c20' }}>
+        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden shadow-lg max-h-52 overflow-y-auto overscroll-contain [&::-webkit-scrollbar]:w-[3px] [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-ive-text-dim/30 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-ive-text-dim/50">
           {options.map(o => (
             <button
               key={o.value}
@@ -1315,7 +1315,7 @@ function SettingsPanel() {
                           else { const data = await res.json(); await alert({ message: data.error || tc('saveFailed'), variant: 'error' }) }
                         } catch {}
                       }}
-                      className="text-xs text-ive-text-dim hover:text-red-400 p-1"
+                      className="text-xs text-ive-text-dim hover:text-ive-red p-1"
                       title={tc('delete')}
                     >
                       <i className="fa-solid fa-xmark" />
@@ -1328,7 +1328,7 @@ function SettingsPanel() {
                         type="number" step="0.01" min="0"
                         value={it.inputPrice}
                         onChange={e => { setPricingItems(prev => prev.map(p => p.id === it.id ? { ...p, inputPrice: parseFloat(e.target.value) || 0 } : p)); setPricingSaved(false) }}
-                        className="w-full text-sm font-bold text-ive-cyan bg-ive-bg-input border border-ive-border rounded-lg px-2 py-1.5 text-right focus:outline-none focus:border-ive-green"
+                        className="w-full text-sm font-bold text-ive-text bg-ive-bg-input border border-ive-border rounded-lg px-2 py-1.5 text-right focus:outline-none focus:border-ive-cyan"
                       />
                     </div>
                     <div className="flex-1">
@@ -1337,7 +1337,7 @@ function SettingsPanel() {
                         type="number" step="0.01" min="0"
                         value={it.outputPrice}
                         onChange={e => { setPricingItems(prev => prev.map(p => p.id === it.id ? { ...p, outputPrice: parseFloat(e.target.value) || 0 } : p)); setPricingSaved(false) }}
-                        className="w-full text-sm font-bold text-ive-amber bg-ive-bg-input border border-ive-border rounded-lg px-2 py-1.5 text-right focus:outline-none focus:border-ive-green"
+                        className="w-full text-sm font-bold text-ive-text bg-ive-bg-input border border-ive-border rounded-lg px-2 py-1.5 text-right focus:outline-none focus:border-ive-cyan"
                       />
                     </div>
                   </div>
@@ -1420,12 +1420,12 @@ function SettingsPanel() {
                       type="number" step="100" min="0"
                       value={it.inputPrice}
                       onChange={e => { setPricingItems(prev => prev.map(p => p.id === it.id ? { ...p, inputPrice: parseFloat(e.target.value) || 0 } : p)); setPricingSaved(false) }}
-                      className="w-full text-sm font-bold text-ive-cyan bg-ive-bg-input border border-ive-border rounded-lg px-2 py-1.5 text-right focus:outline-none focus:border-ive-green"
+                      className="w-full text-sm font-bold text-ive-text bg-ive-bg-input border border-ive-border rounded-lg px-2 py-1.5 text-right focus:outline-none focus:border-ive-cyan"
                     />
                   </div>
                   <div className="flex-1">
                     <div className="text-xs text-ive-text-dim mb-0.5">시급 (160h 기준)</div>
-                    <div className="w-full text-sm font-bold text-ive-amber bg-ive-bg-deep border border-ive-border rounded-lg px-2 py-1.5 text-right cursor-not-allowed">
+                    <div className="w-full text-sm font-bold text-ive-text-muted bg-ive-bg-deep border border-ive-border rounded-lg px-2 py-1.5 text-right cursor-not-allowed">
                       {((it.inputPrice || 0) / 160).toFixed(2)}
                     </div>
                   </div>
@@ -1475,14 +1475,15 @@ function SettingsPanel() {
 
 // ── Activity Panel (사용자 활동 로그) ──
 
+// 카테고리는 아이콘으로 구분, 색은 의미가 있을 때만 (위험 admin / 정보 auth)
 const CATEGORY_META: Record<string, { labelKey: string; icon: string; color: string }> = {
   auth: { labelKey: 'categoryAuth', icon: 'fa-solid fa-right-to-bracket', color: 'text-ive-cyan' },
-  project: { labelKey: 'categoryProject', icon: 'fa-solid fa-folder', color: 'text-ive-green' },
-  agent: { labelKey: 'categoryAgent', icon: 'fa-solid fa-robot', color: 'text-ive-amber' },
-  execution: { labelKey: 'categoryExecution', icon: 'fa-solid fa-play', color: 'text-blue-400' },
-  task: { labelKey: 'categoryTask', icon: 'fa-solid fa-list-check', color: 'text-teal-400' },
+  project: { labelKey: 'categoryProject', icon: 'fa-solid fa-folder', color: 'text-ive-text-muted' },
+  agent: { labelKey: 'categoryAgent', icon: 'fa-solid fa-robot', color: 'text-ive-text-muted' },
+  execution: { labelKey: 'categoryExecution', icon: 'fa-solid fa-play', color: 'text-ive-text-muted' },
+  task: { labelKey: 'categoryTask', icon: 'fa-solid fa-list-check', color: 'text-ive-text-muted' },
   admin: { labelKey: 'categoryAdmin', icon: 'fa-solid fa-shield', color: 'text-ive-red' },
-  settings: { labelKey: 'categorySettings', icon: 'fa-solid fa-gear', color: 'text-purple-400' },
+  settings: { labelKey: 'categorySettings', icon: 'fa-solid fa-gear', color: 'text-ive-text-muted' },
 }
 
 function getDateStr(daysAgo: number) {
@@ -1886,25 +1887,25 @@ function OAuthProvidersPanel() {
         <div className="px-3 pb-3 pt-1 flex flex-col gap-2.5">
           <div className="text-ive-text-dim">
             GitLab/GitHub 측의 "OAuth Application"을 먼저 만들어야 Client ID/Secret을 받을 수 있습니다.
-            콜백 URL은 아래 ID에 따라 달라지므로 <span className="text-ive-amber font-bold">ID를 먼저 정한 뒤</span> GitLab/GitHub에 등록하는 순서가 편합니다.
+            콜백 URL은 아래 ID에 따라 달라지므로 <span className="text-ive-text font-bold">ID를 먼저 정한 뒤</span> GitLab/GitHub에 등록하는 순서가 편합니다.
           </div>
 
           <div className="bg-ive-bg-deep border border-ive-border-subtle rounded-lg p-2.5">
             <div className="text-ive-text font-bold mb-1.5">권장 순서</div>
             <ol className="list-decimal list-inside flex flex-col gap-1 text-xs">
-              <li>아래 <span className="text-ive-green font-bold">[신규 등록]</span> 버튼 → 모달에서 <span className="text-ive-green font-bold">ID만 먼저 입력</span> (예: <code className="font-mono">gitlab-com</code>, <code className="font-mono">gh-main</code>)</li>
-              <li>모달 하단에 표시되는 <span className="text-ive-cyan font-bold">콜백 URL을 복사</span></li>
+              <li>아래 <span className="text-ive-text font-bold">[신규 등록]</span> 버튼 → 모달에서 <span className="text-ive-text font-bold">ID만 먼저 입력</span> (예: <code className="font-mono">gitlab-com</code>, <code className="font-mono">gh-main</code>)</li>
+              <li>모달 하단에 표시되는 <span className="text-ive-text font-bold">콜백 URL을 복사</span></li>
               <li>
                 새 탭에서 GitLab/GitHub 접속 → <span className="font-bold">OAuth Application 등록</span>
                 <div className="mt-1 ml-4 text-ive-text-dim">
-                  • GitLab: <span className="font-mono text-ive-cyan">{'<base-url>'}/-/user_settings/applications</span><br/>
-                  • GitHub: <span className="font-mono text-ive-cyan">https://github.com/settings/developers</span> → New OAuth App<br/>
+                  • GitLab: <span className="font-mono text-ive-text-muted">{'<base-url>'}/-/user_settings/applications</span><br/>
+                  • GitHub: <span className="font-mono text-ive-text-muted">https://github.com/settings/developers</span> → New OAuth App<br/>
                   • Redirect URI(GitHub는 Authorization callback URL) 칸에 2번에서 복사한 URL 붙여넣기<br/>
                   • GitLab scopes: <code className="font-mono">read_user</code>, <code className="font-mono">api</code> 체크 / Confidential 체크<br/>
-                  • 저장 후 <span className="text-ive-amber font-bold">Application ID(=Client ID)</span>와 <span className="text-ive-amber font-bold">Secret(=Client Secret)</span> 복사
+                  • 저장 후 <span className="text-ive-text font-bold">Application ID(=Client ID)</span>와 <span className="text-ive-text font-bold">Secret(=Client Secret)</span> 복사
                 </div>
               </li>
-              <li>IVE 모달로 돌아와 <span className="text-ive-green font-bold">Client ID / Client Secret 입력 → 저장</span></li>
+              <li>IVE 모달로 돌아와 <span className="text-ive-text font-bold">Client ID / Client Secret 입력 → 저장</span></li>
               <li>저장 후 로그인 페이지 하단에 해당 공급자 로그인 버튼이 나타납니다</li>
             </ol>
           </div>
@@ -1923,7 +1924,7 @@ function OAuthProvidersPanel() {
 
           <div className="text-xs">
             <span className="text-ive-text-dim">참고 — 콜백 URL 형식: </span>
-            <span className="font-mono text-ive-cyan break-all">{origin}/api/auth/oauth/&lt;ID&gt;/callback</span>
+            <span className="font-mono text-ive-text break-all">{origin}/api/auth/oauth/&lt;ID&gt;/callback</span>
           </div>
         </div>
       </details>
@@ -2088,7 +2089,7 @@ function OAuthProvidersPanel() {
                       <i className="fa-solid fa-copy mr-1" />복사
                     </button>
                   </div>
-                  <div className="font-mono text-ive-cyan break-all">
+                  <div className="font-mono text-ive-text break-all">
                     {origin}/api/auth/oauth/{form.id}/callback
                   </div>
                 </div>
