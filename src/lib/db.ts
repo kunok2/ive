@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3'
 import path from 'path'
 import bcrypt from 'bcryptjs'
-import { User, Project, Agent, ProjectAssignment, TaskExecution, TaskStatus, StatSnapshot, TokenPricing, ProjectShare, ShareRole, ReportSchedule, ReportSendLog, UserActivityLog, ActivityCategory } from '@/types'
+import { User, Project, Agent, ProjectAssignment, TaskExecution, TaskStatus, StatSnapshot, TokenPricing, ProjectShare, ShareRole, ReportSchedule, ReportSendLog, UserActivityLog, ActivityCategory, OAuthProvider } from '@/types'
 import { getKSTTodayStartISO, getKSTYesterdayStartISO, kstDateToUTCISO } from './date-utils'
 import { startScanner } from './scanner'
 
@@ -341,6 +341,11 @@ function initSchema(db: Database.Database) {
       db.exec("ALTER TABLE task_executions ADD COLUMN rejected_at TEXT DEFAULT NULL")
       console.log('[DB] Added rejected_at to task_executions')
     }
+    // Git assignee 기반 검증자 식별 (username 키)
+    if (!tableInfo.some((col: any) => col.name === 'verifier_username')) {
+      db.exec("ALTER TABLE task_executions ADD COLUMN verifier_username TEXT DEFAULT NULL")
+      console.log('[DB] Added verifier_username to task_executions')
+    }
   } catch (e) { console.error("Migration failed for verifier columns:", e) }
 
   // 프로젝트 모니터링 설정
@@ -471,6 +476,16 @@ function initSchema(db: Database.Database) {
     db.exec(`ALTER TABLE issue_stages ADD COLUMN assign_mode TEXT DEFAULT 'auto'`)
     db.exec(`UPDATE issue_stages SET assign_mode = 'agent' WHERE preferred_agent_id IS NOT NULL`)
   } catch { /* 이미 존재 */ }
+  // Git assignee 스냅샷 컬럼 (검증자별 부하 집계용)
+  try { db.exec(`ALTER TABLE issue_stages ADD COLUMN assignee_username TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
+  try { db.exec(`ALTER TABLE issue_stages ADD COLUMN assignee_name TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
+  try { db.exec(`ALTER TABLE issue_stages ADD COLUMN assignee_avatar TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
+  try { db.exec(`ALTER TABLE issue_stages ADD COLUMN assignee_provider TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
+  // 레이블 기반 stage 캐시 (집계 시 Git API 재호출 회피)
+  try { db.exec(`ALTER TABLE issue_stages ADD COLUMN cached_stage TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
+  try { db.exec(`ALTER TABLE issue_stages ADD COLUMN issue_title TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
+  try { db.exec(`ALTER TABLE issue_stages ADD COLUMN verify_waiting_since TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_issue_stages_assignee ON issue_stages(assignee_username, cached_stage)`) } catch { /* ignore */ }
 
   // 보고서 스케줄 테이블
   db.exec(`
@@ -502,6 +517,21 @@ function initSchema(db: Database.Database) {
     );
     CREATE INDEX IF NOT EXISTS idx_report_send_logs_schedule ON report_send_logs(schedule_id, period_start, period_end);
     CREATE INDEX IF NOT EXISTS idx_report_send_logs_sent_at ON report_send_logs(sent_at);
+  `)
+
+  // project_members 테이블 — Git 프로젝트 멤버(=잠재 검증자) 캐시
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS project_members (
+      project_id TEXT NOT NULL,
+      username TEXT NOT NULL,
+      name TEXT NOT NULL DEFAULT '',
+      avatar_url TEXT NOT NULL DEFAULT '',
+      provider TEXT NOT NULL DEFAULT 'gitlab',
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (project_id, username),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_project_members_username ON project_members(username);
   `)
 
   // 사용자 활동 로그 테이블
@@ -562,6 +592,59 @@ function initSchema(db: Database.Database) {
       console.log('[DB] stat_daily_summaries: added avg_verify_waiting column')
     }
   } catch (e) { console.warn('[DB] stat_snapshots migration skipped:', e) }
+
+  // stat_snapshots / stat_daily_summaries: 'verifier' 엔티티 타입 허용
+  // (CHECK 제약이 'project','agent' 로 고정되어 있음 → 테이블 재생성)
+  try {
+    const snapSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='stat_snapshots'").get() as any
+    if (snapSql?.sql && !snapSql.sql.includes("'verifier'")) {
+      db.pragma('foreign_keys = OFF')
+      db.exec(`CREATE TABLE stat_snapshots_new (
+        id TEXT PRIMARY KEY,
+        entity_type TEXT NOT NULL CHECK(entity_type IN ('project', 'agent', 'verifier')),
+        entity_id TEXT NOT NULL,
+        timestamp TEXT NOT NULL,
+        running INTEGER NOT NULL DEFAULT 0,
+        waiting INTEGER NOT NULL DEFAULT 0,
+        verify_waiting INTEGER NOT NULL DEFAULT 0,
+        completed INTEGER NOT NULL DEFAULT 0,
+        failed INTEGER NOT NULL DEFAULT 0,
+        total_tokens INTEGER NOT NULL DEFAULT 0,
+        cost_usd REAL NOT NULL DEFAULT 0
+      )`)
+      db.exec(`INSERT INTO stat_snapshots_new SELECT id, entity_type, entity_id, timestamp, running, waiting, verify_waiting, completed, failed, total_tokens, cost_usd FROM stat_snapshots`)
+      db.exec(`DROP TABLE stat_snapshots`)
+      db.exec(`ALTER TABLE stat_snapshots_new RENAME TO stat_snapshots`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_stat_snapshots_entity ON stat_snapshots(entity_type, entity_id, timestamp)`)
+      db.pragma('foreign_keys = ON')
+      console.log("[DB] stat_snapshots: added 'verifier' entity_type")
+    }
+    const summarySql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='stat_daily_summaries'").get() as any
+    if (summarySql?.sql && !summarySql.sql.includes("'verifier'")) {
+      db.pragma('foreign_keys = OFF')
+      db.exec(`CREATE TABLE stat_daily_summaries_new (
+        id TEXT PRIMARY KEY,
+        entity_type TEXT NOT NULL CHECK(entity_type IN ('project', 'agent', 'verifier')),
+        entity_id TEXT NOT NULL,
+        date TEXT NOT NULL,
+        avg_running REAL NOT NULL DEFAULT 0,
+        avg_waiting REAL NOT NULL DEFAULT 0,
+        avg_verify_waiting REAL NOT NULL DEFAULT 0,
+        avg_completed REAL NOT NULL DEFAULT 0,
+        avg_failed REAL NOT NULL DEFAULT 0,
+        avg_total_tokens REAL NOT NULL DEFAULT 0,
+        avg_cost_usd REAL NOT NULL DEFAULT 0,
+        sample_count INTEGER NOT NULL DEFAULT 0,
+        UNIQUE(entity_type, entity_id, date)
+      )`)
+      db.exec(`INSERT INTO stat_daily_summaries_new SELECT id, entity_type, entity_id, date, avg_running, avg_waiting, avg_verify_waiting, avg_completed, avg_failed, avg_total_tokens, avg_cost_usd, sample_count FROM stat_daily_summaries`)
+      db.exec(`DROP TABLE stat_daily_summaries`)
+      db.exec(`ALTER TABLE stat_daily_summaries_new RENAME TO stat_daily_summaries`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_stat_daily_summaries_lookup ON stat_daily_summaries(entity_type, entity_id, date)`)
+      db.pragma('foreign_keys = ON')
+      console.log("[DB] stat_daily_summaries: added 'verifier' entity_type")
+    }
+  } catch (e) { console.warn("[DB] verifier entity_type migration skipped:", e) }
 
   // Chat sessions & messages (Issue Chat feature)
   db.exec(`
@@ -661,6 +744,95 @@ function initSchema(db: Database.Database) {
     }
   } catch (e) { console.error('[DB] token_pricing migration failed:', e) }
 
+  // ── OAuth: oauth_providers 테이블 + users OAuth 컬럼 + password nullable ──
+  // 다중 GitLab 인스턴스 및 GitHub OAuth 로그인 지원
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS oauth_providers (
+      id TEXT PRIMARY KEY,
+      type TEXT NOT NULL CHECK(type IN ('github', 'gitlab')),
+      name TEXT NOT NULL,
+      base_url TEXT NOT NULL,
+      client_id TEXT NOT NULL,
+      client_secret TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `)
+
+  // users: OAuth 관련 컬럼 추가
+  try {
+    const userCols = db.prepare("PRAGMA table_info(users)").all() as any[]
+    if (!userCols.some((c: any) => c.name === 'oauth_provider_id')) {
+      db.exec("ALTER TABLE users ADD COLUMN oauth_provider_id TEXT")
+      db.exec("ALTER TABLE users ADD COLUMN oauth_user_id TEXT")
+      db.exec("ALTER TABLE users ADD COLUMN oauth_access_token TEXT")
+      db.exec("ALTER TABLE users ADD COLUMN oauth_refresh_token TEXT")
+      db.exec("ALTER TABLE users ADD COLUMN oauth_token_expires_at TEXT")
+      console.log('[DB] users: added OAuth columns')
+    }
+    // partial unique index: 같은 공급자에서 같은 사용자가 두 번 연결되지 않도록
+    db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_oauth
+             ON users(oauth_provider_id, oauth_user_id)
+             WHERE oauth_provider_id IS NOT NULL`)
+  } catch (e) { console.error('[DB] users OAuth columns migration failed:', e) }
+
+  // users.password NOT NULL → NULL 허용 (OAuth 전용 계정은 비밀번호 없음)
+  // 명시적 DDL로 재생성 — PRAGMA introspection 기반 재생성은 expression default 복원에서
+  // 실패할 수 있어 안정적이지 않음
+  try {
+    const sqlRow = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").get() as any
+    if (sqlRow?.sql && /password\s+TEXT\s+NOT\s+NULL/i.test(sqlRow.sql)) {
+      console.log('[DB] Migrating users: password NOT NULL → nullable (OAuth 지원)')
+      db.pragma('foreign_keys = OFF')
+      db.exec(`
+        CREATE TABLE users_new (
+          id TEXT PRIMARY KEY,
+          email TEXT NOT NULL,
+          name TEXT NOT NULL,
+          password TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          is_admin INTEGER NOT NULL DEFAULT 0,
+          max_agents INTEGER NOT NULL DEFAULT 0,
+          max_turns INTEGER NOT NULL DEFAULT 0,
+          avatar TEXT NOT NULL DEFAULT 'av-01',
+          allowed_clis TEXT NOT NULL DEFAULT 'opencode',
+          locale TEXT,
+          timezone TEXT,
+          git_username TEXT,
+          gitlab_username TEXT,
+          github_username TEXT,
+          oauth_provider_id TEXT,
+          oauth_user_id TEXT,
+          oauth_access_token TEXT,
+          oauth_refresh_token TEXT,
+          oauth_token_expires_at TEXT,
+          UNIQUE(email)
+        )
+      `)
+      db.exec(`
+        INSERT INTO users_new (
+          id, email, name, password, created_at,
+          is_admin, max_agents, max_turns, avatar, allowed_clis,
+          locale, timezone, git_username, gitlab_username, github_username,
+          oauth_provider_id, oauth_user_id, oauth_access_token, oauth_refresh_token, oauth_token_expires_at
+        ) SELECT
+          id, email, name, password, created_at,
+          is_admin, max_agents, max_turns, avatar, allowed_clis,
+          locale, timezone, git_username, gitlab_username, github_username,
+          oauth_provider_id, oauth_user_id, oauth_access_token, oauth_refresh_token, oauth_token_expires_at
+        FROM users
+      `)
+      db.exec('DROP INDEX IF EXISTS idx_users_oauth')
+      db.exec('DROP TABLE users')
+      db.exec('ALTER TABLE users_new RENAME TO users')
+      db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_oauth
+               ON users(oauth_provider_id, oauth_user_id)
+               WHERE oauth_provider_id IS NOT NULL`)
+      db.pragma('foreign_keys = ON')
+      console.log('[DB] users password nullable migration complete')
+    }
+  } catch (e) { console.error('[DB] users password nullable migration failed:', e) }
+
   seedAdmin(db)
   seedTokenPricing(db)
 }
@@ -722,6 +894,9 @@ function mapUser(r: any): User {
     timezone: r.timezone,
     gitlabUsername: r.gitlab_username,
     githubUsername: r.github_username,
+    oauthProviderId: r.oauth_provider_id ?? null,
+    oauthUserId: r.oauth_user_id ?? null,
+    oauthTokenExpiresAt: r.oauth_token_expires_at ?? null,
     createdAt: r.created_at,
   }
 }
@@ -759,6 +934,150 @@ export function updateUserGitUsernames(id: string, gitlabUsername: string | null
 
 export function createUser(u: any) {
   getDb().prepare('INSERT INTO users (id, email, password, name) VALUES (?, ?, ?, ?)').run(u.id, u.email, u.password, u.name)
+}
+
+// ── OAuth Providers ──
+// 저장 시 client_secret은 crypto.ts의 encrypt()로 암호화한 문자열을 전달할 것.
+// mapOAuthProvider는 client_secret을 절대 그대로 반환하지 않음 (undefined).
+
+function mapOAuthProvider(r: any): OAuthProvider {
+  return {
+    id: r.id,
+    type: r.type,
+    name: r.name,
+    baseUrl: r.base_url,
+    clientId: r.client_id,
+    // client_secret은 의도적으로 포함하지 않음 (관리자 UI 응답에서도 노출 금지)
+    enabled: r.enabled === 1,
+    createdAt: r.created_at,
+  }
+}
+
+export function getAllOAuthProviders(): OAuthProvider[] {
+  const rows = getDb().prepare('SELECT * FROM oauth_providers ORDER BY created_at ASC').all() as any[]
+  return rows.map(mapOAuthProvider)
+}
+
+export function getEnabledOAuthProviders(): OAuthProvider[] {
+  const rows = getDb().prepare('SELECT * FROM oauth_providers WHERE enabled = 1 ORDER BY created_at ASC').all() as any[]
+  return rows.map(mapOAuthProvider)
+}
+
+export function getOAuthProviderById(id: string): OAuthProvider | null {
+  const r = getDb().prepare('SELECT * FROM oauth_providers WHERE id = ?').get(id) as any
+  return r ? mapOAuthProvider(r) : null
+}
+
+/** client_secret 복호화는 호출 측에서 crypto.decrypt() 로 처리 */
+export function getOAuthProviderRaw(id: string): { id: string; type: 'github' | 'gitlab'; name: string; base_url: string; client_id: string; client_secret: string; enabled: number } | null {
+  return getDb().prepare('SELECT * FROM oauth_providers WHERE id = ?').get(id) as any ?? null
+}
+
+export function createOAuthProvider(p: {
+  id: string; type: 'github' | 'gitlab'; name: string; baseUrl: string;
+  clientId: string; clientSecretEncrypted: string; enabled?: boolean
+}) {
+  getDb().prepare(`INSERT INTO oauth_providers (id, type, name, base_url, client_id, client_secret, enabled)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)`).run(
+    p.id, p.type, p.name, p.baseUrl, p.clientId, p.clientSecretEncrypted, p.enabled === false ? 0 : 1
+  )
+}
+
+export function updateOAuthProvider(id: string, patch: {
+  name?: string; baseUrl?: string; clientId?: string; clientSecretEncrypted?: string; enabled?: boolean
+}) {
+  const fields: string[] = []
+  const values: any[] = []
+  if (patch.name !== undefined) { fields.push('name = ?'); values.push(patch.name) }
+  if (patch.baseUrl !== undefined) { fields.push('base_url = ?'); values.push(patch.baseUrl) }
+  if (patch.clientId !== undefined) { fields.push('client_id = ?'); values.push(patch.clientId) }
+  if (patch.clientSecretEncrypted !== undefined) { fields.push('client_secret = ?'); values.push(patch.clientSecretEncrypted) }
+  if (patch.enabled !== undefined) { fields.push('enabled = ?'); values.push(patch.enabled ? 1 : 0) }
+  if (fields.length === 0) return
+  values.push(id)
+  getDb().prepare(`UPDATE oauth_providers SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+}
+
+export function deleteOAuthProvider(id: string) {
+  getDb().prepare('DELETE FROM oauth_providers WHERE id = ?').run(id)
+}
+
+// ── OAuth User helpers ──
+
+/** oauth_provider_id + oauth_user_id로 기존 유저 조회 */
+export function getUserByOAuth(providerId: string, oauthUserId: string): User | null {
+  const r = getDb().prepare(
+    'SELECT * FROM users WHERE oauth_provider_id = ? AND oauth_user_id = ?'
+  ).get(providerId, oauthUserId) as any
+  return r ? mapUser(r) : null
+}
+
+/** 기존 유저(이메일로 찾은)에 OAuth 연결을 붙임. 암호화된 토큰을 받음 */
+export function linkUserOAuth(userId: string, params: {
+  providerId: string
+  oauthUserId: string
+  accessTokenEncrypted: string
+  refreshTokenEncrypted: string | null
+  tokenExpiresAt: string | null
+}) {
+  getDb().prepare(`UPDATE users SET
+    oauth_provider_id = ?,
+    oauth_user_id = ?,
+    oauth_access_token = ?,
+    oauth_refresh_token = ?,
+    oauth_token_expires_at = ?
+    WHERE id = ?`).run(
+    params.providerId, params.oauthUserId, params.accessTokenEncrypted,
+    params.refreshTokenEncrypted, params.tokenExpiresAt, userId
+  )
+}
+
+/** OAuth 경로로 신규 유저 생성 (password는 NULL) */
+export function createOAuthUser(u: {
+  id: string; email: string; name: string; avatar?: string;
+  providerId: string; oauthUserId: string;
+  accessTokenEncrypted: string;
+  refreshTokenEncrypted: string | null;
+  tokenExpiresAt: string | null;
+  gitlabUsername?: string | null;
+  githubUsername?: string | null;
+}) {
+  getDb().prepare(`INSERT INTO users (
+    id, email, password, name, avatar,
+    oauth_provider_id, oauth_user_id,
+    oauth_access_token, oauth_refresh_token, oauth_token_expires_at,
+    gitlab_username, github_username
+  ) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    u.id, u.email, u.name, u.avatar ?? 'av-01',
+    u.providerId, u.oauthUserId,
+    u.accessTokenEncrypted, u.refreshTokenEncrypted, u.tokenExpiresAt,
+    u.gitlabUsername ?? null, u.githubUsername ?? null
+  )
+}
+
+/** OAuth 토큰 갱신 (재로그인 또는 refresh token flow 시) */
+export function updateUserOAuthTokens(userId: string, params: {
+  accessTokenEncrypted: string
+  refreshTokenEncrypted: string | null
+  tokenExpiresAt: string | null
+}) {
+  getDb().prepare(`UPDATE users SET
+    oauth_access_token = ?,
+    oauth_refresh_token = ?,
+    oauth_token_expires_at = ?
+    WHERE id = ?`).run(
+    params.accessTokenEncrypted, params.refreshTokenEncrypted,
+    params.tokenExpiresAt, userId
+  )
+}
+
+/** OAuth access_token을 복호화하지 않은 raw 형태로 조회 (프로젝트 생성 시 복호화) */
+export function getUserOAuthTokenRaw(userId: string): { encrypted: string; providerId: string | null } | null {
+  const r = getDb().prepare(
+    'SELECT oauth_access_token, oauth_provider_id FROM users WHERE id = ?'
+  ).get(userId) as any
+  if (!r || !r.oauth_access_token) return null
+  return { encrypted: r.oauth_access_token, providerId: r.oauth_provider_id ?? null }
 }
 
 // ── Projects ──
@@ -1184,19 +1503,42 @@ export function markIssueVerifyStarted(projectId: string, issueIid: number) {
   ).run(now, projectId, issueIid)
 }
 
-export function markIssueVerified(projectId: string, issueIid: number, verifier?: { name: string; avatar?: string }) {
+export function markIssueVerified(projectId: string, issueIid: number, verifier?: { name: string; avatar?: string; username?: string | null }) {
   const now = new Date().toISOString()
+  // verifier_username은 우선 호출자가 전달, 없으면 issue_stages의 현재 assignee에서 읽음
+  let username = verifier?.username ?? null
+  let name = verifier?.name ?? null
+  let avatar = verifier?.avatar ?? null
+  if (!username) {
+    const cached = getIssueAssigneeUsername(projectId, issueIid)
+    if (cached.username) {
+      username = cached.username
+      if (!name) name = cached.name
+      if (!avatar) avatar = cached.avatar || null
+    }
+  }
   getDb().prepare(
-    "UPDATE task_executions SET verified_at = ?, verifier_name = ?, verifier_avatar = ? WHERE project_id = ? AND issue_iid = ? AND status IN ('success', 'failed') AND ended_at IS NOT NULL AND verified_at IS NULL"
-  ).run(now, verifier?.name ?? null, verifier?.avatar ?? null, projectId, issueIid)
+    "UPDATE task_executions SET verified_at = ?, verifier_name = ?, verifier_avatar = ?, verifier_username = ? WHERE project_id = ? AND issue_iid = ? AND status IN ('success', 'failed') AND ended_at IS NOT NULL AND verified_at IS NULL"
+  ).run(now, name, avatar, username, projectId, issueIid)
 }
 
 /** 검증 반려 시 rejected_at 기록 (verify_started_at이 있고 verified_at/rejected_at이 없는 실행만) */
-export function markIssueVerifyRejected(projectId: string, issueIid: number) {
+export function markIssueVerifyRejected(projectId: string, issueIid: number, verifier?: { name?: string | null; avatar?: string | null; username?: string | null }) {
   const now = new Date().toISOString()
+  let username = verifier?.username ?? null
+  let name = verifier?.name ?? null
+  let avatar = verifier?.avatar ?? null
+  if (!username) {
+    const cached = getIssueAssigneeUsername(projectId, issueIid)
+    if (cached.username) {
+      username = cached.username
+      if (!name) name = cached.name
+      if (!avatar) avatar = cached.avatar || null
+    }
+  }
   getDb().prepare(
-    "UPDATE task_executions SET rejected_at = ? WHERE project_id = ? AND issue_iid = ? AND status IN ('success', 'failed') AND ended_at IS NOT NULL AND verify_started_at IS NOT NULL AND verified_at IS NULL AND rejected_at IS NULL"
-  ).run(now, projectId, issueIid)
+    "UPDATE task_executions SET rejected_at = ?, verifier_name = COALESCE(verifier_name, ?), verifier_avatar = COALESCE(verifier_avatar, ?), verifier_username = COALESCE(verifier_username, ?) WHERE project_id = ? AND issue_iid = ? AND status IN ('success', 'failed') AND ended_at IS NOT NULL AND verify_started_at IS NOT NULL AND verified_at IS NULL AND rejected_at IS NULL"
+  ).run(now, name, avatar, username, projectId, issueIid)
 }
 
 /** 반려/재오픈 시 scheduled_at을 현재 시각으로 갱신 (재시도 execution의 대기시간을 정확히 계산하기 위해) */
@@ -1303,7 +1645,7 @@ export function createSnapshot(s: StatSnapshot) {
   ).run(s.id, s.entityType, s.entityId, s.timestamp, s.running, s.waiting, s.verifyWaiting, s.completed, s.failed, s.totalTokens, s.costUsd)
 }
 
-export function getSnapshots(entityType: 'project' | 'agent', entityId: string, limit: number = 60): StatSnapshot[] {
+export function getSnapshots(entityType: 'project' | 'agent' | 'verifier', entityId: string, limit: number = 60): StatSnapshot[] {
   const rows = getDb().prepare(`
     SELECT * FROM stat_snapshots
     WHERE entity_type = ? AND entity_id = ?
@@ -1319,7 +1661,7 @@ export function getSnapshots(entityType: 'project' | 'agent', entityId: string, 
   })).reverse()
 }
 
-export function getDailyAvgSnapshots(entityType: 'project' | 'agent', entityId: string, limit: number = 60): StatSnapshot[] {
+export function getDailyAvgSnapshots(entityType: 'project' | 'agent' | 'verifier', entityId: string, limit: number = 60): StatSnapshot[] {
   const rows = getDb().prepare(`
     SELECT
       DATE(timestamp) as day,
@@ -1351,7 +1693,7 @@ export function getDailyAvgSnapshots(entityType: 'project' | 'agent', entityId: 
   })).reverse()
 }
 
-export function getHourlyAvgSnapshots(entityType: 'project' | 'agent', entityId: string, limit: number = 60): StatSnapshot[] {
+export function getHourlyAvgSnapshots(entityType: 'project' | 'agent' | 'verifier', entityId: string, limit: number = 60): StatSnapshot[] {
   const rows = getDb().prepare(`
     SELECT
       STRFTIME('%Y-%m-%d %H:00', timestamp) as hour,
@@ -1806,6 +2148,7 @@ export interface ReportExecution {
   modelName: string | null
   verifierName: string | null
   verifierAvatar: string | null
+  verifierUsername: string | null
   assigneeType: string
 }
 
@@ -1821,7 +2164,7 @@ export function getExecutionsInRange(userId: string, start: string, end: string)
            te.started_at, te.ended_at, te.input_tokens, te.output_tokens, te.cost_usd, te.turns,
            te.issue_created_at, te.model_name, te.verified_at, te.verify_started_at, te.rejected_at,
            te.assignee_type, te.user_id as te_user_id, te.user_name as te_user_name, te.user_avatar as te_user_avatar,
-           te.verifier_name, te.verifier_avatar
+           te.verifier_name, te.verifier_avatar, te.verifier_username
     FROM task_executions te
     JOIN projects p ON p.id = te.project_id
     LEFT JOIN agents a ON a.id = te.agent_id
@@ -1847,6 +2190,7 @@ export function getExecutionsInRange(userId: string, start: string, end: string)
     rejectedAt: r.rejected_at ?? null,
     verifierName: r.verifier_name ?? null,
     verifierAvatar: r.verifier_avatar ?? null,
+    verifierUsername: r.verifier_username ?? null,
     assigneeType: r.assignee_type ?? 'agent',
   }))
 }
@@ -2029,6 +2373,292 @@ export function clearPreferredAgentRefs(agentId: string) {
   getDb().prepare('UPDATE issue_stages SET preferred_agent_id = NULL WHERE preferred_agent_id = ?').run(agentId)
 }
 
+// ── Project Members (Git 프로젝트 멤버 캐시) ──
+
+/** 스캐너가 주기적으로 호출 — 프로젝트 멤버 전체를 덮어쓰기 */
+export function replaceProjectMembers(
+  projectId: string,
+  members: { username: string; name: string; avatarUrl: string; provider: string }[]
+) {
+  const db = getDb()
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM project_members WHERE project_id = ?').run(projectId)
+    const stmt = db.prepare(`
+      INSERT INTO project_members (project_id, username, name, avatar_url, provider, updated_at)
+      VALUES (?, ?, ?, ?, ?, datetime('now'))
+    `)
+    for (const m of members) {
+      if (!m.username) continue
+      stmt.run(projectId, m.username, m.name || m.username, m.avatarUrl || '', m.provider || 'gitlab')
+    }
+  })
+  tx()
+}
+
+// ── Verifier (Git assignee 기반 검증자) ──
+
+/**
+ * 스캐너가 매 폴링마다 호출 — 이슈의 현재 Git assignee와 레이블 기반 stage를 스냅샷으로 저장합니다.
+ * 집계는 이 스냅샷에서 읽어 Git API 재호출을 회피합니다.
+ */
+export function upsertIssueStageSnapshot(
+  projectId: string,
+  issueIid: number,
+  snapshot: {
+    cachedStage: string | null
+    assigneeUsername: string | null
+    assigneeName: string | null
+    assigneeAvatar: string | null
+    assigneeProvider: string | null
+    issueTitle: string | null
+  }
+) {
+  getDb().prepare(`
+    INSERT INTO issue_stages (project_id, issue_iid, stage, cached_stage, assignee_username, assignee_name, assignee_avatar, assignee_provider, issue_title, verify_waiting_since, updated_at)
+    VALUES (?, ?, '', ?, ?, ?, ?, ?, ?,
+      CASE WHEN ? IN ('verify_waiting', 'verifying') THEN datetime('now') ELSE NULL END,
+      datetime('now'))
+    ON CONFLICT(project_id, issue_iid) DO UPDATE SET
+      cached_stage = excluded.cached_stage,
+      assignee_username = excluded.assignee_username,
+      assignee_name = excluded.assignee_name,
+      assignee_avatar = excluded.assignee_avatar,
+      assignee_provider = excluded.assignee_provider,
+      issue_title = excluded.issue_title,
+      verify_waiting_since = CASE
+        WHEN excluded.cached_stage IN ('verify_waiting', 'verifying') THEN
+          COALESCE(issue_stages.verify_waiting_since, datetime('now'))
+        ELSE NULL
+      END,
+      updated_at = datetime('now')
+  `).run(
+    projectId, issueIid,
+    snapshot.cachedStage,
+    snapshot.assigneeUsername,
+    snapshot.assigneeName,
+    snapshot.assigneeAvatar,
+    snapshot.assigneeProvider,
+    snapshot.issueTitle,
+    snapshot.cachedStage
+  )
+}
+
+/** 특정 이슈의 현재 assignee(username) 조회 — 검증자 기록용 */
+export function getIssueAssigneeUsername(projectId: string, issueIid: number): { username: string | null; name: string | null; avatar: string | null } {
+  const r = getDb().prepare(
+    'SELECT assignee_username, assignee_name, assignee_avatar FROM issue_stages WHERE project_id = ? AND issue_iid = ?'
+  ).get(projectId, issueIid) as any
+  return {
+    username: r?.assignee_username || null,
+    name: r?.assignee_name || null,
+    avatar: r?.assignee_avatar || null,
+  }
+}
+
+export interface VerifierSummary {
+  username: string
+  name: string
+  avatar: string
+  provider: string
+  verifying: number        // 현재 검증 중 (cached_stage='verifying')
+  verifyWaiting: number    // 검증 대기 (cached_stage='verify_waiting')
+  approvedToday: number    // 오늘 승인한 건수
+  rejectedToday: number    // 오늘 반려한 건수
+  approved7d: number       // 최근 7일 승인
+  rejected7d: number       // 최근 7일 반려
+  avgVerifyMin: number     // 최근 7일 평균 검증 소요 (분)
+  oldestWaitMin: number    // 가장 오래 기다린 검증대기 이슈 경과 시간 (분)
+  assignedProjects: { id: string; name: string; color: string; provider: string }[]
+}
+
+/**
+ * 잠재 검증자 전체 목록 — 프로젝트 멤버(등록된 Git 사용자) + 현재 assignee + 최근 검증 이력의 합집합.
+ * 현재 대기/검증 중 건수가 0이어도 프로젝트 멤버면 카드로 표시되어 상대 비교가 가능합니다.
+ */
+export function getVerifiersList(userId: string): VerifierSummary[] {
+  const db = getDb()
+  const accessCondition = `(p.user_id = ? OR EXISTS (SELECT 1 FROM project_shares ps WHERE ps.project_id = p.id AND ps.user_id = ?))`
+  const todayStartISO = getKSTTodayStartISO()
+  const week7Ago = new Date(Date.now() - 7 * 86400 * 1000).toISOString()
+
+  // 1) 프로젝트 멤버 전체 목록 (사용자 접근 가능 프로젝트의 캐시된 Git 멤버)
+  const memberRows = db.prepare(`
+    SELECT pm.username, pm.name, pm.avatar_url, pm.provider, p.id as project_id, p.name as project_name, p.color as project_color
+    FROM project_members pm
+    JOIN projects p ON p.id = pm.project_id
+    WHERE ${accessCondition}
+  `).all(userId, userId) as any[]
+
+  interface Meta { name: string; avatar: string; provider: string; projects: Map<string, { id: string; name: string; color: string; provider: string }> }
+  const usernameMeta = new Map<string, Meta>()
+  for (const m of memberRows) {
+    const existing = usernameMeta.get(m.username) || { name: m.name || m.username, avatar: m.avatar_url || 'av-01', provider: m.provider || 'gitlab', projects: new Map() }
+    existing.projects.set(m.project_id, { id: m.project_id, name: m.project_name, color: m.project_color, provider: m.provider || 'gitlab' })
+    if (!existing.name && m.name) existing.name = m.name
+    if (!existing.avatar && m.avatar_url) existing.avatar = m.avatar_url
+    usernameMeta.set(m.username, existing)
+  }
+
+  // 2) 현재 검증중/대기 집계 (issue_stages 스캐너 스냅샷)
+  const currentRows = db.prepare(`
+    SELECT
+      s.assignee_username as username,
+      MAX(s.assignee_name) as name,
+      MAX(s.assignee_avatar) as avatar,
+      MAX(s.assignee_provider) as provider,
+      SUM(CASE WHEN s.cached_stage = 'verifying' THEN 1 ELSE 0 END) as verifying,
+      SUM(CASE WHEN s.cached_stage = 'verify_waiting' THEN 1 ELSE 0 END) as verify_waiting,
+      MIN(CASE WHEN s.cached_stage IN ('verify_waiting', 'verifying') THEN s.verify_waiting_since ELSE NULL END) as oldest_wait_at
+    FROM issue_stages s
+    JOIN projects p ON p.id = s.project_id
+    WHERE s.assignee_username IS NOT NULL
+      AND s.cached_stage IN ('verify_waiting', 'verifying')
+      AND ${accessCondition}
+    GROUP BY s.assignee_username
+  `).all(userId, userId) as any[]
+  const currentMap = new Map<string, any>()
+  for (const r of currentRows) {
+    currentMap.set(r.username, r)
+    // 멤버 캐시에 없는 assignee도 목록에 포함
+    if (!usernameMeta.has(r.username)) {
+      usernameMeta.set(r.username, {
+        name: r.name || r.username,
+        avatar: r.avatar || 'av-01',
+        provider: r.provider || 'gitlab',
+        projects: new Map(),
+      })
+    }
+  }
+
+  // 3) 최근 7일 / 오늘 승인·반려 + 평균 검증시간 (task_executions.verifier_username)
+  const execStats = db.prepare(`
+    SELECT
+      te.verifier_username as username,
+      SUM(CASE WHEN te.verified_at IS NOT NULL AND te.verified_at >= ? THEN 1 ELSE 0 END) as approved_7d,
+      SUM(CASE WHEN te.rejected_at IS NOT NULL AND te.rejected_at >= ? THEN 1 ELSE 0 END) as rejected_7d,
+      SUM(CASE WHEN te.verified_at IS NOT NULL AND te.verified_at >= ? THEN 1 ELSE 0 END) as approved_today,
+      SUM(CASE WHEN te.rejected_at IS NOT NULL AND te.rejected_at >= ? THEN 1 ELSE 0 END) as rejected_today,
+      AVG(CASE WHEN te.verified_at IS NOT NULL AND te.verify_started_at IS NOT NULL AND te.verified_at >= ?
+        THEN (strftime('%s', te.verified_at) - strftime('%s', te.verify_started_at)) / 60.0
+        ELSE NULL END) as avg_verify_min
+    FROM task_executions te
+    JOIN projects p ON p.id = te.project_id
+    WHERE te.verifier_username IS NOT NULL
+      AND ${accessCondition}
+    GROUP BY te.verifier_username
+  `).all(week7Ago, week7Ago, todayStartISO, todayStartISO, week7Ago, userId, userId) as any[]
+  const execMap = new Map<string, any>()
+  for (const r of execStats) {
+    execMap.set(r.username, r)
+    if (!usernameMeta.has(r.username)) {
+      usernameMeta.set(r.username, { name: r.username, avatar: 'av-01', provider: 'gitlab', projects: new Map() })
+    }
+  }
+
+  const now = Date.now()
+  return Array.from(usernameMeta.entries()).map(([username, meta]) => {
+    const curr = currentMap.get(username)
+    const exec = execMap.get(username)
+    const oldestWaitMs = curr?.oldest_wait_at ? now - new Date(curr.oldest_wait_at + 'Z').getTime() : 0
+    return {
+      username,
+      name: meta.name,
+      avatar: meta.avatar,
+      provider: meta.provider,
+      verifying: Number(curr?.verifying || 0),
+      verifyWaiting: Number(curr?.verify_waiting || 0),
+      approvedToday: Number(exec?.approved_today || 0),
+      rejectedToday: Number(exec?.rejected_today || 0),
+      approved7d: Number(exec?.approved_7d || 0),
+      rejected7d: Number(exec?.rejected_7d || 0),
+      avgVerifyMin: exec?.avg_verify_min != null ? Math.round(Number(exec.avg_verify_min) * 10) / 10 : 0,
+      oldestWaitMin: oldestWaitMs > 0 ? Math.round(oldestWaitMs / 60000) : 0,
+      assignedProjects: Array.from(meta.projects.values()),
+    }
+  }).sort((a, b) => {
+    // 1) 현재 대기(검증대기+검증중) 내림차순 → 병목부터
+    const diff = (b.verifyWaiting + b.verifying) - (a.verifyWaiting + a.verifying)
+    if (diff !== 0) return diff
+    // 2) 최근 7일 승인 내림차순 → 활발한 사람부터
+    const activityDiff = (b.approved7d + b.rejected7d) - (a.approved7d + a.rejected7d)
+    if (activityDiff !== 0) return activityDiff
+    // 3) 이름 알파벳순
+    return a.name.localeCompare(b.name)
+  })
+}
+
+/** 보고서용 — 현재 검증 대기/중 backlog 집계 */
+export function getVerifierBacklogForReport(userId: string): {
+  username: string
+  name: string
+  avatar: string
+  provider: string
+  verifyWaiting: number
+  verifying: number
+  oldestWaitMin: number
+  assignedProjectNames: string[]
+}[] {
+  const db = getDb()
+  const rows = db.prepare(`
+    SELECT
+      s.assignee_username as username,
+      MAX(s.assignee_name) as name,
+      MAX(s.assignee_avatar) as avatar,
+      MAX(s.assignee_provider) as provider,
+      SUM(CASE WHEN s.cached_stage = 'verify_waiting' THEN 1 ELSE 0 END) as verify_waiting,
+      SUM(CASE WHEN s.cached_stage = 'verifying' THEN 1 ELSE 0 END) as verifying,
+      MIN(CASE WHEN s.cached_stage IN ('verify_waiting', 'verifying') THEN s.verify_waiting_since ELSE NULL END) as oldest_wait_at
+    FROM issue_stages s
+    JOIN projects p ON p.id = s.project_id
+    WHERE s.assignee_username IS NOT NULL
+      AND s.cached_stage IN ('verify_waiting', 'verifying')
+      AND (p.user_id = ? OR EXISTS (SELECT 1 FROM project_shares ps WHERE ps.project_id = p.id AND ps.user_id = ?))
+    GROUP BY s.assignee_username
+  `).all(userId, userId) as any[]
+
+  const projectRows = db.prepare(`
+    SELECT DISTINCT s.assignee_username as username, p.name as project_name
+    FROM issue_stages s
+    JOIN projects p ON p.id = s.project_id
+    WHERE s.assignee_username IS NOT NULL
+      AND s.cached_stage IN ('verify_waiting', 'verifying')
+      AND (p.user_id = ? OR EXISTS (SELECT 1 FROM project_shares ps WHERE ps.project_id = p.id AND ps.user_id = ?))
+  `).all(userId, userId) as any[]
+  const projMap = new Map<string, string[]>()
+  for (const r of projectRows) {
+    if (!projMap.has(r.username)) projMap.set(r.username, [])
+    projMap.get(r.username)!.push(r.project_name)
+  }
+
+  const now = Date.now()
+  return rows.map(r => ({
+    username: r.username,
+    name: r.name || r.username,
+    avatar: r.avatar || 'av-01',
+    provider: r.provider || 'gitlab',
+    verifyWaiting: Number(r.verify_waiting || 0),
+    verifying: Number(r.verifying || 0),
+    oldestWaitMin: r.oldest_wait_at ? Math.round((now - new Date(r.oldest_wait_at + 'Z').getTime()) / 60000) : 0,
+    assignedProjectNames: projMap.get(r.username) || [],
+  }))
+}
+
+/** 특정 검증자 앞에 대기 중인 이슈 목록 */
+export function getVerifierQueue(userId: string, username: string): { projectId: string; projectName: string; projectColor: string; issueIid: number; issueTitle: string; stage: string; waitingSince: string | null }[] {
+  return getDb().prepare(`
+    SELECT
+      s.project_id as projectId, p.name as projectName, p.color as projectColor,
+      s.issue_iid as issueIid, COALESCE(s.issue_title, '') as issueTitle,
+      s.cached_stage as stage, s.verify_waiting_since as waitingSince
+    FROM issue_stages s
+    JOIN projects p ON p.id = s.project_id
+    WHERE s.assignee_username = ?
+      AND s.cached_stage IN ('verify_waiting', 'verifying')
+      AND (p.user_id = ? OR EXISTS (SELECT 1 FROM project_shares ps WHERE ps.project_id = p.id AND ps.user_id = ?))
+    ORDER BY s.verify_waiting_since IS NULL, s.verify_waiting_since ASC, s.issue_iid ASC
+  `).all(username, userId, userId) as any[]
+}
+
 // ── Report Schedules (보고서 스케줄) ──
 
 function mapReportSchedule(r: any): ReportSchedule {
@@ -2123,7 +2753,7 @@ export function getGlobalExecutionsInRange(start: string, end: string): ReportEx
            te.issue_iid, te.issue_title, te.status,
            te.started_at, te.ended_at, te.input_tokens, te.output_tokens, te.cost_usd, te.turns,
            te.issue_created_at, te.model_name, te.verified_at, te.verify_started_at, te.rejected_at,
-           te.assignee_type, te.verifier_name, te.verifier_avatar
+           te.assignee_type, te.verifier_name, te.verifier_avatar, te.verifier_username
     FROM task_executions te
     JOIN projects p ON p.id = te.project_id
     LEFT JOIN agents a ON a.id = te.agent_id
@@ -2148,6 +2778,7 @@ export function getGlobalExecutionsInRange(start: string, end: string): ReportEx
     rejectedAt: r.rejected_at ?? null,
     verifierName: r.verifier_name ?? null,
     verifierAvatar: r.verifier_avatar ?? null,
+    verifierUsername: r.verifier_username ?? null,
     assigneeType: r.assignee_type ?? 'agent',
   }))
 }

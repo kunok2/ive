@@ -5,6 +5,12 @@ import {
 } from './db'
 import { getKSTTodayStartISO } from './date-utils'
 
+interface VerifierAggRow {
+  username: string
+  verifying: number
+  verify_waiting: number
+}
+
 let collectorStarted = false
 
 export function startStatsCollector() {
@@ -121,5 +127,58 @@ function collectSnapshots() {
         costUsd: todayStats.cost_usd,
       })
     }
+  }
+
+  // ── 검증자별 스냅샷 (Git assignee 기반) ──
+  // issue_stages의 assignee_username 기준으로 현재 검증중/대기 집계 + 오늘 승인/반려
+  try {
+    const verifierRows = db.prepare(`
+      SELECT
+        assignee_username as username,
+        SUM(CASE WHEN cached_stage = 'verifying' THEN 1 ELSE 0 END) as verifying,
+        SUM(CASE WHEN cached_stage = 'verify_waiting' THEN 1 ELSE 0 END) as verify_waiting
+      FROM issue_stages
+      WHERE assignee_username IS NOT NULL AND cached_stage IN ('verifying', 'verify_waiting')
+      GROUP BY assignee_username
+    `).all() as VerifierAggRow[]
+
+    // 최근 승인/반려 이력이 있는 검증자도 스냅샷에 포함 (대기가 0이더라도 추이 보존)
+    const recentVerifiers = db.prepare(`
+      SELECT DISTINCT verifier_username as username
+      FROM task_executions
+      WHERE verifier_username IS NOT NULL
+        AND (verified_at >= ? OR rejected_at >= ?)
+    `).all(todayStartISO, todayStartISO) as { username: string }[]
+
+    const seenVerifiers = new Set<string>()
+    for (const v of verifierRows) seenVerifiers.add(v.username)
+    for (const v of recentVerifiers) seenVerifiers.add(v.username)
+
+    for (const username of seenVerifiers) {
+      const agg = verifierRows.find(r => r.username === username)
+      const todayAgg = db.prepare(`
+        SELECT
+          COUNT(CASE WHEN verified_at IS NOT NULL AND verified_at >= ? THEN 1 END) as completed,
+          COUNT(CASE WHEN rejected_at IS NOT NULL AND rejected_at >= ? THEN 1 END) as failed
+        FROM task_executions
+        WHERE verifier_username = ?
+      `).get(todayStartISO, todayStartISO, username) as { completed: number; failed: number }
+
+      createSnapshot({
+        id: `snap-v-${username}-${Date.now()}`,
+        entityType: 'verifier',
+        entityId: username,
+        timestamp: now,
+        running: Number(agg?.verifying || 0),       // running → 검증중
+        waiting: Number(agg?.verify_waiting || 0),  // waiting → 검증대기
+        verifyWaiting: 0,
+        completed: todayAgg.completed,              // 오늘 승인
+        failed: todayAgg.failed,                    // 오늘 반려
+        totalTokens: 0,
+        costUsd: 0,
+      })
+    }
+  } catch (e) {
+    console.warn('[StatsCollector] verifier snapshot error:', (e as Error).message)
   }
 }

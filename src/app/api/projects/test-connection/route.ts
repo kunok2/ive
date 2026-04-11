@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
-import { getProject } from '@/lib/db'
+import { getProject, getUserOAuthTokenRaw } from '@/lib/db'
 import { decrypt } from '@/lib/crypto'
 import { AuthType, detectProvider } from '@/types'
 
@@ -8,22 +8,39 @@ export async function POST(req: Request) {
   const user = await getCurrentUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { repoUrl, authType, gitUsername, accessToken, projectId } = await req.json() as {
+  const { repoUrl, authType, gitUsername, accessToken, projectId, useOAuthToken } = await req.json() as {
     repoUrl: string
     authType: AuthType
     gitUsername: string
     accessToken: string
     projectId?: string
+    useOAuthToken?: boolean
   }
 
   if (!repoUrl) {
     return NextResponse.json({ error: '저장소 URL을 입력해주세요' }, { status: 400 })
   }
 
-  // 인증 정보 결정: 새로 입력된 토큰 우선, 없으면 기존 프로젝트의 저장된 토큰 사용
+  // 인증 정보 결정 우선순위:
+  //   1. useOAuthToken=true → 현재 유저의 OAuth access_token 복호화
+  //   2. 새로 입력된 accessToken
+  //   3. (수정 모드) 기존 프로젝트의 저장된 토큰
   let token = accessToken
   let username = gitUsername
   let authMode = authType || 'token'
+
+  if (useOAuthToken) {
+    const raw = getUserOAuthTokenRaw(user.id)
+    if (!raw || !raw.encrypted) {
+      return NextResponse.json({ error: '연결된 OAuth 토큰이 없습니다' }, { status: 400 })
+    }
+    try {
+      token = decrypt(raw.encrypted)
+    } catch {
+      return NextResponse.json({ error: 'OAuth 토큰 복호화 실패' }, { status: 500 })
+    }
+    authMode = 'token'
+  }
 
   if (!token && projectId) {
     const existing = getProject(projectId)

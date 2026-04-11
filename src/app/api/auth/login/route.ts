@@ -15,6 +15,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: '이메일 또는 비밀번호가 올바르지 않습니다' }, { status: 401 })
   }
 
+  // OAuth 전용 계정(password NULL)은 로컬 로그인 불가
+  if (!user.password) {
+    return NextResponse.json({ error: 'OAuth로 가입된 계정입니다. OAuth 로그인을 사용해주세요' }, { status: 401 })
+  }
+
   const valid = await verifyPassword(password, user.password)
   if (!valid) {
     return NextResponse.json({ error: '이메일 또는 비밀번호가 올바르지 않습니다' }, { status: 401 })

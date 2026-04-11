@@ -9,9 +9,11 @@ interface Props {
   children: ReactNode
   dark?: boolean
   size?: 'sm' | 'md'
+  /** 오버레이(백드롭) 클릭 시 닫을지 여부. 기본 true */
+  closeOnBackdrop?: boolean
 }
 
-export default function Modal({ open, onClose, title, children, dark, size = 'md' }: Props) {
+export default function Modal({ open, onClose, title, children, dark, size = 'md', closeOnBackdrop = true }: Props) {
   const backdropRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -29,7 +31,7 @@ export default function Modal({ open, onClose, title, children, dark, size = 'md
     <div
       ref={backdropRef}
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      onClick={e => { if (e.target === backdropRef.current) onClose() }}
+      onClick={e => { if (closeOnBackdrop && e.target === backdropRef.current) onClose() }}
     >
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm pointer-events-none" />
       <div className={`relative w-full ${size === 'sm' ? 'max-w-xs' : 'max-w-lg'} ${dark ? 'bg-[#0f172a] border-[#1e293b]' : 'bg-ive-bg-card border-ive-border'} border rounded-2xl max-h-[90vh] flex flex-col animate-slide-up overflow-hidden shadow-2xl`}>

@@ -261,7 +261,12 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
         <div className="flex items-center gap-2.5 min-w-0 flex-1">
           <AgentAvatar avatar={agent.avatar} size="md" toolBadge={toolBadge} />
           <div className="min-w-0">
-            <div className="text-base font-bold text-ive-green-pale truncate">{agent.name}</div>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="text-base font-bold text-ive-green-pale truncate">{agent.name}</span>
+              <span className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold bg-ive-green/20 text-ive-green">
+                <i className="fa-solid fa-robot" />{t('workerBadge')}
+              </span>
+            </div>
             <div className="text-sm text-ive-text-muted truncate">{cli.label} · {cli.desc}</div>
             {collapsed && assignedProjects && assignedProjects.length > 0 && (
               <div className="text-xs text-ive-text-dim mt-0.5 truncate">

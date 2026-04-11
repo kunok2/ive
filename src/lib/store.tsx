@@ -47,7 +47,7 @@ const StoreContext = createContext<{
   refreshUser: () => Promise<User | null>
   refresh: () => Promise<void>
   logout: () => Promise<void>
-  addProject: (p: Omit<Project, 'id' | 'userId' | 'createdAt' | 'conflictCount'>) => Promise<void>
+  addProject: (p: Omit<Project, 'id' | 'userId' | 'createdAt' | 'conflictCount'> & { useOAuthToken?: boolean }) => Promise<void>
   updateProject: (p: Project) => Promise<void>
   deleteProject: (id: string) => Promise<void>
   refreshAgents: () => Promise<void>
@@ -176,7 +176,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(interval)
   }, [refreshUser, refresh, refreshAgents])
 
-  const addProject = useCallback(async (p: Omit<Project, 'id' | 'userId' | 'createdAt' | 'conflictCount'>) => {
+  const addProject = useCallback(async (p: Omit<Project, 'id' | 'userId' | 'createdAt' | 'conflictCount'> & { useOAuthToken?: boolean }) => {
     await fetch('/api/projects', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

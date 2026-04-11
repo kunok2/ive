@@ -164,6 +164,36 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
     prevByAgent.set(e.agentId, a)
   }
 
+  // 검증자별 집계 (Git assignee 기반 — verifier_username 키)
+  const byVerifier = new Map<string, { username: string; name: string; avatar: string; provider: string; approved: number; rejected: number; avgVerifyMin: number; _verifyMinAcc: number; _verifyMinCnt: number }>()
+  for (const e of executions) {
+    if (!e.verifierUsername) continue
+    const v = byVerifier.get(e.verifierUsername) || {
+      username: e.verifierUsername,
+      name: e.verifierName || e.verifierUsername,
+      avatar: e.verifierAvatar || 'av-01',
+      provider: 'gitlab',
+      approved: 0,
+      rejected: 0,
+      avgVerifyMin: 0,
+      _verifyMinAcc: 0,
+      _verifyMinCnt: 0,
+    }
+    if (e.verifiedAt) v.approved++
+    if (e.rejectedAt && !e.verifiedAt) v.rejected++
+    if (e.verifiedAt && e.verifyStartedAt) {
+      const mins = (new Date(e.verifiedAt).getTime() - new Date(e.verifyStartedAt).getTime()) / 60000
+      if (mins >= 0) {
+        v._verifyMinAcc += mins
+        v._verifyMinCnt++
+      }
+    }
+    byVerifier.set(e.verifierUsername, v)
+  }
+  for (const v of byVerifier.values()) {
+    v.avgVerifyMin = v._verifyMinCnt > 0 ? v._verifyMinAcc / v._verifyMinCnt : 0
+  }
+
   // 사용자별 집계 (이슈 생성건수 포함)
   const byUser = new Map<string, { name: string; total: number; success: number; failed: number; cost: number; issueCount: number; projectCount: number }>()
   for (const e of executions) {
@@ -480,6 +510,44 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
           </tr>
         </thead>
         <tbody>${agentRows}</tbody>
+      </table>
+    </div>
+    ` : ''}
+
+    ${byVerifier.size > 0 ? `
+    <!-- 검증자별 -->
+    <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:20px;">
+      <h3 style="color:#111827;font-size:14px;margin:0 0 12px;font-weight:700;">검증자별 현황</h3>
+      <table width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;color:#111827;">
+        <thead>
+          <tr style="color:#6b7280;font-size:11px;">
+            <th style="padding:6px 12px;text-align:left;border-bottom:1px solid #e5e7eb;">검증자</th>
+            <th style="padding:6px 12px;text-align:center;border-bottom:1px solid #e5e7eb;">승인</th>
+            <th style="padding:6px 12px;text-align:center;border-bottom:1px solid #e5e7eb;">반려</th>
+            <th style="padding:6px 12px;text-align:right;border-bottom:1px solid #e5e7eb;">평균 검증시간</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${Array.from(byVerifier.values())
+            .sort((a, b) => (b.approved + b.rejected) - (a.approved + a.rejected))
+            .map(v => {
+              const avgLabel = v.avgVerifyMin > 0
+                ? v.avgVerifyMin < 60
+                  ? `${Math.round(v.avgVerifyMin)}분`
+                  : `${Math.floor(v.avgVerifyMin / 60)}시간 ${Math.round(v.avgVerifyMin % 60)}분`
+                : '-'
+              return `
+              <tr>
+                <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#111827;">
+                  <strong>${esc(v.name)}</strong>
+                  <span style="color:#6b7280;font-size:11px;"> @${esc(v.username)}</span>
+                </td>
+                <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;color:#16a34a;font-weight:600;">${v.approved}</td>
+                <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;color:#dc2626;font-weight:600;">${v.rejected}</td>
+                <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#111827;">${avgLabel}</td>
+              </tr>`
+            }).join('')}
+        </tbody>
       </table>
     </div>
     ` : ''}

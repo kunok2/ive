@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
-import { getExecutionsInRange, getDailyWaitingTrend, getDailyWaitingTrendByAgent, getProjectAssignmentCounts, getProjectAssignmentAgentIds, getAgentAssignmentInfo } from '@/lib/db'
+import { getExecutionsInRange, getDailyWaitingTrend, getDailyWaitingTrendByAgent, getProjectAssignmentCounts, getProjectAssignmentAgentIds, getAgentAssignmentInfo, getVerifierBacklogForReport } from '@/lib/db'
 import { resolveExecutionCost, getHumanMonthlySalary } from '@/lib/token-pricing'
 import { getKSTTodayString, utcISOToKSTDate, utcISOToKSTMonth } from '@/lib/date-utils'
 
@@ -934,5 +934,6 @@ export async function GET(req: NextRequest) {
     agentWaitingTrend: agentWaitingTrend.daily,
     totalAssignedAgents: Object.values(projectAssignCounts).reduce((s, c) => s + c, 0),
     prevAgentWaitingTrend: prevAgentWaitingTrend.daily,
+    verifierBacklog: getVerifierBacklogForReport(user.id),
   })
 }

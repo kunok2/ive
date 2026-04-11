@@ -26,7 +26,10 @@ import {
   recordIssueScheduledAt,
   getIssueScheduledAt,
   getAssignedUserExecution,
+  upsertIssueStageSnapshot,
+  replaceProjectMembers,
 } from "./db";
+import { fetchProjectMembers } from "./provider";
 import { decrypt } from "./crypto";
 import { defaultLocale } from "@/i18n/config";
 import { addIssueLabels, removeIssueLabels, addIssueComment, createBranch, getDefaultBranch } from "./provider";
@@ -61,6 +64,9 @@ import { calcCostFromDb } from "./token-pricing";
 
 const exec = promisify(require('child_process').exec);
 const execFile = promisify(require('child_process').execFile);
+
+// 프로젝트별 멤버 캐시 갱신 시각 (30분 throttle)
+const memberSyncAt = new Map<string, number>();
 
 /**
  * OpenCode run --format json 이벤트를 읽기 좋은 로그 텍스트로 변환
@@ -401,8 +407,27 @@ export async function scanProject(project: Project, force: boolean = false) {
     }
 
     console.log(`[Scanner] ${force ? 'FORCED ' : ''}Scanning project: ${project.name}`);
-    
+
     const decryptedToken = decrypt(project.accessToken);
+
+    // 프로젝트 멤버 캐시 갱신 (30분 간격 throttle) — 검증자 후보 풀에 사용
+    const lastMemberSyncMs = memberSyncAt.get(project.id) || 0;
+    if (force || (Date.now() - lastMemberSyncMs) > 30 * 60 * 1000) {
+      try {
+        const members = await fetchProjectMembers(project, decryptedToken);
+        const mapped = (members || []).map((m: { username?: string; login?: string; name?: string; avatar_url?: string }) => ({
+          username: m.username || m.login || '',
+          name: m.name || m.username || m.login || '',
+          avatarUrl: m.avatar_url || '',
+          provider: project.provider,
+        })).filter((m: { username: string }) => m.username);
+        replaceProjectMembers(project.id, mapped);
+        memberSyncAt.set(project.id, Date.now());
+        console.log(`[Scanner] Cached ${mapped.length} members for project ${project.name}`);
+      } catch (e) {
+        console.warn(`[Scanner] fetchProjectMembers failed for ${project.name}:`, (e as Error).message);
+      }
+    }
     let issueCount = 0;           // 처리 대기 (waiting) 이슈 수
     let verifyWaitingCount = 0;   // 검증 대기 이슈 수
 
@@ -470,6 +495,21 @@ export async function scanProject(project: Project, force: boolean = false) {
       const labels: string[] = issue.labels || [];
       const activeExec = hasActiveExecution(project.id, iid);
       const stage = stageFromLabels(labels, project, { hasActiveExec: activeExec });
+
+      // 검증자별 부하 집계용 스냅샷 — Git assignee + 현재 stage 저장
+      try {
+        const assignee = (issue.assignees && issue.assignees.length > 0) ? issue.assignees[0] : null;
+        upsertIssueStageSnapshot(project.id, iid, {
+          cachedStage: stage,
+          assigneeUsername: assignee ? (assignee.username || assignee.login || null) : null,
+          assigneeName: assignee ? (assignee.name || assignee.username || assignee.login || null) : null,
+          assigneeAvatar: assignee ? (assignee.avatar_url || null) : null,
+          assigneeProvider: project.provider,
+          issueTitle: issue.title || null,
+        });
+      } catch (e) {
+        console.warn(`[Scanner] upsertIssueStageSnapshot failed (#${iid}):`, (e as Error).message);
+      }
 
       // 사람 작업 완료 감지: 담당자가 Git에서 레이블을 IVE-W, IVE-V 또는 IVE-E로 변경한 경우
       if (activeExec && (stage === 'verify_waiting' || stage === 'verifying' || stage === 'done')) {

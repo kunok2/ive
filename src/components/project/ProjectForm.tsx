@@ -23,6 +23,15 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
   const [repoUrl, setRepoUrl] = useState(existing?.repoUrl ?? '')
   const [accessToken, setAccessToken] = useState('')
 
+  // OAuth 토큰 재사용
+  const [oauthInfo, setOauthInfo] = useState<{
+    hasToken: boolean
+    providerType?: 'github' | 'gitlab'
+    providerName?: string
+    baseUrl?: string
+  }>({ hasToken: false })
+  const [useOAuthToken, setUseOAuthToken] = useState(false)
+
   // 이슈 레이블 설정
   const [labelTarget, setLabelTarget] = useState(existing?.labelTarget ?? 'IVE')
   const [labelSchedule, setLabelSchedule] = useState(existing?.labelSchedule ?? 'IVE-S')
@@ -74,6 +83,14 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
     if (existing) fetchShares()
   }, [existing, fetchShares])
 
+  // 현재 유저의 OAuth 토큰 정보 로드 (있으면 체크박스 노출)
+  useEffect(() => {
+    fetch('/api/auth/oauth/my-token')
+      .then(r => r.ok ? r.json() : { hasToken: false })
+      .then(data => setOauthInfo(data))
+      .catch(() => setOauthInfo({ hasToken: false }))
+  }, [])
+
   // 패널 열릴 때 최신 데이터 갱신
   useEffect(() => {
     if (existing && showSharing) fetchShares()
@@ -123,7 +140,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
 
   async function handleTestConnection() {
     if (!repoUrl.trim()) return
-    if (!accessToken.trim() && !existing) return
+    if (!useOAuthToken && !accessToken.trim() && !existing) return
 
     setTestStatus('loading')
     setTestResult(null)
@@ -135,7 +152,8 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
           repoUrl: repoUrl.trim(),
           authType: 'token',
           gitUsername: '',
-          accessToken: accessToken.trim(),
+          accessToken: useOAuthToken ? '' : accessToken.trim(),
+          useOAuthToken,
           ...(existing ? { projectId: existing.id } : {}),
         }),
       })
@@ -156,7 +174,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!name.trim() || !repoUrl.trim() || (!existing && !accessToken.trim())) return
+    if (!name.trim() || !repoUrl.trim() || (!existing && !useOAuthToken && !accessToken.trim())) return
 
     const projectData = {
       name: name.trim(),
@@ -165,7 +183,8 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
       repoUrl: repoUrl.trim(),
       authType: 'token' as const,
       gitUsername: '',
-      accessToken: accessToken.trim(),
+      accessToken: useOAuthToken ? '' : accessToken.trim(),
+      useOAuthToken,
       labelTarget: labelTarget.trim(),
       labelSchedule: labelSchedule.trim() || 'IVE-S',
       labelDev: labelDev.trim() || 'IVE-D',
@@ -263,6 +282,30 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
         <label className="block text-base font-bold text-ive-text-muted mb-2">
           {t('gitAccessToken')} <span className="text-ive-red">*</span> <span className="text-ive-text-dim font-normal">{t('personalAccessToken')}</span>
         </label>
+
+        {/* OAuth 토큰 재사용 옵션 (로그인 시 받은 토큰이 있을 때만 노출) */}
+        {oauthInfo.hasToken && (
+          <div className="mb-2 bg-ive-bg-card border border-ive-border-subtle rounded-lg p-3">
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={useOAuthToken}
+                onChange={e => setUseOAuthToken(e.target.checked)}
+                className="mt-1"
+              />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-bold text-ive-text">
+                  <i className={`fa-brands ${oauthInfo.providerType === 'github' ? 'fa-github' : 'fa-gitlab'} mr-1.5 text-ive-cyan`} />
+                  내 OAuth 토큰 사용 ({oauthInfo.providerName})
+                </div>
+                <div className="text-xs text-ive-text-dim mt-0.5">
+                  로그인 시 받은 {oauthInfo.providerType === 'github' ? 'GitHub' : 'GitLab'} 토큰을 사용합니다. 별도로 PAT를 발급할 필요가 없습니다.
+                </div>
+              </div>
+            </label>
+          </div>
+        )}
+
         <input
           type="text"
           autoComplete="off"
@@ -271,9 +314,10 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
           data-form-type="other"
           value={accessToken}
           onChange={e => setAccessToken(e.target.value)}
-          placeholder={existing ? t('changeOnlyInput') : 'ghp_xxxxxxxxxxxx'}
-          className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-base text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green font-mono"
-          style={{ WebkitTextSecurity: 'disc' } as React.CSSProperties}
+          disabled={useOAuthToken}
+          placeholder={useOAuthToken ? 'OAuth 토큰 사용 중' : (existing ? t('changeOnlyInput') : 'ghp_xxxxxxxxxxxx')}
+          className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-base text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green font-mono disabled:opacity-50"
+          style={useOAuthToken ? undefined : ({ WebkitTextSecurity: 'disc' } as React.CSSProperties)}
         />
         <p className="text-sm text-ive-text-dim mt-1">
           <i className="fa-solid fa-lock mr-1" />{t('tokenHint')}
@@ -285,7 +329,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
         <button
           type="button"
           onClick={handleTestConnection}
-          disabled={testStatus === 'loading' || !repoUrl.trim() || (!accessToken.trim() && !existing)}
+          disabled={testStatus === 'loading' || !repoUrl.trim() || (!useOAuthToken && !accessToken.trim() && !existing)}
           className="w-full py-2.5 rounded-lg text-sm font-bold border transition-all disabled:opacity-40 bg-ive-bg-card border-ive-border-subtle text-ive-text-muted hover:border-ive-green hover:text-ive-green"
         >
           {testStatus === 'loading' ? (

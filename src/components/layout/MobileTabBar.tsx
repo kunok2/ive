@@ -14,7 +14,7 @@ export default function MobileTabBar() {
 
   const baseTabs: { key: TabKey; icon: string; label: string }[] = [
     { key: 'projects', icon: 'fa-solid fa-folder-open', label: t('projects') },
-    { key: 'agents', icon: 'fa-solid fa-robot', label: t('agents') },
+    { key: 'agents', icon: 'fa-solid fa-users-gear', label: t('agents') },
     { key: 'issues', icon: 'fa-solid fa-list-check', label: t('issues') },
     { key: 'reports', icon: 'fa-solid fa-chart-bar', label: t('reports') },
   ]

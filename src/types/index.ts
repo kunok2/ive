@@ -11,10 +11,25 @@ export interface User {
   timezone?: string    // 사용자 지정 타임존 (예: 'Asia/Seoul')
   gitlabUsername?: string // GitLab 사용자명 (검증자 매칭용)
   githubUsername?: string // GitHub 사용자명 (검증자 매칭용)
+  oauthProviderId?: string | null  // OAuth 로그인 공급자 ID (oauth_providers.id)
+  oauthUserId?: string | null      // 공급자 측 사용자 고유 ID (문자열화)
+  oauthTokenExpiresAt?: string | null // OAuth access_token 만료 시각 (ISO)
   createdAt: string
 }
 
 export type Provider = 'github' | 'gitlab'
+
+/** OAuth 공급자(애플리케이션) — GitLab/GitHub 인스턴스별로 다중 등록 가능 */
+export interface OAuthProvider {
+  id: string
+  type: Provider            // 'github' | 'gitlab'
+  name: string              // 표시명 ("gitlab.com", "회사 GitLab")
+  baseUrl: string           // https://gitlab.com, https://github.com, https://gitlab.example.com
+  clientId: string
+  clientSecret?: string     // 응답 시에는 마스킹 — DB에서 encrypt 저장
+  enabled: boolean
+  createdAt: string
+}
 
 /** URL에서 provider를 자동 감지 (github.com → github, 그 외 → gitlab) */
 export function detectProvider(url: string): Provider {
@@ -161,7 +176,7 @@ export interface TaskExecution {
 
 export interface StatSnapshot {
   id: string
-  entityType: 'project' | 'agent'
+  entityType: 'project' | 'agent' | 'verifier'
   entityId: string
   timestamp: string
   running: number

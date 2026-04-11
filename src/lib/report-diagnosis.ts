@@ -31,6 +31,19 @@ export interface ReportData {
   prevAgentWaitingTrend: AgentWaitingDay[]
   resolvedIssues?: ResolvedIssue[]
   totalAssignedAgents?: number
+  verifierBacklog?: VerifierBacklogRow[]
+}
+
+/** Git assignee 기반 현재 검증 대기 스냅샷 (API route에서 DB 조회로 채워짐) */
+export interface VerifierBacklogRow {
+  username: string
+  name: string
+  avatar: string
+  provider: string
+  verifyWaiting: number
+  verifying: number
+  oldestWaitMin: number
+  assignedProjectNames: string[]
 }
 
 export interface ProjectStat {
@@ -112,6 +125,23 @@ export interface AgentLoad {
   annotation: string | null
 }
 
+/** Git assignee 기반 검증자 부하 */
+export interface VerifierLoad {
+  username: string
+  name: string
+  avatar: string
+  provider: string
+  approved: number              // 기간 내 총 승인 건수
+  rejected: number              // 기간 내 총 반려 건수
+  verifyWaiting: number         // 현재 검증 대기
+  verifying: number             // 현재 검증 중
+  avgVerifyMin: number          // 평균 검증 소요 (분)
+  dailyCapacity: number         // 일 평균 처리 능력 (승인+반려)
+  oldestWaitMin: number         // 현재 가장 오래된 대기 경과 (분)
+  assignedProjectNames: string[]
+  annotation: string | null     // '과부하', '지연' 등
+}
+
 export interface AlertCard {
   severity: AlertSeverity
   title: string
@@ -136,6 +166,7 @@ export interface DiagnosisResult {
   projects: ProjectFlow[]
   agents: AgentLoad[]
   verifier: VerifierDiagnosis | null
+  verifierLoads: VerifierLoad[]
   briefing: string
   retryCostRatio: number       // 재시도 비용 비율 (0~1)
   retryCostAmount: number
@@ -497,6 +528,60 @@ export function diagnose(data: ReportData, prevWeeklyData?: ReportData[]): Diagn
     verifier = { verifierCount, dailyVerifyInflow: Math.round(dailyVerifyInflow * 10) / 10, dailyVerifyCapacity: Math.round(dailyVerifyCap * 10) / 10, verifyUtilization: Math.round(verifyUtil * 100) / 100, verifyWaiting, annotation: ann }
   }
 
+  // ─── 4-b. 검증자별 부하 ───
+
+  const verifierLoads: VerifierLoad[] = (() => {
+    const backlog = data.verifierBacklog || []
+    // username → 기간 내 처리량 + 평균 검증시간 (byVerifier는 verifierName 기반이라 매칭 신뢰 낮음)
+    // 정확한 건 API route에서 verifier_username으로 계산해 verifierBacklog에 같이 담아주는 게 이상적이나,
+    // 여기서는 byVerifier에서 verifierName 유사 매칭으로 보완.
+    const byNameMap = new Map<string, VerifierStat>()
+    for (const v of byVerifier) byNameMap.set(v.verifierName, v)
+
+    const usernames = new Set<string>()
+    for (const b of backlog) usernames.add(b.username)
+
+    const loads: VerifierLoad[] = []
+    for (const username of usernames) {
+      const b = backlog.find(x => x.username === username)!
+      const byName = byNameMap.get(b.name) // fallback: 이름으로 매칭
+      const approved = byName?.tasks ?? 0
+      const rejected = 0 // byVerifier 구조상 분리 정보 없음 — 0으로 둠
+      const avgVerifyMin = byName?.avgVerifyMin ?? 0
+      const dailyCap = elapsedDays > 0 && approved > 0 ? approved / elapsedDays : 0
+
+      const current = b.verifyWaiting + b.verifying
+      let annotation: string | null = null
+      if (b.verifyWaiting >= 6) {
+        annotation = '과부하 — 검증 지원 필요'
+      } else if (b.oldestWaitMin > 60 * 24) {
+        annotation = `지연 — ${Math.round(b.oldestWaitMin / 60)}시간 이상 미검증`
+      } else {
+        const totalVerifyBacklog = backlog.reduce((s, x) => s + x.verifyWaiting + x.verifying, 0)
+        if (current >= 3 && totalVerifyBacklog >= 3 && (current / totalVerifyBacklog) >= 0.6) {
+          annotation = `전체 검증 대기의 ${Math.round(current / totalVerifyBacklog * 100)}%가 집중`
+        }
+      }
+
+      loads.push({
+        username,
+        name: b.name,
+        avatar: b.avatar,
+        provider: b.provider,
+        approved,
+        rejected,
+        verifyWaiting: b.verifyWaiting,
+        verifying: b.verifying,
+        avgVerifyMin,
+        dailyCapacity: Math.round(dailyCap * 10) / 10,
+        oldestWaitMin: b.oldestWaitMin,
+        assignedProjectNames: b.assignedProjectNames || [],
+        annotation,
+      })
+    }
+    return loads.sort((a, b) => (b.verifyWaiting + b.verifying) - (a.verifyWaiting + a.verifying) || b.approved - a.approved)
+  })()
+
   // ─── 5. 재시도 비용 ───
 
   const retryCostRatio = lifecycle.avgAttempts > 1 ? 1 - 1 / lifecycle.avgAttempts : 0
@@ -553,6 +638,17 @@ export function diagnose(data: ReportData, prevWeeklyData?: ReportData[]): Diagn
     }
   }
 
+  // 7-1-b. 방치된 대기 — 기간 내 유입/처리 모두 0인데 대기가 쌓여있음
+  if (totalInflow === 0 && totalThroughput === 0 && endWaiting > 0) {
+    alerts.push({
+      severity: 'critical',
+      title: '대기 방치',
+      detail: `이번 기간 유입·처리 모두 0건인데 대기 ${endWaiting}건이 그대로 남아있습니다. 일주일째 아무도 손대지 않은 상태입니다.`,
+      action: '검증자 확인',
+      actionTarget: '/agents',
+    })
+  }
+
   // 7-2. 적체 — 대기가 3일 연속 의미 있게 증가 (스냅샷 노이즈 제외)
   // 기존 로직은 inflow=tasks+delta를 tasks와 비교하여 delta>0이면 항상 true였음
   // 수정: 실제 대기 수치가 3일 연속 순증가하고, 마지막 날 대기가 2건 이상일 때만 알림
@@ -603,13 +699,41 @@ export function diagnose(data: ReportData, prevWeeklyData?: ReportData[]): Diagn
     alerts.push({ severity: 'warning', title: '검증 병목', detail: verifier.annotation, action: '검증 프로세스 확인' })
   }
 
+  // 7-9. 검증자 개별 병목 (대기 집중 / 장기 미처리)
+  const overloadedVerifiers = verifierLoads.filter(v => v.annotation?.includes('과부하'))
+  if (overloadedVerifiers.length > 0) {
+    const v = overloadedVerifiers[0]
+    alerts.push({
+      severity: 'critical',
+      title: `${v.name}에 검증 대기 집중`,
+      detail: `검증 대기 ${v.verifyWaiting}건${v.verifying > 0 ? ` + 검증 중 ${v.verifying}건` : ''} — ${v.annotation}`,
+      action: '검증자 분산 또는 지원',
+      actionTarget: '/agents',
+    })
+  }
+  const stalledVerifiers = verifierLoads.filter(v => v.annotation?.startsWith('지연'))
+  if (stalledVerifiers.length > 0 && overloadedVerifiers.length === 0) {
+    const v = stalledVerifiers[0]
+    alerts.push({
+      severity: 'warning',
+      title: '검증 지연',
+      detail: `${v.name}: ${v.annotation}`,
+      action: '검증자 확인',
+      actionTarget: '/agents',
+    })
+  }
+
   // ─── 8. 브리핑 텍스트 ───
 
   const briefingLines: string[] = []
 
   // 흐름 상태
   if (summary.totalTasks === 0 && totalInflow === 0) {
-    briefingLines.push('이번 기간에는 유입된 작업이 없습니다.')
+    if (endWaiting > 0) {
+      briefingLines.push(`이번 기간에는 유입·처리 모두 0건입니다. 이전부터 대기 중인 ${endWaiting}건이 그대로 남아있습니다.`)
+    } else {
+      briefingLines.push('이번 기간에는 유입된 작업이 없습니다.')
+    }
   } else {
     const utilPct = Math.round(utilization * 100)
     const levelKo: Record<HealthLevel, string> = { overloaded: '과부하 상태', tight: '빠듯한 상태', optimal: '적정', relaxed: '여유 있는 상태', idle: '자원이 남는 상태' }
@@ -643,6 +767,7 @@ export function diagnose(data: ReportData, prevWeeklyData?: ReportData[]): Diagn
 
   return {
     flow, resource, alerts, projects: projectFlows, agents: agentLoads, verifier,
+    verifierLoads,
     briefing: briefingLines.join(' '),
     retryCostRatio: Math.round(retryCostRatio * 100) / 100,
     retryCostAmount,

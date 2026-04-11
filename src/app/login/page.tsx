@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import ChangePasswordForm from '@/components/auth/ChangePasswordForm'
 import IntroSlides from '@/components/auth/IntroSlides'
@@ -9,8 +9,16 @@ import { useStore } from '@/lib/store'
 import { useTranslations } from 'next-intl'
 import LanguageSwitcher from '@/components/ui/LanguageSwitcher'
 
+type PublicOAuthProvider = {
+  id: string
+  type: 'github' | 'gitlab'
+  name: string
+  baseUrl: string
+}
+
 export default function LoginPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { refreshUser } = useStore()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -19,6 +27,9 @@ export default function LoginPage() {
   const [showChangePassword, setShowChangePassword] = useState(false)
   const [showIntro, setShowIntro] = useState(false)
   const [sessionExpired, setSessionExpired] = useState(false)
+  const [oauthProviders, setOauthProviders] = useState<PublicOAuthProvider[]>([])
+  const [oauthError, setOauthError] = useState<string | null>(null)
+  const [oauthRedirecting, setOauthRedirecting] = useState<string | null>(null)
   const tAuth = useTranslations('auth')
 
   useEffect(() => {
@@ -30,7 +41,15 @@ export default function LoginPage() {
       setSessionExpired(true)
       sessionStorage.removeItem('ive-session-expired')
     }
-  }, [])
+    // OAuth 콜백 에러 표시
+    const oauthErr = searchParams?.get('oauth_error')
+    if (oauthErr) setOauthError(oauthErr)
+    // 활성 OAuth provider 조회
+    fetch('/api/auth/oauth/providers')
+      .then(r => r.ok ? r.json() : [])
+      .then((data: PublicOAuthProvider[]) => setOauthProviders(Array.isArray(data) ? data : []))
+      .catch(() => setOauthProviders([]))
+  }, [searchParams])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -69,6 +88,12 @@ export default function LoginPage() {
         {sessionExpired && (
           <div className="mb-4 text-base text-ive-amber bg-ive-amber/10 border border-ive-amber/20 rounded-lg px-3 py-2">
             <i className="fa-solid fa-clock mr-1.5" />{tAuth('sessionExpired')}
+          </div>
+        )}
+
+        {oauthError && (
+          <div className="mb-4 text-base text-ive-red bg-ive-red/10 border border-ive-red/20 rounded-lg px-3 py-2">
+            <i className="fa-solid fa-circle-exclamation mr-1.5" />{oauthError}
           </div>
         )}
 
@@ -112,6 +137,35 @@ export default function LoginPage() {
             {loading ? (<><i className="fa-solid fa-spinner fa-spin mr-1.5" />{tAuth('loggingIn')}</>) : (<><i className="fa-solid fa-right-to-bracket mr-1.5" />{tAuth('login')}</>)}
           </button>
         </form>
+
+        {oauthProviders.length > 0 && (
+          <div className="mt-4 flex flex-col gap-2">
+            <div className="flex items-center gap-3 my-2">
+              <div className="flex-1 h-px bg-ive-border" />
+              <span className="text-sm text-ive-text-dim">OR</span>
+              <div className="flex-1 h-px bg-ive-border" />
+            </div>
+            {oauthProviders.map(p => {
+              const redirecting = oauthRedirecting === p.id
+              const anyRedirecting = !!oauthRedirecting
+              return (
+                <a
+                  key={p.id}
+                  href={`/api/auth/oauth/${p.id}/start`}
+                  onClick={() => setOauthRedirecting(p.id)}
+                  aria-disabled={anyRedirecting}
+                  className={`w-full flex items-center justify-center gap-2 bg-ive-bg-input border border-ive-border hover:border-ive-green text-ive-text font-bold py-3 rounded-lg text-base transition-colors ${anyRedirecting && !redirecting ? 'opacity-40 pointer-events-none' : ''}`}
+                >
+                  {redirecting ? (
+                    <><i className="fa-solid fa-spinner fa-spin" /><span>이동 중...</span></>
+                  ) : (
+                    <><i className={`fa-brands ${p.type === 'github' ? 'fa-github' : 'fa-gitlab'}`} /><span>{p.name}</span></>
+                  )}
+                </a>
+              )
+            })}
+          </div>
+        )}
 
         <div className="flex justify-center gap-4 mt-6 text-base text-ive-text-muted">
           <Link href="/register" className="text-ive-green font-bold">{tAuth('register')}</Link>

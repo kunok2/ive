@@ -27,6 +27,11 @@
   --color-ive-border-subtle: #23232780;
 }
 
+html {
+  /* 페이지 전환 중 흰색 깜빡임 방지 — 브라우저가 HTML 루트 요소 배경을 그리는 구간에서 노출되는 색 */
+  background-color: #050505;
+}
+
 body {
   background-color: #050505;
   color: var(--color-ive-text);
