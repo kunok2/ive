@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
-import { getProject, getUserOAuthTokenRaw } from '@/lib/db'
+import { getProject, getProjectWithUserOAuth, getUserOAuthTokenRaw } from '@/lib/db'
 import { decrypt } from '@/lib/crypto'
 import { AuthType, detectProvider } from '@/types'
 
@@ -21,15 +21,43 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: '저장소 URL을 입력해주세요' }, { status: 400 })
   }
 
-  // 인증 정보 결정 우선순위:
-  //   1. useOAuthToken=true → 현재 유저의 OAuth access_token 복호화
-  //   2. 새로 입력된 accessToken
-  //   3. (수정 모드) 기존 프로젝트의 저장된 토큰
   let token = accessToken
   let username = gitUsername
   let authMode = authType || 'token'
 
-  if (useOAuthToken) {
+  let existingProject: any = null
+  if (projectId) {
+    existingProject = getProject(projectId)
+    if (existingProject && existingProject.userId === user.id) {
+      if (!username) username = existingProject.gitUsername
+      if (!authType) authMode = existingProject.authType
+    } else {
+      existingProject = null
+    }
+  }
+
+  const usesOAuth = existingProject?.usesOAuthToken
+
+  if (!token && usesOAuth && existingProject) {
+    const full = getProjectWithUserOAuth(projectId)
+    if (full?.oauth_access_token) {
+      try {
+        token = decrypt(full.oauth_access_token)
+      } catch {
+        return NextResponse.json({ error: 'OAuth 토큰 복호화 실패' }, { status: 500 })
+      }
+    }
+  }
+
+  if (!token && !usesOAuth && existingProject) {
+    try {
+      token = decrypt(existingProject.accessToken)
+    } catch {
+      token = existingProject.accessToken
+    }
+  }
+
+  if (!token && useOAuthToken) {
     const raw = getUserOAuthTokenRaw(user.id)
     if (!raw || !raw.encrypted) {
       return NextResponse.json({ error: '연결된 OAuth 토큰이 없습니다' }, { status: 400 })
@@ -40,19 +68,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'OAuth 토큰 복호화 실패' }, { status: 500 })
     }
     authMode = 'token'
-  }
-
-  if (!token && projectId) {
-    const existing = getProject(projectId)
-    if (existing && existing.userId === user.id) {
-      try {
-        token = decrypt(existing.accessToken)
-      } catch {
-        token = existing.accessToken
-      }
-      if (!username) username = existing.gitUsername
-      if (!authType) authMode = existing.authType
-    }
   }
 
   if (!token) {
@@ -83,7 +98,6 @@ async function testGitHub(repoUrl: string, token: string) {
     'Accept': 'application/vnd.github+json',
   }
 
-  // 1단계: 인증 확인
   const userRes = await fetch('https://api.github.com/user', { headers })
   if (!userRes.ok) {
     if (userRes.status === 401) {
@@ -93,7 +107,6 @@ async function testGitHub(repoUrl: string, token: string) {
   }
   const gitUser = await userRes.json()
 
-  // 2단계: 리포지토리 정보 조회
   const cleanUrl = repoUrl.replace(/\.git$/, '').replace(/\/+$/, '')
   const url = new URL(cleanUrl)
   const ownerRepo = (url.pathname.startsWith('/') ? url.pathname.slice(1) : url.pathname).replace(/\/+$/, '')
@@ -141,10 +154,10 @@ async function testGitLab(repoUrl: string, token: string, authMode: string, user
   if (authMode === 'basic') {
     headers['Authorization'] = `Basic ${Buffer.from(`${username}:${token}`).toString('base64')}`
   } else {
+    headers['Authorization'] = `Bearer ${token}`
     headers['PRIVATE-TOKEN'] = token
   }
 
-  // 1단계: 인증 정보 먼저 확인
   const userRes = await fetch(`${apiBase}/user`, { headers })
   if (!userRes.ok) {
     if (userRes.status === 401) {
@@ -159,7 +172,6 @@ async function testGitLab(repoUrl: string, token: string, authMode: string, user
   }
   const gitUser = await userRes.json()
 
-  // 2단계: 프로젝트 정보 조회
   const res = await fetch(`${apiBase}/projects/${projectPath}`, { headers })
   if (!res.ok) {
     if (res.status === 404) {

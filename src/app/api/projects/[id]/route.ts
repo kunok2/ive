@@ -52,6 +52,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     id,
     userId: existing.userId,  // 소유자 ID는 변경 불가
     accessToken: access === 'owner' ? accessToken : existing.accessToken,  // editor는 토큰 변경 불가
+    usesOAuthToken: access === 'owner' ? (body.usesOAuthToken ?? existing.usesOAuthToken) : existing.usesOAuthToken,
   }
 
   updateProject(updatedProject)

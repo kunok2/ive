@@ -9,9 +9,10 @@ import { useTranslations } from 'next-intl'
 interface Props {
   existing?: Project
   onSuccess?: () => void
+  onCancel?: () => void
 }
 
-export default function ProjectForm({ existing, onSuccess }: Props) {
+export default function ProjectForm({ existing, onSuccess, onCancel }: Props) {
   const router = useRouter()
   const { addProject, updateProject } = useStore()
   const t = useTranslations('project')
@@ -30,7 +31,66 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
     providerName?: string
     baseUrl?: string
   }>({ hasToken: false })
-  const [useOAuthToken, setUseOAuthToken] = useState(false)
+  const [usesOAuthToken, setUsesOAuthToken] = useState(existing?.usesOAuthToken ?? oauthInfo.hasToken)
+
+  // OAuth 프로젝트 선택기
+  interface OAuthRepo {
+    id: string
+    name: string
+    fullPath: string
+    description: string
+    repoUrl: string
+    cloneUrl: string
+    avatarUrl: string
+    defaultBranch: string
+    visibility: string
+    openIssuesCount: number
+    lastActivityAt: string | null
+  }
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [pickerLoading, setPickerLoading] = useState(false)
+  const [pickerError, setPickerError] = useState<string | null>(null)
+  const [pickerQuery, setPickerQuery] = useState('')
+  const [pickerRepos, setPickerRepos] = useState<OAuthRepo[]>([])
+
+  const loadOAuthProjects = useCallback(async (q: string) => {
+    setPickerLoading(true)
+    setPickerError(null)
+    try {
+      const url = `/api/auth/oauth/my-projects${q ? `?q=${encodeURIComponent(q)}` : ''}`
+      const res = await fetch(url)
+      const data = await res.json()
+      if (!res.ok) {
+        setPickerError(data.error || '프로젝트 목록 조회 실패')
+        setPickerRepos([])
+      } else {
+        setPickerRepos(data.projects || [])
+      }
+    } catch {
+      setPickerError('서버 오류')
+      setPickerRepos([])
+    } finally {
+      setPickerLoading(false)
+    }
+  }, [])
+
+  function openProjectPicker() {
+    setPickerOpen(true)
+    if (pickerRepos.length === 0) {
+      loadOAuthProjects('')
+    }
+  }
+
+  function handleSelectOAuthProject(repo: OAuthRepo) {
+    setName(repo.name)
+    setRepoUrl(repo.cloneUrl || repo.repoUrl)
+    if (repo.avatarUrl) setAvatarUrl(repo.avatarUrl)
+    setUsesOAuthToken(true)
+    setAccessToken('')
+    setPickerOpen(false)
+    setTestStatus('idle')
+    setTestResult(null)
+  }
 
   // 이슈 레이블 설정
   const [labelTarget, setLabelTarget] = useState(existing?.labelTarget ?? 'IVE')
@@ -44,7 +104,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
   const [labelMessage, setLabelMessage] = useState<string | null>(null)
   
   // 작업 주기 설정 추가 (단위: 분)
-  const [checkInterval, setCheckInterval] = useState(existing?.checkInterval ?? 10)
+  const [checkInterval, setCheckInterval] = useState(existing?.checkInterval ?? 1)
 
   const [snapshotInterval, setSnapshotInterval] = useState(existing?.snapshotInterval ?? 1)
   const [sparklinePoints, setSparklinePoints] = useState(existing?.sparklinePoints ?? 60)
@@ -87,7 +147,12 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
   useEffect(() => {
     fetch('/api/auth/oauth/my-token')
       .then(r => r.ok ? r.json() : { hasToken: false })
-      .then(data => setOauthInfo(data))
+      .then(data => {
+        setOauthInfo(data)
+        if (!existing && data.hasToken) {
+          setUsesOAuthToken(true)
+        }
+      })
       .catch(() => setOauthInfo({ hasToken: false }))
   }, [])
 
@@ -140,7 +205,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
 
   async function handleTestConnection() {
     if (!repoUrl.trim()) return
-    if (!useOAuthToken && !accessToken.trim() && !existing) return
+    if (!usesOAuthToken && !accessToken.trim() && !existing) return
 
     setTestStatus('loading')
     setTestResult(null)
@@ -152,8 +217,8 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
           repoUrl: repoUrl.trim(),
           authType: 'token',
           gitUsername: '',
-          accessToken: useOAuthToken ? '' : accessToken.trim(),
-          useOAuthToken,
+          accessToken: usesOAuthToken ? '' : accessToken.trim(),
+          useOAuthToken: usesOAuthToken,
           ...(existing ? { projectId: existing.id } : {}),
         }),
       })
@@ -174,7 +239,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!name.trim() || !repoUrl.trim() || (!existing && !useOAuthToken && !accessToken.trim())) return
+    if (!name.trim() || !repoUrl.trim() || (!existing && !usesOAuthToken && !accessToken.trim())) return
 
     const projectData = {
       name: name.trim(),
@@ -183,8 +248,8 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
       repoUrl: repoUrl.trim(),
       authType: 'token' as const,
       gitUsername: '',
-      accessToken: useOAuthToken ? '' : accessToken.trim(),
-      useOAuthToken,
+      accessToken: usesOAuthToken ? '' : accessToken.trim(),
+      usesOAuthToken,
       labelTarget: labelTarget.trim(),
       labelSchedule: labelSchedule.trim() || 'IVE-S',
       labelDev: labelDev.trim() || 'IVE-D',
@@ -192,7 +257,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
       labelVerify: labelVerify.trim() || 'IVE-V',
       labelEnd: labelEnd.trim() || 'IVE-E',
       showToolUsage,
-      checkInterval: Number(checkInterval) || 10,
+      checkInterval: Number(checkInterval) || 1,
       lastCheckedAt: existing?.lastCheckedAt ?? null,
       lastScannedIssueCount: existing?.lastScannedIssueCount ?? null,
       lastVerifyWaitingCount: existing?.lastVerifyWaitingCount ?? null,
@@ -210,7 +275,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
     if (existing) {
       await updateProject({
         ...existing,
-        ...projectData
+        ...projectData,
       })
       onSuccess?.()
       if (!onSuccess) router.push(`/projects/${existing.id}`)
@@ -253,6 +318,25 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
         </div>
       </div>
 
+      {/* Git에서 프로젝트 가져오기 — OAuth 로그인 사용자 전용, 신규 생성 시에만 노출 */}
+      {!existing && oauthInfo.hasToken && (
+        <div>
+          <button
+            type="button"
+            onClick={openProjectPicker}
+            className="w-full py-3 rounded-lg text-sm font-bold border border-ive-cyan/40 bg-ive-cyan/10 text-ive-cyan hover:bg-ive-cyan/20 transition-all"
+          >
+            <i className={`fa-brands ${oauthInfo.providerType === 'github' ? 'fa-github' : 'fa-gitlab'} mr-1.5`} />
+            {oauthInfo.providerType === 'github' ? 'GitHub' : 'GitLab'}에서 프로젝트 가져오기
+            <span className="text-ive-text-dim font-normal ml-1">({oauthInfo.providerName})</span>
+          </button>
+          <p className="text-sm text-ive-text-dim mt-1">
+            <i className="fa-solid fa-circle-info mr-1" />
+            내 계정의 저장소 목록에서 선택하면 이름·URL·토큰이 자동으로 채워집니다.
+          </p>
+        </div>
+      )}
+
       {/* 프로젝트 이름 */}
       <div>
         <label className="block text-base font-bold text-ive-text-muted mb-2">{t('projectName')} <span className="text-ive-red">*</span></label>
@@ -283,26 +367,38 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
           {t('gitAccessToken')} <span className="text-ive-red">*</span> <span className="text-ive-text-dim font-normal">{t('personalAccessToken')}</span>
         </label>
 
-        {/* OAuth 토큰 재사용 옵션 (로그인 시 받은 토큰이 있을 때만 노출) */}
-        {oauthInfo.hasToken && (
-          <div className="mb-2 bg-ive-bg-card border border-ive-border-subtle rounded-lg p-3">
-            <label className="flex items-start gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={useOAuthToken}
-                onChange={e => setUseOAuthToken(e.target.checked)}
-                className="mt-1"
-              />
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-bold text-ive-text">
-                  <i className={`fa-brands ${oauthInfo.providerType === 'github' ? 'fa-github' : 'fa-gitlab'} mr-1.5 text-ive-cyan`} />
-                  내 OAuth 토큰 사용 ({oauthInfo.providerName})
+        {/* OAuth 토큰 재사용 옵션 - 프리미엄 카드 스타일 */}
+        {(oauthInfo.hasToken || (existing && existing.usesOAuthToken)) && (
+          <div 
+            onClick={() => setUsesOAuthToken(!usesOAuthToken)}
+            className={`mb-3 p-4 rounded-xl border-2 transition-all cursor-pointer group ${
+              usesOAuthToken 
+                ? 'border-ive-cyan bg-ive-cyan/10 shadow-[0_0_15px_rgba(34,211,238,0.2)]' 
+                : 'border-ive-border-subtle bg-ive-bg-deep/50 hover:border-ive-text-dim/30'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-xl transition-all ${
+                  usesOAuthToken ? 'bg-ive-cyan text-ive-bg-card' : 'bg-ive-bg-card text-ive-text-dim'
+                }`}>
+                  <i className={`fa-brands ${oauthInfo.providerType === 'github' ? 'fa-github' : 'fa-gitlab'}`} />
                 </div>
-                <div className="text-xs text-ive-text-dim mt-0.5">
-                  로그인 시 받은 {oauthInfo.providerType === 'github' ? 'GitHub' : 'GitLab'} 토큰을 사용합니다. 별도로 PAT를 발급할 필요가 없습니다.
+                <div>
+                  <div className={`text-sm font-bold transition-all ${usesOAuthToken ? 'text-ive-cyan' : 'text-ive-text'}`}>
+                    내 OAuth 계정 사용
+                  </div>
+                  <div className="text-xs text-ive-text-dim mt-0.5">
+                    {oauthInfo.providerName || 'GitLab'} 계정의 토큰을 자동으로 관리합니다.
+                  </div>
                 </div>
               </div>
-            </label>
+              <div className={`w-12 h-6 rounded-full relative transition-all ${usesOAuthToken ? 'bg-ive-cyan' : 'bg-ive-bg-card border border-ive-border'}`}>
+                <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm transition-all ${
+                  usesOAuthToken ? 'left-[1.625rem]' : 'left-1'
+                }`} />
+              </div>
+            </div>
           </div>
         )}
 
@@ -314,10 +410,10 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
           data-form-type="other"
           value={accessToken}
           onChange={e => setAccessToken(e.target.value)}
-          disabled={useOAuthToken}
-          placeholder={useOAuthToken ? 'OAuth 토큰 사용 중' : (existing ? t('changeOnlyInput') : 'ghp_xxxxxxxxxxxx')}
-          className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-base text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green font-mono disabled:opacity-50"
-          style={useOAuthToken ? undefined : ({ WebkitTextSecurity: 'disc' } as React.CSSProperties)}
+          disabled={usesOAuthToken}
+          placeholder={usesOAuthToken ? 'OAuth 토큰 자동 관리 모드' : (existing ? t('changeOnlyInput') : 'ghp_xxxxxxxxxxxx')}
+          className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-base text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green font-mono disabled:opacity-30"
+          style={usesOAuthToken ? undefined : ({ WebkitTextSecurity: 'disc' } as React.CSSProperties)}
         />
         <p className="text-sm text-ive-text-dim mt-1">
           <i className="fa-solid fa-lock mr-1" />{t('tokenHint')}
@@ -329,7 +425,7 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
         <button
           type="button"
           onClick={handleTestConnection}
-          disabled={testStatus === 'loading' || !repoUrl.trim() || (!useOAuthToken && !accessToken.trim() && !existing)}
+          disabled={testStatus === 'loading' || !repoUrl.trim() || (!usesOAuthToken && !accessToken.trim() && !existing)}
           className="w-full py-2.5 rounded-lg text-sm font-bold border transition-all disabled:opacity-40 bg-ive-bg-card border-ive-border-subtle text-ive-text-muted hover:border-ive-green hover:text-ive-green"
         >
           {testStatus === 'loading' ? (
@@ -376,38 +472,21 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
         <label className="block text-base font-bold text-ive-text-muted mb-2">
           {t('checkInterval')} <span className="text-ive-text-dim font-normal">{t('checkIntervalUnit')}</span>
         </label>
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <div className="flex bg-ive-bg-input border border-ive-border rounded-lg overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setCheckInterval(v => Math.max(1, v - 1))}
-                className="px-3 py-3 text-ive-text-muted hover:text-ive-green hover:bg-ive-green/10 transition-colors text-base font-bold"
-              >−</button>
-              <span className="w-16 py-3 flex items-center justify-center text-base font-bold text-ive-text border-x border-ive-border">{checkInterval}</span>
-              <button
-                type="button"
-                onClick={() => setCheckInterval(v => Math.min(1440, v + 1))}
-                className="px-3 py-3 text-ive-text-muted hover:text-ive-green hover:bg-ive-green/10 transition-colors text-base font-bold"
-              >+</button>
-            </div>
-            <div className="flex gap-1 flex-1 min-w-0">
-              {[5, 10, 30].map(n => (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => setCheckInterval(n)}
-                  className={`flex-1 py-3 rounded-lg text-base font-bold border transition-all ${
-                    checkInterval === n
-                      ? 'bg-ive-green/10 border-ive-green text-ive-green'
-                      : 'bg-ive-bg-card border-ive-border-subtle text-ive-text-dim'
-                  }`}
-                >
-                  {`${n}m`}
-                </button>
-              ))}
-            </div>
-          </div>
+        <div className="flex gap-1.5">
+          {[1, 3, 5].map(n => (
+            <button
+              key={n}
+              type="button"
+              onClick={() => setCheckInterval(n)}
+              className={`flex-1 py-3 rounded-lg text-base font-bold border transition-all ${
+                checkInterval === n
+                  ? 'bg-ive-green/10 border-ive-green text-ive-green'
+                  : 'bg-ive-bg-card border-ive-border-subtle text-ive-text-dim'
+              }`}
+            >
+              {`${n}m`}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -748,14 +827,131 @@ export default function ProjectForm({ existing, onSuccess }: Props) {
         </div>
       )}
 
-      {/* 버튼 */}
-      <button
-        type="submit"
-        className="w-full bg-ive-green-dark text-white font-bold py-4 rounded-lg text-base active:opacity-90 transition-all mt-2"
-      >
-        <i className={`fa-solid ${existing ? 'fa-check' : 'fa-plus'} mr-2`} />
-        {existing ? t('settingsUpdated') : t('createProject')}
-      </button>
+      {/* 버튼 — 스크롤해도 항상 하단에 고정 */}
+      <div className="sticky bottom-0 -mx-4 px-4 pt-3 pb-1 mt-2 border-t border-ive-border-dark bg-ive-bg-solid flex gap-2">
+        {onCancel && (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="flex-1 bg-white/5 border border-ive-border-subtle text-ive-text-muted font-bold py-4 rounded-lg text-sm active:opacity-80 transition-all"
+          >
+            {tc('cancel')}
+          </button>
+        )}
+        <button
+          type="submit"
+          className="flex-[2] bg-ive-green-dark text-white font-bold py-4 rounded-lg text-sm active:opacity-90 transition-all"
+        >
+          <i className={`fa-solid ${existing ? 'fa-check' : 'fa-plus'} mr-2`} />
+          {existing ? t('settingsUpdated') : t('createProject')}
+        </button>
+      </div>
+
+      {/* OAuth 프로젝트 선택 모달 */}
+      {pickerOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
+          onClick={() => setPickerOpen(false)}
+        >
+          <div
+            className="bg-ive-bg-solid border border-ive-border rounded-2xl w-full max-w-md max-h-[75vh] flex flex-col overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-ive-border-subtle">
+              <div className="text-sm font-bold text-ive-text">
+                <i className={`fa-brands ${oauthInfo.providerType === 'github' ? 'fa-github' : 'fa-gitlab'} mr-1.5 text-ive-cyan`} />
+                프로젝트 선택
+              </div>
+              <button
+                type="button"
+                onClick={() => setPickerOpen(false)}
+                className="text-ive-text-dim hover:text-ive-text"
+              >
+                <i className="fa-solid fa-xmark" />
+              </button>
+            </div>
+
+            <div className="px-3 pt-3 pb-2">
+              <div className="relative">
+                <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-ive-text-dim text-xs" />
+                <input
+                  type="text"
+                  value={pickerQuery}
+                  onChange={e => setPickerQuery(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      loadOAuthProjects(pickerQuery.trim())
+                    }
+                  }}
+                  placeholder="저장소 이름 검색..."
+                  className="w-full bg-ive-bg-input border border-ive-border rounded-lg pl-8 pr-3 py-2 text-sm text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green"
+                />
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-2 pb-2">
+              {pickerLoading && (
+                <div className="flex items-center justify-center py-10 text-ive-text-dim text-sm font-bold">
+                  <i className="fa-solid fa-circle-notch fa-spin mr-2" />
+                  불러오는 중...
+                </div>
+              )}
+              {!pickerLoading && pickerError && (
+                <div className="m-1 bg-ive-red/10 border border-ive-red/30 rounded-lg px-3 py-2 text-xs text-ive-red font-bold">
+                  <i className="fa-solid fa-circle-xmark mr-1.5" />
+                  {pickerError}
+                </div>
+              )}
+              {!pickerLoading && !pickerError && pickerRepos.length === 0 && (
+                <div className="text-center py-10 text-ive-text-dim text-sm font-bold">
+                  저장소가 없습니다
+                </div>
+              )}
+              {!pickerLoading && pickerRepos.map(repo => (
+                <button
+                  key={repo.id}
+                  type="button"
+                  onClick={() => handleSelectOAuthProject(repo)}
+                  className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-ive-bg-input transition-colors text-left"
+                >
+                  {repo.avatarUrl ? (
+                    <img
+                      src={repo.avatarUrl}
+                      alt=""
+                      className="w-7 h-7 rounded object-cover flex-shrink-0"
+                      onError={e => {
+                        const img = e.currentTarget
+                        const fallback = img.nextElementSibling as HTMLElement | null
+                        img.style.display = 'none'
+                        if (fallback) fallback.style.display = 'flex'
+                      }}
+                    />
+                  ) : null}
+                  <div
+                    className="w-7 h-7 rounded bg-ive-bg-input border border-ive-border-subtle items-center justify-center flex-shrink-0"
+                    style={{ display: repo.avatarUrl ? 'none' : 'flex' }}
+                  >
+                    <i className="fa-solid fa-folder text-ive-text-dim text-xs" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm font-bold text-ive-text truncate">{repo.name}</span>
+                      {repo.visibility !== 'public' && (
+                        <i className="fa-solid fa-lock text-xs text-ive-text-dim" />
+                      )}
+                    </div>
+                    <div className="text-xs font-mono font-bold text-ive-text-dim truncate">{repo.fullPath}</div>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-ive-text-dim font-bold flex-shrink-0">
+                    <span><i className="fa-solid fa-circle-exclamation mr-0.5" />{repo.openIssuesCount}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </form>
   )
 }

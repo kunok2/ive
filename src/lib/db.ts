@@ -49,12 +49,27 @@ function initSchema(db: Database.Database) {
       access_token TEXT NOT NULL,
       color TEXT NOT NULL DEFAULT '#4ade80',
       label_target TEXT NOT NULL DEFAULT 'IVE',
+      label_schedule TEXT NOT NULL DEFAULT 'IVE-S',
+      label_dev TEXT NOT NULL DEFAULT 'IVE-D',
+      label_verify_wait TEXT NOT NULL DEFAULT 'IVE-W',
+      label_verify TEXT NOT NULL DEFAULT 'IVE-V',
+      label_end TEXT NOT NULL DEFAULT 'IVE-E',
       show_tool_usage INTEGER NOT NULL DEFAULT 0,
-      check_interval INTEGER NOT NULL DEFAULT 10,
+      check_interval INTEGER NOT NULL DEFAULT 1,
       last_checked_at TEXT,
       last_scanned_issue_count INTEGER,
       last_verify_waiting_count INTEGER,
-      scanner_active INTEGER NOT NULL DEFAULT 1,
+      scanner_active INTEGER NOT NULL DEFAULT 0,
+      uses_oauth_token INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT,
+      last_error_at TEXT,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      avatar_url TEXT NOT NULL DEFAULT '',
+      snapshot_interval INTEGER NOT NULL DEFAULT 1,
+      sparkline_points INTEGER NOT NULL DEFAULT 60,
+      stats_retention INTEGER NOT NULL DEFAULT 7,
+      conflict_count INTEGER NOT NULL DEFAULT 0,
+      last_activity_at TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
@@ -211,6 +226,9 @@ function initSchema(db: Database.Database) {
       // 기존 프로젝트에 순서 부여
       const rows = db.prepare("SELECT id FROM projects ORDER BY created_at ASC").all() as { id: string }[]
       rows.forEach((r, i) => db.prepare("UPDATE projects SET sort_order = ? WHERE id = ?").run(i, r.id))
+    }
+    if (!tableInfo.some((col: any) => col.name === 'uses_oauth_token')) {
+      db.exec("ALTER TABLE projects ADD COLUMN uses_oauth_token INTEGER NOT NULL DEFAULT 0")
     }
   } catch (e) { console.error("Migration failed for projects:", e) }
 
@@ -1082,6 +1100,18 @@ export function getUserOAuthTokenRaw(userId: string): { encrypted: string; provi
   return { encrypted: r.oauth_access_token, providerId: r.oauth_provider_id ?? null }
 }
 
+/** 프로젝트와 연결된 유저의 OAuth 토큰 정보를 함께 조회 */
+export function getProjectWithUserOAuth(projectId: string) {
+  const p = getDb().prepare(`
+    SELECT p.*, u.oauth_provider_id, u.oauth_access_token, u.oauth_refresh_token, u.oauth_token_expires_at
+    FROM projects p
+    LEFT JOIN users u ON p.user_id = u.id
+    WHERE p.id = ?
+  `).get(projectId) as any
+  if (!p) return null
+  return p
+}
+
 // ── Projects ──
 
 type ProjectRow = {
@@ -1093,6 +1123,7 @@ type ProjectRow = {
   last_scanned_issue_count: number | null;
   last_verify_waiting_count: number | null;
   scanner_active: number;
+  uses_oauth_token: number;
   last_error: string | null; last_error_at: string | null;
   sort_order: number; avatar_url: string;
   snapshot_interval: number; sparkline_points: number; stats_retention: number;
@@ -1124,6 +1155,7 @@ function mapProject(r: ProjectRow): Project {
     lastScannedIssueCount: r.last_scanned_issue_count,
     lastVerifyWaitingCount: r.last_verify_waiting_count,
     scannerActive: r.scanner_active === 1,
+    usesOAuthToken: r.uses_oauth_token === 1,
     lastError: r.last_error ?? null,
     lastErrorAt: r.last_error_at ?? null,
     sortOrder: r.sort_order ?? 0,
@@ -1167,16 +1199,17 @@ export function createProject(p: Project) {
     `INSERT INTO projects (
       id, user_id, name, provider, repo_url, auth_type, git_username, access_token, color,
       label_target, label_schedule, label_dev, label_verify_wait, label_verify, label_end, show_tool_usage,
-      check_interval, last_checked_at, last_scanned_issue_count, scanner_active, sort_order,
-      avatar_url, snapshot_interval, sparkline_points, stats_retention, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      check_interval, last_checked_at, last_scanned_issue_count, last_verify_waiting_count, scanner_active, uses_oauth_token, sort_order,
+      avatar_url, snapshot_interval, sparkline_points, stats_retention, last_error, last_error_at, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     p.id, p.userId, p.name, p.provider, p.repoUrl, p.authType || 'token', p.gitUsername || '',
     p.accessToken, p.color || '#4ade80',
     p.labelTarget, p.labelSchedule || 'IVE-S', p.labelDev || 'IVE-D',
     p.labelVerifyWait || 'IVE-W', p.labelVerify || 'IVE-V', p.labelEnd || 'IVE-E', p.showToolUsage ? 1 : 0,
-    p.checkInterval, p.lastCheckedAt, p.lastScannedIssueCount, p.scannerActive ? 1 : 0, sortOrder,
-    p.avatarUrl || '', p.snapshotInterval ?? 1, p.sparklinePoints ?? 60, p.statsRetention ?? 7, p.createdAt
+    p.checkInterval, p.lastCheckedAt, p.lastScannedIssueCount, p.lastVerifyWaitingCount, p.scannerActive ? 1 : 0, p.usesOAuthToken ? 1 : 0, sortOrder,
+    p.avatarUrl || '', p.snapshotInterval ?? 1, p.sparklinePoints ?? 60, p.statsRetention ?? 7,
+    p.lastError || null, p.lastErrorAt || null, p.createdAt
   )
 }
 
@@ -1188,7 +1221,7 @@ export function updateProject(p: Project) {
       label_target = ?, label_schedule = ?, label_dev = ?,
       label_verify_wait = ?, label_verify = ?, label_end = ?, show_tool_usage = ?,
       check_interval = ?, last_checked_at = ?, last_scanned_issue_count = ?,
-      scanner_active = ?, sort_order = ?, avatar_url = ?,
+      scanner_active = ?, uses_oauth_token = ?, sort_order = ?, avatar_url = ?,
       snapshot_interval = ?, sparkline_points = ?, stats_retention = ?
       WHERE id = ? AND user_id = ?`
   ).run(
@@ -1197,7 +1230,7 @@ export function updateProject(p: Project) {
     p.labelTarget, p.labelSchedule || 'IVE-S', p.labelDev || 'IVE-D',
     p.labelVerifyWait || 'IVE-W', p.labelVerify || 'IVE-V', p.labelEnd || 'IVE-E', p.showToolUsage ? 1 : 0,
     p.checkInterval, p.lastCheckedAt, p.lastScannedIssueCount,
-    p.scannerActive ? 1 : 0, p.sortOrder ?? 0, p.avatarUrl || '',
+    p.scannerActive ? 1 : 0, p.usesOAuthToken ? 1 : 0, p.sortOrder ?? 0, p.avatarUrl || '',
     p.snapshotInterval ?? 1, p.sparklinePoints ?? 60, p.statsRetention ?? 7,
     p.id, p.userId
   )

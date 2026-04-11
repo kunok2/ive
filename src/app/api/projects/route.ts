@@ -51,11 +51,12 @@ export async function POST(req: Request) {
   }
 
   // 저장 시에는 별도 암호화 (ENCRYPTION_KEY 기반)
-  const { useOAuthToken: _ignored, ...rest } = body
+  const { useOAuthToken, usesOAuthToken, ...rest } = body
   const project = {
     ...rest,
     userId: user.id,
     accessToken: encrypt(plainToken),
+    usesOAuthToken: usesOAuthToken ? true : (useOAuthToken ? true : false),
   }
   createProject(project)
   logActivity({
