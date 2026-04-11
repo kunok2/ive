@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useStore } from '@/lib/store'
 import AgentCard from '@/components/agent/AgentCard'
+import AgentForm from '@/components/agent/AgentForm'
 import ProjectForm from '@/components/project/ProjectForm'
 import MobileTabBar from '@/components/layout/MobileTabBar'
 import Modal from '@/components/ui/Modal'
@@ -19,6 +20,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [showEditProject, setShowEditProject] = useState(false)
   const [showDeleteProject, setShowDeleteProject] = useState(false)
   const [showAssignAgent, setShowAssignAgent] = useState(false)
+  const [showNewAgent, setShowNewAgent] = useState(false)
   const [assignError, setAssignError] = useState('')
   const [assignToken, setAssignToken] = useState('')
   // 토큰 편집 중인 에이전트
@@ -27,6 +29,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const tc = useTranslations('common')
   const tp = useTranslations('project')
   const ts = useTranslations('stage')
+  const ta = useTranslations('agent')
 
   const [gitMembers, setGitMembers] = useState<{ id: number; username: string; name: string; avatarUrl: string }[]>([])
   const [gitMembersLoading, setGitMembersLoading] = useState(false)
@@ -313,8 +316,17 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       </main>
 
       {/* 모달들 */}
-      <Modal open={showEditProject} onClose={() => setShowEditProject(false)} title={tp('projectSettings')}>
-        <ProjectForm existing={project} onSuccess={() => setShowEditProject(false)} />
+      <Modal
+        open={showEditProject}
+        onClose={() => setShowEditProject(false)}
+        title={tp('projectSettings')}
+        closeOnBackdrop={false}
+      >
+        <ProjectForm
+          existing={project}
+          onSuccess={() => setShowEditProject(false)}
+          onCancel={() => setShowEditProject(false)}
+        />
       </Modal>
 
       <Modal open={showAssignAgent} onClose={() => setShowAssignAgent(false)} title={tp('assignAgent')}>
@@ -322,8 +334,16 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           {availableAgents.length === 0 ? (
             <div className="text-center py-8 text-ive-text-muted">
               <i className="fa-solid fa-robot text-3xl text-ive-text-dim mb-3 block" />
-              <p className="text-base">{tp('noAvailableAgents')}</p>
-              <p className="text-sm text-ive-text-dim mt-1">{tp('noAvailableAgentsHint')}</p>
+              <p className="text-base font-bold">{tp('noAvailableAgents')}</p>
+              <p className="text-sm font-bold text-ive-text-dim mt-1">{tp('noAvailableAgentsHint')}</p>
+              <button
+                type="button"
+                onClick={() => { setShowAssignAgent(false); setShowNewAgent(true) }}
+                className="mt-4 inline-flex items-center gap-2 bg-ive-green-dark text-white font-bold text-sm px-4 py-3 rounded-lg active:opacity-90 transition-all"
+              >
+                <i className="fa-solid fa-plus" />
+                {ta('addAgent')}
+              </button>
             </div>
           ) : (
             <>
@@ -361,11 +381,26 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             </>
           )}
           {assignError && (
-            <div className="text-base text-ive-red bg-ive-red/10 rounded-lg px-4 py-3 border border-ive-red/20">
+            <div className="text-sm font-bold text-ive-red bg-ive-red/10 rounded-lg px-4 py-3 border border-ive-red/20">
               <i className="fa-solid fa-circle-exclamation mr-1.5" />{assignError}
             </div>
           )}
         </div>
+      </Modal>
+
+      <Modal
+        open={showNewAgent}
+        onClose={() => setShowNewAgent(false)}
+        title={ta('addAgent')}
+        closeOnBackdrop={false}
+      >
+        <AgentForm
+          onSuccess={() => {
+            setShowNewAgent(false)
+            setShowAssignAgent(true)
+          }}
+          onCancel={() => setShowNewAgent(false)}
+        />
       </Modal>
 
       <ConfirmModal

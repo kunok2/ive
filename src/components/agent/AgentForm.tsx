@@ -8,9 +8,10 @@ import { AvatarSelector } from '@/components/agent/AgentAvatar'
 
 interface Props {
   onSuccess?: () => void
+  onCancel?: () => void
 }
 
-export default function AgentForm({ onSuccess }: Props) {
+export default function AgentForm({ onSuccess, onCancel }: Props) {
   const t = useTranslations('agent')
   const tc = useTranslations('common')
   const { addAgent, state } = useStore()
@@ -115,7 +116,7 @@ export default function AgentForm({ onSuccess }: Props) {
                 <div className={`text-base font-bold ${cliName === t.value ? 'text-ive-green' : 'text-ive-text'}`}>
                   {t.label}
                 </div>
-                <div className="text-base text-ive-text-muted">{t.desc}</div>
+                <div className="text-sm text-ive-text-muted">{t.desc}</div>
               </div>
             </button>
           ))}
@@ -268,18 +269,30 @@ export default function AgentForm({ onSuccess }: Props) {
       )}
 
       {error && (
-        <div className="text-base text-ive-red bg-ive-red/10 rounded-lg px-3 py-2">
+        <div className="text-sm font-bold text-ive-red bg-ive-red/10 rounded-lg px-3 py-2">
           <i className="fa-solid fa-circle-exclamation mr-1" />{error}
         </div>
       )}
 
-      <button
-        type="submit"
-        disabled={loading || limitReached}
-        className="w-full bg-ive-green-dark text-white font-bold py-3 rounded-lg text-base active:bg-ive-green/80 transition-colors mt-2 disabled:opacity-50"
-      >
-        {loading ? (<><i className="fa-solid fa-spinner fa-spin mr-1.5" />{tc('creating')}</>) : (<><i className="fa-solid fa-robot mr-1.5" />{t('addAgent')}</>)}
-      </button>
+      {/* 버튼 — 스크롤해도 항상 하단에 고정 */}
+      <div className="sticky bottom-0 -mx-4 px-4 pt-3 pb-1 mt-2 border-t border-ive-border-dark bg-ive-bg-solid flex gap-2">
+        {onCancel && (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="flex-1 bg-white/5 border border-ive-border-subtle text-ive-text-muted font-bold py-4 rounded-lg text-sm active:opacity-80 transition-all"
+          >
+            {tc('cancel')}
+          </button>
+        )}
+        <button
+          type="submit"
+          disabled={loading || limitReached}
+          className="flex-[2] bg-ive-green-dark text-white font-bold py-4 rounded-lg text-sm active:bg-ive-green/80 transition-colors disabled:opacity-50"
+        >
+          {loading ? (<><i className="fa-solid fa-spinner fa-spin mr-1.5" />{tc('creating')}</>) : (<><i className="fa-solid fa-robot mr-1.5" />{t('addAgent')}</>)}
+        </button>
+      </div>
     </form>
   )
 }

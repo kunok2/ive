@@ -158,6 +158,14 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     return ''
   })
   const [creating, setCreating] = useState(false)
+
+  // 레이블 누락 안내 모달
+  const [labelModalOpen, setLabelModalOpen] = useState(false)
+  const [labelStatus, setLabelStatus] = useState<{ label: string; exists: boolean }[]>([])
+  const [labelCreating, setLabelCreating] = useState(false)
+  const [labelCreateMsg, setLabelCreateMsg] = useState<string | null>(null)
+  const [pendingCreateAfterLabels, setPendingCreateAfterLabels] = useState(false)
+  const handleCreateIssueRef = useRef<() => void>(() => {})
   const [issueSearchQuery, setIssueSearchQuery] = useState('')
   const [closing, setClosing] = useState<number | null>(null)
   const [preferredAgentId, setPreferredAgentId] = useState<string | null>(null) // null=자동배정, 'none'=배정안함, 'assignee'=담당자처리, agentId=지정
@@ -559,6 +567,14 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     else setSelected(new Set(filtered.map(i => i.iid)))
   }
 
+  // 레이블 생성 후 이슈 생성 자동 재시도
+  useEffect(() => {
+    if (!labelModalOpen && pendingCreateAfterLabels) {
+      setPendingCreateAfterLabels(false)
+      handleCreateIssueRef.current()
+    }
+  }, [labelModalOpen, pendingCreateAfterLabels])
+
   const handleCreateIssue = async () => {
     const lines = newBody.split('\n')
     const title = lines[0].trim()
@@ -621,7 +637,20 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
         }, 1500)
       } else {
         const data = await res.json().catch(() => ({}))
-        toast(data.error || '이슈 생성에 실패했습니다', 'error')
+        if (data.labelMissing) {
+          // 레이블 누락 — 안내 모달 오픈, 상태 로딩
+          try {
+            const lres = await fetch(`/api/projects/${selectedProjectId}/labels`)
+            const ldata = await lres.json().catch(() => [])
+            setLabelStatus(Array.isArray(ldata) ? ldata : [])
+          } catch {
+            setLabelStatus([])
+          }
+          setLabelCreateMsg(null)
+          setLabelModalOpen(true)
+        } else {
+          toast(data.error || '이슈 생성에 실패했습니다', 'error')
+        }
       }
     } catch (err: any) {
       toast(err.message || '네트워크 오류가 발생했습니다', 'error')
@@ -629,6 +658,9 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
       setCreating(false)
     }
   }
+
+  // 모달에서 재시도 시 최신 handleCreateIssue를 호출할 수 있도록 ref 동기화
+  handleCreateIssueRef.current = handleCreateIssue
 
   const handleCloseIssue = async (e: React.MouseEvent, iid: number) => {
     e.stopPropagation()
@@ -696,7 +728,10 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
               <i className={`fa-solid fa-chevron-down text-xs text-ive-text-dim transition-transform ${projectDropdownOpen ? 'rotate-180' : ''}`} />
             </button>
             {projectDropdownOpen && (
-              <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden shadow-lg">
+              <div
+                className="absolute z-50 top-full left-0 right-0 mt-1 border border-ive-border-subtle rounded-lg overflow-hidden shadow-lg"
+                style={{ backgroundColor: '#1c1c20' }}
+              >
                 {state.projects.map(p => (
                   <button
                     key={p.id}
@@ -1410,6 +1445,104 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
             </div>
           )
         })()}
+      </Modal>
+
+      {/* 레이블 누락 안내 모달 — 이슈 생성 시 필수 레이블이 없을 때 */}
+      <Modal
+        open={labelModalOpen}
+        onClose={() => setLabelModalOpen(false)}
+        title="레이블이 필요해요"
+        closeOnBackdrop={false}
+      >
+        <div className="flex flex-col gap-4">
+          <div className="bg-ive-amber/10 border border-ive-amber/30 rounded-lg p-3">
+            <div className="text-sm font-bold text-ive-amber mb-1">
+              <i className="fa-solid fa-triangle-exclamation mr-1.5" />
+              이슈를 생성하려면 IVE 레이블이 Git 저장소에 있어야 합니다
+            </div>
+            <p className="text-xs font-bold text-ive-text-muted leading-relaxed">
+              IVE는 이슈 진행 단계(대기 → 개발 → 검증대기 → 검증 → 완료)를 레이블로 추적합니다.
+              아래 레이블이 Git 저장소에 존재해야 스캐너와 에이전트가 이슈를 관리할 수 있습니다.
+              <br />
+              <span className="text-ive-text-dim">아래 버튼을 누르면 누락된 레이블이 자동으로 생성됩니다.</span>
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            {labelStatus.length === 0 ? (
+              <div className="text-sm font-bold text-ive-text-dim text-center py-2">
+                <i className="fa-solid fa-circle-notch fa-spin mr-1.5" />
+                레이블 상태 확인 중...
+              </div>
+            ) : (
+              labelStatus.map(s => (
+                <div
+                  key={s.label}
+                  className={`flex items-center gap-2 text-sm font-bold px-3 py-2 rounded-lg border ${
+                    s.exists
+                      ? 'border-ive-green/30 bg-ive-green/10 text-ive-green'
+                      : 'border-ive-red/30 bg-ive-red/10 text-ive-red'
+                  }`}
+                >
+                  <i className={`fa-solid ${s.exists ? 'fa-circle-check' : 'fa-circle-xmark'}`} />
+                  <span className="flex-1">{s.label}</span>
+                  <span className="text-xs text-ive-text-dim">
+                    {s.exists ? '있음' : '없음'}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+
+          {labelCreateMsg && (
+            <div className="text-sm font-bold text-ive-amber bg-ive-amber/10 rounded-lg px-3 py-2 border border-ive-amber/30">
+              <i className="fa-solid fa-circle-exclamation mr-1.5" />
+              {labelCreateMsg}
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setLabelModalOpen(false)}
+              className="flex-1 bg-white/5 border border-ive-border-subtle text-ive-text-muted font-bold py-3 rounded-lg text-sm active:opacity-80 transition-all"
+            >
+              {tCommon('cancel')}
+            </button>
+            <button
+              type="button"
+              disabled={labelCreating || !selectedProjectId || labelStatus.every(s => s.exists)}
+              onClick={async () => {
+                if (!selectedProjectId) return
+                setLabelCreating(true)
+                setLabelCreateMsg(null)
+                try {
+                  const res = await fetch(`/api/projects/${selectedProjectId}/labels`, { method: 'POST' })
+                  const data = await res.json()
+                  setLabelStatus(data.results || [])
+                  if (data.success) {
+                    setLabelCreateMsg(null)
+                    setPendingCreateAfterLabels(true)
+                    setLabelModalOpen(false)
+                  } else {
+                    setLabelCreateMsg(data.message || '레이블 생성에 실패했습니다')
+                  }
+                } catch {
+                  setLabelCreateMsg('네트워크 오류가 발생했습니다')
+                } finally {
+                  setLabelCreating(false)
+                }
+              }}
+              className="flex-[2] bg-ive-green-dark text-white font-bold py-3 rounded-lg text-sm active:opacity-90 transition-all disabled:opacity-40"
+            >
+              {labelCreating ? (
+                <><i className="fa-solid fa-circle-notch fa-spin mr-1.5" />생성 중...</>
+              ) : (
+                <><i className="fa-solid fa-wand-magic-sparkles mr-1.5" />레이블 자동 생성</>
+              )}
+            </button>
+          </div>
+        </div>
       </Modal>
     </PullToRefresh>
   )

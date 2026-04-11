@@ -34,9 +34,12 @@ import {
   markIssueVerified,
   markIssueVerifyRejected,
   getIssueAssigneeUsername,
+  getProjectWithUserOAuth,
+  updateUserOAuthTokens,
+  getOAuthProviderById,
 } from "./db";
 import { fetchProjectMembers } from "./provider";
-import { decrypt } from "./crypto";
+import { decrypt, encrypt } from "./crypto";
 import { defaultLocale } from "@/i18n/config";
 import { addIssueLabels, removeIssueLabels, addIssueComment, createBranch, getDefaultBranch } from "./provider";
 import {
@@ -47,7 +50,8 @@ import {
   addGitLabSpentTime,
   createGitLabMR,
   getGitLabMR,
-  addGitLabMRNote
+  addGitLabMRNote,
+  refreshGitLabToken,
 } from "./gitlab";
 import {
   ensureGitHubLabels,
@@ -414,7 +418,49 @@ export async function scanProject(project: Project, force: boolean = false) {
 
     console.log(`[Scanner] ${force ? 'FORCED ' : ''}Scanning project: ${project.name}`);
 
-    const decryptedToken = decrypt(project.accessToken);
+    let decryptedToken = decrypt(project.accessToken);
+
+    // OAuth 토큰 처리
+    if (project.usesOAuthToken) {
+      try {
+        const full = getProjectWithUserOAuth(project.id);
+        if (full?.oauth_access_token) {
+          decryptedToken = decrypt(full.oauth_access_token);
+          
+          // 만료 시간 체크 (현재로부터 10분 이내면 갱신)
+          const expiresAt = full.oauth_token_expires_at ? new Date(full.oauth_token_expires_at).getTime() : 0;
+          const nowMs = Date.now();
+          
+          if (expiresAt < nowMs + 10 * 60 * 1000) {
+            console.log(`[Scanner] OAuth token expiring soon for ${project.name}, refreshing...`);
+            const provider = full.oauth_provider_id ? getOAuthProviderById(full.oauth_provider_id) : null;
+            if (provider && full.oauth_refresh_token) {
+              const refreshPlain = decrypt(full.oauth_refresh_token);
+              const clientSecretPlain = provider.clientSecret ? decrypt(provider.clientSecret) : '';
+              
+              const refreshed = await refreshGitLabToken(project.repoUrl, provider.clientId, clientSecretPlain, refreshPlain);
+              if (refreshed.access_token) {
+                decryptedToken = refreshed.access_token;
+                const newExpiry = new Date(Date.now() + (refreshed.expires_in || 7200) * 1000).toISOString();
+                
+                // DB 업데이트
+                updateUserOAuthTokens(project.userId, {
+                  accessTokenEncrypted: encrypt(refreshed.access_token),
+                  refreshTokenEncrypted: encrypt(refreshed.refresh_token || refreshPlain),
+                  tokenExpiresAt: newExpiry
+                });
+                console.log(`[Scanner] OAuth token refreshed for ${project.name}`);
+              }
+            } else {
+              console.warn(`[Scanner] Cannot refresh OAuth token for ${project.name}: missing provider or refresh_token`);
+            }
+          }
+        }
+      } catch (e) {
+        console.error(`[Scanner] OAuth handling failed for ${project.name}:`, e);
+        // 실패 시 에러만 남기고 기존 토큰으로 시도 (혹시 모르니)
+      }
+    }
 
     // 프로젝트 멤버 캐시 갱신 (30분 간격 throttle) — 검증자 후보 풀에 사용
     const lastMemberSyncMs = memberSyncAt.get(project.id) || 0;

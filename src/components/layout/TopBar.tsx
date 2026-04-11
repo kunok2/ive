@@ -176,12 +176,32 @@ export default function TopBar() {
         />
       </Modal>
 
-      <Modal open={showNewProject} onClose={() => setShowNewProject(false)} title={tp('newProject')}>
-        <ProjectForm onSuccess={() => setShowNewProject(false)} />
+      <Modal
+        open={showNewProject}
+        onClose={() => setShowNewProject(false)}
+        title={tp('newProject')}
+        closeOnBackdrop={false}
+      >
+        <ProjectForm
+          onSuccess={() => setShowNewProject(false)}
+          onCancel={() => setShowNewProject(false)}
+        />
       </Modal>
 
-      <Modal open={showNewAgent} onClose={() => setShowNewAgent(false)} title={ta('addDeveloper')}>
-        <AgentForm onSuccess={() => setShowNewAgent(false)} />
+      <Modal
+        open={showNewAgent}
+        onClose={() => setShowNewAgent(false)}
+        title={ta('addDeveloper')}
+        closeOnBackdrop={false}
+      >
+        <AgentForm
+          onSuccess={() => {
+            setShowNewAgent(false)
+            setActiveTab('agents')
+            if (!isMainPage) router.push('/')
+          }}
+          onCancel={() => setShowNewAgent(false)}
+        />
       </Modal>
     </>
   )

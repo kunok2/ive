@@ -79,6 +79,7 @@ export interface Project {
   lastScannedIssueCount: number | null       // 마지막 스캔 시 처리 대기(waiting) 이슈 수
   lastVerifyWaitingCount: number | null      // 마지막 스캔 시 검증 대기(verify_waiting) 이슈 수
   scannerActive: boolean   // 스캐너 활성화 여부
+  usesOAuthToken: boolean   // OAuth 토큰 사용 여부 (true면 Authorization: Bearer 헤더 사용)
   lastError: string | null      // 마지막 에러 메시지
   lastErrorAt: string | null    // 마지막 에러 시간
   sortOrder: number             // 표시 순서

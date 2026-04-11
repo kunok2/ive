@@ -15,6 +15,32 @@ export function getProjectPath(repoUrl: string): string {
 }
 
 /**
+ * GitLab OAuth 토큰을 refresh_token을 사용하여 갱신합니다.
+ */
+export async function refreshGitLabToken(repoUrl: string, clientId: string, clientSecret: string, refreshToken: string) {
+  const url = new URL(repoUrl);
+  const tokenUrl = `${url.protocol}//${url.host}/oauth/token`;
+
+  const res = await fetch(tokenUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: refreshToken,
+      grant_type: 'refresh_token',
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`GitLab OAuth token refresh failed: ${res.status} ${text}`);
+  }
+
+  return await res.json(); // { access_token, refresh_token, expires_in, ... }
+}
+
+/**
  * 프로젝트 ID를 추출합니다.
  */
 function getProjectId(repoUrl: string): string {
@@ -44,7 +70,7 @@ export function getApiBaseUrl(repoUrl: string): string {
  * 프로젝트의 인증 방식에 따라 적절한 HTTP 헤더를 반환합니다.
  */
 export function getAuthHeaders(project: Project, decryptedToken: string, options?: { isOAuth?: boolean }): Record<string, string> {
-  if (options?.isOAuth) {
+  if (options?.isOAuth || project.usesOAuthToken) {
     return { 'Authorization': `Bearer ${decryptedToken}` };
   }
   if (project.authType === 'basic') {
