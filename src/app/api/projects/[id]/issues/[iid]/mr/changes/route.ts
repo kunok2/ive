@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getProject } from '@/lib/db'
+import { getProject, getProjectAccess, isIssueAssignee } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { decrypt } from '@/lib/crypto'
 import { fetchMRByBranch, fetchMRChanges } from '@/lib/provider'
@@ -10,8 +10,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   const { id, iid } = await params
   const project = getProject(id)
-  if (!project || project.userId !== user.id) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  const access = getProjectAccess(id, user.id)
+  if (!access) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!user.isAdmin && !isIssueAssignee(id, Number(iid), user)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   const decryptedToken = decrypt(project.accessToken)

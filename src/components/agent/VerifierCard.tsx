@@ -20,6 +20,7 @@ export interface VerifierSummary {
   avgVerifyMin: number
   oldestWaitMin: number
   assignedProjects: { id: string; name: string; color: string; provider: string }[]
+  iveUser: { id: string; name: string; email: string; avatar: string } | null
 }
 
 interface QueueItem {
@@ -48,26 +49,26 @@ export default function VerifierCard({ verifier }: Props) {
   const t = useTranslations('agent')
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window === 'undefined') return true
-    return sessionStorage.getItem(`vc-collapsed-${verifier.username}`) !== 'false'
+    return sessionStorage.getItem(`vc-collapsed-${verifier.provider}-${verifier.username}`) !== 'false'
   })
   const toggleCollapsed = () => {
     setCollapsed(prev => {
       const next = !prev
-      sessionStorage.setItem(`vc-collapsed-${verifier.username}`, String(next))
+      sessionStorage.setItem(`vc-collapsed-${verifier.provider}-${verifier.username}`, String(next))
       return next
     })
   }
   type PanelKey = 'waiting' | 'verifying' | 'approved' | 'rejected' | 'stats'
   const [expandedPanel, _setExpandedPanel] = useState<PanelKey | null>(() => {
     if (typeof window === 'undefined') return null
-    const saved = sessionStorage.getItem(`vc-panel-${verifier.username}`)
+    const saved = sessionStorage.getItem(`vc-panel-${verifier.provider}-${verifier.username}`)
     const valid: PanelKey[] = ['waiting', 'verifying', 'approved', 'rejected', 'stats']
     return saved && (valid as string[]).includes(saved) ? (saved as PanelKey) : null
   })
   const setExpandedPanel = (v: PanelKey | null) => {
     _setExpandedPanel(v)
-    if (v) sessionStorage.setItem(`vc-panel-${verifier.username}`, v)
-    else sessionStorage.removeItem(`vc-panel-${verifier.username}`)
+    if (v) sessionStorage.setItem(`vc-panel-${verifier.provider}-${verifier.username}`, v)
+    else sessionStorage.removeItem(`vc-panel-${verifier.provider}-${verifier.username}`)
   }
   const [snapshots, setSnapshots] = useState<StatSnapshot[]>([])
   const [queue, setQueue] = useState<QueueItem[]>([])
@@ -122,11 +123,26 @@ export default function VerifierCard({ verifier }: Props) {
         <div className="flex items-center gap-2.5 min-w-0 flex-1">
           <AgentAvatar avatar={verifier.avatar} size="md" />
           <div className="min-w-0">
-            <div className="flex items-center gap-1.5 min-w-0">
+            <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
               <span className="text-base font-bold text-ive-cyan truncate">{verifier.name}</span>
-              <span className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold bg-ive-cyan/20 text-ive-cyan">
+              <span className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold bg-ive-purple/20 text-ive-purple">
                 <i className="fa-solid fa-user-check" />{t('verifierBadge')}
               </span>
+              {verifier.iveUser ? (
+                <span
+                  className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold bg-ive-green/15 text-ive-green border border-ive-green/30"
+                  title={`IVE 사용자: ${verifier.iveUser.name} (${verifier.iveUser.email})`}
+                >
+                  <i className="fa-solid fa-circle-check" />IVE
+                </span>
+              ) : (
+                <span
+                  className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold bg-ive-text-dim/10 text-ive-text-dim border border-ive-text-dim/20"
+                  title="IVE에 가입하지 않은 Git 사용자"
+                >
+                  <i className="fa-solid fa-user-slash" />Git 전용
+                </span>
+              )}
             </div>
             <div className="text-sm font-bold text-ive-text-muted truncate">
               <i className={`fa-brands ${providerIcon} mr-1`} />@{verifier.username}
@@ -153,34 +169,34 @@ export default function VerifierCard({ verifier }: Props) {
       {!collapsed && <>
         {/* 정보 */}
         <div className="p-3 space-y-2">
-          <div className="flex items-center gap-2 text-base font-bold">
+          <div className="flex items-center gap-2 text-sm font-bold">
             <span className="text-ive-text-muted shrink-0"><i className={`fa-brands ${providerIcon} w-4 text-center`} /> Git ID</span>
             <span className="text-ive-text">@{verifier.username}</span>
           </div>
 
           {verifier.avgVerifyMin > 0 && (
-            <div className="flex items-center gap-2 text-base font-bold">
+            <div className="flex items-center gap-2 text-sm font-bold">
               <span className="text-ive-text-muted shrink-0"><i className="fa-solid fa-gauge w-4 text-center" /> {t('avgVerifyTime')}</span>
               <span className="text-ive-text">{fmtDur(verifier.avgVerifyMin)}</span>
-              <span className="text-xs text-ive-text-dim">({t('avgVerifyTimeHint')})</span>
+              <span className="text-xs font-bold text-ive-text-dim">({t('avgVerifyTimeHint')})</span>
             </div>
           )}
 
           {verifier.oldestWaitMin > 0 && (
-            <div className="flex items-center gap-2 text-base font-bold">
+            <div className="flex items-center gap-2 text-sm font-bold">
               <span className="text-ive-text-muted shrink-0"><i className="fa-solid fa-hourglass-half w-4 text-center" /> {t('oldestWait')}</span>
               <span className={`${verifier.oldestWaitMin > 60 * 24 ? 'text-ive-red' : verifier.oldestWaitMin > 60 * 4 ? 'text-ive-amber' : 'text-ive-text'}`}>{fmtDur(verifier.oldestWaitMin)}</span>
             </div>
           )}
 
-          <div className="flex items-center gap-2 text-base font-bold">
+          <div className="flex items-center gap-2 text-sm font-bold">
             <span className="text-ive-text-muted shrink-0"><i className="fa-solid fa-plug w-4 text-center" /> {t('assigned')}</span>
             {verifier.assignedProjects.length === 0 ? (
               <span className="text-ive-text-dim">{t('notAssigned')}</span>
             ) : (
               <div className="flex flex-wrap gap-1.5">
                 {verifier.assignedProjects.map(p => (
-                  <span key={p.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-sm font-bold bg-ive-bg-deep border border-ive-border-dark">
+                  <span key={p.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold bg-ive-bg-deep border border-ive-border-dark">
                     <i className={`fa-brands ${p.provider === 'github' ? 'fa-github' : 'fa-gitlab'}`} style={{ color: p.color }} />
                     <span className="text-ive-text">{p.name}</span>
                   </span>

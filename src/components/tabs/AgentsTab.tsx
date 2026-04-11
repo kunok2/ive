@@ -116,31 +116,59 @@ export default function AgentsTab({ onAdd }: { onAdd?: () => void }) {
               </button>
             </div>
 
-            <div className="flex flex-col gap-3">
-              {showWorkers && state.agents.map(agent => (
-                <AgentCard
-                  key={agent.id}
-                  agent={agent}
-                  onDelete={(id) => setDeleteAgentId(id)}
-                  assignedProjects={getAssignedProjects(agent.id)}
-                />
-              ))}
-              {showVerifiers && verifiers.map(v => (
-                <VerifierCard key={v.username} verifier={v} />
-              ))}
-              {showVerifiers && verifiersLoaded && verifiers.length === 0 && filter !== 'all' && (
-                <div className="text-center py-8 text-sm font-bold text-ive-text-dim">
-                  <i className="fa-solid fa-user-check text-2xl text-ive-text-dim mb-2 block" />
-                  {t('noVerifiers')}
+            {(() => {
+              // 정렬: 특이사항(대기/진행 중) 많은 순 → 이름순
+              // Worker priority: pendingCount * 100 + (busy ? 10 : 0) + (offline ? -1000 : 0)
+              // Verifier priority: (verifyWaiting + verifying) * 100
+              type Item =
+                | { kind: 'worker'; priority: number; name: string; agent: typeof state.agents[number] }
+                | { kind: 'verifier'; priority: number; name: string; verifier: VerifierSummary }
+
+              const items: Item[] = []
+              if (showWorkers) {
+                for (const a of state.agents) {
+                  const pending = a.pendingCount || 0
+                  const statusScore = a.status === 'busy' ? 10 : a.status === 'offline' ? -1000 : 0
+                  items.push({ kind: 'worker', priority: pending * 100 + statusScore, name: a.name, agent: a })
+                }
+              }
+              if (showVerifiers) {
+                for (const v of verifiers) {
+                  items.push({ kind: 'verifier', priority: (v.verifyWaiting + v.verifying) * 100, name: v.name, verifier: v })
+                }
+              }
+              items.sort((a, b) => {
+                if (a.priority !== b.priority) return b.priority - a.priority
+                return a.name.localeCompare(b.name)
+              })
+
+              return (
+                <div className="flex flex-col gap-3">
+                  {items.map(item => item.kind === 'worker' ? (
+                    <AgentCard
+                      key={`w-${item.agent.id}`}
+                      agent={item.agent}
+                      onDelete={(id) => setDeleteAgentId(id)}
+                      assignedProjects={getAssignedProjects(item.agent.id)}
+                    />
+                  ) : (
+                    <VerifierCard key={`v-${item.verifier.provider}-${item.verifier.username}`} verifier={item.verifier} />
+                  ))}
+                  {showVerifiers && verifiersLoaded && verifiers.length === 0 && filter !== 'all' && (
+                    <div className="text-center py-8 text-sm font-bold text-ive-text-dim">
+                      <i className="fa-solid fa-user-check text-2xl text-ive-text-dim mb-2 block" />
+                      {t('noVerifiers')}
+                    </div>
+                  )}
+                  {showWorkers && state.agents.length === 0 && filter !== 'all' && (
+                    <div className="text-center py-8 text-sm font-bold text-ive-text-dim">
+                      <i className="fa-solid fa-robot text-2xl text-ive-text-dim mb-2 block" />
+                      {t('noAgents')}
+                    </div>
+                  )}
                 </div>
-              )}
-              {showWorkers && state.agents.length === 0 && filter !== 'all' && (
-                <div className="text-center py-8 text-sm font-bold text-ive-text-dim">
-                  <i className="fa-solid fa-robot text-2xl text-ive-text-dim mb-2 block" />
-                  {t('noAgents')}
-                </div>
-              )}
-            </div>
+              )
+            })()}
           </>
         )}
       </main>

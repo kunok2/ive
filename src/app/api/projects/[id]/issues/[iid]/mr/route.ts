@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getProject, markIssueVerified, touchProjectActivity } from '@/lib/db'
+import { getProject, markIssueVerified, touchProjectActivity, getProjectAccess, isIssueAssignee } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { decrypt } from '@/lib/crypto'
 import { fetchMRByBranch, mergeMR, closeMR, fetchSingleIssue, addIssueLabels, removeIssueLabels } from '@/lib/provider'
@@ -11,8 +11,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   const { id, iid } = await params
   const project = getProject(id)
-  if (!project || project.userId !== user.id) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  // MR 조회도 담당자/관리자만 (머지 영역 UI 표시 권한과 동일)
+  const access = getProjectAccess(id, user.id)
+  if (!access) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!user.isAdmin && !isIssueAssignee(id, Number(iid), user)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   const decryptedToken = decrypt(project.accessToken)
@@ -50,8 +55,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const { id, iid } = await params
   const project = getProject(id)
-  if (!project || project.userId !== user.id) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  // 머지/MR 액션은 관리자 또는 이슈 담당자만
+  const access = getProjectAccess(id, user.id)
+  if (!access || access === 'viewer') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!user.isAdmin && !isIssueAssignee(id, Number(iid), user)) {
+    return NextResponse.json(
+      { error: '이 이슈의 담당자 또는 관리자만 MR을 머지/처리할 수 있습니다' },
+      { status: 403 }
+    )
   }
 
   const body = await req.json()

@@ -1773,13 +1773,20 @@ function OAuthProvidersPanel() {
 
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
 
+  // 타입당 1개 제약 — 이미 등록된 타입 확인
+  const hasGitlab = providers.some(p => p.type === 'gitlab')
+  const hasGithub = providers.some(p => p.type === 'github')
+  const bothRegistered = hasGitlab && hasGithub
+
   function openCreate() {
+    if (bothRegistered) return
     setEditing(null)
+    const defaultType: 'gitlab' | 'github' = hasGitlab ? 'github' : 'gitlab'
     setForm({
       id: '',
-      type: 'gitlab',
+      type: defaultType,
       name: '',
-      baseUrl: 'https://gitlab.com',
+      baseUrl: defaultType === 'gitlab' ? 'https://gitlab.com' : 'https://github.com',
       clientId: '',
       clientSecret: '',
       enabled: true,
@@ -1864,7 +1871,9 @@ function OAuthProvidersPanel() {
         </h2>
         <button
           onClick={openCreate}
-          className="bg-ive-green-dark text-white text-sm font-bold px-3 py-1.5 rounded-lg"
+          disabled={bothRegistered}
+          title={bothRegistered ? 'GitLab/GitHub 모두 등록 완료. IVE는 타입당 1개만 지원합니다.' : undefined}
+          className="bg-ive-green-dark text-white text-sm font-bold px-3 py-1.5 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <i className="fa-solid fa-plus mr-1" />신규 등록
         </button>
@@ -1993,19 +2002,21 @@ function OAuthProvidersPanel() {
                 <div className="flex gap-2">
                   <button
                     type="button"
-                    disabled={!!editing}
+                    disabled={!!editing || (!editing && hasGitlab && form.type !== 'gitlab')}
                     onClick={() => setForm(f => ({ ...f, type: 'gitlab', baseUrl: f.baseUrl.includes('github') ? 'https://gitlab.com' : f.baseUrl }))}
-                    className={`flex-1 py-2 rounded-lg text-sm font-bold border ${form.type === 'gitlab' ? 'border-ive-green text-ive-green bg-ive-green/10' : 'border-ive-border text-ive-text-dim'} disabled:opacity-60`}
+                    title={!editing && hasGitlab ? '이미 GitLab 공급자가 등록돼 있습니다' : undefined}
+                    className={`flex-1 py-2 rounded-lg text-sm font-bold border ${form.type === 'gitlab' ? 'border-ive-green text-ive-green bg-ive-green/10' : 'border-ive-border text-ive-text-dim'} disabled:opacity-40 disabled:cursor-not-allowed`}
                   >
-                    <i className="fa-brands fa-gitlab mr-1" />GitLab
+                    <i className="fa-brands fa-gitlab mr-1" />GitLab{!editing && hasGitlab ? ' (등록됨)' : ''}
                   </button>
                   <button
                     type="button"
-                    disabled={!!editing}
+                    disabled={!!editing || (!editing && hasGithub && form.type !== 'github')}
                     onClick={() => setForm(f => ({ ...f, type: 'github', baseUrl: 'https://github.com' }))}
-                    className={`flex-1 py-2 rounded-lg text-sm font-bold border ${form.type === 'github' ? 'border-ive-green text-ive-green bg-ive-green/10' : 'border-ive-border text-ive-text-dim'} disabled:opacity-60`}
+                    title={!editing && hasGithub ? '이미 GitHub 공급자가 등록돼 있습니다' : undefined}
+                    className={`flex-1 py-2 rounded-lg text-sm font-bold border ${form.type === 'github' ? 'border-ive-green text-ive-green bg-ive-green/10' : 'border-ive-border text-ive-text-dim'} disabled:opacity-40 disabled:cursor-not-allowed`}
                   >
-                    <i className="fa-brands fa-github mr-1" />GitHub
+                    <i className="fa-brands fa-github mr-1" />GitHub{!editing && hasGithub ? ' (등록됨)' : ''}
                   </button>
                 </div>
               </div>

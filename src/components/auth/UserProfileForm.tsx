@@ -33,8 +33,6 @@ interface Props {
   avatar: string
   locale?: string
   timezone?: string
-  gitlabUsername?: string
-  githubUsername?: string
   onSuccess?: () => void
   onCancel?: () => void
   onEmailChanged?: () => void
@@ -44,7 +42,7 @@ interface Props {
 
 type ActiveSection = 'none' | 'avatar' | 'email' | 'password' | 'preferences'
 
-export default function UserProfileForm({ userId, email, name, avatar, locale: userLocale, timezone: userTimezone, gitlabUsername: userGitlabUsername, githubUsername: userGithubUsername, onSuccess, onCancel, onEmailChanged, onAvatarChanged, onSettingsChanged }: Props) {
+export default function UserProfileForm({ userId, email, name, avatar, locale: userLocale, timezone: userTimezone, onSuccess, onCancel, onEmailChanged, onAvatarChanged, onSettingsChanged }: Props) {
   const t = useTranslations('auth')
   const tc = useTranslations('common')
   const currentLocale = useLocale()
@@ -52,8 +50,6 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
   const [activeSection, setActiveSection] = useState<ActiveSection>('none')
   const [selectedLocale, setSelectedLocale] = useState<Locale>((userLocale || currentLocale) as Locale)
   const [selectedTimezone, setSelectedTimezone] = useState(userTimezone || 'Asia/Seoul')
-  const [gitlabUsername, setGitlabUsername] = useState(userGitlabUsername || '')
-  const [githubUsername, setGithubUsername] = useState(userGithubUsername || '')
   const [prefsSaving, setPrefsSaving] = useState(false)
   const [prefsSaved, setPrefsSaved] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -62,7 +58,7 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
   const [cropFile, setCropFile] = useState<File | null>(null)
 
   // 환경 설정 자동 저장
-  async function savePreferences(locale: Locale, timezone: string, gitUsernames?: { gitlabUsername?: string; githubUsername?: string }) {
+  async function savePreferences(locale: Locale, timezone: string) {
     setPrefsSaving(true)
     setPrefsSaved(false)
     try {
@@ -72,7 +68,7 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
       await fetch('/api/settings/locale', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ locale, timezone, ...gitUsernames }),
+        body: JSON.stringify({ locale, timezone }),
       })
       onSettingsChanged?.()
       setPrefsSaved(true)
@@ -573,36 +569,6 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
                 ))}
               </select>
               <p className="text-xs text-ive-text-dim mt-1">{t('timezoneDescription')}</p>
-            </div>
-            {/* Git Usernames */}
-            <div>
-              <label className="block text-sm font-bold text-ive-text-muted mb-1">
-                <i className="fa-brands fa-gitlab mr-1 text-xs text-orange-400" />GitLab Username
-              </label>
-              <input
-                type="text"
-                value={gitlabUsername}
-                disabled={prefsSaving}
-                onChange={(e) => setGitlabUsername(e.target.value)}
-                onBlur={() => savePreferences(selectedLocale, selectedTimezone, { gitlabUsername })}
-                placeholder="GitLab username"
-                className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2.5 text-sm text-ive-text placeholder-ive-text-dim focus:outline-none focus:border-ive-green"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-ive-text-muted mb-1">
-                <i className="fa-brands fa-github mr-1 text-xs" />GitHub Username
-              </label>
-              <input
-                type="text"
-                value={githubUsername}
-                disabled={prefsSaving}
-                onChange={(e) => setGithubUsername(e.target.value)}
-                onBlur={() => savePreferences(selectedLocale, selectedTimezone, { githubUsername })}
-                placeholder="GitHub username"
-                className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2.5 text-sm text-ive-text placeholder-ive-text-dim focus:outline-none focus:border-ive-green"
-              />
-              <p className="text-xs text-ive-text-dim mt-1">이슈 담당자/검증자 매칭에 사용됩니다</p>
             </div>
             {/* 자동 저장 피드백 */}
             {prefsSaving && (

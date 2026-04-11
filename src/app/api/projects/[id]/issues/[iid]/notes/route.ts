@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAccess, getUserById } from '@/lib/db';
+import { getProject, getProjectAccess, getUserById, getUserOAuthTokenRaw, getOAuthProviderById } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { decrypt } from '@/lib/crypto';
 import { fetchIssueNotes, addIssueComment } from '@/lib/provider';
@@ -91,10 +91,49 @@ export async function POST(
   if (!body?.trim()) return NextResponse.json({ error: '내용을 입력하세요.' }, { status: 400 });
 
   try {
-    const decryptedToken = decrypt(project.accessToken);
-    // IVE 사용자 식별 마커를 본문 앞에 삽입 (Git에는 HTML 주석으로 저장되어 보이지 않음)
-    const markedBody = `<!-- ive-author:${user.id} -->\n${body.trim()}`;
-    await addIssueComment(project, Number(iid), decryptedToken, markedBody);
+    // 토큰 선택 우선순위:
+    //   1) 로그인 유저가 OAuth로 접속했고 provider 타입이 프로젝트와 일치하면 → 유저 OAuth 토큰 사용
+    //      → Git 측 노트 작성자가 실제 유저로 표시됨 (프로젝트 공용 토큰이 아님)
+    //   2) 그 외(로컬 유저, OAuth 토큰 없음, provider 불일치) → 프로젝트 토큰 fallback
+    let tokenToUse: string | null = null
+    let usingUserToken = false
+    if (user.oauthProviderId && user.oauthUserId) {
+      const provider = getOAuthProviderById(user.oauthProviderId)
+      if (provider && provider.type === project.provider) {
+        const raw = getUserOAuthTokenRaw(user.id)
+        if (raw?.encrypted) {
+          try {
+            tokenToUse = decrypt(raw.encrypted)
+            usingUserToken = true
+          } catch (e) {
+            console.warn('[notes POST] OAuth token decrypt failed, falling back to project token:', e)
+          }
+        }
+      }
+    }
+    if (!tokenToUse) {
+      tokenToUse = decrypt(project.accessToken);
+    }
+
+    // IVE 사용자 식별 마커 — 프로젝트 토큰 사용 시 필수 (작성자 복원용),
+    // 유저 토큰 사용 시는 Git에 이미 실제 author가 남으므로 생략
+    const finalBody = usingUserToken
+      ? body.trim()
+      : `<!-- ive-author:${user.id} -->\n${body.trim()}`;
+
+    try {
+      await addIssueComment(project, Number(iid), tokenToUse, finalBody);
+    } catch (err) {
+      // 유저 토큰으로 실패하면 프로젝트 토큰으로 한 번 더 시도 (토큰 만료/권한 부족 대응)
+      if (usingUserToken) {
+        console.warn('[notes POST] user OAuth token failed, retrying with project token:', err)
+        const projectToken = decrypt(project.accessToken);
+        const fallbackBody = `<!-- ive-author:${user.id} -->\n${body.trim()}`;
+        await addIssueComment(project, Number(iid), projectToken, fallbackBody);
+      } else {
+        throw err;
+      }
+    }
     return NextResponse.json({ success: true });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : '코멘트 추가 실패' }, { status: 500 });

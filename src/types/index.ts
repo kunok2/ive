@@ -9,8 +9,6 @@ export interface User {
   allowedClis: CliName[]  // 사용 가능한 CLI 도구 목록
   locale?: string      // 사용자 지정 언어
   timezone?: string    // 사용자 지정 타임존 (예: 'Asia/Seoul')
-  gitlabUsername?: string // GitLab 사용자명 (검증자 매칭용)
-  githubUsername?: string // GitHub 사용자명 (검증자 매칭용)
   oauthProviderId?: string | null  // OAuth 로그인 공급자 ID (oauth_providers.id)
   oauthUserId?: string | null      // 공급자 측 사용자 고유 ID (문자열화)
   oauthTokenExpiresAt?: string | null // OAuth access_token 만료 시각 (ISO)
@@ -136,6 +134,7 @@ export interface Agent {
   sparklinePoints: number       // 스파크라인 표시 건수
   statsRetention: number        // 데이터 보관 기간 (일)
   createdAt: string
+  pendingCount?: number         // 지정 대기 이슈 수 (API 응답에만 포함, 정렬용)
 }
 
 export interface ProjectAssignment {

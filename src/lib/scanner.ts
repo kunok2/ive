@@ -415,11 +415,15 @@ export async function scanProject(project: Project, force: boolean = false) {
     if (force || (Date.now() - lastMemberSyncMs) > 30 * 60 * 1000) {
       try {
         const members = await fetchProjectMembers(project, decryptedToken);
-        const mapped = (members || []).map((m: { username?: string; login?: string; name?: string; avatar_url?: string }) => ({
+        // gitlab.ts/github.ts는 { id, username, name, avatarUrl } (camelCase) 반환.
+        // 과거 형식 대비해 snake_case(avatar_url)도 fallback으로 받음.
+        const mapped = (members || []).map((m: { id?: number | string; username?: string; login?: string; name?: string; avatarUrl?: string; avatar_url?: string }) => ({
           username: m.username || m.login || '',
           name: m.name || m.username || m.login || '',
-          avatarUrl: m.avatar_url || '',
+          avatarUrl: m.avatarUrl || m.avatar_url || '',
           provider: project.provider,
+          // GitLab: members[].id (numeric), GitHub: collaborators[].id — 문자열화
+          gitUserId: m.id != null ? String(m.id) : null,
         })).filter((m: { username: string }) => m.username);
         replaceProjectMembers(project.id, mapped);
         memberSyncAt.set(project.id, Date.now());
@@ -505,6 +509,8 @@ export async function scanProject(project: Project, force: boolean = false) {
           assigneeName: assignee ? (assignee.name || assignee.username || assignee.login || null) : null,
           assigneeAvatar: assignee ? (assignee.avatar_url || null) : null,
           assigneeProvider: project.provider,
+          // GitLab은 assignee.id (숫자), GitHub도 assignees[].id (숫자). 문자열화해 저장.
+          assigneeGitUserId: assignee && assignee.id != null ? String(assignee.id) : null,
           issueTitle: issue.title || null,
         });
       } catch (e) {

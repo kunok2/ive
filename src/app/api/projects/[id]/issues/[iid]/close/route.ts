@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAccess } from '@/lib/db';
+import { getProject, getProjectAccess, isIssueAssignee } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { decrypt } from '@/lib/crypto';
 import { closeIssue } from '@/lib/provider';
@@ -18,6 +18,16 @@ export async function POST(
   const access = getProjectAccess(projectId, user.id);
   if (!access || access === 'viewer') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  // 권한: 관리자이거나 해당 이슈의 Git assignee만 닫을 수 있음
+  if (!user.isAdmin) {
+    if (!isIssueAssignee(projectId, Number(iid), user)) {
+      return NextResponse.json(
+        { error: '이 이슈의 담당자(Git assignee) 또는 관리자만 이슈를 닫을 수 있습니다' },
+        { status: 403 }
+      );
+    }
   }
 
   try {

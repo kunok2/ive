@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getProject, getProjectAccess, getActiveChatSession, getAnyActiveChatSession, getLastEndedChatSession, getChatMessages, createChatSession, createExecution, updateAgentStatus, getAgent } from '@/lib/db'
+import { getProject, getProjectAccess, isIssueAssignee, getActiveChatSession, getAnyActiveChatSession, getLastEndedChatSession, getChatMessages, createChatSession, createExecution, updateAgentStatus, getAgent } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { pickAgentForChat, prepareChatWorkspace } from '@/lib/chat-agent'
 
@@ -61,6 +61,13 @@ export async function POST(
   const access = getProjectAccess(projectId, user.id)
   if (!access || access === 'viewer') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+  // 채팅 시작은 담당자 또는 관리자만
+  if (!user.isAdmin && !isIssueAssignee(projectId, Number(iid), user)) {
+    return NextResponse.json(
+      { error: '이 이슈의 담당자 또는 관리자만 AI 채팅을 시작할 수 있습니다' },
+      { status: 403 }
+    )
   }
 
   let body: any = {}

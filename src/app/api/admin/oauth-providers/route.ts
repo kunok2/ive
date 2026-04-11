@@ -6,6 +6,9 @@ import {
 import { encrypt } from '@/lib/crypto'
 import { logActivity } from '@/lib/activity'
 
+// IVE 한 대 = GitLab 1개 + GitHub 1개까지. 다중 인스턴스 동시 운영은 지원하지 않음.
+const MAX_PROVIDERS_PER_TYPE = 1
+
 /** 관리자: OAuth 공급자 전체 목록 (client_secret 제외) */
 export async function GET() {
   const user = await getCurrentUser()
@@ -39,6 +42,14 @@ export async function POST(req: Request) {
   }
   if (getOAuthProviderById(id)) {
     return NextResponse.json({ error: `이미 존재하는 ID: ${id}` }, { status: 409 })
+  }
+
+  // 타입당 최대 1개 제약
+  const existingOfType = getAllOAuthProviders().filter(p => p.type === type)
+  if (existingOfType.length >= MAX_PROVIDERS_PER_TYPE) {
+    return NextResponse.json({
+      error: `${type === 'github' ? 'GitHub' : 'GitLab'} 공급자는 이미 등록돼 있습니다. IVE는 타입당 1개만 지원합니다. 기존 공급자를 수정하거나 삭제 후 다시 등록하세요.`
+    }, { status: 409 })
   }
 
   createOAuthProvider({

@@ -68,6 +68,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
 
   const FILTER_TABS = useMemo(() => [
     { key: 'all', label: tFilter('all') },
+    { key: 'mine', label: '내 검증' },
     { key: 'waiting', label: tFilter('waiting') },
     { key: 'active', label: tFilter('active') },
     { key: 'verifying', label: tFilter('verifying') },
@@ -75,6 +76,16 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     { key: 'done', label: tFilter('done') },
     { key: 'history', label: tFilter('history') },
   ], [tFilter])
+
+  // OAuth 로그인 유저의 Git provider user id (assignee 매칭용)
+  const myGitUserId = state.user?.oauthUserId ? String(state.user.oauthUserId) : null
+
+  // 이슈가 현재 로그인 유저의 검증 대기/중인지
+  const isMyVerification = useCallback((issue: IveIssue): boolean => {
+    if (!myGitUserId) return false
+    if (issue.stage !== 'verify_waiting' && issue.stage !== 'verifying') return false
+    return !!issue.assignees?.some(a => a.id != null && String(a.id) === myGitUserId)
+  }, [myGitUserId])
 
   const BULK_ACTIONS: Record<string, { action: string; label: string; icon: string; danger?: boolean }[]> = useMemo(() => ({
     waiting: [],
@@ -365,6 +376,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
 
   const filtered = (isHistoryTab ? closedIssues : issues.filter(issue => {
     if (filter === 'all') return true
+    if (filter === 'mine') return isMyVerification(issue)
     if (filter === 'waiting') return issue.stage === 'waiting' || issue.stage === 'verify_waiting'
     if (filter === 'active') return issue.stage === 'dev'
     if (filter === 'verifying') return issue.stage === 'verifying'
@@ -671,6 +683,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                   {tab.label}
                   {(() => {
                     const count = tab.key === 'all' ? issues.length
+                      : tab.key === 'mine' ? issues.filter(isMyVerification).length
                       : tab.key === 'waiting' ? issues.filter(i => i.stage === 'waiting' || i.stage === 'verify_waiting').length
                       : tab.key === 'active' ? issues.filter(i => i.stage === 'dev').length
                       : tab.key === 'verifying' ? issues.filter(i => i.stage === 'verifying').length

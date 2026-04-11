@@ -21,7 +21,23 @@ import { useTranslations } from 'next-intl'
 export default function HomePage() {
   const router = useRouter()
   const { state, logout, refreshUser } = useStore()
-  const { activeTab, issuesProjectId, issueAddTrigger: contextAddTrigger } = useTab()
+  const { activeTab, setActiveTab, setIssuesFilter, issuesProjectId, issueAddTrigger: contextAddTrigger } = useTab()
+
+  // 내 검증 대기 개수 (OAuth 로그인 유저만 해당)
+  const [myVerifyCount, setMyVerifyCount] = useState(0)
+  useEffect(() => {
+    if (!state.user) return
+    let cancelled = false
+    const fetchCount = () => {
+      fetch('/api/me/verifier/queue?counts=1')
+        .then(r => r.ok ? r.json() : { total: 0 })
+        .then(d => { if (!cancelled) setMyVerifyCount(Number(d.total || 0)) })
+        .catch(() => { /* ignore */ })
+    }
+    fetchCount()
+    const iv = setInterval(fetchCount, 30000)
+    return () => { cancelled = true; clearInterval(iv) }
+  }, [state.user])
   const { alert: showAlert, confirm: showConfirm } = useDialog()
   const tn = useTranslations('nav')
   const tc = useTranslations('common')
@@ -99,6 +115,21 @@ export default function HomePage() {
               ) : null
             })()}
 
+            {/* 내 검증 대기 뱃지 — 클릭 시 이슈 탭의 '내 검증' 필터로 이동 */}
+            {myVerifyCount > 0 && (
+              <button
+                onClick={() => { setIssuesFilter('mine'); setActiveTab('issues') }}
+                className="relative w-8 h-8 rounded-full bg-ive-amber/20 border border-ive-amber/40 flex items-center justify-center text-ive-amber hover:bg-ive-amber/30 active:scale-95 transition-all"
+                title={`내가 검증해야 할 이슈 ${myVerifyCount}건`}
+                aria-label={`내 검증 대기 ${myVerifyCount}건`}
+              >
+                <i className="fa-solid fa-user-check text-sm" />
+                <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 rounded-full bg-ive-red text-white text-[10px] font-bold flex items-center justify-center leading-none">
+                  {myVerifyCount > 99 ? '99+' : myVerifyCount}
+                </span>
+              </button>
+            )}
+
             {/* 아바타 + 로그아웃 */}
             <button
               onClick={() => setShowChangePassword(true)}
@@ -153,7 +184,7 @@ export default function HomePage() {
         <AgentForm onSuccess={() => setShowNewAgent(false)} />
       </Modal>
       <Modal open={showChangePassword} onClose={() => setShowChangePassword(false)} title={tAuth('myInfo')}>
-        <UserProfileForm userId={state.user.id} email={state.user.email} name={state.user.name} avatar={state.user.avatar} locale={state.user.locale} timezone={state.user.timezone} gitlabUsername={state.user.gitlabUsername} githubUsername={state.user.githubUsername} onSuccess={() => setShowChangePassword(false)} onCancel={() => setShowChangePassword(false)} onEmailChanged={() => refreshUser()} onAvatarChanged={() => { setAvatarTs(Date.now()); refreshUser() }} onSettingsChanged={() => refreshUser()} />
+        <UserProfileForm userId={state.user.id} email={state.user.email} name={state.user.name} avatar={state.user.avatar} locale={state.user.locale} timezone={state.user.timezone} onSuccess={() => setShowChangePassword(false)} onCancel={() => setShowChangePassword(false)} onEmailChanged={() => refreshUser()} onAvatarChanged={() => { setAvatarTs(Date.now()); refreshUser() }} onSettingsChanged={() => refreshUser()} />
       </Modal>
     </>
   )

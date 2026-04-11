@@ -391,13 +391,21 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
     }
   }
 
-  // 로그인 사용자가 이슈 담당자인지 확인 (Git username 매칭)
+  // 로그인 사용자가 이슈 담당자인지 확인 (OAuth provider user id 매칭)
+  // users.oauth_user_id는 로그인한 Git provider에서의 숫자 ID — assignee.id와 일치 시 동일 인물
   const isAssignee = (() => {
-    if (!issue?.assignees?.length || !state.user) return false
-    const userGitNames = [state.user.gitlabUsername, state.user.githubUsername].filter(Boolean).map(n => n!.toLowerCase())
-    return issue.assignees.some(a => userGitNames.includes(a.username.toLowerCase()))
+    if (!issue?.assignees?.length || !state.user?.oauthUserId) return false
+    const myGitId = String(state.user.oauthUserId)
+    return issue.assignees.some(a => a.id != null && String(a.id) === myGitId)
   })()
   const canProgressStage = state.user?.isAdmin || isAssignee
+
+  // 권한 없으면 채팅 모드 강제 해제 (코멘트만 허용)
+  useEffect(() => {
+    if (!canProgressStage && mode === 'chat') {
+      setMode('comment')
+    }
+  }, [canProgressStage, mode])
 
   // 담당자 모드: 코멘트 작성 + 다음 단계로 진행
   const NEXT_STAGE: Record<string, { stage: string; action: string; label: string }> = {
@@ -911,7 +919,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                       <i className={`fa-solid fa-file-lines text-xs`} />
                     </button>
                   )}
-                  {actions.map(act => (
+                  {canProgressStage && actions.map(act => (
                     <button
                       key={act.action}
                       onClick={() => handleStageAction(act.action)}
@@ -925,13 +933,20 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                       {stageChanging ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className={`fa-solid ${act.icon} mr-0.5`} />{act.label}</>}
                     </button>
                   ))}
-                  <button
-                    onClick={handleCloseIssue}
-                    disabled={isClosing || stageChanging}
-                    className="h-7 px-2 rounded-lg text-xs font-bold border text-ive-red/80 border-ive-red/30 bg-ive-bg-card hover:bg-ive-red/10 transition-all active:scale-95 disabled:opacity-40"
-                  >
-                    {isClosing ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-xmark mr-0.5" />{tc('close')}</>}
-                  </button>
+                  {canProgressStage && (
+                    <button
+                      onClick={handleCloseIssue}
+                      disabled={isClosing || stageChanging}
+                      className="h-7 px-2 rounded-lg text-xs font-bold border text-ive-red/80 border-ive-red/30 bg-ive-bg-card hover:bg-ive-red/10 transition-all active:scale-95 disabled:opacity-40"
+                    >
+                      {isClosing ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-xmark mr-0.5" />{tc('close')}</>}
+                    </button>
+                  )}
+                  {!canProgressStage && (
+                    <span className="text-xs text-ive-text-dim italic">
+                      <i className="fa-solid fa-lock mr-1" />담당자만 변경 가능
+                    </span>
+                  )}
                 </div>
               </div>
             </>
@@ -949,8 +964,8 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
               <MarkdownNote body={cleanNoteBody(issue.description)} />
             </div>
           )}
-          {/* MR 리뷰 섹션 - 스크롤 영역 안에 배치 */}
-          {(issue.stage === 'done' || issue.stage === 'dev' || issue.stage === 'verify_waiting' || issue.stage === 'verifying') && (
+          {/* MR 리뷰 섹션 - 담당자 또는 관리자만 표시 */}
+          {canProgressStage && (issue.stage === 'done' || issue.stage === 'dev' || issue.stage === 'verify_waiting' || issue.stage === 'verifying') && (
             <div className="pr-2">
               <MRReviewSection projectId={projectId} issueIid={Number(iid)} />
             </div>
@@ -1137,31 +1152,33 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
               >
                 <i className="fa-solid fa-comment mr-1" />{tIssue('commentMode')}
               </button>
-              <button
-                onClick={() => {
-                  if (chatHistoryOnly) {
-                    // Already viewing history, toggle to show it
-                    setMode('chat')
-                  } else if (!chatSessionId) {
-                    handleStartChat()
-                  } else {
-                    setMode('chat')
-                  }
-                }}
-                disabled={chatStarting}
-                className={`text-xs font-bold px-2.5 py-1 rounded-lg transition-all ${
-                  mode === 'chat' ? 'bg-purple-500/15 text-purple-400' : 'text-ive-text-dim hover:text-ive-text'
-                }`}
-              >
-                {chatStarting ? (
-                  <><i className="fa-solid fa-circle-notch fa-spin mr-1" />{tIssue('startingChat')}</>
-                ) : chatHistoryOnly && !chatSessionId ? (
-                  <><i className="fa-solid fa-clock-rotate-left mr-1" />{tIssue('chatMode')}</>
-                ) : (
-                  <><i className="fa-solid fa-comments mr-1" />{chatSessionId && chatAgentName ? `${tIssue('chatMode')}(${chatAgentName})` : tIssue('chatMode')}</>
-                )}
-              </button>
-              {chatSessionId && mode === 'chat' && (
+              {canProgressStage && (
+                <button
+                  onClick={() => {
+                    if (chatHistoryOnly) {
+                      // Already viewing history, toggle to show it
+                      setMode('chat')
+                    } else if (!chatSessionId) {
+                      handleStartChat()
+                    } else {
+                      setMode('chat')
+                    }
+                  }}
+                  disabled={chatStarting}
+                  className={`text-xs font-bold px-2.5 py-1 rounded-lg transition-all ${
+                    mode === 'chat' ? 'bg-purple-500/15 text-purple-400' : 'text-ive-text-dim hover:text-ive-text'
+                  }`}
+                >
+                  {chatStarting ? (
+                    <><i className="fa-solid fa-circle-notch fa-spin mr-1" />{tIssue('startingChat')}</>
+                  ) : chatHistoryOnly && !chatSessionId ? (
+                    <><i className="fa-solid fa-clock-rotate-left mr-1" />{tIssue('chatMode')}</>
+                  ) : (
+                    <><i className="fa-solid fa-comments mr-1" />{chatSessionId && chatAgentName ? `${tIssue('chatMode')}(${chatAgentName})` : tIssue('chatMode')}</>
+                  )}
+                </button>
+              )}
+              {canProgressStage && chatSessionId && mode === 'chat' && (
                 <button
                   onClick={handleEndChat}
                   className="text-xs font-bold px-2 py-1 rounded-lg text-ive-red/70 hover:text-ive-red hover:bg-ive-red/10 transition-all"
@@ -1169,8 +1186,8 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                   <i className="fa-solid fa-xmark mr-0.5" />{tIssue('endChat')}
                 </button>
               )}
-              {/* 작업자 선택 — 탭 행 우측 */}
-              {issue.stage !== 'dev' && projectAgents.length > 0 && (
+              {/* 작업자 선택 — 탭 행 우측 (권한 있는 경우에만) */}
+              {canProgressStage && issue.stage !== 'dev' && projectAgents.length > 0 && (
                 <div ref={retryAgentPickerRef} className="relative flex items-center ml-auto">
                   <button
                     type="button"
@@ -1271,17 +1288,18 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                   {postingType === 'comment' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-paper-plane" /><span>{tIssue('postCommentShort')}</span></>}
                 </button>
                 {preferredAgent?.assignMode === 'assignee' && NEXT_STAGE[issue.stage] ? (
-                  <button
-                    onClick={handleCommentAndNextStage}
-                    disabled={posting || !canProgressStage}
-                    title={!canProgressStage ? '담당자 또는 관리자만 단계를 진행할 수 있습니다' : undefined}
-                    className="shrink-0 h-10 px-3 rounded-lg bg-ive-cyan text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-40 text-xs font-bold whitespace-nowrap"
-                  >
-                    {postingType === 'next' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-forward-step" /><span>{NEXT_STAGE[issue.stage].label}</span></>}
-                  </button>
+                  canProgressStage && (
+                    <button
+                      onClick={handleCommentAndNextStage}
+                      disabled={posting}
+                      className="shrink-0 h-10 px-3 rounded-lg bg-ive-cyan text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-40 text-xs font-bold whitespace-nowrap"
+                    >
+                      {postingType === 'next' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-forward-step" /><span>{NEXT_STAGE[issue.stage].label}</span></>}
+                    </button>
+                  )
                 ) : (
                   <>
-                    {issue.stage !== 'dev' && (
+                    {canProgressStage && issue.stage !== 'dev' && (
                       <button
                         onClick={() => handleCommentAndRetry()}
                         disabled={posting || !comment.trim()}
@@ -1292,7 +1310,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                         {postingType === 'retry' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-paper-plane" /><span>{issue.stage === 'none' ? tIssue('run') : tIssue('rerun')}</span></>}
                       </button>
                     )}
-                    {issue.stage === 'verifying' && (
+                    {canProgressStage && issue.stage === 'verifying' && (
                       <button
                         onClick={handleCommentAndDone}
                         disabled={posting || !comment.trim()}

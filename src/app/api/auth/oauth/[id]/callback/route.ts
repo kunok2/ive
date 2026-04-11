@@ -8,7 +8,7 @@ import {
 } from '@/lib/oauth'
 import {
   getUserByEmail, getUserByOAuth, createOAuthUser, linkUserOAuth,
-  updateUserOAuthTokens, updateUserGitUsernames, updateUserAvatar,
+  updateUserOAuthTokens, updateUserAvatar,
 } from '@/lib/db'
 import { encrypt } from '@/lib/crypto'
 import { setAuthCookie } from '@/lib/auth'
@@ -189,12 +189,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         refreshTokenEncrypted: refreshTokenEnc,
         tokenExpiresAt,
       })
-      // GitLab/GitHub username도 기회에 백필
-      const next = {
-        gitlab: provider.type === 'gitlab' ? profile.username : (byEmail.gitlabUsername ?? null),
-        github: provider.type === 'github' ? profile.username : (byEmail.githubUsername ?? null),
-      }
-      updateUserGitUsernames(byEmail.id, next.gitlab, next.github)
       userId = byEmail.id
       action = 'link'
 
@@ -215,8 +209,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         accessTokenEncrypted: accessTokenEnc,
         refreshTokenEncrypted: refreshTokenEnc,
         tokenExpiresAt,
-        gitlabUsername: provider.type === 'gitlab' ? profile.username : null,
-        githubUsername: provider.type === 'github' ? profile.username : null,
       })
       userId = newId
       action = 'register'

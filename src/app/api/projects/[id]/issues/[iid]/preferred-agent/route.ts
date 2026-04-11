@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAccess, getAssignMode, setAssignMode, getProjectAssignments, getAgent, hasActiveExecution, stageFromLabels } from '@/lib/db';
+import { getProject, getProjectAccess, isIssueAssignee, getAssignMode, setAssignMode, getProjectAssignments, getAgent, hasActiveExecution, stageFromLabels } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { decrypt } from '@/lib/crypto';
 import { fetchSingleIssue } from '@/lib/provider';
@@ -38,6 +38,13 @@ export async function PATCH(
   const access = getProjectAccess(projectId, user.id);
   if (!access || access === 'viewer') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+  // 작업자 변경은 담당자 또는 관리자만
+  if (!user.isAdmin && !isIssueAssignee(projectId, Number(iid), user)) {
+    return NextResponse.json(
+      { error: '이 이슈의 담당자 또는 관리자만 작업자를 변경할 수 있습니다' },
+      { status: 403 }
+    );
   }
 
   // 실행 중(dev)인 이슈는 작업자 변경 불가

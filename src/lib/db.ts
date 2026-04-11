@@ -250,12 +250,8 @@ function initSchema(db: Database.Database) {
     if (!tableInfo.some((col: any) => col.name === 'git_username')) {
       db.exec("ALTER TABLE users ADD COLUMN git_username TEXT")
     }
-    if (!tableInfo.some((col: any) => col.name === 'gitlab_username')) {
-      db.exec("ALTER TABLE users ADD COLUMN gitlab_username TEXT")
-    }
-    if (!tableInfo.some((col: any) => col.name === 'github_username')) {
-      db.exec("ALTER TABLE users ADD COLUMN github_username TEXT")
-    }
+    // gitlab_username/github_username: OAuth 도입 후 deprecated. 기존 컬럼은 보존하되
+    // 신규 설치에서는 더 이상 추가하지 않음 (참조 코드 모두 제거됨).
   } catch (e) { console.error("Migration failed for users:", e) }
 
   try {
@@ -345,6 +341,11 @@ function initSchema(db: Database.Database) {
     if (!tableInfo.some((col: any) => col.name === 'verifier_username')) {
       db.exec("ALTER TABLE task_executions ADD COLUMN verifier_username TEXT DEFAULT NULL")
       console.log('[DB] Added verifier_username to task_executions')
+    }
+    // Git 숫자 ID (OAuth user_id 매칭용, username보다 안정적)
+    if (!tableInfo.some((col: any) => col.name === 'verifier_git_user_id')) {
+      db.exec("ALTER TABLE task_executions ADD COLUMN verifier_git_user_id TEXT DEFAULT NULL")
+      console.log('[DB] Added verifier_git_user_id to task_executions')
     }
   } catch (e) { console.error("Migration failed for verifier columns:", e) }
 
@@ -481,11 +482,14 @@ function initSchema(db: Database.Database) {
   try { db.exec(`ALTER TABLE issue_stages ADD COLUMN assignee_name TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
   try { db.exec(`ALTER TABLE issue_stages ADD COLUMN assignee_avatar TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
   try { db.exec(`ALTER TABLE issue_stages ADD COLUMN assignee_provider TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
+  // Git 숫자 ID — OAuth user_id와 매칭해 IVE 사용자 연결 (username은 변경 가능하므로 ID 기준이 안정적)
+  try { db.exec(`ALTER TABLE issue_stages ADD COLUMN assignee_git_user_id TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
   // 레이블 기반 stage 캐시 (집계 시 Git API 재호출 회피)
   try { db.exec(`ALTER TABLE issue_stages ADD COLUMN cached_stage TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
   try { db.exec(`ALTER TABLE issue_stages ADD COLUMN issue_title TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
   try { db.exec(`ALTER TABLE issue_stages ADD COLUMN verify_waiting_since TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
   try { db.exec(`CREATE INDEX IF NOT EXISTS idx_issue_stages_assignee ON issue_stages(assignee_username, cached_stage)`) } catch { /* ignore */ }
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_issue_stages_assignee_id ON issue_stages(assignee_git_user_id)`) } catch { /* ignore */ }
 
   // 보고서 스케줄 테이블
   db.exec(`
@@ -533,6 +537,9 @@ function initSchema(db: Database.Database) {
     );
     CREATE INDEX IF NOT EXISTS idx_project_members_username ON project_members(username);
   `)
+  // Git 숫자 ID (OAuth user_id와 매칭해 IVE 사용자 연결)
+  try { db.exec(`ALTER TABLE project_members ADD COLUMN git_user_id TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_project_members_git_user_id ON project_members(git_user_id)`) } catch { /* ignore */ }
 
   // 사용자 활동 로그 테이블
   db.exec(`
@@ -892,8 +899,6 @@ function mapUser(r: any): User {
     allowedClis: parseAllowedClis(r.allowed_clis) as User['allowedClis'],
     locale: r.locale,
     timezone: r.timezone,
-    gitlabUsername: r.gitlab_username,
-    githubUsername: r.github_username,
     oauthProviderId: r.oauth_provider_id ?? null,
     oauthUserId: r.oauth_user_id ?? null,
     oauthTokenExpiresAt: r.oauth_token_expires_at ?? null,
@@ -926,10 +931,6 @@ export function updateUserLocale(id: string, locale: string) {
 
 export function updateUserTimezone(id: string, timezone: string) {
   getDb().prepare('UPDATE users SET timezone = ? WHERE id = ?').run(timezone, id)
-}
-
-export function updateUserGitUsernames(id: string, gitlabUsername: string | null, githubUsername: string | null) {
-  getDb().prepare('UPDATE users SET gitlab_username = ?, github_username = ? WHERE id = ?').run(gitlabUsername, githubUsername, id)
 }
 
 export function createUser(u: any) {
@@ -1039,19 +1040,15 @@ export function createOAuthUser(u: {
   accessTokenEncrypted: string;
   refreshTokenEncrypted: string | null;
   tokenExpiresAt: string | null;
-  gitlabUsername?: string | null;
-  githubUsername?: string | null;
 }) {
   getDb().prepare(`INSERT INTO users (
     id, email, password, name, avatar,
     oauth_provider_id, oauth_user_id,
-    oauth_access_token, oauth_refresh_token, oauth_token_expires_at,
-    gitlab_username, github_username
-  ) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    oauth_access_token, oauth_refresh_token, oauth_token_expires_at
+  ) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)`).run(
     u.id, u.email, u.name, u.avatar ?? 'av-01',
     u.providerId, u.oauthUserId,
-    u.accessTokenEncrypted, u.refreshTokenEncrypted, u.tokenExpiresAt,
-    u.gitlabUsername ?? null, u.githubUsername ?? null
+    u.accessTokenEncrypted, u.refreshTokenEncrypted, u.tokenExpiresAt
   )
 }
 
@@ -2117,6 +2114,32 @@ export function getProjectAccess(projectId: string, userId: string): 'owner' | S
   return getProjectShareRole(projectId, userId)
 }
 
+/**
+ * 로그인 사용자가 특정 이슈의 Git assignee(= 검증자/담당자)인지 확인.
+ * 매칭 기준: (project.provider, issue_stages.assignee_git_user_id) ↔ (oauth provider type, users.oauth_user_id)
+ *
+ * @returns true: 본인이 해당 이슈의 assignee, false: 아님
+ */
+export function isIssueAssignee(
+  projectId: string,
+  issueIid: number,
+  user: { oauthProviderId?: string | null; oauthUserId?: string | null },
+): boolean {
+  if (!user.oauthProviderId || !user.oauthUserId) return false
+  const row = getDb().prepare(`
+    SELECT s.assignee_git_user_id, p.provider, op.type as prov_type
+    FROM issue_stages s
+    JOIN projects p ON p.id = s.project_id
+    CROSS JOIN oauth_providers op
+    WHERE s.project_id = ? AND s.issue_iid = ? AND op.id = ?
+  `).get(projectId, issueIid, user.oauthProviderId) as any
+  if (!row) return false
+  if (!row.assignee_git_user_id) return false
+  // 로그인 유저의 provider type과 프로젝트 provider가 일치해야 같은 Git 인스턴스
+  if (row.prov_type !== row.provider) return false
+  return String(row.assignee_git_user_id) === String(user.oauthUserId)
+}
+
 // ── Reports ──
 
 export interface ReportExecution {
@@ -2378,18 +2401,18 @@ export function clearPreferredAgentRefs(agentId: string) {
 /** 스캐너가 주기적으로 호출 — 프로젝트 멤버 전체를 덮어쓰기 */
 export function replaceProjectMembers(
   projectId: string,
-  members: { username: string; name: string; avatarUrl: string; provider: string }[]
+  members: { username: string; name: string; avatarUrl: string; provider: string; gitUserId?: string | null }[]
 ) {
   const db = getDb()
   const tx = db.transaction(() => {
     db.prepare('DELETE FROM project_members WHERE project_id = ?').run(projectId)
     const stmt = db.prepare(`
-      INSERT INTO project_members (project_id, username, name, avatar_url, provider, updated_at)
-      VALUES (?, ?, ?, ?, ?, datetime('now'))
+      INSERT INTO project_members (project_id, username, name, avatar_url, provider, git_user_id, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
     `)
     for (const m of members) {
       if (!m.username) continue
-      stmt.run(projectId, m.username, m.name || m.username, m.avatarUrl || '', m.provider || 'gitlab')
+      stmt.run(projectId, m.username, m.name || m.username, m.avatarUrl || '', m.provider || 'gitlab', m.gitUserId ?? null)
     }
   })
   tx()
@@ -2410,12 +2433,13 @@ export function upsertIssueStageSnapshot(
     assigneeName: string | null
     assigneeAvatar: string | null
     assigneeProvider: string | null
+    assigneeGitUserId: string | null  // Git API의 숫자 id (문자열화) — OAuth user_id와 매칭용
     issueTitle: string | null
   }
 ) {
   getDb().prepare(`
-    INSERT INTO issue_stages (project_id, issue_iid, stage, cached_stage, assignee_username, assignee_name, assignee_avatar, assignee_provider, issue_title, verify_waiting_since, updated_at)
-    VALUES (?, ?, '', ?, ?, ?, ?, ?, ?,
+    INSERT INTO issue_stages (project_id, issue_iid, stage, cached_stage, assignee_username, assignee_name, assignee_avatar, assignee_provider, assignee_git_user_id, issue_title, verify_waiting_since, updated_at)
+    VALUES (?, ?, '', ?, ?, ?, ?, ?, ?, ?,
       CASE WHEN ? IN ('verify_waiting', 'verifying') THEN datetime('now') ELSE NULL END,
       datetime('now'))
     ON CONFLICT(project_id, issue_iid) DO UPDATE SET
@@ -2424,6 +2448,7 @@ export function upsertIssueStageSnapshot(
       assignee_name = excluded.assignee_name,
       assignee_avatar = excluded.assignee_avatar,
       assignee_provider = excluded.assignee_provider,
+      assignee_git_user_id = excluded.assignee_git_user_id,
       issue_title = excluded.issue_title,
       verify_waiting_since = CASE
         WHEN excluded.cached_stage IN ('verify_waiting', 'verifying') THEN
@@ -2438,6 +2463,7 @@ export function upsertIssueStageSnapshot(
     snapshot.assigneeName,
     snapshot.assigneeAvatar,
     snapshot.assigneeProvider,
+    snapshot.assigneeGitUserId,
     snapshot.issueTitle,
     snapshot.cachedStage
   )
@@ -2469,6 +2495,13 @@ export interface VerifierSummary {
   avgVerifyMin: number     // 최근 7일 평균 검증 소요 (분)
   oldestWaitMin: number    // 가장 오래 기다린 검증대기 이슈 경과 시간 (분)
   assignedProjects: { id: string; name: string; color: string; provider: string }[]
+  // IVE 사용자 매칭 (OAuth user_id 기반)
+  iveUser: {
+    id: string
+    name: string
+    email: string
+    avatar: string
+  } | null
 }
 
 /**
@@ -2483,29 +2516,50 @@ export function getVerifiersList(userId: string): VerifierSummary[] {
 
   // 1) 프로젝트 멤버 전체 목록 (사용자 접근 가능 프로젝트의 캐시된 Git 멤버)
   const memberRows = db.prepare(`
-    SELECT pm.username, pm.name, pm.avatar_url, pm.provider, p.id as project_id, p.name as project_name, p.color as project_color
+    SELECT pm.username, pm.name, pm.avatar_url, pm.provider, pm.git_user_id, p.id as project_id, p.name as project_name, p.color as project_color
     FROM project_members pm
     JOIN projects p ON p.id = pm.project_id
     WHERE ${accessCondition}
   `).all(userId, userId) as any[]
 
-  interface Meta { name: string; avatar: string; provider: string; projects: Map<string, { id: string; name: string; color: string; provider: string }> }
-  const usernameMeta = new Map<string, Meta>()
+  interface Meta {
+    username: string
+    name: string
+    avatar: string
+    provider: string
+    gitUserId: string | null
+    projects: Map<string, { id: string; name: string; color: string; provider: string }>
+  }
+  // 키는 `${provider}:${username}` — 같은 username이 여러 provider에 존재 가능
+  const metaMap = new Map<string, Meta>()
+  const metaKey = (provider: string, username: string) => `${provider || 'gitlab'}:${username}`
+
   for (const m of memberRows) {
-    const existing = usernameMeta.get(m.username) || { name: m.name || m.username, avatar: m.avatar_url || 'av-01', provider: m.provider || 'gitlab', projects: new Map() }
+    const key = metaKey(m.provider, m.username)
+    const existing = metaMap.get(key) || {
+      username: m.username,
+      name: m.name || m.username,
+      avatar: m.avatar_url || 'av-01',
+      provider: m.provider || 'gitlab',
+      gitUserId: m.git_user_id || null,
+      projects: new Map(),
+    }
     existing.projects.set(m.project_id, { id: m.project_id, name: m.project_name, color: m.project_color, provider: m.provider || 'gitlab' })
     if (!existing.name && m.name) existing.name = m.name
     if (!existing.avatar && m.avatar_url) existing.avatar = m.avatar_url
-    usernameMeta.set(m.username, existing)
+    if (!existing.gitUserId && m.git_user_id) existing.gitUserId = m.git_user_id
+    metaMap.set(key, existing)
   }
 
   // 2) 현재 검증중/대기 집계 (issue_stages 스캐너 스냅샷)
+  // GROUP BY provider+username — 같은 username이 여러 provider에 존재할 수 있음
   const currentRows = db.prepare(`
     SELECT
       s.assignee_username as username,
+      COALESCE(s.assignee_provider, 'gitlab') as provider,
       MAX(s.assignee_name) as name,
       MAX(s.assignee_avatar) as avatar,
-      MAX(s.assignee_provider) as provider,
+      MAX(s.assignee_git_user_id) as git_user_id,
       SUM(CASE WHEN s.cached_stage = 'verifying' THEN 1 ELSE 0 END) as verifying,
       SUM(CASE WHEN s.cached_stage = 'verify_waiting' THEN 1 ELSE 0 END) as verify_waiting,
       MIN(CASE WHEN s.cached_stage IN ('verify_waiting', 'verifying') THEN s.verify_waiting_since ELSE NULL END) as oldest_wait_at
@@ -2514,26 +2568,58 @@ export function getVerifiersList(userId: string): VerifierSummary[] {
     WHERE s.assignee_username IS NOT NULL
       AND s.cached_stage IN ('verify_waiting', 'verifying')
       AND ${accessCondition}
-    GROUP BY s.assignee_username
+    GROUP BY COALESCE(s.assignee_provider, 'gitlab'), s.assignee_username
   `).all(userId, userId) as any[]
   const currentMap = new Map<string, any>()
   for (const r of currentRows) {
-    currentMap.set(r.username, r)
-    // 멤버 캐시에 없는 assignee도 목록에 포함
-    if (!usernameMeta.has(r.username)) {
-      usernameMeta.set(r.username, {
+    const key = metaKey(r.provider, r.username)
+    currentMap.set(key, r)
+    const existing = metaMap.get(key)
+    if (!existing) {
+      metaMap.set(key, {
+        username: r.username,
         name: r.name || r.username,
         avatar: r.avatar || 'av-01',
         provider: r.provider || 'gitlab',
+        gitUserId: r.git_user_id || null,
         projects: new Map(),
+      })
+    } else if (!existing.gitUserId && r.git_user_id) {
+      existing.gitUserId = r.git_user_id
+    }
+  }
+
+  // 2b) IVE 사용자 매칭 — (provider_type, oauth_user_id)로 매칭
+  //     IVE 한 대 = 타입당 1 provider 정책이므로 provider.type만으로 매칭 가능
+  const iveUserByGitId = new Map<string, { id: string; name: string; email: string; avatar: string }>()
+  const gitIdsToMatch = Array.from(metaMap.values())
+    .map(m => m.gitUserId)
+    .filter((id): id is string => !!id)
+  if (gitIdsToMatch.length > 0) {
+    const placeholders = gitIdsToMatch.map(() => '?').join(',')
+    const iveRows = db.prepare(`
+      SELECT u.id, u.name, u.email, u.avatar, u.oauth_user_id, op.type as provider_type
+      FROM users u
+      JOIN oauth_providers op ON op.id = u.oauth_provider_id
+      WHERE u.oauth_user_id IN (${placeholders})
+    `).all(...gitIdsToMatch) as any[]
+    for (const row of iveRows) {
+      const key = `${row.provider_type}:${row.oauth_user_id}`
+      iveUserByGitId.set(key, {
+        id: row.id,
+        name: row.name,
+        email: row.email,
+        avatar: row.avatar || 'av-01',
       })
     }
   }
 
   // 3) 최근 7일 / 오늘 승인·반려 + 평균 검증시간 (task_executions.verifier_username)
+  //    task_executions에는 provider 정보가 없어 projects.provider로 대체
   const execStats = db.prepare(`
     SELECT
       te.verifier_username as username,
+      p.provider as provider,
       SUM(CASE WHEN te.verified_at IS NOT NULL AND te.verified_at >= ? THEN 1 ELSE 0 END) as approved_7d,
       SUM(CASE WHEN te.rejected_at IS NOT NULL AND te.rejected_at >= ? THEN 1 ELSE 0 END) as rejected_7d,
       SUM(CASE WHEN te.verified_at IS NOT NULL AND te.verified_at >= ? THEN 1 ELSE 0 END) as approved_today,
@@ -2545,23 +2631,32 @@ export function getVerifiersList(userId: string): VerifierSummary[] {
     JOIN projects p ON p.id = te.project_id
     WHERE te.verifier_username IS NOT NULL
       AND ${accessCondition}
-    GROUP BY te.verifier_username
+    GROUP BY p.provider, te.verifier_username
   `).all(week7Ago, week7Ago, todayStartISO, todayStartISO, week7Ago, userId, userId) as any[]
   const execMap = new Map<string, any>()
   for (const r of execStats) {
-    execMap.set(r.username, r)
-    if (!usernameMeta.has(r.username)) {
-      usernameMeta.set(r.username, { name: r.username, avatar: 'av-01', provider: 'gitlab', projects: new Map() })
+    const key = metaKey(r.provider, r.username)
+    execMap.set(key, r)
+    if (!metaMap.has(key)) {
+      metaMap.set(key, {
+        username: r.username,
+        name: r.username,
+        avatar: 'av-01',
+        provider: r.provider || 'gitlab',
+        gitUserId: null,
+        projects: new Map(),
+      })
     }
   }
 
   const now = Date.now()
-  return Array.from(usernameMeta.entries()).map(([username, meta]) => {
-    const curr = currentMap.get(username)
-    const exec = execMap.get(username)
+  return Array.from(metaMap.entries()).map(([key, meta]) => {
+    const curr = currentMap.get(key)
+    const exec = execMap.get(key)
     const oldestWaitMs = curr?.oldest_wait_at ? now - new Date(curr.oldest_wait_at + 'Z').getTime() : 0
+    const iveUser = meta.gitUserId ? (iveUserByGitId.get(`${meta.provider}:${meta.gitUserId}`) || null) : null
     return {
-      username,
+      username: meta.username,
       name: meta.name,
       avatar: meta.avatar,
       provider: meta.provider,
@@ -2574,6 +2669,7 @@ export function getVerifiersList(userId: string): VerifierSummary[] {
       avgVerifyMin: exec?.avg_verify_min != null ? Math.round(Number(exec.avg_verify_min) * 10) / 10 : 0,
       oldestWaitMin: oldestWaitMs > 0 ? Math.round(oldestWaitMs / 60000) : 0,
       assignedProjects: Array.from(meta.projects.values()),
+      iveUser,
     }
   }).sort((a, b) => {
     // 1) 현재 대기(검증대기+검증중) 내림차순 → 병목부터
@@ -2657,6 +2753,57 @@ export function getVerifierQueue(userId: string, username: string): { projectId:
       AND (p.user_id = ? OR EXISTS (SELECT 1 FROM project_shares ps WHERE ps.project_id = p.id AND ps.user_id = ?))
     ORDER BY s.verify_waiting_since IS NULL, s.verify_waiting_since ASC, s.issue_iid ASC
   `).all(username, userId, userId) as any[]
+}
+
+/**
+ * 로그인한 IVE 사용자의 "내 검증 대기/중" 이슈 목록.
+ * OAuth 로그인 시 저장된 oauth_user_id(Git provider의 숫자 id)와
+ * 스캐너가 저장한 assignee_git_user_id를 매칭합니다.
+ *
+ * @param userId     IVE 사용자 id (권한 체크용)
+ * @param oauthUserId  users.oauth_user_id (Git 숫자 ID의 문자열화)
+ * @param providerType 'github' | 'gitlab' — 프로젝트의 provider 타입과 일치해야 함
+ */
+export function getMyVerifierQueue(
+  userId: string,
+  oauthUserId: string,
+  providerType: 'github' | 'gitlab',
+): { projectId: string; projectName: string; projectColor: string; issueIid: number; issueTitle: string; stage: string; waitingSince: string | null }[] {
+  return getDb().prepare(`
+    SELECT
+      s.project_id as projectId, p.name as projectName, p.color as projectColor,
+      s.issue_iid as issueIid, COALESCE(s.issue_title, '') as issueTitle,
+      s.cached_stage as stage, s.verify_waiting_since as waitingSince
+    FROM issue_stages s
+    JOIN projects p ON p.id = s.project_id
+    WHERE s.assignee_git_user_id = ?
+      AND p.provider = ?
+      AND s.cached_stage IN ('verify_waiting', 'verifying')
+      AND (p.user_id = ? OR EXISTS (SELECT 1 FROM project_shares ps WHERE ps.project_id = p.id AND ps.user_id = ?))
+    ORDER BY s.verify_waiting_since IS NULL, s.verify_waiting_since ASC, s.issue_iid ASC
+  `).all(oauthUserId, providerType, userId, userId) as any[]
+}
+
+/** 로그인 유저의 검증 대기/중 개수만 가져오기 (뱃지용) */
+export function getMyVerifierCounts(
+  userId: string,
+  oauthUserId: string,
+  providerType: 'github' | 'gitlab',
+): { verifyWaiting: number; verifying: number; total: number } {
+  const r = getDb().prepare(`
+    SELECT
+      SUM(CASE WHEN s.cached_stage = 'verify_waiting' THEN 1 ELSE 0 END) as verify_waiting,
+      SUM(CASE WHEN s.cached_stage = 'verifying' THEN 1 ELSE 0 END) as verifying
+    FROM issue_stages s
+    JOIN projects p ON p.id = s.project_id
+    WHERE s.assignee_git_user_id = ?
+      AND p.provider = ?
+      AND s.cached_stage IN ('verify_waiting', 'verifying')
+      AND (p.user_id = ? OR EXISTS (SELECT 1 FROM project_shares ps WHERE ps.project_id = p.id AND ps.user_id = ?))
+  `).get(oauthUserId, providerType, userId, userId) as any
+  const verifyWaiting = Number(r?.verify_waiting || 0)
+  const verifying = Number(r?.verifying || 0)
+  return { verifyWaiting, verifying, total: verifyWaiting + verifying }
 }
 
 // ── Report Schedules (보고서 스케줄) ──

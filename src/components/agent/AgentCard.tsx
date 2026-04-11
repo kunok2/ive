@@ -353,28 +353,28 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
       {/* 정보 */}
       <div className="p-3 space-y-2">
         {agent.cliVersion && (
-          <div className="flex items-center gap-2 text-base">
+          <div className="flex items-center gap-2 text-sm font-bold">
             <span className="text-ive-text-muted"><i className="fa-solid fa-code-branch w-4 text-center" /> {t('version')}</span>
-            <span className="text-ive-text font-bold">{agent.cliVersion}</span>
+            <span className="text-ive-text">{agent.cliVersion}</span>
           </div>
         )}
 
-        <div className="flex items-center gap-2 text-base">
+        <div className="flex items-center gap-2 text-sm font-bold">
           <span className="text-ive-text-muted"><i className="fa-solid fa-repeat w-4 text-center" /> {t('maxTurns')}</span>
-          <span className="text-ive-text font-bold">{agent.maxTurns}</span>
-          <span className="text-xs text-ive-text-dim">({t('maxTurnsHint')})</span>
+          <span className="text-ive-text">{agent.maxTurns}</span>
+          <span className="text-xs font-bold text-ive-text-dim">({t('maxTurnsHint')})</span>
         </div>
 
         {assignedProjects !== undefined && (
-          <div className="flex items-center gap-2 text-base">
+          <div className="flex items-center gap-2 text-sm font-bold">
             <span className="text-ive-text-muted shrink-0"><i className="fa-solid fa-plug w-4 text-center" /> {t('assigned')}</span>
             {assignedProjects.length === 0 ? (
-              <span className="font-bold text-ive-text-dim">{t('notAssigned')}</span>
+              <span className="text-ive-text-dim">{t('notAssigned')}</span>
             ) : (
               <div className="flex flex-wrap gap-1.5">
                 {assignedProjects.map(p => (
-                  <span key={p.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-sm font-bold bg-ive-bg-deep border border-ive-border-dark">
-                    <i className={`fa-brands ${p.provider === 'github' ? 'fa-github' : 'fa-gitlab'} text-xs`} style={{ color: p.color }} />
+                  <span key={p.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold bg-ive-bg-deep border border-ive-border-dark">
+                    <i className={`fa-brands ${p.provider === 'github' ? 'fa-github' : 'fa-gitlab'}`} style={{ color: p.color }} />
                     <span className="text-ive-text">{p.name}</span>
                   </span>
                 ))}
@@ -468,7 +468,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
                 setShowInterview(false)
               }
             }}
-            className={`flex-1 text-base py-1.5 rounded border transition-colors ${
+            className={`flex-1 text-sm font-bold py-1.5 rounded-lg border transition-colors ${
               showInterview
                 ? 'text-ive-green border-ive-green/40 bg-ive-green/10'
                 : 'text-ive-cyan border-ive-cyan/30 active:bg-ive-cyan/10'
@@ -483,7 +483,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
               setEditName(agent.name)
               setEditAvatar(agent.avatar)
             }}
-            className={`text-base py-1.5 px-3 rounded border transition-colors ${
+            className={`text-sm font-bold py-1.5 px-3 rounded-lg border transition-colors ${
               editing
                 ? 'text-ive-green border-ive-green/40 bg-ive-green/10'
                 : 'text-ive-text-dim border-ive-border active:bg-white/5'
@@ -496,7 +496,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
           <button
             onClick={handleTest}
             disabled={testing}
-            className="text-base text-ive-text-dim py-1.5 px-3 rounded border border-ive-border active:bg-white/5 transition-colors disabled:opacity-50"
+            className="text-sm font-bold text-ive-text-dim py-1.5 px-3 rounded-lg border border-ive-border active:bg-white/5 transition-colors disabled:opacity-50"
             title={t('checkOperation')}
           >
             {testing ? <i className="fa-solid fa-spinner fa-spin" /> : <i className="fa-solid fa-stethoscope" />}
@@ -505,7 +505,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
           {onDelete && (
             <button
               onClick={() => onDelete(agent.id)}
-              className="text-base text-ive-red/60 py-1.5 px-3 rounded border border-ive-red/20 active:bg-ive-red/10 transition-colors"
+              className="text-sm font-bold text-ive-red/60 py-1.5 px-3 rounded-lg border border-ive-red/20 active:bg-ive-red/10 transition-colors"
               title={tc('remove')}
             >
               <i className="fa-solid fa-trash-can" />
@@ -514,7 +514,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
         </div>
 
         {testResult && !showInterview && (
-          <div className={`text-base rounded-lg px-3 py-2 ${testResult.success ? 'text-ive-green bg-ive-green/10' : 'text-ive-red bg-ive-red/10'}`}>
+          <div className={`text-sm font-bold rounded-lg px-3 py-2 ${testResult.success ? 'text-ive-green bg-ive-green/10' : 'text-ive-red bg-ive-red/10'}`}>
             <i className={`fa-solid ${testResult.success ? 'fa-circle-check' : 'fa-circle-xmark'} mr-1`} />
             {testResult.message}
           </div>

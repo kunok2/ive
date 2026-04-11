@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getAgentsByUser, createAgent, getUserById, getSystemSetting } from '@/lib/db'
+import { getAgentsByUser, createAgent, getUserById, getSystemSetting, countPreferredIssuesByAgent } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { logActivity } from '@/lib/activity'
 
@@ -8,7 +8,9 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const agents = getAgentsByUser(user.id)
-  return NextResponse.json(agents)
+  // 정렬용 pending 이슈 수 포함 (지정 대기 이슈)
+  const enriched = agents.map(a => ({ ...a, pendingCount: countPreferredIssuesByAgent(a.id) }))
+  return NextResponse.json(enriched)
 }
 
 export async function POST(req: Request) {
