@@ -120,7 +120,8 @@ export default function AgentsTab({ onAdd }: { onAdd?: () => void }) {
       </div>
 
       {!state.loading && !empty && (
-        <div className="flex-1 min-h-0 overflow-y-auto pb-20">
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="pb-20">
           {(() => {
               // 정렬: 특이사항(대기/진행 중) 많은 순 → 이름순
               // Worker priority: pendingCount * 100 + (busy ? 10 : 0) + (offline ? -1000 : 0)
@@ -174,6 +175,7 @@ export default function AgentsTab({ onAdd }: { onAdd?: () => void }) {
                 </div>
               )
             })()}
+          </div>
         </div>
       )}
 

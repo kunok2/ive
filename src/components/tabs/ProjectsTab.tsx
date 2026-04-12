@@ -11,8 +11,8 @@ export default function ProjectsTab({ onAdd }: { onAdd?: () => void }) {
 
   return (
     <PullToRefresh onRefresh={refresh} className="w-full flex-1 flex flex-col max-w-lg mx-auto px-4 overflow-hidden">
-      <div className="flex-1 min-h-0 overflow-y-auto pb-20">
-        <div>
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="pb-20">
           {state.loading ? (
             <div className="text-center py-20 text-ive-text-muted text-base">
               <i className="fa-solid fa-circle-notch fa-spin text-2xl text-ive-green mb-3 block" />
