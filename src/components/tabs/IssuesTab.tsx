@@ -12,6 +12,7 @@ import Modal from '@/components/ui/Modal'
 import { useTranslations } from 'next-intl'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 import type { CliName } from '@/types'
+import { createImagePasteHandlers } from '@/lib/paste-upload'
 
 interface IveIssue {
   iid: number
@@ -55,6 +56,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   const tSort = useTranslations('sort')
   const tProject = useTranslations('project')
   const tCommon = useTranslations('common')
+  const tErrors = useTranslations('errors')
 
   const STAGE_INFO: Record<string, { label: string; color: string; icon: string }> = useMemo(() => ({
     waiting:        { label: tStage('waiting'),        color: 'bg-ive-cyan/20 text-ive-cyan border-ive-cyan/30',     icon: 'fa-clock' },
@@ -327,6 +329,16 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     saveDraft(value)
   }, [saveDraft])
 
+  // 이미지 복/붙 업로드 핸들러
+  const newBodyRef = useRef(newBody)
+  useEffect(() => { newBodyRef.current = newBody }, [newBody])
+  const pasteHandlers = useMemo(() => createImagePasteHandlers({
+    projectId: selectedProjectId,
+    getValue: () => newBodyRef.current,
+    setValue: v => handleBodyChange(v),
+    onError: msg => toast(msg, 'error'),
+  }), [selectedProjectId, handleBodyChange, toast])
+
   useEffect(() => {
     if (selectedProjectId) {
       const draft = localStorage.getItem(`ive-issue-draft-${selectedProjectId}`)
@@ -363,7 +375,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
       return
     }
     if (!canEdit) {
-      toast('담당자 변경 권한이 없습니다. (뷰어 권한)', 'error')
+      toast(tIssue('noEditPermissionViewer'), 'error')
       setAssigneeModalIids([])
       return
     }
@@ -390,9 +402,9 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
           }),
         })
         if (!res.ok) {
-          let message = `담당자 변경 실패 (#${iid})`
-          if (res.status === 403) message = `담당자 변경 권한이 없습니다 (#${iid})`
-          else if (res.status === 401) message = '로그인이 필요합니다'
+          let message = `${tIssue('assigneeChangeFailed')} (#${iid})`
+          if (res.status === 403) message = `${tIssue('noEditPermissionViewer')} (#${iid})`
+          else if (res.status === 401) message = tErrors('loginRequired')
           else {
             try {
               const data = await res.json()
@@ -403,7 +415,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
         }
         return { iid, ok: true }
       } catch (e) {
-        return { iid, ok: false, message: `네트워크 오류 (#${iid}): ${(e as Error).message}` }
+        return { iid, ok: false, message: `${tCommon('networkError')} (#${iid}): ${(e as Error).message}` }
       }
     }))
 
@@ -416,7 +428,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
         }
         return i
       }))
-      toast(failed[0].message || '담당자 변경에 실패했습니다', 'error')
+      toast(failed[0].message || tIssue('assigneeChangeFailed'), 'error')
     }
   }
 
@@ -457,10 +469,10 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
         setAgentPickerIid(null)
       } else {
         const data = await res.json().catch(() => ({}))
-        toast(data.error || '설정 저장에 실패했습니다', 'error')
+        toast(data.error || tIssue('settingsSaveFailed'), 'error')
       }
     } catch (err: any) {
-      toast(err.message || '네트워크 오류가 발생했습니다', 'error')
+      toast(err.message || tIssue('networkErrorOccurred'), 'error')
     } finally {
       setAgentPickerSaving(false)
     }
@@ -546,9 +558,9 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     }
 
     if (failed > 0) {
-      toast(`${failed}건의 작업이 실패했습니다.`, 'error')
+      toast(tIssue('bulkFailedCount', { count: failed }), 'error')
     } else if (done > 0) {
-      toast(`${done}건의 작업을 완료했습니다.`, 'success')
+      toast(tIssue('bulkCompletedCount', { count: done }), 'success')
     }
 
     fetchIssues()
@@ -620,7 +632,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
           if (prev.some(i => i.iid === created.iid)) return prev
           return [newIssue, ...prev]
         })
-        toast('이슈가 생성되었습니다', 'success')
+        toast(tIssue('issueCreated'), 'success')
         setTimeout(() => {
           if (!selectedProjectId) return
           fetch(`/api/projects/${selectedProjectId}/issues`)
@@ -649,11 +661,11 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
           setLabelCreateMsg(null)
           setLabelModalOpen(true)
         } else {
-          toast(data.error || '이슈 생성에 실패했습니다', 'error')
+          toast(data.error || tIssue('issueCreateFailed'), 'error')
         }
       }
     } catch (err: any) {
-      toast(err.message || '네트워크 오류가 발생했습니다', 'error')
+      toast(err.message || tIssue('networkErrorOccurred'), 'error')
     } finally {
       setCreating(false)
     }
@@ -681,13 +693,13 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
       if (res.ok) {
         fetchIssues()
         window.dispatchEvent(new CustomEvent('refresh-counts'))
-        toast('이슈가 종료되었습니다', 'success')
+        toast(tIssue('issueClosed'), 'success')
       } else {
         const data = await res.json().catch(() => ({}))
-        toast(data.error || '이슈 종료에 실패했습니다', 'error')
+        toast(data.error || tIssue('issueCloseFailed'), 'error')
       }
     } catch (err: any) {
-      toast(err.message || '네트워크 오류가 발생했습니다', 'error')
+      toast(err.message || tIssue('networkErrorOccurred'), 'error')
     } finally {
       setClosing(null)
     }
@@ -873,10 +885,10 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                       ? 'bg-ive-green/20 text-ive-green border-ive-green/40'
                       : 'bg-ive-bg-card text-ive-text-dim border-ive-border-subtle hover:text-ive-text hover:border-ive-green/30'
                   }`}
-                  title="내게 할당된 이슈만 보기"
+                  title={tIssue('assignedToMeTooltip')}
                 >
                   <i className={`fa-solid ${onlyMine ? 'fa-user-check' : 'fa-user'}`} />
-                  내게
+                  {tIssue('assignedToMe')}
                 </button>
               )}
               <button
@@ -907,6 +919,9 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                   <textarea
                     value={newBody}
                     onChange={e => handleBodyChange(e.target.value)}
+                    onPaste={pasteHandlers.onPaste}
+                    onDrop={pasteHandlers.onDrop}
+                    onDragOver={pasteHandlers.onDragOver}
                     placeholder={`${tIssue('titlePlaceholder')}\n\n${tIssue('bodyPlaceholder')}`}
                     rows={4}
                     className="flex-1 bg-ive-bg-deep border border-ive-border-dark rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-green/50"
@@ -1451,20 +1466,19 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
       <Modal
         open={labelModalOpen}
         onClose={() => setLabelModalOpen(false)}
-        title="레이블이 필요해요"
+        title={tIssue('labelModalTitle')}
         closeOnBackdrop={false}
       >
         <div className="flex flex-col gap-4">
           <div className="bg-ive-amber/10 border border-ive-amber/30 rounded-lg p-3">
             <div className="text-sm font-bold text-ive-amber mb-1">
               <i className="fa-solid fa-triangle-exclamation mr-1.5" />
-              이슈를 생성하려면 IVE 레이블이 Git 저장소에 있어야 합니다
+              {tIssue('labelRequiredDesc')}
             </div>
             <p className="text-xs font-bold text-ive-text-muted leading-relaxed">
-              IVE는 이슈 진행 단계(대기 → 개발 → 검증대기 → 검증 → 완료)를 레이블로 추적합니다.
-              아래 레이블이 Git 저장소에 존재해야 스캐너와 에이전트가 이슈를 관리할 수 있습니다.
+              {tIssue('labelTrackingDesc')}
               <br />
-              <span className="text-ive-text-dim">아래 버튼을 누르면 누락된 레이블이 자동으로 생성됩니다.</span>
+              <span className="text-ive-text-dim">{tIssue('labelAutoCreateHint')}</span>
             </p>
           </div>
 
@@ -1472,7 +1486,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
             {labelStatus.length === 0 ? (
               <div className="text-sm font-bold text-ive-text-dim text-center py-2">
                 <i className="fa-solid fa-circle-notch fa-spin mr-1.5" />
-                레이블 상태 확인 중...
+                {tIssue('labelStatusChecking')}
               </div>
             ) : (
               labelStatus.map(s => (
@@ -1487,7 +1501,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                   <i className={`fa-solid ${s.exists ? 'fa-circle-check' : 'fa-circle-xmark'}`} />
                   <span className="flex-1">{s.label}</span>
                   <span className="text-xs text-ive-text-dim">
-                    {s.exists ? '있음' : '없음'}
+                    {s.exists ? tIssue('labelStatusExists') : tIssue('labelStatusMissing')}
                   </span>
                 </div>
               ))
@@ -1525,10 +1539,10 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                     setPendingCreateAfterLabels(true)
                     setLabelModalOpen(false)
                   } else {
-                    setLabelCreateMsg(data.message || '레이블 생성에 실패했습니다')
+                    setLabelCreateMsg(data.message || tProject('labelCreateFailed'))
                   }
                 } catch {
-                  setLabelCreateMsg('네트워크 오류가 발생했습니다')
+                  setLabelCreateMsg(tIssue('networkErrorOccurred'))
                 } finally {
                   setLabelCreating(false)
                 }
@@ -1536,9 +1550,9 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
               className="flex-[2] bg-ive-green-dark text-white font-bold py-3 rounded-lg text-sm active:opacity-90 transition-all disabled:opacity-40"
             >
               {labelCreating ? (
-                <><i className="fa-solid fa-circle-notch fa-spin mr-1.5" />생성 중...</>
+                <><i className="fa-solid fa-circle-notch fa-spin mr-1.5" />{tCommon('creating')}</>
               ) : (
-                <><i className="fa-solid fa-wand-magic-sparkles mr-1.5" />레이블 자동 생성</>
+                <><i className="fa-solid fa-wand-magic-sparkles mr-1.5" />{tIssue('autoCreateLabels')}</>
               )}
             </button>
           </div>

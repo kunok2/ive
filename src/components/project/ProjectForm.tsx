@@ -61,18 +61,18 @@ export default function ProjectForm({ existing, onSuccess, onCancel }: Props) {
       const res = await fetch(url)
       const data = await res.json()
       if (!res.ok) {
-        setPickerError(data.error || '프로젝트 목록 조회 실패')
+        setPickerError(data.error || t('projectListLoadFailed'))
         setPickerRepos([])
       } else {
         setPickerRepos(data.projects || [])
       }
     } catch {
-      setPickerError('서버 오류')
+      setPickerError(tc('serverError'))
       setPickerRepos([])
     } finally {
       setPickerLoading(false)
     }
-  }, [])
+  }, [t, tc])
 
   function openProjectPicker() {
     setPickerOpen(true)
@@ -327,12 +327,12 @@ export default function ProjectForm({ existing, onSuccess, onCancel }: Props) {
             className="w-full py-3 rounded-lg text-sm font-bold border border-ive-cyan/40 bg-ive-cyan/10 text-ive-cyan hover:bg-ive-cyan/20 transition-all"
           >
             <i className={`fa-brands ${oauthInfo.providerType === 'github' ? 'fa-github' : 'fa-gitlab'} mr-1.5`} />
-            {oauthInfo.providerType === 'github' ? 'GitHub' : 'GitLab'}에서 프로젝트 가져오기
+            {t('importFromProvider', { provider: oauthInfo.providerType === 'github' ? 'GitHub' : 'GitLab' })}
             <span className="text-ive-text-dim font-normal ml-1">({oauthInfo.providerName})</span>
           </button>
           <p className="text-sm text-ive-text-dim mt-1">
             <i className="fa-solid fa-circle-info mr-1" />
-            내 계정의 저장소 목록에서 선택하면 이름·URL·토큰이 자동으로 채워집니다.
+            {t('importFromProviderHint')}
           </p>
         </div>
       )}
@@ -386,10 +386,10 @@ export default function ProjectForm({ existing, onSuccess, onCancel }: Props) {
                 </div>
                 <div>
                   <div className={`text-sm font-bold transition-all ${usesOAuthToken ? 'text-ive-cyan' : 'text-ive-text'}`}>
-                    내 OAuth 계정 사용
+                    {t('useOAuthAccount')}
                   </div>
                   <div className="text-xs text-ive-text-dim mt-0.5">
-                    {oauthInfo.providerName || 'GitLab'} 계정의 토큰을 자동으로 관리합니다.
+                    {t('oauthAccountHint', { provider: oauthInfo.providerName || 'GitLab' })}
                   </div>
                 </div>
               </div>
@@ -411,7 +411,7 @@ export default function ProjectForm({ existing, onSuccess, onCancel }: Props) {
           value={accessToken}
           onChange={e => setAccessToken(e.target.value)}
           disabled={usesOAuthToken}
-          placeholder={usesOAuthToken ? 'OAuth 토큰 자동 관리 모드' : (existing ? t('changeOnlyInput') : 'ghp_xxxxxxxxxxxx')}
+          placeholder={usesOAuthToken ? t('oauthAutoManageMode') : (existing ? t('changeOnlyInput') : 'ghp_xxxxxxxxxxxx')}
           className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-base text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green font-mono disabled:opacity-30"
           style={usesOAuthToken ? undefined : ({ WebkitTextSecurity: 'disc' } as React.CSSProperties)}
         />
@@ -860,7 +860,7 @@ export default function ProjectForm({ existing, onSuccess, onCancel }: Props) {
             <div className="flex items-center justify-between px-4 py-3 border-b border-ive-border-subtle">
               <div className="text-sm font-bold text-ive-text">
                 <i className={`fa-brands ${oauthInfo.providerType === 'github' ? 'fa-github' : 'fa-gitlab'} mr-1.5 text-ive-cyan`} />
-                프로젝트 선택
+                {t('selectProject')}
               </div>
               <button
                 type="button"
@@ -884,7 +884,7 @@ export default function ProjectForm({ existing, onSuccess, onCancel }: Props) {
                       loadOAuthProjects(pickerQuery.trim())
                     }
                   }}
-                  placeholder="저장소 이름 검색..."
+                  placeholder={t('searchRepoPlaceholder')}
                   className="w-full bg-ive-bg-input border border-ive-border rounded-lg pl-8 pr-3 py-2 text-sm text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green"
                 />
               </div>
@@ -894,7 +894,7 @@ export default function ProjectForm({ existing, onSuccess, onCancel }: Props) {
               {pickerLoading && (
                 <div className="flex items-center justify-center py-10 text-ive-text-dim text-sm font-bold">
                   <i className="fa-solid fa-circle-notch fa-spin mr-2" />
-                  불러오는 중...
+                  {tc('loading')}
                 </div>
               )}
               {!pickerLoading && pickerError && (
@@ -905,7 +905,7 @@ export default function ProjectForm({ existing, onSuccess, onCancel }: Props) {
               )}
               {!pickerLoading && !pickerError && pickerRepos.length === 0 && (
                 <div className="text-center py-10 text-ive-text-dim text-sm font-bold">
-                  저장소가 없습니다
+                  {t('noRepos')}
                 </div>
               )}
               {!pickerLoading && pickerRepos.map(repo => (

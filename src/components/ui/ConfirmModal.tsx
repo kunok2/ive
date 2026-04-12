@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import { useTranslations } from 'next-intl'
 
 interface Props {
   open: boolean
@@ -15,8 +16,11 @@ interface Props {
 
 export default function ConfirmModal({
   open, onClose, onConfirm, title, message,
-  confirmLabel = '확인', cancelLabel = '취소', danger = false,
+  confirmLabel, cancelLabel, danger = false,
 }: Props) {
+  const tc = useTranslations('common')
+  const confirmText = confirmLabel ?? tc('confirm')
+  const cancelText = cancelLabel ?? tc('cancel')
   const backdropRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -50,7 +54,7 @@ export default function ConfirmModal({
             onClick={onClose}
             className="flex-1 py-3 text-base font-bold text-ive-text-muted border-r border-ive-border-dark rounded-bl-2xl active:bg-ive-bg-deep transition-colors"
           >
-            {cancelLabel}
+            {cancelText}
           </button>
           <button
             onClick={() => { onConfirm(); onClose() }}
@@ -58,7 +62,7 @@ export default function ConfirmModal({
               danger ? 'text-ive-red' : 'text-ive-green'
             }`}
           >
-            {confirmLabel}
+            {confirmText}
           </button>
         </div>
       </div>

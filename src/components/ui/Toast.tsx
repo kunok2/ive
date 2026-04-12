@@ -1,6 +1,7 @@
 'use client'
 
 import { ReactNode, createContext, useCallback, useContext, useRef, useState } from 'react'
+import { useTranslations } from 'next-intl'
 
 // ── Types ──
 interface ToastItem {
@@ -33,6 +34,7 @@ export function useToast() {
 
 // ── Provider ──
 export function ToastProvider({ children }: { children: ReactNode }) {
+  const tPipeline = useTranslations('pipeline')
   const [toasts, setToasts] = useState<ToastItem[]>([])
   const nextId = useRef(0)
   const watchTimers = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map())
@@ -64,7 +66,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         const timer = watchTimers.current.get(key)
         if (timer) clearInterval(timer)
         watchTimers.current.delete(key)
-        toast(`파이프라인 모니터링 시간 초과 — !${watch.mrIid}`, 'info')
+        toast(tPipeline('monitoringTimeout', { mrIid: watch.mrIid }), 'info')
         return
       }
 
@@ -83,17 +85,17 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           const timer = watchTimers.current.get(key)
           if (timer) clearInterval(timer)
           watchTimers.current.delete(key)
-          toast(`파이프라인 완료 — ${watch.label} 배포 성공`, 'success')
+          toast(tPipeline('deploySuccess', { label: watch.label }), 'success')
         } else if (pipeline.status === 'failed') {
           const timer = watchTimers.current.get(key)
           if (timer) clearInterval(timer)
           watchTimers.current.delete(key)
-          toast(`파이프라인 실패 — ${watch.label} 확인 필요`, 'error')
+          toast(tPipeline('deployFailed', { label: watch.label }), 'error')
         } else if (pipeline.status === 'canceled') {
           const timer = watchTimers.current.get(key)
           if (timer) clearInterval(timer)
           watchTimers.current.delete(key)
-          toast(`파이프라인 취소됨 — ${watch.label}`, 'info')
+          toast(tPipeline('deployCancelled', { label: watch.label }), 'info')
         }
         // running, pending → 계속 폴링
       } catch {
@@ -107,7 +109,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       const timer = setInterval(poll, 10000)
       watchTimers.current.set(key, timer)
     }, 5000)
-  }, [toast])
+  }, [toast, tPipeline])
 
   const iconMap: Record<string, string> = {
     success: 'fa-solid fa-circle-check text-ive-green',

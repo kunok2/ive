@@ -1030,6 +1030,7 @@ interface PricingItem {
 }
 
 function ModelSelect({ models, value, onChange }: { models: string[]; value: string; onChange: (v: string) => void }) {
+  const t = useTranslations('admin')
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -1041,7 +1042,7 @@ function ModelSelect({ models, value, onChange }: { models: string[]; value: str
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
-  const options = [{ value: '', label: 'CLI 기본값' }, ...models.map(m => ({ value: m, label: m }))]
+  const options = [{ value: '', label: t('cliDefault') }, ...models.map(m => ({ value: m, label: m }))]
   const selected = options.find(o => o.value === value) || options[0]
 
   return (

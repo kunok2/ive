@@ -63,15 +63,25 @@ export async function ensureGitHubLabels(project: Project, decryptedToken: strin
       throw new Error(`Failed to fetch labels: ${res.statusText}`);
     }
     const existingLabels: any[] = await res.json();
-    const existingNames = existingLabels.map(l => l.name);
+    const existingByName = new Map<string, any>(existingLabels.map(l => [l.name, l]));
 
     for (const label of labelsToEnsure) {
-      if (!existingNames.includes(label.name)) {
+      const existing = existingByName.get(label.name);
+      if (!existing) {
+        // 신규 생성
         console.log(`[GitHub] Creating label: ${label.name} for project: ${project.name}`);
         await fetch(apiUrl(project, '/labels'), {
           method: 'POST',
           headers: { ...headers, 'Content-Type': 'application/json' },
           body: JSON.stringify(label),
+        });
+      } else if ((existing.description || '') !== label.description) {
+        // 기존 레이블의 설명이 비어있거나 다르면 덮어씀 (색상은 사용자 커스텀을 존중해 건드리지 않음)
+        console.log(`[GitHub] Updating label description: ${label.name}`);
+        await fetch(apiUrl(project, `/labels/${encodeURIComponent(label.name)}`), {
+          method: 'PATCH',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ description: label.description }),
         });
       }
     }
@@ -832,4 +842,44 @@ export async function getGitHubDefaultBranch(project: Project, decryptedToken: s
     return data.default_branch || 'main';
   }
   return 'main';
+}
+
+/**
+ * GitHub 저장소에 파일을 커밋해 업로드합니다 (이슈 본문/코멘트에 첨부할 이미지 등).
+ * GitHub은 이슈 첨부용 공개 API가 없으므로, 저장소 기본 브랜치의 `.ive-assets/` 경로에
+ * 파일을 커밋한 뒤 raw 다운로드 URL을 마크다운으로 반환합니다.
+ */
+export async function uploadGitHubFile(
+  project: Project,
+  decryptedToken: string,
+  filename: string,
+  buffer: Buffer,
+  mimeType: string,
+): Promise<{ markdown: string; url: string }> {
+  const headers = getGitHubAuthHeaders(project, decryptedToken);
+  const branch = await getGitHubDefaultBranch(project, decryptedToken);
+  const safe = (filename || 'file').replace(/[^\w.\-]/g, '_').slice(-80) || 'file';
+  const ts = Date.now();
+  const rand = Math.random().toString(36).slice(2, 8);
+  const path = `.ive-assets/${ts}-${rand}-${safe}`;
+
+  const content = buffer.toString('base64');
+  const putRes = await fetch(apiUrl(project, `/contents/${path}`), {
+    method: 'PUT',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      message: `chore(ive): upload issue attachment ${safe}`,
+      content,
+      branch,
+    }),
+  });
+  if (!putRes.ok) {
+    const text = await putRes.text().catch(() => '');
+    throw new Error(`GitHub 파일 업로드 실패: ${putRes.status} ${text}`);
+  }
+  const data = await putRes.json();
+  const rawUrl: string = data?.content?.download_url || '';
+  const isImage = (mimeType || '').startsWith('image/');
+  const markdown = isImage ? `![${safe}](${rawUrl})` : `[${safe}](${rawUrl})`;
+  return { markdown, url: rawUrl };
 }

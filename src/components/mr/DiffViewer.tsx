@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useTranslations } from 'next-intl'
 
 interface FileChange {
   old_path: string
@@ -68,6 +69,7 @@ function FileLabel({ change }: { change: FileChange }) {
 }
 
 export default function DiffViewer({ changes }: { changes: FileChange[] }) {
+  const tc = useTranslations('common')
   const [expanded, setExpanded] = useState<Record<number, boolean>>(() => {
     const init: Record<number, boolean> = {}
     changes.forEach((_, i) => { init[i] = i < 5 }) // 처음 5개 자동 펼침
@@ -95,10 +97,10 @@ export default function DiffViewer({ changes }: { changes: FileChange[] }) {
       {changes.length > 1 && (
         <div className="flex justify-end gap-2 px-1">
           <button onClick={expandAll} className="text-xs text-ive-text-muted hover:text-ive-text transition-colors">
-            <i className="fa-solid fa-angles-down mr-1" />모두 펼치기
+            <i className="fa-solid fa-angles-down mr-1" />{tc('expandAll')}
           </button>
           <button onClick={collapseAll} className="text-xs text-ive-text-muted hover:text-ive-text transition-colors">
-            <i className="fa-solid fa-angles-up mr-1" />모두 접기
+            <i className="fa-solid fa-angles-up mr-1" />{tc('collapseAll')}
           </button>
         </div>
       )}

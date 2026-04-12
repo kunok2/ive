@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { TaskExecution } from '@/types'
 import LogViewer from '@/components/ui/LogViewer'
 import MarqueeText from '@/components/ui/MarqueeText'
@@ -16,6 +17,7 @@ function formatDuration(startedAt: string, endedAt?: string): string {
 }
 
 export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { projectId: string; className?: string }) {
+  const tExec = useTranslations('execution')
   const [executions, setExecutions] = useState<TaskExecution[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -50,7 +52,7 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
     }
   }
 
-  if (loading) return <div className="text-center py-10 text-ive-text-muted">실행 이력 로딩 중...</div>
+  if (loading) return <div className="text-center py-10 text-ive-text-muted">{tExec('loadingHistory')}</div>
 
   return (
     <div className={`flex flex-col ${className}`}>
@@ -58,7 +60,7 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
         <div className="flex-1 flex flex-col min-h-0 bg-black rounded-lg overflow-hidden border border-ive-border-dark">
           <div className="bg-ive-bg-deep px-4 py-2 border-b border-ive-border-dark flex items-center justify-between shrink-0">
             <span className="text-sm font-bold text-ive-green uppercase tracking-widest flex items-center gap-2">
-              에이전트 실행 로그
+              {tExec('agentLog')}
               {(() => {
                 const ex = executions.find(e => e.id === selectedId)
                 if (!ex) return null
@@ -75,7 +77,7 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
               onClick={() => setSelectedId(null)}
               className="text-sm font-bold text-ive-text-muted hover:text-ive-text bg-white/5 px-2 py-1 rounded"
             >
-              목록으로
+              {tExec('backToList')}
             </button>
           </div>
           <LogViewer
@@ -93,7 +95,7 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
           {executions.length === 0 ? (
             <div className="text-center py-20 bg-ive-bg/50 rounded-2xl border border-dashed border-ive-border-subtle">
               <i className="fa-solid fa-list-check text-3xl text-ive-text-dim mb-3 block" />
-              <p className="text-base text-ive-text-muted">아직 실행된 태스크가 없습니다</p>
+              <p className="text-base text-ive-text-muted">{tExec('noTasksYet')}</p>
             </div>
           ) : (
             executions.map(ex => (
@@ -110,7 +112,7 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
                       ex.status === 'success' ? 'bg-ive-green/20 text-ive-green' :
                       'bg-ive-red/20 text-ive-red'
                     }`}>
-                      {ex.status === 'assigned' ? '배정됨' : ex.status === 'running' ? '실행 중' : ex.status === 'success' ? '완료' : '실패'}
+                      {ex.status === 'assigned' ? tExec('assigned') : ex.status === 'running' ? tExec('running') : ex.status === 'success' ? tExec('completed') : tExec('failed')}
                     </span>
                   </div>
                   {(ex.agentName || ex.modelName || ex.assigneeType === 'user') && (
@@ -153,7 +155,7 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
                       >
                         {killing === ex.id
                           ? <i className="fa-solid fa-circle-notch fa-spin" />
-                          : <><i className="fa-solid fa-skull-crossbones mr-1" />강제종료</>
+                          : <><i className="fa-solid fa-skull-crossbones mr-1" />{tExec('forceStop')}</>
                         }
                       </button>
                     </div>

@@ -1,6 +1,6 @@
 'use client'
 
-import { use, useCallback, useEffect, useRef, useState } from 'react'
+import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import MobileTabBar from '@/components/layout/MobileTabBar'
 import { useDialog } from '@/components/ui/ConfirmDialog'
@@ -13,6 +13,7 @@ import { useStore } from '@/lib/store'
 import { formatDateMedium, formatTime } from '@/lib/format-date'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 import Modal from '@/components/ui/Modal'
+import { createImagePasteHandlers } from '@/lib/paste-upload'
 
 interface ChatMessage {
   id: string
@@ -143,6 +144,27 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const postingRef = useRef(false)
   const pendingScrollToBottomRef = useRef(false)
+
+  // 이미지 복/붙 업로드 핸들러 — 설명 편집 textarea 와 코멘트 textarea 에 각각 부착
+  const editDescRef = useRef(editDesc)
+  useEffect(() => { editDescRef.current = editDesc }, [editDesc])
+  const commentRef = useRef(comment)
+  useEffect(() => { commentRef.current = comment }, [comment])
+  const editDescPasteHandlers = useMemo(() => createImagePasteHandlers({
+    projectId,
+    getValue: () => editDescRef.current,
+    setValue: v => setEditDesc(v),
+    onError: msg => toast(msg, 'error'),
+  }), [projectId, toast])
+  const commentPasteHandlers = useMemo(() => createImagePasteHandlers({
+    projectId,
+    getValue: () => commentRef.current,
+    setValue: v => {
+      setComment(v)
+      try { localStorage.setItem(commentKey, v) } catch {}
+    },
+    onError: msg => toast(msg, 'error'),
+  }), [projectId, commentKey, toast])
 
   // Chat state
   const [mode, setMode] = useState<'comment' | 'chat'>('comment')
@@ -1048,6 +1070,9 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                 <textarea
                   value={editDesc}
                   onChange={e => setEditDesc(e.target.value)}
+                  onPaste={editDescPasteHandlers.onPaste}
+                  onDrop={editDescPasteHandlers.onDrop}
+                  onDragOver={editDescPasteHandlers.onDragOver}
                   className="flex-1 bg-ive-bg-input border border-ive-border rounded-lg px-3 py-1.5 text-sm text-ive-text resize-none focus:outline-none focus:border-ive-green"
                   placeholder={tIssue('descriptionOptional')}
                   rows={4}
@@ -1443,6 +1468,9 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                   e.target.style.height = h + 'px'
                   e.target.style.overflow = e.target.scrollHeight > 120 ? 'auto' : 'hidden'
                 }}
+                onPaste={commentPasteHandlers.onPaste}
+                onDrop={commentPasteHandlers.onDrop}
+                onDragOver={commentPasteHandlers.onDragOver}
                 onKeyDown={e => {
                   if (e.key !== 'Enter') return
                   const isMobile = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0)

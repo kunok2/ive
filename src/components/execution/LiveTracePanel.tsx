@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { TaskExecution, Agent } from '@/types'
 import { useStore } from '@/lib/store'
 import { formatTime as formatTimeUtil } from '@/lib/format-date'
@@ -11,6 +12,7 @@ import AgentAvatar from '@/components/agent/AgentAvatar'
 import MarqueeText from '@/components/ui/MarqueeText'
 
 function ThinkingElapsed() {
+  const tExec = useTranslations('execution')
   const [seconds, setSeconds] = useState(0)
   useEffect(() => {
     const interval = setInterval(() => setSeconds(s => s + 1), 1000)
@@ -18,7 +20,7 @@ function ThinkingElapsed() {
   }, [])
   return (
     <span className="text-ive-cyan text-xs">
-      {seconds}초 생각중...
+      {tExec('thinkingElapsed', { seconds })}
     </span>
   )
 }
@@ -26,6 +28,7 @@ function ThinkingElapsed() {
 interface ChatMsg { id: string; role: 'user' | 'assistant'; content: string; createdAt: string }
 
 function ChatViewer({ projectId, execution, agent }: { projectId: string; execution: TaskExecution; agent: Agent }) {
+  const tExec = useTranslations('execution')
   const { state } = useStore()
   const [messages, setMessages] = useState<ChatMsg[]>([])
   const [agentProcessing, setAgentProcessing] = useState(false)
@@ -65,7 +68,7 @@ function ChatViewer({ projectId, execution, agent }: { projectId: string; execut
     <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto space-y-2 rounded-lg bg-ive-bg-deep/50 border border-ive-border-dark p-2">
       {messages.length === 0 && !agentProcessing && (
         <div className="text-center text-ive-text-dim text-xs py-4">
-          <i className="fa-solid fa-comments mr-1" />대화 내용이 없습니다
+          <i className="fa-solid fa-comments mr-1" />{tExec('noConversation')}
         </div>
       )}
       {messages.map(msg => (
@@ -123,6 +126,7 @@ interface Props {
 
 export default function LiveTracePanel({ agents, projectId, onKill, onAllCompleted }: Props) {
   const router = useRouter()
+  const tExec = useTranslations('execution')
   const [activeIdx, setActiveIdx] = useState(0)
   const [tick, setTick] = useState(0)
   const [activities, setActivities] = useState<Record<string, ToolActivity>>({})
@@ -169,7 +173,7 @@ export default function LiveTracePanel({ agents, projectId, onKill, onAllComplet
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-2 text-ive-text-dim text-sm">
         <i className="fa-solid fa-coffee text-2xl" />
-        <span>작업 중인 에이전트가 없습니다</span>
+        <span>{tExec('noWorkers')}</span>
       </div>
     )
   }
@@ -221,7 +225,7 @@ export default function LiveTracePanel({ agents, projectId, onKill, onAllComplet
                   {current.execution!.issueTitle && !isChat && (
                     <span className="ml-1.5">{current.execution!.issueTitle}</span>
                   )}
-                  {isChat && <span className="ml-1.5">채팅 진행 중</span>}
+                  {isChat && <span className="ml-1.5">{tExec('chatInProgress')}</span>}
                 </MarqueeText>
               </div>
               <div className="flex items-center gap-2 shrink-0 ml-2">
@@ -230,7 +234,7 @@ export default function LiveTracePanel({ agents, projectId, onKill, onAllComplet
                   if (!activity) return null
                   return (
                     <span className="text-xs text-ive-text-dim bg-ive-bg-deep px-1.5 py-0.5 rounded font-mono truncate max-w-[140px]">
-                      {activity.tool === 'thinking' ? '생각 중...' : activity.tool}
+                      {activity.tool === 'thinking' ? tExec('thinking') : activity.tool}
                     </span>
                   )
                 })()}
@@ -251,7 +255,7 @@ export default function LiveTracePanel({ agents, projectId, onKill, onAllComplet
                   )}
                   <div className="text-sm font-bold text-ive-text">{current.execution!.userName}</div>
                   <div className="text-xs text-ive-cyan mt-1">
-                    <i className="fa-solid fa-user-check mr-1" />담당자에게 배정됨
+                    <i className="fa-solid fa-user-check mr-1" />{tExec('assignedToUser')}
                   </div>
                 </div>
               </div>
@@ -279,9 +283,9 @@ export default function LiveTracePanel({ agents, projectId, onKill, onAllComplet
                   }`}
                 >
                   {isChat ? (
-                    <><i className="fa-solid fa-xmark mr-1" />채팅 종료</>
+                    <><i className="fa-solid fa-xmark mr-1" />{tExec('endChatAction')}</>
                   ) : (
-                    <><i className="fa-solid fa-skull-crossbones mr-1" />강제종료</>
+                    <><i className="fa-solid fa-skull-crossbones mr-1" />{tExec('forceStop')}</>
                   )}
                 </button>
               )}
@@ -296,9 +300,9 @@ export default function LiveTracePanel({ agents, projectId, onKill, onAllComplet
                 className="flex-1 text-xs font-bold text-ive-cyan border border-ive-cyan/30 py-1.5 rounded-lg bg-ive-bg-deep hover:bg-ive-cyan/10 transition-colors"
               >
                 {isChat ? (
-                  <><i className="fa-solid fa-comments mr-1" />채팅 열기</>
+                  <><i className="fa-solid fa-comments mr-1" />{tExec('openChatAction')}</>
                 ) : (
-                  <><i className="fa-solid fa-expand mr-1" />전체화면</>
+                  <><i className="fa-solid fa-expand mr-1" />{tExec('fullscreen')}</>
                 )}
               </button>
             </div>

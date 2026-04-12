@@ -116,15 +116,26 @@ export async function ensureGitLabLabels(project: Project, decryptedToken: strin
       throw new Error(`Failed to fetch labels: ${res.statusText}`);
     }
     const existingLabels: any[] = await res.json();
-    const existingNames = existingLabels.map(l => l.name);
+    const existingByName = new Map<string, any>(existingLabels.map(l => [l.name, l]));
 
     for (const label of labelsToEnsure) {
-      if (!existingNames.includes(label.name)) {
+      const existing = existingByName.get(label.name);
+      if (!existing) {
+        // 신규 생성
         console.log(`[GitLab] Creating label: ${label.name} for project: ${project.name}`);
         await fetch(apiUrl(project, '/labels'), {
           method: 'POST',
           headers: { ...headers, 'Content-Type': 'application/json' },
           body: JSON.stringify(label)
+        });
+      } else if ((existing.description || '') !== label.description) {
+        // 기존 레이블의 설명이 비어있거나 다르면 덮어씀 (색상은 사용자 커스텀을 존중해 건드리지 않음)
+        // GitLab API: PUT /projects/:id/labels/:label_id (id는 숫자 또는 URL-encoded name)
+        console.log(`[GitLab] Updating label description: ${label.name}`);
+        await fetch(apiUrl(project, `/labels/${encodeURIComponent(label.name)}`), {
+          method: 'PUT',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ description: label.description }),
         });
       }
     }
@@ -803,4 +814,34 @@ export async function getGitLabDefaultBranch(project: Project, decryptedToken: s
     return data.default_branch || 'main';
   }
   return 'main';
+}
+
+/**
+ * GitLab 프로젝트에 파일을 업로드합니다 (이슈 설명/코멘트에 첨부할 이미지 등).
+ * GitLab API: POST /projects/:id/uploads → { alt, url, markdown, full_path }
+ * markdown 필드에는 GitLab이 인식하는 상대 경로 참조가 들어 있으므로 그대로 본문에 삽입하면 됩니다.
+ */
+export async function uploadGitLabFile(
+  project: Project,
+  decryptedToken: string,
+  filename: string,
+  buffer: Buffer,
+  mimeType: string,
+): Promise<{ markdown: string; url: string }> {
+  const headers = getAuthHeaders(project, decryptedToken);
+  const form = new FormData();
+  const ab = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
+  const blob = new Blob([ab], { type: mimeType || 'application/octet-stream' });
+  form.append('file', blob, filename);
+  const res = await fetch(apiUrl(project, '/uploads'), {
+    method: 'POST',
+    headers, // Content-Type는 FormData가 자동으로 boundary 포함해 지정
+    body: form,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`GitLab 파일 업로드 실패: ${res.status} ${text}`);
+  }
+  const data = await res.json();
+  return { markdown: String(data.markdown || ''), url: String(data.url || '') };
 }

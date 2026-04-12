@@ -1,9 +1,11 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import '@xterm/xterm/css/xterm.css'
 
 export default function TerminalTab() {
+  const tWs = useTranslations('ws')
   const containerRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<any>(null)
   const wsRef = useRef<WebSocket | null>(null)
@@ -61,13 +63,13 @@ export default function TerminalTab() {
       }
 
       ws.onerror = () => {
-        if (!destroyed) setError('WebSocket 연결 실패. 서버가 실행 중인지, 로그인 상태인지 확인하세요.')
+        if (!destroyed) setError(tWs('connectionFailed'))
         term.writeln('\x1b[31mConnection failed.\x1b[0m')
       }
 
       ws.onclose = (e) => {
         if (!destroyed) {
-          if (e.code === 1006) setError('서버에 연결할 수 없습니다 (코드 1006). 서버를 재시작하세요.')
+          if (e.code === 1006) setError(tWs('serverDisconnected'))
           term.writeln(`\x1b[33m\r\nConnection closed (code ${e.code}).\x1b[0m`)
         }
       }
@@ -122,6 +124,7 @@ export default function TerminalTab() {
       termRef.current?.dispose()
       initializedRef.current = false
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return (

@@ -69,6 +69,19 @@ export async function deleteIssueComment(project: Project, iid: number, noteId: 
   return await gitlab.deleteGitLabIssueNote(project, iid, noteId, token, options);
 }
 
+/** 이슈/코멘트 본문에 첨부할 파일(주로 이미지)을 업로드하고 마크다운 스니펫을 돌려줍니다. */
+export function uploadIssueAttachment(
+  project: Project,
+  token: string,
+  filename: string,
+  buffer: Buffer,
+  mimeType: string,
+) {
+  return project.provider === 'github'
+    ? github.uploadGitHubFile(project, token, filename, buffer, mimeType)
+    : gitlab.uploadGitLabFile(project, token, filename, buffer, mimeType);
+}
+
 // MR / PR
 export function fetchMRByBranch(project: Project, token: string, branch: string) {
   return project.provider === 'github'

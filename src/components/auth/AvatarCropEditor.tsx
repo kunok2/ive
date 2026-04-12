@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useCallback, useEffect } from 'react'
+import { useTranslations } from 'next-intl'
 
 interface Props {
   imageFile: File
@@ -11,20 +12,22 @@ interface Props {
 const CANVAS_SIZE = 256
 const VIEW_SIZE = 240
 
-const BG_COLORS = [
-  { label: '어두운 남색', value: '#1a1a2e' },
-  { label: '검정', value: '#000000' },
-  { label: '짙은 회색', value: '#2d2d2d' },
-  { label: '회색', value: '#6b7280' },
-  { label: '흰색', value: '#ffffff' },
-  { label: '초록', value: '#166534' },
-  { label: '파랑', value: '#1e3a5f' },
-  { label: '보라', value: '#3b1f6e' },
-  { label: '빨강', value: '#7f1d1d' },
-  { label: '갈색', value: '#5c3a1e' },
+const BG_COLORS: { labelKey: string; value: string }[] = [
+  { labelKey: 'bgColorDarkNavy', value: '#1a1a2e' },
+  { labelKey: 'bgColorBlack', value: '#000000' },
+  { labelKey: 'bgColorDarkGray', value: '#2d2d2d' },
+  { labelKey: 'bgColorGray', value: '#6b7280' },
+  { labelKey: 'bgColorWhite', value: '#ffffff' },
+  { labelKey: 'bgColorGreen', value: '#166534' },
+  { labelKey: 'bgColorBlue', value: '#1e3a5f' },
+  { labelKey: 'bgColorPurple', value: '#3b1f6e' },
+  { labelKey: 'bgColorRed', value: '#7f1d1d' },
+  { labelKey: 'bgColorBrown', value: '#5c3a1e' },
 ]
 
 export default function AvatarCropEditor({ imageFile, onConfirm, onCancel }: Props) {
+  const tAuth = useTranslations('auth')
+  const tc = useTranslations('common')
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const imgRef = useRef<HTMLImageElement | null>(null)
   const [loaded, setLoaded] = useState(false)
@@ -52,7 +55,7 @@ export default function AvatarCropEditor({ imageFile, onConfirm, onCancel }: Pro
       setLoaded(true)
     }
     img.onerror = () => {
-      setLoadError('이미지를 로드할 수 없습니다. 다른 파일을 선택해주세요.')
+      setLoadError(tAuth('imageLoadFailed'))
     }
     img.src = URL.createObjectURL(imageFile)
     return () => URL.revokeObjectURL(img.src)
@@ -142,7 +145,7 @@ export default function AvatarCropEditor({ imageFile, onConfirm, onCancel }: Pro
       outCanvas.height = CANVAS_SIZE
       const ctx = outCanvas.getContext('2d')
       if (!ctx) {
-        alert('캔버스를 초기화할 수 없습니다. 브라우저를 새로고침해주세요.')
+        alert(tAuth('canvasInitFailed'))
         return
       }
 
@@ -167,13 +170,13 @@ export default function AvatarCropEditor({ imageFile, onConfirm, onCancel }: Pro
 
       outCanvas.toBlob((blob) => {
         if (!blob) {
-          alert('이미지 처리에 실패했습니다. 다시 시도해주세요.')
+          alert(tAuth('imageProcessFailed'))
           return
         }
         onConfirm(blob)
       }, 'image/png', 1)
     } catch {
-      alert('이미지 처리 중 오류가 발생했습니다. 다시 시도해주세요.')
+      alert(tAuth('imageProcessError'))
     }
   }
 
@@ -193,7 +196,7 @@ export default function AvatarCropEditor({ imageFile, onConfirm, onCancel }: Pro
           onClick={onCancel}
           className="w-full py-2 rounded-lg text-sm font-bold text-ive-text-dim bg-ive-bg-card border border-ive-border-subtle"
         >
-          돌아가기
+          {tAuth('goBack')}
         </button>
       </div>
     )
@@ -201,7 +204,7 @@ export default function AvatarCropEditor({ imageFile, onConfirm, onCancel }: Pro
 
   return (
     <div className="flex flex-col items-center gap-3">
-      <p className="text-xs text-ive-text-muted">드래그로 위치 조정, 슬라이더로 크기 조정</p>
+      <p className="text-xs text-ive-text-muted">{tAuth('dragToAdjust')}</p>
 
       {/* 캔버스 */}
       <div
@@ -250,13 +253,13 @@ export default function AvatarCropEditor({ imageFile, onConfirm, onCancel }: Pro
 
       {/* 배경색 */}
       <div className="w-full max-w-[240px]">
-        <p className="text-xs text-ive-text-dim mb-1.5">배경색</p>
+        <p className="text-xs text-ive-text-dim mb-1.5">{tAuth('backgroundColor')}</p>
         <div className="flex gap-1.5 flex-wrap justify-center">
           {BG_COLORS.map(c => (
             <button
               key={c.value}
               type="button"
-              title={c.label}
+              title={tAuth(c.labelKey)}
               onClick={() => setBgColor(c.value)}
               className={`w-6 h-6 rounded-full border-2 transition-all ${
                 bgColor === c.value ? 'border-ive-green scale-125' : 'border-ive-border-subtle hover:scale-110'
@@ -274,14 +277,14 @@ export default function AvatarCropEditor({ imageFile, onConfirm, onCancel }: Pro
           onClick={onCancel}
           className="flex-1 py-2 rounded-lg text-sm font-bold text-ive-text-dim bg-ive-bg-card border border-ive-border-subtle"
         >
-          취소
+          {tc('cancel')}
         </button>
         <button
           type="button"
           onClick={handleConfirm}
           className="flex-1 py-2 rounded-lg text-sm font-bold text-white bg-ive-green"
         >
-          확인
+          {tc('confirm')}
         </button>
       </div>
     </div>
