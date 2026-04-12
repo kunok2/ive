@@ -283,6 +283,8 @@
     "aiGuideCreated": "created",
     "aiGuideUpdated": "updated",
     "aiGuideUnchanged": "unchanged (up to date)",
+    "aiGuideMrCreated": "Merge request created",
+    "aiGuideMrMergeHint": "You must merge this MR for the guide to take effect.",
     "showToolUsage": "Show Tool Usage in Trace",
     "showToolUsageHint": "Include tool calls like Read, Edit, Bash in agent execution logs",
     "distinguishColor": "Color",

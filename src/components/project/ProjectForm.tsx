@@ -107,6 +107,7 @@ export default function ProjectForm({ existing, onSuccess, onCancel }: Props) {
   const [aiGuideStatus, setAiGuideStatus] = useState<{ path: string; hasIveSection: boolean }[] | null>(null)
   const [aiGuideInstalling, setAiGuideInstalling] = useState(false)
   const [aiGuideResult, setAiGuideResult] = useState<{ path: string; created: boolean; updated: boolean; unchanged: boolean; error?: string }[] | null>(null)
+  const [aiGuideMrUrl, setAiGuideMrUrl] = useState<string | null>(null)
 
   // 작업 주기 설정 추가 (단위: 분)
   const [checkInterval, setCheckInterval] = useState(existing?.checkInterval ?? 1)
@@ -657,10 +658,12 @@ export default function ProjectForm({ existing, onSuccess, onCancel }: Props) {
               onClick={async () => {
                 setAiGuideInstalling(true)
                 setAiGuideResult(null)
+                setAiGuideMrUrl(null)
                 try {
                   const res = await fetch(`/api/projects/${existing.id}/ai-guide`, { method: 'POST' })
                   const data = await res.json()
                   setAiGuideResult(data.results || null)
+                  setAiGuideMrUrl(data.mrUrl || null)
                   // 상태도 갱신
                   const statusRes = await fetch(`/api/projects/${existing.id}/ai-guide`)
                   if (statusRes.ok) {
@@ -696,6 +699,27 @@ export default function ProjectForm({ existing, onSuccess, onCancel }: Props) {
                   <span>{r.error ? r.error : r.unchanged ? t('aiGuideUnchanged') : r.created ? t('aiGuideCreated') : t('aiGuideUpdated')}</span>
                 </div>
               ))}
+            </div>
+          )}
+          {/* MR/PR 링크 및 머지 안내 */}
+          {aiGuideMrUrl && (
+            <div className="mt-2 ml-5 p-2.5 rounded-lg bg-ive-cyan/10 border border-ive-cyan/20">
+              <p className="text-xs text-ive-cyan font-bold mb-1">
+                <i className="fa-solid fa-code-merge mr-1" />
+                {t('aiGuideMrCreated')}
+              </p>
+              <a
+                href={aiGuideMrUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-ive-cyan underline hover:text-ive-cyan/80 break-all"
+              >
+                {aiGuideMrUrl}
+              </a>
+              <p className="text-xs text-ive-text-dim mt-1.5">
+                <i className="fa-solid fa-circle-info mr-1" />
+                {t('aiGuideMrMergeHint')}
+              </p>
             </div>
           )}
         </div>

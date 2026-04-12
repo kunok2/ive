@@ -186,6 +186,12 @@ export function createBranch(project: Project, token: string, branchName: string
     : gitlab.createGitLabBranch(project, token, branchName, ref);
 }
 
+export function createMR(project: Project, token: string, payload: { source_branch: string; target_branch: string; title: string; description?: string }) {
+  return project.provider === 'github'
+    ? github.createGitHubPR(project, token, payload)
+    : gitlab.createGitLabMR(project, token, payload);
+}
+
 export function getDefaultBranch(project: Project, token: string) {
   return project.provider === 'github'
     ? github.getGitHubDefaultBranch(project, token)

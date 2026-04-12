@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getProject, getProjectAccess, getProjectAuthToken } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
-import { readRepoFile, upsertRepoFile } from '@/lib/provider'
+import { readRepoFile, upsertRepoFile, createBranch, createMR, getDefaultBranch } from '@/lib/provider'
 import { logActivity } from '@/lib/activity'
 import { Project } from '@/types'
 
@@ -121,6 +121,7 @@ export async function GET(
 
 /**
  * POST /api/projects/:id/ai-guide — CLAUDE.md, AGENTS.md에 IVE 가이드 설치
+ * 보호 브랜치 대응: 별도 브랜치에 커밋 후 MR/PR을 생성한다.
  */
 export async function POST(
   req: NextRequest,
@@ -144,23 +145,78 @@ export async function POST(
 
   const results: { path: string; created: boolean; updated: boolean; unchanged: boolean; error?: string }[] = []
 
+  // 1. 기본 브랜치에서 기존 파일 읽고, 변경 사항이 있는지 확인
+  const defaultBranch = await getDefaultBranch(project, token)
+  const filesToWrite: { path: string; content: string; isNew: boolean }[] = []
+
   for (const filePath of TARGET_FILES) {
     try {
-      // 1. 기존 파일 읽기
       const existing = await readRepoFile(project, token, filePath)
-      // 2. 마커 기반 병합 (기존 내용 보존)
       const merged = mergeIveSection(existing?.content ?? null, iveSection)
-      // 3. 커밋
-      const result = await upsertRepoFile(project, token, filePath, merged, commitMsg)
-      results.push({ path: filePath, ...result })
+      if (existing && existing.content === merged) {
+        results.push({ path: filePath, created: false, updated: false, unchanged: true })
+      } else {
+        filesToWrite.push({ path: filePath, content: merged, isNew: !existing })
+      }
     } catch (e) {
-      results.push({
-        path: filePath,
-        created: false,
-        updated: false,
-        unchanged: false,
-        error: e instanceof Error ? e.message : String(e),
+      results.push({ path: filePath, created: false, updated: false, unchanged: false, error: e instanceof Error ? e.message : String(e) })
+    }
+  }
+
+  // 변경할 파일이 없으면 바로 반환
+  if (filesToWrite.length === 0) {
+    return NextResponse.json({ results })
+  }
+
+  // 2. 브랜치 생성 → 커밋 → MR/PR 생성
+  const branchName = `ive/ai-guide-${Date.now()}`
+  let mrUrl: string | null = null
+
+  try {
+    await createBranch(project, token, branchName, defaultBranch)
+
+    for (const file of filesToWrite) {
+      try {
+        const result = await upsertRepoFile(project, token, file.path, file.content, commitMsg, branchName)
+        results.push({ path: file.path, ...result })
+      } catch (e) {
+        results.push({ path: file.path, created: false, updated: false, unchanged: false, error: e instanceof Error ? e.message : String(e) })
+      }
+    }
+
+    // 커밋된 파일이 있으면 MR/PR 생성
+    const committed = results.filter(r => r.created || r.updated)
+    if (committed.length > 0) {
+      const mrTitle = `chore(ive): AI 도구 가이드 설치 (${committed.map(r => r.path).join(', ')})`
+      const mrDesc = [
+        '## AI 도구 가이드 설치',
+        '',
+        'IVE에서 자동 생성된 MR입니다.',
+        '외부 AI CLI(Claude Code 등)가 IVE 이슈 등록을 인식하도록 가이드 파일을 추가/갱신합니다.',
+        '',
+        '### 변경 파일',
+        ...committed.map(r => `- \`${r.path}\` — ${r.created ? '신규 생성' : '갱신'}`),
+        '',
+        '> 이 MR을 머지하면 가이드가 적용됩니다.',
+      ].join('\n')
+
+      const mr = await createMR(project, token, {
+        source_branch: branchName,
+        target_branch: defaultBranch,
+        title: mrTitle,
+        description: mrDesc,
       })
+      if (mr) {
+        mrUrl = mr.web_url || mr.html_url || null
+      }
+    }
+  } catch (e) {
+    // 브랜치 생성 실패 등
+    const errMsg = e instanceof Error ? e.message : String(e)
+    for (const file of filesToWrite) {
+      if (!results.find(r => r.path === file.path)) {
+        results.push({ path: file.path, created: false, updated: false, unchanged: false, error: errMsg })
+      }
     }
   }
 
@@ -168,12 +224,12 @@ export async function POST(
     userId: user.id,
     category: 'project',
     action: 'install_ai_guide',
-    detail: `AI 도구 가이드 설치: ${results.map(r => `${r.path}(${r.error ? '실패' : r.unchanged ? '변경없음' : r.created ? '생성' : '갱신'})`).join(', ')}`,
+    detail: `AI 도구 가이드 설치: ${results.map(r => `${r.path}(${r.error ? '실패' : r.unchanged ? '변경없음' : r.created ? '생성' : '갱신'})`).join(', ')}${mrUrl ? ` → MR: ${mrUrl}` : ''}`,
     targetType: 'project',
     targetId: projectId,
     req,
   })
 
   const hasError = results.some(r => r.error)
-  return NextResponse.json({ results }, { status: hasError ? 207 : 200 })
+  return NextResponse.json({ results, mrUrl }, { status: hasError ? 207 : 200 })
 }

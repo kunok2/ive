@@ -283,6 +283,8 @@
     "aiGuideCreated": "새로 생성됨",
     "aiGuideUpdated": "갱신됨",
     "aiGuideUnchanged": "변경 없음 (최신)",
+    "aiGuideMrCreated": "MR이 생성되었습니다",
+    "aiGuideMrMergeHint": "이 MR을 머지해야 가이드가 저장소에 적용됩니다.",
     "showToolUsage": "트레이스에 툴 사용 표시",
     "showToolUsageHint": "에이전트 실행 로그에 Read, Edit, Bash 등 툴 호출 내역을 포함합니다",
     "distinguishColor": "구분 색상",
