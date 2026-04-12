@@ -1038,6 +1038,24 @@ async function executeTask(
     createExecution(execution);
   }
 
+  // 배정 즉시 cached_stage를 'dev'로 업데이트
+  // — 다음 스캔 전까지 issue_stages.cached_stage='waiting'으로 남아
+  //   stats API에서 대기+작업중이 동시에 1로 보이는 문제 방지
+  if (!isConflictTask) {
+    try {
+      const assignee = (issue.assignees && issue.assignees.length > 0) ? issue.assignees[0] : null;
+      upsertIssueStageSnapshot(project.id, iid, {
+        cachedStage: 'dev',
+        assigneeUsername: assignee ? (assignee.username || assignee.login || null) : null,
+        assigneeName: assignee ? (assignee.name || assignee.username || assignee.login || null) : null,
+        assigneeAvatar: assignee ? (assignee.avatar_url || null) : null,
+        assigneeProvider: project.provider,
+        assigneeGitUserId: assignee && assignee.id != null ? String(assignee.id) : null,
+        issueTitle: issue.title || null,
+      });
+    } catch (e) { console.warn(`[Scanner] Failed to update cached_stage to dev for #${iid}:`, e); }
+  }
+
   // 레이블 전환: IVE-S 제거, IVE-D 부착 (개발 시작)
   if (!isConflictTask) {
     try {
