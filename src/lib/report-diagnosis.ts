@@ -203,11 +203,21 @@ export interface UserAnnotation {
   severity: AnnotationSeverity
 }
 
+/** i18n 메시지 참조: key + params 조합. UI에서 tr(key, params)로 렌더링.
+ *  nestedKeys — params 중 특정 필드가 다른 i18n 키를 참조할 때 사용한다.
+ *  예: briefingUtilLevel의 {level} 자리에 levelOverloaded 키의 번역을 채워 넣는다.
+ *  UI 리졸버는 nestedKeys를 먼저 tr()로 풀어 params에 주입한 뒤 바깥 키를 tr()로 렌더링한다. */
+export interface I18nMessage {
+  key: string
+  params?: Record<string, string | number>
+  nestedKeys?: Record<string, string>
+}
+
 export interface AlertCard {
   severity: AlertSeverity
-  title: string
-  detail: string
-  action: string
+  title: I18nMessage
+  detail: I18nMessage
+  action: I18nMessage
   actionTarget?: string  // 이동할 페이지 경로
 }
 
@@ -217,7 +227,7 @@ export interface VerifierDiagnosis {
   dailyVerifyCapacity: number
   verifyUtilization: number
   verifyWaiting: number
-  annotation: string | null
+  annotation: I18nMessage | null
 }
 
 export interface DiagnosisResult {
@@ -228,7 +238,7 @@ export interface DiagnosisResult {
   agents: AgentLoad[]
   verifier: VerifierDiagnosis | null
   verifierLoads: VerifierLoad[]
-  briefing: string
+  briefing: I18nMessage[]
   retryCostRatio: number       // 재시도 비용 비율 (0~1)
   retryCostAmount: number
   highRetryProject: { name: string; rate: number } | null
@@ -238,7 +248,7 @@ export interface DiagnosisResult {
 export interface TrendForecast {
   weeklyGrowthRate: number     // 주간 유입 증가율
   weeksUntilShortage: number | null  // 부족 시점까지 주
-  message: string
+  message: I18nMessage
 }
 
 // ─── 유틸 ───
@@ -272,10 +282,11 @@ function healthFromUtil(u: number): HealthLevel {
   return 'overloaded'
 }
 
-function fmtDur(min: number): string {
-  if (min < 60) return `${min.toFixed(1)}분`
+/** 기본 duration 포매터 — 다국어가 필요 없는 컨텍스트(서버 로그 등)용 폴백. */
+function defaultFmtDur(min: number): string {
+  if (min < 60) return `${min.toFixed(1)}m`
   const h = Math.floor(min / 60), m = Math.round(min % 60)
-  return m > 0 ? `${h}시간 ${m}분` : `${h}시간`
+  return m > 0 ? `${h}h ${m}m` : `${h}h`
 }
 
 function fmtCost(n: number): string { return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
@@ -309,7 +320,12 @@ function calcOptimalAgents(caps: number[], dailyInflow: number, margin = 1.2): n
 
 // ─── 메인 진단 함수 ───
 
-export function diagnose(data: ReportData, prevWeeklyData?: ReportData[]): DiagnosisResult {
+export function diagnose(
+  data: ReportData,
+  prevWeeklyData?: ReportData[],
+  formatDur: (min: number) => string = defaultFmtDur,
+): DiagnosisResult {
+  const fmtDur = formatDur
   const { period, summary, prevSummary, byProject, byAgent, byVerifier, lifecycle, prevLifecycle, waitingTrend, agentWaitingTrend, dailyTrend } = data
 
   const periodDays = getPeriodDays(period.start, period.end, period.type)
@@ -598,10 +614,13 @@ export function diagnose(data: ReportData, prevWeeklyData?: ReportData[]): Diagn
     const verifyUtil = 0 // 실제 가동률은 대기 데이터 없이 측정 불가
     const verifyWaiting = 0
 
-    let ann: string | null = null
+    let ann: I18nMessage | null = null
     // 검증 시간이 전기 대비 50% 이상 증가하면 실질적 병목 신호
     if (prevLifecycle.verifyCount > 0 && lifecycle.verifyAvg > prevLifecycle.verifyAvg * 1.5) {
-      ann = `검증 시간 ${Math.round((lifecycle.verifyAvg / prevLifecycle.verifyAvg - 1) * 100)}% 증가 — 확인 필요`
+      ann = {
+        key: 'verifierDiagBottleneck',
+        params: { pct: Math.round((lifecycle.verifyAvg / prevLifecycle.verifyAvg - 1) * 100) },
+      }
     }
 
     verifier = { verifierCount, dailyVerifyInflow: Math.round(dailyVerifyInflow * 10) / 10, dailyVerifyCapacity: Math.round(dailyVerifyCap * 10) / 10, verifyUtilization: Math.round(verifyUtil * 100) / 100, verifyWaiting, annotation: ann }
@@ -706,8 +725,8 @@ export function diagnose(data: ReportData, prevWeeklyData?: ReportData[]): Diagn
           weeklyGrowthRate: Math.round(growthRate * 100),
           weeksUntilShortage: weeksUntil,
           message: weeksUntil
-            ? `유입이 ${prevWeeklyData.length + 1}주 연속 증가 중입니다. ${weeksUntil}주 내 에이전트 추가가 필요합니다.`
-            : `유입이 증가 추세이나 현재 처리 능력으로 당분간 감당 가능합니다.`,
+            ? { key: 'briefingTrendShortage', params: { weeks: prevWeeklyData.length + 1, weeksUntil } }
+            : { key: 'briefingTrendOk' },
         }
       }
     }
@@ -720,7 +739,13 @@ export function diagnose(data: ReportData, prevWeeklyData?: ReportData[]): Diagn
   // 7-1. 무배정 프로젝트 (최우선)
   for (const p of projectFlows) {
     if (p.assignedAgents === 0 && p.currentWaiting > 0) {
-      alerts.push({ severity: 'critical', title: `${p.projectName}에 에이전트 미배정`, detail: `대기 ${p.currentWaiting}건이 처리되지 못하고 있습니다.`, action: '에이전트 배정하기', actionTarget: `/projects` })
+      alerts.push({
+        severity: 'critical',
+        title: { key: 'alertNoAgentTitle', params: { project: p.projectName } },
+        detail: { key: 'alertNoAgentDetail', params: { count: p.currentWaiting } },
+        action: { key: 'alertNoAgentAction' },
+        actionTarget: `/projects`,
+      })
     }
   }
 
@@ -728,9 +753,9 @@ export function diagnose(data: ReportData, prevWeeklyData?: ReportData[]): Diagn
   if (totalInflow === 0 && totalThroughput === 0 && endWaiting > 0) {
     alerts.push({
       severity: 'critical',
-      title: '대기 방치',
-      detail: `이번 기간 유입·처리 모두 0건인데 대기 ${endWaiting}건이 그대로 남아있습니다. 일주일째 아무도 손대지 않은 상태입니다.`,
-      action: '검증자 확인',
+      title: { key: 'alertStaleWaitingTitle' },
+      detail: { key: 'alertStaleWaitingDetail', params: { count: endWaiting } },
+      action: { key: 'alertStaleWaitingAction' },
       actionTarget: '/agents',
     })
   }
@@ -744,19 +769,39 @@ export function diagnose(data: ReportData, prevWeeklyData?: ReportData[]): Diagn
     const deltas = [last4[1].total - last4[0].total, last4[2].total - last4[1].total, last4[3].total - last4[2].total]
     const lastWaiting = last4[3].total
     if (deltas.every(d => d >= 1) && lastWaiting >= 2) {
-      alerts.push({ severity: 'critical', title: '유입 대비 처리 부족', detail: `3일 연속 대기가 증가하여 현재 ${lastWaiting}건입니다.`, action: '에이전트 추가 배정', actionTarget: '/agents' })
+      alerts.push({
+        severity: 'critical',
+        title: { key: 'alertUnderThroughputTitle' },
+        detail: { key: 'alertUnderThroughputDetail', params: { count: lastWaiting } },
+        action: { key: 'alertUnderThroughputAction' },
+        actionTarget: '/agents',
+      })
     }
   }
 
   // 7-3. 유입 급증
   if (prevInflow > 0 && totalInflow > prevInflow * 1.5) {
-    alerts.push({ severity: 'warning', title: '유입 급증', detail: `유입 ${totalInflow}건 (전기 ${prevInflow}건 대비 ${Math.round((totalInflow / prevInflow - 1) * 100)}% 증가)`, action: '프로젝트별 유입 확인' })
+    alerts.push({
+      severity: 'warning',
+      title: { key: 'alertSurgeInflowTitle' },
+      detail: {
+        key: 'alertSurgeInflowDetail',
+        params: { current: totalInflow, prev: prevInflow, pct: Math.round((totalInflow / prevInflow - 1) * 100) },
+      },
+      action: { key: 'alertSurgeInflowAction' },
+    })
   }
 
   // 7-4. 자원 유휴
   const idleAgents = agentLoads.filter(a => a.annotation?.key === 'idle' || a.annotation?.key === 'idleReassign')
   if (idleAgents.length > 0 && byAgent.length >= 3) {
-    alerts.push({ severity: 'info', title: '유휴 자원 감지', detail: `에이전트 ${byAgent.length}대 중 ${idleAgents.length}대가 유휴 상태입니다.`, action: '자원 조정 검토', actionTarget: '/agents' })
+    alerts.push({
+      severity: 'info',
+      title: { key: 'alertIdleResourceTitle' },
+      detail: { key: 'alertIdleResourceDetail', params: { total: byAgent.length, idle: idleAgents.length } },
+      action: { key: 'alertIdleResourceAction' },
+      actionTarget: '/agents',
+    })
   }
 
   // 7-5. 에이전트 편중
@@ -764,7 +809,15 @@ export function diagnose(data: ReportData, prevWeeklyData?: ReportData[]): Diagn
   if (totalW >= 3) {
     for (const a of agentLoads) {
       if (a.currentWaiting >= totalW * 0.6 && a.currentWaiting >= 3) {
-        alerts.push({ severity: 'warning', title: `${a.agentName}에 부하 집중`, detail: `전체 대기 ${totalW}건 중 ${a.currentWaiting}건 (${Math.round(a.currentWaiting / totalW * 100)}%)이 집중`, action: '부하 분산 필요' })
+        alerts.push({
+          severity: 'warning',
+          title: { key: 'alertAgentOverloadTitle', params: { agent: a.agentName } },
+          detail: {
+            key: 'alertAgentOverloadDetail',
+            params: { total: totalW, waiting: a.currentWaiting, pct: Math.round(a.currentWaiting / totalW * 100) },
+          },
+          action: { key: 'alertAgentOverloadAction' },
+        })
         break
       }
     }
@@ -772,17 +825,46 @@ export function diagnose(data: ReportData, prevWeeklyData?: ReportData[]): Diagn
 
   // 7-6. 비용 급증
   if (costPerTask > 0 && prevCostPerTask > 0 && costPerTask > prevCostPerTask * 1.5) {
-    alerts.push({ severity: 'warning', title: '건당 비용 급증', detail: `건당 $${fmtCost(costPerTask)} (전기 $${fmtCost(prevCostPerTask)} 대비 ${Math.round((costPerTask / prevCostPerTask - 1) * 100)}% 증가)`, action: '재시도율 및 프로젝트별 비용 확인' })
+    alerts.push({
+      severity: 'warning',
+      title: { key: 'alertCostSurgeTitle' },
+      detail: {
+        key: 'alertCostSurgeDetail',
+        params: {
+          cost: fmtCost(costPerTask),
+          prev: fmtCost(prevCostPerTask),
+          pct: Math.round((costPerTask / prevCostPerTask - 1) * 100),
+        },
+      },
+      action: { key: 'alertCostSurgeAction' },
+    })
   }
 
   // 7-7. 처리 지연
   if (prevLifecycle.procCount > 0 && lifecycle.procAvg > prevLifecycle.procAvg * 1.5) {
-    alerts.push({ severity: 'warning', title: '처리 시간 증가', detail: `평균 ${fmtDur(lifecycle.procAvg)} (전기 ${fmtDur(prevLifecycle.procAvg)} 대비 ${Math.round((lifecycle.procAvg / prevLifecycle.procAvg - 1) * 100)}% 증가)`, action: '이슈 복잡도 확인' })
+    alerts.push({
+      severity: 'warning',
+      title: { key: 'alertProcTimeTitle' },
+      detail: {
+        key: 'alertProcTimeDetail',
+        params: {
+          avg: fmtDur(lifecycle.procAvg),
+          prev: fmtDur(prevLifecycle.procAvg),
+          pct: Math.round((lifecycle.procAvg / prevLifecycle.procAvg - 1) * 100),
+        },
+      },
+      action: { key: 'alertProcTimeAction' },
+    })
   }
 
   // 7-8. 검증 병목 (검증 시간 증가 기반)
   if (verifier?.annotation) {
-    alerts.push({ severity: 'warning', title: '검증 병목', detail: verifier.annotation, action: '검증 프로세스 확인' })
+    alerts.push({
+      severity: 'warning',
+      title: { key: 'alertVerifyBottleneckTitle' },
+      detail: verifier.annotation,
+      action: { key: 'alertVerifyBottleneckAction' },
+    })
   }
 
   // 7-9. 검증자 개별 병목 (대기 집중 / 장기 미처리)
@@ -791,9 +873,11 @@ export function diagnose(data: ReportData, prevWeeklyData?: ReportData[]): Diagn
     const v = overloadedVerifiers[0]
     alerts.push({
       severity: 'critical',
-      title: `${v.name}에 검증 대기 집중`,
-      detail: `검증 대기 ${v.verifyWaiting}건${v.verifying > 0 ? ` + 검증 중 ${v.verifying}건` : ''}`,
-      action: '검증자 분산 또는 지원',
+      title: { key: 'alertVerifierOverloadTitle', params: { name: v.name } },
+      detail: v.verifying > 0
+        ? { key: 'alertVerifierOverloadDetailWithVerifying', params: { waiting: v.verifyWaiting, verifying: v.verifying } }
+        : { key: 'alertVerifierOverloadDetail', params: { waiting: v.verifyWaiting } },
+      action: { key: 'alertVerifierOverloadAction' },
       actionTarget: '/agents',
     })
   }
@@ -802,55 +886,90 @@ export function diagnose(data: ReportData, prevWeeklyData?: ReportData[]): Diagn
     const v = stalledVerifiers[0]
     alerts.push({
       severity: 'warning',
-      title: '검증 지연',
-      detail: `${v.name}: 오래된 검증 대기 존재`,
-      action: '검증자 확인',
+      title: { key: 'alertVerifierStalledTitle' },
+      detail: { key: 'alertVerifierStalledDetail', params: { name: v.name } },
+      action: { key: 'alertVerifierStalledAction' },
       actionTarget: '/agents',
     })
   }
 
   // ─── 8. 브리핑 텍스트 ───
 
-  const briefingLines: string[] = []
+  const briefingLines: I18nMessage[] = []
 
   // 흐름 상태
   if (summary.totalTasks === 0 && totalInflow === 0) {
     if (endWaiting > 0) {
-      briefingLines.push(`이번 기간에는 유입·처리 모두 0건입니다. 이전부터 대기 중인 ${endWaiting}건이 그대로 남아있습니다.`)
+      briefingLines.push({ key: 'briefingNoFlow', params: { waiting: endWaiting } })
     } else {
-      briefingLines.push('이번 기간에는 유입된 작업이 없습니다.')
+      briefingLines.push({ key: 'briefingNoInflow' })
     }
   } else {
     const utilPct = Math.round(utilization * 100)
-    const levelKo: Record<HealthLevel, string> = { overloaded: '과부하 상태', tight: '빠듯한 상태', optimal: '적정', relaxed: '여유 있는 상태', idle: '자원이 남는 상태' }
-    briefingLines.push(`가동률 ${utilPct}%로 ${levelKo[healthLevel]}입니다.`)
-    briefingLines.push(`${totalInflow}건이 유입되어 ${summary.totalTasks}건을 처리했고, 비용은 $${fmtCost(summary.totalCost)}입니다.`)
+    const levelKeyMap: Record<HealthLevel, string> = {
+      overloaded: 'levelOverloaded',
+      tight: 'levelTight',
+      optimal: 'levelOptimal',
+      relaxed: 'levelRelaxed',
+      idle: 'levelIdle',
+    }
+    briefingLines.push({
+      key: 'briefingUtilLevel',
+      params: { pct: utilPct },
+      nestedKeys: { level: levelKeyMap[healthLevel] },
+    })
+    briefingLines.push({
+      key: 'briefingFlowSummary',
+      params: { inflow: totalInflow, processed: summary.totalTasks, cost: fmtCost(summary.totalCost) },
+    })
   }
 
   // 체감 해결시간
   if (lifecycle.totalAvg > 0) {
-    const prevStr = prevLifecycle.totalAvg > 0 ? ` (전기 ${fmtDur(prevLifecycle.totalAvg)})` : ''
-    briefingLines.push(`이슈 해결까지 평균 ${fmtDur(lifecycle.totalAvg)}${prevStr}`)
+    if (prevLifecycle.totalAvg > 0) {
+      briefingLines.push({
+        key: 'briefingAvgResolveWithPrev',
+        params: { duration: fmtDur(lifecycle.totalAvg), prev: fmtDur(prevLifecycle.totalAvg) },
+      })
+    } else {
+      briefingLines.push({
+        key: 'briefingAvgResolve',
+        params: { duration: fmtDur(lifecycle.totalAvg) },
+      })
+    }
   }
 
   // 자원 진단 처방
   if (scenario === 'shortage' && shortagePlan.length > 0) {
     const total = shortagePlan.reduce((s, p) => s + p.needed, 0)
-    briefingLines.push(`에이전트 ${total}대 추가 시 안정화됩니다.`)
+    briefingLines.push({ key: 'briefingShortage', params: { total } })
   } else if (scenario === 'rebalance' && rebalancePlan.length > 0) {
-    briefingLines.push(`${rebalancePlan[0].agentName}을 ${rebalancePlan[0].fromProjectName}에서 ${rebalancePlan[0].toProjectName}(으)로 재배치하면 추가 비용 없이 정상화됩니다.`)
+    briefingLines.push({
+      key: 'briefingRebalance',
+      params: {
+        agent: rebalancePlan[0].agentName,
+        from: rebalancePlan[0].fromProjectName,
+        to: rebalancePlan[0].toProjectName,
+      },
+    })
   } else if (scenario === 'surplus' && surplusPlan.length > 0) {
     // 에이전트 감축은 토큰 기반 비용을 줄이지 않는다. 재배치 제안만 한다.
-    briefingLines.push(`에이전트 ${surplusPlan.length}대가 여유 있습니다. 다른 바쁜 프로젝트로 재배치를 검토해보세요.`)
+    briefingLines.push({ key: 'briefingSurplus', params: { count: surplusPlan.length } })
   }
 
   // 비용 이상
   if (costPerTask > 0 && prevCostPerTask > 0 && costPerTask > prevCostPerTask * 1.3) {
-    briefingLines.push(`건당 비용이 $${fmtCost(costPerTask)}로 전기 대비 ${Math.round((costPerTask / prevCostPerTask - 1) * 100)}% 높습니다.`)
+    briefingLines.push({
+      key: 'briefingCostUp',
+      params: { cost: fmtCost(costPerTask), pct: Math.round((costPerTask / prevCostPerTask - 1) * 100) },
+    })
   }
   // 실제 비용 감소 경로: 재시도율이 높으면 품질 개선이 토큰 비용을 줄입니다
   if (highRetryProject && highRetryProject.rate >= 40) {
-    briefingLines.push(`${highRetryProject.name}의 재시도율 ${Math.round(highRetryProject.rate)}%를 낮추면 토큰 비용이 실제로 줄어듭니다 (이슈 지시사항·테스트 품질 점검).`)
+    briefingLines.push({
+      key: 'briefingHighRetry',
+      params: { name: highRetryProject.name, pct: Math.round(highRetryProject.rate) },
+    })
   }
 
   // 추세 예측
@@ -859,7 +978,7 @@ export function diagnose(data: ReportData, prevWeeklyData?: ReportData[]): Diagn
   return {
     flow, resource, alerts, projects: projectFlows, agents: agentLoads, verifier,
     verifierLoads,
-    briefing: briefingLines.join(' '),
+    briefing: briefingLines,
     retryCostRatio: Math.round(retryCostRatio * 100) / 100,
     retryCostAmount,
     highRetryProject,
