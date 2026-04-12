@@ -10,8 +10,11 @@
  */
 import crypto from 'crypto'
 import { decrypt } from './crypto'
-import { getOAuthProviderRaw, getOAuthProviderById } from './db'
+import { getOAuthProviderRaw, getOAuthProviderById, getSystemSetting } from './db'
 import type { OAuthProvider } from '@/types'
+
+/** system_settings에 저장되는 서버 공개 origin의 key (Admin → 시스템 설정에서 관리) */
+export const OAUTH_REDIRECT_BASE_KEY = 'oauth.redirect_base'
 
 // 프로젝트 토큰으로도 재사용하기 위한 scope (api/repo 권한 포함)
 const SCOPES = {
@@ -31,7 +34,6 @@ export interface ResolvedProvider {
   baseUrl: string          // 끝에 슬래시 없음
   clientId: string
   clientSecret: string     // 복호화된 평문
-  redirectBase: string | null  // 역프록시 환경 override (끝에 슬래시 없음)
   enabled: boolean
 }
 
@@ -46,7 +48,6 @@ export function loadProvider(id: string): ResolvedProvider | null {
     baseUrl: raw.base_url.replace(/\/+$/, ''),
     clientId: raw.client_id,
     clientSecret: decrypt(raw.client_secret),
-    redirectBase: raw.redirect_base ? raw.redirect_base.replace(/\/+$/, '') : null,
     enabled: raw.enabled === 1,
   }
 }
@@ -76,22 +77,23 @@ export function getPublicOrigin(req: Request): string {
 }
 
 /**
- * provider 단위 redirect base 해석.
- *   1. provider.redirectBase (관리자 설정)
+ * 서버 공개 origin 해석 — OAuth 콜백 URL의 base. 시스템 전역 설정.
+ *   1. system_settings['oauth.redirect_base'] (관리자 UI → 시스템 설정)
  *   2. OAUTH_REDIRECT_BASE 환경변수 (운영 override)
- *   3. 요청 헤더로 자동 감지
+ *   3. 요청 헤더(X-Forwarded-*)로 자동 감지
  */
-export function resolveRedirectBase(provider: ResolvedProvider, req: Request): string {
-  if (provider.redirectBase) return provider.redirectBase
+export function resolveRedirectBase(req: Request): string {
+  const stored = getSystemSetting(OAUTH_REDIRECT_BASE_KEY)
+  if (stored && stored.trim()) return stored.trim().replace(/\/+$/, '')
   const env = process.env.OAUTH_REDIRECT_BASE
   if (env) return env.replace(/\/+$/, '')
   return getPublicOrigin(req)
 }
 
 /** 콜백 URL 생성 — 역프록시 환경에서도 공개 origin을 사용 */
-export function buildRedirectUri(provider: ResolvedProvider, req: Request): string {
-  const base = resolveRedirectBase(provider, req)
-  return `${base}/api/auth/oauth/${provider.id}/callback`
+export function buildRedirectUri(providerId: string, req: Request): string {
+  const base = resolveRedirectBase(req)
+  return `${base}/api/auth/oauth/${providerId}/callback`
 }
 
 /** state 토큰 생성 (CSRF 방어) */

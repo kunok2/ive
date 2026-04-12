@@ -999,6 +999,18 @@ const SETTING_GROUPS: SettingGroup[] = [
     ],
   },
   {
+    key: 'oauth', label: 'oauthSettings', icon: 'fa-solid fa-key',
+    fields: [
+      {
+        key: 'oauth.redirect_base',
+        label: 'Redirect Base URL',
+        type: 'text',
+        placeholder: 'https://ive.dazzleat.link',
+        defaultValue: 'https://ive.dazzleat.link',
+      },
+    ],
+  },
+  {
     key: 'mcp', label: 'mcpServer', icon: 'fa-solid fa-plug',
     fields: [
       {
@@ -1739,12 +1751,12 @@ type OAuthProviderRow = {
   name: string
   baseUrl: string
   clientId: string
-  redirectBase: string | null
   enabled: boolean
   createdAt: string
 }
 
 function OAuthProvidersPanel() {
+  const t = useTranslations('admin.oauth')
   const { alert, confirm } = useDialog()
   const [providers, setProviders] = useState<OAuthProviderRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -1757,7 +1769,6 @@ function OAuthProvidersPanel() {
     baseUrl: 'https://gitlab.com',
     clientId: '',
     clientSecret: '',
-    redirectBase: 'https://ive.dazzleat.link',
     enabled: true,
   })
   const [saving, setSaving] = useState(false)
@@ -1774,7 +1785,33 @@ function OAuthProvidersPanel() {
 
   useEffect(() => { load() }, [load])
 
-  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+  // 시스템 설정(`oauth.redirect_base`)을 불러와 콜백 URL 프리뷰에 사용.
+  // 비어 있으면 현재 브라우저 origin을 폴백으로 씀.
+  const [redirectBase, setRedirectBase] = useState<string>('')
+  useEffect(() => {
+    fetch('/api/admin/env')
+      .then(r => r.json())
+      .then(data => setRedirectBase((data?.settings?.['oauth.redirect_base'] || '').replace(/\/+$/, '')))
+      .catch(() => {})
+  }, [])
+  const browserOrigin = typeof window !== 'undefined' ? window.location.origin : ''
+  const origin = redirectBase || browserOrigin
+  const [copied, setCopied] = useState(false)
+
+  async function copyCallbackUrl() {
+    const url = `${origin}/api/auth/oauth/${form.id}/callback`
+    try {
+      await navigator.clipboard.writeText(url)
+    } catch {
+      // fallback — textarea select
+      const ta = document.createElement('textarea')
+      ta.value = url; document.body.appendChild(ta); ta.select()
+      try { document.execCommand('copy') } catch { /* ignore */ }
+      document.body.removeChild(ta)
+    }
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
 
   // 타입당 1개 제약 — 이미 등록된 타입 확인
   const hasGitlab = providers.some(p => p.type === 'gitlab')
@@ -1792,7 +1829,6 @@ function OAuthProvidersPanel() {
       baseUrl: defaultType === 'gitlab' ? 'https://gitlab.com' : 'https://github.com',
       clientId: '',
       clientSecret: '',
-      redirectBase: 'https://ive.dazzleat.link',
       enabled: true,
     })
     setShowForm(true)
@@ -1807,7 +1843,6 @@ function OAuthProvidersPanel() {
       baseUrl: p.baseUrl,
       clientId: p.clientId,
       clientSecret: '', // 공백 = 변경 없음
-      redirectBase: p.redirectBase || '',
       enabled: p.enabled,
     })
     setShowForm(true)
@@ -1815,11 +1850,11 @@ function OAuthProvidersPanel() {
 
   async function save() {
     if (!form.id || !form.name || !form.baseUrl || !form.clientId) {
-      await alert({ message: '필수 필드를 모두 입력해주세요', variant: 'error' })
+      await alert({ message: t('validationRequired'), variant: 'error' })
       return
     }
     if (!editing && !form.clientSecret) {
-      await alert({ message: '신규 등록 시 Client Secret은 필수입니다', variant: 'error' })
+      await alert({ message: t('validationSecret'), variant: 'error' })
       return
     }
     setSaving(true)
@@ -1830,7 +1865,6 @@ function OAuthProvidersPanel() {
           name: form.name,
           baseUrl: form.baseUrl,
           clientId: form.clientId,
-          redirectBase: form.redirectBase.trim(),
           enabled: form.enabled,
         }
         if (form.clientSecret) patch.clientSecret = form.clientSecret
@@ -1848,7 +1882,7 @@ function OAuthProvidersPanel() {
       }
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: 'unknown' }))
-        await alert({ message: err.error || '저장 실패', variant: 'error' })
+        await alert({ message: err.error || t('saveFailed'), variant: 'error' })
         return
       }
       setShowForm(false)
@@ -1860,8 +1894,8 @@ function OAuthProvidersPanel() {
 
   async function remove(p: OAuthProviderRow) {
     const ok = await confirm({
-      title: 'OAuth 공급자 삭제',
-      message: `${p.name} (${p.id}) 공급자를 삭제하시겠습니까?`,
+      title: t('deleteTitle'),
+      message: t('deleteConfirm', { name: p.name, id: p.id }),
       variant: 'danger',
     })
     if (!ok) return
@@ -1873,62 +1907,79 @@ function OAuthProvidersPanel() {
     <div className="max-w-lg mx-auto px-4 py-4">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-base font-bold text-ive-text">
-          <i className="fa-solid fa-key mr-1.5" />OAuth 공급자
+          <i className="fa-solid fa-key mr-1.5" />{t('title')}
         </h2>
         <button
           onClick={openCreate}
           disabled={bothRegistered}
-          title={bothRegistered ? 'GitLab/GitHub 모두 등록 완료. IVE는 타입당 1개만 지원합니다.' : undefined}
+          title={bothRegistered ? t('bothRegistered') : undefined}
           className="bg-ive-green-dark text-white text-sm font-bold px-3 py-1.5 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          <i className="fa-solid fa-plus mr-1" />신규 등록
+          <i className="fa-solid fa-plus mr-1" />{t('addNew')}
         </button>
       </div>
 
       <details className="text-sm text-ive-text-muted mb-3 bg-ive-bg-card border border-ive-border-subtle rounded-lg">
         <summary className="cursor-pointer px-3 py-2 font-bold text-ive-text">
-          <i className="fa-solid fa-circle-info mr-1.5 text-ive-cyan" />등록 방법 (처음이라면 꼭 읽어주세요)
+          <i className="fa-solid fa-circle-info mr-1.5 text-ive-cyan" />{t('howTo')}
         </summary>
         <div className="px-3 pb-3 pt-1 flex flex-col gap-2.5">
-          <div className="text-ive-text-dim">
-            GitLab/GitHub 측의 "OAuth Application"을 먼저 만들어야 Client ID/Secret을 받을 수 있습니다.
-            콜백 URL은 아래 ID에 따라 달라지므로 <span className="text-ive-text font-bold">ID를 먼저 정한 뒤</span> GitLab/GitHub에 등록하는 순서가 편합니다.
+          <div className="text-ive-text-dim">{t('howToIntro')}</div>
+
+          <div className={`bg-ive-bg-deep border rounded-lg p-2.5 text-xs ${redirectBase ? 'border-ive-green/30' : 'border-ive-amber/30'}`}>
+            <div className={`font-bold mb-1 ${redirectBase ? 'text-ive-green' : 'text-ive-amber'}`}>
+              <i className={`fa-solid ${redirectBase ? 'fa-circle-check' : 'fa-triangle-exclamation'} mr-1`} />
+              {t('redirectBaseBoxTitle')}
+            </div>
+            <div className="text-ive-text-dim leading-relaxed whitespace-pre-line">
+              {t('redirectBaseDesc')}
+              {redirectBase ? (
+                <span className="block mt-1 text-ive-green">
+                  {t('redirectBaseCurrent', { value: redirectBase })}
+                </span>
+              ) : (
+                <span className="block mt-1 text-ive-amber">
+                  {t('redirectBaseMissing', { value: browserOrigin })}
+                </span>
+              )}
+            </div>
           </div>
 
           <div className="bg-ive-bg-deep border border-ive-border-subtle rounded-lg p-2.5">
-            <div className="text-ive-text font-bold mb-1.5">권장 순서</div>
+            <div className="text-ive-text font-bold mb-1.5">{t('recommendedOrder')}</div>
             <ol className="list-decimal list-inside flex flex-col gap-1 text-xs">
-              <li>아래 <span className="text-ive-text font-bold">[신규 등록]</span> 버튼 → 모달에서 <span className="text-ive-text font-bold">ID만 먼저 입력</span> (예: <code className="font-mono">gitlab-com</code>, <code className="font-mono">gh-main</code>)</li>
-              <li>모달 하단에 표시되는 <span className="text-ive-text font-bold">콜백 URL을 복사</span></li>
+              <li>{t('orderStep1')}</li>
+              <li>{t('orderStep2')}</li>
+              <li>{t('orderStep3')}</li>
               <li>
-                새 탭에서 GitLab/GitHub 접속 → <span className="font-bold">OAuth Application 등록</span>
+                {t('orderStep4Line')}
                 <div className="mt-1 ml-4 text-ive-text-dim">
-                  • GitLab: <span className="font-mono text-ive-text-muted">{'<base-url>'}/-/user_settings/applications</span><br/>
-                  • GitHub: <span className="font-mono text-ive-text-muted">https://github.com/settings/developers</span> → New OAuth App<br/>
-                  • Redirect URI(GitHub는 Authorization callback URL) 칸에 2번에서 복사한 URL 붙여넣기<br/>
-                  • GitLab scopes: <code className="font-mono">read_user</code>, <code className="font-mono">api</code> 체크 / Confidential 체크<br/>
-                  • 저장 후 <span className="text-ive-text font-bold">Application ID(=Client ID)</span>와 <span className="text-ive-text font-bold">Secret(=Client Secret)</span> 복사
+                  • {t('orderStep4Gitlab', { url: '<base-url>/-/user_settings/applications' })}<br/>
+                  • {t('orderStep4Github', { url: 'https://github.com/settings/developers' })}<br/>
+                  • {t('orderStep4Paste')}<br/>
+                  • {t('orderStep4Scopes')}<br/>
+                  • {t('orderStep4Save')}
                 </div>
               </li>
-              <li>IVE 모달로 돌아와 <span className="text-ive-text font-bold">Client ID / Client Secret 입력 → 저장</span></li>
-              <li>저장 후 로그인 페이지 하단에 해당 공급자 로그인 버튼이 나타납니다</li>
+              <li>{t('orderStep5')}</li>
+              <li>{t('orderStep6')}</li>
             </ol>
           </div>
 
           <div className="bg-ive-bg-deep border border-ive-amber/20 rounded-lg p-2.5 text-xs">
             <div className="text-ive-amber font-bold mb-1">
-              <i className="fa-solid fa-triangle-exclamation mr-1" />주의
+              <i className="fa-solid fa-triangle-exclamation mr-1" />{t('noteTitle')}
             </div>
             <ul className="list-disc list-inside flex flex-col gap-0.5 text-ive-text-dim">
-              <li><span className="text-ive-text-muted">Client ID/Secret은 GitLab/GitHub에 올린 "앱"의 자격증명이지, 사용자 계정의 ID/비밀번호가 아닙니다</span></li>
-              <li>콜백 URL은 등록 시 정한 ID에 따라 고정됩니다. ID를 바꾸면 GitLab/GitHub 쪽 Redirect URI도 같이 바꿔야 합니다</li>
-              <li>Client Secret은 한 번만 표시되므로 바로 IVE 모달에 붙여넣거나 안전하게 따로 보관하세요</li>
-              <li>GitLab self-hosted는 인스턴스마다 별도로 등록하고 IVE 공급자도 각각 추가하세요</li>
+              <li>{t('note1')}</li>
+              <li>{t('note2')}</li>
+              <li>{t('note3')}</li>
+              <li>{t('note4')}</li>
             </ul>
           </div>
 
           <div className="text-xs">
-            <span className="text-ive-text-dim">참고 — 콜백 URL 형식: </span>
+            <span className="text-ive-text-dim">{t('callbackFormat')} </span>
             <span className="font-mono text-ive-text break-all">{origin}/api/auth/oauth/&lt;ID&gt;/callback</span>
           </div>
         </div>
@@ -1936,10 +1987,10 @@ function OAuthProvidersPanel() {
 
       {loading ? (
         <div className="text-center text-ive-text-dim py-8">
-          <i className="fa-solid fa-spinner fa-spin mr-1" />로딩 중
+          <i className="fa-solid fa-spinner fa-spin mr-1" />{t('loading')}
         </div>
       ) : providers.length === 0 ? (
-        <div className="text-center text-ive-text-dim py-8">등록된 공급자가 없습니다</div>
+        <div className="text-center text-ive-text-dim py-8">{t('empty')}</div>
       ) : (
         <div className="flex flex-col gap-2">
           {providers.map(p => (
@@ -1954,7 +2005,7 @@ function OAuthProvidersPanel() {
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
                   <span className={`text-xs font-bold px-2 py-0.5 rounded-lg ${p.enabled ? 'bg-ive-green/20 text-ive-green' : 'bg-ive-red/20 text-ive-red'}`}>
-                    {p.enabled ? '활성' : '비활성'}
+                    {p.enabled ? t('enabledBadge') : t('disabledBadge')}
                   </span>
                   <button onClick={() => openEdit(p)} className="text-ive-cyan text-sm px-2 font-bold">
                     <i className="fa-solid fa-pen" />
@@ -1965,7 +2016,7 @@ function OAuthProvidersPanel() {
                 </div>
               </div>
               <div className="mt-2 text-xs text-ive-text-dim font-mono break-all">
-                콜백: {(p.redirectBase || origin).replace(/\/+$/, '')}/api/auth/oauth/{p.id}/callback
+                {t('callbackLabel')}: {origin}/api/auth/oauth/{p.id}/callback
               </div>
             </div>
           ))}
@@ -1975,24 +2026,24 @@ function OAuthProvidersPanel() {
       <Modal
         open={showForm}
         onClose={() => setShowForm(false)}
-        title={editing ? 'OAuth 공급자 수정' : 'OAuth 공급자 등록'}
+        title={editing ? t('editTitle') : t('createTitle')}
         closeOnBackdrop={false}
       >
         <div className="flex flex-col gap-3 px-4 py-4">
               {!editing && (
                 <div className="bg-ive-bg-deep border border-ive-cyan/20 rounded-lg p-2.5 text-xs text-ive-text-dim">
                   <div className="text-ive-cyan font-bold mb-1">
-                    <i className="fa-solid fa-lightbulb mr-1" />순서 요약
+                    <i className="fa-solid fa-lightbulb mr-1" />{t('summaryTitle')}
                   </div>
                   <ol className="list-decimal list-inside flex flex-col gap-0.5">
-                    <li>ID를 먼저 입력 → 아래 콜백 URL 복사</li>
-                    <li>GitLab/GitHub에서 OAuth App 생성 + 그 URL 붙여넣기</li>
-                    <li>발급받은 Client ID/Secret을 여기에 입력 → 저장</li>
+                    <li>{t('summary1')}</li>
+                    <li>{t('summary2')}</li>
+                    <li>{t('summary3')}</li>
                   </ol>
                 </div>
               )}
               <div>
-                <label className="block text-xs font-bold text-ive-text-muted mb-1">ID *</label>
+                <label className="block text-xs font-bold text-ive-text-muted mb-1">{t('idLabel')} *</label>
                 <input
                   type="text"
                   value={form.id}
@@ -2001,43 +2052,43 @@ function OAuthProvidersPanel() {
                   placeholder="gh-main, gitlab-com, gitlab-company"
                   className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text font-mono disabled:opacity-60"
                 />
-                <div className="text-xs text-ive-text-dim mt-1">영숫자와 하이픈. 콜백 URL에 사용됨. 등록 후 변경 불가.</div>
+                <div className="text-xs text-ive-text-dim mt-1">{t('idDesc')}</div>
               </div>
               <div>
-                <label className="block text-xs font-bold text-ive-text-muted mb-1">타입 *</label>
+                <label className="block text-xs font-bold text-ive-text-muted mb-1">{t('typeLabel')} *</label>
                 <div className="flex gap-2">
                   <button
                     type="button"
                     disabled={!!editing || (!editing && hasGitlab && form.type !== 'gitlab')}
                     onClick={() => setForm(f => ({ ...f, type: 'gitlab', baseUrl: f.baseUrl.includes('github') ? 'https://gitlab.com' : f.baseUrl }))}
-                    title={!editing && hasGitlab ? '이미 GitLab 공급자가 등록돼 있습니다' : undefined}
+                    title={!editing && hasGitlab ? t('alreadyGitlab') : undefined}
                     className={`flex-1 py-2 rounded-lg text-sm font-bold border ${form.type === 'gitlab' ? 'border-ive-green text-ive-green bg-ive-green/10' : 'border-ive-border text-ive-text-dim'} disabled:opacity-40 disabled:cursor-not-allowed`}
                   >
-                    <i className="fa-brands fa-gitlab mr-1" />GitLab{!editing && hasGitlab ? ' (등록됨)' : ''}
+                    <i className="fa-brands fa-gitlab mr-1" />GitLab{!editing && hasGitlab ? ` ${t('alreadyTag')}` : ''}
                   </button>
                   <button
                     type="button"
                     disabled={!!editing || (!editing && hasGithub && form.type !== 'github')}
                     onClick={() => setForm(f => ({ ...f, type: 'github', baseUrl: 'https://github.com' }))}
-                    title={!editing && hasGithub ? '이미 GitHub 공급자가 등록돼 있습니다' : undefined}
+                    title={!editing && hasGithub ? t('alreadyGithub') : undefined}
                     className={`flex-1 py-2 rounded-lg text-sm font-bold border ${form.type === 'github' ? 'border-ive-green text-ive-green bg-ive-green/10' : 'border-ive-border text-ive-text-dim'} disabled:opacity-40 disabled:cursor-not-allowed`}
                   >
-                    <i className="fa-brands fa-github mr-1" />GitHub{!editing && hasGithub ? ' (등록됨)' : ''}
+                    <i className="fa-brands fa-github mr-1" />GitHub{!editing && hasGithub ? ` ${t('alreadyTag')}` : ''}
                   </button>
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-bold text-ive-text-muted mb-1">표시 이름 *</label>
+                <label className="block text-xs font-bold text-ive-text-muted mb-1">{t('nameLabel')} *</label>
                 <input
                   type="text"
                   value={form.name}
                   onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                  placeholder="GitLab.com, 회사 GitLab"
+                  placeholder={t('namePlaceholder')}
                   className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-ive-text-muted mb-1">Base URL *</label>
+                <label className="block text-xs font-bold text-ive-text-muted mb-1">{t('baseUrlLabel')} *</label>
                 <input
                   type="url"
                   value={form.baseUrl}
@@ -2047,7 +2098,7 @@ function OAuthProvidersPanel() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-ive-text-muted mb-1">Client ID *</label>
+                <label className="block text-xs font-bold text-ive-text-muted mb-1">{t('clientIdLabel')} *</label>
                 <input
                   type="text"
                   value={form.clientId}
@@ -2057,31 +2108,15 @@ function OAuthProvidersPanel() {
               </div>
               <div>
                 <label className="block text-xs font-bold text-ive-text-muted mb-1">
-                  Client Secret {editing ? '(변경 시에만 입력)' : '*'}
+                  {t('clientSecretLabel')} {editing ? t('onlyIfChanging') : '*'}
                 </label>
                 <input
                   type="password"
                   value={form.clientSecret}
                   onChange={e => setForm(f => ({ ...f, clientSecret: e.target.value }))}
-                  placeholder={editing ? '(공백이면 변경 안 함)' : ''}
+                  placeholder={editing ? t('ifBlankNoChange') : ''}
                   className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text font-mono"
                 />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-ive-text-muted mb-1">
-                  Redirect Base URL <span className="text-ive-text-dim font-normal">(선택)</span>
-                </label>
-                <input
-                  type="url"
-                  value={form.redirectBase}
-                  onChange={e => setForm(f => ({ ...f, redirectBase: e.target.value }))}
-                  placeholder={origin}
-                  className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text font-mono"
-                />
-                <div className="text-xs text-ive-text-dim mt-1">
-                  역프록시 환경(예: https 종단, 외부 도메인)에서 콜백 URL의 공개 origin이
-                  서버가 수신한 주소와 다를 때만 지정. 비워 두면 <code className="font-mono">X-Forwarded-*</code> 헤더로 자동 감지.
-                </div>
               </div>
               <div>
                 <label className="flex items-center gap-2 text-sm text-ive-text">
@@ -2090,45 +2125,52 @@ function OAuthProvidersPanel() {
                     checked={form.enabled}
                     onChange={e => setForm(f => ({ ...f, enabled: e.target.checked }))}
                   />
-                  활성화 (로그인 페이지에 노출)
+                  {t('enabledCheckbox')}
                 </label>
               </div>
-              {form.id && (() => {
-                const effectiveBase = (form.redirectBase.trim() || origin).replace(/\/+$/, '')
-                const callbackUrl = `${effectiveBase}/api/auth/oauth/${form.id}/callback`
-                return (
-                  <div className="bg-ive-bg-deep border border-ive-border-subtle rounded-lg p-2 text-xs">
-                    <div className="flex items-center justify-between mb-1">
-                      <div className="text-ive-text-muted font-bold">
-                        <i className="fa-solid fa-link mr-1" />GitLab/GitHub에 등록할 콜백 URL
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard?.writeText(callbackUrl).catch(() => {})
-                        }}
-                        className="text-ive-cyan font-bold px-2 py-0.5 rounded bg-ive-cyan/10 hover:bg-ive-cyan/20"
-                      >
-                        <i className="fa-solid fa-copy mr-1" />복사
-                      </button>
+              {form.id && (
+                <div className="bg-ive-bg-deep border border-ive-border-subtle rounded-lg p-2 text-xs">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="text-ive-text-muted font-bold">
+                      <i className="fa-solid fa-link mr-1" />{t('callbackForRegistration')}
                     </div>
-                    <div className="font-mono text-ive-text break-all">{callbackUrl}</div>
+                    <button
+                      type="button"
+                      onClick={copyCallbackUrl}
+                      className={`font-bold px-2 py-0.5 rounded transition-colors active:scale-95 ${
+                        copied
+                          ? 'text-ive-green bg-ive-green/15'
+                          : 'text-ive-cyan bg-ive-cyan/10 hover:bg-ive-cyan/20 active:bg-ive-cyan/30'
+                      }`}
+                    >
+                      <i className={`fa-solid ${copied ? 'fa-check' : 'fa-copy'} mr-1`} />
+                      {copied ? t('copiedBtn') : t('copyBtn')}
+                    </button>
                   </div>
-                )
-              })()}
+                  <div className="font-mono text-ive-text break-all">
+                    {origin}/api/auth/oauth/{form.id}/callback
+                  </div>
+                  {!redirectBase && (
+                    <div className="mt-1 text-ive-amber">
+                      <i className="fa-solid fa-circle-info mr-1" />
+                      <span className="text-ive-text-dim">{t('missingRedirectHint')}</span>
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="flex gap-2 mt-2">
                 <button
                   onClick={() => setShowForm(false)}
                   className="flex-1 py-2 rounded-lg text-sm font-bold bg-ive-bg-input border border-ive-border text-ive-text"
                 >
-                  취소
+                  {t('cancel')}
                 </button>
                 <button
                   onClick={save}
                   disabled={saving}
                   className="flex-1 py-2 rounded-lg text-sm font-bold bg-ive-green-dark text-white disabled:opacity-50"
                 >
-                  {saving ? <><i className="fa-solid fa-spinner fa-spin mr-1" />저장 중</> : '저장'}
+                  {saving ? <><i className="fa-solid fa-spinner fa-spin mr-1" />{t('saving')}</> : t('save')}
                 </button>
               </div>
             </div>

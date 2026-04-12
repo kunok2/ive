@@ -790,15 +790,6 @@ function initSchema(db: Database.Database) {
     )
   `)
 
-  // oauth_providers.redirect_base: 역프록시 환경에서 공개 origin 지정 (선택)
-  try {
-    const cols = db.prepare("PRAGMA table_info(oauth_providers)").all() as any[]
-    if (!cols.some((c: any) => c.name === 'redirect_base')) {
-      db.exec("ALTER TABLE oauth_providers ADD COLUMN redirect_base TEXT")
-      console.log('[DB] oauth_providers: added redirect_base column')
-    }
-  } catch (e) { console.error('[DB] oauth_providers redirect_base migration failed:', e) }
-
   // users: OAuth 관련 컬럼 추가
   try {
     const userCols = db.prepare("PRAGMA table_info(users)").all() as any[]
@@ -982,7 +973,6 @@ function mapOAuthProvider(r: any): OAuthProvider {
     baseUrl: r.base_url,
     clientId: r.client_id,
     // client_secret은 의도적으로 포함하지 않음 (관리자 UI 응답에서도 노출 금지)
-    redirectBase: r.redirect_base ?? null,
     enabled: r.enabled === 1,
     createdAt: r.created_at,
   }
@@ -1004,25 +994,22 @@ export function getOAuthProviderById(id: string): OAuthProvider | null {
 }
 
 /** client_secret 복호화는 호출 측에서 crypto.decrypt() 로 처리 */
-export function getOAuthProviderRaw(id: string): { id: string; type: 'github' | 'gitlab'; name: string; base_url: string; client_id: string; client_secret: string; redirect_base: string | null; enabled: number } | null {
+export function getOAuthProviderRaw(id: string): { id: string; type: 'github' | 'gitlab'; name: string; base_url: string; client_id: string; client_secret: string; enabled: number } | null {
   return getDb().prepare('SELECT * FROM oauth_providers WHERE id = ?').get(id) as any ?? null
 }
 
 export function createOAuthProvider(p: {
   id: string; type: 'github' | 'gitlab'; name: string; baseUrl: string;
-  clientId: string; clientSecretEncrypted: string; redirectBase?: string | null; enabled?: boolean
+  clientId: string; clientSecretEncrypted: string; enabled?: boolean
 }) {
-  getDb().prepare(`INSERT INTO oauth_providers (id, type, name, base_url, client_id, client_secret, redirect_base, enabled)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(
-    p.id, p.type, p.name, p.baseUrl, p.clientId, p.clientSecretEncrypted,
-    p.redirectBase || null,
-    p.enabled === false ? 0 : 1
+  getDb().prepare(`INSERT INTO oauth_providers (id, type, name, base_url, client_id, client_secret, enabled)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)`).run(
+    p.id, p.type, p.name, p.baseUrl, p.clientId, p.clientSecretEncrypted, p.enabled === false ? 0 : 1
   )
 }
 
 export function updateOAuthProvider(id: string, patch: {
-  name?: string; baseUrl?: string; clientId?: string; clientSecretEncrypted?: string;
-  redirectBase?: string | null; enabled?: boolean
+  name?: string; baseUrl?: string; clientId?: string; clientSecretEncrypted?: string; enabled?: boolean
 }) {
   const fields: string[] = []
   const values: any[] = []
@@ -1030,7 +1017,6 @@ export function updateOAuthProvider(id: string, patch: {
   if (patch.baseUrl !== undefined) { fields.push('base_url = ?'); values.push(patch.baseUrl) }
   if (patch.clientId !== undefined) { fields.push('client_id = ?'); values.push(patch.clientId) }
   if (patch.clientSecretEncrypted !== undefined) { fields.push('client_secret = ?'); values.push(patch.clientSecretEncrypted) }
-  if (patch.redirectBase !== undefined) { fields.push('redirect_base = ?'); values.push(patch.redirectBase || null) }
   if (patch.enabled !== undefined) { fields.push('enabled = ?'); values.push(patch.enabled ? 1 : 0) }
   if (fields.length === 0) return
   values.push(id)

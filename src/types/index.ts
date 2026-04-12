@@ -25,12 +25,6 @@ export interface OAuthProvider {
   baseUrl: string           // https://gitlab.com, https://github.com, https://gitlab.example.com
   clientId: string
   clientSecret?: string     // 응답 시에는 마스킹 — DB에서 encrypt 저장
-  /**
-   * 역프록시 환경에서 공개 origin이 서버가 수신한 origin과 다를 때 지정.
-   * 예: https://ive.dazzleat.link — 콜백 URL은 `${redirectBase}/api/auth/oauth/${id}/callback`
-   * 비어 있으면 X-Forwarded-Proto/Host → Host → req.url 순서로 자동 감지.
-   */
-  redirectBase?: string | null
   enabled: boolean
   createdAt: string
 }

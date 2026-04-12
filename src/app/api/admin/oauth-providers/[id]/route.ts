@@ -38,20 +38,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (typeof body.clientSecret === 'string' && body.clientSecret.length > 0) {
     patch.clientSecretEncrypted = encrypt(body.clientSecret)
   }
-  if (body.redirectBase !== undefined) {
-    const rb = typeof body.redirectBase === 'string' ? body.redirectBase.trim() : ''
-    if (rb === '') {
-      patch.redirectBase = null // 비우면 자동 감지로 폴백
-    } else {
-      try {
-        const u = new URL(rb)
-        if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error('scheme')
-        patch.redirectBase = rb.replace(/\/+$/, '')
-      } catch {
-        return NextResponse.json({ error: 'redirectBase는 http(s):// 로 시작하는 URL이어야 합니다' }, { status: 400 })
-      }
-    }
-  }
   if (typeof body.enabled === 'boolean') patch.enabled = body.enabled
 
   updateOAuthProvider(id, patch)
