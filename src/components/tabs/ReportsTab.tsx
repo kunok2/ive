@@ -7,7 +7,7 @@ import PullToRefresh from '@/components/ui/PullToRefresh'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 import Sparkline from '@/components/ui/Sparkline'
 import { DailyTrendChart, FlowCompareChart } from '@/components/reports/ReportCharts'
-import { getKSTTodayString } from '@/lib/date-utils'
+import { getKSTTodayString, utcISOToKSTDate } from '@/lib/date-utils'
 import { diagnose, type ReportData, type DiagnosisResult, type HealthLevel, type AlertSeverity } from '@/lib/report-diagnosis'
 
 // ─── 유틸 ───
@@ -971,7 +971,7 @@ export default function ReportsTab() {
                           {issue.status === 'failed' && <i className="fa-solid fa-circle-xmark text-ive-red shrink-0" title="실패" />}
                         </div>
 
-                        {/* 2행: 프로젝트 · 총시간 · 비용 · 회차 */}
+                        {/* 2행: 프로젝트 · 처리일자 · 총시간 · 비용 · 회차 */}
                         <div className="flex items-center gap-2 text-xs text-ive-text-dim">
                           <span className="inline-flex items-center gap-1 min-w-0 flex-1" title={issue.projectName}>
                             <span
@@ -985,6 +985,18 @@ export default function ReportsTab() {
                             </span>
                             <span className="truncate">{issue.projectName}</span>
                           </span>
+                          {(() => {
+                            const kstDate = utcISOToKSTDate(issue.resolvedAt)
+                            const [, mm, dd] = kstDate.split('-')
+                            return (
+                              <span
+                                className="font-mono font-bold text-ive-text-muted shrink-0"
+                                title={`처리 완료: ${new Date(issue.resolvedAt).toLocaleString()}`}
+                              >
+                                {parseInt(mm)}/{parseInt(dd)}
+                              </span>
+                            )
+                          })()}
                           <span
                             className="inline-flex items-center gap-1 font-mono font-bold text-ive-text shrink-0"
                             title={`총 소요 ${fmtDur(issue.totalMin)}${issue.waitMin != null ? ` (대기 ${fmtDur(issue.waitMin)} · 작업 ${fmtDur(issue.durationMin)}${issue.verifyMin != null ? ` · 검증 ${fmtDur(issue.verifyMin)}` : ''})` : ''}`}

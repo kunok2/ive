@@ -667,6 +667,8 @@ export async function GET(req: NextRequest) {
           verifierUserId: e.verifierUserId ?? null,
           status: e.status as 'success' | 'failed',
           startedAt: e.startedAt,
+          // 처리 완료 시각 (검증 끝났으면 그 시점, 아니면 작업 종료 시점)
+          resolvedAt: e.verifiedAt || e.rejectedAt || e.endedAt || e.startedAt,
           // 작업 시간 (에이전트가 코드를 만든 시간): startedAt → endedAt
           durationMin: Math.round(durationMin(e.startedAt, e.endedAt) * 10) / 10,
           // 검증 시간 (사람이 검증한 시간): verifyStartedAt → verifiedAt | rejectedAt
