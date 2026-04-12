@@ -34,29 +34,29 @@ export default function HomePage() {
   }, [])
 
   if (!state.authChecked || !state.user) {
-    return <div className="min-h-screen flex items-center justify-center text-ive-text-muted text-base">{tc('loading')}</div>
+    return <div className="h-full flex items-center justify-center text-ive-text-muted text-base">{tc('loading')}</div>
   }
 
   return (
-    <>
-      <div style={{ display: activeTab === 'projects' ? 'block' : 'none' }}>
+    <div className="h-full relative">
+      <div className="absolute inset-0 overflow-hidden" style={{ display: activeTab === 'projects' ? 'flex' : 'none' }}>
         <ProjectsTab onAdd={() => {}} />
       </div>
-      <div style={{ display: activeTab === 'agents' ? 'block' : 'none' }}>
+      <div className="absolute inset-0 overflow-hidden" style={{ display: activeTab === 'agents' ? 'flex' : 'none' }}>
         <AgentsTab onAdd={() => {}} />
       </div>
-      <div style={{ display: activeTab === 'issues' ? 'block' : 'none' }}>
+      <div className="absolute inset-0 overflow-hidden" style={{ display: activeTab === 'issues' ? 'flex' : 'none' }}>
         <IssuesTab addTrigger={issueAddTrigger + contextAddTrigger} />
       </div>
-      <div style={{ display: activeTab === 'reports' ? 'block' : 'none' }}>
+      <div className="absolute inset-0 overflow-hidden" style={{ display: activeTab === 'reports' ? 'flex' : 'none' }}>
         <ReportsTab />
       </div>
       {state.user.isAdmin && (
-        <div style={{ display: activeTab === 'admin' ? 'block' : 'none' }}>
+        <div className="absolute inset-0 overflow-hidden" style={{ display: activeTab === 'admin' ? 'flex' : 'none' }}>
           <AdminTab />
         </div>
       )}
       <MobileTabBar />
-    </>
+    </div>
   )
 }

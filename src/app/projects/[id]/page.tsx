@@ -51,12 +51,12 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const project = state.projects.find(p => p.id === id)
 
   if (state.loading) {
-    return <div className="min-h-screen flex items-center justify-center text-ive-text-muted text-base">{tc('loading')}</div>
+    return <div className="h-full flex items-center justify-center text-ive-text-muted text-base">{tc('loading')}</div>
   }
 
   if (!project) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="h-full flex items-center justify-center">
         <div className="text-center">
           <p className="text-ive-text-muted mb-4">{tp('notFound')}</p>
           <Link href="/" className="text-ive-green text-base font-bold">
@@ -109,7 +109,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   }
 
   return (
-    <div className="min-h-screen pb-20">
+    <div className="h-full overflow-y-auto pb-20">
       <header className="sticky top-0 z-40 bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark">
         <div className="flex items-center gap-3 px-4 py-3 max-w-lg mx-auto">
           <Link href="/" className="text-ive-green text-base font-bold p-1 hover:bg-ive-green/5 rounded">

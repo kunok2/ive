@@ -114,7 +114,7 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
   const isMerged = mr?.state === 'merged'
 
   return (
-    <div className="min-h-screen pb-20">
+    <div className="h-full overflow-y-auto pb-20">
       <header className="sticky top-0 z-40 bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark">
         <div className="px-4 py-3 max-w-lg mx-auto">
           <div className="flex items-center gap-3">

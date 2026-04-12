@@ -966,7 +966,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
 
   if (!loading && !issue) {
     return (
-      <div className="h-screen flex flex-col">
+      <div className="h-full flex flex-col">
         <header className="sticky top-0 z-40 bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark shrink-0">
           <div className="flex items-center gap-2 px-3 py-2 max-w-lg mx-auto">
             <button onClick={() => router.back()} className="text-ive-green font-bold p-1 hover:bg-ive-green/5 rounded shrink-0">
@@ -990,7 +990,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
 
   if (!issue) {
     return (
-      <div className="h-screen flex items-center justify-center">
+      <div className="h-full flex items-center justify-center">
         <i className="fa-solid fa-circle-notch fa-spin text-xl text-ive-green" />
       </div>
     )
@@ -1002,7 +1002,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   const iterationCount = notes.filter(n => n.body.includes('<!-- ive-bot -->') || n.body.includes('IVE(봇)')).length
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="h-full flex flex-col">
       {/* 헤더: 뒤로가기 + 이슈번호 + 상태 + 외부링크 */}
       <header className="sticky top-0 z-40 bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark shrink-0">
         <div className="flex items-center gap-2 px-3 py-2 max-w-lg mx-auto">

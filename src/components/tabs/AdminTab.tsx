@@ -43,10 +43,10 @@ export default function AdminTab() {
   ]
 
   return (
-    <PullToRefresh onRefresh={handleRefresh} className="min-h-screen pb-20">
+    <PullToRefresh onRefresh={handleRefresh} className="w-full flex-1 flex flex-col max-w-lg mx-auto px-4 overflow-hidden">
       {/* 서브 탭 바 */}
-      <div className="sticky top-[57px] z-30 bg-ive-bg-deep border-b border-ive-border-dark">
-        <div className="flex max-w-lg mx-auto">
+      <div className="shrink-0 pt-4 pb-3">
+        <div className="flex">
           {subTabs.map(t => (
             <button
               key={t.key}
@@ -63,11 +63,13 @@ export default function AdminTab() {
         </div>
       </div>
 
-      {subTab === 'users' && <UsersPanel key={refreshKey} />}
-      {subTab === 'mail' && <MailPanel key={refreshKey} />}
-      {subTab === 'settings' && <SettingsPanel key={refreshKey} />}
-      {subTab === 'oauth' && <OAuthProvidersPanel key={refreshKey} />}
-      {subTab === 'cli' && <TerminalTab />}
+      <div className="flex-1 min-h-0 overflow-y-auto pb-20">
+        {subTab === 'users' && <UsersPanel key={refreshKey} />}
+        {subTab === 'mail' && <MailPanel key={refreshKey} />}
+        {subTab === 'settings' && <SettingsPanel key={refreshKey} />}
+        {subTab === 'oauth' && <OAuthProvidersPanel key={refreshKey} />}
+        {subTab === 'cli' && <TerminalTab />}
+      </div>
     </PullToRefresh>
   )
 }
@@ -199,9 +201,35 @@ function UsersPanel() {
 
   if (view === 'activity') {
     return (
-      <main className="px-4 py-4 max-w-lg mx-auto">
+      <main>
         {/* 서브뷰 토글 */}
-        <div className="flex gap-1.5 mb-4">
+        <div className="sticky top-0 z-10 bg-ive-bg-deep pb-2">
+          <div className="flex gap-1.5">
+            {views.map(v => (
+              <button
+                key={v.key}
+                onClick={() => setView(v.key)}
+                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
+                  view === v.key
+                    ? 'bg-ive-green/15 text-ive-green border border-ive-green/30'
+                    : 'bg-ive-bg-card border border-ive-border-subtle text-ive-text-dim active:scale-[0.96]'
+                }`}
+              >
+                <i className={`${v.icon} mr-1`} />{v.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <ActivityContent />
+      </main>
+    )
+  }
+
+  return (
+    <main>
+      {/* 서브뷰 토글 */}
+      <div className="sticky top-0 z-10 bg-ive-bg-deep pb-2">
+        <div className="flex gap-1.5">
           {views.map(v => (
             <button
               key={v.key}
@@ -216,28 +244,6 @@ function UsersPanel() {
             </button>
           ))}
         </div>
-        <ActivityContent />
-      </main>
-    )
-  }
-
-  return (
-    <main className="px-4 py-4 max-w-lg mx-auto">
-      {/* 서브뷰 토글 */}
-      <div className="flex gap-1.5 mb-4">
-        {views.map(v => (
-          <button
-            key={v.key}
-            onClick={() => setView(v.key)}
-            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
-              view === v.key
-                ? 'bg-ive-green/15 text-ive-green border border-ive-green/30'
-                : 'bg-ive-bg-card border border-ive-border-subtle text-ive-text-dim active:scale-[0.96]'
-            }`}
-          >
-            <i className={`${v.icon} mr-1`} />{v.label}
-          </button>
-        ))}
       </div>
       <div className="text-xs text-ive-text-dim mb-3">{t('totalUsersCount', { count: users.length })}</div>
       <div className="space-y-2">
@@ -438,22 +444,24 @@ function MailPanel() {
   ]
 
   return (
-    <main className="px-4 py-4 max-w-lg mx-auto">
+    <main>
       {/* 서브뷰 토글 */}
-      <div className="flex gap-1.5 mb-4">
-        {views.map(v => (
-          <button
-            key={v.key}
-            onClick={() => handleSetView(v.key)}
-            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
-              view === v.key
-                ? 'bg-ive-green/15 text-ive-green border border-ive-green/30'
-                : 'bg-ive-bg-card text-ive-text-dim border border-ive-border-subtle'
-            }`}
-          >
-            <i className={`${v.icon} mr-1`} />{v.label}
-          </button>
-        ))}
+      <div className="sticky top-0 z-10 bg-ive-bg-deep pb-2">
+        <div className="flex gap-1.5">
+          {views.map(v => (
+            <button
+              key={v.key}
+              onClick={() => handleSetView(v.key)}
+              className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
+                view === v.key
+                  ? 'bg-ive-green/15 text-ive-green border border-ive-green/30'
+                  : 'bg-ive-bg-card text-ive-text-dim border border-ive-border-subtle'
+              }`}
+            >
+              <i className={`${v.icon} mr-1`} />{v.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {view === 'broadcast' && <BroadcastView />}
@@ -1179,7 +1187,7 @@ function SettingsPanel() {
   if (loading) return <div className="text-center py-10 text-ive-text-dim">{tc('loading')}</div>
 
   return (
-    <main className="px-4 py-4 max-w-lg mx-auto space-y-3">
+    <main className="space-y-3">
       <div className="text-xs text-ive-text-dim mb-1">
         {t('systemSettingsDesc')}
       </div>
@@ -1905,7 +1913,7 @@ function OAuthProvidersPanel() {
   }
 
   return (
-    <div className="max-w-lg mx-auto px-4 py-4">
+    <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-base font-bold text-ive-text">
           <i className="fa-solid fa-key mr-1.5" />{t('title')}

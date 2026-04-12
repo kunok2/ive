@@ -103,7 +103,7 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
   }, [])
 
   return (
-    <div className="h-screen bg-ive-bg-deep flex flex-col overflow-hidden">
+    <div className="h-full bg-ive-bg-deep flex flex-col overflow-hidden">
       <div className="bg-ive-bg-card border-b border-ive-border-dark px-4 py-3 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3 min-w-0">
           <button

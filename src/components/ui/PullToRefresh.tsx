@@ -11,6 +11,7 @@ interface Props {
 }
 
 export default function PullToRefresh({ onRefresh, children, className, scrollContainerRef }: Props) {
+  const selfRef = useRef<HTMLDivElement>(null)
   const [pullY, setPullY] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
   const touchStartY = useRef(0)
@@ -20,6 +21,9 @@ export default function PullToRefresh({ onRefresh, children, className, scrollCo
   const isAtTop = useCallback(() => {
     if (scrollContainerRef?.current) {
       return scrollContainerRef.current.scrollTop <= 0
+    }
+    if (selfRef.current && selfRef.current.scrollHeight > selfRef.current.clientHeight) {
+      return selfRef.current.scrollTop <= 0
     }
     return window.scrollY <= 0
   }, [scrollContainerRef])
@@ -50,6 +54,7 @@ export default function PullToRefresh({ onRefresh, children, className, scrollCo
 
   return (
     <div
+      ref={selfRef}
       className={className}
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}

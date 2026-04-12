@@ -27,10 +27,13 @@ type Action =
 function reducer(state: State, action: Action): State {
   switch (action.type) {
     case 'SET_USER':
-      // 비로그인이면 loading도 해제
+      // 비로그인이면 loading도 해제, 로그인 시(null→user) loading 활성화
+      if (action.user && !state.user) {
+        return { ...state, user: action.user, authChecked: true, loading: true }
+      }
       return { ...state, user: action.user, authChecked: true, loading: action.user ? state.loading : false }
     case 'SET_PROJECTS':
-      return { ...state, projects: action.projects, loading: false }
+      return { ...state, projects: action.projects }
     case 'SET_AGENTS':
       return { ...state, agents: action.agents }
     case 'SET_LOADING':
@@ -156,14 +159,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     userRef.current = state.user
   }, [state.user])
 
+  // 로그인 상태 변화 감지: user가 null→non-null 로 바뀌면 데이터 로딩
+  const dataLoadedForUser = useRef<string | null>(null)
   useEffect(() => {
-    refreshUser().then((user) => {
-      if (user) {
-        dispatch({ type: 'SET_LOADING', loading: true })
-        refresh()
-        refreshAgents()
-      }
-    })
+    if (state.user && dataLoadedForUser.current !== state.user.id) {
+      dataLoadedForUser.current = state.user.id
+      dispatch({ type: 'SET_LOADING', loading: true })
+      Promise.all([refresh(), refreshAgents()]).then(() => {
+        dispatch({ type: 'SET_LOADING', loading: false })
+      })
+    } else if (!state.user) {
+      dataLoadedForUser.current = null
+    }
+  }, [state.user, refresh, refreshAgents])
+
+  useEffect(() => {
+    refreshUser()
 
     // 10초마다 데이터 자동 갱신 (스캐너 상태 등 반영)
     const interval = setInterval(() => {

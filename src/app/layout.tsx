@@ -41,10 +41,10 @@ export default async function RootLayout({
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
         <link rel="apple-touch-icon" href="/icon-192.svg" />
       </head>
-      <body>
+      <body className="h-dvh flex flex-col overflow-hidden">
         <PWARegister />
         <NextIntlClientProvider locale={locale} messages={messages}>
-          <StoreProvider><TabProvider><DialogProvider><ToastProvider><TopBar />{children}</ToastProvider></DialogProvider></TabProvider></StoreProvider>
+          <StoreProvider><TabProvider><DialogProvider><ToastProvider><TopBar /><div className="flex-1 min-h-0 overflow-hidden">{children}</div></ToastProvider></DialogProvider></TabProvider></StoreProvider>
         </NextIntlClientProvider>
       </body>
     </html>

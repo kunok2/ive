@@ -725,7 +725,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   }, [projectDropdownOpen])
 
   return (
-    <PullToRefresh onRefresh={isHistoryTab ? fetchClosedIssues : fetchIssues} className="h-[calc(100dvh-3.5rem)] flex flex-col max-w-lg mx-auto px-4">
+    <PullToRefresh onRefresh={isHistoryTab ? fetchClosedIssues : fetchIssues} className="w-full flex-1 flex flex-col max-w-lg mx-auto px-4 overflow-hidden">
       <div className="pt-4 shrink-0">
         {state.projects.length > 1 && (
           <div ref={dropdownRef} className="relative mb-3">

@@ -199,10 +199,10 @@ export default function ReportsTab() {
   }
 
   return (
-    <PullToRefresh onRefresh={fetchReport} className="min-h-screen pb-20">
+    <PullToRefresh onRefresh={fetchReport} className="w-full flex-1 flex flex-col max-w-lg mx-auto px-4 overflow-hidden">
       {/* Period selector */}
-      <div className="sticky top-[57px] z-30 bg-ive-bg-deep border-b border-ive-border-dark">
-        <div className="px-4 py-3 max-w-lg mx-auto">
+      <div className="shrink-0 pt-4 pb-2">
+        <div>
           <div className="flex gap-1 mb-2">
             {(['weekly', 'monthly', 'yearly'] as ReportType[]).map(rt => (
               <button key={rt} onClick={() => setType(rt)} className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${type === rt ? 'bg-ive-green text-ive-bg-deep' : 'bg-ive-bg-card text-ive-text-dim'}`}>
@@ -223,10 +223,11 @@ export default function ReportsTab() {
         </div>
       </div>
 
+      <div className="flex-1 min-h-0 overflow-y-auto pb-20">
       {loading && <div className="flex flex-col items-center justify-center py-10 gap-2 text-ive-text-dim"><i className="fa-solid fa-circle-notch fa-spin" />{tr('loadingCompact')}</div>}
 
       {data && !loading && d && (
-        <main className="px-4 py-4 max-w-lg mx-auto space-y-3">
+        <main className="space-y-3">
 
           {/* ① 진단 브리핑 */}
           <section className={`border rounded-lg p-4 ${briefingBg()}`}>
@@ -1086,6 +1087,7 @@ export default function ReportsTab() {
           )}
         </main>
       )}
+      </div>
 
     </PullToRefresh>
   )
