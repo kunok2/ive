@@ -693,7 +693,7 @@ function UserTaskPanel({ executions, projectId, onKill, formatDuration, te }: {
                       <div className="flex items-start gap-1.5 text-xs text-ive-text-dim leading-relaxed">
                         <span className="font-bold text-ive-text-muted shrink-0">{note.author}</span>
                         <span className="flex-1 min-w-0 break-words">
-                          <MarkdownNote body={cleanNoteBody(note.body || '')} />
+                          <MarkdownNote body={cleanNoteBody(note.body || '')} projectId={projectId} />
                         </span>
                         <span className="text-xs font-mono shrink-0 ml-1">{timestamp}</span>
                       </div>
@@ -718,7 +718,7 @@ function UserTaskPanel({ executions, projectId, onKill, formatDuration, te }: {
                         <span className="text-xs text-ive-text-dim font-mono ml-auto">{timestamp}</span>
                       </div>
                       <div className="px-2.5 py-2 text-xs text-ive-text-muted break-words">
-                        <MarkdownNote body={cleanNoteBody(note.body || '')} />
+                        <MarkdownNote body={cleanNoteBody(note.body || '')} projectId={projectId} />
                       </div>
                     </div>
                   </div>

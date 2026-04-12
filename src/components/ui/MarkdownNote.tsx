@@ -27,7 +27,7 @@ export function cleanNoteBody(body: string): string {
     .trim()
 }
 
-export default function MarkdownNote({ body }: { body: string }) {
+export default function MarkdownNote({ body, projectId }: { body: string; projectId?: string }) {
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
@@ -50,6 +50,13 @@ export default function MarkdownNote({ body }: { body: string }) {
         },
         pre: ({ children }) => <pre className="mb-1.5">{children}</pre>,
         blockquote: ({ children }) => <blockquote className="border-l-2 border-ive-border pl-2.5 my-1.5 text-ive-text-dim">{children}</blockquote>,
+        img: ({ src, alt, ...rest }) => {
+          let resolvedSrc = String(src || '')
+          if (projectId && resolvedSrc.startsWith('/uploads/')) {
+            resolvedSrc = `/api/projects/${projectId}${resolvedSrc}`
+          }
+          return <img src={resolvedSrc} alt={alt || ''} className="max-w-full rounded-lg my-1" {...rest} />
+        },
         a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-ive-cyan hover:underline">{children}</a>,
         hr: () => <hr className="border-ive-border-dark my-2" />,
         table: ({ children }) => <table className="w-full border-collapse my-2 text-sm">{children}</table>,

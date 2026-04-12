@@ -1153,7 +1153,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
           {/* 이슈 본문 - 스크롤 영역 안에 배치 */}
           {showDesc && issue.description && (
             <div className="mt-1.5 mr-2 text-sm text-ive-text bg-ive-bg-card rounded-lg p-2.5 break-words leading-relaxed">
-              <MarkdownNote body={cleanNoteBody(issue.description)} />
+              <MarkdownNote body={cleanNoteBody(issue.description)} projectId={projectId} />
             </div>
           )}
           {/* MR 리뷰 섹션 - 담당자 또는 관리자만 표시 */}
@@ -1244,7 +1244,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                     </div>
                   </div>
                   <div className={`text-sm leading-relaxed break-words ${note.system ? 'text-ive-text-dim italic' : 'text-ive-text-muted'}`}>
-                    {note.body.length > 500 ? <NoteBody body={note.body} /> : <MarkdownNote body={cleanNoteBody(note.body)} />}
+                    {note.body.length > 500 ? <NoteBody body={note.body} projectId={projectId} /> : <MarkdownNote body={cleanNoteBody(note.body)} projectId={projectId} />}
                   </div>
                 </div>
                 )
@@ -1746,7 +1746,7 @@ function ElapsedTimer({ startTime }: { startTime: number | null }) {
 
 
 // 긴 노트를 접었다 펼 수 있는 컴포넌트
-function NoteBody({ body }: { body: string }) {
+function NoteBody({ body, projectId }: { body: string; projectId?: string }) {
   const [expanded, setExpanded] = useState(false)
   const tc = useTranslations('common')
   const tIssue = useTranslations('issue')
@@ -1754,7 +1754,7 @@ function NoteBody({ body }: { body: string }) {
   const display = expanded ? cleaned : cleaned.slice(0, 500) + '...'
   return (
     <>
-      <MarkdownNote body={display} />
+      <MarkdownNote body={display} projectId={projectId} />
       <button
         onClick={() => setExpanded(!expanded)}
         className="block mt-1 text-xs text-ive-green hover:underline"
