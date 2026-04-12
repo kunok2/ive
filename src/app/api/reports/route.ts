@@ -106,9 +106,9 @@ export async function GET(req: NextRequest) {
   // 고유 이슈 수 (재시도는 1건으로 집계) — "유입" 계산용
   const uniqueIssueKeys = new Set(execs.map(e => `${e.projectId}:${e.issueIid}`))
   const uniqueInflow = uniqueIssueKeys.size
-  // 검증까지 마무리된 고유 이슈 수 — "처리" 계산용 (verified_at 또는 rejected_at 있어야 완료)
+  // 완료된 고유 이슈 수 — "처리" 계산용 (검증 완료 또는 검증 없이 success)
   const verifiedIssueKeys = new Set(
-    execs.filter(e => e.verifiedAt || e.rejectedAt).map(e => `${e.projectId}:${e.issueIid}`)
+    execs.filter(e => e.verifiedAt || e.rejectedAt || (e.status === 'success' && e.endedAt)).map(e => `${e.projectId}:${e.issueIid}`)
   )
   const verifiedCount = verifiedIssueKeys.size
   const successCount = execs.filter(e => e.status === 'success').length
@@ -201,7 +201,7 @@ export async function GET(req: NextRequest) {
   }
   const prevVerifyDate = new Map<string, string>()
   for (const e of prevExecs) {
-    const verifyEnd = e.verifiedAt || e.rejectedAt
+    const verifyEnd = e.verifiedAt || e.rejectedAt || (e.status === 'success' && e.endedAt ? e.endedAt : null)
     if (!verifyEnd) continue
     const k = `${e.projectId}:${e.issueIid}`
     const pv = prevVerifyDate.get(k)
@@ -300,7 +300,7 @@ export async function GET(req: NextRequest) {
     })
 
     const pUniqueIssues = new Set(pExecs.map(e => `${e.projectId}:${e.issueIid}`)).size
-    const pVerified = new Set(pExecs.filter(e => e.verifiedAt || e.rejectedAt).map(e => `${e.projectId}:${e.issueIid}`)).size
+    const pVerified = new Set(pExecs.filter(e => e.verifiedAt || e.rejectedAt || (e.status === 'success' && e.endedAt)).map(e => `${e.projectId}:${e.issueIid}`)).size
 
     return {
       projectId: pid, projectName: pExecs[0].projectName, projectColor: pExecs[0].projectColor, projectAvatarUrl: pExecs[0].projectAvatarUrl || '', projectProvider: pExecs[0].projectProvider || 'gitlab',
@@ -472,7 +472,7 @@ export async function GET(req: NextRequest) {
   // 검증 완료일은 verifiedAt 또는 rejectedAt이 있는 exec 중 가장 이른 날짜로 귀속
   const verifyDateByIssue = new Map<string, string>()
   for (const e of execs) {
-    const verifyEnd = e.verifiedAt || e.rejectedAt
+    const verifyEnd = e.verifiedAt || e.rejectedAt || (e.status === 'success' && e.endedAt ? e.endedAt : null)
     if (!verifyEnd) continue
     const k = `${e.projectId}:${e.issueIid}`
     const prev = verifyDateByIssue.get(k)
