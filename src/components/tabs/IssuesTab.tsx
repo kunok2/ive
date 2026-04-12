@@ -1173,7 +1173,8 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
 
       {/* 스크롤 가능한 리스트 영역 */}
       {selectedProjectId && (
-        <div className="flex-1 min-h-0 overflow-y-auto pb-20 custom-scrollbar" data-scroll-container="issues-list">
+        <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar" data-scroll-container="issues-list">
+          <div className="pb-20">
             {(isHistoryTab ? closedLoading : loading) && (isHistoryTab ? closedIssues : issues).length === 0 ? (
               <div className="text-center py-20 text-ive-text-muted">{tIssue('loadingIssues')}</div>
             ) : filtered.length === 0 ? (
@@ -1340,6 +1341,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                 })}
               </div>
             )}
+          </div>
         </div>
       )}
       {/* 담당자 선택 모달 — 단일 선택 + 확인 */}

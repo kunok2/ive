@@ -234,7 +234,8 @@ export default function ReportsTab() {
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto pb-20">
+      <div className="flex-1 min-h-0 overflow-y-auto">
+      <div className="pb-20">
       {loading && <div className="flex flex-col items-center justify-center py-10 gap-2 text-ive-text-dim"><i className="fa-solid fa-circle-notch fa-spin" />{tr('loadingCompact')}</div>}
 
       {data && !loading && d && (
@@ -1098,6 +1099,7 @@ export default function ReportsTab() {
           )}
         </main>
       )}
+      </div>
       </div>
 
     </PullToRefresh>

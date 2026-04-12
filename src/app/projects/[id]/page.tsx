@@ -109,7 +109,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   }
 
   return (
-    <div className="h-full overflow-y-auto pb-20">
+    <div className="h-full overflow-y-auto">
       <header className="sticky top-0 z-40 bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark">
         <div className="flex items-center gap-3 px-4 py-3 max-w-lg mx-auto">
           <Link href="/" className="text-ive-green text-base font-bold p-1 hover:bg-ive-green/5 rounded">
@@ -119,7 +119,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         </div>
       </header>
 
-      <main className="px-4 py-4 max-w-lg mx-auto">
+      <main className="px-4 pt-4 pb-20 max-w-lg mx-auto">
         {/* 프로젝트 정보 헤더 */}
         <div
           className="bg-ive-bg-card rounded-lg p-5 border border-ive-border-subtle mb-6 relative overflow-hidden group"
