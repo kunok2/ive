@@ -39,10 +39,24 @@ export function DailyTrendChart({ data, prevData, type }: { data: DailyTrend[]; 
       verified: d.verified ?? 0,
       cost: d.cost,
       prevTasks: prevData[i]?.tasks ?? 0,
-      prevVerified: prevData[i]?.verified ?? 0,
       prevCost: prevData[i]?.cost ?? 0,
     }
   })
+
+  /* 현재 작업 채움 막대를 먼저, 이전 작업 점선 막대를 나중에(위에) 그려서 항상 보이게 */
+  const TaskBarWithPrev = ({ x, y, width, height, payload }: any) => {
+    const prev = payload?.prevTasks ?? 0
+    const cur = payload?.tasks ?? 0
+    const bottomY = y + height
+    const prevH = cur > 0 ? (prev / cur) * height : 0
+    const prevY = bottomY - prevH
+    return (
+      <g>
+        {height > 0 && <rect x={x} y={y} width={width} height={height} fill={C.primary} fillOpacity={0.55} rx={2} />}
+        {prevH > 0 && <rect x={x} y={prevY} width={width} height={prevH} fill="none" stroke={C.textMuted} strokeDasharray="3 2" strokeWidth={1.5} rx={2} />}
+      </g>
+    )
+  }
 
   return (
     <div className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-3">
@@ -53,11 +67,12 @@ export function DailyTrendChart({ data, prevData, type }: { data: DailyTrend[]; 
           <YAxis yAxisId="tasks" tick={{ fill: C.textMuted, fontSize: 10 }} axisLine={false} tickLine={false} width={24} allowDecimals={false} />
           <YAxis yAxisId="cost" orientation="right" tick={{ fill: C.textMuted, fontSize: 9 }} axisLine={false} tickLine={false} width={30} tickFormatter={v => `$${v}`} />
           <Tooltip {...tooltipStyle} />
-          {/* 이전 기간 = 회색 옅게, 현재 기간 = 시안. 검증은 현재 시리즈 농도로 구분 */}
-          <Bar yAxisId="tasks" dataKey="prevTasks" name={tr('chartPrevTasks')} fill={C.textMuted} fillOpacity={0.15} radius={[2, 2, 0, 0]} />
-          <Bar yAxisId="tasks" dataKey="prevVerified" name={tr('chartPrevVerified')} fill={C.textMuted} fillOpacity={0.25} radius={[2, 2, 0, 0]} />
-          <Bar yAxisId="tasks" dataKey="tasks" name={tr('chartTasks')} fill={C.primary} fillOpacity={0.55} radius={[2, 2, 0, 0]} />
+          {/* 현재 작업 막대 (이전 작업 점선 마커 겹침) + 검증 막대 */}
+          <Bar yAxisId="tasks" dataKey="tasks" name={tr('chartTasks')} shape={<TaskBarWithPrev />} />
           <Bar yAxisId="tasks" dataKey="verified" name={tr('chartVerified')} fill={C.primary} radius={[2, 2, 0, 0]} />
+          {/* Y축 도메인에 prevTasks 포함시키기 위한 투명 라인 */}
+          <Line yAxisId="tasks" dataKey="prevTasks" name={tr('chartPrevTasks')} stroke="none" dot={false} activeDot={false} legendType="none" />
+          {/* 비용: 현재=실선, 이전=점선 — 같은 라인 타입 */}
           <Line yAxisId="cost" dataKey="cost" name={tr('chartCost')} stroke={C.primary} strokeWidth={2} dot={{ r: 2, fill: C.primary }} />
           <Line yAxisId="cost" dataKey="prevCost" name={tr('chartPrevCost')} stroke={C.textMuted} strokeDasharray="4 3" dot={false} strokeWidth={1} />
         </ComposedChart>
@@ -66,6 +81,9 @@ export function DailyTrendChart({ data, prevData, type }: { data: DailyTrend[]; 
         <span><span className="inline-block w-2 h-2 rounded-sm bg-ive-cyan/55 mr-0.5" />{tr('chartTasks')}</span>
         <span><span className="inline-block w-2 h-2 rounded-sm bg-ive-cyan mr-0.5" />{tr('chartVerified')}</span>
         <span><span className="inline-block w-3 h-0.5 bg-ive-cyan mr-0.5 align-middle" />{tr('chartCost')}</span>
+        <span className="text-ive-text-dim/60">|</span>
+        <span><span className="inline-block w-3 h-0.5 border-t border-dashed border-ive-text-dim mr-0.5 align-middle" />{tr('chartPrevTasks')}</span>
+        <span><span className="inline-block w-3 h-0.5 border-t border-dashed border-ive-text-dim mr-0.5 align-middle" />{tr('chartPrevCost')}</span>
       </div>
     </div>
   )
