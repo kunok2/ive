@@ -87,7 +87,7 @@ export default function IntroSlides({ onComplete }: IntroSlidesProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-ive-bg-deep flex flex-col items-center justify-center px-6"
+      className="fixed inset-0 z-50 bg-[#0e0e11f2] backdrop-blur-xl backdrop-saturate-150 flex flex-col items-center justify-center px-6"
       tabIndex={0}
       onKeyDown={handleKeyDown}
       onTouchStart={handleTouchStart}

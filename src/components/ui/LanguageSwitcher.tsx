@@ -52,7 +52,7 @@ export default function LanguageSwitcher() {
       </button>
 
       {open && (
-        <div className="absolute top-full mt-1 right-0 min-w-[120px] bg-ive-bg-card border border-ive-border-subtle rounded-lg shadow-lg overflow-hidden z-50">
+        <div className="absolute top-full mt-1 right-0 min-w-[120px] bg-[#1c1c20] border border-ive-border-subtle rounded-lg overflow-hidden z-50">
           {locales.map((l) => (
             <button
               key={l}

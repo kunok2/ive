@@ -49,7 +49,7 @@ html {
 }
 
 body {
-  background-color: #050505;
+  /* background-color는 html에만. body에 깔면 body::before (z-index:-1)가 가려져 ambient glow가 안 보임 */
   color: var(--color-ive-text);
   font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Segoe UI', 'Malgun Gothic', 'Noto Sans KR', sans-serif;
   -webkit-font-smoothing: antialiased;
