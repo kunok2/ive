@@ -1,10 +1,23 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import {
   ComposedChart, Bar, Line, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid, AreaChart,
 } from 'recharts'
 import { useTranslations } from 'next-intl'
+
+function useIsMobile(breakpoint = 768) {
+  const [mobile, setMobile] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${breakpoint}px)`)
+    setMobile(mq.matches)
+    const handler = (e: MediaQueryListEvent) => setMobile(e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [breakpoint])
+  return mobile
+}
 
 // 차트는 측정값 표시. 의미색을 쓰지 않고 단색 시안 + 회색 대비로만 구분.
 // (현재 데이터 = primary, 비교 데이터 = muted, 보조 시리즈 = primary 약화)
@@ -28,6 +41,7 @@ interface PrevDaily { date: string; tasks: number; verified?: number; cost: numb
 
 export function DailyTrendChart({ data, prevData, type }: { data: DailyTrend[]; prevData: PrevDaily[]; type: string }) {
   const tr = useTranslations('report')
+  const isMobile = useIsMobile()
   const dayLabels = tr.raw('dayLabels') as string[]
   const merged = data.map((d, i) => {
     let label: string
@@ -66,7 +80,7 @@ export function DailyTrendChart({ data, prevData, type }: { data: DailyTrend[]; 
           <XAxis dataKey="label" tick={{ fill: C.textMuted, fontSize: 10 }} axisLine={false} tickLine={false} />
           <YAxis yAxisId="tasks" tick={{ fill: C.textMuted, fontSize: 10 }} axisLine={false} tickLine={false} width={24} allowDecimals={false} />
           <YAxis yAxisId="cost" orientation="right" tick={{ fill: C.textMuted, fontSize: 9 }} axisLine={false} tickLine={false} width={30} tickFormatter={v => `$${v}`} />
-          <Tooltip {...tooltipStyle} />
+          {!isMobile && <Tooltip {...tooltipStyle} />}
           {/* 현재 작업 막대 (이전 작업 점선 마커 겹침) + 검증 막대 */}
           <Bar yAxisId="tasks" dataKey="tasks" name={tr('chartTasks')} shape={<TaskBarWithPrev />} />
           <Bar yAxisId="tasks" dataKey="verified" name={tr('chartVerified')} fill={C.primary} radius={[2, 2, 0, 0]} />
@@ -95,6 +109,7 @@ interface FlowDay { label: string; inflow: number | null; throughput: number | n
 
 export function FlowCompareChart({ data }: { data: FlowDay[]; type: string }) {
   const tr = useTranslations('report')
+  const isMobile = useIsMobile()
   return (
     <div className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-3">
       <ResponsiveContainer width="100%" height={140}>
@@ -102,7 +117,7 @@ export function FlowCompareChart({ data }: { data: FlowDay[]; type: string }) {
           <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
           <XAxis dataKey="label" tick={{ fill: C.textMuted, fontSize: 10 }} axisLine={false} tickLine={false} />
           <YAxis tick={{ fill: C.textMuted, fontSize: 10 }} axisLine={false} tickLine={false} width={24} allowDecimals={false} />
-          <Tooltip {...tooltipStyle} />
+          {!isMobile && <Tooltip {...tooltipStyle} />}
           {/* 유입 = 회색(들어오는 일감), 처리 = 시안(우리가 한 일) */}
           <Area dataKey="inflow" name={tr('chartInflow')} fill={C.textMuted} fillOpacity={0.15} stroke={C.textMuted} strokeWidth={2} dot={{ r: 2, fill: C.textMuted }} />
           <Area dataKey="throughput" name={tr('chartThroughput')} fill={C.primary} fillOpacity={0.18} stroke={C.primary} strokeWidth={2} dot={{ r: 2, fill: C.primary }} />
