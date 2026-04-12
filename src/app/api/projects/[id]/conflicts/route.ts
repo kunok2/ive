@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
-import { getProject, getProjectAuthToken, getProjectAccess, updateProjectConflictCount, markIssueVerified, touchProjectActivity } from '@/lib/db'
+import { getProject, getProjectAuthToken, getProjectAccess, updateProjectConflictCount, markIssueVerified, touchProjectActivity, getDb, updateExecutionStatus, upsertIssueStageSnapshot } from '@/lib/db'
 import { fetchOpenMRs, mergeMR, closeMR, fetchSingleIssue, addIssueLabels, removeIssueLabels } from '@/lib/provider'
 import { logActivity } from '@/lib/activity'
 
@@ -86,9 +86,12 @@ export async function POST(
       }
     }
 
-    // 머지 성공한 MR에 대해 관련 이슈의 IVE-V → IVE-E 레이블 전환
+    // 머지 성공한 MR에 대해 관련 이슈의 IVE 레이블 → IVE-E 전환 + 실행 기록 정리
+    const labelD = project.labelDev || 'IVE-D'
+    const labelW = project.labelVerifyWait || 'IVE-W'
     const labelV = project.labelVerify || 'IVE-V'
     const labelE = project.labelEnd || 'IVE-E'
+    const db = getDb()
 
     for (const r of results) {
       if (!r.success) continue
@@ -100,23 +103,51 @@ export async function POST(
         if (!issue) continue
 
         const labels: string[] = issue.labels || []
-        if (labels.includes(labelV) && !labels.includes(labelE)) {
-          await removeIssueLabels(project, issueIid, decryptedToken, [labelV])
-          await addIssueLabels(project, issueIid, decryptedToken, [labelE])
-          markIssueVerified(id, issueIid)
-          touchProjectActivity(id)
-
-          if (user) {
-            logActivity({
-              userId: user.id,
-              category: 'task',
-              action: 'task_complete',
-              detail: `머지 완료 → 자동 전환 (이슈 #${issueIid}, ${project.name})`,
-              targetType: 'issue',
-              targetId: `${id}:${issueIid}`,
-              req,
-            })
+        if (!labels.includes(labelE)) {
+          const labelsToRemove = [labelD, labelW, labelV].filter(l => labels.includes(l))
+          if (labelsToRemove.length > 0) {
+            await removeIssueLabels(project, issueIid, decryptedToken, labelsToRemove)
           }
+          await addIssueLabels(project, issueIid, decryptedToken, [labelE])
+        }
+
+        // 활성 실행(running/assigned) 모두 success로 닫기
+        const activeExecs = db.prepare(
+          "SELECT id FROM task_executions WHERE project_id = ? AND issue_iid = ? AND status IN ('running', 'assigned')"
+        ).all(id, issueIid) as { id: string }[]
+        for (const ex of activeExecs) {
+          updateExecutionStatus(ex.id, 'success', new Date().toISOString())
+        }
+
+        // issue_stages.cached_stage를 즉시 'done'으로 업데이트 (스캐너 대기 없이 반영)
+        const stageRow = db.prepare(
+          'SELECT cached_stage, assignee_username, assignee_name, assignee_avatar, assignee_provider, assignee_git_user_id, issue_title FROM issue_stages WHERE project_id = ? AND issue_iid = ?'
+        ).get(id, issueIid) as any
+        if (stageRow) {
+          upsertIssueStageSnapshot(id, issueIid, {
+            cachedStage: 'done',
+            assigneeUsername: stageRow.assignee_username,
+            assigneeName: stageRow.assignee_name,
+            assigneeAvatar: stageRow.assignee_avatar,
+            assigneeProvider: stageRow.assignee_provider,
+            assigneeGitUserId: stageRow.assignee_git_user_id,
+            issueTitle: stageRow.issue_title,
+          })
+        }
+
+        markIssueVerified(id, issueIid)
+        touchProjectActivity(id)
+
+        if (user) {
+          logActivity({
+            userId: user.id,
+            category: 'task',
+            action: 'task_complete',
+            detail: `머지 완료 → 자동 전환 (이슈 #${issueIid}, ${project.name})`,
+            targetType: 'issue',
+            targetId: `${id}:${issueIid}`,
+            req,
+          })
         }
       } catch (err) {
         console.error(`[Conflicts] 이슈 #${issueIid} 레이블 전환 실패:`, err)
