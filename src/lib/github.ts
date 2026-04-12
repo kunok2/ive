@@ -845,6 +845,72 @@ export async function getGitHubDefaultBranch(project: Project, decryptedToken: s
 }
 
 /**
+ * GitHub 저장소의 텍스트 파일을 읽습니다.
+ * 존재하지 않으면 null 반환.
+ *
+ * GitHub API: GET /repos/:owner/:repo/contents/:path?ref=:branch
+ */
+export async function readGitHubRepoFile(
+  project: Project,
+  decryptedToken: string,
+  filePath: string,
+  branch?: string,
+): Promise<{ content: string; sha: string } | null> {
+  const headers = getGitHubAuthHeaders(project, decryptedToken);
+  const ref = branch || (await getGitHubDefaultBranch(project, decryptedToken));
+  const res = await fetch(apiUrl(project, `/contents/${encodeURIComponent(filePath)}?ref=${encodeURIComponent(ref)}`), { headers });
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`GitHub 파일 읽기 실패: ${res.status} ${text}`);
+  }
+  const data = await res.json();
+  const content = Buffer.from(String(data.content || ''), 'base64').toString('utf-8');
+  return { content, sha: String(data.sha || '') };
+}
+
+/**
+ * GitHub 저장소의 파일을 생성하거나 업데이트합니다 (멱등).
+ * 이미 같은 내용이면 커밋하지 않습니다.
+ *
+ * GitHub API: PUT /repos/:owner/:repo/contents/:path
+ */
+export async function upsertGitHubRepoFile(
+  project: Project,
+  decryptedToken: string,
+  filePath: string,
+  newContent: string,
+  commitMessage: string,
+  branch?: string,
+): Promise<{ created: boolean; updated: boolean; unchanged: boolean }> {
+  const headers = { ...getGitHubAuthHeaders(project, decryptedToken), 'Content-Type': 'application/json' };
+  const ref = branch || (await getGitHubDefaultBranch(project, decryptedToken));
+
+  const existing = await readGitHubRepoFile(project, decryptedToken, filePath, ref);
+  if (existing && existing.content === newContent) {
+    return { created: false, updated: false, unchanged: true };
+  }
+
+  const body: Record<string, string> = {
+    message: commitMessage,
+    content: Buffer.from(newContent, 'utf-8').toString('base64'),
+    branch: ref,
+  };
+  if (existing) body.sha = existing.sha;
+
+  const res = await fetch(apiUrl(project, `/contents/${encodeURIComponent(filePath)}`), {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`GitHub 파일 ${existing ? '업데이트' : '생성'} 실패: ${res.status} ${text}`);
+  }
+  return { created: !existing, updated: !!existing, unchanged: false };
+}
+
+/**
  * GitHub 저장소에 파일을 커밋해 업로드합니다 (이슈 본문/코멘트에 첨부할 이미지 등).
  * GitHub은 이슈 첨부용 공개 API가 없으므로, 저장소 기본 브랜치의 `.ive-assets/` 경로에
  * 파일을 커밋한 뒤 raw 다운로드 URL을 마크다운으로 반환합니다.

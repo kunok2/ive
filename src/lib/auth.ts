@@ -2,7 +2,6 @@ import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
 import { cookies } from 'next/headers'
 import { getUserById } from './db'
-import { User } from '@/types'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'spring-ive-dev-secret-change-in-production'
 const COOKIE_NAME = 'ive-token'
@@ -45,7 +44,7 @@ export async function clearAuthCookie() {
   cookieStore.delete(COOKIE_NAME)
 }
 
-export async function getCurrentUser(): Promise<User | null> {
+export async function getCurrentUser() {
   const cookieStore = await cookies()
   const token = cookieStore.get(COOKIE_NAME)?.value
   if (!token) return null

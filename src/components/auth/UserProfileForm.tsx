@@ -590,6 +590,7 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
           {tc('close')}
         </button>
       )}
+
     </div>
   )
 }

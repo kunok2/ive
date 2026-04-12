@@ -191,3 +191,16 @@ export function getDefaultBranch(project: Project, token: string) {
     ? github.getGitHubDefaultBranch(project, token)
     : gitlab.getGitLabDefaultBranch(project, token);
 }
+
+// Repository File (텍스트 파일 읽기/쓰기)
+export function readRepoFile(project: Project, token: string, filePath: string, branch?: string) {
+  return project.provider === 'github'
+    ? github.readGitHubRepoFile(project, token, filePath, branch)
+    : gitlab.readGitLabRepoFile(project, token, filePath, branch);
+}
+
+export function upsertRepoFile(project: Project, token: string, filePath: string, content: string, commitMessage: string, branch?: string) {
+  return project.provider === 'github'
+    ? github.upsertGitHubRepoFile(project, token, filePath, content, commitMessage, branch)
+    : gitlab.upsertGitLabRepoFile(project, token, filePath, content, commitMessage, branch);
+}

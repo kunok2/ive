@@ -79,6 +79,42 @@ const execFile = promisify(require('child_process').execFile);
 const memberSyncAt = new Map<string, number>();
 
 /**
+ * 이슈 본문에서 <!-- ive-meta ... --> 블록을 파싱한다.
+ * 외부 도구(Claude Code 등)가 이슈 생성 시 삽입한 YAML 형식의 메타데이터.
+ * HTML 주석이므로 GitLab/GitHub UI에서는 보이지 않는다.
+ */
+function parseIveMeta(body: string): {
+  model: string | null
+  inputTokens: number
+  outputTokens: number
+  costUsd: number
+  turns: number
+  startedAt: string | null
+  endedAt: string | null
+} {
+  const defaults = { model: null as string | null, inputTokens: 0, outputTokens: 0, costUsd: 0, turns: 0, startedAt: null as string | null, endedAt: null as string | null };
+  if (!body) return defaults;
+  const match = body.match(/<!--\s*ive-meta\s*\n([\s\S]*?)-->/);
+  if (!match) return defaults;
+  const lines = match[1].split('\n');
+  for (const line of lines) {
+    const kv = line.match(/^\s*(\w+)\s*:\s*(.+)\s*$/);
+    if (!kv) continue;
+    const [, key, val] = kv;
+    switch (key) {
+      case 'model': defaults.model = val.trim(); break;
+      case 'input_tokens': defaults.inputTokens = Number(val) || 0; break;
+      case 'output_tokens': defaults.outputTokens = Number(val) || 0; break;
+      case 'cost_usd': defaults.costUsd = Number(val) || 0; break;
+      case 'turns': defaults.turns = Number(val) || 0; break;
+      case 'started_at': defaults.startedAt = val.trim(); break;
+      case 'ended_at': defaults.endedAt = val.trim(); break;
+    }
+  }
+  return defaults;
+}
+
+/**
  * OpenCode run --format json 이벤트를 읽기 좋은 로그 텍스트로 변환
  */
 function formatOpenCodeEvent(event: any, showToolUsage: boolean = false): string | null {
@@ -601,6 +637,59 @@ export async function scanProject(project: Project, force: boolean = false) {
         });
       } catch (e) {
         console.warn(`[Scanner] upsertIssueStageSnapshot failed (#${iid}):`, (e as Error).message);
+      }
+
+      // ── 외부 도구 이슈 인식 ──
+      // 외부 도구(Claude Code 등)가 Git에 직접 이슈를 생성하고 IVE 레이블을 부착한 경우:
+      // IVE-D 또는 IVE-W가 있지만 task_execution이 전혀 없으면
+      // 이슈 본문의 <!-- ive-meta --> 에서 토큰/비용 정보를 추출하여 execution을 자동 생성한다.
+      // 이 로직은 DB 상태(hasAnyExecution)만으로 판단하며, 이슈 본문의 특정 문자열에 의존하지 않는다.
+      if (!activeExec && !hasAnyExecution(project.id, iid) && (stage === 'verify_waiting' || stage === 'dev_fail')) {
+        // assignee 모드 이슈는 기존 로직(아래 블록)에서 처리하므로 여기서 제외
+        const assignModeMap = getAssignModeMap(project.id);
+        const assignInfo = assignModeMap.get(iid);
+        if (assignInfo?.mode !== 'assignee') {
+          const meta = parseIveMeta(issue.description || '');
+          const executionId = `ex-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+          const author = issue.author || {};
+          const isComplete = stage === 'verify_waiting';
+          const nowIso = new Date().toISOString();
+
+          const execution: Parameters<typeof createExecution>[0] = {
+            id: executionId,
+            projectId: project.id,
+            agentId: '',
+            issueIid: iid,
+            issueTitle: issue.title,
+            status: isComplete ? 'success' : 'running',
+            startedAt: meta.startedAt || issue.created_at || nowIso,
+            endedAt: isComplete ? (meta.endedAt || nowIso) : undefined,
+            logPath: '',
+            inputTokens: 0, outputTokens: 0, costUsd: 0, turns: 0,
+            issueCreatedAt: issue.created_at || nowIso,
+            assigneeType: 'user',
+            userId: null,
+            userName: author.name || author.username || author.login || null,
+            userAvatar: author.avatar_url || null,
+          };
+          createExecution(execution);
+
+          // 토큰/비용 반영 (ive-meta에서 추출된 값이 있으면)
+          if (meta.inputTokens || meta.outputTokens || meta.costUsd || meta.turns || meta.model) {
+            updateExecutionTokens(executionId, meta.inputTokens, meta.outputTokens, meta.costUsd, meta.turns, meta.model || undefined);
+          }
+
+          touchProjectActivity(project.id);
+          try {
+            createActivityLog({
+              userId: 'system', category: 'task', action: 'detect_external_task',
+              detail: `외부 도구 작업 인식: #${iid} "${issue.title}" (${project.name}, ${isComplete ? '완료' : '진행중'})`,
+              targetType: 'execution', targetId: executionId,
+            });
+          } catch (e) { console.error('[Scanner] Failed to log external task activity:', e); }
+
+          console.log(`[Scanner] [EXTERNAL] Project: ${project.name}, Issue: #${iid}, Status: ${isComplete ? 'success' : 'running'}, Author: ${execution.userName}, Tokens: ${meta.inputTokens}/${meta.outputTokens}`);
+        }
       }
 
       // 사람 작업 완료 감지: 담당자가 Git에서 레이블을 IVE-W 또는 IVE-E로 변경한 경우

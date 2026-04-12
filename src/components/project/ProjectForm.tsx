@@ -102,7 +102,12 @@ export default function ProjectForm({ existing, onSuccess, onCancel }: Props) {
   const [labelStatus, setLabelStatus] = useState<{ label: string; exists: boolean }[] | null>(null)
   const [labelCreating, setLabelCreating] = useState(false)
   const [labelMessage, setLabelMessage] = useState<string | null>(null)
-  
+
+  // AI 가이드 설치 (CLAUDE.md, AGENTS.md)
+  const [aiGuideStatus, setAiGuideStatus] = useState<{ path: string; hasIveSection: boolean }[] | null>(null)
+  const [aiGuideInstalling, setAiGuideInstalling] = useState(false)
+  const [aiGuideResult, setAiGuideResult] = useState<{ path: string; created: boolean; updated: boolean; unchanged: boolean; error?: string }[] | null>(null)
+
   // 작업 주기 설정 추가 (단위: 분)
   const [checkInterval, setCheckInterval] = useState(existing?.checkInterval ?? 1)
 
@@ -160,6 +165,15 @@ export default function ProjectForm({ existing, onSuccess, onCancel }: Props) {
   useEffect(() => {
     if (existing && showSharing) fetchShares()
   }, [existing, showSharing, fetchShares])
+
+  // AI 가이드 설치 상태 로드
+  useEffect(() => {
+    if (!existing) return
+    fetch(`/api/projects/${existing.id}/ai-guide`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setAiGuideStatus(data.files || null) })
+      .catch(() => { /* ignore */ })
+  }, [existing])
 
   async function handleAddShare(userId?: string) {
     const targetId = userId || selectedUserId
@@ -628,6 +642,64 @@ export default function ProjectForm({ existing, onSuccess, onCancel }: Props) {
           </div>
         )}
       </div>
+
+      {/* AI 가이드 설치 (CLAUDE.md, AGENTS.md) — 기존 프로젝트에서만 */}
+      {existing && (
+        <div className="border-t border-ive-border-dark pt-3">
+          <p className="text-sm font-bold text-ive-text-muted mb-1">
+            <i className="fa-solid fa-robot mr-1.5 text-xs" />
+            {t('aiGuide')}
+          </p>
+          <p className="text-xs text-ive-text-dim mb-3 ml-5">{t('aiGuideDescription')}</p>
+          <div className="flex items-center gap-2 ml-5">
+            <button
+              type="button"
+              onClick={async () => {
+                setAiGuideInstalling(true)
+                setAiGuideResult(null)
+                try {
+                  const res = await fetch(`/api/projects/${existing.id}/ai-guide`, { method: 'POST' })
+                  const data = await res.json()
+                  setAiGuideResult(data.results || null)
+                  // 상태도 갱신
+                  const statusRes = await fetch(`/api/projects/${existing.id}/ai-guide`)
+                  if (statusRes.ok) {
+                    const sData = await statusRes.json()
+                    setAiGuideStatus(sData.files || null)
+                  }
+                } catch {
+                  setAiGuideResult([{ path: 'CLAUDE.md', created: false, updated: false, unchanged: false, error: t('aiGuideInstallFailed') }])
+                }
+                setAiGuideInstalling(false)
+              }}
+              disabled={aiGuideInstalling}
+              className="text-sm font-bold text-ive-cyan border border-ive-cyan/30 px-3 py-1.5 rounded-lg hover:bg-ive-cyan/10 transition-all disabled:opacity-40"
+            >
+              {aiGuideInstalling ? <i className="fa-solid fa-circle-notch fa-spin mr-1" /> : <i className="fa-solid fa-wand-magic-sparkles mr-1" />}
+              {t('aiGuideInstall')}
+            </button>
+            {/* 상태 표시 */}
+            {aiGuideStatus && aiGuideStatus.map(f => (
+              <span key={f.path} className={`text-xs flex items-center gap-1 ${f.hasIveSection ? 'text-ive-green' : 'text-ive-text-dim'}`}>
+                <i className={`fa-solid ${f.hasIveSection ? 'fa-circle-check' : 'fa-circle-minus'}`} />
+                {f.path}
+              </span>
+            ))}
+          </div>
+          {/* 설치 결과 */}
+          {aiGuideResult && (
+            <div className="mt-2 ml-5 space-y-1">
+              {aiGuideResult.map(r => (
+                <div key={r.path} className={`text-xs flex items-center gap-1.5 ${r.error ? 'text-ive-red' : r.unchanged ? 'text-ive-text-dim' : 'text-ive-green'}`}>
+                  <i className={`fa-solid ${r.error ? 'fa-circle-xmark' : r.unchanged ? 'fa-circle-minus' : 'fa-circle-check'}`} />
+                  <span className="font-bold">{r.path}</span>
+                  <span>{r.error ? r.error : r.unchanged ? t('aiGuideUnchanged') : r.created ? t('aiGuideCreated') : t('aiGuideUpdated')}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 트레이스 설정 */}
       <div className="border-t border-ive-border-dark pt-3">

@@ -1191,6 +1191,7 @@ export function getProject(id: string): Project | null {
   return r ? mapProject(r) : null
 }
 
+
 /** 프로젝트의 인증 토큰을 반환 (OAuth 사용 시 소유주의 토큰) */
 export function getProjectAuthToken(projectId: string): string {
   const p = getProject(projectId)
