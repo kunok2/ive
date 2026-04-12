@@ -682,7 +682,7 @@ export async function scanProject(project: Project, force: boolean = false) {
           touchProjectActivity(project.id);
           try {
             createActivityLog({
-              userId: 'system', category: 'task', action: 'detect_external_task',
+              userId: project.userId, category: 'task', action: 'detect_external_task',
               detail: `외부 도구 작업 인식: #${iid} "${issue.title}" (${project.name}, ${isComplete ? '완료' : '진행중'})`,
               targetType: 'execution', targetId: executionId,
             });
