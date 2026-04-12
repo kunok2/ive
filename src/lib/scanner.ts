@@ -41,7 +41,7 @@ import {
 import { fetchProjectMembers } from "./provider";
 import { decrypt, encrypt } from "./crypto";
 import { defaultLocale } from "@/i18n/config";
-import { addIssueLabels, removeIssueLabels, addIssueComment, createBranch, getDefaultBranch } from "./provider";
+import { addIssueLabels, removeIssueLabels, addIssueComment, createBranch, getDefaultBranch, closeIssue } from "./provider";
 import {
   ensureGitLabLabels,
   fetchGitLabIssues,
@@ -644,7 +644,7 @@ export async function scanProject(project: Project, force: boolean = false) {
       // IVE-D 또는 IVE-W가 있지만 task_execution이 전혀 없으면
       // 이슈 본문의 <!-- ive-meta --> 에서 토큰/비용 정보를 추출하여 execution을 자동 생성한다.
       // 이 로직은 DB 상태(hasAnyExecution)만으로 판단하며, 이슈 본문의 특정 문자열에 의존하지 않는다.
-      if (!activeExec && !hasAnyExecution(project.id, iid) && (stage === 'verify_waiting' || stage === 'dev_fail')) {
+      if (!activeExec && !hasAnyExecution(project.id, iid) && (stage === 'done' || stage === 'verify_waiting' || stage === 'dev_fail')) {
         // assignee 모드 이슈는 기존 로직(아래 블록)에서 처리하므로 여기서 제외
         const assignModeMap = getAssignModeMap(project.id);
         const assignInfo = assignModeMap.get(iid);
@@ -652,7 +652,7 @@ export async function scanProject(project: Project, force: boolean = false) {
           const meta = parseIveMeta(issue.description || '');
           const executionId = `ex-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
           const author = issue.author || {};
-          const isComplete = stage === 'verify_waiting';
+          const isComplete = stage === 'done' || stage === 'verify_waiting';
           const nowIso = new Date().toISOString();
 
           const execution: Parameters<typeof createExecution>[0] = {
@@ -689,6 +689,14 @@ export async function scanProject(project: Project, force: boolean = false) {
           } catch (e) { console.error('[Scanner] Failed to log external task activity:', e); }
 
           console.log(`[Scanner] [EXTERNAL] Project: ${project.name}, Issue: #${iid}, Status: ${isComplete ? 'success' : 'running'}, Author: ${execution.userName}, Tokens: ${meta.inputTokens}/${meta.outputTokens}`);
+
+          // 완료된 외부 도구 이슈는 자동으로 닫는다 (IVE-E/IVE-W 상태)
+          if (isComplete) {
+            try {
+              await closeIssue(project, iid, decryptedToken);
+              console.log(`[Scanner] [EXTERNAL] Closed issue #${iid} (external tool task completed)`);
+            } catch (e) { console.warn(`[Scanner] Failed to close external issue #${iid}:`, e); }
+          }
         }
       }
 
