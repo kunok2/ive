@@ -38,8 +38,7 @@ function mergeIveSection(existing: string | null, iveSection: string): string {
 
 function generateIveGuide(project: Project): string {
   const labelTarget = project.labelTarget || 'IVE'
-  const labelDev = project.labelDev || 'IVE-D'
-  const labelEnd = project.labelEnd || 'IVE-E'
+  const labelEnd = project.labelEnd  || 'IVE-E'
 
   return `## IVE 작업 등록
 
@@ -52,9 +51,8 @@ IVE 스캐너가 이슈를 자동 감지하여 보고서에 반영합니다.
 ### 이슈 생성 규칙
 
 1. 작업 단위로 각각 **Git 이슈를 생성**한다 (GitLab/GitHub API 또는 \`gh\`/\`glab\` CLI 사용)
-2. 이슈에 아래 **레이블을 반드시 부착**한다:
-   - 완료된 작업: \`${labelTarget}\`, \`${labelEnd}\`
-   - 아직 진행 중인 작업: \`${labelTarget}\`, \`${labelDev}\`
+2. 이슈에 레이블 \`${labelTarget}\`, \`${labelEnd}\`를 부착한다. 이슈는 **열린 상태로 둔다** (닫지 않는다).
+   - IVE 스캐너가 이슈를 감지 → 유입으로 카운팅 → 처리 후 자동으로 닫는다.
 3. \`title\`은 간결하게 (이슈 제목이 보고서에 표시됨)
 4. 이슈 본문(description/body)에 포함할 것:
    - 변경한 파일 목록
