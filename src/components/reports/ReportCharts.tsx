@@ -43,6 +43,14 @@ export function DailyTrendChart({ data, prevData, type }: { data: DailyTrend[]; 
   const tr = useTranslations('report')
   const isMobile = useIsMobile()
   const dayLabels = tr.raw('dayLabels') as string[]
+
+  // 현재·이전 기간 tasks/verified 최대값 → Y축 도메인 & 이전 막대 높이 계산 기준
+  const yMax = Math.max(
+    ...data.map(d => Math.max(d.tasks ?? 0, d.verified ?? 0)),
+    ...prevData.map(d => Math.max(d.tasks ?? 0, d.verified ?? 0)),
+    1
+  )
+
   const merged = data.map((d, i) => {
     let label: string
     if (type === 'yearly') label = tr('monthUnit', { month: parseInt(d.date.slice(5, 7)) })
@@ -54,16 +62,31 @@ export function DailyTrendChart({ data, prevData, type }: { data: DailyTrend[]; 
       cost: d.cost,
       prevTasks: prevData[i]?.tasks ?? 0,
       prevCost: prevData[i]?.cost ?? 0,
+      yMax,
     }
   })
 
-  /* 현재 작업 채움 막대를 먼저, 이전 작업 점선 막대를 나중에(위에) 그려서 항상 보이게 */
-  const TaskBarWithPrev = ({ x, y, width, height, payload }: any) => {
+  /* 현재 작업 채움 막대 위에 이전 작업 점선 막대를 겹쳐 그린다.
+   * background prop을 통해 Y축 전체 픽셀 높이(bgH)를 받아
+   * cur=0인 미래 날짜에도 이전 데이터를 올바른 비율로 그린다. */
+  const TaskBarWithPrev = ({ x, y, width, height, background, payload }: any) => {
     const prev = payload?.prevTasks ?? 0
     const cur = payload?.tasks ?? 0
-    const bottomY = y + height
-    const prevH = cur > 0 ? (prev / cur) * height : 0
-    const prevY = bottomY - prevH
+    const dataYMax = payload?.yMax ?? 1
+    const bgH: number = background?.height ?? 0
+    const bgY: number = background?.y ?? 0
+
+    let prevH = 0, prevY = 0
+    if (bgH > 0) {
+      // background 치수로 정확한 비율 계산 (cur=0인 날에도 동작)
+      prevH = (prev / dataYMax) * bgH
+      prevY = bgY + bgH - prevH
+    } else if (cur > 0 && height > 0) {
+      // 폴백: cur > 0일 때 현재 막대 높이 기준 비례 계산
+      prevH = (prev / cur) * height
+      prevY = y + height - prevH
+    }
+
     return (
       <g>
         {height > 0 && <rect x={x} y={y} width={width} height={height} fill={C.primary} fillOpacity={0.55} rx={2} />}
@@ -78,15 +101,14 @@ export function DailyTrendChart({ data, prevData, type }: { data: DailyTrend[]; 
         <ComposedChart data={merged} barGap={0} barCategoryGap="15%">
           <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
           <XAxis dataKey="label" tick={{ fill: C.textMuted, fontSize: 10 }} axisLine={false} tickLine={false} />
-          <YAxis yAxisId="tasks" tick={{ fill: C.textMuted, fontSize: 10 }} axisLine={false} tickLine={false} width={24} allowDecimals={false} />
+          {/* domain을 yMax로 고정하면 현재 tasks=0인 날도 이전 기간 비율이 정확하게 렌더됨 */}
+          <YAxis yAxisId="tasks" domain={[0, yMax]} tick={{ fill: C.textMuted, fontSize: 10 }} axisLine={false} tickLine={false} width={24} allowDecimals={false} />
           <YAxis yAxisId="cost" orientation="right" tick={{ fill: C.textMuted, fontSize: 9 }} axisLine={false} tickLine={false} width={30} tickFormatter={v => `$${v}`} />
           {!isMobile && <Tooltip {...tooltipStyle} />}
-          {/* 현재 작업 막대 (이전 작업 점선 마커 겹침) + 검증 막대 */}
-          <Bar yAxisId="tasks" dataKey="tasks" name={tr('chartTasks')} shape={<TaskBarWithPrev />} />
+          {/* 현재 작업 막대 (background 전달 → 이전 작업 점선 마커 겹침) + 검증 막대 */}
+          <Bar yAxisId="tasks" dataKey="tasks" name={tr('chartTasks')} background={{ fill: 'transparent' }} shape={<TaskBarWithPrev />} />
           <Bar yAxisId="tasks" dataKey="verified" name={tr('chartVerified')} fill={C.primary} radius={[2, 2, 0, 0]} />
-          {/* Y축 도메인에 prevTasks 포함시키기 위한 투명 라인 */}
-          <Line yAxisId="tasks" dataKey="prevTasks" name={tr('chartPrevTasks')} stroke="none" dot={false} activeDot={false} legendType="none" />
-          {/* 비용: 현재=실선, 이전=점선 — 같은 라인 타입 */}
+          {/* 비용: 현재=실선, 이전=점선 */}
           <Line yAxisId="cost" dataKey="cost" name={tr('chartCost')} stroke={C.primary} strokeWidth={2} dot={{ r: 2, fill: C.primary }} />
           <Line yAxisId="cost" dataKey="prevCost" name={tr('chartPrevCost')} stroke={C.textMuted} strokeDasharray="4 3" dot={false} strokeWidth={1} />
         </ComposedChart>
@@ -106,26 +128,53 @@ export function DailyTrendChart({ data, prevData, type }: { data: DailyTrend[]; 
 // ───────────── 유입 vs 처리 비교 차트 ─────────────
 
 interface FlowDay { label: string; inflow: number | null; throughput: number | null }
+interface PrevFlowDay { label: string; prevInflow: number; prevThroughput: number }
 
-export function FlowCompareChart({ data }: { data: FlowDay[]; type: string }) {
+export function FlowCompareChart({ data, prevData, type }: { data: FlowDay[]; prevData?: PrevFlowDay[]; type: string }) {
   const tr = useTranslations('report')
   const isMobile = useIsMobile()
+
+  // 현재 기간과 이전 기간 데이터를 같은 x 인덱스로 병합
+  const merged = data.map((d, i) => ({
+    label: d.label,
+    inflow: d.inflow,
+    throughput: d.throughput,
+    prevInflow: prevData?.[i]?.prevInflow ?? null,
+    prevThroughput: prevData?.[i]?.prevThroughput ?? null,
+  }))
+
+  const hasPrev = (prevData?.length ?? 0) > 0
+
   return (
     <div className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-3">
       <ResponsiveContainer width="100%" height={140}>
-        <AreaChart data={data}>
+        <AreaChart data={merged}>
           <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
           <XAxis dataKey="label" tick={{ fill: C.textMuted, fontSize: 10 }} axisLine={false} tickLine={false} />
           <YAxis tick={{ fill: C.textMuted, fontSize: 10 }} axisLine={false} tickLine={false} width={24} allowDecimals={false} />
           {!isMobile && <Tooltip {...tooltipStyle} />}
-          {/* 유입 = 회색(들어오는 일감), 처리 = 시안(우리가 한 일) */}
+          {/* 이전 기간 (점선, 채움 없음) — 현재 기간보다 먼저 렌더링해 배경에 위치 */}
+          {hasPrev && (
+            <Area dataKey="prevInflow" name={tr('chartPrevInflow')} fill="none" stroke={C.textMuted} strokeWidth={1.5} strokeDasharray="4 3" dot={false} connectNulls />
+          )}
+          {hasPrev && (
+            <Area dataKey="prevThroughput" name={tr('chartPrevThroughput')} fill="none" stroke={C.primary} strokeWidth={1.5} strokeDasharray="4 3" dot={false} connectNulls />
+          )}
+          {/* 현재 기간 (실선 + 채움) */}
           <Area dataKey="inflow" name={tr('chartInflow')} fill={C.textMuted} fillOpacity={0.15} stroke={C.textMuted} strokeWidth={2} dot={{ r: 2, fill: C.textMuted }} />
           <Area dataKey="throughput" name={tr('chartThroughput')} fill={C.primary} fillOpacity={0.18} stroke={C.primary} strokeWidth={2} dot={{ r: 2, fill: C.primary }} />
         </AreaChart>
       </ResponsiveContainer>
-      <div className="flex items-center justify-center gap-3 mt-1 text-xs text-ive-text-dim">
+      <div className="flex items-center justify-center gap-3 mt-1 text-xs text-ive-text-dim flex-wrap">
         <span><span className="inline-block w-2 h-2 rounded-sm bg-ive-text-muted mr-0.5" />{tr('chartInflow')}</span>
         <span><span className="inline-block w-2 h-2 rounded-sm bg-ive-cyan mr-0.5" />{tr('chartThroughput')}</span>
+        {hasPrev && (
+          <>
+            <span className="text-ive-text-dim/60">|</span>
+            <span><span className="inline-block w-3 h-0.5 border-t border-dashed border-ive-text-muted mr-0.5 align-middle" />{tr('chartPrevInflow')}</span>
+            <span><span className="inline-block w-3 h-0.5 border-t border-dashed border-ive-cyan mr-0.5 align-middle" />{tr('chartPrevThroughput')}</span>
+          </>
+        )}
       </div>
     </div>
   )

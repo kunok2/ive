@@ -171,6 +171,17 @@ export default function ReportsTab() {
     })
   }
 
+  // 이전 기간 흐름도 데이터 계산 (FlowCompareChart 오버레이용)
+  function computePrevFlowDays() {
+    if (!data?.prevDailyTrend) return []
+    return data.prevDailyTrend.map(dt => {
+      const label = data.period.type === 'yearly'
+        ? tr('monthUnit', { month: parseInt(dt.date.slice(5, 7)) })
+        : data.period.type === 'weekly' ? dayLabels[new Date(dt.date).getDay()] : `${new Date(dt.date).getDate()}`
+      return { label, prevInflow: dt.inflow ?? 0, prevThroughput: dt.verified ?? 0 }
+    })
+  }
+
   // 이슈 필터/정렬
   const filteredIssues = data?.resolvedIssues?.filter(issue => {
     if (issueProjectFilter !== 'all' && issue.projectId !== issueProjectFilter) return false
@@ -950,7 +961,7 @@ export default function ReportsTab() {
               </button>
               {showTrend && (
                 <div className="space-y-2">
-                  <FlowCompareChart data={computeFlowDays()} type={type} />
+                  <FlowCompareChart data={computeFlowDays()} prevData={computePrevFlowDays()} type={type} />
                   <DailyTrendChart data={data.dailyTrend} prevData={data.prevDailyTrend} type={type} />
                 </div>
               )}

@@ -1057,6 +1057,8 @@
     "chartPrevCost": "Prev Cost",
     "chartInflow": "Inflow",
     "chartThroughput": "Throughput",
+    "chartPrevInflow": "Prev Inflow",
+    "chartPrevThroughput": "Prev Throughput",
     "monthUnit": "{month}",
     "briefingNoFlow": "No inflow or throughput in this period. {waiting} item(s) remain waiting from before.",
     "briefingNoInflow": "No work came in during this period.",
