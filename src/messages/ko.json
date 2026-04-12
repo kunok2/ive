@@ -1057,6 +1057,8 @@
     "chartPrevCost": "이전 비용",
     "chartInflow": "유입",
     "chartThroughput": "처리",
+    "chartPrevInflow": "이전 유입",
+    "chartPrevThroughput": "이전 처리",
     "monthUnit": "{month}월",
     "briefingNoFlow": "이번 기간에는 유입·처리 모두 0건입니다. 이전부터 대기 중인 {waiting}건이 그대로 남아있습니다.",
     "briefingNoInflow": "이번 기간에는 유입된 작업이 없습니다.",
