@@ -23,7 +23,7 @@ export async function POST(req: Request) {
   if (!user?.isAdmin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const body = await req.json()
-  const { id, type, name, baseUrl, clientId, clientSecret, enabled } = body
+  const { id, type, name, baseUrl, clientId, clientSecret, redirectBase, enabled } = body
 
   // 검증
   if (!id || typeof id !== 'string' || !/^[a-z0-9][a-z0-9-]*$/i.test(id)) {
@@ -39,6 +39,16 @@ export async function POST(req: Request) {
     new URL(baseUrl)
   } catch {
     return NextResponse.json({ error: 'baseUrl이 유효한 URL이 아닙니다' }, { status: 400 })
+  }
+  let normalizedRedirectBase: string | null = null
+  if (redirectBase && typeof redirectBase === 'string' && redirectBase.trim()) {
+    try {
+      const u = new URL(redirectBase.trim())
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error('scheme')
+      normalizedRedirectBase = redirectBase.trim().replace(/\/+$/, '')
+    } catch {
+      return NextResponse.json({ error: 'redirectBase는 http(s):// 로 시작하는 URL이어야 합니다' }, { status: 400 })
+    }
   }
   if (getOAuthProviderById(id)) {
     return NextResponse.json({ error: `이미 존재하는 ID: ${id}` }, { status: 409 })
@@ -59,6 +69,7 @@ export async function POST(req: Request) {
     baseUrl: baseUrl.replace(/\/+$/, ''),
     clientId,
     clientSecretEncrypted: encrypt(clientSecret),
+    redirectBase: normalizedRedirectBase,
     enabled: enabled !== false,
   })
 

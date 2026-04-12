@@ -31,6 +31,7 @@ export interface ResolvedProvider {
   baseUrl: string          // 끝에 슬래시 없음
   clientId: string
   clientSecret: string     // 복호화된 평문
+  redirectBase: string | null  // 역프록시 환경 override (끝에 슬래시 없음)
   enabled: boolean
 }
 
@@ -45,14 +46,52 @@ export function loadProvider(id: string): ResolvedProvider | null {
     baseUrl: raw.base_url.replace(/\/+$/, ''),
     clientId: raw.client_id,
     clientSecret: decrypt(raw.client_secret),
+    redirectBase: raw.redirect_base ? raw.redirect_base.replace(/\/+$/, '') : null,
     enabled: raw.enabled === 1,
   }
 }
 
-/** 콜백 URL 생성 (환경변수 OAUTH_REDIRECT_BASE 우선, 없으면 요청 origin 사용) */
-export function buildRedirectUri(providerId: string, requestOrigin: string): string {
-  const base = (process.env.OAUTH_REDIRECT_BASE || requestOrigin).replace(/\/+$/, '')
-  return `${base}/api/auth/oauth/${providerId}/callback`
+/**
+ * 요청의 공개 origin을 추정 (역프록시 기준).
+ *
+ * 우선순위:
+ *   1. X-Forwarded-Proto + X-Forwarded-Host (표준 프록시 헤더)
+ *   2. X-Forwarded-Proto + Host
+ *   3. req.url의 origin (로컬 개발용 최후 수단)
+ */
+export function getPublicOrigin(req: Request): string {
+  const h = req.headers
+  const xfProto = h.get('x-forwarded-proto')?.split(',')[0]?.trim()
+  const xfHost = h.get('x-forwarded-host')?.split(',')[0]?.trim()
+  const host = h.get('host')?.trim()
+
+  const urlProto = (() => {
+    try { return new URL(req.url).protocol.replace(':', '') } catch { return 'http' }
+  })()
+  const proto = xfProto || urlProto
+  const finalHost = xfHost || host
+
+  if (finalHost) return `${proto}://${finalHost}`.replace(/\/+$/, '')
+  try { return new URL(req.url).origin } catch { return '' }
+}
+
+/**
+ * provider 단위 redirect base 해석.
+ *   1. provider.redirectBase (관리자 설정)
+ *   2. OAUTH_REDIRECT_BASE 환경변수 (운영 override)
+ *   3. 요청 헤더로 자동 감지
+ */
+export function resolveRedirectBase(provider: ResolvedProvider, req: Request): string {
+  if (provider.redirectBase) return provider.redirectBase
+  const env = process.env.OAUTH_REDIRECT_BASE
+  if (env) return env.replace(/\/+$/, '')
+  return getPublicOrigin(req)
+}
+
+/** 콜백 URL 생성 — 역프록시 환경에서도 공개 origin을 사용 */
+export function buildRedirectUri(provider: ResolvedProvider, req: Request): string {
+  const base = resolveRedirectBase(provider, req)
+  return `${base}/api/auth/oauth/${provider.id}/callback`
 }
 
 /** state 토큰 생성 (CSRF 방어) */

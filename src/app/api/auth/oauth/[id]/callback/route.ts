@@ -4,7 +4,7 @@ import fs from 'fs'
 import path from 'path'
 import {
   loadProvider, exchangeCodeForToken,
-  fetchUserProfile, expiresInToISO,
+  fetchUserProfile, expiresInToISO, getPublicOrigin,
 } from '@/lib/oauth'
 import {
   getUserByEmail, getUserByOAuth, createOAuthUser, linkUserOAuth,
@@ -96,7 +96,7 @@ async function downloadAndSaveAvatar(userId: string, avatarUrl: string): Promise
 }
 
 function redirectToLoginWithError(req: Request, message: string) {
-  const url = new URL('/login', new URL(req.url).origin)
+  const url = new URL('/login', getPublicOrigin(req))
   url.searchParams.set('oauth_error', message)
   return NextResponse.redirect(url)
 }
@@ -234,7 +234,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   } catch { /* ignore */ }
 
   // 6. 홈으로 — 302 대신 다크 배경 로딩 HTML을 반환해 흰색 깜빡임 방지
-  const homeUrl = new URL('/', url.origin).toString()
+  const homeUrl = new URL('/', getPublicOrigin(req)).toString()
   return new NextResponse(renderLoadingRedirect(homeUrl), {
     status: 200,
     headers: { 'Content-Type': 'text/html; charset=utf-8' },

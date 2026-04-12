@@ -16,8 +16,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     return NextResponse.json({ error: 'Provider disabled' }, { status: 403 })
   }
 
-  const origin = new URL(req.url).origin
-  const redirectUri = buildRedirectUri(id, origin)
+  const redirectUri = buildRedirectUri(provider, req)
   const state = generateState()
   const authorizeUrl = buildAuthorizeUrl(provider, state, redirectUri)
 

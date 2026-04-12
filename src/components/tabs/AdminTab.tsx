@@ -1739,6 +1739,7 @@ type OAuthProviderRow = {
   name: string
   baseUrl: string
   clientId: string
+  redirectBase: string | null
   enabled: boolean
   createdAt: string
 }
@@ -1756,6 +1757,7 @@ function OAuthProvidersPanel() {
     baseUrl: 'https://gitlab.com',
     clientId: '',
     clientSecret: '',
+    redirectBase: 'https://ive.dazzleat.link',
     enabled: true,
   })
   const [saving, setSaving] = useState(false)
@@ -1790,6 +1792,7 @@ function OAuthProvidersPanel() {
       baseUrl: defaultType === 'gitlab' ? 'https://gitlab.com' : 'https://github.com',
       clientId: '',
       clientSecret: '',
+      redirectBase: 'https://ive.dazzleat.link',
       enabled: true,
     })
     setShowForm(true)
@@ -1804,6 +1807,7 @@ function OAuthProvidersPanel() {
       baseUrl: p.baseUrl,
       clientId: p.clientId,
       clientSecret: '', // 공백 = 변경 없음
+      redirectBase: p.redirectBase || '',
       enabled: p.enabled,
     })
     setShowForm(true)
@@ -1826,6 +1830,7 @@ function OAuthProvidersPanel() {
           name: form.name,
           baseUrl: form.baseUrl,
           clientId: form.clientId,
+          redirectBase: form.redirectBase.trim(),
           enabled: form.enabled,
         }
         if (form.clientSecret) patch.clientSecret = form.clientSecret
@@ -1960,7 +1965,7 @@ function OAuthProvidersPanel() {
                 </div>
               </div>
               <div className="mt-2 text-xs text-ive-text-dim font-mono break-all">
-                콜백: {origin}/api/auth/oauth/{p.id}/callback
+                콜백: {(p.redirectBase || origin).replace(/\/+$/, '')}/api/auth/oauth/{p.id}/callback
               </div>
             </div>
           ))}
@@ -2063,6 +2068,22 @@ function OAuthProvidersPanel() {
                 />
               </div>
               <div>
+                <label className="block text-xs font-bold text-ive-text-muted mb-1">
+                  Redirect Base URL <span className="text-ive-text-dim font-normal">(선택)</span>
+                </label>
+                <input
+                  type="url"
+                  value={form.redirectBase}
+                  onChange={e => setForm(f => ({ ...f, redirectBase: e.target.value }))}
+                  placeholder={origin}
+                  className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text font-mono"
+                />
+                <div className="text-xs text-ive-text-dim mt-1">
+                  역프록시 환경(예: https 종단, 외부 도메인)에서 콜백 URL의 공개 origin이
+                  서버가 수신한 주소와 다를 때만 지정. 비워 두면 <code className="font-mono">X-Forwarded-*</code> 헤더로 자동 감지.
+                </div>
+              </div>
+              <div>
                 <label className="flex items-center gap-2 text-sm text-ive-text">
                   <input
                     type="checkbox"
@@ -2072,28 +2093,29 @@ function OAuthProvidersPanel() {
                   활성화 (로그인 페이지에 노출)
                 </label>
               </div>
-              {form.id && (
-                <div className="bg-ive-bg-deep border border-ive-border-subtle rounded-lg p-2 text-xs">
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="text-ive-text-muted font-bold">
-                      <i className="fa-solid fa-link mr-1" />GitLab/GitHub에 등록할 콜백 URL
+              {form.id && (() => {
+                const effectiveBase = (form.redirectBase.trim() || origin).replace(/\/+$/, '')
+                const callbackUrl = `${effectiveBase}/api/auth/oauth/${form.id}/callback`
+                return (
+                  <div className="bg-ive-bg-deep border border-ive-border-subtle rounded-lg p-2 text-xs">
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="text-ive-text-muted font-bold">
+                        <i className="fa-solid fa-link mr-1" />GitLab/GitHub에 등록할 콜백 URL
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard?.writeText(callbackUrl).catch(() => {})
+                        }}
+                        className="text-ive-cyan font-bold px-2 py-0.5 rounded bg-ive-cyan/10 hover:bg-ive-cyan/20"
+                      >
+                        <i className="fa-solid fa-copy mr-1" />복사
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const url = `${origin}/api/auth/oauth/${form.id}/callback`
-                        navigator.clipboard?.writeText(url).catch(() => {})
-                      }}
-                      className="text-ive-cyan font-bold px-2 py-0.5 rounded bg-ive-cyan/10 hover:bg-ive-cyan/20"
-                    >
-                      <i className="fa-solid fa-copy mr-1" />복사
-                    </button>
+                    <div className="font-mono text-ive-text break-all">{callbackUrl}</div>
                   </div>
-                  <div className="font-mono text-ive-text break-all">
-                    {origin}/api/auth/oauth/{form.id}/callback
-                  </div>
-                </div>
-              )}
+                )
+              })()}
               <div className="flex gap-2 mt-2">
                 <button
                   onClick={() => setShowForm(false)}
