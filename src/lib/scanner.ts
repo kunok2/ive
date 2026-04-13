@@ -1310,9 +1310,9 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
 - When designing UI, provide text-art mockups of the result where possible.
 - IMPORTANT: ${langInstruction}`;
 
-    // 5. 에이전트 CLI 실행 (시스템 설정의 CLI 경로/모델 우선 사용)
+    // 5. 에이전트 CLI 실행 (에이전트 모델 우선, 없으면 시스템 설정 폴백)
     const systemCliPath = getSystemSetting(`cli.${agent.cliName}.path`);
-    const systemCliModel = getSystemSetting(`cli.${agent.cliName}.model`);
+    const systemCliModel = agent.modelName || getSystemSetting(`cli.${agent.cliName}.model`);
     let resolvedCliPath = systemCliPath || agent.cliPath;
     // CLI 경로가 존재하지 않으면 which로 자동 탐색
     const mainBin = resolvedCliPath.split(' ')[0];

@@ -161,6 +161,8 @@
     "version": "버전",
     "versionOptional": "버전 (선택)",
     "versionPlaceholder": "예: 2.1.69",
+    "model": "모델",
+    "modelDefault": "시스템 기본값 사용",
     "maxTurns": "최대 턴 수",
     "maxTurnsHint": "이슈당 최대 대화 횟수",
     "monitoring": "모니터링 설정",

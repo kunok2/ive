@@ -149,6 +149,7 @@ export interface Agent {
   cliName: CliName
   cliPath: string
   cliVersion: string
+  modelName: string           // 에이전트별 모델명 (빈 문자열이면 시스템 설정 폴백)
   maxTurns: number
   status: AgentStatus
   snapshotInterval: number      // 스냅샷 수집 간격 (분)

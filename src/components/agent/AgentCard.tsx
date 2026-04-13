@@ -77,6 +77,8 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
   const [editing, setEditing] = useState(false)
   const [editName, setEditName] = useState(agent.name)
   const [editAvatar, setEditAvatar] = useState(agent.avatar)
+  const [editModel, setEditModel] = useState(agent.modelName || '')
+  const [editCliModels, setEditCliModels] = useState<string[]>([])
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
   const [showInterview, setShowInterview] = useState(false)
@@ -221,7 +223,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
         <AgentAvatar avatar={agent.avatar} size="sm" />
         <div className="flex-1 min-w-0">
           <div className="text-base font-bold text-ive-text truncate">{agent.name}</div>
-          <div className="text-sm text-ive-text-muted truncate">{cli.label}</div>
+          <div className="text-sm text-ive-text-muted truncate">{cli.label}{agent.modelName ? ` · ${agent.modelName}` : ''}</div>
         </div>
         <div className="flex items-center gap-1.5 shrink-0 whitespace-nowrap">
           <div className={`w-2 h-2 rounded-full shrink-0 ${status.dot}`} />
@@ -269,7 +271,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
                 <i className="fa-solid fa-robot" />{t('workerBadge')}
               </span>
             </div>
-            <div className="text-sm text-ive-text-muted truncate">{cli.label} · {cli.desc}</div>
+            <div className="text-sm text-ive-text-muted truncate">{cli.label} · {agent.modelName || cli.desc}</div>
             {collapsed && assignedProjects && assignedProjects.length > 0 && (
               <div className="text-xs text-ive-text-dim mt-0.5 truncate">
                 {assignedProjects.map(p => p.name).join(', ')}
@@ -332,10 +334,25 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
             <label className="block text-xs font-bold text-ive-text-muted mb-1">{t('avatar')}</label>
             <AvatarSelector value={editAvatar} onChange={setEditAvatar} />
           </div>
+          {editCliModels.length > 0 && (
+            <div>
+              <label className="block text-xs font-bold text-ive-text-muted mb-1">{t('model')}</label>
+              <select
+                value={editModel}
+                onChange={e => setEditModel(e.target.value)}
+                className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2 text-base text-ive-text focus:outline-none focus:border-ive-green"
+              >
+                <option value="">{t('modelDefault')}</option>
+                {editCliModels.map(m => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="flex gap-2">
             <button
               onClick={async () => {
-                await updateAgent({ ...agent, name: editName.trim() || agent.name, avatar: editAvatar })
+                await updateAgent({ ...agent, name: editName.trim() || agent.name, avatar: editAvatar, modelName: editModel })
                 setEditing(false)
               }}
               className="flex-1 text-sm font-bold text-ive-green border border-ive-green/30 py-1.5 rounded-lg hover:bg-ive-green/10 transition-colors"
@@ -481,9 +498,16 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
 
           <button
             onClick={() => {
-              setEditing(prev => !prev)
+              const willEdit = !editing
+              setEditing(willEdit)
               setEditName(agent.name)
               setEditAvatar(agent.avatar)
+              setEditModel(agent.modelName || '')
+              if (willEdit) {
+                fetch('/api/settings/cli-models').then(r => r.json()).then(data => {
+                  setEditCliModels(data[agent.cliName] || [])
+                }).catch(() => {})
+              }
             }}
             className={`text-sm font-bold py-1.5 px-3 rounded-lg border transition-colors ${
               editing

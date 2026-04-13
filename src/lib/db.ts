@@ -417,6 +417,14 @@ function initSchema(db: Database.Database) {
     }
   } catch (e) { console.error("Migration failed for agents avatar:", e) }
 
+  // agents에 model 컬럼 추가 (에이전트별 모델 지정)
+  try {
+    const tableInfo = db.prepare("PRAGMA table_info(agents)").all() as any[]
+    if (!tableInfo.some((col: any) => col.name === 'model')) {
+      db.exec("ALTER TABLE agents ADD COLUMN model TEXT NOT NULL DEFAULT ''")
+    }
+  } catch (e) { console.error("Migration failed for agents model:", e) }
+
   // projects에 avatar_url 컬럼 추가
   try {
     const tableInfo = db.prepare("PRAGMA table_info(projects)").all() as any[]
@@ -1300,7 +1308,8 @@ function mapAgent(r: any): Agent {
     id: r.id, userId: r.user_id, name: r.name,
     avatar: r.avatar || 'av-01',
     cliName: r.cli_name as Agent['cliName'], cliPath: r.cli_path,
-    cliVersion: r.cli_version, maxTurns: r.max_turns ?? 200,
+    cliVersion: r.cli_version, modelName: r.model || '',
+    maxTurns: r.max_turns ?? 200,
     status: r.status as Agent['status'],
     snapshotInterval: r.snapshot_interval ?? 1,
     sparklinePoints: r.sparkline_points ?? 60,
@@ -1322,14 +1331,14 @@ export function getAgent(id: string): Agent | null {
 
 export function createAgent(a: Agent) {
   getDb().prepare(
-    'INSERT INTO agents (id, user_id, name, avatar, cli_name, cli_path, cli_version, max_turns, status, snapshot_interval, sparkline_points, stats_retention, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-  ).run(a.id, a.userId, a.name, a.avatar || 'av-01', a.cliName, a.cliPath, a.cliVersion, a.maxTurns, a.status, a.snapshotInterval ?? 1, a.sparklinePoints ?? 60, a.statsRetention ?? 7, a.createdAt)
+    'INSERT INTO agents (id, user_id, name, avatar, cli_name, cli_path, cli_version, model, max_turns, status, snapshot_interval, sparkline_points, stats_retention, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(a.id, a.userId, a.name, a.avatar || 'av-01', a.cliName, a.cliPath, a.cliVersion, a.modelName || '', a.maxTurns, a.status, a.snapshotInterval ?? 1, a.sparklinePoints ?? 60, a.statsRetention ?? 7, a.createdAt)
 }
 
 export function updateAgent(a: Agent) {
   getDb().prepare(
-    'UPDATE agents SET name = ?, avatar = ?, cli_name = ?, cli_path = ?, cli_version = ?, max_turns = ?, status = ?, snapshot_interval = ?, sparkline_points = ?, stats_retention = ? WHERE id = ? AND user_id = ?'
-  ).run(a.name, a.avatar || 'av-01', a.cliName, a.cliPath, a.cliVersion, a.maxTurns, a.status, a.snapshotInterval ?? 1, a.sparklinePoints ?? 60, a.statsRetention ?? 7, a.id, a.userId)
+    'UPDATE agents SET name = ?, avatar = ?, cli_name = ?, cli_path = ?, cli_version = ?, model = ?, max_turns = ?, status = ?, snapshot_interval = ?, sparkline_points = ?, stats_retention = ? WHERE id = ? AND user_id = ?'
+  ).run(a.name, a.avatar || 'av-01', a.cliName, a.cliPath, a.cliVersion, a.modelName || '', a.maxTurns, a.status, a.snapshotInterval ?? 1, a.sparklinePoints ?? 60, a.statsRetention ?? 7, a.id, a.userId)
 }
 
 export function deleteAgent(id: string, userId: string) {
@@ -1345,7 +1354,7 @@ export function updateAgentStatus(id: string, status: Agent['status']) {
 
 export function getProjectAssignments(projectId: string): (ProjectAssignment & { agent: Agent })[] {
   const rows = getDb().prepare(`
-    SELECT pa.*, a.name as agent_name, a.avatar as agent_avatar, a.cli_name, a.cli_path, a.cli_version, a.max_turns,
+    SELECT pa.*, a.name as agent_name, a.avatar as agent_avatar, a.cli_name, a.cli_path, a.cli_version, a.model as agent_model, a.max_turns,
            a.status as agent_status, a.user_id, a.created_at as agent_created_at,
            a.snapshot_interval as a_snapshot_interval, a.sparkline_points as a_sparkline_points, a.stats_retention as a_stats_retention
     FROM project_assignments pa
@@ -1360,7 +1369,8 @@ export function getProjectAssignments(projectId: string): (ProjectAssignment & {
       id: r.agent_id, userId: r.user_id, name: r.agent_name,
       avatar: r.agent_avatar || 'av-01',
       cliName: r.cli_name as Agent['cliName'], cliPath: r.cli_path,
-      cliVersion: r.cli_version, maxTurns: r.max_turns ?? 200,
+      cliVersion: r.cli_version, modelName: r.agent_model || '',
+      maxTurns: r.max_turns ?? 200,
       status: r.agent_status as Agent['status'],
       snapshotInterval: r.a_snapshot_interval ?? 1,
       sparklinePoints: r.a_sparkline_points ?? 60,

@@ -33,6 +33,8 @@ export default function AgentForm({ onSuccess, onCancel }: Props) {
   const [name, setName] = useState(availableTools[0]?.defaultName ?? 'Agent')
   const [avatar, setAvatar] = useState<string>(() => DEFAULT_AVATARS[Math.floor(Math.random() * DEFAULT_AVATARS.length)].id)
   const [cliPaths, setCliPaths] = useState<Record<string, string>>({})
+  const [cliModels, setCliModels] = useState<Record<string, string[]>>({})
+  const [modelName, setModelName] = useState('')
   const [cliVersion, setCliVersion] = useState('')
   const [maxTurns, setMaxTurns] = useState(() => userMaxTurns > 0 ? Math.floor(userMaxTurns / 2) : 200)
   const [snapshotInterval, setSnapshotInterval] = useState(1)
@@ -43,14 +45,13 @@ export default function AgentForm({ onSuccess, onCancel }: Props) {
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    fetch('/api/settings/cli-paths')
-      .then(r => r.json())
-      .then(setCliPaths)
-      .catch(() => {})
+    fetch('/api/settings/cli-paths').then(r => r.json()).then(setCliPaths).catch(() => {})
+    fetch('/api/settings/cli-models').then(r => r.json()).then(setCliModels).catch(() => {})
   }, [])
 
   function handleCliChange(cli: CliName) {
     setCliName(cli)
+    setModelName('')
     const tool = cliTools.find(t => t.value === cli)
     if (tool) {
       setName(tool.defaultName)
@@ -80,6 +81,7 @@ export default function AgentForm({ onSuccess, onCancel }: Props) {
         cliName,
         cliPath: currentCliPath,
         cliVersion: cliVersion.trim(),
+        modelName,
         maxTurns,
         status: 'available',
         snapshotInterval,
@@ -122,6 +124,25 @@ export default function AgentForm({ onSuccess, onCancel }: Props) {
           ))}
         </div>
       </div>
+
+      {/* 모델 선택 */}
+      {(cliModels[cliName]?.length ?? 0) > 0 && (
+        <div>
+          <label className="block text-base font-bold text-ive-text-muted mb-2">
+            <i className="fa-solid fa-microchip mr-1" />{t('model')}
+          </label>
+          <select
+            value={modelName}
+            onChange={e => setModelName(e.target.value)}
+            className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-base text-ive-text focus:outline-none focus:border-ive-green"
+          >
+            <option value="">{t('modelDefault')}</option>
+            {cliModels[cliName].map(m => (
+              <option key={m} value={m}>{m}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Agent 이름 */}
       <div>

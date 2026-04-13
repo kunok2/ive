@@ -20,7 +20,7 @@ const CLAUDE_MODELS = [
 /** CLI별 사용 가능한 모델 목록 조회 */
 export async function GET() {
   const user = await getCurrentUser()
-  if (!user?.isAdmin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const settings = getSystemSettings('cli.')
   const result: Record<string, string[]> = {}

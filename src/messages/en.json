@@ -161,6 +161,8 @@
     "version": "Version",
     "versionOptional": "Version (optional)",
     "versionPlaceholder": "e.g. 2.1.69",
+    "model": "Model",
+    "modelDefault": "Use system default",
     "maxTurns": "Max Turns",
     "maxTurnsHint": "Max conversation turns per issue",
     "monitoring": "Monitoring Settings",
