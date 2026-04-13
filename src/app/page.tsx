@@ -39,20 +39,20 @@ export default function HomePage() {
 
   return (
     <div className="h-full relative">
-      <div className="absolute top-0 inset-x-0 bottom-16 overflow-hidden" style={{ display: activeTab === 'projects' ? 'flex' : 'none' }}>
+      <div className="absolute inset-0 overflow-hidden" style={{ display: activeTab === 'projects' ? 'flex' : 'none' }}>
         <ProjectsTab onAdd={() => {}} />
       </div>
-      <div className="absolute top-0 inset-x-0 bottom-16 overflow-hidden" style={{ display: activeTab === 'agents' ? 'flex' : 'none' }}>
+      <div className="absolute inset-0 overflow-hidden" style={{ display: activeTab === 'agents' ? 'flex' : 'none' }}>
         <AgentsTab onAdd={() => {}} />
       </div>
-      <div className="absolute top-0 inset-x-0 bottom-16 overflow-hidden" style={{ display: activeTab === 'issues' ? 'flex' : 'none' }}>
+      <div className="absolute inset-0 overflow-hidden" style={{ display: activeTab === 'issues' ? 'flex' : 'none' }}>
         <IssuesTab addTrigger={issueAddTrigger + contextAddTrigger} />
       </div>
-      <div className="absolute top-0 inset-x-0 bottom-16 overflow-hidden" style={{ display: activeTab === 'reports' ? 'flex' : 'none' }}>
+      <div className="absolute inset-0 overflow-hidden" style={{ display: activeTab === 'reports' ? 'flex' : 'none' }}>
         <ReportsTab />
       </div>
       {state.user.isAdmin && (
-        <div className="absolute top-0 inset-x-0 bottom-16 overflow-hidden" style={{ display: activeTab === 'admin' ? 'flex' : 'none' }}>
+        <div className="absolute inset-0 overflow-hidden" style={{ display: activeTab === 'admin' ? 'flex' : 'none' }}>
           <AdminTab />
         </div>
       )}
