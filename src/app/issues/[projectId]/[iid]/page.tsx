@@ -129,6 +129,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   const [posting, setPosting] = useState(false)
   const [postingType, setPostingType] = useState<'comment' | 'retry' | 'done' | 'next' | null>(null)
   const [stageChanging, setStageChanging] = useState(false)
+  const verifyPopupShownRef = useRef(false)
   const [mrActionModal, setMrActionModal] = useState<{
     mr: { iid: number; title: string; web_url: string; has_conflicts?: boolean }
     finalApprove: () => Promise<void>
@@ -564,6 +565,26 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
     return issue.assignees.some(a => a.id != null && String(a.id) === myGitId)
   })()
   const canProgressStage = state.user?.isAdmin || isAssignee
+
+  // 검증 대기 이슈 열기 → 권한 있는 사용자에게 검증 시작 팝업 표시
+  useEffect(() => {
+    if (loading) return
+    if (!issue) return
+    if (issue.stage !== 'verify_waiting') return
+    if (!canProgressStage) return
+    if (verifyPopupShownRef.current) return
+    verifyPopupShownRef.current = true
+    confirm({
+      title: tIssue('startVerificationPopupTitle'),
+      message: tIssue('startVerificationPopupMessage'),
+      confirmText: tIssue('startVerification'),
+      cancelText: tc('cancel'),
+      variant: 'info',
+    }).then(ok => {
+      if (ok) handleStageAction('start_verification')
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [issue, loading, canProgressStage])
 
   // 권한 없으면 채팅 모드 강제 해제 (코멘트만 허용)
   useEffect(() => {

@@ -416,6 +416,8 @@
     "reopenToWaiting": "대기로 (다시 열기)",
     "cancelToWaiting": "대기로 (취소)",
     "startVerification": "검증시작",
+    "startVerificationPopupTitle": "검증 시작",
+    "startVerificationPopupMessage": "이 이슈의 검증을 지금 시작하시겠습니까?",
     "verifyRequest": "검증 요청",
     "approveVerify": "검증 승인",
     "rejectVerify": "검증 반려 (대기로)",
