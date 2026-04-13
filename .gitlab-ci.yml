@@ -15,7 +15,9 @@ test:
     - deploy
   script:
     - cd $IVE_DIR/repo || cd $CI_PROJECT_DIR
-    - npm ci
+    - npm ci --ignore-scripts
+    - cd node_modules/better-sqlite3 && npx --yes prebuild-install || npx --yes node-gyp rebuild
+    - cd $CI_PROJECT_DIR
     - npm test
   only:
     - main
