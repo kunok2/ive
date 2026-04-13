@@ -56,6 +56,12 @@ export function utcISOToKSTDate(utcISO: string): string {
   return toKST(new Date(utcISO)).toISOString().slice(0, 10)
 }
 
+/** UTC ISO 문자열을 KST 날짜+시간(YYYY-MM-DD HH:mm)으로 변환 */
+export function utcISOToKSTDateTime(utcISO: string): string {
+  const iso = toKST(new Date(utcISO)).toISOString()
+  return iso.slice(0, 10) + ' ' + iso.slice(11, 16)
+}
+
 /**
  * UTC ISO 문자열을 KST 월(YYYY-MM)로 변환 — 연간 버킷 분류용
  */

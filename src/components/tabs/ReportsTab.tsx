@@ -7,7 +7,7 @@ import PullToRefresh from '@/components/ui/PullToRefresh'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 import Sparkline from '@/components/ui/Sparkline'
 import { DailyTrendChart, FlowCompareChart } from '@/components/reports/ReportCharts'
-import { getKSTTodayString, utcISOToKSTDate } from '@/lib/date-utils'
+import { getKSTTodayString, utcISOToKSTDateTime } from '@/lib/date-utils'
 import { diagnose, type ReportData, type DiagnosisResult, type I18nMessage } from '@/lib/report-diagnosis'
 
 // ─── 유틸 ───
@@ -1025,14 +1025,15 @@ export default function ReportsTab() {
                             <span className="truncate">{issue.projectName}</span>
                           </span>
                           {(() => {
-                            const kstDate = utcISOToKSTDate(issue.resolvedAt)
-                            const [, mm, dd] = kstDate.split('-')
+                            const kstDt = utcISOToKSTDateTime(issue.resolvedAt)
+                            const [date, time] = kstDt.split(' ')
+                            const [, mm, dd] = date.split('-')
                             return (
                               <span
                                 className="font-mono font-bold text-ive-text-muted shrink-0"
-                                title={tr('resolvedAtTooltip', { date: new Date(issue.resolvedAt).toLocaleString() })}
+                                title={tr('resolvedAtTooltip', { date: kstDt })}
                               >
-                                {parseInt(mm)}/{parseInt(dd)}
+                                {parseInt(mm)}/{parseInt(dd)} {time}
                               </span>
                             )
                           })()}

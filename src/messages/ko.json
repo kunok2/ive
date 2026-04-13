@@ -824,7 +824,7 @@
     "issueCount": "이슈 수",
     "projectCount": "프로젝트 수",
     "trendAnalysis": "추이 분석",
-    "resolvedIssues": "처리된 이슈 ({count}건)",
+    "resolvedIssues": "처리된 작업 ({count}건)",
     "allFilter": "전체",
     "successFilter": "성공",
     "failedFilter": "실패",
