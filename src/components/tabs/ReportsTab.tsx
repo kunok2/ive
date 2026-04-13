@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl'
 import PullToRefresh from '@/components/ui/PullToRefresh'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 import Sparkline from '@/components/ui/Sparkline'
-import { DailyTrendChart, FlowCompareChart } from '@/components/reports/ReportCharts'
+import { DailyTrendChart, FlowCompareChart, DailyReportTable } from '@/components/reports/ReportCharts'
 import { getKSTTodayString, utcISOToKSTDateTime } from '@/lib/date-utils'
 import { diagnose, type ReportData, type DiagnosisResult, type I18nMessage } from '@/lib/report-diagnosis'
 
@@ -716,7 +716,6 @@ export default function ReportsTab() {
                         <span className="text-ive-text font-bold">{tr('processedInPeriod', { count: a.tasks })}</span>
                         <span className="text-ive-text-dim">{tr('dailyAvgCapacity', { count: a.dailyCapacity })}</span>
                         {a.currentWaiting > 0 && <span className={`font-bold ${a.currentWaiting >= 6 ? 'text-ive-red' : a.currentWaiting >= 3 ? 'text-ive-amber' : 'text-ive-text-muted'}`}>{tr('waitingCompact', { count: a.currentWaiting })}</span>}
-                        {a.successRate > 0 && <span className={`font-bold ${a.successRate < 60 ? 'text-ive-red' : a.successRate < 80 ? 'text-ive-amber' : 'text-ive-green'}`}>{tr('successRateCompact', { rate: a.successRate })}</span>}
                         <span className="text-ive-text-muted ml-auto">${fmtCost(a.cost)}</span>
                       </div>
                       {a.annotation && (() => {
@@ -885,7 +884,7 @@ export default function ReportsTab() {
                             {u.avgVerifyMin > 0 && <span><span className="text-ive-text-dim font-bold">{tr('avgVerifyLabel2')}</span> {fmtDur(u.avgVerifyMin)}</span>}
                             {approvalRate != null && <span className={`font-bold ${approvalRate >= 80 ? 'text-ive-green' : approvalRate >= 50 ? 'text-ive-amber' : 'text-ive-red'}`}>{tr('approvalRatePct', { rate: approvalRate })}</span>}
                           </>) : (<>
-                            <span>{tr('successFailedInline', { success: u.success, failed: u.failed })}</span>
+                            <span className="font-bold text-ive-text">{tr('processedInPeriod', { count: u.tasks })}</span>
                             {u.avgDurationMin > 0 && <span>{tr('avgProcessInline', { duration: fmtDur(u.avgDurationMin) })}</span>}
                           </>)}
                         </div>
@@ -917,10 +916,9 @@ export default function ReportsTab() {
                               <div><div className="text-ive-text-dim">{tr('assignedIssuesHeader')}</div><div className="font-bold text-ive-text">{tr('countCases', { count: u.tasks })}</div></div>
                             </div>
                           </>) : (<>
-                            {/* 검증 데이터 없을 때 — 이슈 배정 상세 */}
-                            <div className="grid grid-cols-3 gap-1 mt-2 text-center text-xs">
-                              <div><div className="text-ive-text-dim">{tr('successHeader')}</div><div className="font-bold text-ive-green">{tr('countCases', { count: u.success })}</div></div>
-                              <div><div className="text-ive-text-dim">{tr('failedHeader')}</div><div className={`font-bold ${u.failed > 0 ? 'text-ive-red' : 'text-ive-text'}`}>{tr('countCases', { count: u.failed })}</div></div>
+                            {/* 검증 데이터 없을 때 — 작업/이슈 기반 */}
+                            <div className="grid grid-cols-2 gap-1 mt-2 text-center text-xs">
+                              <div><div className="text-ive-text-dim">{tr('tasks')}</div><div className="font-bold text-ive-text">{tr('countCases', { count: u.tasks })}</div></div>
                               <div><div className="text-ive-text-dim">{tr('issuesHeader')}</div><div className="font-bold text-ive-text">{tr('countCases', { count: u.issueCount })}</div></div>
                             </div>
                             {u.avgWaitMin > 0 && (
@@ -953,18 +951,40 @@ export default function ReportsTab() {
             </section>
           )}
 
-          {/* ⑩ 추이 차트 (접이식) */}
+          {/* ⑩ 일별 현황 (주간: 보고서 형식 테이블 + 접이식 차트 / 그 외: 접이식 차트) */}
           {data.dailyTrend.length > 0 && (
             <section>
-              <button onClick={() => setShowTrend(!showTrend)} className="w-full flex items-center gap-2 text-xs font-bold text-ive-text-dim uppercase tracking-wider py-2">
-                <i className={`fa-solid fa-chevron-${showTrend ? 'down' : 'right'} text-xs`} />
-                {tr('trendChartToggle')}
-              </button>
-              {showTrend && (
-                <div className="space-y-2">
-                  <FlowCompareChart data={computeFlowDays()} prevData={computePrevFlowDays()} type={type} />
-                  <DailyTrendChart data={data.dailyTrend} prevData={data.prevDailyTrend} type={type} />
-                </div>
+              {type === 'weekly' ? (
+                <>
+                  {/* 주간 — 보고서 형식 일별 현황표 (상시 노출) */}
+                  <div className="text-xs font-bold text-ive-text-dim mb-2 uppercase tracking-wider">{tr('dailyStatusTitle')}</div>
+                  <DailyReportTable data={data.dailyTrend} type={type} today={today} />
+                  {/* 추이 차트 (접이식 보조) */}
+                  <button onClick={() => setShowTrend(!showTrend)} className="w-full flex items-center gap-2 text-xs font-bold text-ive-text-dim uppercase tracking-wider py-2 mt-1">
+                    <i className={`fa-solid fa-chevron-${showTrend ? 'down' : 'right'} text-xs`} />
+                    {tr('trendChartToggle')}
+                  </button>
+                  {showTrend && (
+                    <div className="space-y-2">
+                      <FlowCompareChart data={computeFlowDays()} prevData={computePrevFlowDays()} type={type} />
+                      <DailyTrendChart data={data.dailyTrend} prevData={data.prevDailyTrend} type={type} />
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  {/* 월간/연간 — 기존 접이식 차트 */}
+                  <button onClick={() => setShowTrend(!showTrend)} className="w-full flex items-center gap-2 text-xs font-bold text-ive-text-dim uppercase tracking-wider py-2">
+                    <i className={`fa-solid fa-chevron-${showTrend ? 'down' : 'right'} text-xs`} />
+                    {tr('trendChartToggle')}
+                  </button>
+                  {showTrend && (
+                    <div className="space-y-2">
+                      <FlowCompareChart data={computeFlowDays()} prevData={computePrevFlowDays()} type={type} />
+                      <DailyTrendChart data={data.dailyTrend} prevData={data.prevDailyTrend} type={type} />
+                    </div>
+                  )}
+                </>
               )}
             </section>
           )}
