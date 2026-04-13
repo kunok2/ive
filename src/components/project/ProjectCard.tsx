@@ -227,7 +227,7 @@ export default function ProjectCard({ project }: Props) {
 
   return (
     <div
-      className={`rounded-lg border overflow-hidden transition-colors duration-200 flex flex-col relative ${expandedPanel ? 'border-ive-cyan/30 h-[calc(100vh-160px)]' : 'border-ive-border-subtle hover:border-ive-green/30'}`}
+      className={`bg-ive-bg-card rounded-lg border overflow-hidden transition-colors duration-200 flex flex-col ${expandedPanel ? 'border-ive-cyan/30 h-[calc(100vh-160px)]' : 'border-ive-border-subtle hover:border-ive-green/30'}`}
       style={{ background: `linear-gradient(135deg, ${project.color || '#4ade80'}08 0%, transparent 40%), var(--color-ive-bg-card, #121e14)` }}
     >
       <Link href={`/projects/${project.id}`} className="block p-4 active:bg-white/[0.03] transition-colors group">
