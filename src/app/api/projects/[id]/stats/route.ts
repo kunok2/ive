@@ -76,18 +76,18 @@ export async function GET(
   `).get(id, yesterdayStartISO, todayStartISO) as any
   const yesterdayCompleted = yesterdayExec?.count ?? 0
 
-  // 누적 토큰
+  // 금일 토큰
   const tokensResult = db.prepare(`
     SELECT COALESCE(SUM(input_tokens + output_tokens), 0) as total FROM task_executions
-    WHERE project_id = ?
-  `).get(id) as any
+    WHERE project_id = ? AND started_at >= ?
+  `).get(id, todayStartISO) as any
   const totalTokens = tokensResult?.total ?? 0
 
-  // 누적 비용
+  // 금일 비용
   const costResult = db.prepare(`
     SELECT COALESCE(SUM(cost_usd), 0) as total FROM task_executions
-    WHERE project_id = ?
-  `).get(id) as any
+    WHERE project_id = ? AND started_at >= ?
+  `).get(id, todayStartISO) as any
   const totalCost = costResult?.total ?? 0
 
   // 시간당 평균 작업 수
