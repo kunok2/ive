@@ -1,5 +1,5 @@
 # ---- Build stage ----
-FROM node:22-slim AS builder
+FROM node:24-slim AS builder
 
 # node-pty, better-sqlite3 네이티브 빌드에 필요한 도구
 RUN apt-get update && apt-get install -y \
@@ -15,7 +15,7 @@ COPY . .
 RUN npm run build
 
 # ---- Runtime stage ----
-FROM node:22-slim
+FROM node:24-slim
 
 RUN apt-get update && apt-get install -y \
     python3 make g++ git \
