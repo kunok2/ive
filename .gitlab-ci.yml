@@ -15,7 +15,7 @@ test:
     - deploy
   script:
     - cd $IVE_DIR/repo || cd $CI_PROJECT_DIR
-    - npm ci --ignore-scripts
+    - npm ci
     - npm test
   only:
     - main
