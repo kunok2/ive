@@ -13,7 +13,9 @@
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f",
-    "deploy": "npm run docker:build && npm run docker:push"
+    "deploy": "npm run docker:build && npm run docker:push",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.11.0",
@@ -47,6 +49,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.4"
   }
 }

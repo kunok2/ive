@@ -1,4 +1,5 @@
 stages:
+  - test
   - deploy
   - publish
 
@@ -6,6 +7,18 @@ variables:
   IMAGE_NAME: spring-ive
   HUB_IMAGE: dazzlepf/spring-ive
   IVE_DIR: /home/ubuntu/ive
+
+# 테스트 (main push 시 배포 전 자동 실행)
+test:
+  stage: test
+  tags:
+    - deploy
+  script:
+    - cd $IVE_DIR/repo || cd $CI_PROJECT_DIR
+    - npm ci --ignore-scripts
+    - npm test
+  only:
+    - main
 
 # 로컬 빌드 + 컨테이너 재시작 (main push 시 자동)
 deploy:

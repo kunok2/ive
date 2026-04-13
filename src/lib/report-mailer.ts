@@ -134,8 +134,11 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
   const costPerTask = total > 0 ? totalCost / total : 0
 
   // 사람 총 작업시간 (user 타입 exec 합산)
-  const totalHumanMin = executions.filter(e => e.assigneeType === 'user' && e.endedAt)
-    .reduce((s, e) => s + Math.max(0, (new Date(e.endedAt!).getTime() - new Date(e.startedAt).getTime()) / 60000), 0)
+  const totalHumanMin = executions.filter(e => e.assigneeType === 'user')
+    .reduce((s, e) => {
+      const effEnd = e.endedAt || e.startedAt
+      return s + Math.max(0, (new Date(effEnd).getTime() - new Date(e.startedAt).getTime()) / 60000)
+    }, 0)
 
   // ─── 유입/처리 흐름 계산 ───
   // 유입: 기간 내 최초 시작된 고유 이슈 (projectId + issueIid 기준)
@@ -182,8 +185,9 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
 
   // 처리 시간: startedAt → endedAt
   for (const e of executions) {
-    if (e.endedAt && e.assigneeType !== 'user') {
-      const p = (new Date(e.endedAt).getTime() - new Date(e.startedAt).getTime()) / 60000
+    if (e.assigneeType !== 'user') {
+      const effEnd = e.endedAt || e.startedAt
+      const p = (new Date(effEnd).getTime() - new Date(e.startedAt).getTime()) / 60000
       if (p >= 0 && p < 1440) procTimes.push(p) // 최대 24시간
     }
   }
@@ -220,8 +224,9 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
   // 전 기간 처리 시간
   const prevProcTimes: number[] = []
   for (const e of prev) {
-    if (e.endedAt && e.assigneeType !== 'user') {
-      const p = (new Date(e.endedAt).getTime() - new Date(e.startedAt).getTime()) / 60000
+    if (e.assigneeType !== 'user') {
+      const effEnd = e.endedAt || e.startedAt
+      const p = (new Date(effEnd).getTime() - new Date(e.startedAt).getTime()) / 60000
       if (p >= 0 && p < 1440) prevProcTimes.push(p)
     }
   }
@@ -267,10 +272,9 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
     if (e.status === 'failed') a.failed++
     const bd = resolveExecutionCostBreakdown(e, humanSalary)
     a.cost += bd.ai + bd.human
-    if (e.endedAt) {
-      const dur = (new Date(e.endedAt).getTime() - new Date(e.startedAt).getTime()) / 60000
-      if (dur >= 0) { a._durAcc += dur; a._durCnt++ }
-    }
+    const effEnd = e.endedAt || e.startedAt
+    const dur = (new Date(effEnd).getTime() - new Date(e.startedAt).getTime()) / 60000
+    if (dur >= 0) { a._durAcc += dur; a._durCnt++ }
     byAgent.set(e.agentId, a)
   }
   for (const a of byAgent.values()) {

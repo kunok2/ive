@@ -106,9 +106,9 @@ export async function GET(req: NextRequest) {
   // 고유 이슈 수 (재시도는 1건으로 집계) — "유입" 계산용
   const uniqueIssueKeys = new Set(execs.map(e => `${e.projectId}:${e.issueIid}`))
   const uniqueInflow = uniqueIssueKeys.size
-  // 완료된 고유 이슈 수 — "처리" 계산용 (검증 완료 또는 검증 없이 success)
+  // 완료된 고유 이슈 수 — "처리" 계산용 (검증 완료 또는 success/failed)
   const verifiedIssueKeys = new Set(
-    execs.filter(e => e.verifiedAt || e.rejectedAt || (e.status === 'success' && e.endedAt)).map(e => `${e.projectId}:${e.issueIid}`)
+    execs.filter(e => e.verifiedAt || e.rejectedAt || e.status === 'success' || e.status === 'failed').map(e => `${e.projectId}:${e.issueIid}`)
   )
   const verifiedCount = verifiedIssueKeys.size
   const successCount = execs.filter(e => e.status === 'success').length
@@ -133,8 +133,9 @@ export async function GET(req: NextRequest) {
   const totalCostHuman = costBreakdown.human
   // 사람 비용 계산 메타 (왜 이 금액이 나왔는지 설명용)
   const humanMinutes = execs.reduce((s, e) => {
-    if (e.assigneeType !== 'user' || !e.startedAt || !e.endedAt) return s
-    const ms = new Date(e.endedAt).getTime() - new Date(e.startedAt).getTime()
+    if (e.assigneeType !== 'user' || !e.startedAt) return s
+    const effEnd = e.endedAt || e.startedAt
+    const ms = new Date(effEnd).getTime() - new Date(e.startedAt).getTime()
     return ms > 0 ? s + ms / 60000 : s
   }, 0)
   const successRate = totalTasks > 0 ? (successCount / (successCount + failedCount || 1)) * 100 : 0
@@ -201,7 +202,7 @@ export async function GET(req: NextRequest) {
   }
   const prevVerifyDate = new Map<string, string>()
   for (const e of prevExecs) {
-    const verifyEnd = e.verifiedAt || e.rejectedAt || (e.status === 'success' && e.endedAt ? e.endedAt : null)
+    const verifyEnd = e.verifiedAt || e.rejectedAt || ((e.status === 'success' || e.status === 'failed') ? (e.endedAt || e.startedAt) : null)
     if (!verifyEnd) continue
     const k = `${e.projectId}:${e.issueIid}`
     const pv = prevVerifyDate.get(k)
@@ -215,21 +216,22 @@ export async function GET(req: NextRequest) {
     d.cost += resolveExecutionCost(e, humanSalary)
     const ik = `${e.projectId}:${e.issueIid}`
     if (prevFirstStart.get(ik) === e.startedAt) d.inflowIssues.add(ik)
-    if ((e.status === 'success' || e.status === 'failed') && e.endedAt) {
-      const proc = durationMin(e.startedAt, e.endedAt)
+    if (e.status === 'success' || e.status === 'failed') {
+      const effEnd = e.endedAt || e.startedAt
+      const proc = durationMin(e.startedAt, effEnd)
       if (proc > 0) d.procTimes.push(proc)
       const ws = e.issueCreatedAt
       if (ws) {
         let wait = durationMin(ws, e.startedAt)
-        if (e.endedAt && e.verifyStartedAt) {
-          const vw = durationMin(e.endedAt, e.verifyStartedAt)
+        if (effEnd && e.verifyStartedAt) {
+          const vw = durationMin(effEnd, e.verifyStartedAt)
           if (vw >= 0) wait += vw
         }
         if (wait >= 0) d.waitTimes.push(wait)
       }
       const verifyEnd = e.verifiedAt || e.rejectedAt
       if (verifyEnd) {
-        const vt = e.verifyStartedAt ? durationMin(e.verifyStartedAt, verifyEnd) : durationMin(e.endedAt, verifyEnd)
+        const vt = e.verifyStartedAt ? durationMin(e.verifyStartedAt, verifyEnd) : durationMin(effEnd, verifyEnd)
         if (vt >= 0) d.verifyTimes.push(vt)
       }
     }
@@ -300,7 +302,7 @@ export async function GET(req: NextRequest) {
     })
 
     const pUniqueIssues = new Set(pExecs.map(e => `${e.projectId}:${e.issueIid}`)).size
-    const pVerified = new Set(pExecs.filter(e => e.verifiedAt || e.rejectedAt || (e.status === 'success' && e.endedAt)).map(e => `${e.projectId}:${e.issueIid}`)).size
+    const pVerified = new Set(pExecs.filter(e => e.verifiedAt || e.rejectedAt || e.status === 'success' || e.status === 'failed').map(e => `${e.projectId}:${e.issueIid}`)).size
 
     return {
       projectId: pid, projectName: pExecs[0].projectName, projectColor: pExecs[0].projectColor, projectAvatarUrl: pExecs[0].projectAvatarUrl || '', projectProvider: pExecs[0].projectProvider || 'gitlab',
@@ -359,20 +361,24 @@ export async function GET(req: NextRequest) {
   const verifierLookup = new Map<string, { tasks: number; avgVerifyMin: number; avgWaitMin: number; verified: number; rejected: number; waiting: number }>()
   for (const [vName, vExecs] of verifierMap.entries()) {
     const verifyTimes = vExecs
-      .filter(e => (e.verifiedAt || e.rejectedAt) && e.endedAt)
+      .filter(e => e.verifiedAt || e.rejectedAt)
       .map(e => {
-        const start = e.verifyStartedAt || e.endedAt!
+        const effEnd = e.endedAt || e.startedAt
+        const start = e.verifyStartedAt || effEnd
         const end = (e.verifiedAt || e.rejectedAt)!
         return (new Date(end).getTime() - new Date(start).getTime()) / 60000
       })
       .filter(t => t >= 0)
     const waitTimes = vExecs
-      .filter(e => e.verifyStartedAt && e.endedAt)
-      .map(e => (new Date(e.verifyStartedAt!).getTime() - new Date(e.endedAt!).getTime()) / 60000)
+      .filter(e => e.verifyStartedAt)
+      .map(e => {
+        const effEnd = e.endedAt || e.startedAt
+        return (new Date(e.verifyStartedAt!).getTime() - new Date(effEnd).getTime()) / 60000
+      })
       .filter(t => t >= 0 && t < 60 * 24 * 7)
     const verified = vExecs.filter(e => e.verifiedAt).length
     const rejected = vExecs.filter(e => e.rejectedAt && !e.verifiedAt).length
-    const waiting = vExecs.filter(e => !e.verifiedAt && !e.rejectedAt && e.endedAt).length
+    const waiting = vExecs.filter(e => !e.verifiedAt && !e.rejectedAt && (e.status === 'success' || e.status === 'failed')).length
     verifierLookup.set(vName, {
       tasks: vExecs.length,
       avgVerifyMin: verifyTimes.length > 0 ? Math.round(verifyTimes.reduce((s, t) => s + t, 0) / verifyTimes.length * 10) / 10 : 0,
@@ -472,7 +478,7 @@ export async function GET(req: NextRequest) {
   // 검증 완료일은 verifiedAt 또는 rejectedAt이 있는 exec 중 가장 이른 날짜로 귀속
   const verifyDateByIssue = new Map<string, string>()
   for (const e of execs) {
-    const verifyEnd = e.verifiedAt || e.rejectedAt || (e.status === 'success' && e.endedAt ? e.endedAt : null)
+    const verifyEnd = e.verifiedAt || e.rejectedAt || ((e.status === 'success' || e.status === 'failed') ? (e.endedAt || e.startedAt) : null)
     if (!verifyEnd) continue
     const k = `${e.projectId}:${e.issueIid}`
     const prev = verifyDateByIssue.get(k)
@@ -491,21 +497,22 @@ export async function GET(req: NextRequest) {
     if (firstStartByIssue.get(ik) === e.startedAt) {
       d.inflowIssues.add(ik)
     }
-    if ((e.status === 'success' || e.status === 'failed') && e.endedAt) {
-      const proc = durationMin(e.startedAt, e.endedAt)
+    if (e.status === 'success' || e.status === 'failed') {
+      const effEnd = e.endedAt || e.startedAt
+      const proc = durationMin(e.startedAt, effEnd)
       if (proc > 0) d.procTimes.push(proc)
       const ws = e.issueCreatedAt
       if (ws) {
         let wait = durationMin(ws, e.startedAt)
-        if (e.endedAt && e.verifyStartedAt) {
-          const vw = durationMin(e.endedAt, e.verifyStartedAt)
+        if (effEnd && e.verifyStartedAt) {
+          const vw = durationMin(effEnd, e.verifyStartedAt)
           if (vw >= 0) wait += vw
         }
         if (wait >= 0) d.waitTimes.push(wait)
       }
       const verifyEnd = e.verifiedAt || e.rejectedAt
       if (verifyEnd) {
-        const vt = e.verifyStartedAt ? durationMin(e.verifyStartedAt, verifyEnd) : durationMin(e.endedAt, verifyEnd)
+        const vt = e.verifyStartedAt ? durationMin(e.verifyStartedAt, verifyEnd) : durationMin(effEnd, verifyEnd)
         if (vt >= 0) d.verifyTimes.push(vt)
       }
     }
@@ -696,7 +703,7 @@ export async function GET(req: NextRequest) {
     : undefined
 
   // 이슈 생애주기 집계
-  const finishedExecs = execs.filter(e => (e.status === 'success' || e.status === 'failed') && e.endedAt)
+  const finishedExecs = execs.filter(e => e.status === 'success' || e.status === 'failed')
 
   // 대기시간: 개발대기(issue_created_at → started_at) + 검증대기(ended_at → verify_started_at)
   const waitTimes = finishedExecs
@@ -704,15 +711,17 @@ export async function GET(req: NextRequest) {
     .map(e => {
       let wait = durationMin(e.issueCreatedAt!, e.startedAt)
       // 검증대기 시간 추가 (verify_started_at가 있으면 ended_at → verify_started_at)
-      if (e.endedAt && e.verifyStartedAt) {
-        const verifyWait = durationMin(e.endedAt, e.verifyStartedAt)
+      const effEnd = e.endedAt || e.startedAt
+      if (effEnd && e.verifyStartedAt) {
+        const verifyWait = durationMin(effEnd, e.verifyStartedAt)
         if (verifyWait >= 0) wait += verifyWait
       }
       return wait
     })
     .filter(v => v >= 0)
-  // 작업시간: started_at → ended_at
+  // 작업시간: started_at → ended_at (ended_at 없으면 0)
   const procTimes = finishedExecs
+    .filter(e => e.endedAt)
     .map(e => durationMin(e.startedAt, e.endedAt!))
     .filter(v => v > 0)
   // 검증시간: verify_started_at → verified_at/rejected_at (승인/반려 모두 포함)
@@ -720,14 +729,15 @@ export async function GET(req: NextRequest) {
     .filter(e => e.verifiedAt || e.rejectedAt)
     .map(e => {
       const verifyEnd = (e.verifiedAt || e.rejectedAt)!
-      return e.verifyStartedAt ? durationMin(e.verifyStartedAt, verifyEnd) : durationMin(e.endedAt!, verifyEnd)
+      const effEnd = e.endedAt || e.startedAt
+      return e.verifyStartedAt ? durationMin(e.verifyStartedAt, verifyEnd) : durationMin(effEnd, verifyEnd)
     })
     .filter(v => v >= 0)
   // 총시간: execution별 자체 생애주기 (대기 + 개발 + 검증대기 + 검증)
   const totalTimes = finishedExecs
     .filter(e => e.issueCreatedAt)
     .map(e => {
-      const endPoint = e.verifiedAt || e.rejectedAt || e.endedAt!
+      const endPoint = e.verifiedAt || e.rejectedAt || e.endedAt || e.startedAt
       return durationMin(e.issueCreatedAt!, endPoint)
     })
     .filter(v => v >= 0)
@@ -764,32 +774,35 @@ export async function GET(req: NextRequest) {
   }
 
   // 이전 기간 생애주기 집계
-  const prevFinishedExecs = prevExecs.filter(e => (e.status === 'success' || e.status === 'failed') && e.endedAt)
+  const prevFinishedExecs = prevExecs.filter(e => e.status === 'success' || e.status === 'failed')
   const prevWaitTimes = prevFinishedExecs
     .filter(e => e.issueCreatedAt)
     .map(e => {
       let wait = durationMin(e.issueCreatedAt!, e.startedAt)
-      if (e.endedAt && e.verifyStartedAt) {
-        const vw = durationMin(e.endedAt, e.verifyStartedAt)
+      const effEnd = e.endedAt || e.startedAt
+      if (effEnd && e.verifyStartedAt) {
+        const vw = durationMin(effEnd, e.verifyStartedAt)
         if (vw >= 0) wait += vw
       }
       return wait
     })
     .filter(v => v >= 0)
   const prevProcTimes = prevFinishedExecs
+    .filter(e => e.endedAt)
     .map(e => durationMin(e.startedAt, e.endedAt!))
     .filter(v => v > 0)
   const prevVerifyTimes = prevFinishedExecs
     .filter(e => e.verifiedAt || e.rejectedAt)
     .map(e => {
       const verifyEnd = (e.verifiedAt || e.rejectedAt)!
-      return e.verifyStartedAt ? durationMin(e.verifyStartedAt, verifyEnd) : durationMin(e.endedAt!, verifyEnd)
+      const effEnd = e.endedAt || e.startedAt
+      return e.verifyStartedAt ? durationMin(e.verifyStartedAt, verifyEnd) : durationMin(effEnd, verifyEnd)
     })
     .filter(v => v >= 0)
   const prevTotalTimes = prevFinishedExecs
     .filter(e => e.issueCreatedAt)
     .map(e => {
-      const endPoint = e.verifiedAt || e.rejectedAt || e.endedAt!
+      const endPoint = e.verifiedAt || e.rejectedAt || e.endedAt || e.startedAt
       return durationMin(e.issueCreatedAt!, endPoint)
     })
     .filter(v => v >= 0)

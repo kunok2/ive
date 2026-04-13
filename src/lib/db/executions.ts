@@ -24,13 +24,15 @@ function mapExecution(r: any): TaskExecution {
 
 export function createExecution(ex: TaskExecution) {
   getDb().prepare(
-    'INSERT INTO task_executions (id, project_id, agent_id, issue_iid, issue_title, status, started_at, log_path, issue_created_at, assignee_type, user_id, user_name, user_avatar) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-  ).run(ex.id, ex.projectId, ex.agentId || null, ex.issueIid, ex.issueTitle ?? null, ex.status, ex.startedAt, ex.logPath, ex.issueCreatedAt ?? null, ex.assigneeType ?? 'agent', ex.userId ?? null, ex.userName ?? null, ex.userAvatar ?? null)
+    'INSERT INTO task_executions (id, project_id, agent_id, issue_iid, issue_title, status, started_at, ended_at, log_path, issue_created_at, assignee_type, user_id, user_name, user_avatar) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(ex.id, ex.projectId, ex.agentId || null, ex.issueIid, ex.issueTitle ?? null, ex.status, ex.startedAt, ex.endedAt ?? null, ex.logPath, ex.issueCreatedAt ?? null, ex.assigneeType ?? 'agent', ex.userId ?? null, ex.userName ?? null, ex.userAvatar ?? null)
 }
 
 export function updateExecutionStatus(id: string, status: TaskStatus, endedAt?: string) {
-  if (endedAt) {
-    getDb().prepare('UPDATE task_executions SET status = ?, ended_at = ? WHERE id = ?').run(status, endedAt, id)
+  const isTerminal = status === 'success' || status === 'failed'
+  const effectiveEndedAt = endedAt || (isTerminal ? new Date().toISOString() : null)
+  if (effectiveEndedAt) {
+    getDb().prepare('UPDATE task_executions SET status = ?, ended_at = ? WHERE id = ?').run(status, effectiveEndedAt, id)
   } else {
     getDb().prepare('UPDATE task_executions SET status = ? WHERE id = ?').run(status, id)
   }
