@@ -1174,7 +1174,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
       {/* 스크롤 가능한 리스트 영역 */}
       {selectedProjectId && (
         <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar" data-scroll-container="issues-list">
-          <div className="pb-20 pr-1.5">
+          <div className="pb-20">
             {(isHistoryTab ? closedLoading : loading) && (isHistoryTab ? closedIssues : issues).length === 0 ? (
               <div className="text-center py-20 text-ive-text-muted">{tIssue('loadingIssues')}</div>
             ) : filtered.length === 0 ? (

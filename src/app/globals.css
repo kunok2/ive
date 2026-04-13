@@ -120,6 +120,15 @@ body::before {
   animation: slide-up 0.25s ease-out;
 }
 
+/* iOS Safari: backdrop-filter가 스태킹 컨텍스트를 생성하여 오버레이 스크롤바가 카드 아래로 숨는 문제 수정 */
+.overflow-y-auto .bg-ive-bg-card,
+.overflow-y-auto .bg-ive-bg,
+.overflow-y-auto .bg-ive-bg-deep,
+.overflow-y-auto .bg-ive-bg-input {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
