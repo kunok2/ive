@@ -71,8 +71,8 @@ export default function AgentsTab({ onAdd }: { onAdd?: () => void }) {
     <PullToRefresh onRefresh={onRefresh} className="w-full flex-1 flex flex-col max-w-lg mx-auto px-4 overflow-hidden">
       <div className="pt-4 shrink-0">
         {state.loading ? (
-          <div className="text-center py-20 text-ive-text-muted text-base">
-            <i className="fa-solid fa-circle-notch fa-spin text-2xl text-ive-green mb-3 block" />
+          <div className="flex flex-col items-center justify-center py-20 gap-3 text-ive-text-muted text-base">
+            <i className="fa-solid fa-circle-notch fa-spin text-2xl text-ive-green" />
             {t('loadingAgents')}
           </div>
         ) : empty ? (

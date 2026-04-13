@@ -15,8 +15,8 @@ export default function ProjectsTab({ onAdd }: { onAdd?: () => void }) {
       <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="pb-20">
           {state.loading ? (
-            <div className="text-center py-20 text-ive-text-muted text-base">
-              <i className="fa-solid fa-circle-notch fa-spin text-2xl text-ive-green mb-3 block" />
+            <div className="flex flex-col items-center justify-center py-20 gap-3 text-ive-text-muted text-base">
+              <i className="fa-solid fa-circle-notch fa-spin text-2xl text-ive-green" />
               {t('loadingProjects')}
             </div>
           ) : state.projects.length === 0 ? (

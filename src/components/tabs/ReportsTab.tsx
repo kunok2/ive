@@ -236,7 +236,7 @@ export default function ReportsTab() {
 
       <div className="flex-1 min-h-0 overflow-y-auto">
       <div className="pb-20">
-      {loading && <div className="flex flex-col items-center justify-center py-10 gap-2 text-ive-text-dim"><i className="fa-solid fa-circle-notch fa-spin" />{tr('loadingCompact')}</div>}
+      {loading && <div className="flex flex-col items-center justify-center py-10 gap-3 text-ive-text-dim"><i className="fa-solid fa-circle-notch fa-spin text-2xl" />{tr('loadingCompact')}</div>}
 
       {data && !loading && d && (
         <main className="space-y-3">
