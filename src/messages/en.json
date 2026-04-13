@@ -416,6 +416,8 @@
     "reopenToWaiting": "Reopen (to Waiting)",
     "cancelToWaiting": "Cancel (to Waiting)",
     "startVerification": "Start Verification",
+    "startVerificationPopupTitle": "Start Verification",
+    "startVerificationPopupMessage": "Would you like to start verification for this issue now?",
     "verifyRequest": "Request Verification",
     "approveVerify": "Approve",
     "rejectVerify": "Reject (to Waiting)",
