@@ -2,6 +2,7 @@ import { ReportSchedule, ReportSendLog, ReportType } from '@/types'
 import { getGlobalExecutionsInRange, ReportExecution, createReportSendLog, hasAlreadySent, getDailyWaitingTrend } from './db'
 import { createTransporter, getFromAddress } from './mail'
 import { getKSTTodayString } from './date-utils'
+import { getHumanMonthlySalary, resolveExecutionCostBreakdown } from './token-pricing'
 
 const REPORT_TYPE_LABELS: Record<ReportType, string> = {
   weekly: '주간',
@@ -95,84 +96,207 @@ export function calculatePreviousPeriod(reportType: ReportType, currentStart: st
 function pad(n: number): string { return n.toString().padStart(2, '0') }
 function fmt(d: Date): string { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` }
 
+/** 소요시간 포매팅 */
+function fmtDuration(min: number): string {
+  if (min < 1) return '1분 미만'
+  if (min < 60) return `${Math.round(min)}분`
+  const h = Math.floor(min / 60), m = Math.round(min % 60)
+  return m > 0 ? `${h}시간 ${m}분` : `${h}시간`
+}
+
 /** 보고서 HTML 생성 */
 export function generateReportHtml(reportType: ReportType, periodStart: string, periodEnd: string, executions: ReportExecution[], prevExecutions?: ReportExecution[]): string {
   const label = REPORT_TYPE_LABELS[reportType]
   const prevLabel = PREV_PERIOD_LABELS[reportType]
   const periodEndDisplay = new Date(new Date(periodEnd).getTime() - 86400000).toISOString().slice(0, 10)
+  const humanSalary = getHumanMonthlySalary()
 
-  // 통계 집계
+  // 기간 일수 계산
+  const periodDays = Math.max(1, Math.round(
+    (new Date(periodEnd).getTime() - new Date(periodStart).getTime()) / 86400000
+  ))
+
+  // ─── 기본 통계 집계 ───
   const total = executions.length
   const success = executions.filter(e => e.status === 'success').length
   const failed = executions.filter(e => e.status === 'failed').length
   const running = executions.filter(e => e.status === 'running' || e.status === 'assigned').length
   const totalTokens = executions.reduce((s, e) => s + e.inputTokens + e.outputTokens, 0)
-  const totalCost = executions.reduce((s, e) => s + e.costUsd, 0)
 
-  // 전 기간 통계 집계
+  // ─── AI/사람 비용 분리 ───
+  let totalCostAi = 0, totalCostHuman = 0
+  for (const e of executions) {
+    const bd = resolveExecutionCostBreakdown(e, humanSalary)
+    totalCostAi += bd.ai
+    totalCostHuman += bd.human
+  }
+  const totalCost = totalCostAi + totalCostHuman
+  const costPerTask = total > 0 ? totalCost / total : 0
+
+  // 사람 총 작업시간 (user 타입 exec 합산)
+  const totalHumanMin = executions.filter(e => e.assigneeType === 'user' && e.endedAt)
+    .reduce((s, e) => s + Math.max(0, (new Date(e.endedAt!).getTime() - new Date(e.startedAt).getTime()) / 60000), 0)
+
+  // ─── 유입/처리 흐름 계산 ───
+  // 유입: 기간 내 최초 시작된 고유 이슈 (projectId + issueIid 기준)
+  const seenIssues = new Set<string>()
+  const uniqueInflow = executions.filter(e => {
+    const key = `${e.projectId}:${e.issueIid}`
+    if (seenIssues.has(key)) return false
+    seenIssues.add(key)
+    return true
+  }).length
+  // 처리: verified된 건 (verifiedAt 또는 rejectedAt 있는 건)
+  const verifiedCount = executions.filter(e => e.verifiedAt || e.rejectedAt).length
+  const dailyInflow = uniqueInflow / periodDays
+  const dailyCapacity = total / periodDays
+
+  // 대기 현황 (waitingTrend 마지막 값)
+  const waitingTrendData = getDailyWaitingTrend(periodStart, periodEnd)
+  const latestWaitingDay = waitingTrendData.daily.length > 0
+    ? waitingTrendData.daily[waitingTrendData.daily.length - 1]
+    : null
+  const currentWaiting = latestWaitingDay?.total ?? 0
+
+  // ─── 소요 시간 파이프라인 ───
+  // 대기 시간: issueCreatedAt → startedAt (첫 번째 시도만)
+  const waitTimes: number[] = []
+  const procTimes: number[] = []
+  const verifyTimes: number[] = []
+
+  // 이슈별 첫 번째 실행만 대기시간 계산
+  const firstExecByIssue = new Map<string, ReportExecution>()
+  for (const e of executions) {
+    const key = `${e.projectId}:${e.issueIid}`
+    const existing = firstExecByIssue.get(key)
+    if (!existing || e.startedAt < existing.startedAt) {
+      firstExecByIssue.set(key, e)
+    }
+  }
+  for (const e of firstExecByIssue.values()) {
+    if (e.issueCreatedAt) {
+      const w = (new Date(e.startedAt).getTime() - new Date(e.issueCreatedAt).getTime()) / 60000
+      if (w >= 0 && w < 43200) waitTimes.push(w) // 최대 30일
+    }
+  }
+
+  // 처리 시간: startedAt → endedAt
+  for (const e of executions) {
+    if (e.endedAt && e.assigneeType !== 'user') {
+      const p = (new Date(e.endedAt).getTime() - new Date(e.startedAt).getTime()) / 60000
+      if (p >= 0 && p < 1440) procTimes.push(p) // 최대 24시간
+    }
+  }
+
+  // 검증 시간: verifyStartedAt → verifiedAt or rejectedAt
+  for (const e of executions) {
+    const finishedAt = e.verifiedAt || e.rejectedAt
+    if (e.verifyStartedAt && finishedAt) {
+      const v = (new Date(finishedAt).getTime() - new Date(e.verifyStartedAt).getTime()) / 60000
+      if (v >= 0 && v < 10080) verifyTimes.push(v) // 최대 7일
+    }
+  }
+
+  const avg = (arr: number[]) => arr.length > 0 ? arr.reduce((s, v) => s + v, 0) / arr.length : 0
+  const waitAvg = avg(waitTimes)
+  const procAvg = avg(procTimes)
+  const verifyAvg = avg(verifyTimes)
+  const totalAvg = waitAvg + procAvg + verifyAvg
+
+  // ─── 전 기간 통계 집계 ───
   const prev = prevExecutions || []
   const prevTotal = prev.length
   const prevSuccess = prev.filter(e => e.status === 'success').length
   const prevFailed = prev.filter(e => e.status === 'failed').length
   const prevTotalTokens = prev.reduce((s, e) => s + e.inputTokens + e.outputTokens, 0)
-  const prevTotalCost = prev.reduce((s, e) => s + e.costUsd, 0)
+  let prevTotalCost = 0
+  for (const e of prev) {
+    const bd = resolveExecutionCostBreakdown(e, humanSalary)
+    prevTotalCost += bd.ai + bd.human
+  }
+  const prevCostPerTask = prevTotal > 0 ? prevTotalCost / prevTotal : 0
   const hasPrev = prevExecutions !== undefined
 
-  // 프로젝트별 집계
-  const byProject = new Map<string, { name: string; color: string; total: number; success: number; failed: number; cost: number; tokens: number }>()
+  // 전 기간 처리 시간
+  const prevProcTimes: number[] = []
+  for (const e of prev) {
+    if (e.endedAt && e.assigneeType !== 'user') {
+      const p = (new Date(e.endedAt).getTime() - new Date(e.startedAt).getTime()) / 60000
+      if (p >= 0 && p < 1440) prevProcTimes.push(p)
+    }
+  }
+  const prevProcAvg = avg(prevProcTimes)
+
+  // ─── 프로젝트별 집계 ───
+  const byProject = new Map<string, { name: string; color: string; total: number; success: number; failed: number; cost: number; tokens: number; uniqueIssues: number }>()
   for (const e of executions) {
-    const p = byProject.get(e.projectId) || { name: e.projectName, color: e.projectColor, total: 0, success: 0, failed: 0, cost: 0, tokens: 0 }
+    const p = byProject.get(e.projectId) || { name: e.projectName, color: e.projectColor, total: 0, success: 0, failed: 0, cost: 0, tokens: 0, uniqueIssues: 0 }
     p.total++
     if (e.status === 'success') p.success++
     if (e.status === 'failed') p.failed++
-    p.cost += e.costUsd
+    const bd = resolveExecutionCostBreakdown(e, humanSalary)
+    p.cost += bd.ai + bd.human
     p.tokens += e.inputTokens + e.outputTokens
     byProject.set(e.projectId, p)
   }
+  // 고유 이슈 수 계산
+  for (const [pid] of byProject) {
+    const pExecs = executions.filter(e => e.projectId === pid)
+    byProject.get(pid)!.uniqueIssues = new Set(pExecs.map(e => e.issueIid)).size
+  }
 
   // 전 기간 프로젝트별 집계
-  const prevByProject = new Map<string, { total: number; success: number; failed: number; cost: number; tokens: number }>()
+  const prevByProject = new Map<string, { total: number; success: number; failed: number; cost: number }>()
   for (const e of prev) {
-    const p = prevByProject.get(e.projectId) || { total: 0, success: 0, failed: 0, cost: 0, tokens: 0 }
+    const p = prevByProject.get(e.projectId) || { total: 0, success: 0, failed: 0, cost: 0 }
     p.total++
     if (e.status === 'success') p.success++
     if (e.status === 'failed') p.failed++
-    p.cost += e.costUsd
-    p.tokens += e.inputTokens + e.outputTokens
+    const bd = resolveExecutionCostBreakdown(e, humanSalary)
+    p.cost += bd.ai + bd.human
     prevByProject.set(e.projectId, p)
   }
 
-  // 개발자(에이전트)별 집계 - agentId 기준
-  const byAgent = new Map<string, { name: string; cli: string; total: number; success: number; failed: number; cost: number }>()
+  // ─── 에이전트별 집계 ───
+  const byAgent = new Map<string, { name: string; cli: string; total: number; success: number; failed: number; cost: number; avgDurationMin: number; _durAcc: number; _durCnt: number }>()
   for (const e of executions) {
-    const a = byAgent.get(e.agentId) || { name: e.agentName, cli: e.cliName, total: 0, success: 0, failed: 0, cost: 0 }
+    if (!e.agentId || e.assigneeType === 'user') continue
+    const a = byAgent.get(e.agentId) || { name: e.agentName, cli: e.cliName, total: 0, success: 0, failed: 0, cost: 0, avgDurationMin: 0, _durAcc: 0, _durCnt: 0 }
     a.total++
     if (e.status === 'success') a.success++
     if (e.status === 'failed') a.failed++
-    a.cost += e.costUsd
+    const bd = resolveExecutionCostBreakdown(e, humanSalary)
+    a.cost += bd.ai + bd.human
+    if (e.endedAt) {
+      const dur = (new Date(e.endedAt).getTime() - new Date(e.startedAt).getTime()) / 60000
+      if (dur >= 0) { a._durAcc += dur; a._durCnt++ }
+    }
     byAgent.set(e.agentId, a)
   }
+  for (const a of byAgent.values()) {
+    a.avgDurationMin = a._durCnt > 0 ? a._durAcc / a._durCnt : 0
+  }
 
-  // 전 기간 개발자(에이전트)별 집계
+  // 전 기간 에이전트별 집계
   const prevByAgent = new Map<string, { total: number; success: number; failed: number; cost: number }>()
   for (const e of prev) {
+    if (!e.agentId || e.assigneeType === 'user') continue
     const a = prevByAgent.get(e.agentId) || { total: 0, success: 0, failed: 0, cost: 0 }
     a.total++
     if (e.status === 'success') a.success++
     if (e.status === 'failed') a.failed++
-    a.cost += e.costUsd
+    const bd = resolveExecutionCostBreakdown(e, humanSalary)
+    a.cost += bd.ai + bd.human
     prevByAgent.set(e.agentId, a)
   }
 
-  // 검증자별 집계 (Git assignee 기반 — verifier_username 키)
-  const byVerifier = new Map<string, { username: string; name: string; avatar: string; provider: string; approved: number; rejected: number; avgVerifyMin: number; _verifyMinAcc: number; _verifyMinCnt: number }>()
+  // ─── 검증자별 집계 ───
+  const byVerifier = new Map<string, { username: string; name: string; approved: number; rejected: number; avgVerifyMin: number; _verifyMinAcc: number; _verifyMinCnt: number }>()
   for (const e of executions) {
     if (!e.verifierUsername) continue
     const v = byVerifier.get(e.verifierUsername) || {
       username: e.verifierUsername,
       name: e.verifierName || e.verifierUsername,
-      avatar: e.verifierAvatar || 'av-01',
-      provider: 'gitlab',
       approved: 0,
       rejected: 0,
       avgVerifyMin: 0,
@@ -183,10 +307,7 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
     if (e.rejectedAt && !e.verifiedAt) v.rejected++
     if (e.verifiedAt && e.verifyStartedAt) {
       const mins = (new Date(e.verifiedAt).getTime() - new Date(e.verifyStartedAt).getTime()) / 60000
-      if (mins >= 0) {
-        v._verifyMinAcc += mins
-        v._verifyMinCnt++
-      }
+      if (mins >= 0) { v._verifyMinAcc += mins; v._verifyMinCnt++ }
     }
     byVerifier.set(e.verifierUsername, v)
   }
@@ -194,7 +315,7 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
     v.avgVerifyMin = v._verifyMinCnt > 0 ? v._verifyMinAcc / v._verifyMinCnt : 0
   }
 
-  // 사용자별 집계 (이슈 생성건수 포함)
+  // ─── 사용자별 집계 ───
   const byUser = new Map<string, { name: string; total: number; success: number; failed: number; cost: number; issueCount: number; projectCount: number }>()
   for (const e of executions) {
     const uid = e.developerUserId || e.developerName || e.agentName
@@ -202,23 +323,23 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
     u.total++
     if (e.status === 'success') u.success++
     if (e.status === 'failed') u.failed++
-    u.cost += e.costUsd
+    const bd = resolveExecutionCostBreakdown(e, humanSalary)
+    u.cost += bd.ai + bd.human
     byUser.set(uid, u)
   }
-  // 사용자별 이슈 수, 프로젝트 수 계산
   for (const [uid] of byUser) {
     const userExecs = executions.filter(e => (e.developerUserId || e.developerName || e.agentName) === uid)
     byUser.get(uid)!.issueCount = new Set(userExecs.map(e => `${e.projectId}:${e.issueIid}`)).size
     byUser.get(uid)!.projectCount = new Set(userExecs.map(e => e.projectId)).size
   }
 
-  // 전 기간 사용자별 집계
   const prevByUser = new Map<string, { total: number; cost: number; issueCount: number }>()
   for (const e of prev) {
     const uid = e.developerUserId || e.developerName || e.agentName
     const u = prevByUser.get(uid) || { total: 0, cost: 0, issueCount: 0 }
     u.total++
-    u.cost += e.costUsd
+    const bd = resolveExecutionCostBreakdown(e, humanSalary)
+    u.cost += bd.ai + bd.human
     prevByUser.set(uid, u)
   }
   for (const [uid] of prevByUser) {
@@ -226,247 +347,296 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
     prevByUser.get(uid)!.issueCount = new Set(userExecs.map(e => `${e.projectId}:${e.issueIid}`)).size
   }
 
+  // ─── 최종 지표 계산 ───
   const successRate = total > 0 ? ((success / total) * 100).toFixed(1) : '0.0'
   const prevSuccessRate = prevTotal > 0 ? ((prevSuccess / prevTotal) * 100).toFixed(1) : '0.0'
 
   // 총평 생성
-  const summary = generateSummary(label, total, success, failed, running, parseFloat(successRate), totalCost, byProject, byAgent, byUser, hasPrev ? { prevTotal, prevSuccess, prevFailed, prevSuccessRate: parseFloat(prevSuccessRate), prevTotalCost } : undefined)
+  const summary = generateSummary(
+    label, total, success, failed, running, parseFloat(successRate), totalCost,
+    byProject, byAgent, byUser,
+    hasPrev ? { prevTotal, prevSuccess, prevFailed, prevSuccessRate: parseFloat(prevSuccessRate), prevTotalCost } : undefined,
+    { uniqueInflow, verifiedCount, currentWaiting, totalCostAi, totalCostHuman, dailyInflow, dailyCapacity }
+  )
 
   // 프로젝트 이름 목록 (헤더 표시용)
   const projectNames = Array.from(byProject.values()).map(p => p.name).filter(Boolean)
 
-  const projectRows = Array.from(byProject.entries())
-    .sort((a, b) => b[1].total - a[1].total)
-    .map(([pid, p]) => {
-      const pp = prevByProject.get(pid)
-      return `
-      <tr>
-        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">
-          <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color};margin-right:6px;vertical-align:middle;"></span>
-          <strong style="color:#111827;">${esc(p.name || '(이름없음)')}</strong>
-        </td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;color:#111827;">${p.total}${hasPrev && pp ? ` <span style="font-size:10px;">${changeIndicator(p.total, pp.total)}</span>` : ''}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;color:#16a34a;font-weight:600;">${p.success}${hasPrev && pp ? ` <span style="font-size:10px;">${changeIndicator(p.success, pp.success)}</span>` : ''}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;color:#dc2626;font-weight:600;">${p.failed}${hasPrev && pp ? ` <span style="font-size:10px;">${changeIndicator(p.failed, pp.failed, true)}</span>` : ''}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#111827;">$${p.cost.toFixed(2)}${hasPrev && pp ? ` <span style="font-size:10px;">${changeIndicator(p.cost, pp.cost, true)}</span>` : ''}</td>
-      </tr>
-    `}).join('')
+  // ─── 처리된 이슈 목록 (상위 10건, 비용 순) ───
+  const resolvedIssueMap = new Map<string, { issueIid: number; issueTitle: string; projectName: string; projectColor: string; agentName: string; cost: number; durationMin: number; status: string }>()
+  for (const e of executions.filter(e => e.status === 'success' || e.status === 'failed')) {
+    const key = `${e.projectId}:${e.issueIid}`
+    const existing = resolvedIssueMap.get(key)
+    const dur = e.endedAt ? (new Date(e.endedAt).getTime() - new Date(e.startedAt).getTime()) / 60000 : 0
+    const bd = resolveExecutionCostBreakdown(e, humanSalary)
+    const c = bd.ai + bd.human
+    if (!existing || c > existing.cost) {
+      resolvedIssueMap.set(key, { issueIid: e.issueIid, issueTitle: e.issueTitle || `#${e.issueIid}`, projectName: e.projectName, projectColor: e.projectColor, agentName: e.agentName, cost: c, durationMin: dur, status: e.status })
+    }
+  }
+  const topIssues = Array.from(resolvedIssueMap.values()).sort((a, b) => b.cost - a.cost).slice(0, 10)
 
-  const agentRows = Array.from(byAgent.entries())
-    .sort((a, b) => b[1].total - a[1].total)
-    .map(([agentId, a]) => {
-      const pa = prevByAgent.get(agentId)
-      return `
-      <tr>
-        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#111827;">
-          <strong>${esc(a.name)}</strong>
-          <span style="color:#6b7280;font-size:11px;"> (${esc(a.cli)})</span>
-        </td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;color:#111827;">${a.total}${hasPrev && pa ? ` <span style="font-size:10px;">${changeIndicator(a.total, pa.total)}</span>` : ''}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;color:#16a34a;font-weight:600;">${a.success}${hasPrev && pa ? ` <span style="font-size:10px;">${changeIndicator(a.success, pa.success)}</span>` : ''}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;color:#dc2626;font-weight:600;">${a.failed}${hasPrev && pa ? ` <span style="font-size:10px;">${changeIndicator(a.failed, pa.failed, true)}</span>` : ''}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#111827;">$${a.cost.toFixed(2)}${hasPrev && pa ? ` <span style="font-size:10px;">${changeIndicator(a.cost, pa.cost, true)}</span>` : ''}</td>
-      </tr>
-    `}).join('')
+  // ─── 대기 건수 추이 (재사용) ───
+  const waitingTrend = waitingTrendData
+  const prevWaitingData = prevExecutions ? getDailyWaitingTrend(
+    calculatePreviousPeriod(reportType, periodStart, periodEnd).start,
+    calculatePreviousPeriod(reportType, periodStart, periodEnd).end
+  ) : null
 
+  // ─── HTML 조립 ───
   return `
 <!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"></head>
-<body style="margin:0;padding:0;background:#ffffff;color:#111827;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-  <div style="max-width:600px;margin:0 auto;padding:24px;">
-    <!-- 헤더 -->
-    <div style="text-align:center;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #16a34a;">
-      <h1 style="color:#16a34a;font-size:22px;margin:0 0 4px;">Spring IVE</h1>
-      <h2 style="color:#111827;font-size:16px;margin:0 0 8px;">${label} 보고서</h2>
-      ${projectNames.length > 0 ? `<p style="color:#374151;font-size:13px;margin:0 0 4px;font-weight:600;">${projectNames.map(n => esc(n)).join(', ')}</p>` : ''}
-      <p style="color:#6b7280;font-size:13px;margin:0;">${periodStart} ~ ${periodEndDisplay}</p>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f3f4f6;color:#111827;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <div style="max-width:620px;margin:0 auto;padding:20px 16px;">
+
+    <!-- ① 헤더 -->
+    <div style="background:#111827;border-radius:12px;padding:24px;margin-bottom:16px;text-align:center;">
+      <div style="font-size:11px;color:#4ade80;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:6px;">Spring IVE</div>
+      <div style="font-size:20px;font-weight:800;color:#ffffff;margin-bottom:4px;">${label} 보고서</div>
+      ${projectNames.length > 0 ? `<div style="font-size:12px;color:#9ca3af;margin-bottom:2px;">${projectNames.map(n => esc(n)).join(' · ')}</div>` : ''}
+      <div style="font-size:12px;color:#6b7280;">${periodStart} ~ ${periodEndDisplay}</div>
     </div>
 
-    <!-- 요약 카드 -->
-    <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:20px;margin-bottom:20px;">
-      <table width="100%" cellpadding="0" cellspacing="0">
+    <!-- ② 브리핑 -->
+    ${total > 0 ? `
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:16px;margin-bottom:16px;">
+      <div style="font-size:11px;color:#16a34a;font-weight:700;margin-bottom:8px;">📋 브리핑</div>
+      <div style="font-size:13px;color:#166534;line-height:1.7;">${summary}</div>
+    </div>
+    ` : ''}
+
+    <!-- ③ 흐름 현황 -->
+    <div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;padding:20px;margin-bottom:16px;">
+      <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:16px;">흐름 현황</div>
+      <!-- 유입 → 대기 → 처리 -->
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
         <tr>
-          <td style="text-align:center;padding:8px;">
+          <td style="text-align:center;padding:4px;">
+            <div style="font-size:11px;color:#6b7280;margin-bottom:4px;">유입</div>
+            <div style="font-size:28px;font-weight:800;color:#111827;">${uniqueInflow}</div>
+            <div style="font-size:10px;color:#9ca3af;margin-top:2px;">일평균 ${dailyInflow.toFixed(1)}건</div>
+          </td>
+          <td style="text-align:center;color:#9ca3af;font-size:16px;padding:0 4px;">→</td>
+          <td style="text-align:center;padding:4px;">
+            <div style="font-size:11px;color:#6b7280;margin-bottom:4px;">대기</div>
+            <div style="font-size:28px;font-weight:800;color:${currentWaiting >= 8 ? '#dc2626' : currentWaiting >= 4 ? '#d97706' : '#111827'};">${currentWaiting}</div>
+            <div style="font-size:10px;color:#9ca3af;margin-top:2px;">현재 대기중</div>
+          </td>
+          <td style="text-align:center;color:#9ca3af;font-size:16px;padding:0 4px;">→</td>
+          <td style="text-align:center;padding:4px;">
+            <div style="font-size:11px;color:#6b7280;margin-bottom:4px;">처리</div>
             <div style="font-size:28px;font-weight:800;color:#111827;">${total}</div>
-            <div style="font-size:11px;color:#6b7280;margin-top:2px;">총 작업</div>
-            ${hasPrev ? `<div style="font-size:11px;margin-top:4px;">${changeIndicator(total, prevTotal)}</div>` : ''}
+            <div style="font-size:10px;color:#9ca3af;margin-top:2px;">일평균 ${dailyCapacity.toFixed(1)}건</div>
           </td>
-          <td style="text-align:center;padding:8px;">
-            <div style="font-size:28px;font-weight:800;color:#16a34a;">${success}</div>
-            <div style="font-size:11px;color:#6b7280;margin-top:2px;">성공</div>
-            ${hasPrev ? `<div style="font-size:11px;margin-top:4px;">${changeIndicator(success, prevSuccess)}</div>` : ''}
-          </td>
-          <td style="text-align:center;padding:8px;">
-            <div style="font-size:28px;font-weight:800;color:#dc2626;">${failed}</div>
-            <div style="font-size:11px;color:#6b7280;margin-top:2px;">실패</div>
-            ${hasPrev ? `<div style="font-size:11px;margin-top:4px;">${changeIndicator(failed, prevFailed, true)}</div>` : ''}
-          </td>
-          ${running > 0 ? `
-          <td style="text-align:center;padding:8px;">
-            <div style="font-size:28px;font-weight:800;color:#0891b2;">${running}</div>
-            <div style="font-size:11px;color:#6b7280;margin-top:2px;">진행중</div>
-          </td>` : ''}
         </tr>
       </table>
-      <div style="margin-top:16px;padding-top:16px;border-top:1px solid #e5e7eb;">
+      <!-- 성공/실패/진행 -->
+      <div style="background:#f9fafb;border-radius:8px;padding:12px;margin-bottom:12px;">
         <table width="100%" cellpadding="0" cellspacing="0">
           <tr>
-            <td style="text-align:center;padding:4px;">
-              <div style="font-size:18px;font-weight:700;color:#0891b2;">${successRate}%</div>
-              <div style="font-size:11px;color:#6b7280;">성공률</div>
-              ${hasPrev ? `<div style="font-size:11px;margin-top:4px;">${changeIndicatorRate(parseFloat(successRate), parseFloat(prevSuccessRate))}</div>` : ''}
+            <td style="text-align:center;padding:4px 8px;">
+              <div style="font-size:20px;font-weight:800;color:#16a34a;">${success}</div>
+              <div style="font-size:10px;color:#6b7280;">성공 ${successRate}%</div>
+              ${hasPrev ? `<div style="font-size:10px;margin-top:2px;">${changeIndicator(success, prevSuccess)}</div>` : ''}
             </td>
-            <td style="text-align:center;padding:4px;">
-              <div style="font-size:18px;font-weight:700;color:#d97706;">${formatTokens(totalTokens)}</div>
-              <div style="font-size:11px;color:#6b7280;">총 토큰</div>
-              ${hasPrev ? `<div style="font-size:11px;margin-top:4px;">${changeIndicator(totalTokens, prevTotalTokens)}</div>` : ''}
+            <td style="text-align:center;padding:4px 8px;">
+              <div style="font-size:20px;font-weight:800;color:#dc2626;">${failed}</div>
+              <div style="font-size:10px;color:#6b7280;">실패</div>
+              ${hasPrev ? `<div style="font-size:10px;margin-top:2px;">${changeIndicator(failed, prevFailed, true)}</div>` : ''}
             </td>
-            <td style="text-align:center;padding:4px;">
-              <div style="font-size:18px;font-weight:700;color:#ea580c;">$${totalCost.toFixed(2)}</div>
-              <div style="font-size:11px;color:#6b7280;">총 비용</div>
-              ${hasPrev ? `<div style="font-size:11px;margin-top:4px;">${changeIndicator(totalCost, prevTotalCost, true)}</div>` : ''}
+            ${running > 0 ? `
+            <td style="text-align:center;padding:4px 8px;">
+              <div style="font-size:20px;font-weight:800;color:#0891b2;">${running}</div>
+              <div style="font-size:10px;color:#6b7280;">진행중</div>
+            </td>` : ''}
+            <td style="text-align:center;padding:4px 8px;">
+              <div style="font-size:20px;font-weight:800;color:#d97706;">${formatTokens(totalTokens)}</div>
+              <div style="font-size:10px;color:#6b7280;">총 토큰</div>
+              ${hasPrev ? `<div style="font-size:10px;margin-top:2px;">${changeIndicator(totalTokens, prevTotalTokens)}</div>` : ''}
+            </td>
+          </tr>
+        </table>
+      </div>
+      <!-- 비용 분리 -->
+      <div style="background:#111827;border-radius:8px;padding:12px;">
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td style="text-align:center;padding:4px 8px;">
+              <div style="font-size:16px;font-weight:800;color:#ffffff;">$${totalCost.toFixed(2)}</div>
+              <div style="font-size:10px;color:#9ca3af;">총 비용</div>
+              ${hasPrev ? `<div style="font-size:10px;margin-top:2px;">${changeIndicator(totalCost, prevTotalCost, true)}</div>` : ''}
+            </td>
+            <td style="text-align:center;padding:4px 8px;">
+              <div style="font-size:14px;font-weight:700;color:#4ade80;">$${totalCostAi.toFixed(2)}</div>
+              <div style="font-size:10px;color:#6b7280;">AI 토큰</div>
+            </td>
+            ${totalCostHuman > 0 ? `
+            <td style="text-align:center;padding:4px 8px;">
+              <div style="font-size:14px;font-weight:700;color:#93c5fd;">$${totalCostHuman.toFixed(2)}</div>
+              <div style="font-size:10px;color:#6b7280;">사람 시간${totalHumanMin > 0 ? ` (${fmtDuration(totalHumanMin)})` : ''}</div>
+            </td>` : ''}
+            <td style="text-align:center;padding:4px 8px;">
+              <div style="font-size:14px;font-weight:700;color:#f59e0b;">$${costPerTask.toFixed(2)}</div>
+              <div style="font-size:10px;color:#6b7280;">건당 비용${hasPrev && prevCostPerTask > 0 ? ` ${changeIndicator(costPerTask, prevCostPerTask, true)}` : ''}</div>
             </td>
           </tr>
         </table>
       </div>
     </div>
 
-    ${total > 0 ? `
-    <!-- 총평 -->
-    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:20px;margin-bottom:20px;">
-      <h3 style="color:#14532d;font-size:14px;margin:0 0 12px;font-weight:700;">📋 총평</h3>
-      <p style="color:#166534;font-size:13px;line-height:1.8;margin:0;">${summary}</p>
+    <!-- ④ 소요 시간 파이프라인 -->
+    ${procAvg > 0 ? `
+    <div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;padding:20px;margin-bottom:16px;">
+      <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:12px;">소요 시간 파이프라인</div>
+      ${totalAvg > 0 ? `<div style="font-size:13px;color:#111827;margin-bottom:12px;">평균 해결 시간 <strong>${fmtDuration(totalAvg)}</strong>${hasPrev && prevProcAvg > 0 ? ` <span style="font-size:11px;">${changeIndicator(procAvg, prevProcAvg, true)}</span>` : ''}</div>` : ''}
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:12px;">
+        <tr>
+          ${waitAvg > 0 ? `
+          <td style="text-align:center;padding:4px 8px;">
+            <div style="font-size:10px;color:#6b7280;margin-bottom:2px;">대기</div>
+            <div style="font-size:15px;font-weight:700;color:#111827;">${fmtDuration(waitAvg)}</div>
+          </td>
+          <td style="text-align:center;color:#9ca3af;font-size:12px;">→</td>
+          ` : ''}
+          <td style="text-align:center;padding:4px 8px;">
+            <div style="font-size:10px;color:#6b7280;margin-bottom:2px;">처리</div>
+            <div style="font-size:15px;font-weight:700;color:#111827;">${fmtDuration(procAvg)}</div>
+          </td>
+          ${verifyAvg > 0 ? `
+          <td style="text-align:center;color:#9ca3af;font-size:12px;">→</td>
+          <td style="text-align:center;padding:4px 8px;">
+            <div style="font-size:10px;color:#6b7280;margin-bottom:2px;">검증</div>
+            <div style="font-size:15px;font-weight:700;color:#111827;">${fmtDuration(verifyAvg)}</div>
+          </td>` : ''}
+        </tr>
+      </table>
+      ${totalAvg > 0 ? (() => {
+        const waitPct = Math.round((waitAvg / totalAvg) * 100)
+        const procPct = Math.round((procAvg / totalAvg) * 100)
+        const verifyPct = verifyAvg > 0 ? Math.round((verifyAvg / totalAvg) * 100) : 0
+        return `
+      <div style="height:8px;border-radius:4px;overflow:hidden;background:#f3f4f6;display:flex;">
+        ${waitPct > 0 ? `<div style="width:${waitPct}%;background:#d1fae5;"></div>` : ''}
+        <div style="width:${procPct}%;background:#4ade80;"></div>
+        ${verifyPct > 0 ? `<div style="width:${verifyPct}%;background:#16a34a;"></div>` : ''}
+      </div>
+      <div style="display:flex;margin-top:4px;font-size:10px;color:#6b7280;gap:12px;">
+        ${waitPct > 0 ? `<span>대기 ${waitPct}%</span>` : ''}
+        <span>처리 ${procPct}%</span>
+        ${verifyPct > 0 ? `<span>검증 ${verifyPct}%</span>` : ''}
+      </div>`
+      })() : ''}
     </div>
     ` : ''}
 
+    <!-- ⑤ 전 기간 비교 -->
     ${hasPrev ? `
-    <!-- 전 기간 비교 요약 -->
-    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:16px;margin-bottom:20px;">
-      <h3 style="color:#1e40af;font-size:14px;margin:0 0 12px;font-weight:700;">📊 ${prevLabel} 대비 비교</h3>
-      <table width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;">
+    <div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:16px;">
+      <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:12px;">📊 ${prevLabel} 대비 비교</div>
+      <table width="100%" cellpadding="0" cellspacing="0" style="font-size:12px;">
         <thead>
-          <tr style="color:#6b7280;font-size:11px;">
-            <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #bfdbfe;">항목</th>
-            <th style="padding:6px 8px;text-align:center;border-bottom:1px solid #bfdbfe;">${prevLabel}</th>
-            <th style="padding:6px 8px;text-align:center;border-bottom:1px solid #bfdbfe;">이번 ${label}</th>
-            <th style="padding:6px 8px;text-align:center;border-bottom:1px solid #bfdbfe;">증감</th>
-            <th style="padding:6px 8px;text-align:center;border-bottom:1px solid #bfdbfe;">증감율</th>
+          <tr style="color:#9ca3af;font-size:10px;border-bottom:1px solid #f3f4f6;">
+            <th style="padding:6px 8px;text-align:left;font-weight:600;">항목</th>
+            <th style="padding:6px 8px;text-align:center;font-weight:600;">${prevLabel}</th>
+            <th style="padding:6px 8px;text-align:center;font-weight:600;">이번 ${label}</th>
+            <th style="padding:6px 8px;text-align:center;font-weight:600;">증감</th>
+            <th style="padding:6px 8px;text-align:center;font-weight:600;">증감율</th>
           </tr>
         </thead>
         <tbody>
-          <tr>
-            <td style="padding:8px;border-bottom:1px solid #dbeafe;color:#111827;font-weight:600;">총 작업</td>
-            <td style="padding:8px;border-bottom:1px solid #dbeafe;text-align:center;color:#6b7280;">${prevTotal}</td>
-            <td style="padding:8px;border-bottom:1px solid #dbeafe;text-align:center;color:#111827;font-weight:600;">${total}</td>
-            <td style="padding:8px;border-bottom:1px solid #dbeafe;text-align:center;">${diffBadge(total - prevTotal)}</td>
-            <td style="padding:8px;border-bottom:1px solid #dbeafe;text-align:center;">${changeRateBadge(total, prevTotal)}</td>
+          <tr style="border-bottom:1px solid #f9fafb;">
+            <td style="padding:7px 8px;color:#374151;font-weight:600;">작업수</td>
+            <td style="padding:7px 8px;text-align:center;color:#9ca3af;">${prevTotal}</td>
+            <td style="padding:7px 8px;text-align:center;color:#111827;font-weight:700;">${total}</td>
+            <td style="padding:7px 8px;text-align:center;">${diffBadge(total - prevTotal)}</td>
+            <td style="padding:7px 8px;text-align:center;">${changeRateBadge(total, prevTotal)}</td>
           </tr>
-          <tr>
-            <td style="padding:8px;border-bottom:1px solid #dbeafe;color:#111827;font-weight:600;">성공</td>
-            <td style="padding:8px;border-bottom:1px solid #dbeafe;text-align:center;color:#6b7280;">${prevSuccess}</td>
-            <td style="padding:8px;border-bottom:1px solid #dbeafe;text-align:center;color:#16a34a;font-weight:600;">${success}</td>
-            <td style="padding:8px;border-bottom:1px solid #dbeafe;text-align:center;">${diffBadge(success - prevSuccess)}</td>
-            <td style="padding:8px;border-bottom:1px solid #dbeafe;text-align:center;">${changeRateBadge(success, prevSuccess)}</td>
+          <tr style="border-bottom:1px solid #f9fafb;">
+            <td style="padding:7px 8px;color:#374151;font-weight:600;">성공률</td>
+            <td style="padding:7px 8px;text-align:center;color:#9ca3af;">${prevSuccessRate}%</td>
+            <td style="padding:7px 8px;text-align:center;color:#16a34a;font-weight:700;">${successRate}%</td>
+            <td style="padding:7px 8px;text-align:center;">${diffBadge(parseFloat(successRate) - parseFloat(prevSuccessRate), false, 'pp')}</td>
+            <td style="padding:7px 8px;text-align:center;color:#9ca3af;">-</td>
           </tr>
-          <tr>
-            <td style="padding:8px;border-bottom:1px solid #dbeafe;color:#111827;font-weight:600;">실패</td>
-            <td style="padding:8px;border-bottom:1px solid #dbeafe;text-align:center;color:#6b7280;">${prevFailed}</td>
-            <td style="padding:8px;border-bottom:1px solid #dbeafe;text-align:center;color:#dc2626;font-weight:600;">${failed}</td>
-            <td style="padding:8px;border-bottom:1px solid #dbeafe;text-align:center;">${diffBadge(failed - prevFailed, true)}</td>
-            <td style="padding:8px;border-bottom:1px solid #dbeafe;text-align:center;">${changeRateBadge(failed, prevFailed, true)}</td>
+          <tr style="border-bottom:1px solid #f9fafb;">
+            <td style="padding:7px 8px;color:#374151;font-weight:600;">총 비용</td>
+            <td style="padding:7px 8px;text-align:center;color:#9ca3af;">$${prevTotalCost.toFixed(2)}</td>
+            <td style="padding:7px 8px;text-align:center;color:#ea580c;font-weight:700;">$${totalCost.toFixed(2)}</td>
+            <td style="padding:7px 8px;text-align:center;">${diffBadge(totalCost - prevTotalCost, true, '$')}</td>
+            <td style="padding:7px 8px;text-align:center;">${changeRateBadge(totalCost, prevTotalCost, true)}</td>
           </tr>
-          <tr>
-            <td style="padding:8px;border-bottom:1px solid #dbeafe;color:#111827;font-weight:600;">성공률</td>
-            <td style="padding:8px;border-bottom:1px solid #dbeafe;text-align:center;color:#6b7280;">${prevSuccessRate}%</td>
-            <td style="padding:8px;border-bottom:1px solid #dbeafe;text-align:center;color:#0891b2;font-weight:600;">${successRate}%</td>
-            <td style="padding:8px;border-bottom:1px solid #dbeafe;text-align:center;">${diffBadge(parseFloat(successRate) - parseFloat(prevSuccessRate), false, 'pp')}</td>
-            <td style="padding:8px;border-bottom:1px solid #dbeafe;text-align:center;color:#6b7280;">-</td>
+          <tr style="border-bottom:1px solid #f9fafb;">
+            <td style="padding:7px 8px;color:#374151;font-weight:600;">건당 비용</td>
+            <td style="padding:7px 8px;text-align:center;color:#9ca3af;">$${prevCostPerTask.toFixed(2)}</td>
+            <td style="padding:7px 8px;text-align:center;color:#f59e0b;font-weight:700;">$${costPerTask.toFixed(2)}</td>
+            <td style="padding:7px 8px;text-align:center;">${diffBadge(costPerTask - prevCostPerTask, true, '$')}</td>
+            <td style="padding:7px 8px;text-align:center;">${changeRateBadge(costPerTask, prevCostPerTask, true)}</td>
           </tr>
+          ${hasPrev && prevProcAvg > 0 && procAvg > 0 ? `
           <tr>
-            <td style="padding:8px;border-bottom:1px solid #dbeafe;color:#111827;font-weight:600;">총 토큰</td>
-            <td style="padding:8px;border-bottom:1px solid #dbeafe;text-align:center;color:#6b7280;">${formatTokens(prevTotalTokens)}</td>
-            <td style="padding:8px;border-bottom:1px solid #dbeafe;text-align:center;color:#d97706;font-weight:600;">${formatTokens(totalTokens)}</td>
-            <td style="padding:8px;border-bottom:1px solid #dbeafe;text-align:center;">${diffBadge(totalTokens - prevTotalTokens, false, 'token')}</td>
-            <td style="padding:8px;border-bottom:1px solid #dbeafe;text-align:center;">${changeRateBadge(totalTokens, prevTotalTokens)}</td>
-          </tr>
-          <tr>
-            <td style="padding:8px;color:#111827;font-weight:600;">총 비용</td>
-            <td style="padding:8px;text-align:center;color:#6b7280;">$${prevTotalCost.toFixed(2)}</td>
-            <td style="padding:8px;text-align:center;color:#ea580c;font-weight:600;">$${totalCost.toFixed(2)}</td>
-            <td style="padding:8px;text-align:center;">${diffBadge(totalCost - prevTotalCost, true, '$')}</td>
-            <td style="padding:8px;text-align:center;">${changeRateBadge(totalCost, prevTotalCost, true)}</td>
-          </tr>
+            <td style="padding:7px 8px;color:#374151;font-weight:600;">처리 시간</td>
+            <td style="padding:7px 8px;text-align:center;color:#9ca3af;">${fmtDuration(prevProcAvg)}</td>
+            <td style="padding:7px 8px;text-align:center;color:#111827;font-weight:700;">${fmtDuration(procAvg)}</td>
+            <td style="padding:7px 8px;text-align:center;">${changeIndicator(procAvg, prevProcAvg, true)}</td>
+            <td style="padding:7px 8px;text-align:center;">${changeRateBadge(procAvg, prevProcAvg, true)}</td>
+          </tr>` : ''}
         </tbody>
       </table>
     </div>
     ` : ''}
 
+    <!-- ⑥ 대기 건수 추이 -->
     ${(() => {
-      // 대기 건수 추이 테이블
-      const waitingData = getDailyWaitingTrend(periodStart, periodEnd)
-      const prevWaitingData = prevExecutions ? getDailyWaitingTrend(
-        calculatePreviousPeriod(reportType, periodStart, periodEnd).start,
-        calculatePreviousPeriod(reportType, periodStart, periodEnd).end
-      ) : null
-      const hasWaitingData = waitingData.daily.some(d => d.total > 0)
+      const hasWaitingData = waitingTrend.daily.some(d => d.total > 0)
       if (!hasWaitingData) return ''
 
-      // 모든 프로젝트 추출
+      const avgTotal = waitingTrend.daily.length > 0 ? Math.round(waitingTrend.daily.reduce((s, d) => s + d.total, 0) / waitingTrend.daily.length * 10) / 10 : 0
+      const prevAvgTotal = prevWaitingData && prevWaitingData.daily.length > 0 ? Math.round(prevWaitingData.daily.reduce((s, d) => s + d.total, 0) / prevWaitingData.daily.length * 10) / 10 : 0
+
       const allProjects = new Map<string, { name: string; color: string }>()
-      for (const d of waitingData.daily) {
+      for (const d of waitingTrend.daily) {
         for (const p of d.byProject) {
-          if (!allProjects.has(p.projectId)) {
-            allProjects.set(p.projectId, { name: p.projectName, color: p.projectColor })
-          }
+          if (!allProjects.has(p.projectId)) allProjects.set(p.projectId, { name: p.projectName, color: p.projectColor })
         }
       }
       const projectList = Array.from(allProjects.entries())
-
-      // 기간 평균
-      const avgTotal = waitingData.daily.length > 0 ? Math.round(waitingData.daily.reduce((s, d) => s + d.total, 0) / waitingData.daily.length * 10) / 10 : 0
-      const prevAvgTotal = prevWaitingData && prevWaitingData.daily.length > 0 ? Math.round(prevWaitingData.daily.reduce((s, d) => s + d.total, 0) / prevWaitingData.daily.length * 10) / 10 : 0
-      const latestTotal = waitingData.daily.length > 0 ? waitingData.daily[waitingData.daily.length - 1].total : 0
-
-      const waitingRows = waitingData.daily.map(d => {
+      const projHeaders = projectList.map(([, info]) =>
+        `<th style="padding:5px 6px;text-align:center;font-size:10px;color:#6b7280;font-weight:600;"><span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:${info.color};margin-right:2px;vertical-align:middle;"></span>${esc(info.name)}</th>`
+      ).join('')
+      const waitingRows = waitingTrend.daily.map(d => {
         const projCells = projectList.map(([pid, info]) => {
           const found = d.byProject.find(p => p.projectId === pid)
           const val = found?.waiting ?? 0
-          return `<td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center;color:${val > 0 ? info.color : '#9ca3af'};font-weight:${val > 0 ? '600' : '400'};">${val}</td>`
+          return `<td style="padding:5px 6px;border-top:1px solid #f3f4f6;text-align:center;color:${val > 0 ? info.color : '#9ca3af'};font-weight:${val > 0 ? '700' : '400'};font-size:12px;">${val}</td>`
         }).join('')
         return `<tr>
-          <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:12px;">${d.date.slice(5)}</td>
-          <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center;color:#111827;font-weight:700;">${d.total}</td>
+          <td style="padding:5px 6px;border-top:1px solid #f3f4f6;color:#6b7280;font-size:11px;">${d.date.slice(5)}</td>
+          <td style="padding:5px 6px;border-top:1px solid #f3f4f6;text-align:center;font-weight:700;font-size:12px;color:${d.total >= 5 ? '#dc2626' : d.total >= 3 ? '#d97706' : '#111827'};">${d.total}</td>
           ${projCells}
         </tr>`
       }).join('')
 
-      const projHeaders = projectList.map(([, info]) =>
-        `<th style="padding:6px 8px;text-align:center;border-bottom:1px solid #e5e7eb;"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${info.color};margin-right:3px;vertical-align:middle;"></span>${esc(info.name)}</th>`
-      ).join('')
-
       return `
-    <!-- 대기 건수 추이 -->
-    <div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:12px;padding:16px;margin-bottom:20px;">
-      <h3 style="color:#92400e;font-size:14px;margin:0 0 8px;font-weight:700;">⏳ 대기 건수 추이</h3>
-      <div style="margin-bottom:12px;">
-        <table cellpadding="0" cellspacing="0" style="font-size:13px;">
-          <tr>
-            <td style="padding:2px 12px 2px 0;color:#92400e;font-weight:600;">현재 대기</td>
-            <td style="padding:2px 0;color:#111827;font-weight:800;font-size:18px;">${latestTotal}건</td>
-          </tr>
-          <tr>
-            <td style="padding:2px 12px 2px 0;color:#92400e;font-weight:600;">기간 평균</td>
-            <td style="padding:2px 0;color:#111827;font-weight:700;">${avgTotal}건 ${hasPrev && prevAvgTotal > 0 ? changeIndicator(avgTotal, prevAvgTotal, true) : ''}</td>
-          </tr>
-        </table>
-      </div>
+    <div style="background:#fffbeb;border:1px solid #fbbf24;border-radius:12px;padding:16px;margin-bottom:16px;">
+      <div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:8px;">⏳ 대기 건수 추이</div>
+      <table cellpadding="0" cellspacing="0" style="font-size:12px;margin-bottom:10px;">
+        <tr>
+          <td style="padding:2px 10px 2px 0;color:#92400e;font-weight:600;font-size:11px;">현재 대기</td>
+          <td style="color:#111827;font-weight:800;font-size:16px;">${currentWaiting}건</td>
+        </tr>
+        <tr>
+          <td style="padding:2px 10px 2px 0;color:#92400e;font-weight:600;font-size:11px;">기간 평균</td>
+          <td style="color:#111827;font-weight:700;font-size:13px;">${avgTotal}건 ${hasPrev && prevAvgTotal > 0 ? changeIndicator(avgTotal, prevAvgTotal, true) : ''}</td>
+        </tr>
+      </table>
       <div style="overflow-x:auto;">
-        <table width="100%" cellpadding="0" cellspacing="0" style="font-size:12px;color:#111827;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="font-size:12px;color:#111827;min-width:300px;">
           <thead>
-            <tr style="color:#6b7280;font-size:11px;">
-              <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #e5e7eb;">날짜</th>
-              <th style="padding:6px 8px;text-align:center;border-bottom:1px solid #e5e7eb;">전체</th>
+            <tr style="background:#fef3c7;">
+              <th style="padding:5px 6px;text-align:left;font-size:10px;color:#6b7280;font-weight:600;">날짜</th>
+              <th style="padding:5px 6px;text-align:center;font-size:10px;color:#6b7280;font-weight:600;">전체</th>
               ${projHeaders}
             </tr>
           </thead>
@@ -476,134 +646,174 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
     </div>`
     })()}
 
+    <!-- ⑦ 프로젝트별 현황 -->
     ${byProject.size > 0 ? `
-    <!-- 프로젝트별 -->
-    <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:20px;">
-      <h3 style="color:#111827;font-size:14px;margin:0 0 12px;font-weight:700;">프로젝트별 현황</h3>
-      <table width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;color:#111827;">
+    <div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:16px;">
+      <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:12px;">프로젝트별 현황</div>
+      <table width="100%" cellpadding="0" cellspacing="0" style="font-size:12px;color:#111827;">
         <thead>
-          <tr style="color:#6b7280;font-size:11px;">
-            <th style="padding:6px 12px;text-align:left;border-bottom:1px solid #e5e7eb;">프로젝트</th>
-            <th style="padding:6px 12px;text-align:center;border-bottom:1px solid #e5e7eb;">전체</th>
-            <th style="padding:6px 12px;text-align:center;border-bottom:1px solid #e5e7eb;">성공</th>
-            <th style="padding:6px 12px;text-align:center;border-bottom:1px solid #e5e7eb;">실패</th>
-            <th style="padding:6px 12px;text-align:right;border-bottom:1px solid #e5e7eb;">비용</th>
-          </tr>
-        </thead>
-        <tbody>${projectRows}</tbody>
-      </table>
-    </div>
-    ` : ''}
-
-    ${byAgent.size > 0 ? `
-    <!-- 개발자(에이전트)별 -->
-    <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:20px;">
-      <h3 style="color:#111827;font-size:14px;margin:0 0 12px;font-weight:700;">개발자(에이전트)별 현황</h3>
-      <table width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;color:#111827;">
-        <thead>
-          <tr style="color:#6b7280;font-size:11px;">
-            <th style="padding:6px 12px;text-align:left;border-bottom:1px solid #e5e7eb;">에이전트</th>
-            <th style="padding:6px 12px;text-align:center;border-bottom:1px solid #e5e7eb;">전체</th>
-            <th style="padding:6px 12px;text-align:center;border-bottom:1px solid #e5e7eb;">성공</th>
-            <th style="padding:6px 12px;text-align:center;border-bottom:1px solid #e5e7eb;">실패</th>
-            <th style="padding:6px 12px;text-align:right;border-bottom:1px solid #e5e7eb;">비용</th>
-          </tr>
-        </thead>
-        <tbody>${agentRows}</tbody>
-      </table>
-    </div>
-    ` : ''}
-
-    ${byVerifier.size > 0 ? `
-    <!-- 검증자별 -->
-    <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:20px;">
-      <h3 style="color:#111827;font-size:14px;margin:0 0 12px;font-weight:700;">검증자별 현황</h3>
-      <table width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;color:#111827;">
-        <thead>
-          <tr style="color:#6b7280;font-size:11px;">
-            <th style="padding:6px 12px;text-align:left;border-bottom:1px solid #e5e7eb;">검증자</th>
-            <th style="padding:6px 12px;text-align:center;border-bottom:1px solid #e5e7eb;">승인</th>
-            <th style="padding:6px 12px;text-align:center;border-bottom:1px solid #e5e7eb;">반려</th>
-            <th style="padding:6px 12px;text-align:right;border-bottom:1px solid #e5e7eb;">평균 검증시간</th>
+          <tr style="color:#9ca3af;font-size:10px;">
+            <th style="padding:5px 8px;text-align:left;font-weight:600;">프로젝트</th>
+            <th style="padding:5px 8px;text-align:center;font-weight:600;">이슈</th>
+            <th style="padding:5px 8px;text-align:center;font-weight:600;">작업</th>
+            <th style="padding:5px 8px;text-align:center;font-weight:600;">성공</th>
+            <th style="padding:5px 8px;text-align:center;font-weight:600;">실패</th>
+            <th style="padding:5px 8px;text-align:right;font-weight:600;">비용</th>
           </tr>
         </thead>
         <tbody>
-          ${Array.from(byVerifier.values())
-            .sort((a, b) => (b.approved + b.rejected) - (a.approved + a.rejected))
-            .map(v => {
-              const avgLabel = v.avgVerifyMin > 0
-                ? v.avgVerifyMin < 60
-                  ? `${Math.round(v.avgVerifyMin)}분`
-                  : `${Math.floor(v.avgVerifyMin / 60)}시간 ${Math.round(v.avgVerifyMin % 60)}분`
-                : '-'
-              return `
-              <tr>
-                <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#111827;">
-                  <strong>${esc(v.name)}</strong>
-                  <span style="color:#6b7280;font-size:11px;"> @${esc(v.username)}</span>
-                </td>
-                <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;color:#16a34a;font-weight:600;">${v.approved}</td>
-                <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;color:#dc2626;font-weight:600;">${v.rejected}</td>
-                <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#111827;">${avgLabel}</td>
-              </tr>`
-            }).join('')}
-        </tbody>
-      </table>
-    </div>
-    ` : ''}
-
-    ${byUser.size > 0 ? `
-    <!-- 사용자별 -->
-    <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:20px;">
-      <h3 style="color:#111827;font-size:14px;margin:0 0 12px;font-weight:700;">사용자별 현황</h3>
-      <table width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;color:#111827;">
-        <thead>
-          <tr style="color:#6b7280;font-size:11px;">
-            <th style="padding:6px 12px;text-align:left;border-bottom:1px solid #e5e7eb;">사용자</th>
-            <th style="padding:6px 12px;text-align:center;border-bottom:1px solid #e5e7eb;">이슈 수</th>
-            <th style="padding:6px 12px;text-align:center;border-bottom:1px solid #e5e7eb;">작업</th>
-            <th style="padding:6px 12px;text-align:center;border-bottom:1px solid #e5e7eb;">성공</th>
-            <th style="padding:6px 12px;text-align:center;border-bottom:1px solid #e5e7eb;">실패</th>
-            <th style="padding:6px 12px;text-align:center;border-bottom:1px solid #e5e7eb;">프로젝트</th>
-            <th style="padding:6px 12px;text-align:right;border-bottom:1px solid #e5e7eb;">비용</th>
-          </tr>
-        </thead>
-        <tbody>${Array.from(byUser.entries())
-          .sort((a, b) => b[1].total - a[1].total)
-          .map(([uid, u]) => {
-            const pu = prevByUser.get(uid)
-            return `
-          <tr>
-            <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#111827;"><strong>${esc(u.name)}</strong></td>
-            <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;color:#0891b2;font-weight:600;">${u.issueCount}${hasPrev && pu ? ` <span style="font-size:10px;">${changeIndicator(u.issueCount, pu.issueCount)}</span>` : ''}</td>
-            <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;color:#111827;">${u.total}${hasPrev && pu ? ` <span style="font-size:10px;">${changeIndicator(u.total, pu.total)}</span>` : ''}</td>
-            <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;color:#16a34a;font-weight:600;">${u.success}</td>
-            <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;color:#dc2626;font-weight:600;">${u.failed}</td>
-            <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;color:#6b7280;">${u.projectCount}</td>
-            <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#111827;">$${u.cost.toFixed(2)}${hasPrev && pu ? ` <span style="font-size:10px;">${changeIndicator(u.cost, pu.cost, true)}</span>` : ''}</td>
-          </tr>`
+          ${Array.from(byProject.entries()).sort((a, b) => b[1].total - a[1].total).map(([pid, p]) => {
+            const pp = prevByProject.get(pid)
+            return `<tr style="border-top:1px solid #f9fafb;">
+              <td style="padding:7px 8px;color:#111827;">
+                <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${p.color};margin-right:5px;vertical-align:middle;"></span>
+                <strong style="font-size:12px;">${esc(p.name || '(이름없음)')}</strong>
+                <div style="font-size:10px;color:#9ca3af;margin-left:12px;">${p.uniqueIssues}개 이슈</div>
+              </td>
+              <td style="padding:7px 8px;text-align:center;font-size:10px;color:#6b7280;">${p.uniqueIssues}</td>
+              <td style="padding:7px 8px;text-align:center;font-size:12px;color:#111827;">${p.total}${hasPrev && pp ? `<br><span style="font-size:10px;">${changeIndicator(p.total, pp.total)}</span>` : ''}</td>
+              <td style="padding:7px 8px;text-align:center;font-size:12px;color:#16a34a;font-weight:700;">${p.success}${hasPrev && pp ? `<br><span style="font-size:10px;">${changeIndicator(p.success, pp.success)}</span>` : ''}</td>
+              <td style="padding:7px 8px;text-align:center;font-size:12px;color:#dc2626;font-weight:700;">${p.failed}${hasPrev && pp ? `<br><span style="font-size:10px;">${changeIndicator(p.failed, pp.failed, true)}</span>` : ''}</td>
+              <td style="padding:7px 8px;text-align:right;font-size:12px;color:#111827;">$${p.cost.toFixed(2)}${hasPrev && pp ? `<br><span style="font-size:10px;">${changeIndicator(p.cost, pp.cost, true)}</span>` : ''}</td>
+            </tr>`
           }).join('')}
         </tbody>
       </table>
     </div>
     ` : ''}
 
+    <!-- ⑧ 에이전트별 현황 -->
+    ${byAgent.size > 0 ? `
+    <div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:16px;">
+      <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:12px;">에이전트별 현황</div>
+      <table width="100%" cellpadding="0" cellspacing="0" style="font-size:12px;color:#111827;">
+        <thead>
+          <tr style="color:#9ca3af;font-size:10px;">
+            <th style="padding:5px 8px;text-align:left;font-weight:600;">에이전트</th>
+            <th style="padding:5px 8px;text-align:center;font-weight:600;">작업</th>
+            <th style="padding:5px 8px;text-align:center;font-weight:600;">성공</th>
+            <th style="padding:5px 8px;text-align:center;font-weight:600;">실패</th>
+            <th style="padding:5px 8px;text-align:center;font-weight:600;">평균 시간</th>
+            <th style="padding:5px 8px;text-align:right;font-weight:600;">비용</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${Array.from(byAgent.entries()).sort((a, b) => b[1].total - a[1].total).map(([agentId, a]) => {
+            const pa = prevByAgent.get(agentId)
+            return `<tr style="border-top:1px solid #f9fafb;">
+              <td style="padding:7px 8px;"><strong style="font-size:12px;">${esc(a.name)}</strong><span style="color:#9ca3af;font-size:10px;"> ${esc(a.cli)}</span></td>
+              <td style="padding:7px 8px;text-align:center;">${a.total}${hasPrev && pa ? `<br><span style="font-size:10px;">${changeIndicator(a.total, pa.total)}</span>` : ''}</td>
+              <td style="padding:7px 8px;text-align:center;color:#16a34a;font-weight:700;">${a.success}</td>
+              <td style="padding:7px 8px;text-align:center;color:#dc2626;font-weight:700;">${a.failed}</td>
+              <td style="padding:7px 8px;text-align:center;color:#6b7280;">${a.avgDurationMin > 0 ? fmtDuration(a.avgDurationMin) : '-'}</td>
+              <td style="padding:7px 8px;text-align:right;">$${a.cost.toFixed(2)}${hasPrev && pa ? `<br><span style="font-size:10px;">${changeIndicator(a.cost, pa.cost, true)}</span>` : ''}</td>
+            </tr>`
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+    ` : ''}
+
+    <!-- ⑨ 검증자별 현황 -->
+    ${byVerifier.size > 0 ? `
+    <div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:16px;">
+      <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:12px;">검증자별 현황</div>
+      <table width="100%" cellpadding="0" cellspacing="0" style="font-size:12px;color:#111827;">
+        <thead>
+          <tr style="color:#9ca3af;font-size:10px;">
+            <th style="padding:5px 8px;text-align:left;font-weight:600;">검증자</th>
+            <th style="padding:5px 8px;text-align:center;font-weight:600;">승인</th>
+            <th style="padding:5px 8px;text-align:center;font-weight:600;">반려</th>
+            <th style="padding:5px 8px;text-align:right;font-weight:600;">평균 검증시간</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${Array.from(byVerifier.values()).sort((a, b) => (b.approved + b.rejected) - (a.approved + a.rejected)).map(v => `
+            <tr style="border-top:1px solid #f9fafb;">
+              <td style="padding:7px 8px;"><strong>${esc(v.name)}</strong><span style="color:#9ca3af;font-size:10px;"> @${esc(v.username)}</span></td>
+              <td style="padding:7px 8px;text-align:center;color:#16a34a;font-weight:700;">${v.approved}</td>
+              <td style="padding:7px 8px;text-align:center;color:#dc2626;font-weight:700;">${v.rejected}</td>
+              <td style="padding:7px 8px;text-align:right;color:#6b7280;">${v.avgVerifyMin > 0 ? fmtDuration(v.avgVerifyMin) : '-'}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+    ` : ''}
+
+    <!-- ⑩ 사용자별 현황 -->
+    ${byUser.size > 0 ? `
+    <div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:16px;">
+      <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:12px;">사용자별 현황</div>
+      <table width="100%" cellpadding="0" cellspacing="0" style="font-size:12px;color:#111827;">
+        <thead>
+          <tr style="color:#9ca3af;font-size:10px;">
+            <th style="padding:5px 8px;text-align:left;font-weight:600;">사용자</th>
+            <th style="padding:5px 8px;text-align:center;font-weight:600;">이슈</th>
+            <th style="padding:5px 8px;text-align:center;font-weight:600;">작업</th>
+            <th style="padding:5px 8px;text-align:center;font-weight:600;">성공</th>
+            <th style="padding:5px 8px;text-align:center;font-weight:600;">실패</th>
+            <th style="padding:5px 8px;text-align:right;font-weight:600;">비용</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${Array.from(byUser.entries()).sort((a, b) => b[1].total - a[1].total).map(([uid, u]) => {
+            const pu = prevByUser.get(uid)
+            return `<tr style="border-top:1px solid #f9fafb;">
+              <td style="padding:7px 8px;"><strong>${esc(u.name)}</strong></td>
+              <td style="padding:7px 8px;text-align:center;color:#0891b2;font-weight:700;">${u.issueCount}${hasPrev && pu ? `<br><span style="font-size:10px;">${changeIndicator(u.issueCount, pu.issueCount)}</span>` : ''}</td>
+              <td style="padding:7px 8px;text-align:center;">${u.total}${hasPrev && pu ? `<br><span style="font-size:10px;">${changeIndicator(u.total, pu.total)}</span>` : ''}</td>
+              <td style="padding:7px 8px;text-align:center;color:#16a34a;font-weight:700;">${u.success}</td>
+              <td style="padding:7px 8px;text-align:center;color:#dc2626;font-weight:700;">${u.failed}</td>
+              <td style="padding:7px 8px;text-align:right;">$${u.cost.toFixed(2)}${hasPrev && pu ? `<br><span style="font-size:10px;">${changeIndicator(u.cost, pu.cost, true)}</span>` : ''}</td>
+            </tr>`
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+    ` : ''}
+
+    <!-- ⑪ 처리된 이슈 목록 (상위 10건) -->
+    ${topIssues.length > 0 ? `
+    <div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:16px;">
+      <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:12px;">처리된 이슈 (비용 상위 ${topIssues.length}건)</div>
+      ${topIssues.map(issue => `
+        <div style="padding:8px 0;border-top:1px solid #f3f4f6;">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:12px;color:#111827;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">#${issue.issueIid} ${esc(issue.issueTitle)}</div>
+              <div style="font-size:10px;color:#9ca3af;margin-top:2px;">
+                <span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:${issue.projectColor};margin-right:3px;vertical-align:middle;"></span>
+                ${esc(issue.projectName)} · ${esc(issue.agentName)} · ${fmtDuration(issue.durationMin)}
+              </div>
+            </div>
+            <div style="text-align:right;white-space:nowrap;">
+              <div style="font-size:12px;font-weight:700;color:${issue.status === 'success' ? '#16a34a' : '#dc2626'};">$${issue.cost.toFixed(2)}</div>
+              <div style="font-size:10px;color:#9ca3af;">${issue.status === 'success' ? '✓ 성공' : '✗ 실패'}</div>
+            </div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+    ` : ''}
+
     ${total === 0 ? `
-    <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:32px;text-align:center;margin-bottom:20px;">
+    <div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;padding:32px;text-align:center;margin-bottom:16px;">
+      <div style="font-size:32px;margin-bottom:8px;">📭</div>
       <p style="color:#6b7280;font-size:14px;margin:0;">해당 기간에 실행된 작업이 없습니다.</p>
     </div>
     ` : ''}
 
     <!-- 푸터 -->
-    <div style="text-align:center;padding-top:16px;border-top:1px solid #e5e7eb;">
-      <p style="color:#9ca3af;font-size:11px;margin:0;">이 메일은 Spring IVE에서 자동 발송되었습니다.</p>
+    <div style="text-align:center;padding:12px;">
+      <p style="color:#9ca3af;font-size:10px;margin:0;">이 메일은 Spring IVE에서 자동 발송되었습니다.</p>
     </div>
+
   </div>
 </body>
 </html>`
 }
 
-/** 총평 텍스트 생성 */
+/** 총평/브리핑 텍스트 생성 */
 function generateSummary(
   label: string,
   total: number,
@@ -615,16 +825,34 @@ function generateSummary(
   byProject: Map<string, { name: string; total: number; success: number; failed: number; cost: number }>,
   byAgent: Map<string, { name: string; cli: string; total: number; success: number; failed: number; cost: number }>,
   byUser: Map<string, { name: string; total: number; success: number; failed: number; cost: number; issueCount: number; projectCount: number }>,
-  prevData?: { prevTotal: number; prevSuccess: number; prevFailed: number; prevSuccessRate: number; prevTotalCost: number }
+  prevData?: { prevTotal: number; prevSuccess: number; prevFailed: number; prevSuccessRate: number; prevTotalCost: number },
+  flowData?: { uniqueInflow: number; verifiedCount: number; currentWaiting: number; totalCostAi: number; totalCostHuman: number; dailyInflow: number; dailyCapacity: number }
 ): string {
   const parts: string[] = []
 
-  // 기본 요약
-  if (prevData) {
-    const totalChangeRate = calcChangeRate(total, prevData.prevTotal)
-    parts.push(`이번 ${label} 기간 동안 총 <strong>${total}건</strong>의 작업이 수행되었습니다 (전 기간 대비 ${totalChangeRate}).`)
+  // 기본 요약 — 유입/처리 흐름 중심
+  if (flowData && flowData.uniqueInflow > 0) {
+    const inflowStr = `유입 <strong>${flowData.uniqueInflow}건</strong>`
+    const totalStr = `처리 <strong>${total}건</strong>`
+    if (prevData) {
+      const totalChangeRate = calcChangeRate(total, prevData.prevTotal)
+      parts.push(`이번 ${label} 기간 동안 ${inflowStr}, ${totalStr}이 수행되었습니다 (전 기간 대비 ${totalChangeRate}).`)
+    } else {
+      parts.push(`이번 ${label} 기간 동안 ${inflowStr}, ${totalStr}이 수행되었습니다.`)
+    }
+    if (flowData.currentWaiting > 0) {
+      const waitingNote = flowData.currentWaiting >= 5
+        ? `현재 <strong style="color:#dc2626;">${flowData.currentWaiting}건</strong>이 대기 중으로 주의가 필요합니다.`
+        : `현재 ${flowData.currentWaiting}건이 대기 중입니다.`
+      parts.push(waitingNote)
+    }
   } else {
-    parts.push(`이번 ${label} 기간 동안 총 <strong>${total}건</strong>의 작업이 수행되었습니다.`)
+    if (prevData) {
+      const totalChangeRate = calcChangeRate(total, prevData.prevTotal)
+      parts.push(`이번 ${label} 기간 동안 총 <strong>${total}건</strong>의 작업이 수행되었습니다 (전 기간 대비 ${totalChangeRate}).`)
+    } else {
+      parts.push(`이번 ${label} 기간 동안 총 <strong>${total}건</strong>의 작업이 수행되었습니다.`)
+    }
   }
 
   // 성공률 평가
@@ -652,27 +880,36 @@ function generateSummary(
     }
   }
 
-  // 개발자(에이전트)별 하이라이트
+  // 에이전트 하이라이트
   const agents = Array.from(byAgent.values()).sort((a, b) => b.total - a.total)
   if (agents.length > 1) {
-    const topAgent = agents[0]
-    parts.push(`가장 많은 작업을 수행한 에이전트는 <strong>${esc(topAgent.name)}</strong>(${topAgent.total}건)입니다.`)
+    parts.push(`가장 많은 작업을 수행한 에이전트는 <strong>${esc(agents[0].name)}</strong>(${agents[0].total}건)입니다.`)
   }
 
-  // 사용자별 하이라이트
+  // 사용자 하이라이트
   const users = Array.from(byUser.values()).sort((a, b) => b.total - a.total)
   if (users.length > 1) {
-    const topUser = users[0]
-    parts.push(`가장 많은 작업을 요청한 사용자는 <strong>${esc(topUser.name)}</strong>(${topUser.total}건)입니다.`)
+    parts.push(`가장 많은 작업을 요청한 사용자는 <strong>${esc(users[0].name)}</strong>(${users[0].total}건)입니다.`)
   }
 
-  // 비용 요약
+  // 비용 요약 — AI/사람 분리 강조
   if (totalCost > 0) {
-    if (prevData && prevData.prevTotalCost > 0) {
-      const costChangeRate = calcChangeRate(totalCost, prevData.prevTotalCost)
-      parts.push(`총 비용은 <strong>$${totalCost.toFixed(2)}</strong>이 소요되었습니다 (전 기간 $${prevData.prevTotalCost.toFixed(2)}, ${costChangeRate}).`)
+    if (flowData && flowData.totalCostHuman > 0) {
+      const aiStr = `AI $${flowData.totalCostAi.toFixed(2)}`
+      const humanStr = `사람 $${flowData.totalCostHuman.toFixed(2)}`
+      if (prevData && prevData.prevTotalCost > 0) {
+        const costChangeRate = calcChangeRate(totalCost, prevData.prevTotalCost)
+        parts.push(`총 비용은 <strong>$${totalCost.toFixed(2)}</strong> (${aiStr} + ${humanStr})이 소요되었습니다 (전 기간 $${prevData.prevTotalCost.toFixed(2)}, ${costChangeRate}).`)
+      } else {
+        parts.push(`총 비용은 <strong>$${totalCost.toFixed(2)}</strong> (${aiStr} + ${humanStr})이 소요되었습니다.`)
+      }
     } else {
-      parts.push(`총 비용은 <strong>$${totalCost.toFixed(2)}</strong>이 소요되었습니다.`)
+      if (prevData && prevData.prevTotalCost > 0) {
+        const costChangeRate = calcChangeRate(totalCost, prevData.prevTotalCost)
+        parts.push(`총 비용은 <strong>$${totalCost.toFixed(2)}</strong>이 소요되었습니다 (전 기간 $${prevData.prevTotalCost.toFixed(2)}, ${costChangeRate}).`)
+      } else {
+        parts.push(`총 비용은 <strong>$${totalCost.toFixed(2)}</strong>이 소요되었습니다.`)
+      }
     }
   }
 
