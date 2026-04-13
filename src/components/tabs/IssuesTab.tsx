@@ -8,11 +8,14 @@ import { useToast } from '@/components/ui/Toast'
 import { formatDateMedium } from '@/lib/format-date'
 import PullToRefresh from '@/components/ui/PullToRefresh'
 import { useDialog } from '@/components/ui/ConfirmDialog'
-import Modal from '@/components/ui/Modal'
 import { useTranslations } from 'next-intl'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 import type { CliName } from '@/types'
-import { createImagePasteHandlers } from '@/lib/paste-upload'
+import LabelCheckModal from '@/components/tabs/issues/LabelCheckModal'
+import AssigneePickerModal from '@/components/tabs/issues/AssigneePickerModal'
+import AgentPickerModal from '@/components/tabs/issues/AgentPickerModal'
+import IssueAddForm from '@/components/tabs/issues/IssueAddForm'
+import BulkActionBar from '@/components/tabs/issues/BulkActionBar'
 
 interface IveIssue {
   iid: number
@@ -172,8 +175,6 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   const [closing, setClosing] = useState<number | null>(null)
   const [preferredAgentId, setPreferredAgentId] = useState<string | null>(null) // null=자동배정, 'none'=배정안함, 'assignee'=담당자처리, agentId=지정
   const [projectAgents, setProjectAgents] = useState<ProjectAgent[]>([])
-  const [agentDropdownOpen, setAgentDropdownOpen] = useState(false)
-  const agentDropdownRef = useRef<HTMLDivElement>(null)
   const [gitMembers, setGitMembers] = useState<{ id: number; username: string; name: string; avatarUrl: string }[]>([])
   const [selectedAssignees, setSelectedAssignees] = useState<{ id: number; username: string; name: string; avatarUrl: string }[]>([])
   const [assigneeModalIids, setAssigneeModalIids] = useState<number[]>([]) // 빈 배열이면 닫힘, iid 목록이면 열림
@@ -329,16 +330,6 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     saveDraft(value)
   }, [saveDraft])
 
-  // 이미지 복/붙 업로드 핸들러
-  const newBodyRef = useRef(newBody)
-  useEffect(() => { newBodyRef.current = newBody }, [newBody])
-  const pasteHandlers = useMemo(() => createImagePasteHandlers({
-    projectId: selectedProjectId,
-    getValue: () => newBodyRef.current,
-    setValue: v => handleBodyChange(v),
-    onError: msg => toast(msg, 'error'),
-  }), [selectedProjectId, handleBodyChange, toast])
-
   useEffect(() => {
     if (selectedProjectId) {
       const draft = localStorage.getItem(`ive-issue-draft-${selectedProjectId}`)
@@ -354,17 +345,6 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     setPreferredAgentId(null)
     setSelectedAssignees([])
   }, [selectedProjectId, fetchProjectAgents, fetchGitMembers])
-
-  useEffect(() => {
-    if (!agentDropdownOpen) return
-    const handler = (e: MouseEvent) => {
-      if (agentDropdownRef.current && !agentDropdownRef.current.contains(e.target as Node)) {
-        setAgentDropdownOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [agentDropdownOpen])
 
   // 담당자 모달 확인 — 선택된 1명을 대상 이슈들에 적용
   const handleConfirmAssignee = async () => {
@@ -586,6 +566,28 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
       handleCreateIssueRef.current()
     }
   }, [labelModalOpen, pendingCreateAfterLabels])
+
+  const handleAutoCreateLabels = async () => {
+    if (!selectedProjectId) return
+    setLabelCreating(true)
+    setLabelCreateMsg(null)
+    try {
+      const res = await fetch(`/api/projects/${selectedProjectId}/labels`, { method: 'POST' })
+      const data = await res.json()
+      setLabelStatus(data.results || [])
+      if (data.success) {
+        setLabelCreateMsg(null)
+        setPendingCreateAfterLabels(true)
+        setLabelModalOpen(false)
+      } else {
+        setLabelCreateMsg(data.message || tProject('labelCreateFailed'))
+      }
+    } catch {
+      setLabelCreateMsg(tIssue('networkErrorOccurred'))
+    } finally {
+      setLabelCreating(false)
+    }
+  }
 
   const handleCreateIssue = async () => {
     const lines = newBody.split('\n')
@@ -905,266 +907,39 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
 
             {/* 이슈 추가 폼 */}
             {showAddForm && (
-              <div className="mb-3 bg-ive-bg-card border border-ive-green/30 rounded-lg p-3">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-bold text-ive-green">
-                    <i className="fa-solid fa-plus mr-1" />{tIssue('addNewIssue')}
-                  </span>
-                  <button onClick={() => { setShowAddForm(false); handleBodyChange('') }} className="text-xs text-ive-text-dim hover:text-ive-text font-bold px-2 py-1 rounded-lg hover:bg-white/5 transition-all">
-                    {tCommon('cancel')}
-                  </button>
-                </div>
-                <p className="text-xs text-ive-text-dim mb-1.5"><i className="fa-solid fa-info-circle mr-1" />{tIssue('firstLineTitle')}{newBody && <span className="ml-2 text-ive-green/60"><i className="fa-solid fa-floppy-disk mr-0.5" />{tIssue('autoSaved')}</span>}</p>
-                <div className="flex gap-2 items-end mb-2">
-                  <textarea
-                    value={newBody}
-                    onChange={e => handleBodyChange(e.target.value)}
-                    onPaste={pasteHandlers.onPaste}
-                    onDrop={pasteHandlers.onDrop}
-                    onDragOver={pasteHandlers.onDragOver}
-                    placeholder={`${tIssue('titlePlaceholder')}\n\n${tIssue('bodyPlaceholder')}`}
-                    rows={4}
-                    className="flex-1 bg-ive-bg-deep border border-ive-border-dark rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-green/50"
-                    autoFocus
-                  />
-                </div>
-                {/* 담당자 */}
-                {gitMembers.length > 0 && (
-                  <div className="mb-2">
-                    <label className="text-xs font-bold text-ive-text-dim mb-1 block">
-                      <i className="fa-solid fa-user-tag mr-1" />{tIssue('assignee')}
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => openAssigneeModal([-1])}
-                      className="w-full bg-ive-bg-deep border border-ive-border-dark border-dashed rounded-lg px-3 py-2 text-left flex items-center gap-2 text-sm focus:outline-none hover:border-ive-green/50 transition-colors"
-                    >
-                      {selectedAssignees.length > 0 ? (
-                        <span className="flex items-center gap-1.5 flex-wrap">
-                          {selectedAssignees.map(a => (
-                            <span key={a.id} className="flex items-center gap-1 bg-ive-bg-card rounded px-1.5 py-0.5">
-                              {a.avatarUrl ? <img src={a.avatarUrl} className="w-4 h-4 rounded-full" alt="" /> : <i className="fa-solid fa-user text-xs text-ive-text-dim" />}
-                              <span className="text-ive-text font-bold text-xs">{a.name || a.username}</span>
-                            </span>
-                          ))}
-                          <i className="fa-solid fa-pen text-[10px] text-ive-text-dim ml-auto" />
-                        </span>
-                      ) : (
-                        <span className="text-ive-text-dim font-bold"><i className="fa-solid fa-user-plus mr-1.5" />{tIssue('selectAssignee')}</span>
-                      )}
-                    </button>
-                  </div>
-                )}
-                {/* 에이전트 지정 드롭다운 */}
-                <div ref={agentDropdownRef} className="relative mb-2">
-                  <label className="text-xs font-bold text-ive-text-dim mb-1 block">
-                    <i className="fa-solid fa-user-gear mr-1" />{tIssue('preferredAgent')}
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setAgentDropdownOpen(v => !v)}
-                    className="w-full bg-ive-bg-card border border-ive-border-dark rounded-lg px-3 py-2 text-left flex items-center gap-2 text-sm focus:outline-none focus:border-ive-green/50 transition-colors"
-                  >
-                    {preferredAgentId === 'none' ? (
-                      <>
-                        <span className="w-4 h-4 inline-flex items-center justify-center shrink-0 text-ive-text-muted"><i className="fa-solid fa-ban" /></span>
-                        <span className="text-ive-text font-bold">{tIssue('noAssignment')}</span>
-                      </>
-                    ) : preferredAgentId === 'assignee' ? (
-                      <>
-                        <span className="w-4 h-4 inline-flex items-center justify-center shrink-0 text-ive-cyan"><i className="fa-solid fa-user" /></span>
-                        <span className="text-ive-text font-bold">{tIssue('assigneeHandles')}</span>
-                      </>
-                    ) : preferredAgentId ? (() => {
-                      const pa = projectAgents.find(a => a.agentId === preferredAgentId)
-                      if (!pa) return <span className="text-ive-text font-bold">{tIssue('noPreference')}</span>
-                      const cli = CLI_CONFIG[pa.agent.cliName]
-                      return <>
-                        <AgentAvatar avatar={pa.agent.avatar} size="xs" />
-                        <span className="text-ive-text font-bold">{pa.agent.name}</span>
-                        <span className={`text-xs ${cli.color}`}><i className={`${cli.icon} mr-0.5`} />{cli.label}</span>
-                      </>
-                    })() : (
-                      <>
-                        <span className="w-4 h-4 inline-flex items-center justify-center shrink-0 text-ive-green"><i className="fa-solid fa-shuffle" /></span>
-                        <span className="text-ive-text font-bold">{tIssue('noPreference')}</span>
-                      </>
-                    )}
-                    <i className={`fa-solid fa-chevron-down text-xs text-ive-text-dim ml-auto transition-transform ${agentDropdownOpen ? 'rotate-180' : ''}`} />
-                  </button>
-                  {agentDropdownOpen && (
-                    <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-ive-bg-solid border border-ive-border-subtle rounded-lg overflow-hidden shadow-lg">
-                      <button
-                        onClick={() => { setPreferredAgentId('none'); setAgentDropdownOpen(false) }}
-                        className={`w-full px-3 py-2.5 text-left text-sm flex items-center gap-2 transition-colors ${
-                          preferredAgentId === 'none' ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text-dim hover:bg-white/5'
-                        }`}
-                      >
-                        <span className="w-4 h-4 inline-flex items-center justify-center shrink-0"><i className="fa-solid fa-ban" /></span>
-                        <span className="font-bold">{tIssue('noAssignment')}</span>
-                      </button>
-                      <button
-                        onClick={() => { setPreferredAgentId(null); setAgentDropdownOpen(false) }}
-                        className={`w-full px-3 py-2.5 text-left text-sm flex items-center gap-2 transition-colors ${
-                          preferredAgentId === null ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text-dim hover:bg-white/5'
-                        }`}
-                      >
-                        <span className="w-4 h-4 inline-flex items-center justify-center shrink-0"><i className="fa-solid fa-shuffle" /></span>
-                        <span className="font-bold">{tIssue('noPreference')}</span>
-                      </button>
-                      <button
-                        onClick={() => { setPreferredAgentId('assignee'); setAgentDropdownOpen(false) }}
-                        className={`w-full px-3 py-2.5 text-left text-sm flex items-center gap-2 transition-colors ${
-                          preferredAgentId === 'assignee' ? 'bg-ive-cyan/10 text-ive-cyan' : 'text-ive-text-dim hover:bg-white/5'
-                        }`}
-                      >
-                        <span className="w-4 h-4 inline-flex items-center justify-center shrink-0"><i className="fa-solid fa-user" /></span>
-                        <span className="font-bold">{tIssue('assigneeHandles')}</span>
-                      </button>
-                      {projectAgents.map(pa => {
-                        const cli = CLI_CONFIG[pa.agent.cliName]
-                        const isOffline = pa.agent.status === 'offline'
-                        return (
-                          <button
-                            key={pa.agentId}
-                            onClick={() => { setPreferredAgentId(pa.agentId); setAgentDropdownOpen(false) }}
-                            className={`w-full px-3 py-2.5 text-left text-sm flex items-center gap-2 transition-colors ${
-                              preferredAgentId === pa.agentId ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text hover:bg-white/5'
-                            }`}
-                          >
-                            <AgentAvatar avatar={pa.agent.avatar} size="xs" />
-                            <span className="font-bold">{pa.agent.name}</span>
-                            <span className={`text-xs ${cli.color}`}><i className={`${cli.icon} mr-0.5`} />{cli.label}</span>
-                            {isOffline && <span className="text-xs text-ive-red ml-auto"><i className="fa-solid fa-circle-exclamation mr-0.5" />{tIssue('agentOfflineWarning')}</span>}
-                            {!isOffline && pa.agent.status === 'busy' && <span className="ml-auto w-2 h-2 rounded-full bg-ive-cyan animate-pulse" />}
-                            {!isOffline && pa.agent.status === 'available' && <span className="ml-auto w-2 h-2 rounded-full bg-ive-green" />}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
-                {/* 담당자가 처리 모드인데 담당자 미지정 시 안내 */}
-                {preferredAgentId === 'assignee' && selectedAssignees.length === 0 && (
-                  <div className="mb-2 px-2.5 py-1.5 rounded-lg bg-ive-amber/10 border border-ive-amber/20 text-xs text-ive-amber">
-                    <i className="fa-solid fa-triangle-exclamation mr-1" />
-                    {tIssue('assigneeRequiredWarning')}
-                  </div>
-                )}
-                <button
-                  onClick={handleCreateIssue}
-                  disabled={creating || !newBody.split('\n')[0].trim()}
-                  className="w-full py-2 rounded-lg bg-ive-green text-ive-bg-deep text-sm font-bold transition-all active:scale-[0.98] disabled:opacity-40"
-                >
-                  {creating ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />{tCommon('creating')}</> : <><i className="fa-solid fa-paper-plane mr-1" />{tIssue('createIssue')}</>}
-                </button>
-              </div>
+              <IssueAddForm
+                selectedProjectId={selectedProjectId}
+                newBody={newBody}
+                onBodyChange={handleBodyChange}
+                creating={creating}
+                onCreateIssue={handleCreateIssue}
+                onCancel={() => { setShowAddForm(false); handleBodyChange('') }}
+                preferredAgentId={preferredAgentId}
+                onPreferredAgentIdChange={setPreferredAgentId}
+                projectAgents={projectAgents}
+                gitMembers={gitMembers}
+                selectedAssignees={selectedAssignees}
+                onOpenAssigneeModal={openAssigneeModal}
+              />
             )}
 
             {/* 벌크 모드 툴바 */}
             {bulkMode && !isHistoryTab && (
-              <div className="mb-3 bg-ive-bg-card border border-ive-amber/30 rounded-lg p-3">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={toggleSelectAll}
-                      className="w-7 h-7 rounded-lg border flex items-center justify-center transition-all bg-ive-bg-deep border-ive-border-dark text-ive-text-dim hover:border-ive-green/50"
-                    >
-                      {selected.size === filtered.length && filtered.length > 0
-                        ? <i className="fa-solid fa-square-check text-ive-green text-sm" />
-                        : selected.size > 0
-                          ? <i className="fa-solid fa-square-minus text-ive-amber text-sm" />
-                          : <i className="fa-regular fa-square text-sm" />
-                      }
-                    </button>
-                    <span className="text-sm font-bold text-ive-text">
-                      {selected.size > 0 ? tIssue('selected', { count: selected.size }) : tIssue('selectIssues')}
-                    </span>
-                    {selected.size > 0 && stages.size === 1 && (
-                      <span className={`text-xs font-bold px-1.5 py-0.5 rounded border ${(STAGE_INFO[[...stages][0]] || STAGE_INFO.unknown).color}`}>
-                        {(STAGE_INFO[[...stages][0]] || STAGE_INFO.unknown).label}
-                      </span>
-                    )}
-                    {selected.size > 0 && stages.size > 1 && (
-                      <span className="text-xs text-ive-amber font-bold">{tIssue('mixedStages')}</span>
-                    )}
-                  </div>
-                  <button onClick={exitBulkMode} className="text-sm text-ive-red font-bold px-3 py-1.5 rounded-lg border border-ive-red/30 bg-ive-bg-deep hover:bg-ive-red/10 transition-all active:scale-95">
-                    <i className="fa-solid fa-xmark mr-1" />{tCommon('cancel')}
-                  </button>
-                </div>
-
-                {/* 프로그레스 바 */}
-                {bulkProgress && (
-                  <div className="mb-2">
-                    <div className="flex items-center justify-between text-xs mb-1">
-                      <span className="text-ive-text-muted font-bold">
-                        {cancelRef.current ? tIssue('cancelled') : bulkProgress.done === bulkProgress.total ? tIssue('completed') : tCommon('processing')}
-                        {' '}{bulkProgress.done}/{bulkProgress.total}
-                        {bulkProgress.failed > 0 && <span className="text-ive-red ml-1">({tIssue('failed')} {bulkProgress.failed})</span>}
-                      </span>
-                      {bulkProgress.done < bulkProgress.total && !cancelRef.current && (
-                        <button onClick={handleCancel} className="text-ive-red font-bold hover:underline">
-                          {tIssue('stop')}
-                        </button>
-                      )}
-                    </div>
-                    <div className="w-full h-1.5 bg-ive-bg-deep rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-300 ${cancelRef.current ? 'bg-ive-amber' : bulkProgress.failed > 0 ? 'bg-ive-red' : 'bg-ive-green'}`}
-                        style={{ width: `${(bulkProgress.done / bulkProgress.total) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* 벌크 액션 버튼들 */}
-                {!bulkProgress && selected.size > 0 && (
-                  <div className="flex gap-2 flex-wrap">
-                    {gitMembers.length > 0 && (
-                      <button
-                        onClick={() => openAssigneeModal([...selected])}
-                        className="text-xs font-bold px-3 py-1.5 rounded-lg border text-ive-cyan border-ive-cyan/30 bg-ive-bg-deep hover:bg-ive-cyan/10 transition-all active:scale-95"
-                      >
-                        <i className="fa-solid fa-user-tag mr-1" />{tIssue('assignee')} ({selected.size})
-                      </button>
-                    )}
-                    {stages.size > 1 ? (
-                      <>
-                        <span className="text-xs text-ive-amber py-1">{tIssue('sameStageHint')}</span>
-                        <button
-                          onClick={() => handleBulkAction('close')}
-                          className="text-xs font-bold px-3 py-1.5 rounded-lg border text-ive-red/80 border-ive-red/30 bg-ive-bg-deep hover:bg-ive-red/10 transition-all active:scale-95"
-                        >
-                          <i className="fa-solid fa-xmark mr-1" />{tCommon('close')} ({selected.size})
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        {bulkActions.map(act => (
-                          <button
-                            key={act.action}
-                            onClick={() => handleBulkAction(act.action)}
-                            className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-all active:scale-95 ${
-                              act.danger
-                                ? 'text-ive-red/80 border-ive-red/30 bg-ive-bg-deep hover:bg-ive-red/10'
-                                : 'text-ive-green border-ive-green/30 bg-ive-bg-deep hover:bg-ive-green/10'
-                            }`}
-                          >
-                            <i className={`fa-solid ${act.icon} mr-1`} />{act.label} ({selected.size})
-                          </button>
-                        ))}
-                        <button
-                          onClick={() => handleBulkAction('close')}
-                          className="text-xs font-bold px-3 py-1.5 rounded-lg border text-ive-red/80 border-ive-red/30 bg-ive-bg-deep hover:bg-ive-red/10 transition-all active:scale-95"
-                        >
-                          <i className="fa-solid fa-xmark mr-1" />{tCommon('close')} ({selected.size})
-                        </button>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
+              <BulkActionBar
+                selected={selected}
+                filteredCount={filtered.length}
+                stages={stages}
+                stageInfo={STAGE_INFO}
+                bulkActions={bulkActions}
+                bulkProgress={bulkProgress}
+                cancelRef={cancelRef}
+                gitMembersCount={gitMembers.length}
+                onToggleSelectAll={toggleSelectAll}
+                onExitBulkMode={exitBulkMode}
+                onBulkAction={handleBulkAction}
+                onCancel={handleCancel}
+                onOpenAssigneeModal={openAssigneeModal}
+              />
             )}
 
           </>
@@ -1344,222 +1119,37 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
           </div>
         </div>
       )}
-      {/* 담당자 선택 모달 — 단일 선택 + 확인 */}
-      <Modal open={assigneeModalIids.length > 0} onClose={() => setAssigneeModalIids([])} title={`${tIssue('assignee')}${assigneeModalIids.length > 1 && !assigneeModalIids.includes(-1) ? ` (${assigneeModalIids.length}${tCommon('items')})` : ''}`} size="sm">
-        <div className="p-1.5 border-b border-ive-border-dark">
-          <input
-            type="text"
-            value={assigneeModalSearch}
-            onChange={e => setAssigneeModalSearch(e.target.value)}
-            placeholder={tIssue('searchMember')}
-            className="w-full bg-ive-bg-deep border border-ive-border-dark rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim focus:outline-none focus:border-ive-green/50"
-            autoFocus
-          />
-        </div>
-        <div className="max-h-[50vh] overflow-y-auto">
-          {/* 담당자 없음 옵션 */}
-          <button
-            onClick={() => setAssigneeModalPick(null)}
-            className={`w-full px-4 py-3 text-left text-sm flex items-center gap-3 transition-colors ${
-              !assigneeModalPick ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text-dim hover:bg-white/5'
-            }`}
-          >
-            {!assigneeModalPick ? <i className="fa-solid fa-circle-dot text-xs shrink-0 w-4" /> : <i className="fa-regular fa-circle text-xs shrink-0 w-4 opacity-30" />}
-            <div className="w-7 h-7 rounded-full bg-ive-bg-deep flex items-center justify-center shrink-0">
-              <i className="fa-solid fa-ban text-ive-text-dim text-xs" />
-            </div>
-            <span className="font-bold">{tIssue('noAssignee')}</span>
-          </button>
-          {gitMembers.filter(m => {
-            if (!assigneeModalSearch) return true
-            const q = assigneeModalSearch.toLowerCase()
-            return (m.name || '').toLowerCase().includes(q) || m.username.toLowerCase().includes(q)
-          }).map(m => {
-            const isPicked = assigneeModalPick?.id === m.id
-            return (
-              <button
-                key={m.id}
-                onClick={() => setAssigneeModalPick(m)}
-                className={`w-full px-4 py-3 text-left text-sm flex items-center gap-3 transition-colors ${
-                  isPicked ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text hover:bg-white/5'
-                }`}
-              >
-                {isPicked ? <i className="fa-solid fa-circle-dot text-xs shrink-0 w-4" /> : <i className="fa-regular fa-circle text-xs shrink-0 w-4 opacity-30" />}
-                {m.avatarUrl ? <img src={m.avatarUrl} className="w-7 h-7 rounded-full shrink-0" alt="" /> : <div className="w-7 h-7 rounded-full bg-ive-bg-deep flex items-center justify-center shrink-0"><i className="fa-solid fa-user text-ive-text-dim text-xs" /></div>}
-                <div className="min-w-0 flex-1">
-                  <div className="font-bold truncate">{m.name || m.username}</div>
-                  {m.name && m.name !== m.username && <div className="text-xs text-ive-text-dim truncate">@{m.username}</div>}
-                </div>
-              </button>
-            )
-          })}
-        </div>
-        <div className="p-3 border-t border-ive-border-dark flex gap-2">
-          <button
-            onClick={() => setAssigneeModalIids([])}
-            className="flex-1 py-2 rounded-lg text-sm font-bold text-ive-text-dim border border-ive-border-subtle hover:bg-white/5 transition-all"
-          >
-            {tCommon('cancel')}
-          </button>
-          <button
-            onClick={handleConfirmAssignee}
-            className="flex-1 py-2 rounded-lg text-sm font-bold bg-ive-green text-ive-bg-deep transition-all active:scale-[0.98]"
-          >
-            {tCommon('confirm')}
-          </button>
-        </div>
-      </Modal>
+      {/* 담당자 선택 모달 */}
+      <AssigneePickerModal
+        open={assigneeModalIids.length > 0}
+        onClose={() => setAssigneeModalIids([])}
+        iids={assigneeModalIids}
+        gitMembers={gitMembers}
+        search={assigneeModalSearch}
+        onSearchChange={setAssigneeModalSearch}
+        pick={assigneeModalPick}
+        onPickChange={setAssigneeModalPick}
+        onConfirm={handleConfirmAssignee}
+      />
       {/* 대기 이슈 에이전트 선택 모달 */}
-      <Modal open={agentPickerIid !== null} onClose={() => setAgentPickerIid(null)} title={`#${agentPickerIid ?? ''} ${tIssue('preferredAgent')}`} size="sm">
-        {(() => {
-          const targetIssue = agentPickerIid !== null ? issues.find(i => i.iid === agentPickerIid) : null
-          const currentMode = targetIssue?.assignMode || 'auto'
-          const currentAgentId = targetIssue?.preferredAgentId || null
-          return (
-            <div className="max-h-[60vh] overflow-y-auto">
-              <button
-                disabled={agentPickerSaving}
-                onClick={() => agentPickerIid !== null && handleChangeIssueAgent(agentPickerIid, 'auto', null)}
-                className={`w-full px-4 py-3 text-left text-sm flex items-center gap-3 transition-colors disabled:opacity-40 ${
-                  currentMode === 'auto' ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text-dim hover:bg-white/5'
-                }`}
-              >
-                <span className="w-4 h-4 inline-flex items-center justify-center shrink-0"><i className="fa-solid fa-shuffle" /></span>
-                <span className="font-bold">{tIssue('noPreference')}</span>
-              </button>
-              <button
-                disabled={agentPickerSaving}
-                onClick={() => agentPickerIid !== null && handleChangeIssueAgent(agentPickerIid, 'assignee', null)}
-                className={`w-full px-4 py-3 text-left text-sm flex items-center gap-3 transition-colors disabled:opacity-40 ${
-                  currentMode === 'assignee' ? 'bg-ive-cyan/10 text-ive-cyan' : 'text-ive-text-dim hover:bg-white/5'
-                }`}
-              >
-                <span className="w-4 h-4 inline-flex items-center justify-center shrink-0"><i className="fa-solid fa-user" /></span>
-                <span className="font-bold">{tIssue('assigneeHandles')}</span>
-              </button>
-              {projectAgents.map(pa => {
-                const cli = CLI_CONFIG[pa.agent.cliName]
-                const isOffline = pa.agent.status === 'offline'
-                const isPicked = currentMode === 'agent' && currentAgentId === pa.agentId
-                return (
-                  <button
-                    key={pa.agentId}
-                    disabled={agentPickerSaving}
-                    onClick={() => agentPickerIid !== null && handleChangeIssueAgent(agentPickerIid, 'agent', pa.agentId)}
-                    className={`w-full px-4 py-3 text-left text-sm flex items-center gap-3 transition-colors disabled:opacity-40 ${
-                      isPicked ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text hover:bg-white/5'
-                    }`}
-                  >
-                    <AgentAvatar avatar={pa.agent.avatar} size="xs" />
-                    <span className="font-bold">{pa.agent.name}</span>
-                    <span className={`text-xs ${cli.color}`}><i className={`${cli.icon} mr-0.5`} />{cli.label}</span>
-                    {isOffline && <span className="text-xs text-ive-red ml-auto"><i className="fa-solid fa-circle-exclamation mr-0.5" />{tIssue('agentOfflineWarning')}</span>}
-                    {!isOffline && pa.agent.status === 'busy' && <span className="ml-auto w-2 h-2 rounded-full bg-ive-cyan animate-pulse" />}
-                    {!isOffline && pa.agent.status === 'available' && <span className="ml-auto w-2 h-2 rounded-full bg-ive-green" />}
-                  </button>
-                )
-              })}
-            </div>
-          )
-        })()}
-      </Modal>
-
-      {/* 레이블 누락 안내 모달 — 이슈 생성 시 필수 레이블이 없을 때 */}
-      <Modal
+      <AgentPickerModal
+        iid={agentPickerIid}
+        issues={issues}
+        projectAgents={projectAgents}
+        saving={agentPickerSaving}
+        onSelect={handleChangeIssueAgent}
+        onClose={() => setAgentPickerIid(null)}
+      />
+      {/* 레이블 누락 안내 모달 */}
+      <LabelCheckModal
         open={labelModalOpen}
         onClose={() => setLabelModalOpen(false)}
-        title={tIssue('labelModalTitle')}
-        closeOnBackdrop={false}
-      >
-        <div className="flex flex-col gap-4">
-          <div className="bg-ive-amber/10 border border-ive-amber/30 rounded-lg p-3">
-            <div className="text-sm font-bold text-ive-amber mb-1">
-              <i className="fa-solid fa-triangle-exclamation mr-1.5" />
-              {tIssue('labelRequiredDesc')}
-            </div>
-            <p className="text-xs font-bold text-ive-text-muted leading-relaxed">
-              {tIssue('labelTrackingDesc')}
-              <br />
-              <span className="text-ive-text-dim">{tIssue('labelAutoCreateHint')}</span>
-            </p>
-          </div>
-
-          <div className="space-y-1.5">
-            {labelStatus.length === 0 ? (
-              <div className="text-sm font-bold text-ive-text-dim text-center py-2">
-                <i className="fa-solid fa-circle-notch fa-spin mr-1.5" />
-                {tIssue('labelStatusChecking')}
-              </div>
-            ) : (
-              labelStatus.map(s => (
-                <div
-                  key={s.label}
-                  className={`flex items-center gap-2 text-sm font-bold px-3 py-2 rounded-lg border ${
-                    s.exists
-                      ? 'border-ive-green/30 bg-ive-green/10 text-ive-green'
-                      : 'border-ive-red/30 bg-ive-red/10 text-ive-red'
-                  }`}
-                >
-                  <i className={`fa-solid ${s.exists ? 'fa-circle-check' : 'fa-circle-xmark'}`} />
-                  <span className="flex-1">{s.label}</span>
-                  <span className="text-xs text-ive-text-dim">
-                    {s.exists ? tIssue('labelStatusExists') : tIssue('labelStatusMissing')}
-                  </span>
-                </div>
-              ))
-            )}
-          </div>
-
-          {labelCreateMsg && (
-            <div className="text-sm font-bold text-ive-amber bg-ive-amber/10 rounded-lg px-3 py-2 border border-ive-amber/30">
-              <i className="fa-solid fa-circle-exclamation mr-1.5" />
-              {labelCreateMsg}
-            </div>
-          )}
-
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setLabelModalOpen(false)}
-              className="flex-1 bg-white/5 border border-ive-border-subtle text-ive-text-muted font-bold py-3 rounded-lg text-sm active:opacity-80 transition-all"
-            >
-              {tCommon('cancel')}
-            </button>
-            <button
-              type="button"
-              disabled={labelCreating || !selectedProjectId || labelStatus.every(s => s.exists)}
-              onClick={async () => {
-                if (!selectedProjectId) return
-                setLabelCreating(true)
-                setLabelCreateMsg(null)
-                try {
-                  const res = await fetch(`/api/projects/${selectedProjectId}/labels`, { method: 'POST' })
-                  const data = await res.json()
-                  setLabelStatus(data.results || [])
-                  if (data.success) {
-                    setLabelCreateMsg(null)
-                    setPendingCreateAfterLabels(true)
-                    setLabelModalOpen(false)
-                  } else {
-                    setLabelCreateMsg(data.message || tProject('labelCreateFailed'))
-                  }
-                } catch {
-                  setLabelCreateMsg(tIssue('networkErrorOccurred'))
-                } finally {
-                  setLabelCreating(false)
-                }
-              }}
-              className="flex-[2] bg-ive-green-dark text-white font-bold py-3 rounded-lg text-sm active:opacity-90 transition-all disabled:opacity-40"
-            >
-              {labelCreating ? (
-                <><i className="fa-solid fa-circle-notch fa-spin mr-1.5" />{tCommon('creating')}</>
-              ) : (
-                <><i className="fa-solid fa-wand-magic-sparkles mr-1.5" />{tIssue('autoCreateLabels')}</>
-              )}
-            </button>
-          </div>
-        </div>
-      </Modal>
+        labelStatus={labelStatus}
+        labelCreating={labelCreating}
+        labelCreateMsg={labelCreateMsg}
+        selectedProjectId={selectedProjectId}
+        onAutoCreate={handleAutoCreateLabels}
+      />
     </PullToRefresh>
   )
 }

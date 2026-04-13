@@ -453,10 +453,16 @@ export async function fetchOpenGitHubPRs(project: Project, decryptedToken: strin
   let page = 1;
 
   while (true) {
-    const res = await fetch(
-      apiUrl(project, `/pulls?state=open&per_page=100&page=${page}`),
-      { headers }
-    );
+    let res: Response;
+    try {
+      res = await fetch(
+        apiUrl(project, `/pulls?state=open&per_page=100&page=${page}`),
+        { headers }
+      );
+    } catch (e) {
+      console.error(`[GitHub] fetchOpenGitHubPRs 네트워크 오류 (${ownerRepo}):`, (e as Error).message);
+      return prs;
+    }
     if (!res.ok) break;
     const data = await res.json();
     if (!data.length) break;

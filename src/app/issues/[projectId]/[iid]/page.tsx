@@ -9,10 +9,14 @@ import PullToRefresh from '@/components/ui/PullToRefresh'
 import MRReviewSection from '@/components/mr/MRReviewSection'
 import MarkdownNote, { cleanNoteBody } from '@/components/ui/MarkdownNote'
 import { useTranslations } from 'next-intl'
+import ElapsedTimer from './_components/ElapsedTimer'
+import NoteBody from './_components/NoteBody'
+import MrActionModal from './_components/MrActionModal'
+import AssigneePickerModal from './_components/AssigneePickerModal'
+import StageActionButtons, { useStageConfig } from './_components/StageActions'
 import { useStore } from '@/lib/store'
 import { formatDateMedium, formatTime } from '@/lib/format-date'
 import AgentAvatar from '@/components/agent/AgentAvatar'
-import Modal from '@/components/ui/Modal'
 import { createImagePasteHandlers } from '@/lib/paste-upload'
 
 interface ChatMessage {
@@ -55,13 +59,6 @@ interface Note {
   isMine?: boolean
 }
 
-interface StageAction {
-  action: string
-  label: string
-  icon: string
-  danger?: boolean
-}
-
 export default function IssueDetailPage({ params }: { params: Promise<{ projectId: string; iid: string }> }) {
   const { projectId, iid } = use(params)
   const router = useRouter()
@@ -69,46 +66,9 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   const { toast } = useToast()
   const { state } = useStore()
   const tc = useTranslations('common')
-  const tStage = useTranslations('stage')
   const tIssue = useTranslations('issue')
   const tAuth = useTranslations('auth')
-
-  const STAGE_INFO: Record<string, { label: string; color: string; icon: string; bg: string }> = {
-    waiting:        { label: tStage('waiting'),        color: 'text-ive-cyan',      icon: 'fa-clock',              bg: 'bg-ive-cyan/10' },
-    verify_waiting: { label: tStage('verify_waiting'), color: 'text-ive-amber',     icon: 'fa-hourglass-half',     bg: 'bg-ive-amber/10' },
-    dev:            { label: tStage('dev'),            color: 'text-ive-amber',     icon: 'fa-code',               bg: 'bg-ive-amber/10' },
-    dev_fail:       { label: tStage('dev_fail'),       color: 'text-ive-red',       icon: 'fa-circle-xmark',       bg: 'bg-ive-red/10' },
-    verifying:      { label: tStage('verifying'),      color: 'text-ive-amber',     icon: 'fa-magnifying-glass',   bg: 'bg-ive-amber/10' },
-    done:           { label: tStage('done'),           color: 'text-ive-green',     icon: 'fa-circle-check',       bg: 'bg-ive-green/10' },
-    closed:         { label: tStage('closed'),         color: 'text-ive-text-muted',icon: 'fa-lock',               bg: 'bg-white/5' },
-    rejected:       { label: tStage('rejected'),       color: 'text-ive-red',       icon: 'fa-rotate-left',        bg: 'bg-ive-red/10' },
-    unknown:        { label: tStage('unknown'),        color: 'text-ive-text-dim',  icon: 'fa-question',           bg: 'bg-white/5' },
-  }
-
-  const STAGE_ACTIONS: Record<string, StageAction[]> = {
-    waiting: [],
-    verify_waiting: [
-      { action: 'start_verification', label: tIssue('startVerification'), icon: 'fa-play' },
-      { action: 'cancel', label: tIssue('cancelToWaiting'), icon: 'fa-rotate-left', danger: true },
-    ],
-    dev: [
-      { action: 'cancel', label: tIssue('cancelToDev'), icon: 'fa-rotate-left', danger: true },
-    ],
-    dev_fail: [
-      { action: 'retry', label: tIssue('retryToWaiting'), icon: 'fa-rotate' },
-    ],
-    verifying: [
-      { action: 'approve', label: tIssue('approveVerify'), icon: 'fa-circle-check' },
-      { action: 'reject', label: tIssue('rejectVerify'), icon: 'fa-rotate-left', danger: true },
-    ],
-    done: [
-      { action: 'reopen', label: tIssue('reopenToWaiting'), icon: 'fa-rotate' },
-      { action: 'retry', label: tIssue('retryToWaiting'), icon: 'fa-rotate' },
-    ],
-    rejected: [
-      { action: 'retry', label: tIssue('retryToWaiting'), icon: 'fa-rotate' },
-    ],
-  }
+  const { STAGE_INFO, STAGE_ACTIONS } = useStageConfig()
   const [issue, setIssue] = useState<IssueDetail | null>(null)
   const [notes, setNotes] = useState<Note[]>([])
   const [loading, setLoading] = useState(true)
@@ -118,8 +78,6 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   const retryAgentPickerRef = useRef<HTMLDivElement>(null)
   const [gitMembers, setGitMembers] = useState<IssueAssignee[]>([])
   const [assigneePickerOpen, setAssigneePickerOpen] = useState(false)
-  const [assigneeSearch, setAssigneeSearch] = useState('')
-  const [assigneePick, setAssigneePick] = useState<IssueAssignee | null>(null)
   const [notesLoading, setNotesLoading] = useState(true)
   const commentKey = `issue-comment-${projectId}-${iid}`
   const [comment, setComment] = useState(() => {
@@ -256,9 +214,9 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
     return () => document.removeEventListener('mousedown', handler)
   }, [retryAgentPickerOpen])
 
-  async function handleConfirmAssignee() {
+  async function handleConfirmAssignee(pick: IssueAssignee | null) {
     if (!issue) return
-    const updated = assigneePick ? [assigneePick] : []
+    const updated = pick ? [pick] : []
     setIssue({ ...issue, assignees: updated })
     setAssigneePickerOpen(false)
     await fetch(`/api/projects/${projectId}/issues/${iid}/assignees`, {
@@ -1045,7 +1003,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
           {/* 담당자 */}
           <button
             type="button"
-            onClick={() => { setAssigneeSearch(''); setAssigneePick(issue.assignees?.[0] || null); setAssigneePickerOpen(true) }}
+            onClick={() => setAssigneePickerOpen(true)}
             className="flex items-center gap-1 text-xs text-ive-text-dim hover:text-ive-text transition-all shrink-0"
           >
             {(issue.assignees && issue.assignees.length > 0) ? (
@@ -1132,20 +1090,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
                       <i className={`fa-solid fa-file-lines text-xs`} />
                     </button>
                   )}
-                  {canProgressStage && actions.map(act => (
-                    <button
-                      key={act.action}
-                      onClick={() => handleStageAction(act.action)}
-                      disabled={stageChanging}
-                      className={`h-7 px-2 rounded-lg text-xs font-bold border transition-all active:scale-95 disabled:opacity-40 ${
-                        act.danger
-                          ? 'text-ive-red/80 border-ive-red/30 bg-ive-bg-card hover:bg-ive-red/10'
-                          : 'text-ive-green border-ive-green/30 bg-ive-bg-card hover:bg-ive-green/10'
-                      }`}
-                    >
-                      {stageChanging ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className={`fa-solid ${act.icon} mr-0.5`} />{act.label}</>}
-                    </button>
-                  ))}
+                  {canProgressStage && <StageActionButtons actions={actions} stageChanging={stageChanging} onAction={handleStageAction} />}
                   {canProgressStage && (
                     <button
                       onClick={handleCloseIssue}
@@ -1622,166 +1567,25 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
       </div>
 
       {/* 검증 완료 시 MR 처리 선택 모달 */}
-      <Modal open={!!mrActionModal} onClose={() => !mrActionBusy && setMrActionModal(null)} title="열려 있는 MR 처리" size="sm">
-        {mrActionModal && (
-          <div className="p-4 space-y-4">
-            <p className="text-sm text-ive-text-muted">
-              이 이슈에 아직 열려 있는 MR이 있습니다. 검증을 완료하기 전에 MR을 어떻게 처리할지 선택해주세요.
-            </p>
-            <a
-              href={mrActionModal.mr.web_url}
-              target="_blank"
-              rel="noreferrer"
-              className="block bg-ive-bg-deep border border-ive-border-dark rounded-lg px-3 py-2 hover:border-ive-cyan/40 transition-colors"
-            >
-              <div className="text-xs font-mono text-ive-cyan font-bold">!{mrActionModal.mr.iid}</div>
-              <div className="text-sm text-ive-text truncate">{mrActionModal.mr.title}</div>
-              {mrActionModal.mr.has_conflicts && (
-                <div className="text-xs text-ive-red font-bold mt-1">
-                  <i className="fa-solid fa-triangle-exclamation mr-1" />충돌 있음
-                </div>
-              )}
-            </a>
-            <div className="flex flex-col gap-2">
-              <button
-                onClick={() => handleMrActionChoice('merge')}
-                disabled={mrActionBusy || mrActionModal.mr.has_conflicts}
-                className="w-full px-3 py-2.5 rounded-lg text-sm font-bold text-ive-cyan border border-ive-cyan/30 bg-ive-cyan/5 hover:bg-ive-cyan/15 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                <i className="fa-solid fa-code-merge mr-1.5" />MR 머지 후 완료
-              </button>
-              <button
-                onClick={() => handleMrActionChoice('close')}
-                disabled={mrActionBusy}
-                className="w-full px-3 py-2.5 rounded-lg text-sm font-bold text-ive-red border border-ive-red/30 bg-ive-red/5 hover:bg-ive-red/15 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                <i className="fa-solid fa-xmark mr-1.5" />MR 닫기 후 완료
-              </button>
-              <button
-                onClick={() => handleMrActionChoice('none')}
-                disabled={mrActionBusy}
-                className="w-full px-3 py-2.5 rounded-lg text-sm font-bold text-ive-text-dim border border-ive-border-dark bg-ive-bg-deep hover:bg-white/5 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                <i className="fa-solid fa-arrow-right mr-1.5" />MR 유지 · 상태만 변경
-              </button>
-              <button
-                onClick={() => !mrActionBusy && setMrActionModal(null)}
-                disabled={mrActionBusy}
-                className="w-full px-3 py-2 rounded-lg text-xs font-bold text-ive-text-dim hover:text-ive-text transition-colors disabled:opacity-40"
-              >
-                취소
-              </button>
-            </div>
-          </div>
-        )}
-      </Modal>
+      <MrActionModal
+        open={!!mrActionModal}
+        mr={mrActionModal?.mr ?? null}
+        busy={mrActionBusy}
+        onChoice={handleMrActionChoice}
+        onClose={() => setMrActionModal(null)}
+      />
 
-      {/* 담당자 선택 모달 — 단일 선택 + 확인 */}
-      <Modal open={assigneePickerOpen} onClose={() => setAssigneePickerOpen(false)} title={tIssue('assignee')} size="sm">
-        <div className="p-1.5 border-b border-ive-border-dark">
-          <input
-            type="text"
-            value={assigneeSearch}
-            onChange={e => setAssigneeSearch(e.target.value)}
-            placeholder={tIssue('searchMember')}
-            className="w-full bg-ive-bg-deep border border-ive-border-dark rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim focus:outline-none focus:border-ive-green/50"
-            autoFocus
-          />
-        </div>
-        <div className="max-h-[50vh] overflow-y-auto">
-          {/* 담당자 없음 옵션 */}
-          <button
-            onClick={() => setAssigneePick(null)}
-            className={`w-full px-4 py-3 text-left text-sm flex items-center gap-3 transition-colors ${
-              !assigneePick ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text-dim hover:bg-white/5'
-            }`}
-          >
-            {!assigneePick ? <i className="fa-solid fa-circle-dot text-xs shrink-0 w-4" /> : <i className="fa-regular fa-circle text-xs shrink-0 w-4 opacity-30" />}
-            <div className="w-7 h-7 rounded-full bg-ive-bg-deep flex items-center justify-center shrink-0">
-              <i className="fa-solid fa-ban text-ive-text-dim text-xs" />
-            </div>
-            <span className="font-bold">{tIssue('noAssignee')}</span>
-          </button>
-          {gitMembers.filter(m => {
-            if (!assigneeSearch) return true
-            const q = assigneeSearch.toLowerCase()
-            return (m.name || '').toLowerCase().includes(q) || m.username.toLowerCase().includes(q)
-          }).map(m => {
-            const isPicked = assigneePick?.id === m.id
-            return (
-              <button
-                key={m.id}
-                onClick={() => setAssigneePick(m)}
-                className={`w-full px-4 py-3 text-left text-sm flex items-center gap-3 transition-colors ${
-                  isPicked ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text hover:bg-white/5'
-                }`}
-              >
-                {isPicked ? <i className="fa-solid fa-circle-dot text-xs shrink-0 w-4" /> : <i className="fa-regular fa-circle text-xs shrink-0 w-4 opacity-30" />}
-                {m.avatarUrl ? <img src={m.avatarUrl} className="w-7 h-7 rounded-full shrink-0" alt="" /> : <div className="w-7 h-7 rounded-full bg-ive-bg-deep flex items-center justify-center shrink-0"><i className="fa-solid fa-user text-ive-text-dim text-xs" /></div>}
-                <div className="min-w-0 flex-1">
-                  <div className="font-bold truncate">{m.name || m.username}</div>
-                  {m.name && m.name !== m.username && <div className="text-xs text-ive-text-dim truncate">@{m.username}</div>}
-                </div>
-              </button>
-            )
-          })}
-        </div>
-        <div className="p-3 border-t border-ive-border-dark flex gap-2">
-          <button
-            onClick={() => setAssigneePickerOpen(false)}
-            className="flex-1 py-2 rounded-lg text-sm font-bold text-ive-text-dim border border-ive-border-subtle hover:bg-white/5 transition-all"
-          >
-            {tc('cancel')}
-          </button>
-          <button
-            onClick={handleConfirmAssignee}
-            className="flex-1 py-2 rounded-lg text-sm font-bold bg-ive-green text-ive-bg-deep transition-all active:scale-[0.98]"
-          >
-            {tc('confirm')}
-          </button>
-        </div>
-      </Modal>
+      {/* 담당자 선택 모달 */}
+      <AssigneePickerModal
+        open={assigneePickerOpen}
+        gitMembers={gitMembers}
+        initialPick={issue.assignees?.[0] || null}
+        onConfirm={handleConfirmAssignee}
+        onClose={() => setAssigneePickerOpen(false)}
+      />
 
       <MobileTabBar />
     </div>
   )
 }
 
-// 경과 시간 표시 (예: "3초 생각중...")
-function ElapsedTimer({ startTime }: { startTime: number | null }) {
-  const [seconds, setSeconds] = useState(0)
-  const tIssue = useTranslations('issue')
-  useEffect(() => {
-    if (!startTime) return
-    const tick = () => setSeconds(Math.floor((Date.now() - startTime) / 1000))
-    tick()
-    const interval = setInterval(tick, 1000)
-    return () => clearInterval(interval)
-  }, [startTime])
-  return (
-    <span className="text-ive-cyan text-sm">
-      {tIssue('chatThinking', { seconds })}
-    </span>
-  )
-}
-
-
-// 긴 노트를 접었다 펼 수 있는 컴포넌트
-function NoteBody({ body, projectId }: { body: string; projectId?: string }) {
-  const [expanded, setExpanded] = useState(false)
-  const tc = useTranslations('common')
-  const tIssue = useTranslations('issue')
-  const cleaned = cleanNoteBody(body)
-  const display = expanded ? cleaned : cleaned.slice(0, 500) + '...'
-  return (
-    <>
-      <MarkdownNote body={display} projectId={projectId} />
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="block mt-1 text-xs text-ive-green hover:underline"
-      >
-        {expanded ? tc('collapse') : tIssue('viewAll')}
-      </button>
-    </>
-  )
-}

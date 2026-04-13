@@ -1,0 +1,293 @@
+/**
+ * 순수 유틸리티 함수들 (DB 의존 없음)
+ * - 이벤트 포맷팅, 메타데이터 파싱
+ */
+
+/**
+ * 이슈 본문에서 <!-- ive-meta ... --> 블록을 파싱한다.
+ * 외부 도구(Claude Code 등)가 이슈 생성 시 삽입한 YAML 형식의 메타데이터.
+ * HTML 주석이므로 GitLab/GitHub UI에서는 보이지 않는다.
+ */
+export function parseIveMeta(body: string): {
+  model: string | null
+  inputTokens: number
+  outputTokens: number
+  costUsd: number
+  turns: number
+  startedAt: string | null
+  endedAt: string | null
+} {
+  const defaults = { model: null as string | null, inputTokens: 0, outputTokens: 0, costUsd: 0, turns: 0, startedAt: null as string | null, endedAt: null as string | null };
+  if (!body) return defaults;
+  const match = body.match(/<!--\s*ive-meta\s*\n([\s\S]*?)-->/);
+  if (!match) return defaults;
+  const lines = match[1].split('\n');
+  for (const line of lines) {
+    const kv = line.match(/^\s*(\w+)\s*:\s*(.+)\s*$/);
+    if (!kv) continue;
+    const [, key, val] = kv;
+    switch (key) {
+      case 'model': defaults.model = val.trim(); break;
+      case 'input_tokens': defaults.inputTokens = Number(val) || 0; break;
+      case 'output_tokens': defaults.outputTokens = Number(val) || 0; break;
+      case 'cost_usd': defaults.costUsd = Number(val) || 0; break;
+      case 'turns': defaults.turns = Number(val) || 0; break;
+      case 'started_at': defaults.startedAt = val.trim(); break;
+      case 'ended_at': defaults.endedAt = val.trim(); break;
+    }
+  }
+  return defaults;
+}
+
+/**
+ * OpenCode run --format json 이벤트를 읽기 좋은 로그 텍스트로 변환
+ */
+export function formatOpenCodeEvent(event: any, showToolUsage: boolean = false): string | null {
+  switch (event.type) {
+    case 'text': {
+      // OpenCode 1.x: content is in event.part.text
+      const content = event.part?.text ?? event.content ?? event.text ?? '';
+      if (!content.trim()) return null;
+      return content;
+    }
+    case 'tool_use': {
+      if (!showToolUsage) return null;
+      // OpenCode 1.x: tool name is in event.part.tool, input in event.part.state.input
+      const toolName = event.part?.tool ?? event.tool ?? event.name ?? '';
+      const input = event.part?.state?.input ?? event.input ?? event.args ?? {};
+      const summary = formatToolInput(toolName, input);
+      return `\x1b[1;34m[Tool] ${toolName}\x1b[0m ${summary}`;
+    }
+    case 'step_finish': {
+      // OpenCode 1.x: completion is step_finish with reason='stop'
+      if (event.part?.reason !== 'stop') return null;
+      const tokens = event.part?.tokens ?? {};
+      const inputT = tokens.input ?? 0;
+      const outputT = tokens.output ?? 0;
+      const cost = event.part?.cost ?? 0;
+      const meta: string[] = [];
+      if (inputT || outputT) meta.push(`입력 ${Number(inputT).toLocaleString()} + 출력 ${Number(outputT).toLocaleString()} 토큰`);
+      if (cost) meta.push(`비용 $${Number(cost).toFixed(4)}`);
+      const metaStr = meta.length > 0 ? `\x1b[90m(${meta.join(' | ')})\x1b[0m ` : '';
+      return `\x1b[1;32m[완료]\x1b[0m ${metaStr}`;
+    }
+    case 'session.status': {
+      // Legacy format fallback
+      const meta: string[] = [];
+      const inputT = event.inputTokens ?? event.input_tokens ?? event.tokens?.input ?? 0;
+      const outputT = event.outputTokens ?? event.output_tokens ?? event.tokens?.output ?? 0;
+      const cost = event.cost ?? event.costUsd ?? event.cost_usd ?? 0;
+      if (inputT || outputT) meta.push(`입력 ${Number(inputT).toLocaleString()} + 출력 ${Number(outputT).toLocaleString()} 토큰`);
+      if (cost) meta.push(`비용 $${Number(cost).toFixed(4)}`);
+      const metaStr = meta.length > 0 ? `\x1b[90m(${meta.join(' | ')})\x1b[0m ` : '';
+      return `\x1b[1;32m[완료]\x1b[0m ${metaStr}`;
+    }
+    case 'session.error': {
+      const msg = event.error ?? event.message ?? '알 수 없는 오류';
+      return `\x1b[1;31m[오류]\x1b[0m ${msg}`;
+    }
+    default:
+      return null;
+  }
+}
+
+export function formatOpenCodeEventMarkdown(event: any): string | null {
+  switch (event.type) {
+    case 'text': {
+      const content = event.part?.text ?? event.content ?? event.text ?? '';
+      return content.trim() || null;
+    }
+    case 'tool_use': {
+      const toolName = event.part?.tool ?? event.tool ?? event.name ?? '';
+      const summary = formatToolInputMarkdown(toolName, event.part?.state?.input ?? event.input ?? event.args ?? {});
+      return `> **🔧 ${toolName}** ${summary}`;
+    }
+    case 'step_finish': {
+      if (event.part?.reason !== 'stop') return null;
+      const tokens = event.part?.tokens ?? {};
+      const inputT = tokens.input ?? 0;
+      const outputT = tokens.output ?? 0;
+      const cost = event.part?.cost ?? 0;
+      const meta: string[] = [];
+      if (cost) meta.push(`비용: $${Number(cost).toFixed(4)}`);
+      if (inputT || outputT) meta.push(`토큰: ${(Number(inputT) + Number(outputT)).toLocaleString()}`);
+      return `\n---\n**📊 실행 결과** ${meta.join(' | ')}`;
+    }
+    case 'session.status': {
+      // Legacy format fallback
+      const meta: string[] = [];
+      const inputT = event.inputTokens ?? event.input_tokens ?? event.tokens?.input ?? 0;
+      const outputT = event.outputTokens ?? event.output_tokens ?? event.tokens?.output ?? 0;
+      const cost = event.cost ?? event.costUsd ?? event.cost_usd ?? 0;
+      const model = event.model ?? event.modelId ?? event.model_id ?? '';
+      if (model) meta.push(`모델: ${model}`);
+      if (cost) meta.push(`비용: $${Number(cost).toFixed(4)}`);
+      if (inputT || outputT) meta.push(`토큰: ${(Number(inputT) + Number(outputT)).toLocaleString()}`);
+      return `\n---\n**📊 실행 결과** ${meta.join(' | ')}`;
+    }
+    default:
+      return null;
+  }
+}
+
+/**
+ * Claude CLI stream-json 이벤트를 읽기 좋은 로그 텍스트로 변환
+ */
+export function extractMeta(event: any, usage?: any): string | null {
+  const meta: string[] = [];
+  const u = usage || {};
+  const baseInput = u.input_tokens ?? u.inputTokens ?? event.input_tokens ?? 0;
+  const cacheCreate = u.cache_creation_input_tokens ?? 0;
+  const cacheRead = u.cache_read_input_tokens ?? 0;
+  const inputT = Number(baseInput) + Number(cacheCreate) + Number(cacheRead);
+  const outputT = u.output_tokens ?? u.outputTokens ?? event.output_tokens;
+  if (inputT || outputT) meta.push(`입력 ${Number(inputT||0).toLocaleString()} + 출력 ${Number(outputT||0).toLocaleString()} 토큰`);
+  const cost = event.total_cost_usd ?? event.cost_usd ?? event.costUsd ?? event.cost;
+  if (cost) meta.push(`비용 $${Number(cost).toFixed(4)}`);
+  const dur = event.duration_ms ?? event.durationMs ?? event.duration_api_ms;
+  if (dur) meta.push(`응답 ${(Number(dur) / 1000).toFixed(1)}초`);
+  const turns = event.num_turns ?? event.numTurns;
+  if (turns) meta.push(`${turns}턴`);
+  return meta.length > 0 ? `(${meta.join(' | ')})` : null;
+}
+
+export function formatStreamEvent(event: any, showToolUsage: boolean = false): string | null {
+  switch (event.type) {
+    case 'assistant': {
+      const parts = event.message?.content || [];
+      const lines: string[] = [];
+      for (const part of parts) {
+        if (part.type === 'text' && part.text?.trim()) {
+          lines.push(part.text);
+        } else if (part.type === 'tool_use' && showToolUsage) {
+          const input = part.input || {};
+          const summary = formatToolInput(part.name, input);
+          lines.push(`\x1b[1;34m[Tool] ${part.name}\x1b[0m ${summary}`);
+        }
+      }
+      if (lines.length === 0) return null;
+      const usage = event.message?.usage || event.usage;
+      const meta = extractMeta(event, usage);
+      if (meta) lines.push(`\x1b[90m${meta}\x1b[0m`);
+      return lines.join('\n');
+    }
+    case 'content_block_delta': {
+      const delta = event.delta;
+      if (delta?.type === 'text_delta' && delta.text) {
+        return delta.text;
+      }
+      return null;
+    }
+    case 'result': {
+      const meta = extractMeta(event, event.usage) || '';
+      const metaStr = meta ? `\x1b[90m${meta}\x1b[0m ` : '';
+      return `\x1b[1;32m[완료]\x1b[0m ${metaStr}`;
+    }
+    case 'system': {
+      // system 이벤트 중 의미 있는 메시지만 출력 (JSON 덤프 방지)
+      if (event.subtype === 'init' || event.subtype === 'session') {
+        const model = event.model ?? event.modelId ?? '';
+        return `\x1b[1;36m[시작]\x1b[0m 세션 초기화${model ? ` \x1b[90m(${model})\x1b[0m` : ''}`;
+      }
+      // task_notification 등 내부 이벤트는 메타만 간략히
+      if (event.subtype === 'task_notification') {
+        const summary = event.summary || '';
+        const tokens = event.usage?.total_tokens ? ` (${event.usage.total_tokens.toLocaleString()} tokens)` : '';
+        return summary ? `\x1b[90m[내부작업] ${summary}${tokens}\x1b[0m` : null;
+      }
+      // 문자열 메시지가 있으면 표시, 아니면 무시
+      if (typeof event.message === 'string' && event.message.trim()) {
+        return `\x1b[1;36m[System]\x1b[0m ${event.message}`;
+      }
+      return null; // 나머지 system 이벤트는 무시
+    }
+    default:
+      return null;
+  }
+}
+
+/**
+ * stream-json 이벤트를 GitLab 이슈 노트용 마크다운으로 변환
+ */
+export function formatStreamEventMarkdown(event: any): string | null {
+  switch (event.type) {
+    case 'assistant': {
+      const parts = event.message?.content || [];
+      const lines: string[] = [];
+      for (const part of parts) {
+        if (part.type === 'text' && part.text?.trim()) {
+          lines.push(part.text);
+        } else if (part.type === 'tool_use') {
+          const summary = formatToolInputMarkdown(part.name, part.input || {});
+          lines.push(`> **🔧 ${part.name}** ${summary}`);
+        }
+      }
+      return lines.length > 0 ? lines.join('\n') : null;
+    }
+    case 'result': {
+      const info: string[] = [];
+      const cost = event.cost_usd ?? event.costUsd ?? event.cost;
+      const duration = event.duration_ms ?? event.durationMs ?? event.duration_api_ms;
+      const tokens = event.total_tokens ?? event.totalTokens ?? event.usage?.total_tokens;
+      const inputTokens = event.input_tokens ?? event.inputTokens ?? event.usage?.input_tokens;
+      const outputTokens = event.output_tokens ?? event.outputTokens ?? event.usage?.output_tokens;
+      const turns = event.num_turns ?? event.numTurns;
+      const model = event.model ?? event.modelId ?? event.model_id ?? '';
+      if (model) info.push(`모델: ${model}`);
+      if (cost) info.push(`비용: $${Number(cost).toFixed(4)}`);
+      if (duration) info.push(`소요: ${(Number(duration) / 1000).toFixed(1)}s`);
+      if (tokens) info.push(`토큰: ${Number(tokens).toLocaleString()}`);
+      else if (inputTokens || outputTokens) info.push(`토큰: ${(Number(inputTokens||0) + Number(outputTokens||0)).toLocaleString()}`);
+      if (turns) info.push(`턴: ${turns}`);
+      return `\n---\n**📊 실행 결과** ${info.join(' | ')}`;
+    }
+    default:
+      return null;
+  }
+}
+
+export function formatToolInputMarkdown(toolName: string, input: any): string {
+  switch (toolName) {
+    case 'Read': return `\`${input.file_path || ''}\``;
+    case 'Edit': return `\`${input.file_path || ''}\``;
+    case 'Write': return `\`${input.file_path || ''}\``;
+    case 'Bash': return input.command ? `\`$ ${input.command.substring(0, 100)}\`` : '';
+    case 'Glob': return `\`${input.pattern || ''}\``;
+    case 'Grep': return `\`"${input.pattern || ''}"\``;
+    case 'ToolSearch': return input.query ? `\`${input.query}\`` : '';
+    case 'WebSearch': return `\`${input.query || input.search_query || ''}\``;
+    case 'WebFetch': return `\`${input.url || ''}\``;
+    case 'Agent': return input.description || input.prompt?.substring(0, 80) || '';
+    default: {
+      const vals = Object.values(input).filter(v => typeof v === 'string').join(' ').substring(0, 80);
+      return vals ? `\`${vals}\`` : '';
+    }
+  }
+}
+
+export function formatToolInput(toolName: string, input: any): string {
+  switch (toolName) {
+    case 'Read':
+      return input.file_path || '';
+    case 'Edit':
+      return `${input.file_path || ''} (edit)`;
+    case 'Write':
+      return `${input.file_path || ''} (write)`;
+    case 'Bash':
+      return input.command ? `\x1b[33m$ ${input.command.substring(0, 120)}\x1b[0m` : '';
+    case 'Glob':
+      return input.pattern || '';
+    case 'Grep':
+      return `"${input.pattern || ''}" ${input.path || ''}`;
+    case 'ToolSearch':
+      return input.query || '';
+    case 'WebSearch':
+      return input.query || input.search_query || '';
+    case 'WebFetch':
+      return input.url || '';
+    case 'Agent':
+      return input.description || input.prompt?.substring(0, 80) || '';
+    default:
+      return Object.values(input).filter(v => typeof v === 'string').join(' ').substring(0, 80) || '';
+  }
+}
