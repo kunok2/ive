@@ -34,9 +34,100 @@ const tooltipStyle = {
   labelStyle: { color: C.textMuted, fontWeight: 700, marginBottom: 4 },
 }
 
-// ───────────── 일별 추이 차트 (건수 바 + 비용 라인 + 이전 기간) ─────────────
+// ───────────── 일별 현황 테이블 (주간 보고서 형식) ─────────────
 
-interface DailyTrend { date: string; tasks: number | null; verified: number | null; success: number | null; failed: number | null; cost: number | null }
+interface DailyTrend { date: string; tasks: number | null; inflow: number | null; verified: number | null; success: number | null; failed: number | null; cost: number | null; waitAvg?: number | null; procAvg?: number | null; verifyAvg?: number | null }
+
+function fmtCostLocal(n: number): string {
+  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+export function DailyReportTable({ data, type, today }: {
+  data: DailyTrend[]
+  type: string
+  today: string
+}) {
+  const tr = useTranslations('report')
+  const dayLabels = tr.raw('dayLabels') as string[]
+
+  const rows = data.map((d) => {
+    let label: string
+    if (type === 'yearly') label = tr('monthUnit', { month: parseInt(d.date.slice(5, 7)) })
+    else if (type === 'weekly') { const dt = new Date(d.date); label = dayLabels[dt.getDay()] }
+    else { label = `${new Date(d.date).getDate()}` }
+
+    const isFuture = d.inflow === null || d.date > today
+    const isToday = d.date === today
+
+    return {
+      date: d.date, label, isFuture, isToday,
+      inflow: d.inflow ?? 0,
+      processed: d.verified ?? 0,
+      tasks: d.tasks ?? 0,
+      cost: d.cost ?? 0,
+    }
+  })
+
+  const pastRows = rows.filter(r => !r.isFuture)
+  const totalInflow = pastRows.reduce((s, r) => s + r.inflow, 0)
+  const totalProcessed = pastRows.reduce((s, r) => s + r.processed, 0)
+  const totalTasks = pastRows.reduce((s, r) => s + r.tasks, 0)
+  const totalCost = pastRows.reduce((s, r) => s + r.cost, 0)
+
+  return (
+    <div className="bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden">
+      {/* 헤더 */}
+      <div className="grid gap-x-2 px-3 py-1.5 border-b border-ive-border-dark bg-ive-bg-deep font-bold text-ive-text-dim uppercase tracking-wider" style={{ fontSize: 10, gridTemplateColumns: '2rem 1fr 2.5rem 3.5rem' }}>
+        <div />
+        <div>{tr('dailyColInflow')}</div>
+        <div className="text-right">{tr('dailyColTasks')}</div>
+        <div className="text-right">{tr('dailyColCost')}</div>
+      </div>
+
+      {/* 데이터 행 */}
+      {rows.map((row) => {
+        if (row.isFuture) {
+          return (
+            <div key={row.date} className="grid gap-x-2 px-3 py-1.5 border-b border-ive-border-dark/20 last:border-0 text-xs" style={{ gridTemplateColumns: '2rem 1fr 2.5rem 3.5rem', opacity: 0.3 }}>
+              <div className="font-bold text-ive-text-dim">{row.label}</div>
+              <div className="text-ive-text-dim">—</div>
+              <div className="text-right text-ive-text-dim">—</div>
+              <div className="text-right text-ive-text-dim">—</div>
+            </div>
+          )
+        }
+        return (
+          <div key={row.date} className={`grid gap-x-2 px-3 py-2 border-b border-ive-border-dark/30 last:border-0 text-xs ${row.isToday ? 'bg-ive-cyan/5' : ''}`} style={{ gridTemplateColumns: '2rem 1fr 2.5rem 3.5rem' }}>
+            <div className={`font-bold ${row.isToday ? 'text-ive-cyan' : 'text-ive-text'}`}>{row.label}</div>
+            <div>
+              <span className="text-ive-text-muted">{row.inflow}</span>
+              <span className="text-ive-text-dim/60 mx-1">→</span>
+              <span className="font-bold text-ive-text">{row.processed}</span>
+            </div>
+            <div className="text-right text-ive-text-muted">{row.tasks}</div>
+            <div className="text-right text-ive-text-dim">{row.cost > 0 ? `$${fmtCostLocal(row.cost)}` : '—'}</div>
+          </div>
+        )
+      })}
+
+      {/* 합계 행 */}
+      {pastRows.length > 0 && (
+        <div className="grid gap-x-2 px-3 py-2 border-t border-ive-border bg-ive-bg-deep text-xs font-bold" style={{ gridTemplateColumns: '2rem 1fr 2.5rem 3.5rem' }}>
+          <div className="text-ive-text-dim" style={{ fontSize: 10 }}>{tr('dailyTotal')}</div>
+          <div>
+            <span className="text-ive-text-muted">{totalInflow}</span>
+            <span className="text-ive-text-dim/60 mx-1">→</span>
+            <span className="text-ive-text">{totalProcessed}</span>
+          </div>
+          <div className="text-right text-ive-text">{totalTasks}</div>
+          <div className="text-right text-ive-text-muted">${fmtCostLocal(totalCost)}</div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ───────────── 일별 추이 차트 (건수 바 + 비용 라인 + 이전 기간) ─────────────
 interface PrevDaily { date: string; tasks: number; verified?: number; cost: number }
 
 export function DailyTrendChart({ data, prevData, type }: { data: DailyTrend[]; prevData: PrevDaily[]; type: string }) {
