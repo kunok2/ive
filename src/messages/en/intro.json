@@ -1,0 +1,14 @@
+{
+  "welcomeTitle": "Welcome to Spring IVE",
+  "welcomeDesc": "Manage your projects smarter\nwith an AI-powered integrated development environment.",
+  "projectRegTitle": "Project Registration",
+  "projectRegDesc": "Connect GitLab/GitHub repositories\nand auto-track issues and MRs.",
+  "agentRegTitle": "Agent Registration",
+  "agentRegDesc": "Register AI agents to\nautomatically analyze and resolve issues.",
+  "taskRegTitle": "Task Registration & Auto Inflow",
+  "taskRegDesc": "Issues are automatically added to the queue\nand processed by AI agents in order.",
+  "aiResolveTitle": "AI Auto-Resolution",
+  "aiResolveDesc": "AI analyzes and fixes code,\nautomatically creating Merge Requests.",
+  "reviewTitle": "Review & Reports",
+  "reviewDesc": "Monitor execution results in real-time\nand check detailed reports."
+}

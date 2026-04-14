@@ -13,6 +13,8 @@ function mapExecution(r: any): TaskExecution {
     logPath: r.log_path, pid: r.pid ?? undefined,
     agentName: r.agent_name ?? undefined,
     inputTokens: r.input_tokens ?? 0, outputTokens: r.output_tokens ?? 0,
+    cacheReadInputTokens: r.cache_read_input_tokens ?? 0,
+    cacheCreationInputTokens: r.cache_creation_input_tokens ?? 0,
     costUsd: r.cost_usd ?? 0, turns: r.turns ?? 0,
     issueCreatedAt: r.issue_created_at ?? undefined,
     assigneeType: r.assignee_type ?? 'agent',
@@ -38,13 +40,16 @@ export function updateExecutionStatus(id: string, status: TaskStatus, endedAt?: 
   }
 }
 
-export function updateExecutionTokens(id: string, inputTokens: number, outputTokens: number, costUsd: number, turns: number = 0, modelName?: string) {
+export function updateExecutionTokens(
+  id: string, inputTokens: number, outputTokens: number, costUsd: number, turns: number = 0, modelName?: string,
+  cacheReadInputTokens: number = 0, cacheCreationInputTokens: number = 0,
+) {
   if (modelName) {
-    getDb().prepare('UPDATE task_executions SET input_tokens = ?, output_tokens = ?, cost_usd = ?, turns = ?, model_name = ? WHERE id = ?')
-      .run(inputTokens, outputTokens, costUsd, turns, modelName, id)
+    getDb().prepare('UPDATE task_executions SET input_tokens = ?, output_tokens = ?, cost_usd = ?, turns = ?, model_name = ?, cache_read_input_tokens = ?, cache_creation_input_tokens = ? WHERE id = ?')
+      .run(inputTokens, outputTokens, costUsd, turns, modelName, cacheReadInputTokens, cacheCreationInputTokens, id)
   } else {
-    getDb().prepare('UPDATE task_executions SET input_tokens = ?, output_tokens = ?, cost_usd = ?, turns = ? WHERE id = ?')
-      .run(inputTokens, outputTokens, costUsd, turns, id)
+    getDb().prepare('UPDATE task_executions SET input_tokens = ?, output_tokens = ?, cost_usd = ?, turns = ?, cache_read_input_tokens = ?, cache_creation_input_tokens = ? WHERE id = ?')
+      .run(inputTokens, outputTokens, costUsd, turns, cacheReadInputTokens, cacheCreationInputTokens, id)
   }
 }
 

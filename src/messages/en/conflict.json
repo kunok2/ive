@@ -1,0 +1,21 @@
+{
+  "title": "MR Merge Manager",
+  "conflictCount": "{count} conflict(s)",
+  "totalMRs": "{count} total",
+  "loading": "Loading MR list...",
+  "noMRs": "No open MRs",
+  "selectAll": "Select All",
+  "readyToMerge": "Ready to Merge",
+  "hasConflicts": "Has Conflicts",
+  "conflict": "Conflict",
+  "merged": "Merged",
+  "mergeFailed": "Merge Failed",
+  "openExternal": "Open externally",
+  "openIssue": "Open issue page",
+  "selectedCount": "{count} selected",
+  "sequentialMerge": "Sequential Merge",
+  "merging": "Merging...",
+  "closeMR": "Discard MR",
+  "closingMR": "Discarding...",
+  "closed": "Discarded"
+}

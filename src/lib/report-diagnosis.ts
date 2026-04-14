@@ -8,7 +8,7 @@
 export interface ReportData {
   period: { start: string; end: string; type: string }
   prevPeriod: { start: string; end: string }
-  summary: { totalTasks: number; uniqueInflow: number; verifiedCount: number; successCount: number; failedCount: number; runningCount: number; successRate: number; totalDurationMin: number; avgDurationMin: number; totalInputTokens: number; totalOutputTokens: number; totalCost: number; totalCostAi?: number; totalCostHuman?: number; humanMinutes?: number; humanMonthlySalary?: number }
+  summary: { totalTasks: number; uniqueInflow: number; verifiedCount: number; successCount: number; failedCount: number; runningCount: number; successRate: number; totalDurationMin: number; avgDurationMin: number; totalInputTokens: number; totalOutputTokens: number; totalCacheReadTokens?: number; totalCacheCreationTokens?: number; totalCost: number; totalCostAi?: number; totalCostHuman?: number; humanMinutes?: number; humanMonthlySalary?: number }
   prevSummary: { totalTasks: number; successCount: number; failedCount: number; successRate: number; totalDurationMin: number; avgDurationMin: number; totalCost: number }
   byProject: ProjectStat[]
   byAgent: AgentStat[]
@@ -50,17 +50,17 @@ export interface ProjectStat {
   projectId: string; projectName: string; projectColor: string; projectAvatarUrl: string; projectProvider: string
   tasks: number; uniqueIssues: number; verified: number; success: number; failed: number
   totalDurationMin: number; avgDurationMin: number
-  inputTokens: number; outputTokens: number; cost: number
+  inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheCreationTokens?: number; cost: number
   assignedAgentCount: number
   assignedAgentIds: string[]
-  byAgent: { agentId: string; agentName: string; agentAvatar: string; cliName: string; tasks: number; success: number; failed: number; durationMin: number; avgDurationMin: number; cost: number; avgTurns: number }[]
+  byAgent: { agentId: string; agentName: string; agentAvatar: string; cliName: string; tasks: number; success: number; failed: number; durationMin: number; avgDurationMin: number; inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheCreationTokens?: number; cost: number; avgTurns: number }[]
 }
 
 export interface AgentStat {
   agentId: string; agentName: string; agentAvatar: string; cliName: string
   tasks: number; success: number; failed: number
   totalDurationMin: number; avgDurationMin: number
-  inputTokens: number; outputTokens: number; cost: number; avgTurns: number
+  inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheCreationTokens?: number; cost: number; avgTurns: number
   assignedProjectId: string; assignedProjectName: string; currentStatus: string
 }
 

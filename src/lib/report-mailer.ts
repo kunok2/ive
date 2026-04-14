@@ -122,6 +122,7 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
   const failed = executions.filter(e => e.status === 'failed').length
   const running = executions.filter(e => e.status === 'running' || e.status === 'assigned').length
   const totalTokens = executions.reduce((s, e) => s + e.inputTokens + e.outputTokens, 0)
+  const totalCacheReadTokens = executions.reduce((s, e) => s + (e.cacheReadInputTokens ?? 0), 0)
 
   // ─── AI/사람 비용 분리 ───
   let totalCostAi = 0, totalCostHuman = 0
@@ -457,7 +458,7 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
             </td>` : ''}
             <td style="text-align:center;padding:4px 8px;">
               <div style="font-size:20px;font-weight:800;color:#d97706;">${formatTokens(totalTokens)}</div>
-              <div style="font-size:10px;color:#6b7280;">총 토큰</div>
+              <div style="font-size:10px;color:#6b7280;">총 토큰${totalCacheReadTokens > 0 && totalTokens > 0 ? ` (캐시 ${Math.round(totalCacheReadTokens / totalTokens * 100)}%)` : ''}</div>
               ${hasPrev ? `<div style="font-size:10px;margin-top:2px;">${changeIndicator(totalTokens, prevTotalTokens)}</div>` : ''}
             </td>
           </tr>

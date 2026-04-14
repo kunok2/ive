@@ -1,0 +1,4 @@
+{
+  "connectionFailed": "WebSocket 연결 실패. 서버가 실행 중인지, 로그인 상태인지 확인하세요.",
+  "serverDisconnected": "서버에 연결할 수 없습니다 (코드 1006). 서버를 재시작하세요."
+}

@@ -1,0 +1,14 @@
+{
+  "welcomeTitle": "Spring IVE에 오신 것을 환영합니다",
+  "welcomeDesc": "AI 기반 통합 개발 환경으로\n프로젝트를 더 스마트하게 관리하세요.",
+  "projectRegTitle": "프로젝트 등록",
+  "projectRegDesc": "GitLab/GitHub 저장소를 연결하고\n이슈와 MR을 자동으로 추적합니다.",
+  "agentRegTitle": "에이전트 등록",
+  "agentRegDesc": "AI 에이전트를 등록하면\n이슈를 자동으로 분석하고 해결합니다.",
+  "taskRegTitle": "작업 등록 & 자동 유입",
+  "taskRegDesc": "이슈가 등록되면 자동으로 작업 큐에 추가되고\nAI 에이전트가 순서대로 처리합니다.",
+  "aiResolveTitle": "AI 자동 해결",
+  "aiResolveDesc": "AI가 코드를 분석하고 수정하여\nMerge Request를 자동으로 생성합니다.",
+  "reviewTitle": "검수 & 보고서",
+  "reviewDesc": "실행 결과를 실시간으로 모니터링하고\n상세 보고서를 확인하세요."
+}

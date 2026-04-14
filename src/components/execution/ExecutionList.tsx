@@ -123,7 +123,12 @@ export default function ExecutionList({ executions, showAgent = true, onKill, ki
               <span><i className="fa-solid fa-rotate mr-0.5" />{ex.turns} {te('turns')}</span>
             )}
             {ex.assigneeType !== 'user' && (ex.inputTokens + ex.outputTokens > 0) && (
-              <span>{formatTokens(ex.inputTokens + ex.outputTokens)} tok</span>
+              <span title={(ex.cacheReadInputTokens ?? 0) > 0 ? te('cacheTooltip', { tokens: formatTokens(ex.cacheReadInputTokens ?? 0) }) : undefined}>
+                {formatTokens(ex.inputTokens + ex.outputTokens)} tok
+                {(ex.cacheReadInputTokens ?? 0) > 0 && ex.inputTokens > 0 && (
+                  <span className="text-ive-text-muted ml-0.5">({te('cacheHit')} {Math.round((ex.cacheReadInputTokens ?? 0) / ex.inputTokens * 100)}%)</span>
+                )}
+              </span>
             )}
             {ex.assigneeType !== 'user' && ex.costUsd > 0 && (
               <span>${ex.costUsd.toFixed(4)}</span>

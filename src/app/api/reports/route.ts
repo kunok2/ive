@@ -119,6 +119,8 @@ export async function GET(req: NextRequest) {
   const avgDurationMin = finishedCount > 0 ? totalDurationMin / finishedCount : 0
   const totalInputTokens = execs.reduce((s, e) => s + e.inputTokens, 0)
   const totalOutputTokens = execs.reduce((s, e) => s + e.outputTokens, 0)
+  const totalCacheReadTokens = execs.reduce((s, e) => s + (e.cacheReadInputTokens ?? 0), 0)
+  const totalCacheCreationTokens = execs.reduce((s, e) => s + (e.cacheCreationInputTokens ?? 0), 0)
   // 비용 breakdown: AI 토큰 비용과 사람 시간 비용을 분리 집계
   const costBreakdown = execs.reduce(
     (acc, e) => {
@@ -296,6 +298,8 @@ export async function GET(req: NextRequest) {
         avgDurationMin: aFinished > 0 ? Math.round((aDur / aFinished) * 10) / 10 : 0,
         inputTokens: aExecs.reduce((s, e) => s + e.inputTokens, 0),
         outputTokens: aExecs.reduce((s, e) => s + e.outputTokens, 0),
+        cacheReadTokens: aExecs.reduce((s, e) => s + (e.cacheReadInputTokens ?? 0), 0),
+        cacheCreationTokens: aExecs.reduce((s, e) => s + (e.cacheCreationInputTokens ?? 0), 0),
         cost: Math.round(aCost * 100) / 100,
         avgTurns: aFinished > 0 ? Math.round(aExecs.reduce((s, e) => s + e.turns, 0) / aFinished * 10) / 10 : 0,
       }
@@ -311,6 +315,8 @@ export async function GET(req: NextRequest) {
       avgDurationMin: pFinished > 0 ? Math.round((pDur / pFinished) * 10) / 10 : 0,
       inputTokens: pExecs.reduce((s, e) => s + e.inputTokens, 0),
       outputTokens: pExecs.reduce((s, e) => s + e.outputTokens, 0),
+      cacheReadTokens: pExecs.reduce((s, e) => s + (e.cacheReadInputTokens ?? 0), 0),
+      cacheCreationTokens: pExecs.reduce((s, e) => s + (e.cacheCreationInputTokens ?? 0), 0),
       cost: Math.round(pCost * 100) / 100,
       costAi: Math.round(pCostBreakdown.ai * 100) / 100,
       costHuman: Math.round(pCostBreakdown.human * 100) / 100,
@@ -341,6 +347,8 @@ export async function GET(req: NextRequest) {
       avgDurationMin: aFinished > 0 ? Math.round((aDur / aFinished) * 10) / 10 : 0,
       inputTokens: aExecs.reduce((s, e) => s + e.inputTokens, 0),
       outputTokens: aExecs.reduce((s, e) => s + e.outputTokens, 0),
+      cacheReadTokens: aExecs.reduce((s, e) => s + (e.cacheReadInputTokens ?? 0), 0),
+      cacheCreationTokens: aExecs.reduce((s, e) => s + (e.cacheCreationInputTokens ?? 0), 0),
       cost: Math.round(aCost * 100) / 100,
       avgTurns: aFinished > 0 ? Math.round(aExecs.reduce((s, e) => s + e.turns, 0) / aFinished * 10) / 10 : 0,
       assignedProjectId: aInfo?.projectId ?? '',
@@ -980,6 +988,8 @@ export async function GET(req: NextRequest) {
       avgDurationMin: Math.round(avgDurationMin * 10) / 10,
       totalInputTokens,
       totalOutputTokens,
+      totalCacheReadTokens,
+      totalCacheCreationTokens,
       totalCost: Math.round(totalCost * 100) / 100,
       // 비용 내역 분리 (AI 토큰 비용 vs 사람 시간 비용)
       totalCostAi: Math.round(totalCostAi * 100) / 100,

@@ -114,6 +114,8 @@ export function setupTestDb(): Database.Database {
       verifier_username TEXT DEFAULT NULL,
       verifier_git_user_id TEXT DEFAULT NULL,
       verifier_user_id TEXT DEFAULT NULL,
+      cache_read_input_tokens INTEGER NOT NULL DEFAULT 0,
+      cache_creation_input_tokens INTEGER NOT NULL DEFAULT 0,
       FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
     );
 
@@ -243,6 +245,8 @@ export interface SeedExecution {
   verifierName?: string | null
   verifierUsername?: string | null
   verifierUserId?: string | null
+  cacheReadInputTokens?: number
+  cacheCreationInputTokens?: number
 }
 
 export function seedExecution(db: Database.Database, ex: SeedExecution) {
@@ -252,8 +256,9 @@ export function seedExecution(db: Database.Database, ex: SeedExecution) {
       started_at, ended_at, issue_created_at, assignee_type,
       user_id, user_name, input_tokens, output_tokens, cost_usd, turns,
       model_name, verified_at, verify_started_at, rejected_at,
-      verifier_name, verifier_username, verifier_user_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      verifier_name, verifier_username, verifier_user_id,
+      cache_read_input_tokens, cache_creation_input_tokens
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     ex.id, ex.projectId, ex.agentId ?? null, ex.issueIid, ex.issueTitle ?? null, ex.status,
     ex.startedAt, ex.endedAt ?? null, ex.issueCreatedAt ?? null, ex.assigneeType ?? 'agent',
@@ -261,5 +266,6 @@ export function seedExecution(db: Database.Database, ex: SeedExecution) {
     ex.costUsd ?? 0, ex.turns ?? 0, ex.modelName ?? null, ex.verifiedAt ?? null,
     ex.verifyStartedAt ?? null, ex.rejectedAt ?? null, ex.verifierName ?? null,
     ex.verifierUsername ?? null, ex.verifierUserId ?? null,
+    ex.cacheReadInputTokens ?? 0, ex.cacheCreationInputTokens ?? 0,
   )
 }

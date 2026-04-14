@@ -136,12 +136,18 @@ export function formatOpenCodeEventMarkdown(event: any): string | null {
 export function extractMeta(event: any, usage?: any): string | null {
   const meta: string[] = [];
   const u = usage || {};
-  const baseInput = u.input_tokens ?? u.inputTokens ?? event.input_tokens ?? 0;
-  const cacheCreate = u.cache_creation_input_tokens ?? 0;
-  const cacheRead = u.cache_read_input_tokens ?? 0;
-  const inputT = Number(baseInput) + Number(cacheCreate) + Number(cacheRead);
+  const baseInput = Number(u.input_tokens ?? u.inputTokens ?? event.input_tokens ?? 0);
+  const cacheCreate = Number(u.cache_creation_input_tokens ?? 0);
+  const cacheRead = Number(u.cache_read_input_tokens ?? 0);
+  const inputT = baseInput + cacheCreate + cacheRead;
   const outputT = u.output_tokens ?? u.outputTokens ?? event.output_tokens;
-  if (inputT || outputT) meta.push(`입력 ${Number(inputT||0).toLocaleString()} + 출력 ${Number(outputT||0).toLocaleString()} 토큰`);
+  if (inputT || outputT) {
+    const parts = [`입력 ${Number(inputT||0).toLocaleString()}`];
+    if (cacheRead > 0) parts.push(`캐시읽기 ${cacheRead.toLocaleString()}`);
+    if (cacheCreate > 0) parts.push(`캐시쓰기 ${cacheCreate.toLocaleString()}`);
+    parts.push(`출력 ${Number(outputT||0).toLocaleString()} 토큰`);
+    meta.push(parts.join(' + '));
+  }
   const cost = event.total_cost_usd ?? event.cost_usd ?? event.costUsd ?? event.cost;
   if (cost) meta.push(`비용 $${Number(cost).toFixed(4)}`);
   const dur = event.duration_ms ?? event.durationMs ?? event.duration_api_ms;

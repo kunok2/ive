@@ -186,6 +186,8 @@ export interface TaskExecution {
   modelName?: string
   inputTokens: number
   outputTokens: number
+  cacheReadInputTokens?: number
+  cacheCreationInputTokens?: number
   costUsd: number
   turns: number
   issueCreatedAt?: string

@@ -1,0 +1,21 @@
+{
+  "title": "MR 취합 관리",
+  "conflictCount": "충돌 {count}건",
+  "totalMRs": "전체 {count}건",
+  "loading": "MR 목록 불러오는 중...",
+  "noMRs": "열린 MR이 없습니다",
+  "selectAll": "전체 선택",
+  "readyToMerge": "머지 가능",
+  "hasConflicts": "충돌 있음",
+  "conflict": "충돌",
+  "merged": "머지 완료",
+  "mergeFailed": "머지 실패",
+  "openExternal": "외부에서 열기",
+  "openIssue": "이슈 페이지 열기",
+  "selectedCount": "{count}건 선택",
+  "sequentialMerge": "순차 머지",
+  "merging": "머지 중...",
+  "closeMR": "MR 버림",
+  "closingMR": "버리는 중...",
+  "closed": "버림 완료"
+}

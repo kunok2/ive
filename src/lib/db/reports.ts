@@ -27,6 +27,8 @@ export interface ReportExecution {
   endedAt: string | null
   inputTokens: number
   outputTokens: number
+  cacheReadInputTokens?: number
+  cacheCreationInputTokens?: number
   costUsd: number
   turns: number
   issueCreatedAt: string | null
@@ -54,6 +56,8 @@ function mapReportExecution(r: any): ReportExecution {
     issueIid: r.issue_iid, issueTitle: r.issue_title,
     status: r.status, startedAt: r.started_at, endedAt: r.ended_at,
     inputTokens: r.input_tokens ?? 0, outputTokens: r.output_tokens ?? 0,
+    cacheReadInputTokens: r.cache_read_input_tokens ?? 0,
+    cacheCreationInputTokens: r.cache_creation_input_tokens ?? 0,
     costUsd: r.cost_usd ?? 0, turns: r.turns ?? 0,
     issueCreatedAt: r.issue_created_at ?? null,
     modelName: r.model_name ?? null,
@@ -73,7 +77,7 @@ const REPORT_EXEC_QUERY = `
          te.agent_id, a.name as agent_name, a.avatar as agent_avatar, a.cli_name,
          u.name as developer_name, a.user_id as developer_user_id,
          te.issue_iid, te.issue_title, te.status,
-         te.started_at, te.ended_at, te.input_tokens, te.output_tokens, te.cost_usd, te.turns,
+         te.started_at, te.ended_at, te.input_tokens, te.output_tokens, te.cache_read_input_tokens, te.cache_creation_input_tokens, te.cost_usd, te.turns,
          te.issue_created_at, te.model_name, te.verified_at, te.verify_started_at, te.rejected_at,
          te.assignee_type, te.user_id as te_user_id, te.user_name as te_user_name, te.user_avatar as te_user_avatar,
          te.verifier_name, te.verifier_avatar, te.verifier_username,

@@ -513,6 +513,8 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
       let stdoutBuffer = '';
       let totalInputTokens = 0;
       let totalOutputTokens = 0;
+      let totalCacheReadTokens = 0;
+      let totalCacheCreationTokens = 0;
       let totalCostUsd = 0;
       let totalTurns = 0;
       let assistantTurnCount = 0;
@@ -588,11 +590,15 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
           // 토큰/비용/턴 누적
           if (event.type === 'result') {
             const u = event.usage ?? {};
-            const iT = (u.input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0);
+            const baseInput = Number(u.input_tokens ?? 0);
+            const cacheCreation = Number(u.cache_creation_input_tokens ?? 0);
+            const cacheRead = Number(u.cache_read_input_tokens ?? 0);
             const oT = u.output_tokens ?? event.output_tokens ?? event.outputTokens ?? 0;
             const cost = event.total_cost_usd ?? event.cost_usd ?? event.costUsd ?? event.cost ?? 0;
             const turns = event.num_turns ?? event.numTurns ?? 0;
-            totalInputTokens += Number(iT);
+            totalInputTokens += baseInput + cacheCreation + cacheRead;
+            totalCacheCreationTokens += cacheCreation;
+            totalCacheReadTokens += cacheRead;
             totalOutputTokens += Number(oT);
             totalCostUsd += Number(cost);
             totalTurns = Math.max(totalTurns, Number(turns));
@@ -639,10 +645,10 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
           const finalCost = totalCostUsd > 0
             ? totalCostUsd
             : calcCostFromDb(totalInputTokens, totalOutputTokens, finalModel);
-          updateExecutionTokens(executionId, totalInputTokens, totalOutputTokens, finalCost, finalTurns, finalModel);
+          updateExecutionTokens(executionId, totalInputTokens, totalOutputTokens, finalCost, finalTurns, finalModel, totalCacheReadTokens, totalCacheCreationTokens);
         } else if (finalModel) {
           // 토큰 데이터가 없어도 모델명은 저장
-          updateExecutionTokens(executionId, 0, 0, 0, 0, finalModel);
+          updateExecutionTokens(executionId, 0, 0, 0, 0, finalModel, 0, 0);
         }
         if (code === 0) resolve();
         else reject(new Error(`Agent CLI exited with code ${code}`));

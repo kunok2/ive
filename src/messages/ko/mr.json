@@ -1,0 +1,13 @@
+{
+  "workResult": "작업결과 반영",
+  "mergeComplete": "머지 완료",
+  "conflict": "충돌 발생",
+  "readyToMerge": "머지 가능",
+  "changedFiles": "변경 파일 {count}개",
+  "mergedBy": "{name}이(가) {date}에 머지됨",
+  "codeReview": "코드 리뷰",
+  "merging": "머지 중...",
+  "cannotMerge": "머지 불가",
+  "merge": "머지",
+  "closeMR": "버림"
+}

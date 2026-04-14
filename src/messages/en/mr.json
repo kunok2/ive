@@ -1,0 +1,13 @@
+{
+  "workResult": "Work Result",
+  "mergeComplete": "Merged",
+  "conflict": "Conflict",
+  "readyToMerge": "Ready to Merge",
+  "changedFiles": "{count} changed files",
+  "mergedBy": "Merged by {name} on {date}",
+  "codeReview": "Code Review",
+  "merging": "Merging...",
+  "cannotMerge": "Cannot Merge",
+  "merge": "Merge",
+  "closeMR": "Discard"
+}

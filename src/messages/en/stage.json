@@ -1,0 +1,11 @@
+{
+  "waiting": "Waiting",
+  "verify_waiting": "Verify Wait",
+  "dev": "In Progress",
+  "dev_fail": "Failed",
+  "verifying": "Verifying",
+  "done": "Done",
+  "closed": "Closed",
+  "rejected": "Rejected",
+  "unknown": "Unknown"
+}

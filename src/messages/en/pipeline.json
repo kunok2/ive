@@ -1,0 +1,6 @@
+{
+  "monitoringTimeout": "Pipeline monitoring timeout — !{mrIid}",
+  "deploySuccess": "Pipeline complete — {label} deployed successfully",
+  "deployFailed": "Pipeline failed — {label} needs review",
+  "deployCancelled": "Pipeline cancelled — {label}"
+}

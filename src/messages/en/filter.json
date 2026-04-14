@@ -1,0 +1,9 @@
+{
+  "all": "All",
+  "waiting": "Waiting",
+  "active": "Active",
+  "verifying": "Verify",
+  "failed": "Failed",
+  "done": "Done",
+  "history": "History"
+}

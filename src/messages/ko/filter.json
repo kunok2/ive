@@ -1,0 +1,9 @@
+{
+  "all": "전체",
+  "waiting": "대기",
+  "active": "진행",
+  "verifying": "검증",
+  "failed": "실패",
+  "done": "완료",
+  "history": "이력"
+}

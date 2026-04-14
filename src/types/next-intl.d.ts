@@ -1,6 +1,6 @@
-import ko from '../messages/ko.json'
+import messages from '../messages/ko/index'
 
-type Messages = typeof ko
+type Messages = typeof messages
 
 declare global {
   interface IntlMessages extends Messages {}

@@ -1,0 +1,4 @@
+{
+  "connectionFailed": "WebSocket connection failed. Please check if the server is running and you are logged in.",
+  "serverDisconnected": "Cannot connect to server (code 1006). Please restart the server."
+}

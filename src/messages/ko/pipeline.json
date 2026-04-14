@@ -1,0 +1,6 @@
+{
+  "monitoringTimeout": "파이프라인 모니터링 시간 초과 — !{mrIid}",
+  "deploySuccess": "파이프라인 완료 — {label} 배포 성공",
+  "deployFailed": "파이프라인 실패 — {label} 확인 필요",
+  "deployCancelled": "파이프라인 취소됨 — {label}"
+}

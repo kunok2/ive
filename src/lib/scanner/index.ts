@@ -394,7 +394,7 @@ export async function scanProject(project: Project, force: boolean = false) {
 
           // 토큰/비용 반영 (ive-meta에서 추출된 값이 있으면)
           if (meta.inputTokens || meta.outputTokens || meta.costUsd || meta.turns || meta.model) {
-            updateExecutionTokens(executionId, meta.inputTokens, meta.outputTokens, meta.costUsd, meta.turns, meta.model || undefined);
+            updateExecutionTokens(executionId, meta.inputTokens, meta.outputTokens, meta.costUsd, meta.turns, meta.model || undefined, 0, 0);
           }
 
           touchProjectActivity(project.id);

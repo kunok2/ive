@@ -1,0 +1,10 @@
+{
+  "notification": "알림",
+  "logoutTitle": "로그아웃",
+  "logoutMessage": "로그아웃 하시겠습니까?",
+  "limitExceededTitle": "제한 초과",
+  "mrMergeTitle": "MR 머지 확인",
+  "mrMergeConfirm": "!{iid} {source} → {target}\n\n이 MR을 머지할까요?",
+  "mrCloseTitle": "MR 버림",
+  "mrCloseConfirm": "!{iid} {source}\n\n머지하지 않고 이 MR을 버릴까요?"
+}

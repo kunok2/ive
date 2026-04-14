@@ -361,6 +361,16 @@ function initSchema(db: Database.Database) {
     }
   } catch (e) { console.error("Migration failed for verifier columns:", e) }
 
+  // 캐시 토큰 분리 저장 컬럼
+  try {
+    const tableInfo = db.prepare("PRAGMA table_info(task_executions)").all() as any[]
+    if (!tableInfo.some((col: any) => col.name === 'cache_read_input_tokens')) {
+      db.exec("ALTER TABLE task_executions ADD COLUMN cache_read_input_tokens INTEGER NOT NULL DEFAULT 0")
+      db.exec("ALTER TABLE task_executions ADD COLUMN cache_creation_input_tokens INTEGER NOT NULL DEFAULT 0")
+      console.log('[DB] Added cache_read_input_tokens, cache_creation_input_tokens to task_executions')
+    }
+  } catch (e) { console.error("Migration failed for cache token columns:", e) }
+
   // 프로젝트 모니터링 설정
   try {
     const tableInfo = db.prepare("PRAGMA table_info(projects)").all() as any[]
