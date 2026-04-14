@@ -16,6 +16,7 @@ import VerifierLoadSection from '@/components/tabs/reports/VerifierLoadSection'
 import UserVerifySection from '@/components/tabs/reports/UserVerifySection'
 import DailyTrendSection from '@/components/tabs/reports/DailyTrendSection'
 import IssueListSection from '@/components/tabs/reports/IssueListSection'
+import { FlowCompareChart, DailyTrendChart } from '@/components/reports/ReportCharts'
 import { diagnose, type ReportData, type DiagnosisResult, type I18nMessage } from '@/lib/report-diagnosis'
 import { getKSTTodayString } from '@/lib/date-utils'
 import type { ReportHelpers } from '@/components/tabs/reports/types'
@@ -231,6 +232,15 @@ export default function ReportsTab() {
                 helpers={helpers}
               />
 
+              {/* ③-2 추이 그래프 */}
+              {data.dailyTrend.length > 0 && (
+                <div className="space-y-2">
+                  <div className="text-xs font-bold text-ive-text-dim uppercase tracking-wider">{tr('trendChartToggle')}</div>
+                  <FlowCompareChart data={computeFlowDays()} prevData={computePrevFlowDays()} type={type} />
+                  <DailyTrendChart data={data.dailyTrend} prevData={data.prevDailyTrend} type={type} />
+                </div>
+              )}
+
               {/* ④ 주의/경고 카드 */}
               {diagnosis.alerts.length > 0 && (
                 <AlertCards d={diagnosis} helpers={helpers} />
@@ -272,10 +282,6 @@ export default function ReportsTab() {
                   data={data}
                   type={type}
                   today={today}
-                  showTrend={showTrend}
-                  setShowTrend={setShowTrend}
-                  flowDays={computeFlowDays()}
-                  prevFlowDays={computePrevFlowDays()}
                 />
               )}
 
