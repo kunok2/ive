@@ -15,10 +15,10 @@ export function useStageConfig() {
 
   const STAGE_INFO: Record<string, { label: string; color: string; icon: string; bg: string }> = {
     waiting:        { label: tStage('waiting'),        color: 'text-ive-cyan',      icon: 'fa-clock',              bg: 'bg-ive-cyan/10' },
-    verify_waiting: { label: tStage('verify_waiting'), color: 'text-ive-amber',     icon: 'fa-hourglass-half',     bg: 'bg-ive-amber/10' },
+    verify_waiting: { label: tStage('verify_waiting'), color: 'text-ive-cyan',     icon: 'fa-hourglass-half',     bg: 'bg-ive-cyan/10' },
     dev:            { label: tStage('dev'),            color: 'text-ive-amber',     icon: 'fa-code',               bg: 'bg-ive-amber/10' },
     dev_fail:       { label: tStage('dev_fail'),       color: 'text-ive-red',       icon: 'fa-circle-xmark',       bg: 'bg-ive-red/10' },
-    verifying:      { label: tStage('verifying'),      color: 'text-ive-amber',     icon: 'fa-magnifying-glass',   bg: 'bg-ive-amber/10' },
+    verifying:      { label: tStage('verifying'),      color: 'text-ive-cyan',     icon: 'fa-magnifying-glass',   bg: 'bg-ive-cyan/10' },
     done:           { label: tStage('done'),           color: 'text-ive-green',     icon: 'fa-circle-check',       bg: 'bg-ive-green/10' },
     closed:         { label: tStage('closed'),         color: 'text-ive-text-muted',icon: 'fa-lock',               bg: 'bg-white/5' },
     rejected:       { label: tStage('rejected'),       color: 'text-ive-red',       icon: 'fa-rotate-left',        bg: 'bg-ive-red/10' },
