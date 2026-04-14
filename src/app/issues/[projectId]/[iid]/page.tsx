@@ -141,6 +141,13 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
 
   // ===================== Data fetching =====================
 
+  const isAssignee = (() => {
+    if (!issue?.assignees?.length || !state.user?.oauthUserId) return false
+    const myGitId = String(state.user.oauthUserId)
+    return issue.assignees.some(a => a.id != null && String(a.id) === myGitId)
+  })()
+  const canProgressStage = state.user?.isAdmin || isAssignee
+
   const fetchIssue = useCallback(async () => {
     const cacheKey = `issue-detail-${projectId}-${iid}`
     const cached = sessionStorage.getItem(cacheKey)
@@ -637,14 +644,6 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   }
 
   // ===================== Side effects =====================
-
-  // Permission check
-  const isAssignee = (() => {
-    if (!issue?.assignees?.length || !state.user?.oauthUserId) return false
-    const myGitId = String(state.user.oauthUserId)
-    return issue.assignees.some(a => a.id != null && String(a.id) === myGitId)
-  })()
-  const canProgressStage = state.user?.isAdmin || isAssignee
 
   // Auto-scroll on chat changes
   useEffect(() => { if (mode === 'chat') notesEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [chatMessages, chatStreamText, mode])
