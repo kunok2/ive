@@ -1,100 +1,7 @@
-import { ReportSchedule, ReportSendLog, ReportType } from '@/types'
-import { getGlobalExecutionsInRange, ReportExecution, createReportSendLog, hasAlreadySent, getDailyWaitingTrend } from './db'
-import { createTransporter, getFromAddress } from './mail'
-import { getKSTTodayString } from './date-utils'
-import { getHumanMonthlySalary, resolveExecutionCostBreakdown } from './token-pricing'
-
-const REPORT_TYPE_LABELS: Record<ReportType, string> = {
-  weekly: '주간',
-  monthly: '월간',
-  yearly: '연간',
-}
-
-const PREV_PERIOD_LABELS: Record<ReportType, string> = {
-  weekly: '전주',
-  monthly: '전월',
-  yearly: '전년',
-}
-
-/** 보고서 기간 계산 (KST 기준 YYYY-MM-DD) */
-export function calculateReportPeriod(reportType: ReportType, baseDate: Date = new Date()): { start: string; end: string } {
-  // KST 기준 오늘
-  const kstToday = getKSTTodayString(baseDate)
-  const [y, m, d] = kstToday.split('-').map(Number)
-
-  switch (reportType) {
-    case 'weekly': {
-      // 지난주 월~일
-      const today = new Date(y, m - 1, d)
-      const dayOfWeek = today.getDay() // 0=일 ~ 6=토
-      const lastSunday = new Date(today)
-      lastSunday.setDate(today.getDate() - (dayOfWeek === 0 ? 7 : dayOfWeek))
-      const lastMonday = new Date(lastSunday)
-      lastMonday.setDate(lastSunday.getDate() - 6)
-      const endDay = new Date(lastSunday)
-      endDay.setDate(endDay.getDate() + 1) // exclusive end
-      return {
-        start: fmt(lastMonday),
-        end: fmt(endDay),
-      }
-    }
-    case 'monthly': {
-      // 지난달
-      const prevMonth = m === 1 ? 12 : m - 1
-      const prevYear = m === 1 ? y - 1 : y
-      return {
-        start: `${prevYear}-${pad(prevMonth)}-01`,
-        end: `${y}-${pad(m)}-01`,
-      }
-    }
-    case 'yearly': {
-      // 작년
-      return {
-        start: `${y - 1}-01-01`,
-        end: `${y}-01-01`,
-      }
-    }
-  }
-}
-
-/** 이전 기간 계산 (전주/전월/전년) */
-export function calculatePreviousPeriod(reportType: ReportType, currentStart: string, currentEnd: string): { start: string; end: string } {
-  const [sy, sm, sd] = currentStart.split('-').map(Number)
-  const [ey, em, ed] = currentEnd.split('-').map(Number)
-  const startDate = new Date(sy, sm - 1, sd)
-  const endDate = new Date(ey, em - 1, ed)
-  const diffMs = endDate.getTime() - startDate.getTime()
-  const diffDays = Math.round(diffMs / 86400000)
-
-  switch (reportType) {
-    case 'weekly': {
-      const prevStart = new Date(startDate)
-      prevStart.setDate(prevStart.getDate() - 7)
-      const prevEnd = new Date(endDate)
-      prevEnd.setDate(prevEnd.getDate() - 7)
-      return { start: fmt(prevStart), end: fmt(prevEnd) }
-    }
-    case 'monthly': {
-      const prevStartMonth = sm - 1 === 0 ? 12 : sm - 1
-      const prevStartYear = sm - 1 === 0 ? sy - 1 : sy
-      const prevEndMonth = em - 1 === 0 ? 12 : em - 1
-      const prevEndYear = em - 1 === 0 ? ey - 1 : ey
-      return {
-        start: `${prevStartYear}-${pad(prevStartMonth)}-${pad(sd)}`,
-        end: `${prevEndYear}-${pad(prevEndMonth)}-${pad(ed)}`,
-      }
-    }
-    case 'yearly': {
-      return {
-        start: `${sy - 1}-${pad(sm)}-${pad(sd)}`,
-        end: `${ey - 1}-${pad(em)}-${pad(ed)}`,
-      }
-    }
-  }
-}
-
-function pad(n: number): string { return n.toString().padStart(2, '0') }
-function fmt(d: Date): string { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` }
+import { ReportType } from '@/types'
+import { ReportExecution, getDailyWaitingTrend } from '../db'
+import { getHumanMonthlySalary, resolveExecutionCostBreakdown } from '../token-pricing'
+import { REPORT_TYPE_LABELS, PREV_PERIOD_LABELS, calculatePreviousPeriod } from './schedule'
 
 /** 소요시간 포매팅 */
 function fmtDuration(min: number): string {
@@ -102,6 +9,187 @@ function fmtDuration(min: number): string {
   if (min < 60) return `${Math.round(min)}분`
   const h = Math.floor(min / 60), m = Math.round(min % 60)
   return m > 0 ? `${h}시간 ${m}분` : `${h}시간`
+}
+
+function esc(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+/** 증감 표시 (인라인 배지) - invertColor: true이면 증가가 빨간색(비용/실패 등) */
+function changeIndicator(current: number, previous: number, invertColor?: boolean): string {
+  const diff = current - previous
+  if (diff === 0) return '<span style="color:#6b7280;">-</span>'
+  const isUp = diff > 0
+  const arrow = isUp ? '▲' : '▼'
+  const color = invertColor ? (isUp ? '#dc2626' : '#16a34a') : (isUp ? '#16a34a' : '#dc2626')
+  const rate = previous > 0 ? ((Math.abs(diff) / previous) * 100).toFixed(1) + '%' : 'NEW'
+  const absDiff = Math.abs(diff)
+  const diffStr = absDiff % 1 === 0 ? absDiff.toString() : absDiff.toFixed(2)
+  return `<span style="color:${color};font-weight:600;">${arrow}${diffStr} (${rate})</span>`
+}
+
+/** 성공률 등 %p 단위 증감 표시 */
+function changeIndicatorRate(current: number, previous: number): string {
+  const diff = current - previous
+  if (Math.abs(diff) < 0.05) return '<span style="color:#6b7280;">-</span>'
+  const isUp = diff > 0
+  const arrow = isUp ? '▲' : '▼'
+  const color = isUp ? '#16a34a' : '#dc2626'
+  return `<span style="color:${color};font-weight:600;">${arrow}${Math.abs(diff).toFixed(1)}%p</span>`
+}
+
+/** 증감 배지 (비교 테이블용) */
+function diffBadge(diff: number, invertColor?: boolean, unit?: string): string {
+  if (Math.abs(diff) < 0.005) return '<span style="color:#6b7280;">-</span>'
+  const isUp = diff > 0
+  const arrow = isUp ? '▲' : '▼'
+  const color = invertColor ? (isUp ? '#dc2626' : '#16a34a') : (isUp ? '#16a34a' : '#dc2626')
+  let valStr: string
+  if (unit === '$') {
+    valStr = '$' + Math.abs(diff).toFixed(2)
+  } else if (unit === 'token') {
+    valStr = formatTokens(Math.abs(Math.round(diff)))
+  } else if (unit === 'pp') {
+    valStr = Math.abs(diff).toFixed(1) + '%p'
+  } else {
+    valStr = Math.abs(diff) % 1 === 0 ? Math.abs(diff).toString() : Math.abs(diff).toFixed(2)
+  }
+  return `<span style="color:${color};font-weight:600;">${arrow} ${valStr}</span>`
+}
+
+/** 증감율 배지 (비교 테이블용) */
+function changeRateBadge(current: number, previous: number, invertColor?: boolean): string {
+  if (previous === 0 && current === 0) return '<span style="color:#6b7280;">-</span>'
+  if (previous === 0) return `<span style="color:${invertColor ? '#dc2626' : '#16a34a'};font-weight:600;">NEW</span>`
+  const rate = ((current - previous) / previous) * 100
+  if (Math.abs(rate) < 0.05) return '<span style="color:#6b7280;">0.0%</span>'
+  const isUp = rate > 0
+  const color = invertColor ? (isUp ? '#dc2626' : '#16a34a') : (isUp ? '#16a34a' : '#dc2626')
+  return `<span style="color:${color};font-weight:600;">${isUp ? '+' : ''}${rate.toFixed(1)}%</span>`
+}
+
+/** 증감율 텍스트 (총평용) */
+function calcChangeRate(current: number, previous: number): string {
+  if (previous === 0 && current === 0) return '변동 없음'
+  if (previous === 0) return '신규'
+  const rate = ((current - previous) / previous) * 100
+  if (Math.abs(rate) < 0.05) return '변동 없음'
+  const sign = rate > 0 ? '+' : ''
+  return `${sign}${rate.toFixed(1)}%`
+}
+
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M'
+  if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K'
+  return n.toString()
+}
+
+/** 총평/브리핑 텍스트 생성 */
+function generateSummary(
+  label: string,
+  total: number,
+  success: number,
+  failed: number,
+  running: number,
+  successRate: number,
+  totalCost: number,
+  byProject: Map<string, { name: string; total: number; success: number; failed: number; cost: number }>,
+  byAgent: Map<string, { name: string; cli: string; total: number; success: number; failed: number; cost: number }>,
+  byUser: Map<string, { name: string; total: number; success: number; failed: number; cost: number; issueCount: number; projectCount: number }>,
+  prevData?: { prevTotal: number; prevSuccess: number; prevFailed: number; prevSuccessRate: number; prevTotalCost: number },
+  flowData?: { uniqueInflow: number; verifiedCount: number; currentWaiting: number; totalCostAi: number; totalCostHuman: number; dailyInflow: number; dailyCapacity: number }
+): string {
+  const parts: string[] = []
+
+  // 기본 요약 — 유입/처리 흐름 중심
+  if (flowData && flowData.uniqueInflow > 0) {
+    const inflowStr = `유입 <strong>${flowData.uniqueInflow}건</strong>`
+    const totalStr = `처리 <strong>${total}건</strong>`
+    if (prevData) {
+      const totalChangeRate = calcChangeRate(total, prevData.prevTotal)
+      parts.push(`이번 ${label} 기간 동안 ${inflowStr}, ${totalStr}이 수행되었습니다 (전 기간 대비 ${totalChangeRate}).`)
+    } else {
+      parts.push(`이번 ${label} 기간 동안 ${inflowStr}, ${totalStr}이 수행되었습니다.`)
+    }
+    if (flowData.currentWaiting > 0) {
+      const waitingNote = flowData.currentWaiting >= 5
+        ? `현재 <strong style="color:#dc2626;">${flowData.currentWaiting}건</strong>이 대기 중으로 주의가 필요합니다.`
+        : `현재 ${flowData.currentWaiting}건이 대기 중입니다.`
+      parts.push(waitingNote)
+    }
+  } else {
+    if (prevData) {
+      const totalChangeRate = calcChangeRate(total, prevData.prevTotal)
+      parts.push(`이번 ${label} 기간 동안 총 <strong>${total}건</strong>의 작업이 수행되었습니다 (전 기간 대비 ${totalChangeRate}).`)
+    } else {
+      parts.push(`이번 ${label} 기간 동안 총 <strong>${total}건</strong>의 작업이 수행되었습니다.`)
+    }
+  }
+
+  // 성공률 평가
+  if (successRate >= 90) {
+    const rateNote = prevData ? ` (전 기간 ${prevData.prevSuccessRate}%)` : ''
+    parts.push(`성공률 <strong>${successRate}%</strong>로 매우 안정적인 운영 상태입니다${rateNote}.`)
+  } else if (successRate >= 70) {
+    const rateNote = prevData ? ` (전 기간 ${prevData.prevSuccessRate}%)` : ''
+    parts.push(`성공률 <strong>${successRate}%</strong>로 양호한 수준이나, 실패 작업(${failed}건)에 대한 점검이 권장됩니다${rateNote}.`)
+  } else if (total > 0) {
+    const rateNote = prevData ? ` (전 기간 ${prevData.prevSuccessRate}%)` : ''
+    parts.push(`성공률이 <strong>${successRate}%</strong>로 낮은 편입니다. 실패 작업(${failed}건)에 대한 원인 분석이 필요합니다${rateNote}.`)
+  }
+
+  // 프로젝트별 하이라이트
+  const projects = Array.from(byProject.values()).sort((a, b) => b.total - a.total)
+  if (projects.length > 0) {
+    const topProject = projects[0]
+    parts.push(`가장 활발한 프로젝트는 <strong>${esc(topProject.name)}</strong>(${topProject.total}건)입니다.`)
+
+    const failedProjects = projects.filter(p => p.failed > 0)
+    if (failedProjects.length > 0) {
+      const failedNames = failedProjects.map(p => `${esc(p.name)}(${p.failed}건)`).join(', ')
+      parts.push(`실패가 발생한 프로젝트: ${failedNames}.`)
+    }
+  }
+
+  // 에이전트 하이라이트
+  const agents = Array.from(byAgent.values()).sort((a, b) => b.total - a.total)
+  if (agents.length > 1) {
+    parts.push(`가장 많은 작업을 수행한 에이전트는 <strong>${esc(agents[0].name)}</strong>(${agents[0].total}건)입니다.`)
+  }
+
+  // 사용자 하이라이트
+  const users = Array.from(byUser.values()).sort((a, b) => b.total - a.total)
+  if (users.length > 1) {
+    parts.push(`가장 많은 작업을 요청한 사용자는 <strong>${esc(users[0].name)}</strong>(${users[0].total}건)입니다.`)
+  }
+
+  // 비용 요약 — AI/사람 분리 강조
+  if (totalCost > 0) {
+    if (flowData && flowData.totalCostHuman > 0) {
+      const aiStr = `AI $${flowData.totalCostAi.toFixed(2)}`
+      const humanStr = `사람 $${flowData.totalCostHuman.toFixed(2)}`
+      if (prevData && prevData.prevTotalCost > 0) {
+        const costChangeRate = calcChangeRate(totalCost, prevData.prevTotalCost)
+        parts.push(`총 비용은 <strong>$${totalCost.toFixed(2)}</strong> (${aiStr} + ${humanStr})이 소요되었습니다 (전 기간 $${prevData.prevTotalCost.toFixed(2)}, ${costChangeRate}).`)
+      } else {
+        parts.push(`총 비용은 <strong>$${totalCost.toFixed(2)}</strong> (${aiStr} + ${humanStr})이 소요되었습니다.`)
+      }
+    } else {
+      if (prevData && prevData.prevTotalCost > 0) {
+        const costChangeRate = calcChangeRate(totalCost, prevData.prevTotalCost)
+        parts.push(`총 비용은 <strong>$${totalCost.toFixed(2)}</strong>이 소요되었습니다 (전 기간 $${prevData.prevTotalCost.toFixed(2)}, ${costChangeRate}).`)
+      } else {
+        parts.push(`총 비용은 <strong>$${totalCost.toFixed(2)}</strong>이 소요되었습니다.`)
+      }
+    }
+  }
+
+  // 진행중 작업
+  if (running > 0) {
+    parts.push(`현재 진행 중인 작업이 ${running}건 있습니다.`)
+  }
+
+  return parts.join(' ')
 }
 
 /** 보고서 HTML 생성 */
@@ -816,265 +904,4 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
   </div>
 </body>
 </html>`
-}
-
-/** 총평/브리핑 텍스트 생성 */
-function generateSummary(
-  label: string,
-  total: number,
-  success: number,
-  failed: number,
-  running: number,
-  successRate: number,
-  totalCost: number,
-  byProject: Map<string, { name: string; total: number; success: number; failed: number; cost: number }>,
-  byAgent: Map<string, { name: string; cli: string; total: number; success: number; failed: number; cost: number }>,
-  byUser: Map<string, { name: string; total: number; success: number; failed: number; cost: number; issueCount: number; projectCount: number }>,
-  prevData?: { prevTotal: number; prevSuccess: number; prevFailed: number; prevSuccessRate: number; prevTotalCost: number },
-  flowData?: { uniqueInflow: number; verifiedCount: number; currentWaiting: number; totalCostAi: number; totalCostHuman: number; dailyInflow: number; dailyCapacity: number }
-): string {
-  const parts: string[] = []
-
-  // 기본 요약 — 유입/처리 흐름 중심
-  if (flowData && flowData.uniqueInflow > 0) {
-    const inflowStr = `유입 <strong>${flowData.uniqueInflow}건</strong>`
-    const totalStr = `처리 <strong>${total}건</strong>`
-    if (prevData) {
-      const totalChangeRate = calcChangeRate(total, prevData.prevTotal)
-      parts.push(`이번 ${label} 기간 동안 ${inflowStr}, ${totalStr}이 수행되었습니다 (전 기간 대비 ${totalChangeRate}).`)
-    } else {
-      parts.push(`이번 ${label} 기간 동안 ${inflowStr}, ${totalStr}이 수행되었습니다.`)
-    }
-    if (flowData.currentWaiting > 0) {
-      const waitingNote = flowData.currentWaiting >= 5
-        ? `현재 <strong style="color:#dc2626;">${flowData.currentWaiting}건</strong>이 대기 중으로 주의가 필요합니다.`
-        : `현재 ${flowData.currentWaiting}건이 대기 중입니다.`
-      parts.push(waitingNote)
-    }
-  } else {
-    if (prevData) {
-      const totalChangeRate = calcChangeRate(total, prevData.prevTotal)
-      parts.push(`이번 ${label} 기간 동안 총 <strong>${total}건</strong>의 작업이 수행되었습니다 (전 기간 대비 ${totalChangeRate}).`)
-    } else {
-      parts.push(`이번 ${label} 기간 동안 총 <strong>${total}건</strong>의 작업이 수행되었습니다.`)
-    }
-  }
-
-  // 성공률 평가
-  if (successRate >= 90) {
-    const rateNote = prevData ? ` (전 기간 ${prevData.prevSuccessRate}%)` : ''
-    parts.push(`성공률 <strong>${successRate}%</strong>로 매우 안정적인 운영 상태입니다${rateNote}.`)
-  } else if (successRate >= 70) {
-    const rateNote = prevData ? ` (전 기간 ${prevData.prevSuccessRate}%)` : ''
-    parts.push(`성공률 <strong>${successRate}%</strong>로 양호한 수준이나, 실패 작업(${failed}건)에 대한 점검이 권장됩니다${rateNote}.`)
-  } else if (total > 0) {
-    const rateNote = prevData ? ` (전 기간 ${prevData.prevSuccessRate}%)` : ''
-    parts.push(`성공률이 <strong>${successRate}%</strong>로 낮은 편입니다. 실패 작업(${failed}건)에 대한 원인 분석이 필요합니다${rateNote}.`)
-  }
-
-  // 프로젝트별 하이라이트
-  const projects = Array.from(byProject.values()).sort((a, b) => b.total - a.total)
-  if (projects.length > 0) {
-    const topProject = projects[0]
-    parts.push(`가장 활발한 프로젝트는 <strong>${esc(topProject.name)}</strong>(${topProject.total}건)입니다.`)
-
-    const failedProjects = projects.filter(p => p.failed > 0)
-    if (failedProjects.length > 0) {
-      const failedNames = failedProjects.map(p => `${esc(p.name)}(${p.failed}건)`).join(', ')
-      parts.push(`실패가 발생한 프로젝트: ${failedNames}.`)
-    }
-  }
-
-  // 에이전트 하이라이트
-  const agents = Array.from(byAgent.values()).sort((a, b) => b.total - a.total)
-  if (agents.length > 1) {
-    parts.push(`가장 많은 작업을 수행한 에이전트는 <strong>${esc(agents[0].name)}</strong>(${agents[0].total}건)입니다.`)
-  }
-
-  // 사용자 하이라이트
-  const users = Array.from(byUser.values()).sort((a, b) => b.total - a.total)
-  if (users.length > 1) {
-    parts.push(`가장 많은 작업을 요청한 사용자는 <strong>${esc(users[0].name)}</strong>(${users[0].total}건)입니다.`)
-  }
-
-  // 비용 요약 — AI/사람 분리 강조
-  if (totalCost > 0) {
-    if (flowData && flowData.totalCostHuman > 0) {
-      const aiStr = `AI $${flowData.totalCostAi.toFixed(2)}`
-      const humanStr = `사람 $${flowData.totalCostHuman.toFixed(2)}`
-      if (prevData && prevData.prevTotalCost > 0) {
-        const costChangeRate = calcChangeRate(totalCost, prevData.prevTotalCost)
-        parts.push(`총 비용은 <strong>$${totalCost.toFixed(2)}</strong> (${aiStr} + ${humanStr})이 소요되었습니다 (전 기간 $${prevData.prevTotalCost.toFixed(2)}, ${costChangeRate}).`)
-      } else {
-        parts.push(`총 비용은 <strong>$${totalCost.toFixed(2)}</strong> (${aiStr} + ${humanStr})이 소요되었습니다.`)
-      }
-    } else {
-      if (prevData && prevData.prevTotalCost > 0) {
-        const costChangeRate = calcChangeRate(totalCost, prevData.prevTotalCost)
-        parts.push(`총 비용은 <strong>$${totalCost.toFixed(2)}</strong>이 소요되었습니다 (전 기간 $${prevData.prevTotalCost.toFixed(2)}, ${costChangeRate}).`)
-      } else {
-        parts.push(`총 비용은 <strong>$${totalCost.toFixed(2)}</strong>이 소요되었습니다.`)
-      }
-    }
-  }
-
-  // 진행중 작업
-  if (running > 0) {
-    parts.push(`현재 진행 중인 작업이 ${running}건 있습니다.`)
-  }
-
-  return parts.join(' ')
-}
-
-function esc(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-}
-
-/** 증감 표시 (인라인 배지) - invertColor: true이면 증가가 빨간색(비용/실패 등) */
-function changeIndicator(current: number, previous: number, invertColor?: boolean): string {
-  const diff = current - previous
-  if (diff === 0) return '<span style="color:#6b7280;">-</span>'
-  const isUp = diff > 0
-  const arrow = isUp ? '▲' : '▼'
-  const color = invertColor ? (isUp ? '#dc2626' : '#16a34a') : (isUp ? '#16a34a' : '#dc2626')
-  const rate = previous > 0 ? ((Math.abs(diff) / previous) * 100).toFixed(1) + '%' : 'NEW'
-  const absDiff = Math.abs(diff)
-  const diffStr = absDiff % 1 === 0 ? absDiff.toString() : absDiff.toFixed(2)
-  return `<span style="color:${color};font-weight:600;">${arrow}${diffStr} (${rate})</span>`
-}
-
-/** 성공률 등 %p 단위 증감 표시 */
-function changeIndicatorRate(current: number, previous: number): string {
-  const diff = current - previous
-  if (Math.abs(diff) < 0.05) return '<span style="color:#6b7280;">-</span>'
-  const isUp = diff > 0
-  const arrow = isUp ? '▲' : '▼'
-  const color = isUp ? '#16a34a' : '#dc2626'
-  return `<span style="color:${color};font-weight:600;">${arrow}${Math.abs(diff).toFixed(1)}%p</span>`
-}
-
-/** 증감 배지 (비교 테이블용) */
-function diffBadge(diff: number, invertColor?: boolean, unit?: string): string {
-  if (Math.abs(diff) < 0.005) return '<span style="color:#6b7280;">-</span>'
-  const isUp = diff > 0
-  const arrow = isUp ? '▲' : '▼'
-  const color = invertColor ? (isUp ? '#dc2626' : '#16a34a') : (isUp ? '#16a34a' : '#dc2626')
-  let valStr: string
-  if (unit === '$') {
-    valStr = '$' + Math.abs(diff).toFixed(2)
-  } else if (unit === 'token') {
-    valStr = formatTokens(Math.abs(Math.round(diff)))
-  } else if (unit === 'pp') {
-    valStr = Math.abs(diff).toFixed(1) + '%p'
-  } else {
-    valStr = Math.abs(diff) % 1 === 0 ? Math.abs(diff).toString() : Math.abs(diff).toFixed(2)
-  }
-  return `<span style="color:${color};font-weight:600;">${arrow} ${valStr}</span>`
-}
-
-/** 증감율 배지 (비교 테이블용) */
-function changeRateBadge(current: number, previous: number, invertColor?: boolean): string {
-  if (previous === 0 && current === 0) return '<span style="color:#6b7280;">-</span>'
-  if (previous === 0) return `<span style="color:${invertColor ? '#dc2626' : '#16a34a'};font-weight:600;">NEW</span>`
-  const rate = ((current - previous) / previous) * 100
-  if (Math.abs(rate) < 0.05) return '<span style="color:#6b7280;">0.0%</span>'
-  const isUp = rate > 0
-  const color = invertColor ? (isUp ? '#dc2626' : '#16a34a') : (isUp ? '#16a34a' : '#dc2626')
-  return `<span style="color:${color};font-weight:600;">${isUp ? '+' : ''}${rate.toFixed(1)}%</span>`
-}
-
-/** 증감율 텍스트 (총평용) */
-function calcChangeRate(current: number, previous: number): string {
-  if (previous === 0 && current === 0) return '변동 없음'
-  if (previous === 0) return '신규'
-  const rate = ((current - previous) / previous) * 100
-  if (Math.abs(rate) < 0.05) return '변동 없음'
-  const sign = rate > 0 ? '+' : ''
-  return `${sign}${rate.toFixed(1)}%`
-}
-
-function formatTokens(n: number): string {
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M'
-  if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K'
-  return n.toString()
-}
-
-/** 보고서를 생성하여 수신자들에게 발송 */
-export async function sendReport(
-  schedule: ReportSchedule,
-  options?: { force?: boolean; periodStart?: string; periodEnd?: string }
-): Promise<{ sent: number; skipped: number; failed: number }> {
-  const force = options?.force ?? false
-  const { start, end } = options?.periodStart && options?.periodEnd
-    ? { start: options.periodStart, end: options.periodEnd }
-    : calculateReportPeriod(schedule.reportType)
-
-  const periodStart = start
-  const periodEnd = end
-
-  const executions = getGlobalExecutionsInRange(periodStart, periodEnd)
-
-  // 전 기간 데이터 조회
-  const prevPeriod = calculatePreviousPeriod(schedule.reportType, periodStart, periodEnd)
-  const prevExecutions = getGlobalExecutionsInRange(prevPeriod.start, prevPeriod.end)
-
-  const html = generateReportHtml(schedule.reportType, periodStart, periodEnd, executions, prevExecutions)
-
-  const label = REPORT_TYPE_LABELS[schedule.reportType]
-  const periodEndDisplay = new Date(new Date(periodEnd).getTime() - 86400000).toISOString().slice(0, 10)
-  const subject = `[Spring IVE] ${label} 보고서 (${periodStart} ~ ${periodEndDisplay})`
-
-  const transporter = createTransporter()
-  const fromAddr = getFromAddress()
-
-  let sent = 0, skipped = 0, failed = 0
-
-  for (const email of schedule.recipients) {
-    // 중복발송 체크
-    if (!force && hasAlreadySent(schedule.id, periodStart, periodEnd, email)) {
-      skipped++
-      continue
-    }
-
-    const logId = `rsl-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    try {
-      await transporter.sendMail({
-        from: `"Spring IVE" <${fromAddr}>`,
-        to: email,
-        subject,
-        html,
-      })
-
-      createReportSendLog({
-        id: logId,
-        scheduleId: schedule.id,
-        reportType: schedule.reportType,
-        periodStart,
-        periodEnd,
-        recipientEmail: email,
-        status: 'success',
-        sentAt: new Date().toISOString(),
-      })
-      sent++
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
-      console.error(`[ReportMailer] 발송 실패 (${email}):`, msg)
-
-      createReportSendLog({
-        id: logId,
-        scheduleId: schedule.id,
-        reportType: schedule.reportType,
-        periodStart,
-        periodEnd,
-        recipientEmail: email,
-        status: 'failed',
-        errorMessage: msg,
-        sentAt: new Date().toISOString(),
-      })
-      failed++
-    }
-  }
-
-  console.log(`[ReportMailer] ${label} 보고서 발송 완료: sent=${sent}, skipped=${skipped}, failed=${failed}`)
-  return { sent, skipped, failed }
 }

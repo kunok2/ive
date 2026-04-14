@@ -3,25 +3,8 @@
 import Modal from '@/components/ui/Modal'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 import { useTranslations } from 'next-intl'
-import type { CliName } from '@/types'
-
-const CLI_CONFIG: Record<CliName, { label: string; icon: string; color: string }> = {
-  claude: { label: 'Claude', icon: 'fa-solid fa-atom', color: 'text-ive-amber' },
-  gemini: { label: 'Gemini', icon: 'fa-brands fa-google', color: 'text-ive-cyan' },
-  codex: { label: 'Codex', icon: 'fa-solid fa-brain', color: 'text-ive-green-light' },
-  opencode: { label: 'OpenCode', icon: 'fa-solid fa-terminal', color: 'text-ive-cyan' },
-}
-
-interface ProjectAgent {
-  agentId: string
-  agent: { id: string; name: string; avatar: string; cliName: CliName; status: string }
-}
-
-interface IveIssue {
-  iid: number
-  assignMode?: string
-  preferredAgentId?: string | null
-}
+import { CLI_CONFIG } from './types'
+import type { ProjectAgent, IveIssue } from './types'
 
 interface AgentPickerModalProps {
   iid: number | null
