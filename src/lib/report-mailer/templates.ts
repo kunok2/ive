@@ -321,6 +321,17 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
   }
   const prevProcAvg = avg(prevProcTimes)
 
+  // 전 기간 유입/검증 계산
+  const prevSeenIssues = new Set<string>()
+  const prevUniqueInflow = prev.filter(e => {
+    const key = `${e.projectId}:${e.issueIid}`
+    if (prevSeenIssues.has(key)) return false
+    prevSeenIssues.add(key)
+    return true
+  }).length
+  const prevVerifiedCount = prev.filter(e => e.verifiedAt || e.rejectedAt).length
+  const prevCurrentWaiting = 0
+
   // ─── 프로젝트별 집계 ───
   const byProject = new Map<string, { name: string; color: string; total: number; success: number; failed: number; cost: number; tokens: number; uniqueIssues: number }>()
   for (const e of executions) {
@@ -476,6 +487,9 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
     calculatePreviousPeriod(reportType, periodStart, periodEnd).end
   ) : null
 
+  // 전 기간 대기수 계산 (HTML 섹션에서 사용)
+  const prevCurrentWaitingCalc = prevWaitingData && prevWaitingData.daily && prevWaitingData.daily.length > 0 ? prevWaitingData.daily[prevWaitingData.daily.length - 1]?.total ?? 0 : 0
+
   // ─── HTML 조립 ───
   return `
 <!DOCTYPE html>
@@ -503,7 +517,7 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
     <!-- ③ 흐름 현황 -->
     <div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;padding:20px;margin-bottom:16px;">
       <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:16px;">흐름 현황</div>
-      <!-- 유입 → 대기 → 처리 -->
+      <!-- 유입 → 처리 -->
       <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
         <tr>
           <td style="text-align:center;padding:4px;">
@@ -525,28 +539,28 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
           </td>
         </tr>
       </table>
-      <!-- 성공/실패/진행 -->
+      <!-- 작업/검증 -->
       <div style="background:#f9fafb;border-radius:8px;padding:12px;margin-bottom:12px;">
         <table width="100%" cellpadding="0" cellspacing="0">
           <tr>
             <td style="text-align:center;padding:4px 8px;">
-              <div style="font-size:20px;font-weight:800;color:#16a34a;">${success}</div>
-              <div style="font-size:10px;color:#6b7280;">성공 ${successRate}%</div>
-              ${hasPrev ? `<div style="font-size:10px;margin-top:2px;">${changeIndicator(success, prevSuccess)}</div>` : ''}
+              <div style="font-size:20px;font-weight:800;color:#16a34a;">${uniqueInflow}</div>
+              <div style="font-size:10px;color:#6b7280;">유입</div>
+              ${hasPrev ? `<div style="font-size:10px;margin-top:2px;">${changeIndicator(uniqueInflow, prevUniqueInflow)}</div>` : ''}
             </td>
             <td style="text-align:center;padding:4px 8px;">
-              <div style="font-size:20px;font-weight:800;color:#dc2626;">${failed}</div>
-              <div style="font-size:10px;color:#6b7280;">실패</div>
-              ${hasPrev ? `<div style="font-size:10px;margin-top:2px;">${changeIndicator(failed, prevFailed, true)}</div>` : ''}
+              <div style="font-size:20px;font-weight:800;color:#0891b2;">${verifiedCount}</div>
+              <div style="font-size:10px;color:#6b7280;">검증완료</div>
+              ${hasPrev ? `<div style="font-size:10px;margin-top:2px;">${changeIndicator(verifiedCount, prevVerifiedCount)}</div>` : ''}
             </td>
-            ${running > 0 ? `
             <td style="text-align:center;padding:4px 8px;">
-              <div style="font-size:20px;font-weight:800;color:#0891b2;">${running}</div>
-              <div style="font-size:10px;color:#6b7280;">진행중</div>
-            </td>` : ''}
+              <div style="font-size:20px;font-weight:800;color:${currentWaiting > 0 ? '#d97706' : '#6b7280'};">${currentWaiting}</div>
+              <div style="font-size:10px;color:#6b7280;">대기중</div>
+              ${hasPrev ? `<div style="font-size:10px;margin-top:2px;">${changeIndicator(currentWaiting, prevCurrentWaitingCalc, true)}</div>` : ''}
+            </td>
             <td style="text-align:center;padding:4px 8px;">
               <div style="font-size:20px;font-weight:800;color:#d97706;">${formatTokens(totalTokens)}</div>
-              <div style="font-size:10px;color:#6b7280;">총 토큰${totalCacheReadTokens > 0 && totalTokens > 0 ? ` (캐시 ${Math.round(totalCacheReadTokens / totalTokens * 100)}%)` : ''}</div>
+              <div style="font-size:10px;color:#6b7280;">토큰${totalCacheReadTokens > 0 && totalTokens > 0 ? ` (${Math.round(totalCacheReadTokens / totalTokens * 100)}%)` : ''}</div>
               ${hasPrev ? `<div style="font-size:10px;margin-top:2px;">${changeIndicator(totalTokens, prevTotalTokens)}</div>` : ''}
             </td>
           </tr>
