@@ -1,16 +1,28 @@
 'use client'
 
-import { useRef, useEffect, useMemo } from 'react'
+import { useRef, useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 import { createImagePasteHandlers } from '@/lib/paste-upload'
 import AgentPickerDropdown from './AgentPickerDropdown'
+import ConfirmModal from '@/components/ui/ConfirmModal'
 
 interface IssueDetail {
   iid: number
   stage: string
   state: string
   [key: string]: any
+}
+
+interface MRInfo {
+  iid: number
+  title: string
+  state: string
+  source_branch: string
+  target_branch: string
+  merge_status: string
+  has_conflicts: boolean
+  web_url: string
 }
 
 interface PreferredAgent {
@@ -48,6 +60,13 @@ interface BottomInputAreaProps {
   projectAgents: ProjectAgent[]
   // Next-stage config
   NEXT_STAGE: Record<string, { stage: string; action: string; label: string }>
+  // MR state
+  mr: MRInfo | null
+  mrLoading: boolean
+  mrMerging: boolean
+  mrClosing: boolean
+  onMergeMR: () => void
+  onCloseMR: () => void
   // Handlers
   onSetMode: (m: 'comment' | 'chat') => void
   onSetComment: (v: string) => void
@@ -68,11 +87,14 @@ export default function BottomInputArea({
   comment, commentKey, posting, postingType,
   chatSessionId, chatHistoryOnly, chatStarting, chatSending, chatInput, chatAgentName,
   preferredAgent, projectAgents, NEXT_STAGE,
+  mr, mrLoading, mrMerging, mrClosing, onMergeMR, onCloseMR,
   onSetMode, onSetComment, onSetChatInput,
   onPostComment, onCommentAndRetry, onCommentAndDone, onCommentAndNextStage,
   onStartChat, onEndChat, onSendChatMessage, onChangePreferredAgent, onToast,
 }: BottomInputAreaProps) {
   const tIssue = useTranslations('issue')
+  const t = useTranslations('mr')
+  const td = useTranslations('dialog')
 
   // Image paste handler for comment textarea
   const commentRef = useRef(comment)
@@ -145,6 +167,19 @@ export default function BottomInputArea({
       {mode === 'chat' && !chatSessionId && !chatHistoryOnly && !chatStarting && (
         <ChatStartPrompt onStartChat={onStartChat} />
       )}
+
+      {/* MR actions - 하단 액션 버튼 영역 */}
+      <MRActionButtons
+        issue={issue}
+        canProgressStage={canProgressStage}
+        mr={mr}
+        mrLoading={mrLoading}
+        mrMerging={mrMerging}
+        mrClosing={mrClosing}
+        onMergeMR={onMergeMR}
+        onCloseMR={onCloseMR}
+        onToast={onToast}
+      />
     </div>
   )
 }
@@ -402,5 +437,142 @@ function ChatStartPrompt({ onStartChat }: { onStartChat: (force?: boolean) => vo
         <i className="fa-solid fa-comments mr-1" />{tIssue('startChat')}
       </button>
     </div>
+  )
+}
+
+function MRActionButtons({
+  issue,
+  canProgressStage,
+  mr,
+  mrLoading,
+  mrMerging,
+  mrClosing,
+  onMergeMR,
+  onCloseMR,
+  onToast,
+}: {
+  issue: BottomInputAreaProps['issue']
+  canProgressStage: boolean
+  mr: MRInfo | null
+  mrLoading: boolean
+  mrMerging: boolean
+  mrClosing: boolean
+  onMergeMR: () => void
+  onCloseMR: () => void
+  onToast: (msg: string, type: 'success' | 'error') => void
+}) {
+  const t = useTranslations('mr')
+  const td = useTranslations('dialog')
+  const [showMergeConfirm, setShowMergeConfirm] = useState(false)
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false)
+
+  const showMRSection = canProgressStage && (issue.stage === 'done' || issue.stage === 'dev' || issue.stage === 'verify_waiting' || issue.stage === 'verifying')
+  if (!showMRSection) return null
+
+  if (mrLoading) {
+    return (
+      <div className="mt-3 py-2 px-3 bg-ive-bg-card rounded-lg border border-ive-border-subtle animate-pulse">
+        <div className="h-4 bg-ive-bg-deep rounded w-1/3 mb-2" />
+        <div className="h-3 bg-ive-bg-deep rounded w-2/3" />
+      </div>
+    )
+  }
+
+  if (!mr) return null
+
+  const isMerged = mr.state === 'merged'
+  const canMerge = mr.state === 'opened' && !mr.has_conflicts && mr.merge_status !== 'cannot_be_merged'
+  const hasConflicts = mr.has_conflicts || mr.merge_status === 'cannot_be_merged'
+
+  const handleMergeClick = () => {
+    if (canMerge) setShowMergeConfirm(true)
+  }
+
+  const handleMergeConfirm = async () => {
+    setShowMergeConfirm(false)
+    onMergeMR()
+  }
+
+  const handleCloseClick = () => {
+    setShowCloseConfirm(true)
+  }
+
+  const handleCloseConfirm = async () => {
+    setShowCloseConfirm(false)
+    onCloseMR()
+  }
+
+  return (
+    <>
+      <div className="mt-3 py-2 px-3 bg-ive-bg-card rounded-lg border border-ive-border-subtle">
+        <div className="flex items-center gap-2 mb-2">
+          <i className="fa-solid fa-code-merge text-ive-cyan text-xs" />
+          <span className="text-xs font-bold text-ive-text-dim">MR !{mr.iid}</span>
+          {isMerged ? (
+            <span className="text-[10px] font-bold bg-ive-cyan/15 text-ive-cyan px-1.5 py-0.5 rounded-full">
+              {t('mergeComplete')}
+            </span>
+          ) : hasConflicts ? (
+            <span className="text-[10px] font-bold bg-ive-red/15 text-ive-red px-1.5 py-0.5 rounded-full">
+              {t('conflict')}
+            </span>
+          ) : (
+            <span className="text-[10px] font-bold bg-ive-green/15 text-ive-green px-1.5 py-0.5 rounded-full">
+              {t('readyToMerge')}
+            </span>
+          )}
+        </div>
+        {!isMerged && (
+          <div className="flex gap-2">
+            <button
+              onClick={handleMergeClick}
+              disabled={!canMerge || mrMerging || mrClosing}
+              className={`flex-1 text-xs font-bold py-1.5 rounded-lg active:scale-[0.98] transition-all ${
+                canMerge
+                  ? 'text-ive-green bg-ive-green/10 hover:bg-ive-green/15'
+                  : 'text-ive-text-dim bg-ive-bg-deep cursor-not-allowed'
+              }`}
+            >
+              {mrMerging ? (
+                <><i className="fa-solid fa-spinner fa-spin mr-1" />{t('merging')}</>
+              ) : hasConflicts ? (
+                <><i className="fa-solid fa-ban mr-1" />{t('cannotMerge')}</>
+              ) : (
+                <><i className="fa-solid fa-code-merge mr-1" />{t('merge')}</>
+              )}
+            </button>
+            <button
+              onClick={handleCloseClick}
+              disabled={mrMerging || mrClosing}
+              className="text-xs font-bold text-ive-red/70 bg-ive-red/5 px-2.5 py-1.5 rounded-lg active:scale-[0.98] transition-all hover:bg-ive-red/10"
+            >
+              {mrClosing ? (
+                <i className="fa-solid fa-spinner fa-spin" />
+              ) : (
+                <><i className="fa-solid fa-xmark mr-1" />{t('closeMR')}</>
+              )}
+            </button>
+          </div>
+        )}
+      </div>
+
+      <ConfirmModal
+        open={showMergeConfirm}
+        onClose={() => setShowMergeConfirm(false)}
+        onConfirm={handleMergeConfirm}
+        title={td('mrMergeTitle')}
+        message={td('mrMergeConfirm', { iid: mr.iid, source: mr.source_branch, target: mr.target_branch })}
+        confirmLabel={t('merge')}
+      />
+      <ConfirmModal
+        open={showCloseConfirm}
+        onClose={() => setShowCloseConfirm(false)}
+        onConfirm={handleCloseConfirm}
+        title={td('mrCloseTitle')}
+        message={td('mrCloseConfirm', { iid: mr.iid, source: mr.source_branch })}
+        confirmLabel={t('closeMR')}
+        danger
+      />
+    </>
   )
 }
