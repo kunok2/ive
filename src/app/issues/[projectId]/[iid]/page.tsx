@@ -102,6 +102,21 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   } | null>(null)
   const [mrActionBusy, setMrActionBusy] = useState(false)
 
+  // --- MR bottom buttons state ---
+  const [mrInfo, setMrInfo] = useState<{
+    iid: number
+    title: string
+    state: string
+    source_branch: string
+    target_branch: string
+    merge_status: string
+    has_conflicts: boolean
+    web_url: string
+  } | null>(null)
+  const [mrLoading, setMrLoading] = useState(false)
+  const [mrMerging, setMrMerging] = useState(false)
+  const [mrClosing, setMrClosing] = useState(false)
+
   // --- Scroll/UI refs ---
   const notesEndRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -165,6 +180,50 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
     if (res.ok) setPreferredAgent(await res.json())
   }, [projectId, iid])
 
+  const fetchMRInfo = useCallback(async () => {
+    if (!canProgressStage) return
+    if (issue?.stage !== 'done' && issue?.stage !== 'dev' && issue?.stage !== 'verify_waiting' && issue?.stage !== 'verifying') return
+    setMrLoading(true)
+    try {
+      const res = await fetch(`/api/projects/${projectId}/issues/${iid}/mr`)
+      if (res.ok) {
+        const data = await res.json()
+        setMrInfo(data.mr || null)
+      }
+    } catch { setMrInfo(null) }
+    finally { setMrLoading(false) }
+  }, [projectId, iid, canProgressStage, issue?.stage])
+
+  const handleMergeMR = useCallback(async () => {
+    setMrMerging(true)
+    try {
+      const res = await fetch(`/api/projects/${projectId}/issues/${iid}/mr`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'merge' }),
+      })
+      const data = await res.json()
+      if (!res.ok) { toast(data.error || 'MR 머지에 실패했습니다', 'error'); return }
+      toast('MR이 성공적으로 머지되었습니다', 'success')
+      await fetchMRInfo()
+    } finally { setMrMerging(false) }
+  }, [projectId, iid, fetchMRInfo, toast])
+
+  const handleCloseMR = useCallback(async () => {
+    setMrClosing(true)
+    try {
+      const res = await fetch(`/api/projects/${projectId}/issues/${iid}/mr`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'close' }),
+      })
+      const data = await res.json()
+      if (!res.ok) { toast(data.error || 'MR 닫기에 실패했습니다', 'error'); return }
+      toast('MR이 닫혔습니다', 'success')
+      await fetchMRInfo()
+    } finally { setMrClosing(false) }
+  }, [projectId, iid, fetchMRInfo, toast])
+
   useEffect(() => {
     fetchIssue()
     fetchNotes()
@@ -177,7 +236,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
       .then(res => res.ok ? res.json() : [])
       .then(setGitMembers)
       .catch(() => setGitMembers([]))
-  }, [fetchIssue, fetchNotes, fetchPreferredAgent, projectId])
+  }, [fetchIssue, fetchNotes, fetchPreferredAgent, fetchMRInfo, projectId])
 
   // ===================== Stage/issue handlers =====================
 
@@ -743,6 +802,12 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
         onSendChatMessage={handleSendChatMessage}
         onChangePreferredAgent={handleChangePreferredAgent}
         onToast={toast}
+        mr={mrInfo}
+        mrLoading={mrLoading}
+        mrMerging={mrMerging}
+        mrClosing={mrClosing}
+        onMergeMR={handleMergeMR}
+        onCloseMR={handleCloseMR}
       />
 
       <MrActionModal
