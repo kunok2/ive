@@ -40,7 +40,7 @@ export default function BroadcastView() {
 
   async function handleSend() {
     if (!subject.trim() || !body.trim()) {
-      toast(t('subjectContentRequired'), 'warning')
+      toast(t('subjectContentRequired'), 'info')
       return
     }
     const targets = selectedIds.size > 0 ? Array.from(selectedIds) : undefined
