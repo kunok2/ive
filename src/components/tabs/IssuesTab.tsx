@@ -35,10 +35,10 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   // --- Constants ---
   const STAGE_INFO: Record<string, StageInfo> = useMemo(() => ({
     waiting:        { label: tStage('waiting'),        color: 'bg-ive-cyan/20 text-ive-cyan border-ive-cyan/30',     icon: 'fa-clock' },
-    verify_waiting: { label: tStage('verify_waiting'), color: 'bg-ive-amber/20 text-ive-amber border-ive-amber/30',  icon: 'fa-hourglass-half' },
+    verify_waiting: { label: tStage('verify_waiting'), color: 'bg-ive-cyan/20 text-ive-cyan border-ive-cyan/30', icon: 'fa-hourglass-half' },
     dev:            { label: tStage('dev'),            color: 'bg-ive-amber/20 text-ive-amber border-ive-amber/30',  icon: 'fa-code' },
     dev_fail:       { label: tStage('dev_fail'),       color: 'bg-ive-red/20 text-ive-red border-ive-red/30',        icon: 'fa-circle-xmark' },
-    verifying:      { label: tStage('verifying'),      color: 'bg-ive-amber/20 text-ive-amber border-ive-amber/30',  icon: 'fa-magnifying-glass' },
+    verifying:      { label: tStage('verifying'),      color: 'bg-ive-cyan/20 text-ive-cyan border-ive-cyan/30', icon: 'fa-magnifying-glass' },
     done:           { label: tStage('done'),           color: 'bg-ive-green/20 text-ive-green border-ive-green/30',  icon: 'fa-circle-check' },
     closed:         { label: tStage('closed'),         color: 'bg-white/5 text-ive-text-muted border-ive-border-subtle', icon: 'fa-lock' },
     rejected:       { label: tStage('rejected'),       color: 'bg-ive-red/20 text-ive-red border-ive-red/30',        icon: 'fa-rotate-left' },
