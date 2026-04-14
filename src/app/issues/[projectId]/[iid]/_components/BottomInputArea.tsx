@@ -216,8 +216,8 @@ function ModeTabs({
           <i className="fa-solid fa-xmark mr-0.5" />{tIssue('endChat')}
         </button>
       )}
-      {/* 작업자 선택 — 탭 행 우측 (권한 있는 경우에만) */}
-      {canProgressStage && issue.stage !== 'dev' && projectAgents.length > 0 && (
+      {/* 작업자 선택 — 탭 행 우측 (코멘트 모드에서만, 권한 있는 경우에만) */}
+      {canProgressStage && issue.stage !== 'dev' && projectAgents.length > 0 && mode === 'comment' && (
         <AgentPickerDropdown
           preferredAgent={preferredAgent}
           projectAgents={projectAgents}
