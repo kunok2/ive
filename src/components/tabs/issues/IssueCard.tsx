@@ -73,8 +73,8 @@ export default function IssueCard({
           : 'border-ive-border-subtle hover:border-ive-green/40'
       }`}
     >
-      <div className="flex items-start justify-between gap-3 mb-2">
-        <div className="flex items-start gap-2.5 min-w-0 flex-1">
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="flex items-start gap-2 min-w-0 flex-1">
           {bulkMode && (
             <div className="mt-0.5 shrink-0">
               {isSelected
@@ -91,8 +91,8 @@ export default function IssueCard({
         {navigatingIid === issue.iid ? (
           <i className="fa-solid fa-circle-notch fa-spin text-ive-green shrink-0" />
         ) : issue.stage !== 'none' && (
-          <span className={`shrink-0 text-xs font-bold px-2 py-1 rounded-lg border ${info.color}`}>
-            <i className={`fa-solid ${info.icon} mr-1`} />
+          <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded border ${info.color} ${displayStage === 'done' ? 'flex items-center gap-1' : ''}`}>
+            <i className={`fa-solid ${info.icon}`} />
             {info.label}
           </span>
         )}
@@ -103,7 +103,7 @@ export default function IssueCard({
           {issue.failReason}
         </div>
       )}
-      <div className="flex items-center gap-3 text-xs text-ive-text-dim">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ive-text-dim">
         <AgentBadge
           issue={issue}
           canEdit={canEdit}
@@ -112,13 +112,13 @@ export default function IssueCard({
           cliConfig={cliConfig}
           onOpenAgentPicker={onOpenAgentPicker}
         />
-        <span>
+        <span className="inline-flex items-center">
           <i className="fa-solid fa-user mr-1" />
           {issue.author}
         </span>
         {/* assignee avatars + edit */}
         {((issue.assignees && issue.assignees.length > 0) || (canEdit && !bulkMode && gitMembers.length > 0)) && (
-          <span className="flex items-center gap-1"
+          <span className="inline-flex items-center gap-1"
             onClick={(e) => {
               if (canEdit && !bulkMode && gitMembers.length > 0) {
                 e.stopPropagation()
@@ -127,9 +127,15 @@ export default function IssueCard({
             }}
           >
             {(issue.assignees || []).map(a => (
-              <span key={a.id} className="flex items-center gap-0.5">
-                {a.avatarUrl ? <img src={a.avatarUrl} className="w-4 h-4 rounded-full" alt="" /> : <i className="fa-solid fa-user text-[10px]" />}
-                <span className="text-xs font-bold text-ive-text-muted">{a.name || a.username}</span>
+              <span key={a.id} className="inline-flex items-center gap-0.5">
+                {a.avatarUrl ? (
+                  <img src={a.avatarUrl} className="w-4 h-4 rounded-full object-cover bg-ive-bg-deep" alt="" />
+                ) : (
+                  <span className="w-4 h-4 rounded-full bg-ive-cyan/20 flex items-center justify-center">
+                    <i className="fa-solid fa-user text-[10px] text-ive-cyan" />
+                  </span>
+                )}
+                <span className="text-xs font-bold text-ive-text-muted truncate max-w-[80px]">{a.name || a.username}</span>
               </span>
             ))}
             {canEdit && !bulkMode && gitMembers.length > 0 && !(issue.assignees && issue.assignees.length > 0) && (
@@ -178,30 +184,34 @@ function AgentBadge({
   const onClickEdit = agentEditable ? (e: React.MouseEvent) => { e.stopPropagation(); onOpenAgentPicker(issue.iid) } : undefined
 
   if (issue.assignMode === 'assignee') {
+    const assignee = issue.assignees?.[0]
     return (
       <span
-        className={`flex items-center gap-1 text-ive-cyan ${agentEditable ? 'cursor-pointer hover:text-ive-cyan/80' : ''}`}
+        className={`inline-flex items-center gap-1 text-ive-cyan ${agentEditable ? 'cursor-pointer hover:text-ive-cyan/80' : ''}`}
         onClick={onClickEdit}
       >
-        {issue.assignees?.[0]?.avatarUrl ? (
-          <img src={issue.assignees[0].avatarUrl} className="w-4 h-4 rounded-full" alt="" />
+        {assignee?.avatarUrl ? (
+          <img src={assignee.avatarUrl} className="w-4 h-4 rounded-full object-cover bg-ive-bg-deep" alt="" />
         ) : (
-          <i className="fa-solid fa-user text-[10px]" />
+          <span className="w-4 h-4 rounded-full bg-ive-cyan/20 flex items-center justify-center">
+            <i className="fa-solid fa-user text-[10px] text-ive-cyan" />
+          </span>
         )}
-        <span className="font-bold">{issue.assignees?.[0]?.name || issue.assignees?.[0]?.username || tIssue('assigneeHandles')}</span>
+        <span className="font-bold truncate max-w-[80px]">{assignee?.name || assignee?.username || tIssue('assigneeHandles')}</span>
         {agentEditable && <i className="fa-solid fa-pen-to-square text-[9px] opacity-60" />}
       </span>
     )
   }
 
-  if (issue.preferredAgentId && issue.preferredAgentAvatar) {
+  if (issue.preferredAgentId) {
+    const avatar = issue.preferredAgentAvatar || 'av-01'
     return (
       <span
-        className={`flex items-center gap-1 ${agentEditable ? 'cursor-pointer hover:text-ive-text' : ''}`}
+        className={`inline-flex items-center gap-1 ${agentEditable ? 'cursor-pointer hover:text-ive-text' : ''}`}
         onClick={onClickEdit}
       >
-        <AgentAvatar avatar={issue.preferredAgentAvatar} size="xs" />
-        <span className="font-bold text-ive-text-muted">{issue.preferredAgentName}</span>
+        <AgentAvatar avatar={avatar} size="xs" />
+        <span className="font-bold text-ive-text-muted truncate max-w-[80px]">{issue.preferredAgentName}</span>
         {issue.preferredAgentCliName && (() => {
           const cli = cliConfig[issue.preferredAgentCliName as CliName]
           return cli ? <i className={`${cli.icon} ${cli.color} text-[10px]`} /> : null
@@ -214,11 +224,11 @@ function AgentBadge({
   if (agentEditable) {
     return (
       <span
-        className="flex items-center gap-1 cursor-pointer text-ive-text-dim hover:text-ive-green"
+        className="inline-flex items-center gap-1 cursor-pointer text-ive-text-dim hover:text-ive-green"
         onClick={onClickEdit}
       >
         <i className="fa-solid fa-user-gear text-[10px]" />
-        <span className="font-bold">{tIssue('noPreference')}</span>
+        <span className="font-bold truncate max-w-[80px]">{tIssue('noPreference')}</span>
         <i className="fa-solid fa-pen-to-square text-[9px] opacity-60" />
       </span>
     )
