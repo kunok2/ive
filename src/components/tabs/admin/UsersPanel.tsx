@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { User, DEFAULT_AVATARS } from '@/types'
 import { useDialog } from '@/components/ui/ConfirmDialog'
+import { useToast } from '@/components/ui/Toast'
 import ActivityContent from './ActivityContent'
 
 type UsersSubView = 'users' | 'activity'
@@ -13,6 +14,7 @@ export default function UsersPanel() {
   const tc = useTranslations('common')
   const ta = useTranslations('agent')
   const { confirm, alert } = useDialog()
+  const { toast } = useToast()
   const [view, setView] = useState<UsersSubView>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('ive-admin-users-subview')
@@ -61,7 +63,7 @@ export default function UsersPanel() {
       setUsers(prev => prev.filter(u => u.id !== userId))
     } else {
       const data = await res.json()
-      await alert({ message: data.error || tc('deleteFailed'), variant: 'error' })
+      toast(data.error || tc('deleteFailed'), 'error')
     }
     setDeleting(null)
   }
@@ -83,7 +85,7 @@ export default function UsersPanel() {
       } : u))
     } else {
       const data = await res.json()
-      await alert({ message: data.error || t('permissionChangeFailed'), variant: 'error' })
+      toast(data.error || t('permissionChangeFailed'), 'error')
     }
   }
 
@@ -122,7 +124,7 @@ export default function UsersPanel() {
       setEditingLimits(null)
     } else {
       const data = await res.json()
-      await alert({ message: data.error || tc('saveFailed'), variant: 'error' })
+      toast(data.error || tc('saveFailed'), 'error')
     }
   }
 

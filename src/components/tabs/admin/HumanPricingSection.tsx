@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { useDialog } from '@/components/ui/ConfirmDialog'
+import { useToast } from '@/components/ui/Toast'
 
 interface PricingItem {
   id: string; cliName: string; modelName: string
@@ -23,7 +23,7 @@ export default function HumanPricingSection({
 }: HumanPricingSectionProps) {
   const t = useTranslations('admin')
   const tc = useTranslations('common')
-  const { alert } = useDialog()
+  const { toast } = useToast()
   const [pricingSaving, setPricingSaving] = useState(false)
 
   return (
@@ -67,7 +67,7 @@ export default function HumanPricingSection({
               try {
                 const res = await fetch('/api/settings/pricing', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: pricingItems.map(it => ({ id: it.id, cliName: it.cliName, modelName: it.modelName, inputPrice: it.inputPrice, outputPrice: it.outputPrice })) }) })
                 if (res.ok) { setPricingItems(await res.json()); setPricingSaved(true); setTimeout(() => setPricingSaved(false), 2000) }
-                else { const data = await res.json(); await alert({ message: data.error || tc('saveFailed'), variant: 'error' }) }
+                else { const data = await res.json(); toast(data.error || tc('saveFailed'), 'error') }
               } finally { setPricingSaving(false) }
             }}
             disabled={pricingSaving}

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import { User } from '@/types'
 import { useDialog } from '@/components/ui/ConfirmDialog'
+import { useToast } from '@/components/ui/Toast'
 
 interface ReportScheduleState {
   id: string; reportType: string; enabled: boolean
@@ -21,6 +22,7 @@ export default function ReportScheduleView() {
   const tc = useTranslations('common')
   const tr = useTranslations('report')
   const { confirm, alert } = useDialog()
+  const { toast } = useToast()
   const [schedules, setSchedules] = useState<ReportScheduleState[]>([])
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
@@ -97,7 +99,7 @@ export default function ReportScheduleView() {
         setEditing(null)
       } else {
         const data = await res.json()
-        await alert({ message: data.error || tc('saveFailed'), variant: 'error' })
+        toast(data.error || tc('saveFailed'), 'error')
       }
     } finally {
       setSaving(null)
@@ -123,13 +125,10 @@ export default function ReportScheduleView() {
       })
       const data = await res.json()
       if (res.ok) {
-        await alert({
-          title: t('sendComplete', { sent: data.sent }),
-          message: `${t('sendResult', { sent: data.sent })}${data.failed > 0 ? t('sendResultFailed', { failed: data.failed }) : ''}${data.skipped > 0 ? t('sendResultSkipped', { skipped: data.skipped }) : ''}`,
-          variant: data.failed > 0 ? 'error' : 'success',
-        })
+        const msg = `${t('sendResult', { sent: data.sent })}${data.failed > 0 ? t('sendResultFailed', { failed: data.failed }) : ''}${data.skipped > 0 ? t('sendResultSkipped', { skipped: data.skipped }) : ''}`
+        toast(msg, data.failed > 0 ? 'error' : 'success')
       } else {
-        await alert({ message: data.error || t('sendFailed'), variant: 'error' })
+        toast(data.error || t('sendFailed'), 'error')
       }
     } finally {
       setSending(null)

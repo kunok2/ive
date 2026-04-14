@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useDialog } from '@/components/ui/ConfirmDialog'
+import { useToast } from '@/components/ui/Toast'
 import Modal from '@/components/ui/Modal'
 
 type OAuthProviderRow = {
@@ -18,6 +19,7 @@ type OAuthProviderRow = {
 export default function OAuthProvidersPanel() {
   const t = useTranslations('admin.oauth')
   const { alert, confirm } = useDialog()
+  const { toast } = useToast()
   const [providers, setProviders] = useState<OAuthProviderRow[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -110,11 +112,11 @@ export default function OAuthProvidersPanel() {
 
   async function save() {
     if (!form.id || !form.name || !form.baseUrl || !form.clientId) {
-      await alert({ message: t('validationRequired'), variant: 'error' })
+      toast(t('validationRequired'), 'error')
       return
     }
     if (!editing && !form.clientSecret) {
-      await alert({ message: t('validationSecret'), variant: 'error' })
+      toast(t('validationSecret'), 'error')
       return
     }
     setSaving(true)
@@ -142,7 +144,7 @@ export default function OAuthProvidersPanel() {
       }
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: 'unknown' }))
-        await alert({ message: err.error || t('saveFailed'), variant: 'error' })
+        toast(err.error || t('saveFailed'), 'error')
         return
       }
       setShowForm(false)

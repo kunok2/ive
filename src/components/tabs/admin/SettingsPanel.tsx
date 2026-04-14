@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import { useDialog } from '@/components/ui/ConfirmDialog'
+import { useToast } from '@/components/ui/Toast'
 import ModelSelect from './ModelSelect'
 import ModelPricingSection from './ModelPricingSection'
 import HumanPricingSection from './HumanPricingSection'
@@ -87,6 +88,7 @@ export default function SettingsPanel() {
   const t = useTranslations('admin')
   const tc = useTranslations('common')
   const { alert } = useDialog()
+  const { toast } = useToast()
   const [settings, setSettings] = useState<Record<string, string>>({})
   const [passwordsSet, setPasswordsSet] = useState<Record<string, boolean>>({})
   const [loading, setLoading] = useState(true)
@@ -145,14 +147,14 @@ export default function SettingsPanel() {
         setTimeout(() => setSaved(false), 2000)
       } else {
         const data = await res.json()
-        await alert({ message: data.error || tc('saveFailed'), variant: 'error' })
+        toast(data.error || tc('saveFailed'), 'error')
       }
     } finally { setSaving(false) }
   }
 
   async function handleTestMail() {
     if (!testEmail) {
-      await alert({ message: t('recipientPlaceholder'), variant: 'error' })
+      toast(t('recipientPlaceholder'), 'warning')
       return
     }
     setTesting(true)
@@ -169,12 +171,12 @@ export default function SettingsPanel() {
       })
       const data = await res.json()
       if (res.ok) {
-        await alert({ title: t('sendSuccess'), message: t('testMailSent', { email: testEmail }), variant: 'success' })
+        toast(t('testMailSent', { email: testEmail }), 'success')
       } else {
-        await alert({ message: data.error || t('sendFailed'), variant: 'error' })
+        toast(data.error || t('sendFailed'), 'error')
       }
     } catch {
-      await alert({ message: t('testFailed'), variant: 'error' })
+      toast(t('testFailed'), 'error')
     } finally { setTesting(false) }
   }
 

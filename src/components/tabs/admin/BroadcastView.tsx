@@ -4,11 +4,13 @@ import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import { User } from '@/types'
 import { useDialog } from '@/components/ui/ConfirmDialog'
+import { useToast } from '@/components/ui/Toast'
 
 export default function BroadcastView() {
   const t = useTranslations('admin')
   const tc = useTranslations('common')
   const { confirm, alert } = useDialog()
+  const { toast } = useToast()
   const [users, setUsers] = useState<User[]>([])
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [subject, setSubject] = useState('')
@@ -38,7 +40,7 @@ export default function BroadcastView() {
 
   async function handleSend() {
     if (!subject.trim() || !body.trim()) {
-      await alert({ message: t('subjectContentRequired'), variant: 'info' })
+      toast(t('subjectContentRequired'), 'warning')
       return
     }
     const targets = selectedIds.size > 0 ? Array.from(selectedIds) : undefined
@@ -62,8 +64,13 @@ export default function BroadcastView() {
       const data = await res.json()
       if (res.ok) {
         setResult({ sent: data.sent, failed: data.failed })
+        if (data.failed > 0) {
+          toast(t('sendComplete', { sent: data.sent, failed: data.failed }), 'error')
+        } else {
+          toast(t('sendComplete', { sent: data.sent }), 'success')
+        }
       } else {
-        await alert({ message: data.error || t('sendFailed'), variant: 'error' })
+        toast(data.error || t('sendFailed'), 'error')
       }
     } finally {
       setSending(false)

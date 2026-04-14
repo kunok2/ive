@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { useDialog } from '@/components/ui/ConfirmDialog'
+import { useToast } from '@/components/ui/Toast'
 
 interface PricingItem {
   id: string; cliName: string; modelName: string
@@ -23,7 +23,7 @@ export default function ModelPricingSection({
 }: ModelPricingSectionProps) {
   const t = useTranslations('admin')
   const tc = useTranslations('common')
-  const { alert } = useDialog()
+  const { toast } = useToast()
 
   return (
     <div className="bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden">
@@ -54,7 +54,7 @@ function ModelPricingContent({
 }: Pick<ModelPricingSectionProps, 'pricingItems' | 'setPricingItems' | 'pricingSaved' | 'setPricingSaved'>) {
   const t = useTranslations('admin')
   const tc = useTranslations('common')
-  const { alert } = useDialog()
+  const { toast } = useToast()
   const [pricingFetching, setPricingFetching] = useState(false)
   const [pricingSaving, setPricingSaving] = useState(false)
 
@@ -81,7 +81,7 @@ function ModelPricingContent({
                   try {
                     const res = await fetch('/api/settings/pricing', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: it.id }) })
                     if (res.ok) setPricingItems(await res.json())
-                    else { const data = await res.json(); await alert({ message: data.error || tc('saveFailed'), variant: 'error' }) }
+                    else { const data = await res.json(); toast(data.error || tc('saveFailed'), 'error') }
                   } catch {}
                 }}
                 className="text-xs text-ive-text-dim hover:text-ive-red p-1"
@@ -130,8 +130,8 @@ function ModelPricingContent({
             setPricingFetching(true)
             try {
               const res = await fetch('/api/settings/pricing', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'auto-fetch' }) })
-              if (res.ok) { setPricingItems(await res.json()); setPricingSaved(false); await alert({ title: t('fetchComplete'), message: t('latestPricingApplied'), variant: 'success' }) }
-              else { const data = await res.json(); await alert({ message: data.error || t('fetchFailed'), variant: 'error' }) }
+if (res.ok) { setPricingItems(await res.json()); setPricingSaved(false); toast(t('latestPricingApplied'), 'success') }
+                else { const data = await res.json(); toast(data.error || t('fetchFailed'), 'error') }
             } finally { setPricingFetching(false) }
           }}
           disabled={pricingFetching}
@@ -147,8 +147,8 @@ function ModelPricingContent({
             setPricingSaving(true)
             try {
               const res = await fetch('/api/settings/pricing', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: pricingItems.map(it => ({ id: it.id, cliName: it.cliName, modelName: it.modelName, inputPrice: it.inputPrice, outputPrice: it.outputPrice })) }) })
-              if (res.ok) { setPricingItems(await res.json()); setPricingSaved(true); setTimeout(() => setPricingSaved(false), 2000) }
-              else { const data = await res.json(); await alert({ message: data.error || tc('saveFailed'), variant: 'error' }) }
+if (res.ok) { setPricingItems(await res.json()); setPricingSaved(true); setTimeout(() => setPricingSaved(false), 2000) }
+                else { const data = await res.json(); toast(data.error || tc('saveFailed'), 'error') }
             } finally { setPricingSaving(false) }
           }}
           disabled={pricingSaving}

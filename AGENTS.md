@@ -1,3 +1,41 @@
+## Commands
+
+```bash
+npm run dev      # Development server (tsx server.ts - custom HTTP + WebSocket + node-pty)
+npm run build   # Next.js production build
+npm run start   # Production server
+npm run lint    # ESLint (eslint.config.mjs)
+npm run test    # Run tests (vitest)
+```
+
+## Tech Stack
+
+- **Framework**: Next.js 16 (App Router), Custom server (`server.ts` with WebSocket, node-pty)
+- **Frontend**: React 19, Tailwind CSS 4, xterm.js
+- **DB**: SQLite (`data/spring-ive.db`) via better-sqlite3
+- **i18n**: next-intl (ko/en)
+- **Auth**: JWT + bcryptjs
+
+## Testing
+
+- Vitest config: `vitest.config.ts` — test files in `tests/**/*.test.ts`
+- Run: `npm run test` or `npm run test:watch`
+
+## Scanner Principles
+
+- Scanner decides solely by DB state — no label-based scheduling
+- No workarounds or temporary fixes
+
+## UI Development
+
+Follow [DESIGN_GUIDE.md](DESIGN_GUIDE.md) — colors, typography, spacing, component patterns.
+
+Key rules:
+- Colors: use only `ive-*` tokens (no raw Tailwind palette like `amber-*`, `red-*`)
+- Rounding: `rounded-lg` for buttons/inputs/cards, `rounded-2xl` for modals, `rounded-full` for avatars
+- Typography: `font-bold` is default — `font-semibold`, `font-medium` forbidden
+- No `shadow-*` except modals/dropdowns
+
 <!-- ive:begin -->
 ## IVE 작업 등록
 
@@ -10,9 +48,8 @@ IVE 스캐너가 이슈를 자동 감지하여 보고서에 반영합니다.
 ### 이슈 생성 규칙
 
 1. 작업 단위로 각각 **Git 이슈를 생성**한다 (GitLab/GitHub API 또는 `gh`/`glab` CLI 사용)
-2. 이슈에 아래 **레이블을 반드시 부착**한다:
-   - 완료된 작업: `IVE`, `IVE-E`
-   - 아직 진행 중인 작업: `IVE`, `IVE-D`
+2. 이슈에 레이블 `IVE`, `IVE-E`를 부착한다. 이슈는 **열린 상태로 둔다** (닫지 않는다).
+   - IVE 스캐너가 이슈를 감지 → 유입으로 카운팅 → 처리 후 자동으로 닫는다.
 3. `title`은 간결하게 (이슈 제목이 보고서에 표시됨)
 4. 이슈 본문(description/body)에 포함할 것:
    - 변경한 파일 목록
