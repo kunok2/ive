@@ -466,7 +466,7 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
   // 프로젝트 이름 목록 (헤더 표시용)
   const projectNames = Array.from(byProject.values()).map(p => p.name).filter(Boolean)
 
-  // ─── 처리된 이슈 목록 (상위 10건, 비용 순) ───
+  // ─── 처리된 작업 목록 (상위 10건, 비용 순) ───
   const resolvedIssueMap = new Map<string, { issueIid: number; issueTitle: string; projectName: string; projectColor: string; agentName: string; cost: number; durationMin: number; status: string }>()
   for (const e of executions.filter(e => e.status === 'success' || e.status === 'failed')) {
     const key = `${e.projectId}:${e.issueIid}`
@@ -761,10 +761,7 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
         <thead>
           <tr style="color:#9ca3af;font-size:10px;">
             <th style="padding:5px 8px;text-align:left;font-weight:600;">프로젝트</th>
-            <th style="padding:5px 8px;text-align:center;font-weight:600;">이슈</th>
-            <th style="padding:5px 8px;text-align:center;font-weight:600;">작업</th>
-            <th style="padding:5px 8px;text-align:center;font-weight:600;">성공</th>
-            <th style="padding:5px 8px;text-align:center;font-weight:600;">실패</th>
+            <th style="padding:5px 8px;text-align:center;font-weight:600;">처리</th>
             <th style="padding:5px 8px;text-align:right;font-weight:600;">비용</th>
           </tr>
         </thead>
@@ -775,12 +772,8 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
               <td style="padding:7px 8px;color:#111827;">
                 <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${p.color};margin-right:5px;vertical-align:middle;"></span>
                 <strong style="font-size:12px;">${esc(p.name || '(이름없음)')}</strong>
-                <div style="font-size:10px;color:#9ca3af;margin-left:12px;">${p.uniqueIssues}개 이슈</div>
               </td>
-              <td style="padding:7px 8px;text-align:center;font-size:10px;color:#6b7280;">${p.uniqueIssues}</td>
               <td style="padding:7px 8px;text-align:center;font-size:12px;color:#111827;">${p.total}${hasPrev && pp ? `<br><span style="font-size:10px;">${changeIndicator(p.total, pp.total)}</span>` : ''}</td>
-              <td style="padding:7px 8px;text-align:center;font-size:12px;color:#16a34a;font-weight:700;">${p.success}${hasPrev && pp ? `<br><span style="font-size:10px;">${changeIndicator(p.success, pp.success)}</span>` : ''}</td>
-              <td style="padding:7px 8px;text-align:center;font-size:12px;color:#dc2626;font-weight:700;">${p.failed}${hasPrev && pp ? `<br><span style="font-size:10px;">${changeIndicator(p.failed, pp.failed, true)}</span>` : ''}</td>
               <td style="padding:7px 8px;text-align:right;font-size:12px;color:#111827;">$${p.cost.toFixed(2)}${hasPrev && pp ? `<br><span style="font-size:10px;">${changeIndicator(p.cost, pp.cost, true)}</span>` : ''}</td>
             </tr>`
           }).join('')}
@@ -855,7 +848,6 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
         <thead>
           <tr style="color:#9ca3af;font-size:10px;">
             <th style="padding:5px 8px;text-align:left;font-weight:600;">사용자</th>
-            <th style="padding:5px 8px;text-align:center;font-weight:600;">이슈</th>
             <th style="padding:5px 8px;text-align:center;font-weight:600;">작업</th>
             <th style="padding:5px 8px;text-align:center;font-weight:600;">성공</th>
             <th style="padding:5px 8px;text-align:center;font-weight:600;">실패</th>
@@ -867,7 +859,6 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
             const pu = prevByUser.get(uid)
             return `<tr style="border-top:1px solid #f9fafb;">
               <td style="padding:7px 8px;"><strong>${esc(u.name)}</strong></td>
-              <td style="padding:7px 8px;text-align:center;color:#0891b2;font-weight:700;">${u.issueCount}${hasPrev && pu ? `<br><span style="font-size:10px;">${changeIndicator(u.issueCount, pu.issueCount)}</span>` : ''}</td>
               <td style="padding:7px 8px;text-align:center;">${u.total}${hasPrev && pu ? `<br><span style="font-size:10px;">${changeIndicator(u.total, pu.total)}</span>` : ''}</td>
               <td style="padding:7px 8px;text-align:center;color:#16a34a;font-weight:700;">${u.success}</td>
               <td style="padding:7px 8px;text-align:center;color:#dc2626;font-weight:700;">${u.failed}</td>
@@ -879,10 +870,10 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
     </div>
     ` : ''}
 
-    <!-- ⑪ 처리된 이슈 목록 (상위 10건) -->
+    <!-- ⑪ 처리된 작업 목록 (상위 10건) -->
     ${topIssues.length > 0 ? `
     <div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:16px;">
-      <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:12px;">처리된 이슈 (비용 상위 ${topIssues.length}건)</div>
+      <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:12px;">처리된 작업 (비용 상위 ${topIssues.length}건)</div>
       ${topIssues.map(issue => `
         <div style="padding:8px 0;border-top:1px solid #f3f4f6;">
           <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
