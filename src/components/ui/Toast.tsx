@@ -7,7 +7,7 @@ import { useTranslations } from 'next-intl'
 interface ToastItem {
   id: number
   message: string
-  variant: 'success' | 'error' | 'info'
+  variant: 'success' | 'error' | 'info' | 'warning'
   dismissing?: boolean
 }
 
@@ -19,7 +19,7 @@ interface PipelineWatch {
 }
 
 interface ToastContext {
-  toast: (message: string, variant?: 'success' | 'error' | 'info') => void
+  toast: (message: string, variant?: 'success' | 'error' | 'info' | 'warning') => void
   watchPipeline: (watch: PipelineWatch) => void
 }
 
@@ -46,7 +46,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     }, 300)
   }, [])
 
-  const toast = useCallback((message: string, variant: 'success' | 'error' | 'info' = 'info') => {
+  const toast = useCallback((message: string, variant: 'success' | 'error' | 'info' | 'warning' = 'info') => {
     const id = nextId.current++
     setToasts(prev => [...prev, { id, message, variant }])
     setTimeout(() => dismiss(id), 5000)
@@ -115,12 +115,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     success: 'fa-solid fa-circle-check text-ive-green',
     error: 'fa-solid fa-circle-xmark text-ive-red',
     info: 'fa-solid fa-circle-info text-ive-cyan',
+    warning: 'fa-solid fa-circle-exclamation text-ive-amber',
   }
 
   const borderMap: Record<string, string> = {
     success: 'border-ive-green/30',
     error: 'border-ive-red/30',
     info: 'border-ive-cyan/30',
+    warning: 'border-ive-amber/30',
   }
 
   return (
