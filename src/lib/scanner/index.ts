@@ -117,6 +117,39 @@ export function startScanner() {
 
 }
 
+export function triggerScan(projectId?: string) {
+  console.log(`[Scanner] Triggered scan${projectId ? ` for project ${projectId}` : ' (all projects)'}`);
+  setTimeout(() => runScanImmediate(projectId), 100);
+}
+
+async function runScanImmediate(projectId?: string) {
+  if (global.isScanning) {
+    console.log("[Scanner] Trigger: Scan already in progress, skipping trigger");
+    return;
+  }
+
+  global.isScanning = true;
+  console.log(`[Scanner] Running immediate scan${projectId ? ` for project ${projectId}` : ''}...`);
+
+  try {
+    if (projectId) {
+      const project = getProject(projectId);
+      if (project) {
+        await scanProject(project, true);
+      }
+    } else {
+      const projects = getAllProjects();
+      for (const project of projects) {
+        await scanProject(project, true);
+      }
+    }
+  } catch (err) {
+    console.error(`[Scanner] Immediate scan error:`, err);
+  } finally {
+    global.isScanning = false;
+  }
+}
+
 export function stopScanner() {
   if (global.scanInterval) {
     clearInterval(global.scanInterval);

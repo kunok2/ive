@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getProject, getProjectAccess, getProjectAuthToken, getAssignModeMap, setAssignMode, getAgent, hasActiveExecution, hasAnyExecution, stageFromLabels, touchProjectActivity } from '@/lib/db';
+import { triggerScan } from '@/lib/scanner';
 import { getCurrentUser } from '@/lib/auth';
 import { checkLabelsExist, addIssueComment } from '@/lib/provider';
 import { fetchAllProjectIssues, fetchClosedProjectIssues, createIssue } from '@/lib/provider';
@@ -171,6 +172,14 @@ export async function POST(
     }
 
     touchProjectActivity(projectId);
+
+    // 즉시 스캔 트리거
+    try {
+      triggerScan(projectId);
+    } catch (e) {
+      console.warn(`[Issues] Failed to trigger scanner:`, e);
+    }
+
     return NextResponse.json(issue);
   } catch (err) {
     console.error('[issues POST] failed:', err)

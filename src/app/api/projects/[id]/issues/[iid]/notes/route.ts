@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAuthToken, getProjectAccess, getUserById, getUserOAuthTokenRaw, getOAuthProviderById, isIssueAssignee } from '@/lib/db';
+import { getProject, getProjectAuthToken, getProjectAccess, getUserById, getUserOAuthTokenRaw, getOAuthProviderById, isIssueAssignee, touchProjectActivity } from '@/lib/db';
+import { triggerScan } from '@/lib/scanner';
 import { getCurrentUser } from '@/lib/auth';
 import { decrypt } from '@/lib/crypto';
 import { fetchIssueNotes, addIssueComment } from '@/lib/provider';
@@ -7,6 +8,7 @@ import type { User } from '@/types';
 
 // IVE 사용자가 작성한 노트임을 표시하는 마커 (Git에는 숨겨진 HTML 주석으로 저장)
 const IVE_AUTHOR_MARKER_RE = /<!--\s*ive-author:([a-zA-Z0-9_-]+)\s*-->/;
+const IVE_BOT_TRIGGER_RE = /<!--\s*ive-bot\s*-->/i;
 
 export const dynamic = 'force-dynamic';
 
@@ -170,6 +172,17 @@ export async function POST(
         throw firstErr;
       }
     }
+
+    // ive-bot 트리거 패턴 감지 시 즉시 스캔 트리거
+    if (IVE_BOT_TRIGGER_RE.test(body)) {
+      try {
+        touchProjectActivity(projectId);
+        triggerScan(projectId);
+      } catch (e) {
+        console.warn(`[Notes] Failed to trigger scanner:`, e);
+      }
+    }
+
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error('[notes POST] failed:', err)

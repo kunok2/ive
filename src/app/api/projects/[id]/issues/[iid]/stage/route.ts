@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, getProject, getProjectAuthToken, getProjectAccess, hasActiveExecution, stageFromLabels, markIssueVerifyStarted, markIssueVerified, markIssueVerifyRejected, resetIssueScheduledAt, touchProjectActivity, assignIssueAtomically, getAssignModeMap, getIssueScheduledAt, isIssueAssignee, upsertIssueStageSnapshot, updateExecutionStatus, getVerifyWaitingCount, updateProjectLastChecked } from '@/lib/db';
+import { triggerScan } from '@/lib/scanner';
 import type { TaskExecution } from '@/types';
 import { getCurrentUser } from '@/lib/auth';
 import { reopenIssue, fetchSingleIssue, addIssueLabels, removeIssueLabels, addIssueComment, createBranch, getDefaultBranch } from '@/lib/provider';
@@ -420,6 +421,13 @@ export async function POST(
       updateProjectLastChecked(projectId, new Date().toISOString(), waitingCount, verifyWaitingCount);
     } catch (e) {
       console.warn(`[Stage] Failed to update verify waiting count:`, e);
+    }
+
+    // 즉시 스캔 트리거 (다른 프로젝트의 assignment 재빠르게 반영)
+    try {
+      triggerScan(projectId);
+    } catch (e) {
+      console.warn(`[Stage] Failed to trigger scanner:`, e);
     }
 
     return NextResponse.json({ success: true, stage: newStage });
