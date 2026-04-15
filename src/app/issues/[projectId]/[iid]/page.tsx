@@ -235,6 +235,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
     fetchIssue()
     fetchNotes()
     fetchPreferredAgent()
+    fetchMRInfo()
     fetch(`/api/projects/${projectId}/agents`)
       .then(res => res.ok ? res.json() : [])
       .then(setProjectAgents)
