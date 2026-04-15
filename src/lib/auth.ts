@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
 import { cookies } from 'next/headers'
+import { NextResponse } from 'next/server'
 import { getUserById } from './db'
 
 const KNOWN_DEFAULT_JWT_SECRETS = [
@@ -34,16 +35,30 @@ export function verifyToken(token: string): { userId: string } | null {
   }
 }
 
-export async function setAuthCookie(userId: string) {
+const COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  // lax: 외부 링크에서 진입 시에도 쿠키 전송. OAuth 콜백 후 redirect 시 필요.
+  // strict로 변경하면 안 됨 — 이전 "fix"는 근거 없이 strict로 바꾼 것으로 되돌림.
+  sameSite: 'lax' as const,
+  maxAge: TOKEN_MAX_AGE,
+  path: '/',
+}
+
+/**
+ * JWT 인증 쿠키를 발급합니다.
+ * @param userId 사용자 ID
+ * @param response 제공 시 해당 response.cookies에 직접 설정 (OAuth callback용)
+ *                 미제공 시 Next.js cookies() API를 통해 암묵적으로 설정 (일반 login용)
+ */
+export async function setAuthCookie(userId: string, response?: NextResponse) {
   const token = signToken(userId)
-  const cookieStore = await cookies()
-  cookieStore.set(COOKIE_NAME, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
-    maxAge: TOKEN_MAX_AGE,
-    path: '/',
-  })
+  if (response) {
+    response.cookies.set(COOKIE_NAME, token, COOKIE_OPTIONS)
+  } else {
+    const cookieStore = await cookies()
+    cookieStore.set(COOKIE_NAME, token, COOKIE_OPTIONS)
+  }
 }
 
 export async function clearAuthCookie() {
@@ -67,13 +82,7 @@ export async function getCurrentUser() {
       const halfLife = (decoded.exp - decoded.iat) / 2
       if (decoded.exp - now < halfLife) {
         const newToken = signToken(payload.userId)
-        cookieStore.set(COOKIE_NAME, newToken, {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: 'strict',
-          maxAge: TOKEN_MAX_AGE,
-          path: '/',
-        })
+        cookieStore.set(COOKIE_NAME, newToken, COOKIE_OPTIONS)
       }
     }
   } catch { /* 갱신 실패 시 기존 토큰으로 계속 진행 */ }
