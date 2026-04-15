@@ -36,7 +36,7 @@ export async function PUT(
     })
   } catch (err) {
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : '이슈 수정 실패' },
+      { error: '이슈 수정 실패' },
       { status: 500 }
     )
   }
@@ -90,7 +90,7 @@ export async function GET(
     })
   } catch (err) {
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : '이슈 조회 실패' },
+      { error: '이슈 조회 실패' },
       { status: 500 }
     )
   }

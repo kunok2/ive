@@ -147,7 +147,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     tokens = await exchangeCodeForToken(provider, code, redirectUri)
   } catch (e: any) {
     console.error('[OAuth callback] token exchange failed:', e, 'redirectUri:', redirectUri)
-    return redirectToLoginWithError(req, `토큰 교환 실패: ${e?.message || 'unknown'}`)
+    return redirectToLoginWithError(req, '인증 처리 중 오류가 발생했습니다')
   }
 
   // 2. access_token으로 사용자 프로필 조회 (verified 이메일 강제)
@@ -156,7 +156,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     profile = await fetchUserProfile(provider, tokens.accessToken)
   } catch (e: any) {
     console.error('[OAuth callback] fetch profile failed:', e)
-    return redirectToLoginWithError(req, `프로필 조회 실패: ${e?.message || 'unknown'}`)
+    return redirectToLoginWithError(req, '인증 처리 중 오류가 발생했습니다')
   }
 
   const accessTokenEnc = encrypt(tokens.accessToken)

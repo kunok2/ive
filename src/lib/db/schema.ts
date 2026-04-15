@@ -820,6 +820,15 @@ export function initSchema(db: Database.Database) {
     }
   } catch (e) { console.error('[DB] users password nullable migration failed:', e) }
 
+  // 이메일 인증 코드 테이블 (서버 재시작에도 코드 유지)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS verification_codes (
+      email TEXT PRIMARY KEY,
+      code TEXT NOT NULL,
+      expires_at INTEGER NOT NULL
+    )
+  `)
+
   seedAdmin(db)
   seedTokenPricing(db)
 }

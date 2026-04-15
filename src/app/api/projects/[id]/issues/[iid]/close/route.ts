@@ -34,6 +34,7 @@ export async function POST(
     await closeIssue(project, Number(iid), token);
     return NextResponse.json({ success: true });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : '이슈 닫기 실패' }, { status: 500 });
+    console.error('[close] failed:', err)
+    return NextResponse.json({ error: '이슈 닫기 실패' }, { status: 500 });
   }
 }

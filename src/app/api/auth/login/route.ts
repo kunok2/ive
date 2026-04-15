@@ -2,8 +2,15 @@ import { NextResponse } from 'next/server'
 import { getUserByEmail } from '@/lib/db'
 import { verifyPassword, setAuthCookie } from '@/lib/auth'
 import { logActivity } from '@/lib/activity'
+import { isRateLimited, getClientIp } from '@/lib/rate-limit'
 
 export async function POST(req: Request) {
+  // IP당 5분에 10회 제한
+  const ip = getClientIp(req)
+  if (isRateLimited(`login:${ip}`, 10, 5 * 60 * 1000)) {
+    return NextResponse.json({ error: '잠시 후 다시 시도해주세요' }, { status: 429 })
+  }
+
   const { email, password } = await req.json()
 
   if (!email || !password) {

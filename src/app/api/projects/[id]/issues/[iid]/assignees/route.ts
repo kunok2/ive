@@ -29,6 +29,7 @@ export async function PATCH(
     });
     return NextResponse.json({ success: true });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : '담당자 변경 실패' }, { status: 500 });
+    console.error('[assignees] failed:', err)
+    return NextResponse.json({ error: '담당자 변경 실패' }, { status: 500 });
   }
 }

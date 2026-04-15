@@ -98,7 +98,8 @@ export async function GET(
 
     return NextResponse.json(mapped);
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : '이슈 조회 실패' }, { status: 500 });
+    console.error('[issues GET] failed:', err)
+    return NextResponse.json({ error: '이슈 조회 실패' }, { status: 500 });
   }
 }
 
@@ -172,6 +173,7 @@ export async function POST(
     touchProjectActivity(projectId);
     return NextResponse.json(issue);
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : '이슈 생성 실패' }, { status: 500 });
+    console.error('[issues POST] failed:', err)
+    return NextResponse.json({ error: '이슈 생성 실패' }, { status: 500 });
   }
 }

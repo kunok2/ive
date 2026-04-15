@@ -44,8 +44,8 @@ export async function GET(req: Request) {
     }
     return await fetchGitLabProjects(provider.baseUrl, token, q, page, perPage)
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    return NextResponse.json({ error: `프로젝트 목록 조회 실패: ${msg}` }, { status: 400 })
+    console.error('[oauth/my-projects] failed:', err)
+    return NextResponse.json({ error: '프로젝트 목록 조회에 실패했습니다' }, { status: 400 })
   }
 }
 

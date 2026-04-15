@@ -102,7 +102,8 @@ export async function GET(
 
     return NextResponse.json(mapped);
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : '노트 조회 실패' }, { status: 500 });
+    console.error('[notes GET] failed:', err)
+    return NextResponse.json({ error: '노트 조회 실패' }, { status: 500 });
   }
 }
 
@@ -171,6 +172,7 @@ export async function POST(
     }
     return NextResponse.json({ success: true });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : '코멘트 추가 실패' }, { status: 500 });
+    console.error('[notes POST] failed:', err)
+    return NextResponse.json({ error: '코멘트 추가 실패' }, { status: 500 });
   }
 }

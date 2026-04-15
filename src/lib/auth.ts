@@ -3,7 +3,14 @@ import bcrypt from 'bcryptjs'
 import { cookies } from 'next/headers'
 import { getUserById } from './db'
 
+const KNOWN_DEFAULT_JWT_SECRETS = [
+  'spring-ive-dev-secret-change-in-production',
+  'spring-ive-secret-change-me',
+]
 const JWT_SECRET = process.env.JWT_SECRET || 'spring-ive-dev-secret-change-in-production'
+if (process.env.NODE_ENV === 'production' && KNOWN_DEFAULT_JWT_SECRETS.includes(JWT_SECRET)) {
+  console.warn('[SECURITY WARNING] JWT_SECRET is set to a known default value. Set a strong, unique JWT_SECRET environment variable!')
+}
 const COOKIE_NAME = 'ive-token'
 const TOKEN_MAX_AGE = 60 * 60 * 24 * 7 // 7일
 
@@ -63,7 +70,7 @@ export async function getCurrentUser() {
         cookieStore.set(COOKIE_NAME, newToken, {
           httpOnly: true,
           secure: process.env.NODE_ENV === 'production',
-          sameSite: 'lax',
+          sameSite: 'strict',
           maxAge: TOKEN_MAX_AGE,
           path: '/',
         })

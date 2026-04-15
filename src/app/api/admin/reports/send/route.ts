@@ -29,7 +29,7 @@ export async function POST(req: Request) {
     const result = await sendReport(schedule, { force: force ?? true })
     return NextResponse.json(result)
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err)
-    return NextResponse.json({ error: msg }, { status: 500 })
+    console.error('[reports/send] failed:', err)
+    return NextResponse.json({ error: '보고서 발송에 실패했습니다' }, { status: 500 })
   }
 }

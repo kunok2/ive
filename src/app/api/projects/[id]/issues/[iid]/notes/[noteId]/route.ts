@@ -43,6 +43,6 @@ export async function DELETE(
     return NextResponse.json({ success: true })
   } catch (err) {
     console.error(`[notes DELETE] Failed to delete note ${noteId}:`, err)
-    return NextResponse.json({ error: err instanceof Error ? err.message : '코멘트 삭제 실패' }, { status: 500 })
+    return NextResponse.json({ error: '코멘트 삭제 실패' }, { status: 500 })
   }
 }

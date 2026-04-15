@@ -8,7 +8,14 @@ import * as pty from 'node-pty'
 import jwt from 'jsonwebtoken'
 import { handleChatWebSocket } from './src/lib/chat-ws'
 
+const KNOWN_DEFAULT_JWT_SECRETS = [
+  'spring-ive-dev-secret-change-in-production',
+  'spring-ive-secret-change-me',
+]
 const JWT_SECRET = process.env.JWT_SECRET || 'spring-ive-dev-secret-change-in-production'
+if (process.env.NODE_ENV === 'production' && KNOWN_DEFAULT_JWT_SECRETS.includes(JWT_SECRET)) {
+  console.warn('\x1b[31m[SECURITY WARNING] JWT_SECRET is set to a known default value. Set a strong, unique JWT_SECRET environment variable!\x1b[0m')
+}
 function verifyToken(token: string): { userId: string } | null {
   try {
     return jwt.verify(token, JWT_SECRET) as { userId: string }
@@ -22,6 +29,18 @@ const SSL_CERT = process.env.SSL_CERT || '/app/ssl/cert.pem'
 const SSL_KEY = process.env.SSL_KEY || '/app/ssl/key.pem'
 const useHttps = !dev && existsSync(SSL_CERT) && existsSync(SSL_KEY)
 const port = parseInt(process.env.PORT || (useHttps ? '443' : '3000'), 10)
+
+// 터미널 PTY에 전달할 환경변수에서 민감한 서버 시크릿 제거
+const EXCLUDED_ENV_KEYS = new Set([
+  'JWT_SECRET', 'ENCRYPTION_KEY',
+  'MAIL_SMTP_PASSWORD', 'MAIL_SMTP_AUTH',
+  'DATABASE_URL', 'DB_PASSWORD',
+])
+function getSafeEnv(): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(process.env).filter(([k, v]) => !EXCLUDED_ENV_KEYS.has(k) && v !== undefined)
+  ) as Record<string, string>
+}
 
 function parseCookies(header: string): Record<string, string> {
   if (!header) return {}
@@ -100,7 +119,7 @@ async function main() {
         cols: 80,
         rows: 24,
         cwd: process.cwd(),
-        env: process.env as Record<string, string>,
+        env: getSafeEnv(),
       })
     } catch (err: any) {
       ws.send(`\r\n\x1b[31mFailed to start terminal: ${err.message}\x1b[0m\r\n`)
