@@ -19,7 +19,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   return NextResponse.json({
     ...project,
-    accessToken: access === 'owner' ? project.accessToken : '', // 공유 사용자에게 토큰 숨김
+    accessToken: (access === 'owner' || access === 'editor') ? project.accessToken : '', // viewer에게만 토큰 숨김
     assignedAgents,
     shareRole: access === 'owner' ? null : access,
   })
@@ -51,7 +51,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     ...body,
     id,
     userId: existing.userId,  // 소유자 ID는 변경 불가
-    accessToken: access === 'owner' ? accessToken : existing.accessToken,  // editor는 토큰 변경 불가
+    accessToken: (access === 'owner' || access === 'editor') ? accessToken : existing.accessToken,
     usesOAuthToken: access === 'owner' ? (body.usesOAuthToken ?? existing.usesOAuthToken) : existing.usesOAuthToken,
   }
 
