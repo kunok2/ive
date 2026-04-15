@@ -73,7 +73,7 @@ export default function ExecutionList({ executions, showAgent = true, onKill, ki
       {executions.map(ex => (
         <div
           key={ex.id}
-          onClick={() => { saveScroll(); router.push(`/executions/${ex.id}`) }}
+          onClick={() => { saveScroll(); router.push(ex.status === 'running' || ex.status === 'assigned' ? `/executions/${ex.id}` : `/issues/${ex.projectId}/${ex.issueIid}`) }}
           className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-3 hover:border-ive-green/40 transition-all cursor-pointer active:scale-[0.98]"
         >
           <div className="flex items-center justify-between mb-1">
