@@ -210,6 +210,12 @@ export default function NotesList({
               <div ref={notesEndRef} />
             </div>
           )}
+          {/* MR 리뷰 섹션 - 노트 목록 하단에도 표시 */}
+          {canProgressStage && (issue.stage === 'done' || issue.stage === 'dev' || issue.stage === 'verify_waiting' || issue.stage === 'verifying') && (
+            <div className="pr-2 mt-2">
+              <MRReviewSection projectId={projectId} issueIid={Number(iid)} />
+            </div>
+          )}
         </PullToRefresh>
       </div>
     </div>
