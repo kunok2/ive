@@ -91,7 +91,7 @@ export default function LifecycleSection({ d, data, helpers }: LifecycleSectionP
       })()}
 
       <div className="text-xs text-ive-text-dim text-center">
-        {tr('retryIssueSummary', { count: data.lifecycle.avgAttempts.toFixed(1), issues: data.lifecycle.uniqueIssues })}
+        {tr('retryIssueSummary', { count: Math.round(data.lifecycle.avgAttempts), issues: data.lifecycle.uniqueIssues })}
       </div>
 
       {/* 검증자 진단 */}

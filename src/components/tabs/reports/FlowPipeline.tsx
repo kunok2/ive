@@ -24,7 +24,7 @@ export default function FlowPipeline({ d, inflowData, throughputData, waitingDat
           <div className="text-xs text-ive-text-dim mb-1">{tr('flowInflow')}</div>
           <div className="text-2xl font-bold text-ive-text mb-2">{d.flow.inflow.toLocaleString()}</div>
           <div className="h-6 mb-2 px-1"><Sparkline data={inflowData.length > 0 ? inflowData : [0]} width="100%" height={24} color="cyan" /></div>
-          <div className="text-xs text-ive-text-dim">{tr('perDayUnit', { count: d.flow.dailyInflow.toFixed(1) })}</div>
+          <div className="text-xs text-ive-text-dim">{tr('perDayUnit', { count: Math.round(d.flow.dailyInflow) })}</div>
         </div>
         <div className="text-ive-text-dim px-2"><i className="fa-solid fa-arrow-right" /></div>
         {/* 대기열 */}
@@ -42,7 +42,7 @@ export default function FlowPipeline({ d, inflowData, throughputData, waitingDat
           <div className="text-xs text-ive-text-dim mb-1">{tr('flowThroughput')}</div>
           <div className="text-2xl font-bold text-ive-text mb-2">{d.flow.throughput.toLocaleString()}</div>
           <div className="h-6 mb-2 px-1"><Sparkline data={throughputData.length > 0 ? throughputData : [0]} width="100%" height={24} color="cyan" /></div>
-          <div className="text-xs text-ive-text-dim">{tr('perDayUnit', { count: d.flow.dailyCapacity.toFixed(1) })}</div>
+          <div className="text-xs text-ive-text-dim">{tr('perDayUnit', { count: Math.round(d.flow.dailyCapacity) })}</div>
         </div>
       </div>
       {/* 비용 */}
@@ -62,7 +62,7 @@ export default function FlowPipeline({ d, inflowData, throughputData, waitingDat
             <span>
               <i className="fa-solid fa-user mr-0.5 text-ive-text-muted" />{tr('humanCostCompact', { amount: fmtCost(d.flow.totalCostHuman) })}
               {d.flow.humanMinutes > 0 && (
-                <span className="opacity-70"> {tr('humanCostDurExpr', { duration: fmtDur(d.flow.humanMinutes), perMin: (d.flow.humanMonthlySalary / 9600).toFixed(2) })}</span>
+                <span className="opacity-70"> {tr('humanCostDurExpr', { duration: fmtDur(d.flow.humanMinutes), perMin: Math.round(d.flow.humanMonthlySalary / 9600) })}</span>
               )}
             </span>
           </div>

@@ -39,7 +39,7 @@ const tooltipStyle = {
 interface DailyTrend { date: string; tasks: number | null; inflow: number | null; verified: number | null; success: number | null; failed: number | null; cost: number | null; waitAvg?: number | null; procAvg?: number | null; verifyAvg?: number | null }
 
 function fmtCostLocal(n: number): string {
-  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return n.toLocaleString(undefined, { maximumFractionDigits: 0 })
 }
 
 export function DailyReportTable({ data, type, today }: {
