@@ -46,7 +46,7 @@ export function generateBriefing(
     })
     briefingLines.push({
       key: 'briefingFlowSummary',
-      params: { inflow: totalInflow, processed: summary.totalTasks, cost: fmtCost(summary.totalCost) },
+      params: { inflow: totalInflow.toLocaleString(), processed: summary.totalTasks.toLocaleString(), cost: fmtCost(summary.totalCost) },
     })
   }
 
@@ -86,7 +86,7 @@ export function generateBriefing(
   if (costPerTask > 0 && prevCostPerTask > 0 && costPerTask > prevCostPerTask * 1.3) {
     briefingLines.push({
       key: 'briefingCostUp',
-      params: { cost: fmtCost(costPerTask), pct: Math.round((costPerTask / prevCostPerTask - 1) * 100) },
+      params: { cost: fmtCost(costPerTask), pct: Math.round((costPerTask / prevCostPerTask - 1) * 100).toLocaleString() },
     })
   }
   // 실제 비용 감소 경로: 재시도율이 높으면 품질 개선이 토큰 비용을 줄입니다
