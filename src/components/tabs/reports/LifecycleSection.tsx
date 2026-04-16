@@ -99,7 +99,7 @@ export default function LifecycleSection({ d, data, helpers }: LifecycleSectionP
         <div className="pt-2 border-t border-ive-border-dark/50">
           <div className="flex items-center justify-between text-xs">
             <span className="text-ive-text-dim">{tr('verifierResourceLine', { count: d.verifier.verifierCount, capacity: d.verifier.dailyVerifyCapacity })}</span>
-            <span className={`font-bold ${d.verifier.verifyUtilization >= 0.9 ? 'text-ive-red' : 'text-ive-text-dim'}`}>{tr('utilizationPctLabel', { pct: Math.round(d.verifier.verifyUtilization * 100).toLocaleString() })}</span>
+            <span className={`font-bold ${d.verifier.verifyUtilization >= 0.9 ? 'text-ive-red' : 'text-ive-text-dim'}`}>{tr('utilizationPctLabel', { pct: Math.round(d.verifier.verifyUtilization * 100) })}</span>
           </div>
           {d.verifier.annotation && <div className="text-xs text-ive-amber mt-0.5">{resolveMsg(d.verifier.annotation)}</div>}
         </div>
