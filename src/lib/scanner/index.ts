@@ -88,6 +88,7 @@ const memberSyncAt = new Map<string, number>();
 declare global {
   var scanInterval: NodeJS.Timeout | undefined;
   var isScanning: boolean;
+  var pendingScanProjectId: string | null | undefined; // 스캔 중 트리거된 프로젝트 ID (undefined = 없음, null = 전체)
 }
 
 export function startScanner() {
@@ -119,16 +120,28 @@ export function startScanner() {
 
 export function triggerScan(projectId?: string) {
   console.log(`[Scanner] Triggered scan${projectId ? ` for project ${projectId}` : ' (all projects)'}`);
+
+  if (global.isScanning) {
+    // 스캔 중이면 pending에 기록해두고 현재 스캔이 끝난 뒤 실행
+    // undefined(없음) → 해당 projectId로 설정
+    // 이미 pending이 있으면 null(전체)로 확장
+    if (global.pendingScanProjectId === undefined) {
+      global.pendingScanProjectId = projectId ?? null
+    } else if (global.pendingScanProjectId !== null && global.pendingScanProjectId !== projectId) {
+      global.pendingScanProjectId = null // 다른 프로젝트 → 전체 스캔으로 확장
+    }
+    console.log(`[Scanner] Scan in progress, queued for after: projectId=${global.pendingScanProjectId ?? 'all'}`)
+    return
+  }
+
   setTimeout(() => runScanImmediate(projectId), 100);
 }
 
 async function runScanImmediate(projectId?: string) {
-  if (global.isScanning) {
-    console.log("[Scanner] Trigger: Scan already in progress, skipping trigger");
-    return;
-  }
+  if (global.isScanning) return;
 
   global.isScanning = true;
+  global.pendingScanProjectId = undefined;
   console.log(`[Scanner] Running immediate scan${projectId ? ` for project ${projectId}` : ''}...`);
 
   try {
@@ -147,6 +160,14 @@ async function runScanImmediate(projectId?: string) {
     console.error(`[Scanner] Immediate scan error:`, err);
   } finally {
     global.isScanning = false;
+
+    // pending 트리거가 있으면 실행
+    const pending = global.pendingScanProjectId
+    if (pending !== undefined) {
+      global.pendingScanProjectId = undefined
+      console.log(`[Scanner] Running pending scan${pending ? ` for project ${pending}` : ''}...`)
+      setTimeout(() => runScanImmediate(pending ?? undefined), 100)
+    }
   }
 }
 
