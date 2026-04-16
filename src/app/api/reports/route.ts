@@ -653,9 +653,11 @@ export async function GET(req: NextRequest) {
   })
 
   // Resolved issues (weekly only)
-  // 이슈별 실행 횟수 (attempts) 계산
+  // 이슈별 실행 횟수 (attempts) 계산: 완료된 실행(success/failed)만 카운트
+  // running/queued 등 진행 중인 실행을 포함하면 재시도율이 거짓으로 부풀어오름
   const issueAttemptMap = new Map<string, number>()
   for (const e of execs) {
+    if (e.status !== 'success' && e.status !== 'failed') continue
     const key = `${e.projectId}:${e.issueIid}`
     issueAttemptMap.set(key, (issueAttemptMap.get(key) || 0) + 1)
   }
