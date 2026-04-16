@@ -22,7 +22,7 @@ export default function FlowPipeline({ d, inflowData, throughputData, waitingDat
         {/* 유입 */}
         <div className="text-center flex-1 w-0">
           <div className="text-xs text-ive-text-dim mb-1">{tr('flowInflow')}</div>
-          <div className="text-2xl font-bold text-ive-text mb-2">{d.flow.inflow}</div>
+          <div className="text-2xl font-bold text-ive-text mb-2">{d.flow.inflow.toLocaleString()}</div>
           <div className="h-6 mb-2 px-1"><Sparkline data={inflowData.length > 0 ? inflowData : [0]} width="100%" height={24} color="cyan" /></div>
           <div className="text-xs text-ive-text-dim">{tr('perDayUnit', { count: d.flow.dailyInflow.toFixed(1) })}</div>
         </div>
@@ -40,7 +40,7 @@ export default function FlowPipeline({ d, inflowData, throughputData, waitingDat
         {/* 처리 */}
         <div className="text-center flex-1 w-0">
           <div className="text-xs text-ive-text-dim mb-1">{tr('flowThroughput')}</div>
-          <div className="text-2xl font-bold text-ive-text mb-2">{d.flow.throughput}</div>
+          <div className="text-2xl font-bold text-ive-text mb-2">{d.flow.throughput.toLocaleString()}</div>
           <div className="h-6 mb-2 px-1"><Sparkline data={throughputData.length > 0 ? throughputData : [0]} width="100%" height={24} color="cyan" /></div>
           <div className="text-xs text-ive-text-dim">{tr('perDayUnit', { count: d.flow.dailyCapacity.toFixed(1) })}</div>
         </div>

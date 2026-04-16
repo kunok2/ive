@@ -100,11 +100,11 @@ export function DailyReportTable({ data, type, today }: {
           <div key={row.date} className={`grid gap-x-2 px-3 py-2 border-b border-ive-border-dark/30 last:border-0 text-xs ${row.isToday ? 'bg-ive-cyan/5' : ''}`} style={{ gridTemplateColumns: '2rem 1fr 2.5rem 3.5rem' }}>
             <div className={`font-bold ${row.isToday ? 'text-ive-cyan' : 'text-ive-text'}`}>{row.label}</div>
             <div>
-              <span className="text-ive-text-muted">{row.inflow}</span>
+              <span className="text-ive-text-muted">{row.inflow.toLocaleString()}</span>
               <span className="text-ive-text-dim/60 mx-1">→</span>
-              <span className="font-bold text-ive-text">{row.processed}</span>
+              <span className="font-bold text-ive-text">{row.processed.toLocaleString()}</span>
             </div>
-            <div className="text-right text-ive-text-muted">{row.tasks}</div>
+            <div className="text-right text-ive-text-muted">{row.tasks.toLocaleString()}</div>
             <div className="text-right text-ive-text-dim">{row.cost > 0 ? `$${fmtCostLocal(row.cost)}` : '—'}</div>
           </div>
         )
@@ -115,11 +115,11 @@ export function DailyReportTable({ data, type, today }: {
         <div className="grid gap-x-2 px-3 py-2 border-t border-ive-border bg-ive-bg-deep text-xs font-bold" style={{ gridTemplateColumns: '2rem 1fr 2.5rem 3.5rem' }}>
           <div className="text-ive-text-dim" style={{ fontSize: 10 }}>{tr('dailyTotal')}</div>
           <div>
-            <span className="text-ive-text-muted">{totalInflow}</span>
+            <span className="text-ive-text-muted">{totalInflow.toLocaleString()}</span>
             <span className="text-ive-text-dim/60 mx-1">→</span>
-            <span className="text-ive-text">{totalProcessed}</span>
+            <span className="text-ive-text">{totalProcessed.toLocaleString()}</span>
           </div>
-          <div className="text-right text-ive-text">{totalTasks}</div>
+          <div className="text-right text-ive-text">{totalTasks.toLocaleString()}</div>
           <div className="text-right text-ive-text-muted">${fmtCostLocal(totalCost)}</div>
         </div>
       )}
@@ -194,7 +194,7 @@ export function DailyTrendChart({ data, prevData, type }: { data: DailyTrend[]; 
           <XAxis dataKey="label" tick={{ fill: C.textMuted, fontSize: 10 }} axisLine={false} tickLine={false} />
           {/* domain을 yMax로 고정하면 현재 tasks=0인 날도 이전 기간 비율이 정확하게 렌더됨 */}
           <YAxis yAxisId="tasks" domain={[0, yMax]} tick={{ fill: C.textMuted, fontSize: 10 }} axisLine={false} tickLine={false} width={24} allowDecimals={false} />
-          <YAxis yAxisId="cost" orientation="right" tick={{ fill: C.textMuted, fontSize: 9 }} axisLine={false} tickLine={false} width={30} tickFormatter={v => `$${v}`} />
+          <YAxis yAxisId="cost" orientation="right" tick={{ fill: C.textMuted, fontSize: 9 }} axisLine={false} tickLine={false} width={36} tickFormatter={v => `$${(v as number).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`} />
           {!isMobile && <Tooltip {...tooltipStyle} />}
           {/* 현재 작업 막대 (background 전달 → 이전 작업 점선 마커 겹침) + 검증 막대 */}
           <Bar yAxisId="tasks" dataKey="tasks" name={tr('chartTasks')} background={{ fill: 'transparent' }} shape={<TaskBarWithPrev />} />
