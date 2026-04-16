@@ -79,7 +79,7 @@ export default function ProjectFlowSection({ d, data, helpers }: ProjectFlowSect
                         : 'text-ive-cyan'
                       return (
                         <>
-                          <div className={`font-bold ${cls}`}>{pct}%</div>
+                          <div className={`font-bold ${cls}`}>{pct.toLocaleString()}%</div>
                           <div className="text-[10px] text-ive-text-dim">{label}</div>
                         </>
                       )
@@ -97,7 +97,7 @@ export default function ProjectFlowSection({ d, data, helpers }: ProjectFlowSect
                       const cls = r >= 30 ? 'text-ive-amber' : 'text-ive-text'
                       return (
                         <>
-                          <div className={`font-bold ${cls}`}>{r.toFixed(0)}%</div>
+                          <div className={`font-bold ${cls}`}>{r.toLocaleString()}%</div>
                           <div className="text-[10px] text-ive-text-dim">{label}</div>
                         </>
                       )
