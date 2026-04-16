@@ -16,40 +16,57 @@ export default function IntroSlides({ onComplete }: IntroSlidesProps) {
 
   const slides = [
     {
-      icon: 'fa-solid fa-hand-wave',
-      iconColor: 'text-ive-amber',
+      icon: 'fa-solid fa-circle-question',
+      iconColor: 'text-ive-cyan',
       title: t('welcomeTitle'),
       description: t('welcomeDesc'),
     },
     {
-      icon: 'fa-solid fa-folder-plus',
+      icon: 'fa-solid fa-laptop-code',
+      iconColor: 'text-ive-amber',
+      title: t('workerPainTitle'),
+      description: t('workerPainDesc'),
+    },
+    {
+      icon: 'fa-solid fa-user-tie',
+      iconColor: 'text-ive-amber',
+      title: t('managerPainTitle'),
+      description: t('managerPainDesc'),
+    },
+    {
+      icon: 'fa-solid fa-chart-pie',
+      iconColor: 'text-ive-amber',
+      title: t('execPainTitle'),
+      description: t('execPainDesc'),
+    },
+    {
+      icon: 'fa-solid fa-wand-magic-sparkles',
+      iconColor: 'text-ive-cyan',
+      title: t('solutionTitle'),
+      description: t('solutionDesc'),
+    },
+    {
+      icon: 'fa-solid fa-plug',
       iconColor: 'text-ive-green',
-      title: t('projectRegTitle'),
-      description: t('projectRegDesc'),
+      title: t('projectTitle'),
+      description: t('projectDesc'),
     },
     {
       icon: 'fa-solid fa-robot',
       iconColor: 'text-ive-cyan',
-      title: t('agentRegTitle'),
-      description: t('agentRegDesc'),
+      title: t('agentTitle'),
+      description: t('agentDesc'),
     },
     {
-      icon: 'fa-solid fa-list-check',
-      iconColor: 'text-ive-cyan',
-      title: t('taskRegTitle'),
-      description: t('taskRegDesc'),
+      icon: 'fa-solid fa-rocket',
+      iconColor: 'text-ive-green',
+      title: t('startTitle'),
+      description: t('startDesc'),
     },
     {
-      icon: 'fa-solid fa-wand-magic-sparkles',
-      iconColor: 'text-ive-amber',
-      title: t('aiResolveTitle'),
-      description: t('aiResolveDesc'),
-    },
-    {
-      icon: 'fa-solid fa-clipboard-check',
-      iconColor: 'text-ive-green-light',
-      title: t('reviewTitle'),
-      description: t('reviewDesc'),
+      logo: true,
+      title: t('conclusionTitle'),
+      description: t('conclusionDesc'),
     },
   ]
 
@@ -106,9 +123,15 @@ export default function IntroSlides({ onComplete }: IntroSlidesProps) {
 
       {/* 슬라이드 콘텐츠 */}
       <div className="flex flex-col items-center text-center max-w-sm">
-        <div className="w-20 h-20 rounded-full bg-ive-bg-card border border-ive-border-subtle flex items-center justify-center mb-6">
-          <i className={`${slide.icon} ${slide.iconColor} text-3xl`} />
-        </div>
+        {'logo' in slide && slide.logo ? (
+          <div className="w-20 h-20 rounded-lg overflow-hidden mb-6">
+            <img src="/icon-192.svg" alt="Spring IVE" className="w-full h-full" />
+          </div>
+        ) : (
+          <div className="w-20 h-20 rounded-full bg-ive-bg-card border border-ive-border-subtle flex items-center justify-center mb-6">
+            <i className={`${'icon' in slide ? slide.icon : ''} ${'iconColor' in slide ? slide.iconColor : ''} text-3xl`} />
+          </div>
+        )}
         <h2 className="text-xl font-bold text-ive-text mb-3">{slide.title}</h2>
         <p className="text-base text-ive-text-secondary whitespace-pre-line leading-relaxed">
           {slide.description}

@@ -11,6 +11,8 @@ import UserProfileForm from '@/components/auth/UserProfileForm'
 import ProjectForm from '@/components/project/ProjectForm'
 import AgentForm from '@/components/agent/AgentForm'
 import Modal from '@/components/ui/Modal'
+import HelpModal from '@/components/ui/HelpModal'
+import IntroSlides from '@/components/auth/IntroSlides'
 
 export default function TopBar() {
   const router = useRouter()
@@ -24,12 +26,15 @@ export default function TopBar() {
   const tAuth = useTranslations('auth')
   const ta = useTranslations('agent')
   const tp = useTranslations('project')
+  const t = useTranslations('help')
 
   const [myVerifyCount, setMyVerifyCount] = useState(0)
   const [showChangePassword, setShowChangePassword] = useState(false)
   const [avatarTs, setAvatarTs] = useState(() => Date.now())
   const [showNewProject, setShowNewProject] = useState(false)
   const [showNewAgent, setShowNewAgent] = useState(false)
+  const [showHelp, setShowHelp] = useState(false)
+  const [showIntro, setShowIntro] = useState(false)
 
   // 메인 페이지 확인 (/, /ko, /en 등)
   const isMainPage = pathname === '/' || /^\/(ko|en)($|\/)/.test(pathname)
@@ -54,6 +59,17 @@ export default function TopBar() {
       window.removeEventListener('refresh-counts', fetchCount)
     }
   }, [state.user])
+
+  useEffect(() => {
+    const handleProjectAdd = () => setShowNewProject(true)
+    const handleAgentAdd = () => setShowNewAgent(true)
+    window.addEventListener('project-add-trigger', handleProjectAdd)
+    window.addEventListener('agent-add-trigger', handleAgentAdd)
+    return () => {
+      window.removeEventListener('project-add-trigger', handleProjectAdd)
+      window.removeEventListener('agent-add-trigger', handleAgentAdd)
+    }
+  }, [])
 
   if (!state.authChecked || !state.user) {
     return null
@@ -132,6 +148,15 @@ export default function TopBar() {
               </button>
             )}
 
+            {/* 도움말 */}
+            <button
+              onClick={() => setShowHelp(true)}
+              className="w-8 h-8 rounded-full bg-ive-bg-card border border-ive-border-subtle flex items-center justify-center text-ive-text-dim hover:text-ive-cyan active:scale-95 transition-all"
+              aria-label={t('title')}
+            >
+              <i className="fa-solid fa-circle-question text-sm" />
+            </button>
+
             {/* 아바타 + 로그아웃 */}
             <button
               onClick={() => setShowChangePassword(true)}
@@ -203,6 +228,16 @@ export default function TopBar() {
           onCancel={() => setShowNewAgent(false)}
         />
       </Modal>
+
+      <HelpModal
+        open={showHelp}
+        onClose={() => setShowHelp(false)}
+        onShowIntro={() => setShowIntro(true)}
+      />
+
+      {showIntro && (
+        <IntroSlides onComplete={() => setShowIntro(false)} />
+      )}
     </>
   )
 }

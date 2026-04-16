@@ -19,6 +19,7 @@ import pull from './pull.json'
 import ws from './ws.json'
 import pipeline from './pipeline.json'
 import errors from './errors.json'
+import help from './help.json'
 
 const messages = {
   common,
@@ -42,6 +43,7 @@ const messages = {
   ws,
   pipeline,
   errors,
+  help,
 }
 
 export default messages

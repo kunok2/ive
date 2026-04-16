@@ -40,10 +40,10 @@ export default function HomePage() {
   return (
     <div className="h-full relative">
       <div className="absolute inset-0 overflow-hidden" style={{ display: activeTab === 'projects' ? 'flex' : 'none' }}>
-        <ProjectsTab onAdd={() => {}} />
+        <ProjectsTab onAdd={() => window.dispatchEvent(new CustomEvent('project-add-trigger'))} />
       </div>
       <div className="absolute inset-0 overflow-hidden" style={{ display: activeTab === 'agents' ? 'flex' : 'none' }}>
-        <AgentsTab onAdd={() => {}} />
+        <AgentsTab onAdd={() => window.dispatchEvent(new CustomEvent('agent-add-trigger'))} />
       </div>
       <div className="absolute inset-0 overflow-hidden" style={{ display: activeTab === 'issues' ? 'flex' : 'none' }}>
         <IssuesTab addTrigger={issueAddTrigger + contextAddTrigger} />
