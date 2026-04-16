@@ -146,8 +146,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   try {
     tokens = await exchangeCodeForToken(provider, code, redirectUri)
   } catch (e: any) {
+    const msg = e?.message || '알 수 없는 오류'
     console.error('[OAuth callback] token exchange failed:', e, 'redirectUri:', redirectUri)
-    return redirectToLoginWithError(req, '인증 처리 중 오류가 발생했습니다')
+    return redirectToLoginWithError(req, `토큰 교환 실패: ${msg}`)
   }
 
   // 2. access_token으로 사용자 프로필 조회 (verified 이메일 강제)
@@ -155,8 +156,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   try {
     profile = await fetchUserProfile(provider, tokens.accessToken)
   } catch (e: any) {
+    const msg = e?.message || '알 수 없는 오류'
     console.error('[OAuth callback] fetch profile failed:', e)
-    return redirectToLoginWithError(req, '인증 처리 중 오류가 발생했습니다')
+    return redirectToLoginWithError(req, `프로필 조회 실패: ${msg}`)
   }
 
   const accessTokenEnc = encrypt(tokens.accessToken)
@@ -219,8 +221,17 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     }
   }
 
-  // 4. JWT 쿠키 발급
-  await setAuthCookie(userId)
+  // 4. 홈으로 — 302 대신 다크 배경 로딩 HTML을 반환해 흰색 깜빡임 방지
+  //    new NextResponse()에는 response.cookies.set()으로 직접 쿠키를 설정해야
+  //    Set-Cookie 헤더가 확실히 포함됨 (cookies().set() 암묵적 방식은 일부 경우 누락 가능)
+  const homeUrl = new URL('/', getPublicOrigin(req)).toString()
+  const htmlResponse = new NextResponse(renderLoadingRedirect(homeUrl), {
+    status: 200,
+    headers: { 'Content-Type': 'text/html; charset=utf-8' },
+  })
+
+  // JWT 쿠키를 response에 직접 발급
+  await setAuthCookie(userId, htmlResponse)
 
   // 5. 활동 로그
   try {
@@ -233,10 +244,5 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     })
   } catch { /* ignore */ }
 
-  // 6. 홈으로 — 302 대신 다크 배경 로딩 HTML을 반환해 흰색 깜빡임 방지
-  const homeUrl = new URL('/', getPublicOrigin(req)).toString()
-  return new NextResponse(renderLoadingRedirect(homeUrl), {
-    status: 200,
-    headers: { 'Content-Type': 'text/html; charset=utf-8' },
-  })
+  return htmlResponse
 }

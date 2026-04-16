@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
 import { loadProvider, buildRedirectUri, buildAuthorizeUrl, generateState } from '@/lib/oauth'
 
 const STATE_COOKIE = 'ive-oauth-state'
@@ -22,15 +21,18 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
   // state와 redirect_uri를 함께 쿠키에 저장 — 토큰 교환 시 authorize와 동일한 redirect_uri를
   // 재사용해야 하기 때문 (GitLab/GitHub는 바이트 단위 일치를 요구)
-  const cookieStore = await cookies()
+  //
+  // ⚠️ sameSite: 'lax' 필수 — GitHub/GitLab이 콜백 URL로 redirect할 때
+  // 브라우저가 cross-site top-level GET 요청을 보내는데, 이때 lax 쿠키는 전송됨.
+  // strict로 변경하면 콜백에서 state 쿠키를 읽지 못해 OAuth 로그인이 완전히 불가.
   const payload = Buffer.from(JSON.stringify({ id, state, redirectUri })).toString('base64url')
-  cookieStore.set(STATE_COOKIE, payload, {
+  const response = NextResponse.redirect(authorizeUrl)
+  response.cookies.set(STATE_COOKIE, payload, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     maxAge: STATE_MAX_AGE,
     path: '/',
   })
-
-  return NextResponse.redirect(authorizeUrl)
+  return response
 }
