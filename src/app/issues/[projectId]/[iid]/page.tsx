@@ -188,8 +188,9 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   }, [projectId, iid])
 
   const fetchMRInfo = useCallback(async () => {
+    if (!issue) return
     if (!canProgressStage) return
-    if (issue?.stage !== 'done' && issue?.stage !== 'dev' && issue?.stage !== 'verify_waiting' && issue?.stage !== 'verifying') return
+    if (issue.stage !== 'done' && issue.stage !== 'dev' && issue.stage !== 'verify_waiting' && issue.stage !== 'verifying') return
     setMrLoading(true)
     try {
       const res = await fetch(`/api/projects/${projectId}/issues/${iid}/mr`)
@@ -199,7 +200,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
       }
     } catch { setMrInfo(null) }
     finally { setMrLoading(false) }
-  }, [projectId, iid, canProgressStage, issue?.stage])
+  }, [projectId, iid, canProgressStage, issue])
 
   const handleMergeMR = useCallback(async () => {
     setMrMerging(true)
