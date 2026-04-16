@@ -39,7 +39,7 @@ export default function ReportsTab() {
       if (prev === 0) return cur > 0 ? tr('newBadge') : null
       const pct = Math.round(((cur - prev) / prev) * 100)
       if (pct === 0) return null
-      return `${pct > 0 ? '+' : ''}${pct}%`
+      return `${pct > 0 ? '+' : ''}${pct.toLocaleString()}%`
     },
     diffColor: (cur: number, prev: number, invert = false) => {
       if (prev === 0) return 'text-ive-cyan'
