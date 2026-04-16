@@ -46,7 +46,7 @@ export async function commitPushAndCreateMR(params: {
   const {
     executionId, project, agent, iid, issueTitle, token,
     workspacePath, baseBranch, branchName, iterationCount,
-    durationStr, logStream, log,
+    conversationParts, durationStr, logStream, log,
   } = params;
   const isGitHub = project.provider === 'github';
   const mrLabel = isGitHub ? 'PR' : 'MR';
@@ -103,7 +103,10 @@ export async function commitPushAndCreateMR(params: {
     // 완료 노트
     const mrLine = mrUrl ? `- **${mrLabel}:** ${mrUrl}` : `- **${mrLabel}:** 생성 실패 (권한 부족 또는 API 오류)`;
     const iterLine = iterationCount > 1 ? `\n- **반복 횟수:** ${iterationCount}회` : '';
-    const completionNote = `<!-- ive-bot -->\n## ✅ 개발 완료 — ${agent.name}\n\n${mrLine}\n- **소요 시간:** ${durationStr}${iterLine}`;
+    const workSummary = conversationParts.length > 0
+      ? `\n\n### 📝 수행 작업\n${conversationParts.filter(p => p.trim()).join('\n')}`
+      : '';
+    const completionNote = `<!-- ive-bot -->\n## ✅ 개발 완료 — ${agent.name}\n\n${mrLine}\n- **소요 시간:** ${durationStr}${iterLine}${workSummary}`;
     if (isGitHub) {
       await addGitHubIssueComment(project, iid, token, completionNote);
     } else {
@@ -122,7 +125,10 @@ export async function commitPushAndCreateMR(params: {
     // 코드 변경사항 없음
     log("코드 변경사항 없음. 작업 완료로 처리.", 'system');
     const iterLine = iterationCount > 1 ? `\n- **반복 횟수:** ${iterationCount}회` : '';
-    const noChangeNote = `<!-- ive-bot -->\n## ✅ 개발 완료 — ${agent.name}\n\n코드 변경사항 없이 완료되었습니다.\n- **소요 시간:** ${durationStr}${iterLine}`;
+    const workSummary = conversationParts.length > 0
+      ? `\n\n### 📝 수행 작업\n${conversationParts.filter(p => p.trim()).join('\n')}`
+      : '';
+    const noChangeNote = `<!-- ive-bot -->\n## ✅ 개발 완료 — ${agent.name}\n\n코드 변경사항 없이 완료되었습니다.\n- **소요 시간:** ${durationStr}${iterLine}${workSummary}`;
     try {
       if (isGitHub) {
         await addGitHubIssueComment(project, iid, token, noChangeNote);

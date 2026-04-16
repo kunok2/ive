@@ -44,7 +44,7 @@ export default function UtilizationGauge({ d, helpers }: UtilizationGaugeProps) 
         </div>
         <div className="text-center mt-1">
           <span className={`text-lg font-bold ${d.flow.healthLevel === 'overloaded' ? 'text-ive-red' : d.flow.healthLevel === 'tight' ? 'text-ive-amber' : d.flow.healthLevel === 'idle' ? 'text-ive-cyan' : 'text-ive-green'}`}>
-            {Math.round(d.flow.utilization * 100).toLocaleString()}%
+            {Math.round(d.flow.utilization * 100)}%
           </span>
         </div>
       </div>
