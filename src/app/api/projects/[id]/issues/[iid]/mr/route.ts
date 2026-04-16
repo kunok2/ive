@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getProject, getProjectAuthToken, markIssueVerified, touchProjectActivity, getProjectAccess, isIssueAssignee, getDb, updateExecutionStatus } from '@/lib/db'
+import { triggerScan } from '@/lib/scanner'
 import { getCurrentUser } from '@/lib/auth'
 import { fetchMRByBranch, mergeMR, closeMR, fetchSingleIssue, addIssueLabels, removeIssueLabels } from '@/lib/provider'
 import { logActivity } from '@/lib/activity'
@@ -41,6 +42,12 @@ async function syncLabelsToDone(project: Project, iid: number, token: string, us
         targetType: 'issue',
         targetId: `${projectId}:${iid}`,
       })
+
+      try {
+        triggerScan(projectId);
+      } catch (e) {
+        console.warn(`[MR] Failed to trigger scanner:`, e);
+      }
     }
   }
 }
