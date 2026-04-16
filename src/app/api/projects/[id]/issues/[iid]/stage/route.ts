@@ -255,7 +255,7 @@ export async function POST(
 
         // 브랜치 안내 코멘트
         try {
-          const commentBody = `<!-- ive-bot -->\n**작업 브랜치가 생성되었습니다.**\n\n브랜치: \`${branchName}\`\n담당자: ${execution.userName}\n\n**작업 방법:**\n1. \`${branchName}\` 브랜치에서 작업\n2. MR/PR 생성 시 제목에 \`resolve #${iid}\` 포함 (머지 시 이슈 자동 닫힘)\n3. 작업 완료 후 레이블을 \`${project.labelDev || 'IVE-D'}\` → \`${project.labelVerifyWait || 'IVE-W'}\`로 변경`;
+          const commentBody = `<!-- ive-bot -->\n## 🌿 작업 브랜치 생성됨\n\n- **브랜치:** \`${branchName}\`\n- **담당자:** ${execution.userName}`;
           await addIssueComment(project, Number(iid), token, commentBody);
         } catch (e) { console.warn(`[Stage] Failed to add branch comment on #${iid}:`, e); }
       }

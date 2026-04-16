@@ -20,7 +20,6 @@ import {
   getUserById,
   assignIssueAtomically,
   createActivityLog,
-  setAssignMode,
   touchProjectActivity,
   recordIssueScheduledAt,
   getIssueScheduledAt,
@@ -205,7 +204,7 @@ async function runScan() {
  * 특정 프로젝트의 스캔을 수행합니다.
  * @param force true인 경우 checkInterval을 무시하고 즉시 스캔합니다.
  */
-export async function scanProject(project: Project, force: boolean = false) {
+async function scanProject(project: Project, force: boolean = false) {
   try {
     // 스캐너 활성화 여부 확인 (수동 실행 시에도 비활성 상태면 건너뜀)
     if (!force && project.scannerActive === false) {
@@ -551,7 +550,7 @@ export async function scanProject(project: Project, force: boolean = false) {
 
               // 브랜치 안내 코멘트
               try {
-                const commentBody = `<!-- ive-bot -->\n**작업 브랜치가 생성되었습니다.**\n\n브랜치: \`${branchName}\`\n담당자: ${execution.userName}\n\n**작업 방법:**\n1. \`${branchName}\` 브랜치에서 작업\n2. MR/PR 생성 시 제목에 \`resolve #${iid}\` 포함 (머지 시 이슈 자동 닫힘)\n3. 작업 완료 후 레이블을 \`${project.labelDev || 'IVE-D'}\` → \`${project.labelVerifyWait || 'IVE-W'}\`로 변경`;
+                const commentBody = `<!-- ive-bot -->\n## 🌿 작업 브랜치 생성됨\n\n- **브랜치:** \`${branchName}\`\n- **담당자:** ${execution.userName}`;
                 await addIssueComment(project, iid, decryptedToken, commentBody);
               } catch (e) { console.warn(`[Scanner] Failed to add branch comment on #${iid}:`, e); }
 
@@ -693,9 +692,12 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
     if (preferredAgentId) {
       const pa = assignments.find(a => a.agentId === preferredAgentId);
       if (!pa) {
-        // 지정 에이전트가 프로젝트에서 배정 해제됨 → auto 전환
-        console.log(`[Scanner] [RESET] Issue #${issue.iid} — 지정 작업자가 프로젝트에서 해제됨, 자동 배정으로 전환`);
-        setAssignMode(project.id, issue.iid, 'auto');
+        // 지정 에이전트가 현재 프로젝트 배정 목록에 없음 → 다른 에이전트로 자동 전환 금지, 대기
+        // 사용자가 직접 작업자를 지정했으므로 그 의도를 존중한다.
+        // 이슈가 계속 대기 상태로 보이면 사용자가 작업자를 직접 변경하면 됨.
+        console.log(`[Scanner] [WAIT] Issue #${issue.iid} — 지정 작업자(${preferredAgentId})가 프로젝트 배정 목록에 없음, 대기`);
+        waitingCount++;
+        continue;
       } else if (busyAgentIds.has(pa.agentId) || countActiveExecutionsByAgent(pa.agentId) > 0) {
         // 지정 에이전트가 바쁨 → 이번 스캔 스킵, 다음 스캔에서 재시도
         console.log(`[Scanner] [WAIT] Issue #${issue.iid} — 지정 작업자 '${pa.agent.name}' 작업 중, 대기`);

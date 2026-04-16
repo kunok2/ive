@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getProject, getProjectAccess } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
-import { scanProject } from '@/lib/scanner';
+import { triggerScan } from '@/lib/scanner';
 
 export async function POST(
   req: NextRequest,
@@ -23,12 +23,10 @@ export async function POST(
   }
 
   try {
-    // 비동기로 실행하고 즉시 응답할지, 아니면 완료를 기다릴지 결정
-    // 수동 실행은 대개 결과를 빨리 알고 싶어 하므로 await 하되, 
-    // 실제 이슈 해결(executeTask)은 어차피 내부에서 비동기로 돌기 때문에 
-    // 이슈 수집 및 배정까지만 기다립니다.
-    await scanProject(project, true);
-    
+    // 스캔은 전용 루프에서만 실행 — 직접 호출 금지.
+    // triggerScan: 스캔 중이면 pending 큐에 등록, 아니면 즉시 실행.
+    triggerScan(project.id);
+
     return NextResponse.json({ success: true, message: 'Scan started' });
   } catch (err) {
     console.error('[Manual Scan Error]', err);

@@ -250,7 +250,7 @@ export async function executeTask(
       updateProjectConflictCount(project.id, 0);
     }
     if (!isConflictTask) {
-      await postErrorNote(project, agent, iid, token, err.message, conversationParts, isGitHub);
+      await postErrorNote(project, agent, iid, token, err.message, isGitHub);
     }
     updateExecutionStatus(executionId, 'failed', new Date().toISOString());
   } finally {
@@ -263,13 +263,13 @@ export async function executeTask(
       }
     } catch (e) { /* ignore */ }
 
-    // 대기 이슈가 있으면 즉시 재스캔
+    // 대기 이슈가 있으면 스캔 트리거 (직접 호출 금지 — 스캔은 전용 루프에서만 실행)
     try {
       const freshProject = getProject(project.id);
       if (freshProject && (freshProject.lastScannedIssueCount ?? 0) > 0) {
-        console.log(`[Scanner] Agent ${agent.name} freed — re-scanning ${freshProject.name} for waiting issues`);
-        const { scanProject } = await import('./index');
-        scanProject(freshProject, true);
+        console.log(`[Scanner] Agent ${agent.name} freed — triggering scan for ${freshProject.name}`);
+        const { triggerScan } = await import('./index');
+        triggerScan(freshProject.id);
       }
     } catch (e) { /* ignore */ }
   }

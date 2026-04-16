@@ -46,7 +46,7 @@ export async function commitPushAndCreateMR(params: {
   const {
     executionId, project, agent, iid, issueTitle, token,
     workspacePath, baseBranch, branchName, iterationCount,
-    conversationParts, durationStr, logStream, log,
+    durationStr, logStream, log,
   } = params;
   const isGitHub = project.provider === 'github';
   const mrLabel = isGitHub ? 'PR' : 'MR';
@@ -101,9 +101,9 @@ export async function commitPushAndCreateMR(params: {
     }
 
     // 완료 노트
-    const conversationLog = conversationParts.join('\n\n').substring(0, 60000);
-    const mrLine = mrUrl ? `${mrLabel}: ${mrUrl}` : `${mrLabel}: creation failed (insufficient permissions or API error)`;
-    const completionNote = `<!-- ive-bot -->\n## ${agent.name} Development Complete\n\n${mrLine}\nDuration: ${durationStr}\n\nDevelopment is complete. Please review and merge.\n\n<details>\n<summary>🤖 AI Work Log (expand)</summary>\n\n${conversationLog}\n\n</details>`;
+    const mrLine = mrUrl ? `- **${mrLabel}:** ${mrUrl}` : `- **${mrLabel}:** 생성 실패 (권한 부족 또는 API 오류)`;
+    const iterLine = iterationCount > 1 ? `\n- **반복 횟수:** ${iterationCount}회` : '';
+    const completionNote = `<!-- ive-bot -->\n## ✅ 개발 완료 — ${agent.name}\n\n${mrLine}\n- **소요 시간:** ${durationStr}${iterLine}`;
     if (isGitHub) {
       await addGitHubIssueComment(project, iid, token, completionNote);
     } else {
@@ -121,8 +121,8 @@ export async function commitPushAndCreateMR(params: {
   } else {
     // 코드 변경사항 없음
     log("코드 변경사항 없음. 작업 완료로 처리.", 'system');
-    const noChangeLog = conversationParts.join('\n\n').substring(0, 60000);
-    const noChangeNote = `<!-- ive-bot -->\n## ${agent.name} Development Complete\n\nTask completed without code changes.\nDuration: ${durationStr}\n\n<details>\n<summary>🤖 AI Work Log (expand)</summary>\n\n${noChangeLog}\n\n</details>`;
+    const iterLine = iterationCount > 1 ? `\n- **반복 횟수:** ${iterationCount}회` : '';
+    const noChangeNote = `<!-- ive-bot -->\n## ✅ 개발 완료 — ${agent.name}\n\n코드 변경사항 없이 완료되었습니다.\n- **소요 시간:** ${durationStr}${iterLine}`;
     try {
       if (isGitHub) {
         await addGitHubIssueComment(project, iid, token, noChangeNote);
@@ -149,11 +149,9 @@ export async function postErrorNote(
   iid: number,
   token: string,
   errMessage: string,
-  conversationParts: string[],
   isGitHub: boolean,
 ): Promise<void> {
-  const errorLog = conversationParts.join('\n\n').substring(0, 60000);
-  const errorNote = `<!-- ive-bot -->\n## ${agent.name} Execution Error\nAn error occurred: ${errMessage}\n\n<details>\n<summary>🤖 AI Work Log (expand)</summary>\n\n${errorLog}\n\n</details>`;
+  const errorNote = `<!-- ive-bot -->\n## ❌ 실행 오류 — ${agent.name}\n\n- **오류:** ${errMessage}`;
   try {
     if (isGitHub) {
       await addGitHubIssueComment(project, iid, token, errorNote);
@@ -183,8 +181,8 @@ async function handlePushFailure(
   const isPermission = pushMsg.includes('403') || pushMsg.includes('denied') || pushMsg.includes('Permission') || pushMsg.includes('protected');
   log(`push 실패: ${pushMsg}`, 'error');
   const pushFailNote = isPermission
-    ? `<!-- ive-bot -->\n## ${agent.name} No Push Permission\n\nCode changes are complete, but cannot create a branch due to insufficient push permissions.\nPlease grant write access to the token account or use a fork-based workflow.\n\nDuration: ${durationStr}`
-    : `<!-- ive-bot -->\n## ${agent.name} Push Failed\n\nCode changes are complete, but push failed: ${pushMsg}\n\nDuration: ${durationStr}`;
+    ? `<!-- ive-bot -->\n## ⚠️ 푸시 권한 없음 — ${agent.name}\n\n코드 변경은 완료되었으나 저장소에 푸시할 권한이 없습니다.\n토큰 계정에 쓰기 권한을 부여해주세요.\n- **소요 시간:** ${durationStr}`
+    : `<!-- ive-bot -->\n## ⚠️ 푸시 실패 — ${agent.name}\n\n- **오류:** ${pushMsg}\n- **소요 시간:** ${durationStr}`;
   try {
     if (isGitHub) {
       await addGitHubIssueComment(project, iid, token, pushFailNote);
