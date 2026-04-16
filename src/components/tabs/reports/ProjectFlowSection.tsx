@@ -39,9 +39,9 @@ export default function ProjectFlowSection({ d, data, helpers }: ProjectFlowSect
                 <i className={`fa-solid fa-chevron-${expandedProjects.has(p.projectId) ? 'up' : 'down'} text-xs text-ive-text-dim`} />
               </div>
               <div className="flex items-center gap-2 mt-1 text-xs">
-                <span className="text-ive-text-muted">{tr('inflowCompact', { count: p.inflow })}</span>
+                <span className="text-ive-text-muted">{tr('inflowCompact', { count: p.inflow.toLocaleString() })}</span>
                 <span className="text-ive-text-dim">→</span>
-                <span className="text-ive-text-muted">{tr('throughputCompact', { count: p.throughput })}</span>
+                <span className="text-ive-text-muted">{tr('throughputCompact', { count: p.throughput.toLocaleString() })}</span>
                 {p.currentWaiting > 0 && <span className={`font-bold ${p.currentWaiting >= 6 ? 'text-ive-red' : p.currentWaiting >= 3 ? 'text-ive-amber' : 'text-ive-text-muted'}`}>
                   {tr('waitingInProgressCount', { count: p.currentWaiting })}
                 </span>}

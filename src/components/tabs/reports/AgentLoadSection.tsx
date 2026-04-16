@@ -37,7 +37,7 @@ export default function AgentLoadSection({ d, data, helpers }: AgentLoadSectionP
                 <i className={`fa-solid fa-chevron-${expandedAgents.has(a.agentId) ? 'up' : 'down'} text-xs text-ive-text-dim`} />
               </div>
               <div className="flex items-center gap-3 mt-1 text-xs">
-                <span className="text-ive-text font-bold">{tr('processedInPeriod', { count: a.tasks })}</span>
+                <span className="text-ive-text font-bold">{tr('processedInPeriod', { count: a.tasks.toLocaleString() })}</span>
                 <span className="text-ive-text-dim">{tr('dailyAvgCapacity', { count: a.dailyCapacity })}</span>
                 {a.currentWaiting > 0 && <span className={`font-bold ${a.currentWaiting >= 6 ? 'text-ive-red' : a.currentWaiting >= 3 ? 'text-ive-amber' : 'text-ive-text-muted'}`}>{tr('waitingCompact', { count: a.currentWaiting })}</span>}
                 <span className="text-ive-text-muted ml-auto">${fmtCost(a.cost)}</span>
