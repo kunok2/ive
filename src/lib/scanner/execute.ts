@@ -86,7 +86,8 @@ export async function executeTask(
   // 배정 즉시 cached_stage를 'dev'로 업데이트
   if (!isConflictTask) {
     try {
-      const assignee = (issue.assignees && issue.assignees.length > 0) ? issue.assignees[0] : null;
+      // 담당자가 없으면 이슈 작성자를 담당자로 간주
+      const assignee = (issue.assignees && issue.assignees.length > 0) ? issue.assignees[0] : (issue.author || null);
       upsertIssueStageSnapshot(project.id, iid, {
         cachedStage: 'dev',
         assigneeUsername: assignee ? (assignee.username || assignee.login || null) : null,

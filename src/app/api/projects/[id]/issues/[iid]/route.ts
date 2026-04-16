@@ -87,6 +87,7 @@ export async function GET(
       updatedAt: issue.updated_at,
       webUrl: issue.web_url,
       author: issue.author?.name,
+      authorId: issue.author?.id ?? null,
     })
   } catch (err) {
     return NextResponse.json(

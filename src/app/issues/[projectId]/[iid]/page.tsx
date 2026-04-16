@@ -40,6 +40,7 @@ interface IssueDetail {
   updatedAt: string
   webUrl: string
   author: string
+  authorId: number | null
   assignees?: IssueAssignee[]
 }
 
@@ -127,9 +128,14 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   // ===================== Data fetching =====================
 
   const isAssignee = (() => {
-    if (!issue?.assignees?.length || !state.user?.oauthUserId) return false
+    if (!state.user?.oauthUserId) return false
     const myGitId = String(state.user.oauthUserId)
-    return issue.assignees.some(a => a.id != null && String(a.id) === myGitId)
+    // 담당자가 지정되어 있으면 담당자 확인
+    if (issue?.assignees?.length) {
+      return issue.assignees.some(a => a.id != null && String(a.id) === myGitId)
+    }
+    // 담당자가 없으면 이슈 작성자를 담당자로 간주
+    return issue?.authorId != null && String(issue.authorId) === myGitId
   })()
   const canProgressStage = state.user?.isAdmin || isAssignee
 

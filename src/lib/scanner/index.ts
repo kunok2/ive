@@ -395,7 +395,8 @@ async function scanProject(project: Project, force: boolean = false) {
 
       // 검증자별 부하 집계용 스냅샷 — Git assignee + 현재 stage 저장
       try {
-        const assignee = (issue.assignees && issue.assignees.length > 0) ? issue.assignees[0] : null;
+        // 담당자가 없으면 이슈 작성자를 담당자로 간주
+        const assignee = (issue.assignees && issue.assignees.length > 0) ? issue.assignees[0] : (issue.author || null);
         upsertIssueStageSnapshot(project.id, iid, {
           cachedStage: stage,
           assigneeUsername: assignee ? (assignee.username || assignee.login || null) : null,

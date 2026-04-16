@@ -142,17 +142,6 @@ export async function POST(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  // 권한: 관리자이거나 해당 이슈의 Git assignee(검증자/담당자)만 단계 변경 가능
-  // (viewer 권한이어도 assignee이면 자신의 작업을 진행할 수 있어야 함)
-  if (!user.isAdmin) {
-    if (!isIssueAssignee(projectId, Number(iid), user)) {
-      return NextResponse.json(
-        { error: '이 이슈의 담당자(Git assignee) 또는 관리자만 단계를 변경할 수 있습니다' },
-        { status: 403 }
-      );
-    }
-  }
-
   const { stage, action } = await req.json();
   if (!stage || !action) {
     return NextResponse.json({ error: 'stage와 action이 필요합니다.' }, { status: 400 });
@@ -175,6 +164,21 @@ export async function POST(
     // 클라이언트가 보낸 stage가 Git의 실제 레이블에서 계산한 stage와 일치하는지 확인.
     // 다중 사용자 환경에서 캐시된 오래된 stage로 액션이 들어오는 경우를 차단.
     const currentIssue = await fetchSingleIssue(project, Number(iid), token);
+
+    // 권한: 관리자이거나 해당 이슈의 Git assignee(검증자/담당자)만 단계 변경 가능
+    // 담당자가 지정되지 않았으면 이슈 작성자를 담당자로 간주
+    // (viewer 권한이어도 assignee이면 자신의 작업을 진행할 수 있어야 함)
+    if (!user.isAdmin && !isIssueAssignee(projectId, Number(iid), user)) {
+      const hasNoAssignee = !currentIssue?.assignees?.length;
+      const isAuthor = hasNoAssignee && currentIssue?.author?.id != null
+        && user.oauthUserId && String(currentIssue.author.id) === String(user.oauthUserId);
+      if (!isAuthor) {
+        return NextResponse.json(
+          { error: '이 이슈의 담당자(Git assignee) 또는 관리자만 단계를 변경할 수 있습니다' },
+          { status: 403 }
+        );
+      }
+    }
     const currentLabels: string[] = currentIssue?.labels || [];
     const hasActive = hasActiveExecution(projectId, Number(iid));
     const actualStage = stageFromLabels(currentLabels, project, { hasActiveExec: hasActive });
@@ -372,8 +376,8 @@ export async function POST(
         gitUserId: user.oauthUserId ? String(user.oauthUserId) : null,  // OAuth user id (Git provider의 numeric id)
       };
     } else {
-      // 다른 단계: Git issue의 assignee 사용
-      const firstAssignee = issue?.assignees?.[0];
+      // 다른 단계: Git issue의 assignee 사용 (없으면 작성자를 담당자로 간주)
+      const firstAssignee = issue?.assignees?.[0] || issue?.author;
       assigneeInfo = {
         username: firstAssignee?.username || null,
         name: firstAssignee?.name || (firstAssignee as any)?.login || null,
