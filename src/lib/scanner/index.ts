@@ -623,6 +623,16 @@ async function scanProject(project: Project, force: boolean = false) {
           assigneeGitUserId: null,
           issueTitle: null,
         })
+        // 잔류 활성 execution 정리 (검증자 execution 포함)
+        const lingeringExecs = getDb().prepare(
+          "SELECT id FROM task_executions WHERE project_id = ? AND issue_iid = ? AND status IN ('running', 'assigned')"
+        ).all(project.id, row.issue_iid) as { id: string }[]
+        for (const ex of lingeringExecs) {
+          updateExecutionStatus(ex.id, 'failed', new Date().toISOString())
+        }
+        if (lingeringExecs.length > 0) {
+          console.log(`[Scanner] Cleaned ${lingeringExecs.length} lingering execution(s) for stale issue #${row.issue_iid}`)
+        }
       }
     }
 
