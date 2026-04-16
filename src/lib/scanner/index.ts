@@ -34,7 +34,7 @@ import {
   getIssueAssigneeUsername,
   getProjectWithUserOAuth,
   updateUserOAuthTokens,
-  getOAuthProviderById,
+  getOAuthProviderRaw,
 } from "../db";
 import { fetchProjectMembers } from "../provider";
 import { decrypt, encrypt } from "../crypto";
@@ -240,12 +240,12 @@ async function scanProject(project: Project, force: boolean = false) {
 
           if (expiresAt < nowMs + 10 * 60 * 1000) {
             console.log(`[Scanner] OAuth token expiring soon for ${project.name}, refreshing...`);
-            const provider = full.oauth_provider_id ? getOAuthProviderById(full.oauth_provider_id) : null;
-            if (provider && full.oauth_refresh_token) {
+            const providerRaw = full.oauth_provider_id ? getOAuthProviderRaw(full.oauth_provider_id) : null;
+            if (providerRaw && full.oauth_refresh_token) {
               const refreshPlain = decrypt(full.oauth_refresh_token);
-              const clientSecretPlain = provider.clientSecret ? decrypt(provider.clientSecret) : '';
+              const clientSecretPlain = providerRaw.client_secret ? decrypt(providerRaw.client_secret) : '';
 
-              const refreshed = await refreshGitLabToken(project.repoUrl, provider.clientId, clientSecretPlain, refreshPlain);
+              const refreshed = await refreshGitLabToken(project.repoUrl, providerRaw.client_id, clientSecretPlain, refreshPlain);
               if (refreshed.access_token) {
                 decryptedToken = refreshed.access_token;
                 const newExpiry = new Date(Date.now() + (refreshed.expires_in || 7200) * 1000).toISOString();
