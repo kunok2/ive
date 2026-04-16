@@ -315,6 +315,13 @@ export default function ProjectCard({ project }: Props) {
             )}
           </div>
         )}
+
+        {agentCount === 0 && project.scannerActive && (
+          <div className="mt-3 mx-0 bg-ive-amber/10 border border-ive-amber/20 rounded-lg px-3 py-2 text-sm text-ive-amber/80">
+            <i className="fa-solid fa-triangle-exclamation mr-1.5" />
+            <span className="font-bold">{tp('noAgentWarning')}</span>
+          </div>
+        )}
       </Link>
 
       {/* 대시보드 통계 바 */}

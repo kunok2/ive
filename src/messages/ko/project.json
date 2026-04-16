@@ -119,5 +119,6 @@
   "verifyWaitBadge": "검증대기",
   "todayRecords": "금일 수행기록 ({count})",
   "errorLabel": "오류:",
-  "conflictLabel": "작업취합"
+  "conflictLabel": "작업취합",
+  "noAgentWarning": "배정된 에이전트가 없어 작업을 처리할 수 없습니다"
 }

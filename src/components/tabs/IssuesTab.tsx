@@ -21,7 +21,7 @@ import LabelCheckModal from '@/components/tabs/issues/LabelCheckModal'
 
 export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   const router = useRouter()
-  const { confirm } = useDialog()
+  const { confirm, alert: showAlert } = useDialog()
   const { state } = useStore()
   const { toast } = useToast()
   const { activeTab, setActiveTab, issuesProjectId, setIssuesProjectId, issuesFilter, setIssuesFilter, issuesSort, setIssuesSort } = useTab()
@@ -392,6 +392,9 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     }
     if (failed > 0) toast(tIssue('bulkFailedCount', { count: failed }), 'error')
     else if (done > 0) toast(tIssue('bulkCompletedCount', { count: done }), 'success')
+    if (action === 'waiting' && projectAgents.length === 0) {
+      showAlert({ title: tIssue('noAgentWarningTitle'), message: tIssue('noAgentWarningDesc'), variant: 'error' })
+    }
     fetchIssues()
     window.dispatchEvent(new CustomEvent('refresh-counts'))
     setTimeout(() => { exitBulkMode() }, cancelRef.current ? 500 : 1000)
@@ -450,6 +453,9 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
         }
         setIssues(prev => prev.some(i => i.iid === created.iid) ? prev : [newIssue, ...prev])
         toast(tIssue('issueCreated'), 'success')
+        if (newIssue.stage === 'waiting' && projectAgents.length === 0) {
+          showAlert({ title: tIssue('noAgentWarningTitle'), message: tIssue('noAgentWarningDesc'), variant: 'error' })
+        }
         setTimeout(() => {
           if (!selectedProjectId) return
           fetch(`/api/projects/${selectedProjectId}/issues`).then(res => res.ok ? res.json() : null).then(data => {

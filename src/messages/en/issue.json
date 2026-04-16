@@ -122,5 +122,7 @@
   "labelStatusChecking": "Checking label status...",
   "labelStatusExists": "OK",
   "labelStatusMissing": "Missing",
-  "autoCreateLabels": "Auto-create labels"
+  "autoCreateLabels": "Auto-create labels",
+  "noAgentWarningTitle": "No agent assigned",
+  "noAgentWarningDesc": "No agent is assigned to this project, so tasks cannot be processed. Please assign an agent in the project settings."
 }

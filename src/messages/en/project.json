@@ -119,5 +119,6 @@
   "verifyWaitBadge": "Verify Wait",
   "todayRecords": "Today's Records ({count})",
   "errorLabel": "Error:",
-  "conflictLabel": "Merge"
+  "conflictLabel": "Merge",
+  "noAgentWarning": "No agent assigned — tasks cannot be processed"
 }

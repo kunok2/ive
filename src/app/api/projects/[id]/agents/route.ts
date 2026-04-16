@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getProjectAssignments, assignAgentToProject, unassignAgentFromProject, getAgentProjectId, updateAssignmentToken, clearPreferredAgentRefs } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { encrypt, decrypt } from '@/lib/crypto'
+import { triggerScan } from '@/lib/scanner'
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser()
@@ -42,6 +43,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     assignedAt: new Date().toISOString(),
   })
 
+  triggerScan(id)
   return NextResponse.json({ success: true }, { status: 201 })
 }
 
@@ -72,5 +74,6 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const { agentId } = await req.json()
   clearPreferredAgentRefs(agentId)
   unassignAgentFromProject(id, agentId)
+  triggerScan(id)
   return NextResponse.json({ success: true })
 }
