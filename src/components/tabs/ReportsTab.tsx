@@ -29,9 +29,9 @@ export default function ReportsTab() {
 
   // ─── Helpers ───
   const helpers = useMemo<ReportHelpers>(() => ({
-    fmtCost: (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+    fmtCost: (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 0 }),
     fmtDur: (min: number) => {
-      if (min < 60) return tr('durMin', { value: min.toFixed(1) })
+      if (min < 60) return tr('durMin', { value: Math.round(min) })
       const h = Math.floor(min / 60), m = Math.round(min % 60)
       return m > 0 ? tr('durHourMin', { h, m }) : tr('durHour', { h })
     },

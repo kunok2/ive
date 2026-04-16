@@ -52,8 +52,8 @@ export default function UtilizationGauge({ d, helpers }: UtilizationGaugeProps) 
       {/* 핵심 수치 */}
       <div className="grid grid-cols-2 gap-2 text-xs">
         <div className="flex justify-between"><span className="text-ive-text-dim">{tr('agentsLabel')}</span><span className="text-ive-text font-bold">{tr('agentCountUnit', { count: d.resource.currentAgents })}</span></div>
-        <div className="flex justify-between"><span className="text-ive-text-dim">{tr('capacityLabel')}</span><span className="text-ive-text font-bold">{tr('perDayUnit', { count: d.flow.dailyCapacity.toFixed(1) })}</span></div>
-        <div className="flex justify-between"><span className="text-ive-text-dim">{tr('inflowLabel2')}</span><span className="text-ive-text font-bold">{tr('perDayUnit', { count: d.flow.dailyInflow.toFixed(1) })}</span></div>
+        <div className="flex justify-between"><span className="text-ive-text-dim">{tr('capacityLabel')}</span><span className="text-ive-text font-bold">{tr('perDayUnit', { count: Math.round(d.flow.dailyCapacity) })}</span></div>
+        <div className="flex justify-between"><span className="text-ive-text-dim">{tr('inflowLabel2')}</span><span className="text-ive-text font-bold">{tr('perDayUnit', { count: Math.round(d.flow.dailyInflow) })}</span></div>
         <div className="flex justify-between"><span className="text-ive-text-dim">{tr('waitingLabel2')}</span><span className={`font-bold ${d.flow.currentWaiting >= 5 ? 'text-ive-red' : 'text-ive-text'}`}>{tr('countCases', { count: d.flow.currentWaiting })}</span></div>
       </div>
 

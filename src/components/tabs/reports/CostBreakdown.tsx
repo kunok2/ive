@@ -39,9 +39,9 @@ export default function CostBreakdown({ d, data, helpers }: CostBreakdownProps) 
           </div>
           {d.flow.humanMinutes > 0 && d.flow.humanMonthlySalary > 0 && (
             <div className="text-[10px] text-ive-text-dim pt-1 border-t border-ive-border-dark/50 mt-1">
-              {tr('salaryBasis', { salary: d.flow.humanMonthlySalary.toLocaleString(), perMin: (d.flow.humanMonthlySalary / 9600).toFixed(2) })}
+              {tr('salaryBasis', { salary: d.flow.humanMonthlySalary.toLocaleString(), perMin: Math.round(d.flow.humanMonthlySalary / 9600) })}
               <br />
-              {tr('salaryCalc', { duration: fmtDur(d.flow.humanMinutes), perMin: (d.flow.humanMonthlySalary / 9600).toFixed(2), total: fmtCost(d.flow.totalCostHuman) })}
+              {tr('salaryCalc', { duration: fmtDur(d.flow.humanMinutes), perMin: Math.round(d.flow.humanMonthlySalary / 9600), total: fmtCost(d.flow.totalCostHuman) })}
             </div>
           )}
           {d.flow.humanMonthlySalary === 0 && (
@@ -54,7 +54,7 @@ export default function CostBreakdown({ d, data, helpers }: CostBreakdownProps) 
       {d.retryCostRatio > 0.05 && (
         <div className="text-xs text-ive-text-dim">
           {tr('retryCostLine', { amount: fmtCost(d.retryCostAmount), pct: Math.round(d.retryCostRatio * 100) })}
-          {d.highRetryProject && <span className="ml-1">{tr('highRetryProjectLine', { name: d.highRetryProject.name, rate: d.highRetryProject.rate.toFixed(0) })}</span>}
+          {d.highRetryProject && <span className="ml-1">{tr('highRetryProjectLine', { name: d.highRetryProject.name, rate: Math.round(d.highRetryProject.rate) })}</span>}
         </div>
       )}
       {/* 일별 비용 스파크라인 */}
