@@ -180,7 +180,7 @@ export default function ReportsTab() {
     <PullToRefresh onRefresh={fetchReport} className="w-full flex-1 flex flex-col max-w-lg mx-auto px-4 overflow-hidden">
       {/* Period selector */}
       <div className="shrink-0 pt-4 pb-2">
-        <div>
+        <div data-tour="reports-period">
           <div className="flex gap-1 mb-2">
             {(['weekly', 'monthly', 'yearly'] as const).map(rt => (
               <button key={rt} onClick={() => setType(rt)} className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${type === rt ? 'bg-ive-green text-ive-bg-deep' : 'bg-ive-bg-card text-ive-text-dim'}`}>

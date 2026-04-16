@@ -257,8 +257,9 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
 
   return (
     <div className={`bg-ive-bg-card rounded-lg border overflow-hidden transition-colors duration-200 ${expandedPanel ? 'border-ive-cyan/30' : 'border-ive-border-subtle'}`}>
-      {/* 헤더 — 클릭으로 접기/펼치기 */}
+      {/* 헤더 — 클릭으로 접��/펼치기 */}
       <div
+        data-tour="agent-card-header"
         onClick={toggleCollapsed}
         className={`p-3 flex items-center justify-between cursor-pointer active:bg-white/[0.02] transition-colors ${collapsed ? '' : 'border-b border-ive-border-dark'}`}
       >
@@ -404,7 +405,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
       </div>
 
       {/* 대시보드 통계 바 */}
-      <div className="flex items-stretch border-t border-ive-border-dark">
+      <div data-tour="agent-card-stats" className="flex items-stretch border-t border-ive-border-dark">
         {/* 작업중 */}
         <button
           onClick={() => setExpandedPanel(expandedPanel === 'running' ? null : 'running')}
@@ -487,6 +488,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
                 setShowInterview(false)
               }
             }}
+            data-tour="agent-interview"
             className={`flex-1 text-sm font-bold py-1.5 rounded-lg border transition-colors ${
               showInterview
                 ? 'text-ive-green border-ive-green/40 bg-ive-green/10'
@@ -520,6 +522,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
           </button>
 
           <button
+            data-tour="agent-test"
             onClick={handleTest}
             disabled={testing}
             className="text-sm font-bold text-ive-text-dim py-1.5 px-3 rounded-lg border border-ive-border active:bg-white/5 transition-colors disabled:opacity-50"

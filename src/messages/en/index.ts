@@ -20,6 +20,7 @@ import ws from './ws.json'
 import pipeline from './pipeline.json'
 import errors from './errors.json'
 import help from './help.json'
+import tour from './tour.json'
 
 const messages = {
   common,
@@ -44,6 +45,7 @@ const messages = {
   pipeline,
   errors,
   help,
+  tour,
 }
 
 export default messages

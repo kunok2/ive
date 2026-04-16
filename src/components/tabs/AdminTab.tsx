@@ -44,7 +44,7 @@ export default function AdminTab() {
     <PullToRefresh onRefresh={handleRefresh} className="w-full flex-1 flex flex-col max-w-lg mx-auto px-4 overflow-hidden">
       {/* 서브 탭 바 */}
       <div className="shrink-0 pt-4 pb-3">
-        <div className="flex">
+        <div data-tour="admin-sub-tabs" className="flex">
           {subTabs.map(t => (
             <button
               key={t.key}

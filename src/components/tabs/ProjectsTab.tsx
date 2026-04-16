@@ -26,6 +26,7 @@ export default function ProjectsTab({ onAdd }: { onAdd?: () => void }) {
               <p className="text-sm text-ive-text-dim mb-5">{t('noProjectsHint')}</p>
               {onAdd && (
                 <button
+                  data-tour="projects-empty-add"
                   onClick={onAdd}
                   className="inline-flex items-center gap-2 px-5 py-2.5 bg-ive-green text-ive-bg-deep font-bold text-sm rounded-lg active:scale-95 transition-transform"
                 >

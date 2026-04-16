@@ -34,7 +34,7 @@ export default function ProjectSelector({ projects, selectedProjectId, onSelectP
   const selectedProject = projects.find(p => p.id === selectedProjectId)
 
   return (
-    <div ref={ref} className="relative mb-3">
+    <div ref={ref} data-tour="issues-project-select" className="relative mb-3">
       <button
         type="button"
         onClick={() => setOpen(v => !v)}

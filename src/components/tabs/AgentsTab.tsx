@@ -82,6 +82,7 @@ export default function AgentsTab({ onAdd }: { onAdd?: () => void }) {
             <p className="text-sm text-ive-text-dim mb-5">{t('noAgentsHint')}</p>
             {onAdd && (
               <button
+                data-tour="agents-empty-add"
                 onClick={onAdd}
                 className="inline-flex items-center gap-2 px-5 py-2.5 bg-ive-green text-ive-bg-deep font-bold text-sm rounded-lg active:scale-95 transition-transform"
               >
@@ -92,7 +93,7 @@ export default function AgentsTab({ onAdd }: { onAdd?: () => void }) {
         ) : (
           <>
             {/* 필터 탭 — ReportsTab과 동일 스타일 */}
-            <div className="flex gap-1 mb-3">
+            <div data-tour="agents-filter" className="flex gap-1 mb-3">
               <button
                 onClick={() => changeFilter('all')}
                 className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${filter === 'all' ? 'bg-ive-green text-ive-bg-deep' : 'bg-ive-bg-card text-ive-text-dim'}`}

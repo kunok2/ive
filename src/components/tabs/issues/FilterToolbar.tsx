@@ -48,7 +48,7 @@ export default function FilterToolbar({
 
   return (
     <>
-      <div className="flex gap-1 mb-2 bg-ive-bg-card rounded-lg p-1 border border-ive-border-subtle">
+      <div data-tour="issues-filter" className="flex gap-1 mb-2 bg-ive-bg-card rounded-lg p-1 border border-ive-border-subtle">
         {filterTabs.map(tab => (
           <button
             key={tab.key}

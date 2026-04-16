@@ -29,6 +29,7 @@ export default function MobileTabBar() {
         {tabs.map(tab => (
           <button
             key={tab.key}
+            data-tour={`tab-${tab.key}`}
             onClick={() => {
               setActiveTab(tab.key)
               if (pathname !== '/') router.push('/')

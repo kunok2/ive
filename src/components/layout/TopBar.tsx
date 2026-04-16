@@ -12,6 +12,7 @@ import ProjectForm from '@/components/project/ProjectForm'
 import AgentForm from '@/components/agent/AgentForm'
 import Modal from '@/components/ui/Modal'
 import HelpModal from '@/components/ui/HelpModal'
+import TourOverlay, { tourSteps } from '@/components/ui/TourOverlay'
 import IntroSlides from '@/components/auth/IntroSlides'
 
 export default function TopBar() {
@@ -35,6 +36,7 @@ export default function TopBar() {
   const [showNewAgent, setShowNewAgent] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
   const [showIntro, setShowIntro] = useState(false)
+  const [tourTab, setTourTab] = useState<string | null>(null)
 
   // 메인 페이지 확인 (/, /ko, /en 등)
   const isMainPage = pathname === '/' || /^\/(ko|en)($|\/)/.test(pathname)
@@ -95,6 +97,7 @@ export default function TopBar() {
             {/* 메인 페이지 탭별 추가 버튼 */}
             {isMainPage && activeTab === 'projects' && (
               <button
+                data-tour={state.projects.length > 0 ? 'add-project' : undefined}
                 onClick={() => setShowNewProject(true)}
                 className="w-8 h-8 rounded-full bg-ive-green flex items-center justify-center text-ive-bg-deep hover:brightness-110 active:scale-95 transition-all"
               >
@@ -104,6 +107,7 @@ export default function TopBar() {
 
             {isMainPage && activeTab === 'agents' && (
               <button
+                data-tour={state.agents.length > 0 ? 'add-agent' : undefined}
                 onClick={async () => {
                   const maxAgents = state.user?.maxAgents || 0
                   if (maxAgents > 0 && state.agents.length >= maxAgents) {
@@ -123,6 +127,7 @@ export default function TopBar() {
               const canEdit = proj ? !proj.shareRole || proj.shareRole === 'editor' : false
               return canEdit ? (
                 <button
+                  data-tour="add-issue"
                   onClick={() => {
                     window.dispatchEvent(new CustomEvent('issue-add-trigger'))
                   }}
@@ -233,7 +238,20 @@ export default function TopBar() {
         open={showHelp}
         onClose={() => setShowHelp(false)}
         onShowIntro={() => setShowIntro(true)}
+        onStartTour={(tabKey) => {
+          setShowHelp(false)
+          setActiveTab(tabKey as any)
+          if (!isMainPage) router.push('/')
+          setTimeout(() => setTourTab(tabKey), 300)
+        }}
       />
+
+      {tourTab && tourSteps[tourTab] && (
+        <TourOverlay
+          steps={tourSteps[tourTab]}
+          onClose={() => setTourTab(null)}
+        />
+      )}
 
       {showIntro && (
         <IntroSlides onComplete={() => setShowIntro(false)} />
