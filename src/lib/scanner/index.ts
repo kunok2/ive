@@ -134,7 +134,7 @@ export function triggerScan(projectId?: string) {
     return
   }
 
-  setTimeout(() => runScanImmediate(projectId), 100);
+  runScanImmediate(projectId);
 }
 
 async function runScanImmediate(projectId?: string) {
@@ -166,7 +166,7 @@ async function runScanImmediate(projectId?: string) {
     if (pending !== undefined) {
       global.pendingScanProjectId = undefined
       console.log(`[Scanner] Running pending scan${pending ? ` for project ${pending}` : ''}...`)
-      setTimeout(() => runScanImmediate(pending ?? undefined), 100)
+      runScanImmediate(pending ?? undefined)
     }
   }
 }
