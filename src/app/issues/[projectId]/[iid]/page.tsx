@@ -200,7 +200,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
       }
     } catch { setMrInfo(null) }
     finally { setMrLoading(false) }
-  }, [projectId, iid, canProgressStage, issue])
+  }, [projectId, iid, canProgressStage, issue?.stage])
 
   const handleMergeMR = useCallback(async () => {
     setMrMerging(true)
