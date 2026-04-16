@@ -579,9 +579,9 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
         setMode('chat')
         if (data.existing) loadChatMessages(data.sessionId)
       } else if (data.error) {
-        alert(data.error === 'noAgentAvailable' ? tIssue('chatNoAgent') : data.error)
+        toast(data.error === 'noAgentAvailable' ? tIssue('chatNoAgent') : data.error, 'error')
       }
-    } catch { alert(tIssue('chatError')) }
+    } catch { toast(tIssue('chatError'), 'error') }
     finally { setChatStarting(false) }
   }
 
@@ -642,7 +642,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
         })
         sendPayload()
       } else { throw new Error('WebSocket not available') }
-    } catch { setChatSending(false); alert(tIssue('chatError')) }
+    } catch { setChatSending(false); toast(tIssue('chatError'), 'error') }
   }
 
   // ===================== Side effects =====================
@@ -663,6 +663,8 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
     verifyPopupShownRef.current = true
     confirm({ title: tIssue('startVerificationPopupTitle'), message: tIssue('startVerificationPopupMessage'), confirmText: tIssue('startVerification'), cancelText: tc('cancel'), variant: 'info' })
       .then(ok => { if (ok) handleStageAction('start_verification') })
+    // React Strict Mode(개발)는 effect를 두 번 실행하므로 cleanup에서 ref 리셋
+    return () => { verifyPopupShownRef.current = false }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [issue, loading, canProgressStage])
 
