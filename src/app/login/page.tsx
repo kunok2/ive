@@ -30,9 +30,26 @@ export default function LoginPage() {
   const [oauthProviders, setOauthProviders] = useState<PublicOAuthProvider[]>([])
   const [oauthError, setOauthError] = useState<string | null>(null)
   const [oauthRedirecting, setOauthRedirecting] = useState<string | null>(null)
+  const [installPrompt, setInstallPrompt] = useState<any>(null)
+  const [isIos, setIsIos] = useState(false)
+  const [isFirefox, setIsFirefox] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
+  const [isStandalone, setIsStandalone] = useState(false)
+  const [showGuide, setShowGuide] = useState(false)
   const tAuth = useTranslations('auth')
 
   useEffect(() => {
+    // PWA 설치 프롬프트
+    const standalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone
+    setIsStandalone(!!standalone)
+    const ua = navigator.userAgent
+    const ios = /iPad|iPhone|iPod/.test(ua) || (ua.includes('Mac') && 'ontouchend' in document)
+    setIsIos(ios)
+    setIsFirefox(/Firefox/i.test(ua))
+    setIsMobile(/Android|iPhone|iPad|iPod|Mobile/i.test(ua))
+    const handler = (e: Event) => { e.preventDefault(); setInstallPrompt(e) }
+    window.addEventListener('beforeinstallprompt', handler)
+
     if (!localStorage.getItem('ive-intro-seen')) {
       setShowIntro(true)
     }
@@ -49,6 +66,7 @@ export default function LoginPage() {
       .then(r => r.ok ? r.json() : [])
       .then((data: PublicOAuthProvider[]) => setOauthProviders(Array.isArray(data) ? data : []))
       .catch(() => setOauthProviders([]))
+    return () => window.removeEventListener('beforeinstallprompt', handler)
   }, [searchParams])
 
   async function handleSubmit(e: React.FormEvent) {
@@ -189,7 +207,38 @@ export default function LoginPage() {
           <LanguageSwitcher />
         </div>
 
-        <div className="mt-6 flex justify-center">
+        {!isStandalone && (
+          <div className="mt-6 flex flex-col items-center gap-2">
+            <button
+              onClick={async () => {
+                if (installPrompt) {
+                  installPrompt.prompt()
+                  const { outcome } = await installPrompt.userChoice
+                  if (outcome === 'accepted') setInstallPrompt(null)
+                } else {
+                  setShowGuide(v => !v)
+                }
+              }}
+              className="flex items-center gap-2 bg-ive-cyan/10 border border-ive-cyan/30 text-ive-cyan font-bold py-2.5 px-5 rounded-lg text-sm hover:bg-ive-cyan/20 active:scale-95 transition-all"
+            >
+              <i className="fa-solid fa-download" />{tAuth('installApp')}
+            </button>
+            {showGuide && !installPrompt && (
+              <p className="text-xs text-ive-text-muted text-center">
+                {isIos
+                  ? <>{tAuth('installIosGuide', { icon: '' })}<i className="fa-solid fa-arrow-up-from-bracket mx-1 text-ive-cyan" /></>
+                  : isFirefox && !isMobile
+                  ? tAuth('installFirefoxGuide')
+                  : isFirefox && isMobile
+                  ? <>{tAuth('installFirefoxMobileGuide', { icon: '' })}<i className="fa-solid fa-ellipsis-vertical mx-1 text-ive-cyan" /></>
+                  : <>{tAuth('installChromeGuide', { icon: '' })}<i className="fa-solid fa-ellipsis-vertical mx-1 text-ive-cyan" /></>
+                }
+              </p>
+            )}
+          </div>
+        )}
+
+        <div className="mt-4 flex justify-center">
           <a href="https://www.producthunt.com/products/spring-ive?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-spring-ive" target="_blank" rel="noopener noreferrer">
             <img alt="Springware IVE on Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1107541&theme=dark&t=1774503857741" />
           </a>
