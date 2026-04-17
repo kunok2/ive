@@ -96,7 +96,8 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="h-full overflow-y-auto flex items-center justify-center px-4 py-8">
+    <div className="h-full overflow-y-auto">
+      <div className="min-h-full flex items-center justify-center px-4 py-8">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-ive-green mb-1">Springware <span className="text-ive-amber">IVE</span></h1>
@@ -246,6 +247,7 @@ export default function LoginPage() {
       </div>
 
       {showIntro && <IntroSlides onComplete={() => { setShowIntro(false); localStorage.setItem('ive-intro-seen', '1') }} />}
+    </div>
     </div>
   )
 }
