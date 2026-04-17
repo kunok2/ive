@@ -24,7 +24,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
-  themeColor: "#0e160e",
+  themeColor: "#0e0e11",
 };
 
 export default async function RootLayout({
@@ -44,7 +44,7 @@ export default async function RootLayout({
       <body className="h-dvh flex flex-col overflow-hidden">
         <PWARegister />
         <NextIntlClientProvider locale={locale} messages={messages}>
-          <StoreProvider><TabProvider><DialogProvider><ToastProvider><TopBar /><div className="flex-1 min-h-0 overflow-hidden">{children}</div></ToastProvider></DialogProvider></TabProvider></StoreProvider>
+          <StoreProvider><TabProvider><DialogProvider><ToastProvider><TopBar /><div className="flex-1 min-h-0 overflow-y-auto">{children}</div></ToastProvider></DialogProvider></TabProvider></StoreProvider>
         </NextIntlClientProvider>
       </body>
     </html>
