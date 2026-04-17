@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import ChangePasswordForm from '@/components/auth/ChangePasswordForm'
 import IntroSlides from '@/components/auth/IntroSlides'
 import { useStore } from '@/lib/store'
 import { useTranslations } from 'next-intl'
@@ -24,7 +23,6 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [showChangePassword, setShowChangePassword] = useState(false)
   const [showIntro, setShowIntro] = useState(false)
   const [sessionExpired, setSessionExpired] = useState(false)
   const [oauthProviders, setOauthProviders] = useState<PublicOAuthProvider[]>([])
@@ -96,8 +94,9 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="min-h-full flex items-center justify-center px-4 py-8">
+    <div className="h-full flex justify-center overflow-hidden">
+      <div className="w-full max-w-lg overflow-y-auto px-4">
+        <div className="min-h-full flex items-center justify-center py-8">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-ive-green mb-1">Springware <span className="text-ive-amber">IVE</span></h1>
@@ -188,15 +187,8 @@ export default function LoginPage() {
 
         <div className="flex justify-center gap-4 mt-6 text-base text-ive-text-muted">
           <Link href="/register" className="text-ive-green font-bold">{tAuth('register')}</Link>
-          <button onClick={() => setShowChangePassword(true)} className="text-ive-cyan font-bold">{tAuth('changePassword')}</button>
+          <Link href="/change-password" className="text-ive-cyan font-bold">{tAuth('changePassword')}</Link>
         </div>
-
-        {showChangePassword && (
-          <div className="mt-6 bg-ive-bg-card border border-ive-border-subtle rounded-lg p-4">
-            <h3 className="text-sm font-bold text-ive-text mb-3">{tAuth('changePassword')}</h3>
-            <ChangePasswordForm onSuccess={() => setShowChangePassword(false)} onCancel={() => setShowChangePassword(false)} />
-          </div>
-        )}
 
         <div className="mt-4 flex items-center justify-center gap-3">
           <button
@@ -247,6 +239,7 @@ export default function LoginPage() {
       </div>
 
       {showIntro && <IntroSlides onComplete={() => { setShowIntro(false); localStorage.setItem('ive-intro-seen', '1') }} />}
+    </div>
     </div>
     </div>
   )

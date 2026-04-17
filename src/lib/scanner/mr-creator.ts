@@ -55,7 +55,8 @@ export async function commitPushAndCreateMR(params: {
   const { stdout: diffResult } = await execFile('git', ['diff', '--cached', '--name-only'], { cwd: workspacePath });
 
   if (diffResult.trim()) {
-    log("변경사항 감지. 커밋 및 푸시 중...", 'system');
+    log("변경사항 감지. 브랜치 생성 후 커밋 및 푸시 중...", 'system');
+    await execFile('git', ['checkout', '-B', branchName], { cwd: workspacePath });
     await execFile('git', ['commit', '-m', `fix: resolve #${iid} - ${issueTitle}`], { cwd: workspacePath });
 
     // 푸시

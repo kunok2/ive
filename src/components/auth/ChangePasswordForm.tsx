@@ -80,10 +80,10 @@ export default function ChangePasswordForm({ email, onSuccess, onCancel }: Props
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       {/* 이메일 + 인증 버튼 */}
       <div>
-        <label className="block text-sm font-bold text-ive-text-muted mb-1">{t('email')}</label>
+        <label className="block text-base font-bold text-ive-text-muted mb-1.5">{t('email')}</label>
         <div className="flex gap-2">
           <input
             type="email"
@@ -91,13 +91,13 @@ export default function ChangePasswordForm({ email, onSuccess, onCancel }: Props
             onChange={e => !email && setInputEmail(e.target.value)}
             readOnly={!!email}
             required
-            className={`flex-1 min-w-0 bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2.5 text-sm text-ive-text focus:outline-none focus:border-ive-green ${email ? 'opacity-60' : ''}`}
+            className={`flex-1 min-w-0 bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-base text-ive-text focus:outline-none focus:border-ive-green ${email ? 'opacity-60' : ''}`}
           />
           <button
             type="button"
             onClick={handleSendCode}
             disabled={sendingCode || !targetEmail}
-            className={`w-20 shrink-0 py-2.5 rounded-lg text-sm font-bold transition-all disabled:opacity-40 ${
+            className={`w-20 shrink-0 py-3 rounded-lg text-base font-bold transition-all disabled:opacity-40 ${
               codeSent ? 'bg-ive-green/15 text-ive-green' : 'bg-ive-cyan/15 text-ive-cyan'
             }`}
           >
@@ -109,7 +109,7 @@ export default function ChangePasswordForm({ email, onSuccess, onCancel }: Props
       {/* 인증 코드 입력 */}
       {codeSent && (
         <div>
-          <label className="block text-sm font-bold text-ive-text-muted mb-1">{t('verificationCode')}</label>
+          <label className="block text-base font-bold text-ive-text-muted mb-1.5">{t('verificationCode')}</label>
           <input
             type="text"
             value={code}
@@ -117,24 +117,24 @@ export default function ChangePasswordForm({ email, onSuccess, onCancel }: Props
             placeholder={t('sixDigits')}
             maxLength={6}
             required
-            className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2.5 text-sm text-ive-text font-mono tracking-widest text-center focus:outline-none focus:border-ive-green"
+            className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-base text-ive-text font-mono tracking-widest text-center focus:outline-none focus:border-ive-green"
           />
           <p className="text-xs text-ive-text-dim mt-1">{t('emailCodeHint')}</p>
         </div>
       )}
 
       <div>
-        <label className="block text-sm font-bold text-ive-text-muted mb-1">{t('currentPassword')}</label>
+        <label className="block text-base font-bold text-ive-text-muted mb-1.5">{t('currentPassword')}</label>
         <input
           type="password"
           value={currentPassword}
           onChange={e => setCurrentPassword(e.target.value)}
           required
-          className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2.5 text-sm text-ive-text focus:outline-none focus:border-ive-green"
+          className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-base text-ive-text focus:outline-none focus:border-ive-green"
         />
       </div>
       <div>
-        <label className="block text-sm font-bold text-ive-text-muted mb-1">{t('newPassword')}</label>
+        <label className="block text-base font-bold text-ive-text-muted mb-1.5">{t('newPassword')}</label>
         <input
           type="password"
           value={newPassword}
@@ -142,18 +142,18 @@ export default function ChangePasswordForm({ email, onSuccess, onCancel }: Props
           required
           minLength={6}
           placeholder={t('minSixChars')}
-          className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2.5 text-sm text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green"
+          className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-base text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green"
         />
       </div>
       <div>
-        <label className="block text-sm font-bold text-ive-text-muted mb-1">{t('newPasswordConfirm')}</label>
+        <label className="block text-base font-bold text-ive-text-muted mb-1.5">{t('newPasswordConfirm')}</label>
         <input
           type="password"
           value={newPasswordConfirm}
           onChange={e => setNewPasswordConfirm(e.target.value)}
           required
           minLength={6}
-          className={`w-full bg-ive-bg-input border rounded-lg px-3 py-2.5 text-sm text-ive-text focus:outline-none ${
+          className={`w-full bg-ive-bg-input border rounded-lg px-4 py-3 text-base text-ive-text focus:outline-none ${
             newPasswordConfirm && newPassword !== newPasswordConfirm ? 'border-ive-red' : 'border-ive-border focus:border-ive-green'
           }`}
         />
@@ -164,11 +164,11 @@ export default function ChangePasswordForm({ email, onSuccess, onCancel }: Props
       {error && <div className="text-sm text-ive-red bg-ive-red/10 rounded-lg px-3 py-2"><i className="fa-solid fa-circle-exclamation mr-1" />{error}</div>}
       <div className="flex gap-2">
         {onCancel && (
-          <button type="button" onClick={onCancel} className="flex-1 py-2.5 rounded-lg text-sm font-bold text-ive-text-dim bg-ive-bg-card border border-ive-border-subtle">
+          <button type="button" onClick={onCancel} className="flex-1 py-3 rounded-lg text-base font-bold text-ive-text-dim bg-ive-bg-card border border-ive-border-subtle">
             {tc('cancel')}
           </button>
         )}
-        <button type="submit" disabled={loading || !codeSent || code.length < 6} className="flex-1 py-2.5 rounded-lg text-sm font-bold bg-ive-green-dark text-white disabled:opacity-50">
+        <button type="submit" disabled={loading || !codeSent || code.length < 6} className="flex-1 py-3 rounded-lg text-base font-bold bg-ive-green-dark text-white disabled:opacity-50">
           {loading ? t('changingPassword') : t('changePassword')}
         </button>
       </div>

@@ -65,10 +65,8 @@ export async function setupWorkspace(
     await execFile('git', ['pull', 'origin', baseBranch], { cwd: workspacePath });
   }
 
-  // 충돌 감지 작업은 기본 브랜치에서 분석만 수행 (별도 브랜치 생성 안 함)
-  if (!isConflictTask) {
-    await execFile('git', ['checkout', '-B', branchName], { cwd: workspacePath });
-  }
+  // 브랜치는 CLI 실행 후 변경사항이 있을 때 mr-creator에서 생성
+  // 여기서는 기본 브랜치에서 작업
 
   return { workspacePath, baseBranch, branchName };
 }

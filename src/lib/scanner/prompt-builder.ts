@@ -103,12 +103,14 @@ curl -s --header "PRIVATE-TOKEN: $IVE_GITLAB_TOKEN" "${gitlabBaseUrl}/api/v4/pro
   prompt += `
 
 ## Instructions:
+- Before writing any code, thoroughly analyze the relevant files, their dependencies, and the surrounding architecture. Understand how the existing code works before changing it.
+- Identify all affected areas — a change in one place often requires consistent changes elsewhere. Make all related changes together, not incrementally.
 - Understand the project structure and style, then modify the relevant code.
 - After completing changes, stage them with git add.
 - Do NOT git commit or push.
 - If you find important discoveries or have questions during work, leave a comment on the issue.
 - Leave a brief start comment on the issue when you begin work.
-- Take your time and be thorough — resolve the problem precisely.
+- Take your time and be thorough — resolve the problem precisely. Do not rush or apply superficial fixes.
 - Review repeatedly until there are zero reasons the intended functionality could fail.
 - When designing UI, provide text-art mockups of the result where possible.
 - IMPORTANT: ${langInstruction}`;
