@@ -9,10 +9,10 @@ import jwt from 'jsonwebtoken'
 import { handleChatWebSocket } from './src/lib/chat-ws'
 
 const KNOWN_DEFAULT_JWT_SECRETS = [
-  'spring-ive-dev-secret-change-in-production',
-  'spring-ive-secret-change-me',
+  'springware-ive-dev-secret-change-in-production',
+  'springware-ive-secret-change-me',
 ]
-const JWT_SECRET = process.env.JWT_SECRET || 'spring-ive-dev-secret-change-in-production'
+const JWT_SECRET = process.env.JWT_SECRET || 'springware-ive-dev-secret-change-in-production'
 if (process.env.NODE_ENV === 'production' && KNOWN_DEFAULT_JWT_SECRETS.includes(JWT_SECRET)) {
   console.warn('\x1b[31m[SECURITY WARNING] JWT_SECRET is set to a known default value. Set a strong, unique JWT_SECRET environment variable!\x1b[0m')
 }

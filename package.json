@@ -1,5 +1,5 @@
 {
-  "name": "spring-ive",
+  "name": "springware-ive",
   "version": "0.9.0",
   "private": true,
   "scripts": {
@@ -8,8 +8,8 @@
     "start": "NODE_ENV=production tsx server.ts",
     "lint": "eslint",
     "postinstall": "node -e \"const os=require('os'),fs=require('fs'),path=require('path');const h=path.join('node_modules','node-pty','prebuilds',os.platform()+'-'+os.arch(),'spawn-helper');try{fs.chmodSync(h,'755');console.log('node-pty spawn-helper: chmod 755 ok')}catch(e){}\"",
-    "docker:build": "docker build -t dazzlepf/spring-ive .",
-    "docker:push": "docker push dazzlepf/spring-ive:latest",
+    "docker:build": "docker build -t dazzlepf/springware-ive .",
+    "docker:push": "docker push dazzlepf/springware-ive:latest",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f",

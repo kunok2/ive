@@ -81,7 +81,7 @@ export default function LoginPage() {
     <div className="h-full flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-ive-green mb-1">Spring <span className="text-ive-amber">IVE</span></h1>
+          <h1 className="text-3xl font-bold text-ive-green mb-1">Springware <span className="text-ive-amber">IVE</span></h1>
           <p className="text-base text-ive-text-muted">Integrated Value Environment</p>
         </div>
 
@@ -191,7 +191,7 @@ export default function LoginPage() {
 
         <div className="mt-6 flex justify-center">
           <a href="https://www.producthunt.com/products/spring-ive?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-spring-ive" target="_blank" rel="noopener noreferrer">
-            <img alt="Spring IVE on Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1107541&theme=dark&t=1774503857741" />
+            <img alt="Springware IVE on Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1107541&theme=dark&t=1774503857741" />
           </a>
         </div>
       </div>

@@ -1,17 +1,17 @@
 services:
-  spring-ive:
-    image: spring-ive:latest
+  springware-ive:
+    image: springware-ive:latest
     env_file:
       - .env
-    container_name: spring-ive
+    container_name: springware-ive
     restart: unless-stopped
     ports:
       - "3100:3000"
     environment:
       - NODE_ENV=production
       - PORT=3000
-      - JWT_SECRET=${JWT_SECRET:-spring-ive-secret-change-me}
-      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-spring-ive-encryption-key-change-me}
+      - JWT_SECRET=${JWT_SECRET:-springware-ive-secret-change-me}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-springware-ive-encryption-key-change-me}
       - SHELL=/bin/bash
     volumes:
       - ./data:/app/data

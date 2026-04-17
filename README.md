@@ -1,4 +1,4 @@
-# Spring IVE
+# Springware IVE
 
 > **AI develops, humans manage value.**
 
@@ -97,7 +97,7 @@ npm start
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `ENCRYPTION_KEY` | Encryption key for GitLab tokens | `spring-ive-dev-encryption-key-change-in-prod` |
+| `ENCRYPTION_KEY` | Encryption key for GitLab tokens | `springware-ive-dev-encryption-key-change-in-prod` |
 
 > **Warning:** In production, make sure to change `ENCRYPTION_KEY` to a secure value.
 
@@ -170,6 +170,6 @@ src/
 
 | Path | Contents |
 |------|----------|
-| `data/spring-ive.db` | SQLite database |
+| `data/springware-ive.db` | SQLite database |
 | `data/logs/*.log` | Agent execution logs |
 | `workspaces/` | Temporary repos during work (auto-deleted after completion) |

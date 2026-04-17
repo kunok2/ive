@@ -9,7 +9,7 @@ declare global {
 
 export function getDb() {
   if (!global.db) {
-    const dbPath = path.join(process.cwd(), 'data', 'spring-ive.db')
+    const dbPath = path.join(process.cwd(), 'data', 'springware-ive.db')
     const db = new Database(dbPath)
     db.pragma('foreign_keys = ON')
     initSchema(db)

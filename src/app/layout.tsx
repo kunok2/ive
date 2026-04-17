@@ -10,7 +10,7 @@ import TopBar from "@/components/layout/TopBar";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Spring IVE",
+  title: "Springware IVE",
   description: "Integrated Value Environment — AI가 개발을 하고, 사람은 가치를 관리한다",
   manifest: "/manifest.json",
   appleWebApp: {

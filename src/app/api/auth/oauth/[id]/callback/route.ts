@@ -27,7 +27,7 @@ function renderLoadingRedirect(targetUrl: string): string {
 <head>
 <meta charset="utf-8">
 <meta http-equiv="refresh" content="0; url=${escaped}">
-<title>Spring IVE</title>
+<title>Springware IVE</title>
 <style>
   html, body { margin:0; padding:0; background:#050505; color:#d4d4d8; height:100%;
     font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Segoe UI',sans-serif; }
@@ -55,7 +55,7 @@ function renderLoadingRedirect(targetUrl: string): string {
 async function downloadAndSaveAvatar(userId: string, avatarUrl: string): Promise<boolean> {
   try {
     const res = await fetch(avatarUrl, {
-      headers: { 'User-Agent': 'Spring-IVE-OAuth' },
+      headers: { 'User-Agent': 'Springware-IVE-OAuth' },
       redirect: 'follow',
     })
     if (!res.ok) return false

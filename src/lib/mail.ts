@@ -34,12 +34,12 @@ export async function sendVerificationEmail(to: string, code: string) {
   const transporter = createTransporter()
   const from = getFromAddress()
   await transporter.sendMail({
-    from: `"Spring IVE" <${from}>`,
+    from: `"Springware IVE" <${from}>`,
     to,
-    subject: '[Spring IVE] 이메일 인증 코드',
+    subject: '[Springware IVE] 이메일 인증 코드',
     html: `
       <div style="font-family: sans-serif; max-width: 400px; margin: 0 auto; padding: 20px;">
-        <h2 style="color: #4ade80; margin-bottom: 8px;">Spring IVE</h2>
+        <h2 style="color: #4ade80; margin-bottom: 8px;">Springware IVE</h2>
         <p style="color: #666; margin-bottom: 20px;">이메일 인증 코드입니다.</p>
         <div style="background: #f4f4f4; border-radius: 8px; padding: 20px; text-align: center; margin-bottom: 20px;">
           <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #222;">${code}</span>

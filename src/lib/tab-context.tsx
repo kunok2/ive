@@ -71,6 +71,10 @@ export function TabProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (user && user.id !== userIdRef.current) {
       userIdRef.current = user.id
+      // 관리자가 아닌데 admin 탭이 선택되어 있으면 projects로 전환
+      if (!user.isAdmin && activeTab === 'admin') {
+        setActiveTab('projects')
+      }
       const savedProject = localStorage.getItem(`ive-issues-project-${user.id}`)
       if (savedProject) {
         setIssuesProjectIdState(savedProject)

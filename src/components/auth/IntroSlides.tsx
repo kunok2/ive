@@ -125,7 +125,7 @@ export default function IntroSlides({ onComplete }: IntroSlidesProps) {
       <div className="flex flex-col items-center text-center max-w-sm">
         {'logo' in slide && slide.logo ? (
           <div className="w-20 h-20 rounded-lg overflow-hidden mb-6">
-            <img src="/icon-192.svg" alt="Spring IVE" className="w-full h-full" />
+            <img src="/icon-192.svg" alt="Springware IVE" className="w-full h-full" />
           </div>
         ) : (
           <div className="w-20 h-20 rounded-full bg-ive-bg-card border border-ive-border-subtle flex items-center justify-center mb-6">

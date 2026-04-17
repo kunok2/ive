@@ -12,7 +12,7 @@ npm run test    # Run tests (vitest)
 
 - **Framework**: Next.js 16 (App Router), Custom server (`server.ts` with WebSocket, node-pty)
 - **Frontend**: React 19, Tailwind CSS 4, xterm.js
-- **DB**: SQLite (`data/spring-ive.db`) via better-sqlite3
+- **DB**: SQLite (`data/springware-ive.db`) via better-sqlite3
 - **i18n**: next-intl (ko/en)
 - **Auth**: JWT + bcryptjs
 
@@ -39,7 +39,7 @@ Key rules:
 <!-- ive:begin -->
 ## IVE 작업 등록
 
-이 프로젝트는 **IVE** (Spring IVE 관리 대상)입니다.
+이 프로젝트는 **IVE** (Springware IVE 관리 대상)입니다.
 
 사용자가 "IVE용 이슈로 정리해줘", "IVE에 등록해줘" 등의 요청을 하면
 대화 맥락에서 의미 단위로 작업을 쪼개어 **Git 이슈를 직접 생성**하세요.

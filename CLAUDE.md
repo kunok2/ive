@@ -1,4 +1,4 @@
-# Spring IVE - Project Guide
+# Springware IVE - Project Guide
 
 ## Overview
 GitLab/GitHub 이슈를 AI CLI 에이전트(Claude, Gemini, Codex, OpenCode)가 자동 처리하는 웹 대시보드.
@@ -7,7 +7,7 @@ Next.js 16 + custom server (node-pty, WebSocket) + SQLite (better-sqlite3).
 ## Tech Stack
 - **Frontend**: Next.js 16 (App Router), React 19, Tailwind CSS 4, Recharts, xterm.js
 - **Backend**: Custom HTTP/WS server (`server.ts`), Next.js API Routes
-- **DB**: SQLite via better-sqlite3 (`data/spring-ive.db`)
+- **DB**: SQLite via better-sqlite3 (`data/springware-ive.db`)
 - **i18n**: next-intl (ko/en)
 - **Auth**: JWT (bcryptjs), 쿠키 기반
 - **Deploy**: Docker (port 3100→3000), GitLab CI/CD → 서버 로컬 빌드+재시작, Docker Hub push는 수동
@@ -103,7 +103,7 @@ npm run deploy       # Docker 빌드 + 푸시 (수동 시에만, CI/CD가 자동
 <!-- ive:begin -->
 ## IVE 작업 등록
 
-이 프로젝트는 **IVE** (Spring IVE 관리 대상)입니다.
+이 프로젝트는 **IVE** (Springware IVE 관리 대상)입니다.
 
 사용자가 "IVE용 이슈로 정리해줘", "IVE에 등록해줘" 등의 요청을 하면
 대화 맥락에서 의미 단위로 작업을 쪼개어 **Git 이슈를 직접 생성**하세요.

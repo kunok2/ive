@@ -500,7 +500,7 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
 
     <!-- ① 헤더 -->
     <div style="background:#111827;border-radius:12px;padding:24px;margin-bottom:16px;text-align:center;">
-      <div style="font-size:11px;color:#4ade80;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:6px;">Spring IVE</div>
+      <div style="font-size:11px;color:#4ade80;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:6px;">Springware IVE</div>
       <div style="font-size:20px;font-weight:800;color:#ffffff;margin-bottom:4px;">${label} 보고서</div>
       ${projectNames.length > 0 ? `<div style="font-size:12px;color:#9ca3af;margin-bottom:2px;">${projectNames.map(n => esc(n)).join(' · ')}</div>` : ''}
       <div style="font-size:12px;color:#6b7280;">${periodStart} ~ ${periodEndDisplay}</div>
@@ -903,7 +903,7 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
 
     <!-- 푸터 -->
     <div style="text-align:center;padding:12px;">
-      <p style="color:#9ca3af;font-size:10px;margin:0;">이 메일은 Spring IVE에서 자동 발송되었습니다.</p>
+      <p style="color:#9ca3af;font-size:10px;margin:0;">이 메일은 Springware IVE에서 자동 발송되었습니다.</p>
     </div>
 
   </div>

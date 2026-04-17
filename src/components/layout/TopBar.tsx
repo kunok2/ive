@@ -85,9 +85,9 @@ export default function TopBar() {
             onClick={() => router.push('/')}
             className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity"
           >
-            <div>
+            <div className="text-left">
               <h1 className="text-xl font-bold leading-none">
-                <span className="text-ive-cyan">Spring</span>{' '}
+                <span className="text-ive-cyan">Springware</span>{' '}
                 <span className="text-ive-amber">IVE</span>
               </h1>
               <p className="text-xs text-ive-text-dim mt-0.5">{tn(activeTab as 'projects' | 'agents' | 'issues' | 'reports' | 'admin')}</p>

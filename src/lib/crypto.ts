@@ -2,7 +2,7 @@ import crypto from 'crypto'
 
 const ALGORITHM = 'aes-256-gcm'
 const KEY = crypto.scryptSync(
-  process.env.ENCRYPTION_KEY || 'spring-ive-dev-encryption-key-change-in-prod',
+  process.env.ENCRYPTION_KEY || 'springware-ive-dev-encryption-key-change-in-prod',
   'salt',
   32
 )

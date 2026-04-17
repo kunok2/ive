@@ -29,7 +29,7 @@ export async function POST(req: Request) {
   for (const target of targets) {
     try {
       await transporter.sendMail({
-        from: `"Spring IVE" <${fromAddr}>`,
+        from: `"Springware IVE" <${fromAddr}>`,
         to: target.email,
         subject,
         html: body,

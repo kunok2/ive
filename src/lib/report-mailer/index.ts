@@ -31,7 +31,7 @@ export async function sendReport(
 
   const label = REPORT_TYPE_LABELS[schedule.reportType]
   const periodEndDisplay = new Date(new Date(periodEnd).getTime() - 86400000).toISOString().slice(0, 10)
-  const subject = `[Spring IVE] ${label} 보고서 (${periodStart} ~ ${periodEndDisplay})`
+  const subject = `[Springware IVE] ${label} 보고서 (${periodStart} ~ ${periodEndDisplay})`
 
   const transporter = createTransporter()
   const fromAddr = getFromAddress()
@@ -48,7 +48,7 @@ export async function sendReport(
     const logId = `rsl-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     try {
       await transporter.sendMail({
-        from: `"Spring IVE" <${fromAddr}>`,
+        from: `"Springware IVE" <${fromAddr}>`,
         to: email,
         subject,
         html,

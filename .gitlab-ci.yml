@@ -4,8 +4,8 @@ stages:
   - publish
 
 variables:
-  IMAGE_NAME: spring-ive
-  HUB_IMAGE: dazzlepf/spring-ive
+  IMAGE_NAME: springware-ive
+  HUB_IMAGE: dazzlepf/springware-ive
   IVE_DIR: /home/ubuntu/ive
 
 # 테스트 (main push 시 배포 전 자동 실행)
