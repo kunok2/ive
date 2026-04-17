@@ -65,7 +65,7 @@ export default function IntroSlides({ onComplete }: IntroSlidesProps) {
     },
     {
       logo: true,
-      title: t('conclusionTitle'),
+      title: <><span className="text-[#22c55e]">Spring</span><span className="text-ive-amber">ware</span> <span className="text-ive-cyan">IVE</span></>,
       description: t('conclusionDesc'),
     },
   ]

@@ -2,5 +2,5 @@
   <rect width="192" height="192" rx="32" fill="#0e0e11"/>
   <rect x="8" y="8" width="176" height="176" rx="26" fill="none" stroke="#1c1c20" stroke-width="2"/>
   <text x="96" y="104" text-anchor="middle" font-family="system-ui,-apple-system,sans-serif" font-weight="700" font-size="72" fill="#22d3ee">IVE</text>
-  <text x="96" y="148" text-anchor="middle" font-family="system-ui,-apple-system,sans-serif" font-weight="500" font-size="18" fill="#f59e0b">Springware</text>
+  <text y="148" font-family="system-ui,-apple-system,sans-serif" font-weight="500" font-size="18" text-anchor="middle" x="96"><tspan fill="#22c55e">Spring</tspan><tspan fill="#f59e0b">ware</tspan></text>
 </svg>

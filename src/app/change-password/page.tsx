@@ -15,7 +15,7 @@ export default function ChangePasswordPage() {
         <div className="min-h-full flex items-center justify-center py-8">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-ive-green mb-1">Springware <span className="text-ive-amber">IVE</span></h1>
+          <h1 className="text-3xl font-bold mb-1"><span className="text-[#22c55e]">Spring</span><span className="text-ive-amber">ware</span> <span className="text-ive-cyan">IVE</span></h1>
           <p className="text-base text-ive-text-muted">{tAuth('changePassword')}</p>
         </div>
 
