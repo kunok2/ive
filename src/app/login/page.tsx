@@ -34,6 +34,8 @@ export default function LoginPage() {
   const [isMobile, setIsMobile] = useState(false)
   const [isStandalone, setIsStandalone] = useState(false)
   const [showGuide, setShowGuide] = useState(false)
+  const [isSafari, setIsSafari] = useState(false)
+  const [isAndroid, setIsAndroid] = useState(false)
   const tAuth = useTranslations('auth')
 
   useEffect(() => {
@@ -45,6 +47,8 @@ export default function LoginPage() {
     setIsIos(ios)
     setIsFirefox(/Firefox/i.test(ua))
     setIsMobile(/Android|iPhone|iPad|iPod|Mobile/i.test(ua))
+    setIsSafari(/Safari/i.test(ua) && !/Chrome/i.test(ua))
+    setIsAndroid(/Android/i.test(ua))
     const handler = (e: Event) => { e.preventDefault(); setInstallPrompt(e) }
     window.addEventListener('beforeinstallprompt', handler)
 
@@ -219,11 +223,15 @@ export default function LoginPage() {
             {showGuide && !installPrompt && (
               <p className="text-xs text-ive-text-muted text-center">
                 {isIos
-                  ? <>{tAuth('installIosGuide', { icon: '' })}<i className="fa-solid fa-arrow-up-from-bracket mx-1 text-ive-cyan" /></>
+                  ? isSafari
+                    ? <>{tAuth('installSafariIosGuide', { icon: '' })}<i className="fa-solid fa-share-nodes mx-1 text-ive-cyan" /></>
+                    : <>{tAuth('installIosGuide', { icon: '' })}<i className="fa-solid fa-arrow-up-from-bracket mx-1 text-ive-cyan" /></>
                   : isFirefox && !isMobile
                   ? tAuth('installFirefoxGuide')
                   : isFirefox && isMobile
                   ? <>{tAuth('installFirefoxMobileGuide', { icon: '' })}<i className="fa-solid fa-ellipsis-vertical mx-1 text-ive-cyan" /></>
+                  : isAndroid
+                  ? <>{tAuth('installAndroidGuide', { icon: '' })}<i className="fa-solid fa-ellipsis-vertical mx-1 text-ive-cyan" /></>
                   : <>{tAuth('installChromeGuide', { icon: '' })}<i className="fa-solid fa-ellipsis-vertical mx-1 text-ive-cyan" /></>
                 }
               </p>
