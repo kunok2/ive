@@ -224,15 +224,15 @@ export default function LoginPage() {
               <p className="text-xs text-ive-text-muted text-center">
                 {isIos
                   ? isSafari
-                    ? <>{tAuth('installSafariIosGuide', { icon: '' })}<i className="fa-solid fa-share-nodes mx-1 text-ive-cyan" /></>
-                    : <>{tAuth('installIosGuide', { icon: '' })}<i className="fa-solid fa-arrow-up-from-bracket mx-1 text-ive-cyan" /></>
-                  : isFirefox && !isMobile
-                  ? tAuth('installFirefoxGuide')
-                  : isFirefox && isMobile
-                  ? <>{tAuth('installFirefoxMobileGuide', { icon: '' })}<i className="fa-solid fa-ellipsis-vertical mx-1 text-ive-cyan" /></>
+                    ? tAuth('installSafariIosGuide')
+                    : tAuth('installIosGuide')
                   : isAndroid
-                  ? <>{tAuth('installAndroidGuide', { icon: '' })}<i className="fa-solid fa-ellipsis-vertical mx-1 text-ive-cyan" /></>
-                  : <>{tAuth('installChromeGuide', { icon: '' })}<i className="fa-solid fa-ellipsis-vertical mx-1 text-ive-cyan" /></>
+                  ? tAuth('installAndroidGuide')
+                  : isFirefox && isMobile
+                  ? tAuth('installFirefoxMobileGuide')
+                  : isFirefox
+                  ? tAuth('installFirefoxGuide')
+                  : tAuth('installDesktopGuide')
                 }
               </p>
             )}
