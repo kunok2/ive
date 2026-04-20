@@ -152,36 +152,46 @@ export function DailyTrendChart({ data, prevData, type }: { data: DailyTrend[]; 
       verified: d.verified ?? 0,
       cost: d.cost,
       prevTasks: prevData[i]?.tasks ?? 0,
+      prevVerified: prevData[i]?.verified ?? 0,
       prevCost: prevData[i]?.cost ?? 0,
       yMax,
     }
   })
 
-  /* 현재 작업 채움 막대 위에 이전 작업 점선 막대를 겹쳐 그린다.
+  /* 현재 작업 채움 막대 위에 이전 작업/검증 점선 막대를 겹쳐 그린다.
    * background prop을 통해 Y축 전체 픽셀 높이(bgH)를 받아
    * cur=0인 미래 날짜에도 이전 데이터를 올바른 비율로 그린다. */
   const TaskBarWithPrev = ({ x, y, width, height, background, payload }: any) => {
-    const prev = payload?.prevTasks ?? 0
+    const prevTasks = payload?.prevTasks ?? 0
+    const prevVerified = payload?.prevVerified ?? 0
     const cur = payload?.tasks ?? 0
     const dataYMax = payload?.yMax ?? 1
     const bgH: number = background?.height ?? 0
     const bgY: number = background?.y ?? 0
 
-    let prevH = 0, prevY = 0
+    let prevTasksH = 0, prevTasksY = 0
     if (bgH > 0) {
-      // background 치수로 정확한 비율 계산 (cur=0인 날에도 동작)
-      prevH = (prev / dataYMax) * bgH
-      prevY = bgY + bgH - prevH
+      prevTasksH = (prevTasks / dataYMax) * bgH
+      prevTasksY = bgY + bgH - prevTasksH
     } else if (cur > 0 && height > 0) {
-      // 폴백: cur > 0일 때 현재 막대 높이 기준 비례 계산
-      prevH = (prev / cur) * height
-      prevY = y + height - prevH
+      prevTasksH = (prevTasks / cur) * height
+      prevTasksY = y + height - prevTasksH
+    }
+
+    let prevVerifiedH = 0, prevVerifiedY = 0
+    if (bgH > 0) {
+      prevVerifiedH = (prevVerified / dataYMax) * bgH
+      prevVerifiedY = bgY + bgH - prevVerifiedH
+    } else if (cur > 0 && height > 0) {
+      prevVerifiedH = (prevVerified / cur) * height
+      prevVerifiedY = y + height - prevVerifiedH
     }
 
     return (
       <g>
         {height > 0 && <rect x={x} y={y} width={width} height={height} fill={C.primary} fillOpacity={0.55} rx={2} />}
-        {prevH > 0 && <rect x={x} y={prevY} width={width} height={prevH} fill="none" stroke={C.textMuted} strokeDasharray="3 2" strokeWidth={1.5} rx={2} />}
+        {prevTasksH > 0 && <rect x={x} y={prevTasksY} width={width} height={prevTasksH} fill="none" stroke={C.textMuted} strokeDasharray="3 2" strokeWidth={1.5} rx={2} />}
+        {prevVerifiedH > 0 && <rect x={x} y={prevVerifiedY} width={width} height={prevVerifiedH} fill="none" stroke={C.textMuted} strokeDasharray="3 2" strokeWidth={1.5} rx={2} />}
       </g>
     )
   }
