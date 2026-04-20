@@ -187,11 +187,13 @@ export function DailyTrendChart({ data, prevData, type }: { data: DailyTrend[]; 
       prevVerifiedY = y + height - prevVerifiedH
     }
 
+    const prevVerifiedX = x + width * 0.5
+
     return (
       <g>
         {height > 0 && <rect x={x} y={y} width={width} height={height} fill={C.primary} fillOpacity={0.55} rx={2} />}
         {prevTasksH > 0 && <rect x={x} y={prevTasksY} width={width} height={prevTasksH} fill="none" stroke={C.textMuted} strokeDasharray="3 2" strokeWidth={1.5} rx={2} />}
-        {prevVerifiedH > 0 && <rect x={x} y={prevVerifiedY} width={width} height={prevVerifiedH} fill="none" stroke={C.textMuted} strokeDasharray="3 2" strokeWidth={1.5} rx={2} />}
+        {prevVerifiedH > 0 && <rect x={prevVerifiedX} y={prevVerifiedY} width={width} height={prevVerifiedH} fill="none" stroke={C.textMuted} strokeDasharray="3 2" strokeWidth={1.5} rx={2} />}
       </g>
     )
   }
