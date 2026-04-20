@@ -665,7 +665,7 @@ export async function GET(req: NextRequest) {
   const issueAttemptCounter = new Map<string, number>()
   const resolvedIssues = type === 'weekly'
     ? execs
-      .filter(e => e.status === 'success' || e.status === 'failed')
+      .filter(e => (e.status === 'success' || e.status === 'failed') && (e.verifiedAt || e.rejectedAt))
       .map(e => {
         const key = `${e.projectId}:${e.issueIid}`
         const attemptNo = (issueAttemptCounter.get(key) || 0) + 1

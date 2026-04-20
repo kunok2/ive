@@ -33,17 +33,17 @@ export async function GET(
   `).get(id) as any
   const verifying = verifyingExec?.count ?? 0
 
-  // 오늘 완료된 execution 수
+  // 오늘 완료된 execution 수 (검증 완료된 것만 카운트)
   const completedExec = db.prepare(`
     SELECT COUNT(*) as count FROM task_executions
-    WHERE project_id = ? AND status = 'success' AND started_at >= ?
+    WHERE project_id = ? AND status = 'success' AND started_at >= ? AND (verified_at IS NOT NULL OR rejected_at IS NOT NULL)
   `).get(id, todayStartISO) as any
   const completed = completedExec?.count ?? 0
 
-  // 오늘 실패한 execution 수
+  // 오늘 실패한 execution 수 (검증 완료된 것만 카운트)
   const failedExec = db.prepare(`
     SELECT COUNT(*) as count FROM task_executions
-    WHERE project_id = ? AND status = 'failed' AND started_at >= ?
+    WHERE project_id = ? AND status = 'failed' AND started_at >= ? AND (verified_at IS NOT NULL OR rejected_at IS NOT NULL)
   `).get(id, todayStartISO) as any
   const failed = failedExec?.count ?? 0
 
@@ -68,11 +68,11 @@ export async function GET(
   `).get(id) as any
   const conflicts = mergeCount?.count ?? 0
 
-  // 어제 완료한 execution 수
+  // 어제 완료한 execution 수 (검증 완료된 것만 카운트)
   const yesterdayStartISO = new Date(new Date(todayStartISO).getTime() - 24 * 60 * 60 * 1000).toISOString()
   const yesterdayExec = db.prepare(`
     SELECT COUNT(*) as count FROM task_executions
-    WHERE project_id = ? AND status = 'success' AND started_at >= ? AND started_at < ?
+    WHERE project_id = ? AND status = 'success' AND started_at >= ? AND started_at < ? AND (verified_at IS NOT NULL OR rejected_at IS NOT NULL)
   `).get(id, yesterdayStartISO, todayStartISO) as any
   const yesterdayCompleted = yesterdayExec?.count ?? 0
 
