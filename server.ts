@@ -72,6 +72,9 @@ async function main() {
   })
 
   server.on('upgrade', (req, socket, head) => {
+    const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress
+    console.log(`[WS] Connection from ${clientIp} (${req.url})`)
+
     // /_next/ 경로는 Next.js HMR용이므로 그냥 통과
     if (!req.url || req.url.startsWith('/_next/')) return
 
