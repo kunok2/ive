@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getProject, getProjectAuthToken, getProjectAccess, isIssueAssignee } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
-import { fetchMRByBranch, fetchMRChanges } from '@/lib/provider'
+import { fetchMRByBranch, fetchMRChanges, fetchSingleIssue } from '@/lib/provider'
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string; iid: string }> }) {
   const user = await getCurrentUser()
@@ -13,11 +13,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   const access = getProjectAccess(id, user.id)
   if (!access) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  if (!user.isAdmin && !isIssueAssignee(id, Number(iid), user)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
 
   const token = getProjectAuthToken(id)
+
+  if (!user.isAdmin && !(await isIssueAssignee(project, Number(iid), token, user))) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
   const sourceBranch = `dev-${iid}`
   const mr = await fetchMRByBranch(project, token, sourceBranch)
 

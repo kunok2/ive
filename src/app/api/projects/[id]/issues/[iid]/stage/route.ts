@@ -168,7 +168,7 @@ export async function POST(
     // 권한: 관리자이거나 해당 이슈의 Git assignee(검증자/담당자)만 단계 변경 가능
     // 담당자가 지정되지 않았으면 이슈 작성자를 담당자로 간주
     // (viewer 권한이어도 assignee이면 자신의 작업을 진행할 수 있어야 함)
-    if (!user.isAdmin && !isIssueAssignee(projectId, Number(iid), user)) {
+    if (!user.isAdmin && !(await isIssueAssignee(project, Number(iid), token, user))) {
       const hasNoAssignee = !currentIssue?.assignees?.length;
       const isAuthor = hasNoAssignee && currentIssue?.author?.id != null
         && user.oauthUserId && String(currentIssue.author.id) === String(user.oauthUserId);

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getProject, getProjectAccess, getChatSession, endChatSession, updateExecutionStatus, updateAgentStatus, countActiveExecutionsByAgent, isIssueAssignee } from '@/lib/db'
+import { getProject, getProjectAccess, getProjectAuthToken, getChatSession, endChatSession, updateExecutionStatus, updateAgentStatus, countActiveExecutionsByAgent, isIssueAssignee } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { killChatAgent } from '@/lib/chat-agent'
 
@@ -25,7 +25,8 @@ export async function POST(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
   // 채팅 종료는 담당자 또는 관리자만 (viewer도 assignee면 허용)
-  if (!user.isAdmin && !isIssueAssignee(projectId, Number(iid), user)) {
+  const token = getProjectAuthToken(projectId)
+  if (!user.isAdmin && !(await isIssueAssignee(project, Number(iid), token, user))) {
     return NextResponse.json(
       { error: '이 이슈의 담당자 또는 관리자만 AI 채팅을 종료할 수 있습니다' },
       { status: 403 }

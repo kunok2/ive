@@ -63,11 +63,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   // MR 조회도 담당자/관리자만 (머지 영역 UI 표시 권한과 동일)
   const access = getProjectAccess(id, user.id)
   if (!access) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  if (!user.isAdmin && !isIssueAssignee(id, Number(iid), user)) {
+
+  const token = getProjectAuthToken(id)
+
+  if (!user.isAdmin && !(await isIssueAssignee(project, Number(iid), token, user))) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const token = getProjectAuthToken(id)
   const sourceBranch = `dev-${iid}`
   const mr = await fetchMRByBranch(project, token, sourceBranch)
 
@@ -108,7 +110,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // (viewer 권한이어도 자기에게 할당된 이슈의 MR은 처리할 수 있어야 함)
   const access = getProjectAccess(id, user.id)
   if (!access) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  if (!user.isAdmin && !isIssueAssignee(id, Number(iid), user)) {
+
+  const token = getProjectAuthToken(id)
+
+  if (!user.isAdmin && !(await isIssueAssignee(project, Number(iid), token, user))) {
     return NextResponse.json(
       { error: '이 이슈의 담당자 또는 관리자만 MR을 머지/처리할 수 있습니다' },
       { status: 403 }
@@ -118,7 +123,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const body = await req.json()
 
   if (body.action === 'merge') {
-    const token = getProjectAuthToken(id)
     const sourceBranch = `dev-${iid}`
     const mr = await fetchMRByBranch(project, token, sourceBranch)
     if (!mr) {
@@ -150,7 +154,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   if (body.action === 'close') {
-    const token = getProjectAuthToken(id)
     const sourceBranch = `dev-${iid}`
     const mr = await fetchMRByBranch(project, token, sourceBranch)
     if (!mr) {

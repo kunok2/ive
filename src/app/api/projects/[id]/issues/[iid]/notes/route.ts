@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAuthToken, getProjectAccess, getUserById, getUserOAuthTokenRaw, getOAuthProviderById, isIssueAssignee, touchProjectActivity } from '@/lib/db';
+import { getProject, getProjectAuthToken, getProjectAccess, getUserById, getUserOAuthTokenRaw, getOAuthProviderById, touchProjectActivity } from '@/lib/db';
 import { triggerScan } from '@/lib/scanner';
 import { getCurrentUser } from '@/lib/auth';
 import { decrypt } from '@/lib/crypto';

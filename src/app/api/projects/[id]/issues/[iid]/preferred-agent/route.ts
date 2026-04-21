@@ -38,17 +38,18 @@ export async function PATCH(
   if (!access) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
+  // 실행 중(dev)인 이슈는 작업자 변경 불가 + 담당자 권한 확인
+  const token = getProjectAuthToken(projectId);
+
   // 작업자 변경은 담당자 또는 관리자만 (viewer도 assignee면 허용)
-  if (!user.isAdmin && !isIssueAssignee(projectId, Number(iid), user)) {
+  if (!user.isAdmin && !(await isIssueAssignee(project, Number(iid), token, user))) {
     return NextResponse.json(
       { error: '이 이슈의 담당자 또는 관리자만 작업자를 변경할 수 있습니다' },
       { status: 403 }
     );
   }
 
-  // 실행 중(dev)인 이슈는 작업자 변경 불가
   try {
-    const token = getProjectAuthToken(projectId);
     const issue = await fetchSingleIssue(project, Number(iid), token);
     if (issue) {
       const labels = issue.labels || [];

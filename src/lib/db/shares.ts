@@ -1,6 +1,7 @@
 import { Project, ProjectShare, ShareRole } from '@/types'
 import { getDb } from './connection'
 import { getProject, mapProject, type ProjectRow } from './projects'
+import { fetchSingleIssue } from '@/lib/provider'
 
 export function getProjectShares(projectId: string): (ProjectShare & { userName: string; userEmail: string })[] {
   const rows = getDb().prepare(`
@@ -54,21 +55,16 @@ export function getProjectAccess(projectId: string, userId: string): 'owner' | S
   return getProjectShareRole(projectId, userId)
 }
 
-export function isIssueAssignee(
-  projectId: string,
+/** 실제 Git 이슈를 조회하여 현재 사용자가 담당자인지 확인 (DB 캐시 사용 안함) */
+export async function isIssueAssignee(
+  project: Project,
   issueIid: number,
-  user: { oauthProviderId?: string | null; oauthUserId?: string | null },
-): boolean {
-  if (!user.oauthProviderId || !user.oauthUserId) return false
-  const row = getDb().prepare(`
-    SELECT s.assignee_git_user_id, p.provider, op.type as prov_type
-    FROM issue_stages s
-    JOIN projects p ON p.id = s.project_id
-    CROSS JOIN oauth_providers op
-    WHERE s.project_id = ? AND s.issue_iid = ? AND op.id = ?
-  `).get(projectId, issueIid, user.oauthProviderId) as any
-  if (!row) return false
-  if (!row.assignee_git_user_id) return false
-  if (row.prov_type !== row.provider) return false
-  return String(row.assignee_git_user_id) === String(user.oauthUserId)
+  token: string,
+  user: { oauthUserId?: string | null },
+): Promise<boolean> {
+  if (!user.oauthUserId) return false
+  const issue = await fetchSingleIssue(project, issueIid, token)
+  if (!issue) return false
+  const assignees: any[] = issue.assignees || []
+  return assignees.some((a: any) => String(a.id) === String(user.oauthUserId))
 }
