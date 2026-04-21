@@ -25,6 +25,7 @@ interface IssueDetail {
   updatedAt: string
   webUrl: string
   author: string
+  authorAvatarUrl?: string | null
   assignees?: IssueAssignee[]
 }
 
@@ -101,7 +102,14 @@ export default function IssueHeader({
             <i className="fa-solid fa-repeat mr-0.5" />{tIssue('iterationLabel', { count: iterationCount })}
           </span>
         )}
-        <span className="text-xs text-ive-text-dim shrink-0"><i className="fa-solid fa-user mr-0.5" />{issue.author}</span>
+        <span className="text-xs text-ive-text-dim shrink-0 inline-flex items-center gap-1">
+          {issue.authorAvatarUrl ? (
+            <img src={issue.authorAvatarUrl} className="w-4 h-4 rounded-full object-cover bg-ive-bg-deep" alt="" />
+          ) : (
+            <i className="fa-solid fa-user" />
+          )}
+          {issue.author}
+        </span>
         {/* 담당자 */}
         <button
           type="button"

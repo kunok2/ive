@@ -41,6 +41,7 @@ interface IssueDetail {
   webUrl: string
   author: string
   authorId: number | null
+  authorAvatarUrl: string | null
   assignees?: IssueAssignee[]
 }
 

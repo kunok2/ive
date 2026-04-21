@@ -40,10 +40,12 @@ export async function addGitLabIssueComment(project: Project, issueIid: number, 
   const headers = getAuthHeaders(project, decryptedToken, options);
 
   try {
+    // CLI 출력에 포함될 수 있는 제어 문자(ANSI 이스케이프, null 바이트 등) 제거
+    const sanitized = body.replace(/\x00/g, '').replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').replace(/[\x01-\x08\x0b\x0c\x0e-\x1f]/g, '');
     const res = await fetch(apiUrl(project, `/issues/${issueIid}/notes`), {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ body })
+      body: JSON.stringify({ body: sanitized })
     });
     if (!res.ok) {
       const errorBody = await res.text().catch(() => 'No body');

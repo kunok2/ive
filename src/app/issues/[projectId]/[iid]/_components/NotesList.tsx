@@ -29,6 +29,7 @@ interface IssueDetail {
   updatedAt: string
   webUrl: string
   author: string
+  authorAvatarUrl?: string | null
   assignees?: IssueAssignee[]
 }
 

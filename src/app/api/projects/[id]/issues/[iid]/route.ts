@@ -88,6 +88,7 @@ export async function GET(
       webUrl: issue.web_url,
       author: issue.author?.name,
       authorId: issue.author?.id ?? null,
+      authorAvatarUrl: issue.author?.avatar_url ?? null,
     })
   } catch (err) {
     return NextResponse.json(
