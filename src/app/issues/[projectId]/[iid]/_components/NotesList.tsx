@@ -100,6 +100,12 @@ export default function NotesList({
               <MarkdownNote body={cleanNoteBody(issue.description)} projectId={projectId} />
             </div>
           )}
+          {/* MR 리뷰 섹션 - 담당자 또는 관리자만 표시 */}
+          {canProgressStage && (issue.stage === 'done' || issue.stage === 'dev' || issue.stage === 'verify_waiting' || issue.stage === 'verifying') && (
+            <div className="pr-2">
+              <MRReviewSection projectId={projectId} issueIid={Number(iid)} />
+            </div>
+          )}
           <div className="py-1.5 pr-2 flex items-center justify-between mt-2 sticky top-0 z-10 bg-ive-bg-deep/95 backdrop-blur-sm">
             <span className="text-xs font-bold text-ive-text-dim uppercase tracking-widest">
               <i className="fa-solid fa-comments mr-1" />{tIssue('activityLog')}
