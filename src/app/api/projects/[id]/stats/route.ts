@@ -33,17 +33,21 @@ export async function GET(
   `).get(id) as any
   const verifying = verifyingExec?.count ?? 0
 
-  // 오늘 완료된 execution 수 (검증까지 마무리된 것만)
+  // 오늘 완료된 execution 수
+  // - 검증 완료(verified_at/rejected_at) OR 외부 도구 작업(agent_id = '') → 완료로 카운트
+  // - 검증 exec(ex-verify-%)는 제외
   const completedExec = db.prepare(`
     SELECT COUNT(*) as count FROM task_executions
-    WHERE project_id = ? AND status = 'success' AND started_at >= ? AND id NOT LIKE 'ex-verify-%' AND (verified_at IS NOT NULL OR rejected_at IS NOT NULL)
+    WHERE project_id = ? AND status = 'success' AND started_at >= ? AND id NOT LIKE 'ex-verify-%' AND (verified_at IS NOT NULL OR rejected_at IS NOT NULL OR agent_id = '')
   `).get(id, todayStartISO) as any
   const completed = completedExec?.count ?? 0
 
-  // 오늘 실패한 execution 수 (검증까지 마무리된 것만)
+  // 오늘 실패한 execution 수
+  // - 검증 반려(rejected_at) OR 외부 도구 작업 실패(agent_id = '') → 실패로 카운트
+  // - 외부 도구에서 직접 실패 처리는 거의 없지만 로직的统一을 위해 포함
   const failedExec = db.prepare(`
     SELECT COUNT(*) as count FROM task_executions
-    WHERE project_id = ? AND status = 'failed' AND started_at >= ? AND id NOT LIKE 'ex-verify-%' AND (verified_at IS NOT NULL OR rejected_at IS NOT NULL)
+    WHERE project_id = ? AND status = 'failed' AND started_at >= ? AND id NOT LIKE 'ex-verify-%' AND (verified_at IS NOT NULL OR rejected_at IS NOT NULL OR agent_id = '')
   `).get(id, todayStartISO) as any
   const failed = failedExec?.count ?? 0
 
@@ -68,11 +72,12 @@ export async function GET(
   `).get(id) as any
   const conflicts = mergeCount?.count ?? 0
 
-  // 어제 완료한 execution 수 (검증까지 마무리된 것만)
+  // 어제 완료한 execution 수
+  // - 검증 완료(verified_at/rejected_at) OR 외부 도구 작업(agent_id = '') → 완료로 카운트
   const yesterdayStartISO = new Date(new Date(todayStartISO).getTime() - 24 * 60 * 60 * 1000).toISOString()
   const yesterdayExec = db.prepare(`
     SELECT COUNT(*) as count FROM task_executions
-    WHERE project_id = ? AND status = 'success' AND started_at >= ? AND started_at < ? AND id NOT LIKE 'ex-verify-%' AND (verified_at IS NOT NULL OR rejected_at IS NOT NULL)
+    WHERE project_id = ? AND status = 'success' AND started_at >= ? AND started_at < ? AND id NOT LIKE 'ex-verify-%' AND (verified_at IS NOT NULL OR rejected_at IS NOT NULL OR agent_id = '')
   `).get(id, yesterdayStartISO, todayStartISO) as any
   const yesterdayCompleted = yesterdayExec?.count ?? 0
 
