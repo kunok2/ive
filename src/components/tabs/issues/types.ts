@@ -9,7 +9,7 @@ export interface IveIssue {
   labels: string[]
   createdAt: string
   updatedAt: string
-  author: string
+  author: { name: string; avatarUrl?: string }
   assignMode?: string
   preferredAgentId?: string | null
   preferredAgentName?: string | null

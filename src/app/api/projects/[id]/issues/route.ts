@@ -94,7 +94,7 @@ export async function GET(
           createdAt: issue.created_at,
           updatedAt: issue.updated_at,
           webUrl: issue.web_url,
-          author: issue.author?.name,
+          author: { name: issue.author?.name, avatarUrl: issue.author?.avatar_url },
         };
       });
 

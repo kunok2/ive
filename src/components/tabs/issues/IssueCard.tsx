@@ -112,9 +112,13 @@ export default function IssueCard({
           cliConfig={cliConfig}
           onOpenAgentPicker={onOpenAgentPicker}
         />
-        <span className="inline-flex items-center">
-          <i className="fa-solid fa-user mr-1" />
-          {issue.author}
+        <span className="inline-flex items-center gap-1">
+          {issue.author?.avatarUrl ? (
+            <img src={issue.author.avatarUrl} className="w-4 h-4 rounded-full object-cover bg-ive-bg-deep" alt="" />
+          ) : (
+            <i className="fa-solid fa-user mr-0.5" />
+          )}
+          {issue.author?.name}
         </span>
         {/* assignee avatars + edit */}
         {((issue.assignees && issue.assignees.length > 0) || (canEdit && !bulkMode && gitMembers.length > 0)) && (

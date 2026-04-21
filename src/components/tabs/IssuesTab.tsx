@@ -531,7 +531,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     if (onlyMine && canFilterMine && !isMine(issue)) return false
     if (!issueSearchQuery) return true
     const q = issueSearchQuery.toLowerCase()
-    return issue.title.toLowerCase().includes(q) || String(issue.iid).includes(q) || (issue.author || '').toLowerCase().includes(q)
+    return issue.title.toLowerCase().includes(q) || String(issue.iid).includes(q) || (issue.author?.name || '').toLowerCase().includes(q)
   }).sort((a, b) => {
     if (sortOrder === 'newest') return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
