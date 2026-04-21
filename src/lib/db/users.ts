@@ -54,3 +54,13 @@ export function updateUserTimezone(id: string, timezone: string) {
 export function createUser(u: any) {
   getDb().prepare('INSERT INTO users (id, email, password, name) VALUES (?, ?, ?, ?)').run(u.id, u.email, u.password, u.name)
 }
+
+export function clearUserOAuth(userId: string) {
+  getDb().prepare(`UPDATE users SET
+    oauth_provider_id = NULL,
+    oauth_user_id = NULL,
+    oauth_access_token = NULL,
+    oauth_refresh_token = NULL,
+    oauth_token_expires_at = NULL
+    WHERE id = ?`).run(userId)
+}
