@@ -1,7 +1,7 @@
 {
   "issues": "Issues",
   "noIssues": "No issues",
-  "noIveIssues": "No IVE issues",
+  "noIveIssues": "No IVE tasks",
   "noFilterMatch": "No issues match the current filter",
   "loadingIssues": "Loading issues...",
   "addNewIssue": "Add New Issue",
