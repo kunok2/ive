@@ -179,7 +179,15 @@ export default function TopBar() {
             <button
               onClick={async () => {
                 const ok = await showConfirm({ title: td('logoutTitle'), message: td('logoutMessage'), confirmText: tAuth('logout'), cancelText: tc('cancel'), variant: 'info' })
-                if (ok) { await logout(); router.push('/login') }
+                if (!ok) return
+                const { providerLogoutUrl } = await logout()
+                if (providerLogoutUrl) {
+                  // OAuth 공급자(GitHub/GitLab)의 브라우저 세션도 종료시키기 위해 해당 로그아웃 URL로 이동.
+                  // 이렇게 해야 다음 OAuth 로그인 시 공급자가 아이디/비밀번호를 다시 요구함.
+                  window.location.href = providerLogoutUrl
+                  return
+                }
+                router.push('/login')
               }}
               className="w-8 h-8 rounded-full bg-ive-bg-card border border-ive-border-subtle flex items-center justify-center text-ive-text-dim hover:text-ive-text active:scale-95 transition-all"
               aria-label={tAuth('logout')}

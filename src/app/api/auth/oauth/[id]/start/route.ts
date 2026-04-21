@@ -27,6 +27,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   // strict로 변경하면 콜백에서 state 쿠키를 읽지 못해 OAuth 로그인이 완전히 불가.
   const payload = Buffer.from(JSON.stringify({ id, state, redirectUri })).toString('base64url')
   const response = NextResponse.redirect(authorizeUrl)
+  // 브라우저/프록시가 start URL을 캐시해서 동일 state로 재방문하는 것을 방지
+  response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, private')
+  response.headers.set('Pragma', 'no-cache')
   response.cookies.set(STATE_COOKIE, payload, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
