@@ -158,12 +158,11 @@ export function DailyTrendChart({ data, prevData, type }: { data: DailyTrend[]; 
     }
   })
 
-  /* 현재 작업 채움 막대 위에 이전 작업/검증 점선 막대를 겹쳐 그린다.
+  /* 현재 작업 채움 막대 위에 이전 작업 점선 막대를 겹쳐 그린다.
    * background prop을 통해 Y축 전체 픽셀 높이(bgH)를 받아
    * cur=0인 미래 날짜에도 이전 데이터를 올바른 비율로 그린다. */
   const TaskBarWithPrev = ({ x, y, width, height, background, payload }: any) => {
     const prevTasks = payload?.prevTasks ?? 0
-    const prevVerified = payload?.prevVerified ?? 0
     const cur = payload?.tasks ?? 0
     const dataYMax = payload?.yMax ?? 1
     const bgH: number = background?.height ?? 0
@@ -178,6 +177,22 @@ export function DailyTrendChart({ data, prevData, type }: { data: DailyTrend[]; 
       prevTasksY = y + height - prevTasksH
     }
 
+    return (
+      <g>
+        {height > 0 && <rect x={x} y={y} width={width} height={height} fill={C.primary} fillOpacity={0.55} rx={2} />}
+        {prevTasksH > 0 && <rect x={x} y={prevTasksY} width={width} height={prevTasksH} fill="none" stroke={C.textMuted} strokeDasharray="3 2" strokeWidth={1.5} rx={2} />}
+      </g>
+    )
+  }
+
+  /* 현재 검증 채움 막대 위에 이전 검증 점선 막대를 겹쳐 그린다. */
+  const VerifiedBarWithPrev = ({ x, y, width, height, background, payload }: any) => {
+    const prevVerified = payload?.prevVerified ?? 0
+    const cur = payload?.verified ?? 0
+    const dataYMax = payload?.yMax ?? 1
+    const bgH: number = background?.height ?? 0
+    const bgY: number = background?.y ?? 0
+
     let prevVerifiedH = 0, prevVerifiedY = 0
     if (bgH > 0) {
       prevVerifiedH = (prevVerified / dataYMax) * bgH
@@ -187,13 +202,10 @@ export function DailyTrendChart({ data, prevData, type }: { data: DailyTrend[]; 
       prevVerifiedY = y + height - prevVerifiedH
     }
 
-    const prevVerifiedX = x + width * 0.5
-
     return (
       <g>
-        {height > 0 && <rect x={x} y={y} width={width} height={height} fill={C.primary} fillOpacity={0.55} rx={2} />}
-        {prevTasksH > 0 && <rect x={x} y={prevTasksY} width={width} height={prevTasksH} fill="none" stroke={C.textMuted} strokeDasharray="3 2" strokeWidth={1.5} rx={2} />}
-        {prevVerifiedH > 0 && <rect x={prevVerifiedX} y={prevVerifiedY} width={width} height={prevVerifiedH} fill="none" stroke={C.textMuted} strokeDasharray="3 2" strokeWidth={1.5} rx={2} />}
+        {height > 0 && <rect x={x} y={y} width={width} height={height} fill={C.primary} rx={2} />}
+        {prevVerifiedH > 0 && <rect x={x} y={prevVerifiedY} width={width} height={prevVerifiedH} fill="none" stroke={C.textMuted} strokeDasharray="3 2" strokeWidth={1.5} rx={2} />}
       </g>
     )
   }
@@ -210,7 +222,7 @@ export function DailyTrendChart({ data, prevData, type }: { data: DailyTrend[]; 
           {!isMobile && <Tooltip {...tooltipStyle} />}
           {/* 현재 작업 막대 (background 전달 → 이전 작업 점선 마커 겹침) + 검증 막대 */}
           <Bar yAxisId="tasks" dataKey="tasks" name={tr('chartTasks')} background={{ fill: 'transparent' }} shape={<TaskBarWithPrev />} />
-          <Bar yAxisId="tasks" dataKey="verified" name={tr('chartVerified')} fill={C.primary} radius={[2, 2, 0, 0]} />
+          <Bar yAxisId="tasks" dataKey="verified" name={tr('chartVerified')} background={{ fill: 'transparent' }} shape={<VerifiedBarWithPrev />} />
           {/* 비용: 현재=실선, 이전=점선 */}
           <Line yAxisId="cost" dataKey="cost" name={tr('chartCost')} stroke={C.primary} strokeWidth={2} dot={{ r: 2, fill: C.primary }} />
           <Line yAxisId="cost" dataKey="prevCost" name={tr('chartPrevCost')} stroke={C.textMuted} strokeDasharray="4 3" dot={false} strokeWidth={1} />
