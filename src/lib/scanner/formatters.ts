@@ -32,8 +32,8 @@ export function parseIveMeta(body: string): {
       case 'output_tokens': defaults.outputTokens = Number(val) || 0; break;
       case 'cost_usd': defaults.costUsd = Number(val) || 0; break;
       case 'turns': defaults.turns = Number(val) || 0; break;
-      case 'started_at': defaults.startedAt = val.trim(); break;
-      case 'ended_at': defaults.endedAt = val.trim(); break;
+      case 'started_at': { const d = new Date(val.trim()); defaults.startedAt = isNaN(d.getTime()) ? val.trim() : d.toISOString(); break; }
+      case 'ended_at': { const d = new Date(val.trim()); defaults.endedAt = isNaN(d.getTime()) ? val.trim() : d.toISOString(); break; }
     }
   }
   return defaults;
