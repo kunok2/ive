@@ -1,7 +1,7 @@
 {
   "issues": "이슈",
   "noIssues": "이슈가 없습니다",
-  "noIveIssues": "IVE 이슈가 없습니다",
+  "noIveIssues": "IVE 작업이 없습니다",
   "noFilterMatch": "해당 필터에 맞는 이슈가 없습니다",
   "loadingIssues": "이슈 불러오는 중...",
   "addNewIssue": "새 이슈 추가",
