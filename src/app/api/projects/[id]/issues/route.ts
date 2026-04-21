@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAccess, getProjectAuthToken, getAssignModeMap, setAssignMode, getAgent, hasActiveExecution, hasAnyExecution, stageFromLabels, touchProjectActivity } from '@/lib/db';
+import { getProject, getProjectAccess, getProjectAuthToken, getAssignModeMap, setAssignMode, getAgent, hasActiveExecution, hasAnyExecution, stageFromLabels, touchProjectActivity, getUserOAuthTokenRaw } from '@/lib/db';
 import { triggerScan } from '@/lib/scanner';
 import { getCurrentUser } from '@/lib/auth';
+import { decrypt } from '@/lib/crypto';
 import { checkLabelsExist, addIssueComment } from '@/lib/provider';
 import { fetchAllProjectIssues, fetchClosedProjectIssues, createIssue } from '@/lib/provider';
 
@@ -124,7 +125,16 @@ export async function POST(
   if (!title?.trim()) return NextResponse.json({ error: '제목을 입력하세요.' }, { status: 400 });
 
   try {
-    const token = getProjectAuthToken(projectId);
+    const projectToken = getProjectAuthToken(projectId);
+
+    // 현재 사용자의 OAuth 토큰을 우선 사용, 없으면 프로젝트 토큰
+    let userToken: string | null = null;
+    const userOAuth = getUserOAuthTokenRaw(user.id);
+    if (userOAuth?.encrypted) {
+      try { userToken = decrypt(userOAuth.encrypted); } catch { /* ignore */ }
+    }
+
+    const token = userToken || projectToken;
 
     // 레이블 존재 확인 (asDev일 때만)
     if (asDev) {
@@ -145,7 +155,19 @@ export async function POST(
       : [project.labelTarget];
     const assignees = (assigneeIds?.length || assigneeUsernames?.length)
       ? { ids: assigneeIds, usernames: assigneeUsernames } : undefined;
-    const issue = await createIssue(project, token, title.trim(), description?.trim() ?? '', labels, assignees);
+
+    // 사용자 토큰으로 시도, 실패하면 프로젝트 토큰으로 재시도
+    let issue: any;
+    try {
+      issue = await createIssue(project, token, title.trim(), description?.trim() ?? '', labels, assignees);
+    } catch (e) {
+      if (userToken && token !== projectToken) {
+        console.warn(`[Issues] User token failed, retrying with project token:`, e);
+        issue = await createIssue(project, projectToken, title.trim(), description?.trim() ?? '', labels, assignees);
+      } else {
+        throw e;
+      }
+    }
 
     // 배정 모드 지정
     if (issue.iid) {
