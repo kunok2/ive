@@ -12,7 +12,7 @@ export async function POST(req: Request) {
     if (raw?.encrypted && raw?.providerId) {
       const { decrypt } = await import('@/lib/crypto')
       const accessToken = decrypt(raw.encrypted)
-      revokeOAuthToken(raw.providerId, accessToken)
+      await revokeOAuthToken(raw.providerId, accessToken)
     }
 
     logActivity({ userId: user.id, category: 'auth', action: 'logout', detail: '로그아웃', req })
