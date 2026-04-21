@@ -178,7 +178,7 @@ export default function ProjectCard({ project }: Props) {
   const runningExecs = executions.filter(e => e.status === 'running' || e.status === 'assigned')
   const doneExecs = executions.filter(e => e.status !== 'running' && e.status !== 'assigned')
   const todayStartISO = getKSTTodayStartISO()
-  const todayDoneExecs = doneExecs.filter(e => e.startedAt >= todayStartISO)
+  const todayDoneExecs = doneExecs.filter(e => e.startedAt >= todayStartISO && (e.verifiedAt != null || e.rejectedAt != null))
 
   const mergeCount = liveMRCount ?? 0
   const conflictCount = liveConflictCount ?? stats?.conflictCount ?? 0

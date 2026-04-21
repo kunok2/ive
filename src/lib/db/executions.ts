@@ -21,6 +21,8 @@ function mapExecution(r: any): TaskExecution {
     userId: r.user_id ?? null,
     userName: r.user_name ?? null,
     userAvatar: r.user_avatar ?? null,
+    verifiedAt: r.verified_at ?? null,
+    rejectedAt: r.rejected_at ?? null,
   }
 }
 
