@@ -195,6 +195,8 @@ export interface TaskExecution {
   userId?: string | null
   userName?: string | null
   userAvatar?: string | null
+  verifiedAt?: string | null
+  rejectedAt?: string | null
 }
 
 export interface StatSnapshot {
