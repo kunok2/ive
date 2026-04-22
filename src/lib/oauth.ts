@@ -114,8 +114,7 @@ export function buildAuthorizeUrl(p: ResolvedProvider, state: string, redirectUr
     // GitHub는 query에 allow_signup도 지정 가능 (기본 true)
     return `${p.baseUrl}/login/oauth/authorize?${params.toString()}`
   }
-  // GitLab: prompt=login으로 매번 재인증을 강제해 로그아웃 후 자동 로그인을 방지
-  params.set('prompt', 'login')
+  // GitLab: /oauth/authorize
   return `${p.baseUrl}/oauth/authorize?${params.toString()}`
 }
 
@@ -297,22 +296,21 @@ export async function revokeOAuthToken(providerId: string, accessToken: string):
 
   try {
     if (provider.type === 'github') {
-      // GitHub OAuth App grant 삭제: 다음 로그인 시 재인가 화면을 강제로 표시함
-      // (DELETE /applications/{client_id}/grant — Basic auth 필요)
-      const credentials = Buffer.from(`${provider.clientId}:${provider.clientSecret}`).toString('base64')
-      await fetch(`https://api.github.com/applications/${provider.clientId}/grant`, {
-        method: 'DELETE',
+      await fetch('https://github.com/login/oauth/access_token', {
+        method: 'POST',
         headers: {
-          'Accept': 'application/vnd.github+json',
-          'Authorization': `Basic ${credentials}`,
+          'Accept': 'application/json',
           'Content-Type': 'application/json',
-          'X-GitHub-Api-Version': '2022-11-28',
         },
-        body: JSON.stringify({ access_token: accessToken }),
+        body: JSON.stringify({
+          client_id: provider.clientId,
+          client_secret: provider.clientSecret,
+          access_token: accessToken,
+        }),
       })
     } else {
-      // GitLab: POST /oauth/revoke (api/v4 경로가 아님)
-      await fetch(`${provider.baseUrl}/oauth/revoke`, {
+      // GitLab: revoke refresh token (액세스 토큰도 revoke 가능)
+      await fetch(`${provider.baseUrl}/api/v4/oauth/revoke`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
