@@ -105,13 +105,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const res = await fetch('/api/projects')
     if (res.ok) {
       const data = await res.json()
-      // 작업 중인 프로젝트를 위로 정렬 (running > 0 우선, 그 다음 sortOrder)
+      // 작업 중인 프로젝트를 최상단으로. 나머지는 서버의 last_activity_at DESC 순서 유지.
       data.sort((a: any, b: any) => {
         const aRunning = a.runningCount ?? 0
         const bRunning = b.runningCount ?? 0
         if (aRunning > 0 && bRunning === 0) return -1
         if (aRunning === 0 && bRunning > 0) return 1
-        return (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
+        return 0
       })
       dispatch({ type: 'SET_PROJECTS', projects: data })
     } else if (res.status === 401) {
