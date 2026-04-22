@@ -117,6 +117,7 @@
   "noVerifying": "No issues under verification",
   "waitingBadge": "Waiting",
   "verifyWaitBadge": "Verify Wait",
+  "verifyingBadge": "Verifying",
   "todayRecords": "Today's Records ({count})",
   "errorLabel": "Error:",
   "conflictLabel": "Merge",

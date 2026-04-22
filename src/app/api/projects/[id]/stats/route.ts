@@ -26,12 +26,16 @@ export async function GET(
   `).get(id) as any
   const agentWorking = agentWorkingExec?.count ?? 0
 
-  // 사람 검증 중 (assigneeType = 'user')
-  const verifyingExec = db.prepare(`
-    SELECT COUNT(*) as count FROM task_executions
-    WHERE project_id = ? AND status IN ('running', 'assigned') AND assignee_type = 'user'
+  // 검증 중 (IVE-V 라벨 단계) — issue_stages.cached_stage 기준
+  // waiting/verifyWaiting 카운트와 동일한 소스(issue_stages)를 사용해
+  // GitLab/GitHub에서 수동으로 라벨을 바꾼 경우(=task_execution 없는 경우)도
+  // 즉시 반영되도록 한다. task_execution 기반으로 세면 IVE가 만든 검증 exec만
+  // 잡혀서 수동 라벨 전환이 집계에서 빠지는 버그가 있었음.
+  const verifyingCount = db.prepare(`
+    SELECT COUNT(*) as count FROM issue_stages
+    WHERE project_id = ? AND cached_stage = 'verifying'
   `).get(id) as any
-  const verifying = verifyingExec?.count ?? 0
+  const verifying = verifyingCount?.count ?? 0
 
   // 오늘 완료된 execution 수
   // - 검증 완료(verified_at/rejected_at) OR 외부 도구 작업(agent_id 비어있음) → 완료로 카운트

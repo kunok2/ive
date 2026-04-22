@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl'
 import { useStore } from '@/lib/store'
 import { formatDateMedium } from '@/lib/format-date'
 import StageActionButtons from './StageActions'
+import AgentAvatar from '@/components/agent/AgentAvatar'
 import { createImagePasteHandlers } from '@/lib/paste-upload'
 import { useMemo, useRef, useEffect } from 'react'
 
@@ -26,6 +27,7 @@ interface IssueDetail {
   webUrl: string
   author: string
   authorAvatarUrl?: string | null
+  iveAuthorAvatar?: string | null   // IVE 사용자 아바타 ID ('photo' 리졸브된 URL 또는 'av-XX')
   assignees?: IssueAssignee[]
 }
 
@@ -103,7 +105,9 @@ export default function IssueHeader({
           </span>
         )}
         <span className="text-xs text-ive-text-dim shrink-0 inline-flex items-center gap-1">
-          {issue.authorAvatarUrl ? (
+          {issue.iveAuthorAvatar ? (
+            <AgentAvatar avatar={issue.iveAuthorAvatar} size="xs" className="rounded-full overflow-hidden" />
+          ) : issue.authorAvatarUrl ? (
             <img src={issue.authorAvatarUrl} className="w-4 h-4 rounded-full object-cover bg-ive-bg-deep" alt="" />
           ) : (
             <i className="fa-solid fa-user" />

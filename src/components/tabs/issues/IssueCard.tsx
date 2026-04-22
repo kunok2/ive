@@ -113,7 +113,9 @@ export default function IssueCard({
           onOpenAgentPicker={onOpenAgentPicker}
         />
         <span className="inline-flex items-center gap-1">
-          {issue.author?.avatarUrl ? (
+          {issue.author?.avatar ? (
+            <AgentAvatar avatar={issue.author.avatar} size="xs" className="rounded-full overflow-hidden" />
+          ) : issue.author?.avatarUrl ? (
             <img src={issue.author.avatarUrl} className="w-4 h-4 rounded-full object-cover bg-ive-bg-deep" alt="" />
           ) : (
             <i className="fa-solid fa-user mr-0.5" />
