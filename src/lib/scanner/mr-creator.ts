@@ -107,7 +107,7 @@ export async function commitPushAndCreateMR(params: {
     const workSummary = conversationParts.length > 0
       ? `\n\n### 📝 수행 작업\n${conversationParts.filter(p => p.trim()).join('\n')}`
       : '';
-    const completionNote = `<!-- ive-bot -->\n## ✅ 개발 완료 — ${agent.name}\n\n${mrLine}\n- **소요 시간:** ${durationStr}${iterLine}${workSummary}`;
+    const completionNote = `<!-- ive-bot -->\n<!-- ive-agent:${agent.id} -->\n## ✅ 개발 완료 — ${agent.name}\n\n${mrLine}\n- **소요 시간:** ${durationStr}${iterLine}${workSummary}`;
     if (isGitHub) {
       await addGitHubIssueComment(project, iid, token, completionNote);
     } else {
@@ -129,7 +129,7 @@ export async function commitPushAndCreateMR(params: {
     const workSummary = conversationParts.length > 0
       ? `\n\n### 📝 수행 작업\n${conversationParts.filter(p => p.trim()).join('\n')}`
       : '';
-    const noChangeNote = `<!-- ive-bot -->\n## ✅ 개발 완료 — ${agent.name}\n\n코드 변경사항 없이 완료되었습니다.\n- **소요 시간:** ${durationStr}${iterLine}${workSummary}`;
+    const noChangeNote = `<!-- ive-bot -->\n<!-- ive-agent:${agent.id} -->\n## ✅ 개발 완료 — ${agent.name}\n\n코드 변경사항 없이 완료되었습니다.\n- **소요 시간:** ${durationStr}${iterLine}${workSummary}`;
     try {
       if (isGitHub) {
         await addGitHubIssueComment(project, iid, token, noChangeNote);
@@ -158,7 +158,7 @@ export async function postErrorNote(
   errMessage: string,
   isGitHub: boolean,
 ): Promise<void> {
-  const errorNote = `<!-- ive-bot -->\n## ❌ 실행 오류 — ${agent.name}\n\n- **오류:** ${errMessage}`;
+  const errorNote = `<!-- ive-bot -->\n<!-- ive-agent:${agent.id} -->\n## ❌ 실행 오류 — ${agent.name}\n\n- **오류:** ${errMessage}`;
   try {
     if (isGitHub) {
       await addGitHubIssueComment(project, iid, token, errorNote);
@@ -188,8 +188,8 @@ async function handlePushFailure(
   const isPermission = pushMsg.includes('403') || pushMsg.includes('denied') || pushMsg.includes('Permission') || pushMsg.includes('protected');
   log(`push 실패: ${pushMsg}`, 'error');
   const pushFailNote = isPermission
-    ? `<!-- ive-bot -->\n## ⚠️ 푸시 권한 없음 — ${agent.name}\n\n코드 변경은 완료되었으나 저장소에 푸시할 권한이 없습니다.\n토큰 계정에 쓰기 권한을 부여해주세요.\n- **소요 시간:** ${durationStr}`
-    : `<!-- ive-bot -->\n## ⚠️ 푸시 실패 — ${agent.name}\n\n- **오류:** ${pushMsg}\n- **소요 시간:** ${durationStr}`;
+    ? `<!-- ive-bot -->\n<!-- ive-agent:${agent.id} -->\n## ⚠️ 푸시 권한 없음 — ${agent.name}\n\n코드 변경은 완료되었으나 저장소에 푸시할 권한이 없습니다.\n토큰 계정에 쓰기 권한을 부여해주세요.\n- **소요 시간:** ${durationStr}`
+    : `<!-- ive-bot -->\n<!-- ive-agent:${agent.id} -->\n## ⚠️ 푸시 실패 — ${agent.name}\n\n- **오류:** ${pushMsg}\n- **소요 시간:** ${durationStr}`;
   try {
     if (isGitHub) {
       await addGitHubIssueComment(project, iid, token, pushFailNote);

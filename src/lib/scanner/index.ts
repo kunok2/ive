@@ -549,7 +549,7 @@ async function scanProject(project: Project, force: boolean = false) {
                 }
               } catch (e) { console.warn(`[Scanner] Failed to clean IVE-S on #${iid}:`, e); }
 
-              // 브랜치 안내 코멘트
+              // 브랜치 안내 코멘트 (담당자 모드 — 에이전트가 아닌 사람 담당자라 ive-agent 마커 없음)
               try {
                 const commentBody = `<!-- ive-bot -->\n## 🌿 작업 브랜치 생성됨\n\n- **브랜치:** \`${branchName}\`\n- **담당자:** ${execution.userName}`;
                 await addIssueComment(project, iid, decryptedToken, commentBody);

@@ -41,7 +41,9 @@ interface IssueDetail {
   webUrl: string
   author: string
   authorId: number | null
+  iveAuthorId: string | null
   authorAvatarUrl: string | null
+  iveAuthorAvatar: string | null
   assignees?: IssueAssignee[]
 }
 
@@ -129,14 +131,20 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   // ===================== Data fetching =====================
 
   const isAssignee = (() => {
-    if (!state.user?.oauthUserId) return false
-    const myGitId = String(state.user.oauthUserId)
-    // 담당자가 지정되어 있으면 담당자 확인
+    // 1) 담당자가 지정되어 있으면 → Git assignees 리스트 매치 (OAuth 사용자만 가능)
     if (issue?.assignees?.length) {
+      if (!state.user?.oauthUserId) return false
+      const myGitId = String(state.user.oauthUserId)
       return issue.assignees.some(a => a.id != null && String(a.id) === myGitId)
     }
-    // 담당자가 없으면 이슈 작성자를 담당자로 간주
-    return issue?.authorId != null && String(issue.authorId) === myGitId
+    // 2) 담당자 없음 → 이슈 작성자를 담당자로 간주.
+    //    (a) ive-author 마커 기반: IVE user.id 매치 — 로컬 계정(비-OAuth) 사용자도 판정 가능
+    if (state.user?.id && issue?.iveAuthorId && issue.iveAuthorId === state.user.id) return true
+    //    (b) Git author id 기반: OAuth 사용자만 가능
+    if (state.user?.oauthUserId && issue?.authorId != null) {
+      return String(issue.authorId) === String(state.user.oauthUserId)
+    }
+    return false
   })()
   const canProgressStage = state.user?.isAdmin || isAssignee
 

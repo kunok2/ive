@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getProject, getProjectAccess, getProjectAuthToken, hasActiveExecution, stageFromLabels } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { updateIssue, fetchSingleIssue } from '@/lib/provider'
+import { resolveIveAuthorFromBody, stripIveAuthorMarker } from '@/lib/ive-author'
 
 export async function PUT(
   req: NextRequest,
@@ -75,10 +76,28 @@ export async function GET(
       avatarUrl: a.avatar_url,
     }))
 
+    // ive-author 마커가 있으면 실제 IVE 사용자로 작성자 정보 덮어쓰기.
+    // Git UI 에는 토큰 소유자가 저자로 남지만 IVE UI 에서는 실제 작성자가 표시되도록.
+    //
+    // 권한 판정을 위해 두 가지 식별자를 함께 돌려준다:
+    //   - authorId      : Git user id (OAuth 사용자 매칭용)
+    //   - iveAuthorId   : IVE user id (로컬 계정 포함 모든 IVE 사용자 매칭용)
+    // 클라이언트는 둘 중 하나만 일치해도 자기 이슈로 판정 가능.
+    const iveAuthor = resolveIveAuthorFromBody(issue.description)
+    const author = iveAuthor ? iveAuthor.name : issue.author?.name
+    const authorId = iveAuthor
+      ? (iveAuthor.oauthUserId != null ? Number(iveAuthor.oauthUserId) : (issue.author?.id ?? null))
+      : (issue.author?.id ?? null)
+    const iveAuthorId = iveAuthor ? iveAuthor.id : null
+    const authorAvatarUrl = iveAuthor ? null : (issue.author?.avatar_url ?? null)
+    const iveAuthorAvatar = iveAuthor
+      ? (iveAuthor.avatar === 'photo' ? `/api/auth/avatar/image?id=${iveAuthor.id}` : iveAuthor.avatar)
+      : null
+
     return NextResponse.json({
       iid: issue.iid,
       title: issue.title,
-      description: issue.description,
+      description: stripIveAuthorMarker(issue.description || ''),
       state: issue.state,
       stage: stage || 'none',
       assignees,
@@ -86,9 +105,11 @@ export async function GET(
       createdAt: issue.created_at,
       updatedAt: issue.updated_at,
       webUrl: issue.web_url,
-      author: issue.author?.name,
-      authorId: issue.author?.id ?? null,
-      authorAvatarUrl: issue.author?.avatar_url ?? null,
+      author,
+      authorId,
+      iveAuthorId,    // IVE 사용자 id (ive-author 마커 기반). 로컬 계정 담당자 판정용.
+      authorAvatarUrl,
+      iveAuthorAvatar,
     })
   } catch (err) {
     return NextResponse.json(

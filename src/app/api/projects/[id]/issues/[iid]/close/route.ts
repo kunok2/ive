@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAccess, getProjectAuthToken, isIssueAssignee } from '@/lib/db';
+import { getProject, getProjectAccess, getProjectAuthToken, isIssueAssignee, isIssueAuthor } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { closeIssue } from '@/lib/provider';
 
@@ -21,11 +21,17 @@ export async function POST(
 
   const token = getProjectAuthToken(projectId);
 
-  // 권한: 관리자이거나 해당 이슈의 Git assignee만 닫을 수 있음 (viewer도 assignee면 허용)
-  if (!user.isAdmin) {
-    if (!(await isIssueAssignee(project, Number(iid), token, user))) {
+  // 권한: 관리자 / 프로젝트 소유자 / 이슈 Git assignee / 이슈 작성자(author) 중 하나면 닫기 허용.
+  // (작성자 본인은 자기가 만든 이슈를 닫을 수 있어야 함 — 흔한 오픈소스 관행)
+  const isOwner = project.userId === user.id;
+  if (!user.isAdmin && !isOwner) {
+    const [assignee, author] = await Promise.all([
+      isIssueAssignee(project, Number(iid), token, user),
+      isIssueAuthor(project, Number(iid), token, user),
+    ]);
+    if (!assignee && !author) {
       return NextResponse.json(
-        { error: '이 이슈의 담당자(Git assignee) 또는 관리자만 이슈를 닫을 수 있습니다' },
+        { error: '이 이슈의 작성자/담당자/프로젝트 소유자/관리자만 이슈를 닫을 수 있습니다' },
         { status: 403 }
       );
     }

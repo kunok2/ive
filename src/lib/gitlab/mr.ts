@@ -67,11 +67,11 @@ export async function addGitLabMRNote(project: Project, decryptedToken: string, 
 /**
  * source_branch로 MR을 조회합니다 (opened + merged 모두).
  */
-export async function fetchGitLabMRByBranch(project: Project, decryptedToken: string, sourceBranch: string) {
+export async function fetchGitLabMRByBranch(project: Project, decryptedToken: string, sourceBranch: string, options?: { isOAuth?: boolean }) {
   const projectPath = getProjectPath(project.repoUrl);
   if (!projectPath) return null;
 
-  const headers = getAuthHeaders(project, decryptedToken);
+  const headers = getAuthHeaders(project, decryptedToken, options);
 
   try {
     // opened 먼저 조회
@@ -124,11 +124,11 @@ export async function fetchGitLabMRChanges(project: Project, decryptedToken: str
 /**
  * MR을 머지합니다.
  */
-export async function mergeGitLabMR(project: Project, decryptedToken: string, mrIid: number) {
+export async function mergeGitLabMR(project: Project, decryptedToken: string, mrIid: number, options?: { isOAuth?: boolean }) {
   const projectPath = getProjectPath(project.repoUrl);
   if (!projectPath) throw new Error('Invalid repo URL');
 
-  const headers = getAuthHeaders(project, decryptedToken);
+  const headers = getAuthHeaders(project, decryptedToken, options);
 
   // MR 상태 확인 — checking 중이면 대기 후 재시도
   const checkRes = await fetch(
@@ -176,8 +176,8 @@ export async function mergeGitLabMR(project: Project, decryptedToken: string, mr
 /**
  * MR을 닫습니다 (머지하지 않고).
  */
-export async function closeGitLabMR(project: Project, decryptedToken: string, mrIid: number) {
-  const headers = getAuthHeaders(project, decryptedToken);
+export async function closeGitLabMR(project: Project, decryptedToken: string, mrIid: number, options?: { isOAuth?: boolean }) {
+  const headers = getAuthHeaders(project, decryptedToken, options);
   const res = await fetch(
     apiUrl(project, `/merge_requests/${mrIid}`),
     {

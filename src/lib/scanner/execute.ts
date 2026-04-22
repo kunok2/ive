@@ -214,7 +214,9 @@ export async function executeTask(
     }
 
     // 4. 프롬프트 구성
-    const prompt = buildPrompt(project, issue, iid, isConflictTask, isGitHub, isKo, iterationCount, latestFeedback, iterationContext);
+    // 프로젝트가 OAuth 토큰을 쓰는 경우 에이전트에게 Bearer 헤더를 쓰도록 지시.
+    // PAT 기반이면 PRIVATE-TOKEN 유지. 잘못된 헤더는 401 → 에이전트가 "토큰 만료"로 오해함.
+    const prompt = buildPrompt(project, issue, iid, isConflictTask, isGitHub, isKo, iterationCount, latestFeedback, iterationContext, !!project.usesOAuthToken, agent.id);
 
     // 5. CLI 실행
     const cliPath = await resolveCliPath(agent, log);

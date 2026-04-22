@@ -52,7 +52,7 @@ export function normalizeIssue(ghIssue: any): any {
     created_at: ghIssue.created_at,
     updated_at: ghIssue.updated_at,
     web_url: ghIssue.html_url,
-    author: ghIssue.user ? { name: ghIssue.user.login, avatar_url: ghIssue.user.avatar_url } : undefined,
+    author: ghIssue.user ? { id: ghIssue.user.id, name: ghIssue.user.login, username: ghIssue.user.login, avatar_url: ghIssue.user.avatar_url } : undefined,
   };
 }
 

@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAuthToken, getProjectAccess, getUserById, getUserOAuthTokenRaw, getOAuthProviderById, touchProjectActivity } from '@/lib/db';
+import { getProject, getProjectAuthToken, getProjectAccess, getUserById, getUserOAuthTokenRaw, getOAuthProviderById, getAgent, touchProjectActivity } from '@/lib/db';
 import { triggerScan } from '@/lib/scanner';
 import { getCurrentUser } from '@/lib/auth';
 import { decrypt } from '@/lib/crypto';
 import { fetchIssueNotes, addIssueComment } from '@/lib/provider';
-import type { User } from '@/types';
+import { IVE_AUTHOR_MARKER_RE, IVE_AGENT_MARKER_RE, stripAllIveMarkers } from '@/lib/ive-author';
+import type { User, Agent } from '@/types';
 
-// IVE 사용자가 작성한 노트임을 표시하는 마커 (Git에는 숨겨진 HTML 주석으로 저장)
-const IVE_AUTHOR_MARKER_RE = /<!--\s*ive-author:([a-zA-Z0-9_-]+)\s*-->/;
 const IVE_BOT_TRIGGER_RE = /<!--\s*ive-bot\s*-->/i;
 
 export const dynamic = 'force-dynamic';
@@ -55,13 +54,20 @@ export async function GET(
       notes = await fetchIssueNotes(project, Number(iid), projectToken);
     }
 
-    // IVE 사용자 조회 캐시 (여러 노트가 같은 사용자일 때 중복 조회 방지)
+    // IVE 사용자 / 에이전트 조회 캐시 (여러 노트가 같은 주체일 때 중복 조회 방지)
     const iveUserCache = new Map<string, User | null>();
+    const iveAgentCache = new Map<string, Agent | null>();
     const resolveIveUser = (id: string): User | null => {
       if (!iveUserCache.has(id)) {
         iveUserCache.set(id, getUserById(id));
       }
       return iveUserCache.get(id) || null;
+    };
+    const resolveIveAgent = (id: string): Agent | null => {
+      if (!iveAgentCache.has(id)) {
+        iveAgentCache.set(id, getAgent(id) || null);
+      }
+      return iveAgentCache.get(id) || null;
     };
 
     const mapped = (notes as any[]).map((n: any) => {
@@ -69,10 +75,12 @@ export async function GET(
       let avatarUrl = n.author?.avatar_url || '';
       let iveAuthorAvatar: string | null = null;
 
-      // IVE 마커가 있으면 원래 작성한 IVE 사용자 정보로 override
-      const match: RegExpMatchArray | null = typeof n.body === 'string' ? n.body.match(IVE_AUTHOR_MARKER_RE) : null;
-      if (match) {
-        const iveUser = resolveIveUser(match[1]);
+      // 우선순위: ive-author(IVE 사용자) > ive-agent(에이전트) > Git author
+      const userMatch: RegExpMatchArray | null = typeof n.body === 'string' ? n.body.match(IVE_AUTHOR_MARKER_RE) : null;
+      const agentMatch: RegExpMatchArray | null = typeof n.body === 'string' ? n.body.match(IVE_AGENT_MARKER_RE) : null;
+
+      if (userMatch) {
+        const iveUser = resolveIveUser(userMatch[1]);
         if (iveUser) {
           author = iveUser.name;
           iveAuthorAvatar = iveUser.avatar === 'photo'
@@ -80,11 +88,18 @@ export async function GET(
             : iveUser.avatar;
           avatarUrl = '';
         }
+      } else if (agentMatch) {
+        const agent = resolveIveAgent(agentMatch[1]);
+        if (agent) {
+          author = agent.name;
+          iveAuthorAvatar = agent.avatar || 'av-01';
+          avatarUrl = '';
+        }
       }
 
       let isMine = false;
-      if (match) {
-        if (match[1] === user.id) isMine = true;
+      if (userMatch) {
+        if (userMatch[1] === user.id) isMine = true;
       } else if (!n.system) {
         // OAuth 연동된 계정과 동일한지 확인 (GitLab/GitHub ID 비교)
         if (user.oauthUserId && String(n.author?.id) === user.oauthUserId) isMine = true;
@@ -92,7 +107,7 @@ export async function GET(
 
       return {
         id: n.id,
-        body: typeof n.body === 'string' ? n.body.replace(IVE_AUTHOR_MARKER_RE, '').trim() : n.body,
+        body: typeof n.body === 'string' ? stripAllIveMarkers(n.body).trim() : n.body,
         author,
         avatarUrl,
         iveAuthorAvatar,

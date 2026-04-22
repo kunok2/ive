@@ -83,10 +83,10 @@ export function uploadIssueAttachment(
 }
 
 // MR / PR
-export function fetchMRByBranch(project: Project, token: string, branch: string) {
+export function fetchMRByBranch(project: Project, token: string, branch: string, options?: { isOAuth?: boolean }) {
   return project.provider === 'github'
     ? github.fetchGitHubPRByBranch(project, token, branch)
-    : gitlab.fetchGitLabMRByBranch(project, token, branch);
+    : gitlab.fetchGitLabMRByBranch(project, token, branch, options);
 }
 
 export function fetchMRChanges(project: Project, token: string, mrIid: number) {
@@ -95,16 +95,16 @@ export function fetchMRChanges(project: Project, token: string, mrIid: number) {
     : gitlab.fetchGitLabMRChanges(project, token, mrIid);
 }
 
-export function mergeMR(project: Project, token: string, mrIid: number) {
+export function mergeMR(project: Project, token: string, mrIid: number, options?: { isOAuth?: boolean }) {
   return project.provider === 'github'
     ? github.mergeGitHubPR(project, token, mrIid)
-    : gitlab.mergeGitLabMR(project, token, mrIid);
+    : gitlab.mergeGitLabMR(project, token, mrIid, options);
 }
 
-export function closeMR(project: Project, token: string, mrIid: number) {
+export function closeMR(project: Project, token: string, mrIid: number, options?: { isOAuth?: boolean }) {
   return project.provider === 'github'
     ? github.closeGitHubPR(project, token, mrIid)
-    : gitlab.closeGitLabMR(project, token, mrIid);
+    : gitlab.closeGitLabMR(project, token, mrIid, options);
 }
 
 // Open MRs (충돌 감지용)

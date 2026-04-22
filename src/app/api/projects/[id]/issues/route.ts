@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAccess, getProjectAuthToken, getAssignModeMap, setAssignMode, getAgent, hasActiveExecution, hasAnyExecution, stageFromLabels, touchProjectActivity, getUserOAuthTokenRaw, getOAuthProviderById } from '@/lib/db';
+import { getProject, getProjectAccess, getProjectAuthToken, getAssignModeMap, setAssignMode, getAgent, hasActiveExecution, hasAnyExecution, stageFromLabels, touchProjectActivity } from '@/lib/db';
 import { triggerScan } from '@/lib/scanner';
 import { getCurrentUser } from '@/lib/auth';
-import { decrypt } from '@/lib/crypto';
 import { checkLabelsExist, addIssueComment } from '@/lib/provider';
 import { fetchAllProjectIssues, fetchClosedProjectIssues, createIssue } from '@/lib/provider';
+import { withGitToken, friendlyGitError } from '@/lib/git-token';
+import { prependIveAuthorMarker, stripIveAuthorMarker, resolveIveAuthorFromBody } from '@/lib/ive-author';
 
 export async function GET(
   req: NextRequest,
@@ -77,10 +78,29 @@ export async function GET(
           avatarUrl: a.avatar_url,
         }));
 
+        // ive-author 마커가 본문에 있으면 실제 IVE 사용자로 author 덮어쓰기.
+        // Git UI에는 토큰 소유자가 저자로 남지만 IVE UI에서는 실제 작성자로 보이도록.
+        // avatar 는 AgentAvatar 가 해석 가능한 값을 반환: URL | 'photo' | 'av-XX'
+        const iveAuthor = resolveIveAuthorFromBody(issue.description);
+        const author = iveAuthor
+          ? {
+              name: iveAuthor.name,
+              avatar: iveAuthor.avatar === 'photo'
+                ? `/api/auth/avatar/image?id=${iveAuthor.id}`
+                : (iveAuthor.avatar || 'av-01'),
+              // 하위 호환용 — 기존에 author.avatarUrl 만 쓰던 UI 가 photo URL 은 그대로 표시 가능
+              avatarUrl: iveAuthor.avatar === 'photo' ? `/api/auth/avatar/image?id=${iveAuthor.id}` : null,
+            }
+          : {
+              name: issue.author?.name,
+              avatar: issue.author?.avatar_url || 'av-01',
+              avatarUrl: issue.author?.avatar_url ?? null,
+            };
+
         return {
           iid: issue.iid,
           title: issue.title,
-          description: issue.description,
+          description: stripIveAuthorMarker(issue.description || ''),
           state: issue.state,
           stage,
           failReason: null, // 실패 사유는 이슈 코멘트에서 확인
@@ -94,7 +114,7 @@ export async function GET(
           createdAt: issue.created_at,
           updatedAt: issue.updated_at,
           webUrl: issue.web_url,
-          author: { name: issue.author?.name, avatarUrl: issue.author?.avatar_url },
+          author,
         };
       });
 
@@ -125,37 +145,11 @@ export async function POST(
   if (!title?.trim()) return NextResponse.json({ error: '제목을 입력하세요.' }, { status: 400 });
 
   try {
-    const projectToken = getProjectAuthToken(projectId);
-
-    // 이슈 생성자가 "이슈를 작성한 실제 사용자"가 되도록:
-    //   1) 접속자가 OAuth로 로그인했고
-    //   2) 접속자의 OAuth provider 타입이 프로젝트의 provider와 일치하면
-    //   → 접속자 OAuth 토큰으로 이슈 생성 (Bearer 헤더)
-    // 그 외 경우는 프로젝트 토큰(PAT 또는 프로젝트 생성자 OAuth)으로 생성.
-    // provider type 불일치(예: 사용자는 GitHub OAuth인데 프로젝트는 GitLab)면
-    // 애초에 해당 토큰으론 인증 안 되니 시도 자체를 생략.
-    let userToken: string | null = null;
-    let usingUserToken = false;
-    if (user.oauthProviderId) {
-      const provider = getOAuthProviderById(user.oauthProviderId);
-      if (provider && provider.type === project.provider) {
-        const raw = getUserOAuthTokenRaw(user.id);
-        if (raw?.encrypted) {
-          try {
-            userToken = decrypt(raw.encrypted);
-            usingUserToken = true;
-          } catch (e) {
-            console.warn('[Issues POST] OAuth token decrypt failed, falling back to project token:', e);
-          }
-        }
-      }
-    }
-    const token = userToken || projectToken;
-
-    // 레이블 존재 확인 (asDev일 때만).
-    // 프로젝트 공식 토큰으로 조회 — 사용자 OAuth 토큰은 조직/private repo 접근 권한이 없을 수 있고,
-    // checkLabelsExist는 API 실패를 "모두 없음"으로 묻기 때문에 오탐(모달 오동작)이 발생함.
+    // 레이블 존재 확인 (asDev일 때만) — 프로젝트 레벨 설정 점검이라 프로젝트 토큰 고정.
+    // 접속자 OAuth 토큰은 조직/private repo 접근 권한이 없을 수 있고, checkLabelsExist는 API 실패를
+    // "모두 없음"으로 묻기 때문에 접속자 토큰으로 하면 오탐(모달 오동작) 발생.
     if (asDev) {
+      const projectToken = getProjectAuthToken(projectId);
       const labelCheck = await checkLabelsExist(project, projectToken);
       const devLabel = labelCheck.find(l => l.label === project.labelTarget);
       if (devLabel && !devLabel.exists) {
@@ -174,20 +168,16 @@ export async function POST(
     const assignees = (assigneeIds?.length || assigneeUsernames?.length)
       ? { ids: assigneeIds, usernames: assigneeUsernames } : undefined;
 
-    // 접속자 OAuth 토큰은 GitLab에 `Authorization: Bearer`로 보내야 함 (isOAuth: true).
-    // 프로젝트 토큰(PAT)은 PRIVATE-TOKEN 헤더 — getAuthHeaders 기본값.
-    // 접속자 토큰 실패 시 프로젝트 토큰으로 fallback (Git 상 작성자는 프로젝트 소유자로 표시됨).
-    let issue: any;
-    try {
-      issue = await createIssue(project, token, title.trim(), description?.trim() ?? '', labels, assignees, { isOAuth: usingUserToken });
-    } catch (e) {
-      if (usingUserToken) {
-        console.warn(`[Issues POST] User OAuth token failed, retrying with project token:`, e);
-        issue = await createIssue(project, projectToken, title.trim(), description?.trim() ?? '', labels, assignees);
-      } else {
-        throw e;
-      }
-    }
+    // 본문 맨 앞에 ive-author 마커 주입 — 프로젝트 토큰으로 fallback되어 Git 저자가
+    // 프로젝트 소유자로 표시되는 경우에도 IVE UI에서는 실제 작성자로 복원할 수 있게 함.
+    // 마커는 HTML 주석이라 GitLab/GitHub 웹 UI에서는 사용자에게 보이지 않음.
+    const bodyWithMarker = prependIveAuthorMarker(user.id, description?.trim() ?? '');
+
+    // 대원칙 적용: 접속자 OAuth 토큰 우선 → 실패 시 프로젝트 토큰 fallback.
+    // withGitToken 이 TokenContext 를 넘겨주므로 ctx.isOAuth 만 그대로 API 함수에 전달.
+    const issue: any = await withGitToken(user, project, (ctx) =>
+      createIssue(project, ctx.token, title.trim(), bodyWithMarker, labels, assignees, { isOAuth: ctx.isOAuth })
+    );
 
     // 배정 모드 지정
     if (issue.iid) {
@@ -207,7 +197,9 @@ export async function POST(
         const labelV = project.labelVerify || 'IVE-V';
         const labelE = project.labelEnd || 'IVE-E';
         const guideNote = `<!-- ive-bot -->\n## 📋 담당자 작업 안내\n\n| 레이블 | 단계 | 설명 |\n|:---:|---|---|\n| \`${labelS}\` | 대기 | 현재 단계 |\n| \`${labelD}\` | 개발 | 개발 진행 중 (브랜치 자동 생성) |\n| \`${labelW}\` | 검증 대기 | 개발 완료 |\n| \`${labelV}\` | 검증 중 | 검증 진행 중 |\n| \`${labelE}\` | 완료 | 모든 작업 완료 |`;
-        await addIssueComment(project, issue.iid, token, guideNote);
+        await withGitToken(user, project, (ctx) =>
+          addIssueComment(project, issue.iid, ctx.token, guideNote, { isOAuth: ctx.isOAuth })
+        );
       } catch (e) {
         console.warn(`[Issues] Failed to add guide note on #${issue.iid}:`, e);
       }
@@ -225,6 +217,6 @@ export async function POST(
     return NextResponse.json(issue);
   } catch (err) {
     console.error('[issues POST] failed:', err)
-    return NextResponse.json({ error: '이슈 생성 실패' }, { status: 500 });
+    return NextResponse.json({ error: friendlyGitError(err, '이슈 생성') }, { status: 500 });
   }
 }
