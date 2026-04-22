@@ -136,9 +136,11 @@ export async function POST(
 
     const token = userToken || projectToken;
 
-    // 레이블 존재 확인 (asDev일 때만)
+    // 레이블 존재 확인 (asDev일 때만).
+    // 프로젝트 공식 토큰으로 조회 — 사용자 OAuth 토큰은 조직/private repo 접근 권한이 없을 수 있고,
+    // checkLabelsExist는 API 실패를 "모두 없음"으로 묻기 때문에 오탐(모달 오동작)이 발생함.
     if (asDev) {
-      const labelCheck = await checkLabelsExist(project, token);
+      const labelCheck = await checkLabelsExist(project, projectToken);
       const devLabel = labelCheck.find(l => l.label === project.labelTarget);
       if (devLabel && !devLabel.exists) {
         return NextResponse.json({
