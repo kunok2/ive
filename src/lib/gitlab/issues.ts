@@ -295,12 +295,15 @@ export async function createGitLabIssue(
   title: string,
   description: string,
   labels: string[],
-  assigneeIds?: number[]
+  assigneeIds?: number[],
+  options?: { isOAuth?: boolean }
 ) {
   const projectPath = getProjectPath(project.repoUrl);
   if (!projectPath) throw new Error('Invalid repo URL');
 
-  const headers = getAuthHeaders(project, decryptedToken);
+  // OAuth 토큰은 Authorization: Bearer로 보내야 함. PRIVATE-TOKEN 헤더는 PAT 전용이라
+  // OAuth 토큰을 거기 실으면 GitLab이 401 Unauthorized로 거부한다.
+  const headers = getAuthHeaders(project, decryptedToken, options);
 
   const body: any = { title, description, labels: labels.join(',') };
   if (assigneeIds && assigneeIds.length > 0) body.assignee_ids = assigneeIds;

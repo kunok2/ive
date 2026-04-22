@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAccess, getProjectAuthToken, getAssignModeMap, setAssignMode, getAgent, hasActiveExecution, hasAnyExecution, stageFromLabels, touchProjectActivity, getUserOAuthTokenRaw } from '@/lib/db';
+import { getProject, getProjectAccess, getProjectAuthToken, getAssignModeMap, setAssignMode, getAgent, hasActiveExecution, hasAnyExecution, stageFromLabels, touchProjectActivity, getUserOAuthTokenRaw, getOAuthProviderById } from '@/lib/db';
 import { triggerScan } from '@/lib/scanner';
 import { getCurrentUser } from '@/lib/auth';
 import { decrypt } from '@/lib/crypto';
@@ -127,13 +127,29 @@ export async function POST(
   try {
     const projectToken = getProjectAuthToken(projectId);
 
-    // 현재 사용자의 OAuth 토큰을 우선 사용, 없으면 프로젝트 토큰
+    // 이슈 생성자가 "이슈를 작성한 실제 사용자"가 되도록:
+    //   1) 접속자가 OAuth로 로그인했고
+    //   2) 접속자의 OAuth provider 타입이 프로젝트의 provider와 일치하면
+    //   → 접속자 OAuth 토큰으로 이슈 생성 (Bearer 헤더)
+    // 그 외 경우는 프로젝트 토큰(PAT 또는 프로젝트 생성자 OAuth)으로 생성.
+    // provider type 불일치(예: 사용자는 GitHub OAuth인데 프로젝트는 GitLab)면
+    // 애초에 해당 토큰으론 인증 안 되니 시도 자체를 생략.
     let userToken: string | null = null;
-    const userOAuth = getUserOAuthTokenRaw(user.id);
-    if (userOAuth?.encrypted) {
-      try { userToken = decrypt(userOAuth.encrypted); } catch { /* ignore */ }
+    let usingUserToken = false;
+    if (user.oauthProviderId) {
+      const provider = getOAuthProviderById(user.oauthProviderId);
+      if (provider && provider.type === project.provider) {
+        const raw = getUserOAuthTokenRaw(user.id);
+        if (raw?.encrypted) {
+          try {
+            userToken = decrypt(raw.encrypted);
+            usingUserToken = true;
+          } catch (e) {
+            console.warn('[Issues POST] OAuth token decrypt failed, falling back to project token:', e);
+          }
+        }
+      }
     }
-
     const token = userToken || projectToken;
 
     // 레이블 존재 확인 (asDev일 때만).
@@ -158,13 +174,15 @@ export async function POST(
     const assignees = (assigneeIds?.length || assigneeUsernames?.length)
       ? { ids: assigneeIds, usernames: assigneeUsernames } : undefined;
 
-    // 사용자 토큰으로 시도, 실패하면 프로젝트 토큰으로 재시도
+    // 접속자 OAuth 토큰은 GitLab에 `Authorization: Bearer`로 보내야 함 (isOAuth: true).
+    // 프로젝트 토큰(PAT)은 PRIVATE-TOKEN 헤더 — getAuthHeaders 기본값.
+    // 접속자 토큰 실패 시 프로젝트 토큰으로 fallback (Git 상 작성자는 프로젝트 소유자로 표시됨).
     let issue: any;
     try {
-      issue = await createIssue(project, token, title.trim(), description?.trim() ?? '', labels, assignees);
+      issue = await createIssue(project, token, title.trim(), description?.trim() ?? '', labels, assignees, { isOAuth: usingUserToken });
     } catch (e) {
-      if (userToken && token !== projectToken) {
-        console.warn(`[Issues] User token failed, retrying with project token:`, e);
+      if (usingUserToken) {
+        console.warn(`[Issues POST] User OAuth token failed, retrying with project token:`, e);
         issue = await createIssue(project, projectToken, title.trim(), description?.trim() ?? '', labels, assignees);
       } else {
         throw e;
