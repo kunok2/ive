@@ -20,6 +20,22 @@ export function setupTestDb(): Database.Database {
       is_admin INTEGER NOT NULL DEFAULT 0,
       max_agents INTEGER NOT NULL DEFAULT 1,
       max_turns INTEGER NOT NULL DEFAULT 20,
+      oauth_provider_id TEXT,
+      oauth_user_id TEXT,
+      oauth_access_token TEXT,
+      oauth_refresh_token TEXT,
+      oauth_token_expires_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE oauth_providers (
+      id TEXT PRIMARY KEY,
+      type TEXT NOT NULL CHECK(type IN ('github', 'gitlab')),
+      name TEXT NOT NULL,
+      base_url TEXT NOT NULL,
+      client_id TEXT NOT NULL,
+      client_secret TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -203,9 +219,32 @@ export function teardownTestDb() {
 
 // ── 시드 데이터 생성 헬퍼 ──
 
-export function seedUser(db: Database.Database, id: string, name: string, opts?: { isAdmin?: boolean }) {
-  db.prepare('INSERT INTO users (id, email, password, name, is_admin) VALUES (?, ?, ?, ?, ?)').run(
-    id, `${id}@test.com`, 'hash', name, opts?.isAdmin ? 1 : 0
+export function seedUser(db: Database.Database, id: string, name: string, opts?: {
+  isAdmin?: boolean
+  avatar?: string
+  oauthProviderId?: string | null
+  oauthUserId?: string | null
+  oauthAccessToken?: string | null
+}) {
+  db.prepare(`INSERT INTO users
+    (id, email, password, name, avatar, is_admin, oauth_provider_id, oauth_user_id, oauth_access_token)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    id, `${id}@test.com`, 'hash', name, opts?.avatar ?? 'av-01', opts?.isAdmin ? 1 : 0,
+    opts?.oauthProviderId ?? null, opts?.oauthUserId ?? null, opts?.oauthAccessToken ?? null,
+  )
+}
+
+export function seedOAuthProvider(db: Database.Database, id: string, type: 'github' | 'gitlab', opts?: {
+  baseUrl?: string; clientId?: string; clientSecret?: string; enabled?: boolean
+}) {
+  db.prepare(`INSERT INTO oauth_providers
+    (id, type, name, base_url, client_id, client_secret, enabled)
+    VALUES (?, ?, ?, ?, ?, ?, ?)`).run(
+    id, type, `${type}-provider`,
+    opts?.baseUrl ?? (type === 'gitlab' ? 'https://gitlab.com' : 'https://github.com'),
+    opts?.clientId ?? 'client-id',
+    opts?.clientSecret ?? 'client-secret',
+    opts?.enabled === false ? 0 : 1,
   )
 }
 
