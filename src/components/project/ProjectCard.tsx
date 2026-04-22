@@ -178,7 +178,9 @@ export default function ProjectCard({ project }: Props) {
   const runningExecs = executions.filter(e => e.status === 'running' || e.status === 'assigned')
   const doneExecs = executions.filter(e => e.status !== 'running' && e.status !== 'assigned')
   const todayStartISO = getKSTTodayStartISO()
-  const todayDoneExecs = doneExecs.filter(e => e.startedAt >= todayStartISO && (e.verifiedAt != null || e.rejectedAt != null || e.agentId === ''))
+  // agent_id가 비어있으면(=null/'') 외부 도구 execution. mapExecution에서 NULL→''로 정규화하긴 하지만
+  // 호출 경로가 여럿이라 방어적으로 둘 다 처리.
+  const todayDoneExecs = doneExecs.filter(e => e.startedAt >= todayStartISO && (e.verifiedAt != null || e.rejectedAt != null || !e.agentId))
 
   const mergeCount = liveMRCount ?? 0
   const conflictCount = liveConflictCount ?? stats?.conflictCount ?? 0
