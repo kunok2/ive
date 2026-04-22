@@ -521,8 +521,15 @@ export default function ProjectCard({ project }: Props) {
                     </div>
                     <MarqueeText className="text-sm text-ive-text font-bold">{issue.title}</MarqueeText>
                     <div className="flex items-center gap-3 text-xs text-ive-text-dim mt-1">
-                      {issue.author && (
-                        <span><i className="fa-solid fa-user mr-0.5" />{issue.author}</span>
+                      {issue.author?.name && (
+                        <span className="flex items-center gap-1">
+                          {issue.author.avatarUrl ? (
+                            <img src={issue.author.avatarUrl} className="w-4 h-4 rounded-full object-cover bg-ive-bg-deep" alt="" />
+                          ) : (
+                            <i className="fa-solid fa-user" />
+                          )}
+                          {issue.author.name}
+                        </span>
                       )}
                       <span>
                         {formatDateShort(issue.createdAt, userLocale, userTz)}
