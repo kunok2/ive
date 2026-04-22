@@ -49,7 +49,7 @@ const StoreContext = createContext<{
   state: State
   refreshUser: () => Promise<User | null>
   refresh: () => Promise<void>
-  logout: () => Promise<{ providerLogoutUrl: string | null }>
+  logout: () => Promise<void>
   addProject: (p: Omit<Project, 'id' | 'userId' | 'createdAt' | 'conflictCount'> & { useOAuthToken?: boolean }) => Promise<void>
   updateProject: (p: Project) => Promise<void>
   deleteProject: (id: string) => Promise<void>
@@ -65,7 +65,7 @@ const StoreContext = createContext<{
   state: { user: null, projects: [], agents: [], loading: true, authChecked: false },
   refreshUser: async () => null,
   refresh: async () => {},
-  logout: async () => ({ providerLogoutUrl: null }),
+  logout: async () => {},
   addProject: async () => {},
   updateProject: async () => {},
   deleteProject: async () => {},
@@ -143,23 +143,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const logout = useCallback(async () => {
-    const res = await fetch('/api/auth/logout', { method: 'POST' })
-    // OAuth 로그인이었다면 서버가 공급자 브라우저 세션 로그아웃 URL을 반환.
-    // 호출자가 이 URL로 full-page navigate 해야 GitLab/GitHub 쿠키까지 종료됨.
-    let providerLogoutUrl: string | null = null
-    try {
-      const data = await res.json()
-      providerLogoutUrl = data?.providerLogoutUrl ?? null
-    } catch { /* ignore */ }
+    await fetch('/api/auth/logout', { method: 'POST' })
     dispatch({ type: 'SET_USER', user: null })
     dispatch({ type: 'SET_PROJECTS', projects: [] })
     dispatch({ type: 'SET_AGENTS', agents: [] })
+    // 세션 캐시 제거
     if (typeof window !== 'undefined') {
       sessionStorage.removeItem('issues-cache')
       sessionStorage.removeItem('issues-scroll')
-      sessionStorage.removeItem('ive-session-expired')
     }
-    return { providerLogoutUrl }
   }, [])
 
   const userRef = useRef(state.user)

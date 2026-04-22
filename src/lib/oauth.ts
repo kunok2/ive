@@ -111,15 +111,11 @@ export function buildAuthorizeUrl(p: ResolvedProvider, state: string, redirectUr
     state,
   })
   if (p.type === 'github') {
-    // GitHub는 OAuth 2.0 일반 흐름에서 prompt 파라미터를 공식 지원하지 않음.
-    // 공급자 측 브라우저 세션 종료는 logout 엔드포인트의 providerLogoutUrl navigate로 처리.
+    // GitHub는 query에 allow_signup도 지정 가능 (기본 true)
     return `${p.baseUrl}/login/oauth/authorize?${params.toString()}`
   }
-  // GitLab: prompt=login 과 max_age=0 두 가지를 동시 지정 — 일부 버전에서 하나만 인식.
-  // 공급자 세션 쿠키가 남아있는 경우 재인증 화면을 띄우는 best-effort. 확실한 세션 종료는
-  // logout 엔드포인트의 providerLogoutUrl navigate에서 담당.
+  // GitLab: prompt=login으로 매번 재인증을 강제해 로그아웃 후 자동 로그인을 방지
   params.set('prompt', 'login')
-  params.set('max_age', '0')
   return `${p.baseUrl}/oauth/authorize?${params.toString()}`
 }
 
