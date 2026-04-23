@@ -199,8 +199,11 @@ export default function ProjectCard({ project }: Props) {
   // 호출 경로가 여럿이라 방어적으로 둘 다 처리.
   const todayDoneExecs = doneExecs.filter(e => e.startedAt >= todayStartISO && (e.verifiedAt != null || e.rejectedAt != null || !e.agentId))
 
-  const mergeCount = liveMRCount ?? 0
-  const conflictCount = liveConflictCount ?? stats?.conflictCount ?? 0
+  // 라이브 값(/api/.../conflicts)이 단일 진실. stats.conflictCount는
+  // 'merge 단계 이슈 수'라는 다른 지표라 fallback으로 쓰면 카운트가 어긋남(0 MR인데
+  // conflict>0 같은 모순 표시). 로드 전에는 null로 두고 화면에서 placeholder 처리.
+  const mergeCount = liveMRCount
+  const conflictCount = liveConflictCount ?? 0
   const agentWorkingCount = stats?.agentWorking ?? 0
   const verifyingCount = stats?.verifying ?? 0
   const completedCount = stats?.completed ?? 0
@@ -416,11 +419,14 @@ export default function ProjectCard({ project }: Props) {
           onClick={() => setExpandedPanel(expandedPanel === 'conflicts' ? null : 'conflicts')}
           className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'conflicts' ? 'bg-ive-amber/5' : 'hover:bg-white/[0.02]'}`}
         >
-          <span className={`text-lg font-bold leading-none ${conflictCount > 0 ? 'text-ive-red animate-pulse' : mergeCount > 0 ? 'text-ive-amber' : 'text-ive-text-dim'}`}>
-            {mergeCount}
+          <span className={`text-lg font-bold leading-none ${mergeCount === null ? 'text-ive-text-dim/40' : conflictCount > 0 ? 'text-ive-red animate-pulse' : mergeCount > 0 ? 'text-ive-amber' : 'text-ive-text-dim'}`}>
+            {mergeCount === null ? '–' : mergeCount}
           </span>
-          <i className={`fa-solid fa-code-merge text-xs ${conflictCount > 0 ? 'text-ive-red' : mergeCount > 0 ? 'text-ive-amber' : 'text-ive-text-dim'}`} />
-          <span className={`text-xs font-bold ${conflictCount > 0 ? 'text-ive-red' : mergeCount > 0 ? 'text-ive-amber' : 'text-ive-text-dim'}`}>{tp('conflictLabel')}</span>
+          {/* Sparkline(40x12)과 동일 박스로 감싸야 <i> baseline 정렬이 위 숫자와 붙어 보이는 현상 방지 */}
+          <div className="flex items-center justify-center" style={{ width: 40, height: 12 }}>
+            <i className={`fa-solid fa-code-merge text-[10px] leading-none ${conflictCount > 0 ? 'text-ive-red' : (mergeCount ?? 0) > 0 ? 'text-ive-amber' : 'text-ive-text-dim'}`} />
+          </div>
+          <span className={`text-xs font-bold ${conflictCount > 0 ? 'text-ive-red' : (mergeCount ?? 0) > 0 ? 'text-ive-amber' : 'text-ive-text-dim'}`}>{tp('conflictLabel')}</span>
         </button>
       </div>
 
