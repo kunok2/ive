@@ -1,25 +1,28 @@
 ## Commands
 
 ```bash
-npm run dev      # Development server (tsx server.ts - custom HTTP + WebSocket + node-pty)
-npm run build   # Next.js production build
-npm run start   # Production server
-npm run lint    # ESLint (eslint.config.mjs)
-npm run test    # Run tests (vitest)
+npm run dev        # Dev server (tsx server.ts — HTTP + WebSocket + node-pty)
+npm run build     # Next.js production build
+npm run start    # Production server
+npm run lint     # ESLint
+npm run test    # Vitest (tests/**/*.test.ts)
+npm run test:watch  # Watch mode
+npm run deploy   # Docker build + push (manual)
 ```
 
 ## Tech Stack
 
-- **Framework**: Next.js 16 (App Router), Custom server (`server.ts` with WebSocket, node-pty)
-- **Frontend**: React 19, Tailwind CSS 4, xterm.js
-- **DB**: SQLite (`data/springware-ive.db`) via better-sqlite3
+- **Framework**: Next.js 16 (App Router) + custom `server.ts` (HTTP/WS + node-pty)
+- **Frontend**: React 19, Tailwind CSS 4, xterm.js, Recharts
+- **DB**: SQLite — `data/springware-ive.db` via better-sqlite3
 - **i18n**: next-intl (ko/en)
 - **Auth**: JWT + bcryptjs
+- **Deploy**: Docker (port 3100→3000), GitLab CI/CD triggers local build+restart
 
 ## Testing
 
-- Vitest config: `vitest.config.ts` — test files in `tests/**/*.test.ts`
-- Run: `npm run test` or `npm run test:watch`
+- Run single test: `npm run test -- <pattern>` or vitest directly
+- Test files: `tests/**/*.test.ts`
 
 ## Scanner Principles
 
@@ -28,13 +31,27 @@ npm run test    # Run tests (vitest)
 
 ## UI Development
 
-Follow [DESIGN_GUIDE.md](DESIGN_GUIDE.md) — colors, typography, spacing, component patterns.
+Follow [DESIGN_GUIDE.md](DESIGN_GUIDE.md):
 
-Key rules:
-- Colors: use only `ive-*` tokens (no raw Tailwind palette like `amber-*`, `red-*`)
-- Rounding: `rounded-lg` for buttons/inputs/cards, `rounded-2xl` for modals, `rounded-full` for avatars
-- Typography: `font-bold` is default — `font-semibold`, `font-medium` forbidden
+- Colors: use only `ive-*` tokens (no raw `amber-*`, `red-*`)
+- Rounding: `rounded-lg` (buttons/inputs/cards), `rounded-2xl` (modals), `rounded-full` (avatars)
+- Typography: `font-bold` default — `font-semibold`, `font-medium` forbidden
 - No `shadow-*` except modals/dropdowns
+
+## Core Flow
+
+1. Scanner (`lib/scanner.ts`) polls GitLab/GitHub issues periodically
+2. Finds issues with target label → creates `TaskExecution` in DB
+3. Assigned agent runs CLI (`claude`/`gemini`/`codex`/`opencode`) via node-pty
+4. Logs stream in real-time via WebSocket (xterm.js)
+5. On complete: creates MR/PR or adds issue comment
+
+## Key Files
+
+- `src/lib/db.ts` — SQLite schema + all queries
+- `src/lib/scanner.ts` — Issue polling + task execution
+- `src/lib/provider.ts` — GitLab/GitHub API
+- `src/lib/store.tsx` — React client state
 
 <!-- ive:begin -->
 ## IVE 작업 등록
