@@ -138,6 +138,28 @@ ended_at: <ISO 시각>
 -->
 ```
 
+`started_at` / `ended_at` 은 **한국시간(KST, +09:00)** 으로 기재. UTC `Z` 표기 사용 금지. 형식 예: `TZ=Asia/Seoul date +"%Y-%m-%dT%H:%M:%S+09:00"`
+
+### 작업시간 기록 (GitLab Time Tracking, 필수)
+
+GitLab UI의 **Time tracking** 패널에 작업시간이 표시되도록 이슈 생성 후 `/spend` quick action을 코멘트로 추가하세요. ive-meta의 `started_at`/`ended_at`만으로는 GitLab Time tracking에 반영되지 않습니다.
+
+```
+/spend <시간> [<날짜>]
+```
+
+예시:
+- `/spend 2h 45m` — 2시간 45분 기록 (작성 시점 날짜)
+- `/spend 1h 2026-04-24` — 특정 날짜에 1시간 기록
+- `/estimate 3h` — 예상 시간 설정 (선택사항)
+
+GitLab CLI로 추가하는 방법:
+```
+glab issue note <ID> -R <project> --message "/spend 2h 45m"
+```
+
+작업이 여러 이슈에 분산됐다면 각 이슈에 해당 부분만큼만 `/spend`. ive-meta의 시간 범위와 GitLab Time tracking 합계가 일치해야 합니다.
+
 ### 참고
 
 - IVE 서버 주소나 IVE 토큰은 **필요하지 않습니다**
