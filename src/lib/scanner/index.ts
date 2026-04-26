@@ -687,9 +687,9 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
 
     // ── 담당자가 처리 (assignee 모드) ──
     // assignee 모드는 자동 배정하지 않음. 담당자가 Git에서 IVE-D를 직접 부여하면 처리됨.
+    // 이 상태는 "사람이 직접 처리 중"이므로 진짜 대기가 아님
     if (assignInfo.mode === 'assignee') {
       console.log(`[Scanner] [WAIT] Issue #${issue.iid} — assignee 모드, 담당자가 IVE-D 레이블 부여 대기`);
-      waitingCount++;
       continue;
     }
 
@@ -703,16 +703,13 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
     if (preferredAgentId) {
       const pa = assignments.find(a => a.agentId === preferredAgentId);
       if (!pa) {
-        // 지정 에이전트가 현재 프로젝트 배정 목록에 없음 → 다른 에이전트로 자동 전환 금지, 대기
+        // 지정 에이전트가 현재 프로젝트 배정 목록에 없음 → 다른 에이전트로 자동 전환 금지
         // 사용자가 직접 작업자를 지정했으므로 그 의도를 존중한다.
-        // 이슈가 계속 대기 상태로 보이면 사용자가 작업자를 직접 변경하면 됨.
         console.log(`[Scanner] [WAIT] Issue #${issue.iid} — 지정 작업자(${preferredAgentId})가 프로젝트 배정 목록에 없음, 대기`);
-        waitingCount++;
         continue;
       } else if (busyAgentIds.has(pa.agentId) || countActiveExecutionsByAgent(pa.agentId) > 0) {
         // 지정 에이전트가 바쁨 → 이번 스캔 스킵, 다음 스캔에서 재시도
         console.log(`[Scanner] [WAIT] Issue #${issue.iid} — 지정 작업자 '${pa.agent.name}' 작업 중, 대기`);
-        waitingCount++;
         continue;
       } else {
         selectedPa = pa;
