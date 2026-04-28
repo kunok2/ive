@@ -164,6 +164,8 @@ export async function runCliProcess(
 
     // 토큰/비용 누적 변수
     let stdoutBuffer = '';
+    let stderrBuffer = '';
+    const STDERR_BUFFER_MAX = 4000;
     let totalInputTokens = 0;
     let totalOutputTokens = 0;
     let totalCacheReadTokens = 0;
@@ -273,7 +275,12 @@ export async function runCliProcess(
       }
     });
     child.stderr.on('data', (data: Buffer) => {
-      const text = data.toString().trim();
+      const raw = data.toString();
+      stderrBuffer += raw;
+      if (stderrBuffer.length > STDERR_BUFFER_MAX) {
+        stderrBuffer = stderrBuffer.slice(-STDERR_BUFFER_MAX);
+      }
+      const text = raw.trim();
       if (text) log(text, 'warn');
     });
 
@@ -300,8 +307,25 @@ export async function runCliProcess(
       } else if (finalModel) {
         updateExecutionTokens(executionId, 0, 0, 0, 0, finalModel, 0, 0);
       }
-      if (code === 0) resolve();
-      else reject(new Error(`Agent CLI exited with code ${code}`));
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      const detail: string[] = [];
+      detail.push(`Agent CLI exited with code ${code}${signal ? ` (signal: ${signal})` : ''}`);
+      if (signal === 'SIGKILL' || code === 137) {
+        detail.push('힌트: 메모리 부족(OOM) 또는 강제 종료로 추정됩니다.');
+      } else if (signal === 'SIGTERM' || code === 143) {
+        detail.push('힌트: 외부 신호로 프로세스가 종료되었습니다 (timeout/kill).');
+      } else if (assistantTurnCount === 0) {
+        detail.push('힌트: 응답을 시작하기 전 종료 — CLI 인증/모델 미설정/인수 오류 가능성.');
+      }
+      const stderrTail = stderrBuffer.trim();
+      if (stderrTail) {
+        const tail = stderrTail.length > 800 ? `…${stderrTail.slice(-800)}` : stderrTail;
+        detail.push(`stderr:\n${tail}`);
+      }
+      reject(new Error(detail.join('\n')));
     });
     child.on('error', (err) => {
       log(`CLI 실행 실패: ${err.message}`, 'error');

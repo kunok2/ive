@@ -158,7 +158,10 @@ export async function postErrorNote(
   errMessage: string,
   isGitHub: boolean,
 ): Promise<void> {
-  const errorNote = `<!-- ive-bot -->\n<!-- ive-agent:${agent.id} -->\n## ❌ 실행 오류 — ${agent.name}\n\n- **오류:** ${errMessage}`;
+  const formatted = errMessage.includes('\n')
+    ? `\n\n\`\`\`\n${errMessage}\n\`\`\``
+    : ` ${errMessage}`;
+  const errorNote = `<!-- ive-bot -->\n<!-- ive-agent:${agent.id} -->\n## ❌ 실행 오류 — ${agent.name}\n\n- **오류:**${formatted}`;
   try {
     if (isGitHub) {
       await addGitHubIssueComment(project, iid, token, errorNote);
