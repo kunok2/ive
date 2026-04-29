@@ -73,6 +73,7 @@ export interface Project {
   labelVerifyWait: string  // 검증 대기 (예: IVE-W) — 개발 완료 후 부착 (검증자 시작 전)
   labelVerify: string      // 검증 중 (예: IVE-V) — 검증자가 검증시작 클릭 후 부착
   labelEnd: string         // 처리 완료 (예: IVE-E) — 검증 완료 후 부착
+  baseBranch: string       // 베이스 브랜치 (빈 값이면 origin/HEAD 자동 감지 → main fallback)
   showToolUsage: boolean   // 트레이스에 툴 사용 표시 여부
   checkInterval: number    // 체크 간격 (분)
   lastCheckedAt: string | null // 마지막 체크 시간

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Project } from '@/types'
 import { useTranslations } from 'next-intl'
 import type { OAuthInfo } from './OAuthImportSection'
@@ -18,6 +18,8 @@ export interface ConnectionSectionProps {
   oauthInfo: OAuthInfo
   avatarUrl: string
   onAvatarUrlChange: (v: string) => void
+  baseBranch: string
+  onBaseBranchChange: (v: string) => void
 }
 
 export default function ConnectionSection({
@@ -33,6 +35,8 @@ export default function ConnectionSection({
   oauthInfo,
   avatarUrl,
   onAvatarUrlChange,
+  baseBranch,
+  onBaseBranchChange,
 }: ConnectionSectionProps) {
   const t = useTranslations('project')
   const tc = useTranslations('common')
@@ -46,6 +50,60 @@ export default function ConnectionSection({
     avatarUrl?: string
     error?: string
   } | null>(null)
+  const [branches, setBranches] = useState<string[]>([])
+  const [branchesLoading, setBranchesLoading] = useState(false)
+  const [branchesError, setBranchesError] = useState<string | null>(null)
+  const [branchOpen, setBranchOpen] = useState(false)
+  const [branchFilter, setBranchFilter] = useState('')
+  const branchRef = useRef<HTMLDivElement>(null)
+  const branchFilterRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (branchRef.current && !branchRef.current.contains(e.target as Node)) {
+        setBranchOpen(false)
+        setBranchFilter('')
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  useEffect(() => {
+    if (branchOpen) {
+      setBranchFilter('')
+      setTimeout(() => branchFilterRef.current?.focus(), 0)
+    }
+  }, [branchOpen])
+
+  const filteredBranches = branches.filter(b =>
+    b.toLowerCase().includes(branchFilter.toLowerCase())
+  )
+
+  async function loadBranchesForExisting() {
+    if (!existing?.id) return
+    setBranchesLoading(true)
+    setBranchesError(null)
+    try {
+      const res = await fetch(`/api/projects/${existing.id}/branches`)
+      const data = await res.json()
+      if (!res.ok) {
+        setBranchesError(data.error || `HTTP ${res.status}`)
+        setBranches([])
+      } else {
+        setBranches(Array.isArray(data.branches) ? data.branches : [])
+      }
+    } catch (err) {
+      setBranchesError(err instanceof Error ? err.message : String(err))
+      setBranches([])
+    } finally {
+      setBranchesLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadBranchesForExisting()
+  }, [existing?.id])
 
   async function handleTestConnection() {
     if (!repoUrl.trim()) return
@@ -74,6 +132,9 @@ export default function ConnectionSection({
         setTestStatus('success')
         setTestResult(data.project)
         if (data.project.avatarUrl) onAvatarUrlChange(data.project.avatarUrl)
+        if (Array.isArray(data.project.branches)) {
+          setBranches(data.project.branches)
+        }
       }
     } catch {
       setTestStatus('error')
@@ -211,6 +272,117 @@ export default function ConnectionSection({
             </div>
           </div>
         )}
+      </div>
+
+      {/* Base branch */}
+      <div>
+        <label className="block text-base font-bold text-ive-text-muted mb-2">
+          {t('baseBranch')}
+        </label>
+        <div className="flex gap-2">
+          <div ref={branchRef} className={`relative flex-1 ${branchOpen ? 'z-50' : ''}`}>
+            <button
+              type="button"
+              onClick={() => setBranchOpen(!branchOpen)}
+              disabled={branchesLoading}
+              className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-base text-left flex items-center justify-between focus:outline-none focus:border-ive-green/50 disabled:opacity-50"
+            >
+              <span className={baseBranch ? 'text-ive-text font-mono' : 'text-ive-text-dim'}>
+                {baseBranch || t('baseBranchAuto')}
+              </span>
+              <i className={`fa-solid fa-chevron-${branchOpen ? 'up' : 'down'} text-xs text-ive-text-dim`} />
+            </button>
+            {branchOpen && (
+              <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-ive-bg-solid border border-ive-border-subtle rounded-lg overflow-hidden flex flex-col max-h-72">
+                {branches.length > 5 && (
+                  <div className="p-2 border-b border-ive-border-subtle bg-ive-bg-solid">
+                    <div className="relative">
+                      <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-xs text-ive-text-dim" />
+                      <input
+                        ref={branchFilterRef}
+                        type="text"
+                        value={branchFilter}
+                        onChange={e => setBranchFilter(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Escape') { setBranchOpen(false); setBranchFilter('') } }}
+                        placeholder={t('branchesFilterPlaceholder')}
+                        className="w-full bg-ive-bg-input border border-ive-border rounded-lg pl-8 pr-3 py-2 text-sm text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green"
+                      />
+                    </div>
+                  </div>
+                )}
+                <div className="overflow-y-auto overscroll-contain [&::-webkit-scrollbar]:w-[3px] [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-ive-text-dim/30 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-ive-text-dim/50">
+                  {!branchFilter && (
+                    <button
+                      type="button"
+                      onClick={() => { onBaseBranchChange(''); setBranchOpen(false) }}
+                      className={`w-full px-4 py-2.5 text-base text-left hover:bg-white/[0.05] ${
+                        baseBranch === '' ? 'text-ive-green font-bold' : 'text-ive-text-dim'
+                      }`}
+                    >
+                      {baseBranch === '' && <i className="fa-solid fa-check text-xs mr-2" />}
+                      {t('baseBranchAuto')}
+                    </button>
+                  )}
+                  {!branchFilter && !branches.includes(baseBranch) && baseBranch && (
+                    <button
+                      type="button"
+                      onClick={() => setBranchOpen(false)}
+                      className="w-full px-4 py-2.5 text-base text-left hover:bg-white/[0.05] text-ive-green font-bold font-mono"
+                    >
+                      <i className="fa-solid fa-check text-xs mr-2" />
+                      {baseBranch} <span className="text-xs text-ive-text-dim font-sans font-normal">({t('baseBranchSaved')})</span>
+                    </button>
+                  )}
+                  {filteredBranches.map(b => (
+                    <button
+                      key={b}
+                      type="button"
+                      onClick={() => { onBaseBranchChange(b); setBranchOpen(false) }}
+                      className={`w-full px-4 py-2.5 text-base text-left hover:bg-white/[0.05] font-mono ${
+                        b === baseBranch ? 'text-ive-green font-bold' : 'text-ive-text'
+                      }`}
+                    >
+                      {b === baseBranch && <i className="fa-solid fa-check text-xs mr-2" />}
+                      {b}
+                    </button>
+                  ))}
+                  {branches.length === 0 && !baseBranch && (
+                    <div className="px-4 py-3 text-sm text-ive-text-dim">
+                      {existing ? t('branchesEmpty') : t('baseBranchTestFirst')}
+                    </div>
+                  )}
+                  {branches.length > 0 && filteredBranches.length === 0 && branchFilter && (
+                    <div className="px-4 py-3 text-sm text-ive-text-dim">
+                      {t('branchesNoMatch')}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={loadBranchesForExisting}
+            disabled={branchesLoading || !existing?.id}
+            title={t('refreshBranches')}
+            className="px-3 py-3 rounded-lg border border-ive-border-subtle bg-ive-bg-card text-ive-text-muted hover:border-ive-green hover:text-ive-green disabled:opacity-40 transition-all"
+          >
+            <i className={`fa-solid ${branchesLoading ? 'fa-circle-notch fa-spin' : 'fa-rotate'}`} />
+          </button>
+        </div>
+        {branchesError && (
+          <p className="text-sm text-ive-red mt-1">
+            <i className="fa-solid fa-circle-xmark mr-1" />{branchesError}
+          </p>
+        )}
+        {!existing && branches.length === 0 && !branchesLoading && (
+          <p className="text-sm text-ive-text-dim mt-1">
+            <i className="fa-solid fa-circle-info mr-1" />{t('baseBranchTestFirst')}
+          </p>
+        )}
+        <p className="text-sm text-ive-text-dim mt-1">
+          <i className="fa-solid fa-circle-info mr-1" />{t('baseBranchHint')}
+        </p>
       </div>
     </>
   )

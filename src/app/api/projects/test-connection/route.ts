@@ -111,7 +111,10 @@ async function testGitHub(repoUrl: string, token: string) {
   const url = new URL(cleanUrl)
   const ownerRepo = (url.pathname.startsWith('/') ? url.pathname.slice(1) : url.pathname).replace(/\/+$/, '')
 
-  const repoRes = await fetch(`https://api.github.com/repos/${ownerRepo}`, { headers })
+  const [repoRes, branchesRes] = await Promise.all([
+    fetch(`https://api.github.com/repos/${ownerRepo}`, { headers }),
+    fetch(`https://api.github.com/repos/${ownerRepo}/branches?per_page=100`, { headers }),
+  ])
   if (!repoRes.ok) {
     if (repoRes.status === 404) {
       return NextResponse.json({
@@ -127,6 +130,13 @@ async function testGitHub(repoUrl: string, token: string) {
   }
 
   const repo = await repoRes.json()
+  let branches: string[] = []
+  if (branchesRes.ok) {
+    const branchesData = await branchesRes.json()
+    if (Array.isArray(branchesData)) {
+      branches = branchesData.map((b: any) => b.name).filter(Boolean)
+    }
+  }
 
   return NextResponse.json({
     success: true,
@@ -139,6 +149,7 @@ async function testGitHub(repoUrl: string, token: string) {
       avatarUrl: repo.owner?.avatar_url || '',
       user: gitUser.login,
       userAvatarUrl: gitUser.avatar_url || '',
+      branches,
     }
   })
 }
@@ -172,7 +183,10 @@ async function testGitLab(repoUrl: string, token: string, authMode: string, user
   }
   const gitUser = await userRes.json()
 
-  const res = await fetch(`${apiBase}/projects/${projectPath}`, { headers })
+  const [res, branchesRes] = await Promise.all([
+    fetch(`${apiBase}/projects/${projectPath}`, { headers }),
+    fetch(`${apiBase}/projects/${projectPath}/repository/branches?per_page=100`, { headers }),
+  ])
   if (!res.ok) {
     if (res.status === 404) {
       return NextResponse.json({
@@ -188,6 +202,13 @@ async function testGitLab(repoUrl: string, token: string, authMode: string, user
   }
 
   const project = await res.json()
+  let branches: string[] = []
+  if (branchesRes.ok) {
+    const branchesData = await branchesRes.json()
+    if (Array.isArray(branchesData)) {
+      branches = branchesData.map((b: any) => b.name).filter(Boolean)
+    }
+  }
 
   return NextResponse.json({
     success: true,
@@ -200,6 +221,7 @@ async function testGitLab(repoUrl: string, token: string, authMode: string, user
       avatarUrl: project.avatar_url || '',
       user: gitUser.username,
       userAvatarUrl: gitUser.avatar_url || '',
+      branches,
     }
   })
 }

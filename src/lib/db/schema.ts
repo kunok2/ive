@@ -31,6 +31,7 @@ export function initSchema(db: Database.Database) {
       label_verify_wait TEXT NOT NULL DEFAULT 'IVE-W',
       label_verify TEXT NOT NULL DEFAULT 'IVE-V',
       label_end TEXT NOT NULL DEFAULT 'IVE-E',
+      base_branch TEXT NOT NULL DEFAULT '',
       show_tool_usage INTEGER NOT NULL DEFAULT 0,
       check_interval INTEGER NOT NULL DEFAULT 1,
       last_checked_at TEXT,
@@ -427,6 +428,9 @@ export function initSchema(db: Database.Database) {
     }
     if (!tableInfo.some((col: any) => col.name === 'label_dev_end')) {
       try { db.exec("ALTER TABLE projects ADD COLUMN label_dev_end TEXT NOT NULL DEFAULT 'IVE-D'") } catch {}
+    }
+    if (!tableInfo.some((col: any) => col.name === 'base_branch')) {
+      db.exec("ALTER TABLE projects ADD COLUMN base_branch TEXT NOT NULL DEFAULT ''")
     }
   } catch (e) { console.error("Migration failed for projects:", e) }
 

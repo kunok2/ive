@@ -47,26 +47,38 @@ export async function setupWorkspace(
   log("저장소 클론 중...", 'system');
   await execFile('git', ['clone', repoUrl, '.'], { cwd: workspacePath });
 
-  let baseBranch = 'staging';
-  try {
-    await execFile('git', ['fetch', 'origin', 'staging'], { cwd: workspacePath });
-    await execFile('git', ['checkout', 'staging'], { cwd: workspacePath });
-    await execFile('git', ['pull', 'origin', 'staging'], { cwd: workspacePath });
-  } catch {
-    // staging 브랜치 없으면 원격 기본 브랜치 감지
+  const configured = (project.baseBranch || '').trim();
+  let baseBranch = configured;
+
+  if (configured) {
     try {
-      await execFile('git', ['remote', 'set-head', 'origin', '--auto'], { cwd: workspacePath });
-      const { stdout: headRef } = await execFile('git', ['symbolic-ref', 'refs/remotes/origin/HEAD'], { cwd: workspacePath });
-      baseBranch = headRef.trim().replace('refs/remotes/origin/', '');
+      await execFile('git', ['fetch', 'origin', configured], { cwd: workspacePath });
+      await execFile('git', ['checkout', configured], { cwd: workspacePath });
+      await execFile('git', ['pull', 'origin', configured], { cwd: workspacePath });
     } catch {
-      baseBranch = 'main'; // fallback
+      log(`설정된 베이스 브랜치 '${configured}' 체크아웃 실패. 원격 기본 브랜치로 폴백.`, 'warn');
+      baseBranch = await detectAndCheckoutDefault(workspacePath);
     }
-    await execFile('git', ['checkout', baseBranch], { cwd: workspacePath });
-    await execFile('git', ['pull', 'origin', baseBranch], { cwd: workspacePath });
+  } else {
+    baseBranch = await detectAndCheckoutDefault(workspacePath);
   }
 
   // 브랜치는 CLI 실행 후 변경사항이 있을 때 mr-creator에서 생성
   // 여기서는 기본 브랜치에서 작업
 
   return { workspacePath, baseBranch, branchName };
+}
+
+async function detectAndCheckoutDefault(workspacePath: string): Promise<string> {
+  let baseBranch = 'main';
+  try {
+    await execFile('git', ['remote', 'set-head', 'origin', '--auto'], { cwd: workspacePath });
+    const { stdout: headRef } = await execFile('git', ['symbolic-ref', 'refs/remotes/origin/HEAD'], { cwd: workspacePath });
+    baseBranch = headRef.trim().replace('refs/remotes/origin/', '');
+  } catch {
+    baseBranch = 'main';
+  }
+  await execFile('git', ['checkout', baseBranch], { cwd: workspacePath });
+  await execFile('git', ['pull', 'origin', baseBranch], { cwd: workspacePath });
+  return baseBranch;
 }
