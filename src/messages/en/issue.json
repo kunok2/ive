@@ -94,6 +94,8 @@
   "assigneeRequiredWarning": "Please assign a member first. Without an assignee, the task will wait until one is assigned.",
   "assignee": "Assignee",
   "noAssignee": "No assignee",
+  "autoAssign": "Auto-assign",
+  "autoAssignDesc": "Auto-pick the least loaded member when processing finishes",
   "selectAssignee": "Assign member",
   "searchMember": "Search by name or username",
   "searchPlaceholder": "Search title, number, author",

@@ -20,6 +20,8 @@ interface AssigneePickerModalProps {
   onSearchChange: (value: string) => void
   pick: GitMember | null
   onPickChange: (member: GitMember | null) => void
+  autoMode: boolean
+  onAutoModeChange: (value: boolean) => void
   onConfirm: () => void
 }
 
@@ -32,6 +34,8 @@ export default function AssigneePickerModal({
   onSearchChange,
   pick,
   onPickChange,
+  autoMode,
+  onAutoModeChange,
   onConfirm,
 }: AssigneePickerModalProps) {
   const tIssue = useTranslations('issue')
@@ -42,6 +46,13 @@ export default function AssigneePickerModal({
     const q = search.toLowerCase()
     return (m.name || '').toLowerCase().includes(q) || m.username.toLowerCase().includes(q)
   })
+
+  const isNoneSelected = !pick && !autoMode
+  const isAutoSelected = !pick && autoMode
+
+  const selectNone = () => { onAutoModeChange(false); onPickChange(null) }
+  const selectAuto = () => { onAutoModeChange(true); onPickChange(null) }
+  const selectMember = (m: GitMember) => { onAutoModeChange(false); onPickChange(m) }
 
   return (
     <Modal open={open} onClose={onClose} title={`${tIssue('assignee')}${iids.length > 1 && !iids.includes(-1) ? ` (${iids.length}${tCommon('items')})` : ''}`} size="sm">
@@ -56,25 +67,41 @@ export default function AssigneePickerModal({
         />
       </div>
       <div className="max-h-[50vh] overflow-y-auto">
-        {/* 담당자 없음 옵션 */}
+        {/* 담당자 없음 */}
         <button
-          onClick={() => onPickChange(null)}
+          onClick={selectNone}
           className={`w-full px-4 py-3 text-left text-sm flex items-center gap-3 transition-colors ${
-            !pick ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text-dim hover:bg-white/5'
+            isNoneSelected ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text-dim hover:bg-white/5'
           }`}
         >
-          {!pick ? <i className="fa-solid fa-circle-dot text-xs shrink-0 w-4" /> : <i className="fa-regular fa-circle text-xs shrink-0 w-4 opacity-30" />}
+          {isNoneSelected ? <i className="fa-solid fa-circle-dot text-xs shrink-0 w-4" /> : <i className="fa-regular fa-circle text-xs shrink-0 w-4 opacity-30" />}
           <div className="w-7 h-7 rounded-full bg-ive-bg-deep flex items-center justify-center shrink-0">
             <i className="fa-solid fa-ban text-ive-text-dim text-xs" />
           </div>
           <span className="font-bold">{tIssue('noAssignee')}</span>
+        </button>
+        {/* 자동배정 */}
+        <button
+          onClick={selectAuto}
+          className={`w-full px-4 py-3 text-left text-sm flex items-center gap-3 transition-colors ${
+            isAutoSelected ? 'bg-ive-cyan/10 text-ive-cyan' : 'text-ive-text-dim hover:bg-white/5'
+          }`}
+        >
+          {isAutoSelected ? <i className="fa-solid fa-circle-dot text-xs shrink-0 w-4" /> : <i className="fa-regular fa-circle text-xs shrink-0 w-4 opacity-30" />}
+          <div className="w-7 h-7 rounded-full bg-ive-bg-deep flex items-center justify-center shrink-0">
+            <i className="fa-solid fa-shuffle text-ive-cyan text-xs" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="font-bold">{tIssue('autoAssign')}</div>
+            <div className="text-xs text-ive-text-dim truncate">{tIssue('autoAssignDesc')}</div>
+          </div>
         </button>
         {filtered.map(m => {
           const isPicked = pick?.id === m.id
           return (
             <button
               key={m.id}
-              onClick={() => onPickChange(m)}
+              onClick={() => selectMember(m)}
               className={`w-full px-4 py-3 text-left text-sm flex items-center gap-3 transition-colors ${
                 isPicked ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text hover:bg-white/5'
               }`}

@@ -470,6 +470,7 @@ export function initSchema(db: Database.Database) {
   try { db.exec(`ALTER TABLE issue_stages ADD COLUMN cached_stage TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
   try { db.exec(`ALTER TABLE issue_stages ADD COLUMN issue_title TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
   try { db.exec(`ALTER TABLE issue_stages ADD COLUMN verify_waiting_since TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
+  try { db.exec(`ALTER TABLE issue_stages ADD COLUMN assignee_auto INTEGER DEFAULT 0`) } catch { /* 이미 존재 */ }
   try { db.exec(`CREATE INDEX IF NOT EXISTS idx_issue_stages_assignee ON issue_stages(assignee_username, cached_stage)`) } catch { /* ignore */ }
   try { db.exec(`CREATE INDEX IF NOT EXISTS idx_issue_stages_assignee_id ON issue_stages(assignee_git_user_id)`) } catch { /* ignore */ }
 

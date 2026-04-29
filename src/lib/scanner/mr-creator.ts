@@ -4,8 +4,9 @@
 import fs from "fs";
 import { promisify } from "util";
 import { Project, Agent } from "@/types";
-import { updateExecutionStatus, updateAgentStatus } from "../db";
+import { updateExecutionStatus, updateAgentStatus, getAssigneeAuto } from "../db";
 import { addIssueLabels, removeIssueLabels } from "../provider";
+import { runAutoAssign } from "./auto-assign";
 import {
   addGitLabIssueComment,
   addGitLabSpentTime,
@@ -122,6 +123,7 @@ export async function commitPushAndCreateMR(params: {
     } catch (e) { console.warn(`[Scanner] Label switch failed:`, e); }
     log("작업 완료 → 검증대기 (IVE-W). 검증자가 검증시작을 클릭하면 검증이 시작됩니다.", 'system');
     updateExecutionStatus(executionId, 'success', new Date().toISOString());
+    await maybeAutoAssign(project, iid, token, log);
   } else {
     // 코드 변경사항 없음
     log("코드 변경사항 없음. 작업 완료로 처리.", 'system');
@@ -144,6 +146,26 @@ export async function commitPushAndCreateMR(params: {
       await addIssueLabels(project, iid, token, [project.labelVerifyWait || 'IVE-W']);
     } catch (e) { console.warn(`[Scanner] Label switch failed:`, e); }
     updateExecutionStatus(executionId, 'success', new Date().toISOString());
+    await maybeAutoAssign(project, iid, token, log);
+  }
+}
+
+async function maybeAutoAssign(
+  project: Project,
+  iid: number,
+  token: string,
+  log: (msg: string, type?: 'info' | 'error' | 'warn' | 'system') => void,
+): Promise<void> {
+  if (!getAssigneeAuto(project.id, iid)) return;
+  try {
+    const result = await runAutoAssign(project, iid, token);
+    if (result) {
+      log(`자동배정 완료 → ${result.name} (@${result.username}, 현재 배정 ${result.count}건)`, 'system');
+    } else {
+      log("자동배정 스킵 — 후보 멤버가 없습니다.", 'warn');
+    }
+  } catch (e) {
+    log(`자동배정 실패: ${(e as Error).message || e}`, 'warn');
   }
 }
 

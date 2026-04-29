@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAccess, getProjectAuthToken, getAssignModeMap, setAssignMode, getAgent, hasActiveExecution, hasAnyExecution, stageFromLabels, touchProjectActivity } from '@/lib/db';
+import { getProject, getProjectAccess, getProjectAuthToken, getAssignModeMap, setAssignMode, setAssigneeAuto, getAgent, hasActiveExecution, hasAnyExecution, stageFromLabels, touchProjectActivity } from '@/lib/db';
 import { triggerScan } from '@/lib/scanner';
 import { getCurrentUser } from '@/lib/auth';
 import { checkLabelsExist, addIssueComment } from '@/lib/provider';
@@ -54,7 +54,7 @@ export async function GET(
           || (isClosed ? 'done' : 'none');
 
         // 배정 모드 + 선호 에이전트 정보 조회
-        const assignInfo = assignModeMap.get(issue.iid) || { mode: 'auto' as const, agentId: null };
+        const assignInfo = assignModeMap.get(issue.iid) || { mode: 'auto' as const, agentId: null, assigneeAuto: false };
         let preferredAgentId = assignInfo.mode === 'agent' ? assignInfo.agentId : null;
         let preferredAgentName: string | null = null;
         let preferredAgentAvatar: string | null = null;
@@ -109,6 +109,7 @@ export async function GET(
           preferredAgentName,
           preferredAgentAvatar,
           preferredAgentCliName,
+          assigneeAuto: assignInfo.assigneeAuto,
           assignees,
           labels: issue.labels,
           createdAt: issue.created_at,
@@ -141,7 +142,7 @@ export async function POST(
     return NextResponse.json({ error: '작업 생성 권한이 없습니다.' }, { status: 403 });
   }
 
-  const { title, description, asDev, preferredAgentId, assignMode: reqAssignMode, assigneeIds, assigneeUsernames } = await req.json();
+  const { title, description, asDev, preferredAgentId, assignMode: reqAssignMode, assigneeIds, assigneeUsernames, assigneeAuto } = await req.json();
   if (!title?.trim()) return NextResponse.json({ error: '제목을 입력하세요.' }, { status: 400 });
 
   try {
@@ -165,7 +166,8 @@ export async function POST(
     const labels = asDev
       ? [project.labelTarget, project.labelSchedule || 'IVE-S']
       : [project.labelTarget];
-    const assignees = (assigneeIds?.length || assigneeUsernames?.length)
+    // 자동배정 모드면 생성 시점에는 assignee 비움 (처리 마무리 시 자동 선택)
+    const assignees = !assigneeAuto && (assigneeIds?.length || assigneeUsernames?.length)
       ? { ids: assigneeIds, usernames: assigneeUsernames } : undefined;
 
     // 본문 맨 앞에 ive-author 마커 주입 — 프로젝트 토큰으로 fallback되어 Git 저자가
@@ -185,6 +187,9 @@ export async function POST(
         setAssignMode(projectId, issue.iid, 'assignee');
       } else if (preferredAgentId) {
         setAssignMode(projectId, issue.iid, 'agent', preferredAgentId);
+      }
+      if (assigneeAuto) {
+        setAssigneeAuto(projectId, issue.iid, true);
       }
     }
 

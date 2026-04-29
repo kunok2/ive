@@ -15,6 +15,7 @@ export interface IveIssue {
   preferredAgentName?: string | null
   preferredAgentAvatar?: string | null
   preferredAgentCliName?: string | null
+  assigneeAuto?: boolean
   assignees?: { id: number; username: string; name: string; avatarUrl: string }[]
 }
 

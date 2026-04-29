@@ -94,6 +94,8 @@
   "assigneeRequiredWarning": "담당자를 먼저 지정해주세요. 미지정 시 담당자가 지정될 때까지 대기합니다.",
   "assignee": "담당자",
   "noAssignee": "담당자 없음",
+  "autoAssign": "자동배정",
+  "autoAssignDesc": "처리 마무리 시 가장 한가한 담당자에게 자동 배정",
   "selectAssignee": "담당자 지정",
   "searchMember": "이름 또는 아이디로 검색",
   "searchPlaceholder": "제목, 번호, 작성자 검색",

@@ -147,9 +147,11 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   const [projectAgents, setProjectAgents] = useState<ProjectAgent[]>([])
   const [gitMembers, setGitMembers] = useState<{ id: number; username: string; name: string; avatarUrl: string }[]>([])
   const [selectedAssignees, setSelectedAssignees] = useState<{ id: number; username: string; name: string; avatarUrl: string }[]>([])
+  const [autoAssign, setAutoAssign] = useState(false)
   const [assigneeModalIids, setAssigneeModalIids] = useState<number[]>([])
   const [assigneeModalSearch, setAssigneeModalSearch] = useState('')
   const [assigneeModalPick, setAssigneeModalPick] = useState<{ id: number; username: string; name: string; avatarUrl: string } | null>(null)
+  const [assigneeModalAuto, setAssigneeModalAuto] = useState(false)
   const [agentPickerIid, setAgentPickerIid] = useState<number | null>(null)
   const [agentPickerSaving, setAgentPickerSaving] = useState(false)
 
@@ -276,6 +278,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     }
     setPreferredAgentId(null)
     setSelectedAssignees([])
+    setAutoAssign(false)
   }, [selectedProjectId, fetchProjectAgents, fetchGitMembers])
 
   // --- Assignee modal ---
@@ -283,21 +286,33 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     const isCreateMode = assigneeModalIids.includes(-1)
     if (isCreateMode) {
       setSelectedAssignees(assigneeModalPick ? [assigneeModalPick] : [])
+      setAutoAssign(assigneeModalAuto)
       setAssigneeModalIids([])
       return
     }
     if (!canEdit) { toast(tIssue('noEditPermissionViewer'), 'error'); setAssigneeModalIids([]); return }
-    const updated = assigneeModalPick ? [assigneeModalPick] : []
+    const updated = assigneeModalAuto ? [] : (assigneeModalPick ? [assigneeModalPick] : [])
     const prevSnapshots = new Map<number, IveIssue['assignees']>()
-    for (const iid of assigneeModalIids) { const cur = issues.find(i => i.iid === iid); if (cur) prevSnapshots.set(iid, cur.assignees) }
-    setIssues(prev => prev.map(i => assigneeModalIids.includes(i.iid) ? { ...i, assignees: updated } : i))
+    const prevAutoMap = new Map<number, boolean>()
+    for (const iid of assigneeModalIids) {
+      const cur = issues.find(i => i.iid === iid)
+      if (cur) {
+        prevSnapshots.set(iid, cur.assignees)
+        prevAutoMap.set(iid, !!cur.assigneeAuto)
+      }
+    }
+    setIssues(prev => prev.map(i => assigneeModalIids.includes(i.iid) ? { ...i, assignees: updated, assigneeAuto: assigneeModalAuto } : i))
     setAssigneeModalIids([])
 
     const results = await Promise.all(assigneeModalIids.map(async iid => {
       try {
         const res = await fetch(`/api/projects/${selectedProjectId}/issues/${iid}/assignees`, {
           method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ assigneeIds: updated.map(a => a.id), assigneeUsernames: updated.map(a => a.username) }),
+          body: JSON.stringify({
+            assigneeIds: updated.map(a => a.id),
+            assigneeUsernames: updated.map(a => a.username),
+            assigneeAuto: assigneeModalAuto,
+          }),
         })
         if (!res.ok) {
           let message = `${tIssue('assigneeChangeFailed')} (#${iid})`
@@ -312,7 +327,9 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     const failed = results.filter(r => !r.ok)
     if (failed.length > 0) {
       setIssues(prev => prev.map(i => {
-        if (prevSnapshots.has(i.iid) && failed.some(f => f.iid === i.iid)) return { ...i, assignees: prevSnapshots.get(i.iid)! }
+        if (prevSnapshots.has(i.iid) && failed.some(f => f.iid === i.iid)) {
+          return { ...i, assignees: prevSnapshots.get(i.iid)!, assigneeAuto: prevAutoMap.get(i.iid) ?? false }
+        }
         return i
       }))
       toast(failed[0].message || tIssue('assigneeChangeFailed'), 'error')
@@ -324,10 +341,13 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     if (iids.length === 1 && !iids.includes(-1)) {
       const issue = issues.find(i => i.iid === iids[0])
       setAssigneeModalPick(issue?.assignees?.[0] || null)
+      setAssigneeModalAuto(!!issue?.assigneeAuto)
     } else if (iids.includes(-1)) {
       setAssigneeModalPick(selectedAssignees[0] || null)
+      setAssigneeModalAuto(autoAssign)
     } else {
       setAssigneeModalPick(null)
+      setAssigneeModalAuto(false)
     }
     setAssigneeModalIids(iids)
   }
@@ -439,11 +459,12 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
           preferredAgentId: (preferredAgentId && preferredAgentId !== 'none' && preferredAgentId !== 'assignee') ? preferredAgentId : undefined,
           assigneeIds: selectedAssignees.length > 0 ? selectedAssignees.map(a => a.id) : undefined,
           assigneeUsernames: selectedAssignees.length > 0 ? selectedAssignees.map(a => a.username) : undefined,
+          assigneeAuto: autoAssign || undefined,
         }),
       })
       if (res.ok) {
         const created = await res.json()
-        handleBodyChange(''); setShowAddForm(false); setPreferredAgentId(null); setSelectedAssignees([])
+        handleBodyChange(''); setShowAddForm(false); setPreferredAgentId(null); setSelectedAssignees([]); setAutoAssign(false)
         const selectedAgent = preferredAgentId ? projectAgents.find(a => a.agentId === preferredAgentId) : null
         const newIssue: IveIssue = {
           iid: created.iid, title: created.title, state: created.state || 'opened',
@@ -454,6 +475,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
           preferredAgentId: (preferredAgentId && preferredAgentId !== 'none' && preferredAgentId !== 'assignee') ? preferredAgentId : null,
           preferredAgentName: selectedAgent?.agent.name || null, preferredAgentAvatar: selectedAgent?.agent.avatar || null,
           preferredAgentCliName: selectedAgent?.agent.cliName || null,
+          assigneeAuto: autoAssign,
         }
         setIssues(prev => prev.some(i => i.iid === created.iid) ? prev : [newIssue, ...prev])
         toast(tIssue('issueCreated'), 'success')
@@ -614,6 +636,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                 projectAgents={projectAgents}
                 gitMembers={gitMembers}
                 selectedAssignees={selectedAssignees}
+                autoAssign={autoAssign}
                 onOpenAssigneeModal={openAssigneeModal}
               />
             )}
@@ -674,6 +697,8 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
         onSearchChange={setAssigneeModalSearch}
         pick={assigneeModalPick}
         onPickChange={setAssigneeModalPick}
+        autoMode={assigneeModalAuto}
+        onAutoModeChange={setAssigneeModalAuto}
         onConfirm={handleConfirmAssignee}
       />
       <AgentPickerModal

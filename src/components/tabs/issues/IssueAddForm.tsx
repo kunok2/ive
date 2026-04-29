@@ -28,6 +28,7 @@ interface IssueAddFormProps {
   projectAgents: ProjectAgent[]
   gitMembers: GitMember[]
   selectedAssignees: GitMember[]
+  autoAssign: boolean
   onOpenAssigneeModal: (iids: number[]) => void
 }
 
@@ -43,6 +44,7 @@ export default function IssueAddForm({
   projectAgents,
   gitMembers,
   selectedAssignees,
+  autoAssign,
   onOpenAssigneeModal,
 }: IssueAddFormProps) {
   const tIssue = useTranslations('issue')
@@ -108,7 +110,15 @@ export default function IssueAddForm({
             onClick={() => onOpenAssigneeModal([-1])}
             className="w-full bg-ive-bg-deep border border-ive-border-dark border-dashed rounded-lg px-3 py-2 text-left flex items-center gap-2 text-sm focus:outline-none hover:border-ive-green/50 transition-colors"
           >
-            {selectedAssignees.length > 0 ? (
+            {autoAssign ? (
+              <span className="flex items-center gap-1.5">
+                <span className="flex items-center gap-1 bg-ive-cyan/10 rounded px-1.5 py-0.5">
+                  <i className="fa-solid fa-shuffle text-xs text-ive-cyan" />
+                  <span className="text-ive-cyan font-bold text-xs">{tIssue('autoAssign')}</span>
+                </span>
+                <i className="fa-solid fa-pen text-[10px] text-ive-text-dim ml-auto" />
+              </span>
+            ) : selectedAssignees.length > 0 ? (
               <span className="flex items-center gap-1.5 flex-wrap">
                 {selectedAssignees.map(a => (
                   <span key={a.id} className="flex items-center gap-1 bg-ive-bg-card rounded px-1.5 py-0.5">

@@ -123,7 +123,7 @@ export default function IssueCard({
           {issue.author?.name}
         </span>
         {/* assignee avatars + edit */}
-        {((issue.assignees && issue.assignees.length > 0) || (canEdit && !bulkMode && gitMembers.length > 0)) && (
+        {((issue.assignees && issue.assignees.length > 0) || issue.assigneeAuto || (canEdit && !bulkMode && gitMembers.length > 0)) && (
           <span className="inline-flex items-center gap-1"
             onClick={(e) => {
               if (canEdit && !bulkMode && gitMembers.length > 0) {
@@ -144,7 +144,15 @@ export default function IssueCard({
                 <span className="text-xs font-bold text-ive-text-muted truncate max-w-[80px]">{a.name || a.username}</span>
               </span>
             ))}
-            {canEdit && !bulkMode && gitMembers.length > 0 && !(issue.assignees && issue.assignees.length > 0) && (
+            {issue.assigneeAuto && !(issue.assignees && issue.assignees.length > 0) && (
+              <span className="inline-flex items-center gap-0.5">
+                <span className="w-4 h-4 rounded-full bg-ive-cyan/20 flex items-center justify-center">
+                  <i className="fa-solid fa-shuffle text-[9px] text-ive-cyan" />
+                </span>
+                <span className="text-xs font-bold text-ive-cyan">{tIssue('autoAssign')}</span>
+              </span>
+            )}
+            {canEdit && !bulkMode && gitMembers.length > 0 && !(issue.assignees && issue.assignees.length > 0) && !issue.assigneeAuto && (
               <i className="fa-solid fa-user-pen text-[10px] text-ive-text-dim hover:text-ive-green cursor-pointer transition-all" />
             )}
           </span>

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAccess, getProjectAuthToken } from '@/lib/db';
+import { getProject, getProjectAccess, getProjectAuthToken, setAssigneeAuto } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { updateIssue } from '@/lib/provider';
 
@@ -19,14 +19,17 @@ export async function PATCH(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const { assigneeIds, assigneeUsernames } = await req.json();
+  const { assigneeIds, assigneeUsernames, assigneeAuto } = await req.json();
+  const issueIid = Number(iid);
 
   try {
     const token = getProjectAuthToken(projectId);
-    await updateIssue(project, Number(iid), token, {
-      assigneeIds: assigneeIds || [],
-      assignees: assigneeUsernames || [],
+    // 자동배정 모드면 Git 상의 assignee 는 비움 (마무리 시점에 시스템이 채움)
+    await updateIssue(project, issueIid, token, {
+      assigneeIds: assigneeAuto ? [] : (assigneeIds || []),
+      assignees: assigneeAuto ? [] : (assigneeUsernames || []),
     });
+    setAssigneeAuto(projectId, issueIid, !!assigneeAuto);
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error('[assignees] failed:', err)

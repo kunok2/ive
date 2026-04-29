@@ -74,17 +74,31 @@ export function countIssuesByStage(_projectId: string, _stage: IssueStage): numb
 
 // ── Assign Mode ──
 
-export function getAssignMode(projectId: string, issueIid: number): { mode: 'auto' | 'assignee' | 'agent'; agentId: string | null } {
-  const r = getDb().prepare('SELECT assign_mode, preferred_agent_id FROM issue_stages WHERE project_id = ? AND issue_iid = ?').get(projectId, issueIid) as any
-  return { mode: (r?.assign_mode as 'auto' | 'assignee' | 'agent') || 'auto', agentId: r?.preferred_agent_id || null }
+export interface AssignModeInfo {
+  mode: 'auto' | 'assignee' | 'agent'
+  agentId: string | null
+  assigneeAuto: boolean
 }
 
-export function getAssignModeMap(projectId: string): Map<number, { mode: 'auto' | 'assignee' | 'agent'; agentId: string | null }> {
+export function getAssignMode(projectId: string, issueIid: number): AssignModeInfo {
+  const r = getDb().prepare('SELECT assign_mode, preferred_agent_id, assignee_auto FROM issue_stages WHERE project_id = ? AND issue_iid = ?').get(projectId, issueIid) as any
+  return {
+    mode: (r?.assign_mode as 'auto' | 'assignee' | 'agent') || 'auto',
+    agentId: r?.preferred_agent_id || null,
+    assigneeAuto: !!r?.assignee_auto,
+  }
+}
+
+export function getAssignModeMap(projectId: string): Map<number, AssignModeInfo> {
   const rows = getDb().prepare(
-    'SELECT issue_iid, assign_mode, preferred_agent_id FROM issue_stages WHERE project_id = ?'
+    'SELECT issue_iid, assign_mode, preferred_agent_id, assignee_auto FROM issue_stages WHERE project_id = ?'
   ).all(projectId) as any[]
-  const map = new Map<number, { mode: 'auto' | 'assignee' | 'agent'; agentId: string | null }>()
-  for (const r of rows) map.set(r.issue_iid, { mode: r.assign_mode || 'auto', agentId: r.preferred_agent_id || null })
+  const map = new Map<number, AssignModeInfo>()
+  for (const r of rows) map.set(r.issue_iid, {
+    mode: r.assign_mode || 'auto',
+    agentId: r.preferred_agent_id || null,
+    assigneeAuto: !!r.assignee_auto,
+  })
   return map
 }
 
@@ -95,6 +109,19 @@ export function setAssignMode(projectId: string, issueIid: number, mode: 'auto' 
     VALUES (?, ?, '', ?, ?, datetime('now'))
     ON CONFLICT(project_id, issue_iid) DO UPDATE SET assign_mode = excluded.assign_mode, preferred_agent_id = excluded.preferred_agent_id
   `).run(projectId, issueIid, mode, effectiveAgentId)
+}
+
+export function setAssigneeAuto(projectId: string, issueIid: number, value: boolean) {
+  getDb().prepare(`
+    INSERT INTO issue_stages (project_id, issue_iid, stage, assignee_auto, updated_at)
+    VALUES (?, ?, '', ?, datetime('now'))
+    ON CONFLICT(project_id, issue_iid) DO UPDATE SET assignee_auto = excluded.assignee_auto, updated_at = datetime('now')
+  `).run(projectId, issueIid, value ? 1 : 0)
+}
+
+export function getAssigneeAuto(projectId: string, issueIid: number): boolean {
+  const r = getDb().prepare('SELECT assignee_auto FROM issue_stages WHERE project_id = ? AND issue_iid = ?').get(projectId, issueIid) as any
+  return !!r?.assignee_auto
 }
 
 export function countPreferredIssuesByAgent(agentId: string): number {
