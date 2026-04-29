@@ -78,19 +78,22 @@ export async function isIssueAssignee(
   const myGitId = user.oauthUserId ? String(user.oauthUserId) : null
   const assignees: any[] = issue.assignees || []
 
-  if (assignees.length > 0) {
-    if (!myGitId) return false
-    return assignees.some((a: any) => a?.id != null && String(a.id) === myGitId)
-  }
-
-  // assignees 없음 → 작성자(author) 를 담당자로 간주
-  // (a) IVE 내부 마커 기반: body 의 ive-author 가 현재 IVE 사용자 id 와 일치
+  // 동일한 IVE 사용자라면 로그인 방식(로컬/OAuth)과 무관하게 매칭되어야 한다.
+  // 가능한 식별 경로를 모두 평가하고 하나라도 일치하면 본인으로 판정.
+  //
+  // (a) IVE 내부 마커 기반: body 의 ive-author 가 현재 IVE 사용자 id 와 일치.
+  //     로컬 계정 사용자도 항상 판정 가능.
   if (user.id) {
     const markerId = extractIveAuthorId(issue.description)
     if (markerId && markerId === user.id) return true
   }
-  // (b) Git author id 기반 (마커 없거나 불일치)
-  if (myGitId && issue.author?.id != null && String(issue.author.id) === myGitId) return true
+  // 아래 경로는 OAuth 로그인 사용자에 한해 동작.
+  if (myGitId) {
+    // (b) Git assignees 매치
+    if (assignees.some((a: any) => a?.id != null && String(a.id) === myGitId)) return true
+    // (c) Git author id 매치 (assignee 가 비어 있을 때 작성자를 담당자로 간주)
+    if (assignees.length === 0 && issue.author?.id != null && String(issue.author.id) === myGitId) return true
+  }
   return false
 }
 

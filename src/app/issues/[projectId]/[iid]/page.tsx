@@ -131,18 +131,19 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   // ===================== Data fetching =====================
 
   const isAssignee = (() => {
-    // 1) 담당자가 지정되어 있으면 → Git assignees 리스트 매치 (OAuth 사용자만 가능)
-    if (issue?.assignees?.length) {
-      if (!state.user?.oauthUserId) return false
-      const myGitId = String(state.user.oauthUserId)
-      return issue.assignees.some(a => a.id != null && String(a.id) === myGitId)
-    }
-    // 2) 담당자 없음 → 이슈 작성자를 담당자로 간주.
-    //    (a) ive-author 마커 기반: IVE user.id 매치 — 로컬 계정(비-OAuth) 사용자도 판정 가능
+    // 동일한 IVE 사용자라면 로그인 방식(로컬/OAuth)과 무관하게 매칭되어야 한다.
+    // 가능한 식별 경로를 모두 평가하고 하나라도 일치하면 본인으로 판정.
+    //
+    // (a) ive-author 마커 → IVE user.id 매치. 로컬 계정도 항상 판정 가능.
     if (state.user?.id && issue?.iveAuthorId && issue.iveAuthorId === state.user.id) return true
-    //    (b) Git author id 기반: OAuth 사용자만 가능
-    if (state.user?.oauthUserId && issue?.authorId != null) {
-      return String(issue.authorId) === String(state.user.oauthUserId)
+    //
+    // 아래 경로는 OAuth 로그인 사용자에 한해 동작 (oauthUserId 가 있어야 비교 가능).
+    if (state.user?.oauthUserId) {
+      const myGitId = String(state.user.oauthUserId)
+      // (b) GitLab/GitHub assignees 매치
+      if (issue?.assignees?.some(a => a.id != null && String(a.id) === myGitId)) return true
+      // (c) Git author id 매치 (assignee 가 비어 있을 때 작성자를 담당자로 간주)
+      if (!issue?.assignees?.length && issue?.authorId != null && String(issue.authorId) === myGitId) return true
     }
     return false
   })()
