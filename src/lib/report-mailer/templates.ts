@@ -101,15 +101,16 @@ function generateSummary(
 ): string {
   const parts: string[] = []
 
-  // 기본 요약 — 유입/처리 흐름 중심
+  // 기본 요약 — 유입/실행/마무리 단위 명확화
   if (flowData && flowData.uniqueInflow > 0) {
     const inflowStr = `유입 <strong>${flowData.uniqueInflow}건</strong>`
-    const totalStr = `처리 <strong>${total}건</strong>`
+    const executionStr = `<strong>${total}번의 실행</strong>`
+    const completedStr = `<strong>${flowData.verifiedCount}건</strong>을 마무리`
     if (prevData) {
       const totalChangeRate = calcChangeRate(total, prevData.prevTotal)
-      parts.push(`이번 ${label} 기간 동안 ${inflowStr}, ${totalStr}이 수행되었습니다 (전 기간 대비 ${totalChangeRate}).`)
+      parts.push(`이번 ${label} 기간 동안 ${inflowStr}이 들어와 ${executionStr}으로 ${completedStr}했습니다 (실행 전 기간 대비 ${totalChangeRate}).`)
     } else {
-      parts.push(`이번 ${label} 기간 동안 ${inflowStr}, ${totalStr}이 수행되었습니다.`)
+      parts.push(`이번 ${label} 기간 동안 ${inflowStr}이 들어와 ${executionStr}으로 ${completedStr}했습니다.`)
     }
     if (flowData.currentWaiting > 0) {
       const waitingNote = flowData.currentWaiting >= 5
@@ -527,7 +528,7 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
     <!-- ③ 흐름 현황 -->
     <div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;padding:20px;margin-bottom:16px;">
       <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:16px;">흐름 현황</div>
-      <!-- 유입 → 처리 -->
+      <!-- 유입 → 대기 → 마무리 -->
       <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
         <tr>
           <td style="text-align:center;padding:4px;">
@@ -543,9 +544,9 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
           </td>
           <td style="text-align:center;color:#9ca3af;font-size:16px;padding:0 4px;">→</td>
           <td style="text-align:center;padding:4px;">
-            <div style="font-size:11px;color:#6b7280;margin-bottom:4px;">처리</div>
-            <div style="font-size:28px;font-weight:800;color:#111827;">${total}</div>
-            <div style="font-size:10px;color:#9ca3af;margin-top:2px;">일평균 ${dailyCapacity.toFixed(1)}건</div>
+            <div style="font-size:11px;color:#6b7280;margin-bottom:4px;">마무리</div>
+            <div style="font-size:28px;font-weight:800;color:#111827;">${verifiedCount}</div>
+            <div style="font-size:10px;color:#9ca3af;margin-top:2px;">일평균 ${(verifiedCount / periodDays).toFixed(1)}건 · 실행 ${total}회</div>
           </td>
         </tr>
       </table>
@@ -771,7 +772,7 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
         <thead>
           <tr style="color:#9ca3af;font-size:10px;">
             <th style="padding:5px 8px;text-align:left;font-weight:600;">프로젝트</th>
-            <th style="padding:5px 8px;text-align:center;font-weight:600;">처리</th>
+            <th style="padding:5px 8px;text-align:center;font-weight:600;">실행</th>
             <th style="padding:5px 8px;text-align:right;font-weight:600;">비용</th>
           </tr>
         </thead>

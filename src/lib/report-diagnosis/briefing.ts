@@ -46,7 +46,12 @@ export function generateBriefing(
     })
     briefingLines.push({
       key: 'briefingFlowSummary',
-      params: { inflow: totalInflow.toLocaleString(), processed: summary.totalTasks.toLocaleString(), cost: fmtCost(summary.totalCost) },
+      params: {
+        inflow: totalInflow.toLocaleString(),
+        executions: summary.totalTasks.toLocaleString(),
+        completed: flow.throughput.toLocaleString(),
+        cost: fmtCost(summary.totalCost),
+      },
     })
   }
 
