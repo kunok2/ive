@@ -122,30 +122,39 @@ export function aggregateSnapshotsToDailySummaries() {
   }
 }
 
-export function getDailyWaitingTrend(startDate: string, endDate: string): {
+// userId: null이면 전체(메일 보고서 등 글로벌 집계용), string이면 해당 사용자가 소유/공유받은 프로젝트만 집계
+export function getDailyWaitingTrend(userId: string | null, startDate: string, endDate: string): {
   daily: { date: string; total: number; totalWaiting: number; totalVerifyWaiting: number; byProject: { projectId: string; projectName: string; projectColor: string; waiting: number; verifyWaiting: number }[] }[]
 } {
   const db = getDb()
-  const projects = db.prepare('SELECT id, name, color FROM projects').all() as { id: string; name: string; color: string }[]
+  const userScope = userId
+    ? `(p.user_id = ? OR EXISTS (SELECT 1 FROM project_shares ps WHERE ps.project_id = p.id AND ps.user_id = ?))`
+    : '1=1'
+  const userArgs: string[] = userId ? [userId, userId] : []
+
+  const projects = db.prepare(
+    `SELECT p.id, p.name, p.color FROM projects p WHERE ${userScope}`
+  ).all(...userArgs) as { id: string; name: string; color: string }[]
   const projectMap = new Map(projects.map(p => [p.id, { name: p.name, color: p.color }]))
 
   const summaryRows = db.prepare(`
-    SELECT date as day, entity_id as project_id, avg_waiting, avg_verify_waiting
-    FROM stat_daily_summaries
-    WHERE entity_type = 'project' AND date >= ? AND date < ?
+    SELECT s.date as day, s.entity_id as project_id, s.avg_waiting, s.avg_verify_waiting
+    FROM stat_daily_summaries s JOIN projects p ON p.id = s.entity_id
+    WHERE s.entity_type = 'project' AND s.date >= ? AND s.date < ? AND ${userScope}
     ORDER BY day ASC
-  `).all(startDate, endDate) as { day: string; project_id: string; avg_waiting: number; avg_verify_waiting: number }[]
+  `).all(startDate, endDate, ...userArgs) as { day: string; project_id: string; avg_waiting: number; avg_verify_waiting: number }[]
 
   const kstToday = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
   const snapshotRows = db.prepare(`
-    SELECT DATE(timestamp, '+9 hours') as day, entity_id as project_id,
-      ROUND(AVG(waiting)) as avg_waiting, ROUND(AVG(verify_waiting)) as avg_verify_waiting
-    FROM stat_snapshots
-    WHERE entity_type = 'project'
-      AND DATE(timestamp, '+9 hours') >= ? AND DATE(timestamp, '+9 hours') < ? AND DATE(timestamp, '+9 hours') < ?
-    GROUP BY DATE(timestamp, '+9 hours'), entity_id
+    SELECT DATE(s.timestamp, '+9 hours') as day, s.entity_id as project_id,
+      ROUND(AVG(s.waiting)) as avg_waiting, ROUND(AVG(s.verify_waiting)) as avg_verify_waiting
+    FROM stat_snapshots s JOIN projects p ON p.id = s.entity_id
+    WHERE s.entity_type = 'project'
+      AND DATE(s.timestamp, '+9 hours') >= ? AND DATE(s.timestamp, '+9 hours') < ? AND DATE(s.timestamp, '+9 hours') < ?
+      AND ${userScope}
+    GROUP BY DATE(s.timestamp, '+9 hours'), s.entity_id
     ORDER BY day ASC
-  `).all(startDate, endDate, kstToday) as { day: string; project_id: string; avg_waiting: number; avg_verify_waiting: number }[]
+  `).all(startDate, endDate, kstToday, ...userArgs) as { day: string; project_id: string; avg_waiting: number; avg_verify_waiting: number }[]
 
   const latestTodayRows = db.prepare(`
     SELECT s.entity_id as project_id, s.waiting, s.verify_waiting
@@ -154,8 +163,9 @@ export function getDailyWaitingTrend(startDate: string, endDate: string): {
       SELECT entity_id, MAX(timestamp) as max_ts FROM stat_snapshots
       WHERE entity_type = 'project' AND DATE(timestamp, '+9 hours') = ? GROUP BY entity_id
     ) latest ON s.entity_id = latest.entity_id AND s.timestamp = latest.max_ts
-    WHERE s.entity_type = 'project'
-  `).all(kstToday) as { project_id: string; waiting: number; verify_waiting: number }[]
+    JOIN projects p ON p.id = s.entity_id
+    WHERE s.entity_type = 'project' AND ${userScope}
+  `).all(kstToday, ...userArgs) as { project_id: string; waiting: number; verify_waiting: number }[]
 
   const dayMap = new Map<string, Map<string, { waiting: number; verifyWaiting: number }>>()
   for (const r of summaryRows) {
@@ -193,25 +203,35 @@ export function getDailyWaitingTrend(startDate: string, endDate: string): {
   return { daily }
 }
 
-export function getDailyWaitingTrendByAgent(startDate: string, endDate: string): {
+// userId: null이면 전체, string이면 해당 사용자 소유 에이전트만 집계
+export function getDailyWaitingTrendByAgent(userId: string | null, startDate: string, endDate: string): {
   daily: { date: string; total: number; byAgent: { agentId: string; agentName: string; agentAvatar: string; waiting: number }[] }[]
 } {
   const db = getDb()
-  const agents = db.prepare('SELECT id, name, avatar FROM agents').all() as { id: string; name: string; avatar: string }[]
+  const ownerScope = userId ? 'a.user_id = ?' : '1=1'
+  const ownerArgs: string[] = userId ? [userId] : []
+
+  const agents = db.prepare(
+    `SELECT a.id, a.name, a.avatar FROM agents a WHERE ${ownerScope}`
+  ).all(...ownerArgs) as { id: string; name: string; avatar: string }[]
   const agentMap = new Map(agents.map(a => [a.id, { name: a.name, avatar: a.avatar }]))
 
   const summaryRows = db.prepare(`
-    SELECT date as day, entity_id as agent_id, avg_waiting
-    FROM stat_daily_summaries WHERE entity_type = 'agent' AND date >= ? AND date < ? ORDER BY day ASC
-  `).all(startDate, endDate) as { day: string; agent_id: string; avg_waiting: number }[]
+    SELECT s.date as day, s.entity_id as agent_id, s.avg_waiting
+    FROM stat_daily_summaries s JOIN agents a ON a.id = s.entity_id
+    WHERE s.entity_type = 'agent' AND s.date >= ? AND s.date < ? AND ${ownerScope}
+    ORDER BY day ASC
+  `).all(startDate, endDate, ...ownerArgs) as { day: string; agent_id: string; avg_waiting: number }[]
 
   const kstToday = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
   const snapshotRows = db.prepare(`
-    SELECT DATE(timestamp, '+9 hours') as day, entity_id as agent_id, ROUND(AVG(waiting)) as avg_waiting
-    FROM stat_snapshots WHERE entity_type = 'agent'
-      AND DATE(timestamp, '+9 hours') >= ? AND DATE(timestamp, '+9 hours') < ? AND DATE(timestamp, '+9 hours') < ?
-    GROUP BY DATE(timestamp, '+9 hours'), entity_id ORDER BY day ASC
-  `).all(startDate, endDate, kstToday) as { day: string; agent_id: string; avg_waiting: number }[]
+    SELECT DATE(s.timestamp, '+9 hours') as day, s.entity_id as agent_id, ROUND(AVG(s.waiting)) as avg_waiting
+    FROM stat_snapshots s JOIN agents a ON a.id = s.entity_id
+    WHERE s.entity_type = 'agent'
+      AND DATE(s.timestamp, '+9 hours') >= ? AND DATE(s.timestamp, '+9 hours') < ? AND DATE(s.timestamp, '+9 hours') < ?
+      AND ${ownerScope}
+    GROUP BY DATE(s.timestamp, '+9 hours'), s.entity_id ORDER BY day ASC
+  `).all(startDate, endDate, kstToday, ...ownerArgs) as { day: string; agent_id: string; avg_waiting: number }[]
 
   const latestTodayRows = db.prepare(`
     SELECT s.entity_id as agent_id, s.waiting
@@ -220,8 +240,9 @@ export function getDailyWaitingTrendByAgent(startDate: string, endDate: string):
       SELECT entity_id, MAX(timestamp) as max_ts FROM stat_snapshots
       WHERE entity_type = 'agent' AND DATE(timestamp, '+9 hours') = ? GROUP BY entity_id
     ) latest ON s.entity_id = latest.entity_id AND s.timestamp = latest.max_ts
-    WHERE s.entity_type = 'agent'
-  `).all(kstToday) as { agent_id: string; waiting: number }[]
+    JOIN agents a ON a.id = s.entity_id
+    WHERE s.entity_type = 'agent' AND ${ownerScope}
+  `).all(kstToday, ...ownerArgs) as { agent_id: string; waiting: number }[]
 
   const dayMap = new Map<string, Map<string, number>>()
   for (const r of summaryRows) {

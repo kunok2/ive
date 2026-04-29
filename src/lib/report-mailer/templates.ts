@@ -243,8 +243,8 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
   const dailyInflow = uniqueInflow / periodDays
   const dailyCapacity = total / periodDays
 
-  // 대기 현황 (waitingTrend 마지막 값)
-  const waitingTrendData = getDailyWaitingTrend(periodStart, periodEnd)
+  // 대기 현황 (waitingTrend 마지막 값) — 메일 보고서는 글로벌(getGlobalExecutionsInRange와 동일 스코프)
+  const waitingTrendData = getDailyWaitingTrend(null, periodStart, periodEnd)
   const latestWaitingDay = waitingTrendData.daily.length > 0
     ? waitingTrendData.daily[waitingTrendData.daily.length - 1]
     : null
@@ -492,6 +492,7 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
   // ─── 대기 건수 추이 (재사용) ───
   const waitingTrend = waitingTrendData
   const prevWaitingData = prevExecutions ? getDailyWaitingTrend(
+    null,
     calculatePreviousPeriod(reportType, periodStart, periodEnd).start,
     calculatePreviousPeriod(reportType, periodStart, periodEnd).end
   ) : null

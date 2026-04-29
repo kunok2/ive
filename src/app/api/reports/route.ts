@@ -963,10 +963,11 @@ export async function GET(req: NextRequest) {
   }
 
   // 대기건수 추이 (stat_snapshots 기반)
-  const waitingTrend = getDailyWaitingTrend(range.start, range.end)
-  const prevWaitingTrend = getDailyWaitingTrend(prevRange.start, prevRange.end)
-  const agentWaitingTrend = getDailyWaitingTrendByAgent(range.start, range.end)
-  const prevAgentWaitingTrend = getDailyWaitingTrendByAgent(prevRange.start, prevRange.end)
+  // 보고서 일관성: 다른 모든 통계가 user.id로 필터링되므로 대기 트렌드도 동일 스코프로 제한
+  const waitingTrend = getDailyWaitingTrend(user.id, range.start, range.end)
+  const prevWaitingTrend = getDailyWaitingTrend(user.id, prevRange.start, prevRange.end)
+  const agentWaitingTrend = getDailyWaitingTrendByAgent(user.id, range.start, range.end)
+  const prevAgentWaitingTrend = getDailyWaitingTrendByAgent(user.id, prevRange.start, prevRange.end)
 
   // 대기건수 인사이트
   const waitingDays = waitingTrend.daily.filter(d => d.date <= todayKey)
