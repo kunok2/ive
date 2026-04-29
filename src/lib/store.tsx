@@ -1,10 +1,9 @@
 'use client'
 
 import { createContext, useContext, useReducer, useEffect, useCallback, useRef, ReactNode } from 'react'
-import { User, Project, Agent, ProjectAssignment } from '@/types'
+import { User, Project, Agent } from '@/types'
 
 interface ProjectWithAgents extends Project {
-  assignedAgents: (ProjectAssignment & { agent: Agent })[]
   runningCount?: number       // 현재 실행 중인 작업 수
   shareRole?: string | null  // null=소유자, 'viewer', 'editor'
 }
@@ -57,9 +56,6 @@ const StoreContext = createContext<{
   addAgent: (a: Omit<Agent, 'id' | 'userId' | 'createdAt'>) => Promise<void>
   updateAgent: (a: Agent) => Promise<void>
   deleteAgent: (id: string) => Promise<void>
-  assignAgentToProject: (projectId: string, agentId: string, accessToken?: string) => Promise<void>
-  unassignAgentFromProject: (projectId: string, agentId: string) => Promise<void>
-  updateAgentToken: (projectId: string, agentId: string, accessToken: string) => Promise<void>
   scanProjectNow: (id: string) => Promise<void>
 }>({
   state: { user: null, projects: [], agents: [], loading: true, authChecked: false },
@@ -73,9 +69,6 @@ const StoreContext = createContext<{
   addAgent: async () => {},
   updateAgent: async () => {},
   deleteAgent: async () => {},
-  assignAgentToProject: async () => {},
-  unassignAgentFromProject: async () => {},
-  updateAgentToken: async () => {},
   scanProjectNow: async () => {},
 })
 
@@ -246,37 +239,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     await refresh()
   }, [refreshAgents, refresh])
 
-  const assignAgentToProject = useCallback(async (projectId: string, agentId: string, accessToken?: string) => {
-    const res = await fetch(`/api/projects/${projectId}/agents`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ agentId, accessToken: accessToken || '' }),
-    })
-    if (!res.ok) {
-      const data = await res.json()
-      throw new Error(data.error || 'Agent 배정 실패')
-    }
-    await refresh()
-  }, [refresh])
-
-  const updateAgentToken = useCallback(async (projectId: string, agentId: string, accessToken: string) => {
-    await fetch(`/api/projects/${projectId}/agents`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ agentId, accessToken }),
-    })
-    await refresh()
-  }, [refresh])
-
-  const unassignAgentFromProject = useCallback(async (projectId: string, agentId: string) => {
-    await fetch(`/api/projects/${projectId}/agents`, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ agentId }),
-    })
-    await refresh()
-  }, [refresh])
-
   const scanProjectNow = useCallback(async (id: string) => {
     const res = await fetch(`/api/projects/${id}/scan`, { method: 'POST' })
     if (res.ok) {
@@ -292,7 +254,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       state, refreshUser, refresh, logout,
       addProject, updateProject, deleteProject,
       refreshAgents, addAgent, updateAgent, deleteAgent,
-      assignAgentToProject, unassignAgentFromProject, updateAgentToken,
       scanProjectNow,
     }}>
       {children}

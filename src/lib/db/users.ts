@@ -30,6 +30,20 @@ export function getUserById(id: string): User | null {
   return mapUser(row)
 }
 
+/**
+ * Git 사용자 식별자(oauth_user_id, 숫자 ID 문자열화)로 IVE 사용자 lookup.
+ * provider type ('github'|'gitlab') 으로 필터하여 정확히 매칭.
+ */
+export function getUserByOAuthId(providerType: 'github' | 'gitlab', oauthUserId: string): User | null {
+  const row = getDb().prepare(`
+    SELECT u.* FROM users u
+    JOIN oauth_providers op ON op.id = u.oauth_provider_id
+    WHERE op.type = ? AND u.oauth_user_id = ?
+    LIMIT 1
+  `).get(providerType, oauthUserId) as any
+  return row ? mapUser(row) : null
+}
+
 export function getAllUsers(): User[] {
   const rows = getDb().prepare('SELECT * FROM users ORDER BY created_at ASC').all() as any[]
   return rows.map(mapUser)

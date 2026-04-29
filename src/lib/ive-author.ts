@@ -14,8 +14,8 @@
  *   - 이슈 본문(description)
  *   - 이슈 코멘트(note body)
  */
-import { getUserById, getAgent } from '@/lib/db'
-import type { User, Agent } from '@/types'
+import { getUserById, getUserByOAuthId, getAgent } from '@/lib/db'
+import type { User, Agent, Project } from '@/types'
 
 export const IVE_AUTHOR_MARKER_RE = /<!--\s*ive-author:([a-zA-Z0-9_-]+)\s*-->/
 export const IVE_AGENT_MARKER_RE = /<!--\s*ive-agent:([a-zA-Z0-9_-]+)\s*-->/
@@ -86,4 +86,44 @@ export function resolveIveAgentFromBody(body: string | null | undefined): Agent 
 export function stripAllIveMarkers(body: string): string {
   if (typeof body !== 'string') return body
   return body.replace(IVE_AUTHOR_MARKER_RE, '').replace(IVE_AGENT_MARKER_RE, '').trimStart()
+}
+
+// ──────────────── Issue requester (이슈 의뢰자) ────────────────
+//
+// 이슈를 처리할 에이전트를 누구의 풀에서 골라올지 결정하는 핵심 로직.
+// "의뢰자" = 이 작업을 해달라고 요청한 사람 = 이슈 작성자.
+// (Git assignees는 처리/검증할 사람이지 의뢰자가 아님 — 의뢰자 판정에서 제외.)
+//
+// 우선순위:
+//   1) 본문 ive-author 마커 → IVE 사용자 (IVE 내부에서 만든 이슈)
+//   2) Git author → oauth_user_id 매칭 (외부에서 만든 이슈, IVE 가입자)
+//   3) 모두 실패 → 프로젝트 오너 (외부인이 GitLab에서 직접 IVE 레이블만 단 케이스)
+//
+// 1~2는 의뢰자가 명확히 식별된 경우. 3은 fallback (오너가 책임).
+// 호출부는 반환값.user.id 로 그 사람의 에이전트 풀을 lookup.
+
+export interface IssueRequesterResult {
+  user: User
+  /** 'marker' | 'author' | 'owner-fallback' — 디버그/로깅용 */
+  source: 'marker' | 'author' | 'owner-fallback'
+}
+
+export function resolveIssueRequester(project: Project, issue: any): IssueRequesterResult | null {
+  // 1) 본문 ive-author 마커
+  const markerId = extractIveAuthorId(issue.description || '')
+  if (markerId) {
+    const u = getUserById(markerId)
+    if (u) return { user: u, source: 'marker' }
+  }
+
+  // 2) Git author → IVE 사용자 매칭
+  if (issue.author?.id != null) {
+    const u = getUserByOAuthId(project.provider, String(issue.author.id))
+    if (u) return { user: u, source: 'author' }
+  }
+
+  // 3) 프로젝트 오너 fallback
+  const owner = getUserById(project.userId)
+  if (owner) return { user: owner, source: 'owner-fallback' }
+  return null
 }

@@ -12,6 +12,7 @@ function mapExecution(r: any): TaskExecution {
     status: r.status, startedAt: r.started_at, endedAt: r.ended_at,
     logPath: r.log_path, pid: r.pid ?? undefined,
     agentName: r.agent_name ?? undefined,
+    agentAvatar: r.agent_avatar ?? undefined,
     inputTokens: r.input_tokens ?? 0, outputTokens: r.output_tokens ?? 0,
     cacheReadInputTokens: r.cache_read_input_tokens ?? 0,
     cacheCreationInputTokens: r.cache_creation_input_tokens ?? 0,
@@ -186,7 +187,7 @@ export function hasPastExecution(projectId: string, issueIid: number): boolean {
 
 export function getLatestExecutionsByProject(projectId: string, limit: number = 20): TaskExecution[] {
   const rows = getDb().prepare(`
-    SELECT te.*, a.name AS agent_name
+    SELECT te.*, a.name AS agent_name, a.avatar AS agent_avatar
     FROM task_executions te
     LEFT JOIN agents a ON a.id = te.agent_id
     WHERE te.project_id = ?
@@ -198,7 +199,7 @@ export function getLatestExecutionsByProject(projectId: string, limit: number = 
 
 export function getLatestExecutionsByAgent(agentId: string, limit: number = 20): TaskExecution[] {
   const rows = getDb().prepare(`
-    SELECT te.*, a.name AS agent_name
+    SELECT te.*, a.name AS agent_name, a.avatar AS agent_avatar
     FROM task_executions te
     LEFT JOIN agents a ON a.id = te.agent_id
     WHERE te.agent_id = ?
@@ -211,7 +212,7 @@ export function getLatestExecutionsByAgent(agentId: string, limit: number = 20):
 export function getTodayExecutionsByProject(projectId: string): TaskExecution[] {
   const todayStartISO = getKSTTodayStartISO()
   const rows = getDb().prepare(`
-    SELECT te.*, a.name AS agent_name
+    SELECT te.*, a.name AS agent_name, a.avatar AS agent_avatar
     FROM task_executions te
     LEFT JOIN agents a ON a.id = te.agent_id
     WHERE te.project_id = ? AND te.started_at >= ?
@@ -223,7 +224,7 @@ export function getTodayExecutionsByProject(projectId: string): TaskExecution[] 
 export function getTodayExecutionsByAgent(agentId: string): TaskExecution[] {
   const todayStartISO = getKSTTodayStartISO()
   const rows = getDb().prepare(`
-    SELECT te.*, a.name AS agent_name
+    SELECT te.*, a.name AS agent_name, a.avatar AS agent_avatar
     FROM task_executions te
     LEFT JOIN agents a ON a.id = te.agent_id
     WHERE te.agent_id = ? AND te.started_at >= ?

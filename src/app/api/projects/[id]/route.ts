@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getProject, updateProject, deleteProject, getProjectAssignments, getProjectAccess } from '@/lib/db'
+import { getProject, updateProject, deleteProject, getProjectAccess } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { encrypt } from '@/lib/crypto'
 import { logActivity } from '@/lib/activity'
@@ -15,12 +15,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
-  const assignedAgents = getProjectAssignments(id)
-
   return NextResponse.json({
     ...project,
     accessToken: (access === 'owner' || access === 'editor') ? project.accessToken : '', // viewer에게만 토큰 숨김
-    assignedAgents,
     shareRole: access === 'owner' ? null : access,
   })
 }

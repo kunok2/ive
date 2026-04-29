@@ -64,16 +64,7 @@ export function initSchema(db: Database.Database) {
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
 
-    CREATE TABLE IF NOT EXISTS project_assignments (
-      id TEXT PRIMARY KEY,
-      project_id TEXT NOT NULL,
-      agent_id TEXT NOT NULL,
-      access_token TEXT NOT NULL DEFAULT '',
-      assigned_at TEXT NOT NULL DEFAULT (datetime('now')),
-      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-      FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE,
-      UNIQUE(project_id, agent_id)
-    );
+    -- project_assignments 테이블은 #272에서 제거됨 (전역 에이전트 풀 + 의뢰자 기준 선택)
 
     CREATE TABLE IF NOT EXISTS task_executions (
       id TEXT PRIMARY KEY,
@@ -378,13 +369,10 @@ export function initSchema(db: Database.Database) {
     }
   } catch (e) { console.error("Migration failed for agents monitoring:", e) }
 
-  // project_assignments에 access_token 컬럼 추가
+  // #272: project_assignments 테이블 제거 (전역 에이전트 풀로 전환)
   try {
-    const tableInfo = db.prepare("PRAGMA table_info(project_assignments)").all() as any[]
-    if (!tableInfo.some((col: any) => col.name === 'access_token')) {
-      db.exec("ALTER TABLE project_assignments ADD COLUMN access_token TEXT NOT NULL DEFAULT ''")
-    }
-  } catch (e) { console.error("Migration failed for project_assignments:", e) }
+    db.exec('DROP TABLE IF EXISTS project_assignments')
+  } catch (e) { console.error("Migration failed dropping project_assignments:", e) }
 
   // agents에 avatar 컬럼 추가
   try {

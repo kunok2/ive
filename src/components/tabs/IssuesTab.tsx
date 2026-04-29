@@ -207,10 +207,14 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
       .finally(() => setLoading(false))
   }, [selectedProjectId])
 
+  // #272: 프로젝트별 배정 폐기. 이슈 생성/지정 에이전트 picker는 "현재 로그인 사용자(의뢰자) 의 에이전트 풀"을 보여준다.
+  // store의 state.agents 는 현재 사용자가 소유한 에이전트 목록.
   const fetchProjectAgents = useCallback(() => {
-    if (!selectedProjectId) { setProjectAgents([]); return }
-    fetch(`/api/projects/${selectedProjectId}/agents`).then(res => res.ok ? res.json() : []).then(setProjectAgents).catch(() => setProjectAgents([]))
-  }, [selectedProjectId])
+    setProjectAgents(state.agents.map(a => ({
+      agentId: a.id,
+      agent: { id: a.id, name: a.name, avatar: a.avatar, cliName: a.cliName, status: a.status },
+    })))
+  }, [state.agents])
 
   const fetchGitMembers = useCallback(() => {
     if (!selectedProjectId) { setGitMembers([]); return }

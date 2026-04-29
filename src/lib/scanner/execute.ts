@@ -17,13 +17,12 @@ import {
   createActivityLog,
   touchProjectActivity,
   upsertIssueStageSnapshot,
-  getProjectAssignments,
+  getAgentsByUser,
 } from "../db";
 import { addIssueLabels, removeIssueLabels } from "../provider";
 import { fetchGitLabIssueNotes } from "../gitlab";
 import { fetchGitHubIssueNotes } from "../github";
 import { Project, Agent } from "@/types";
-import { decrypt } from "../crypto";
 import { defaultLocale } from "@/i18n/config";
 import fs from "fs";
 import path from "path";
@@ -295,22 +294,20 @@ export async function processConflictCheck(project: Project, decryptedToken: str
     return;
   }
 
-  const assignments = getProjectAssignments(project.id);
+  // 충돌 감지는 프로젝트 단위 작업 → 프로젝트 오너의 에이전트 풀 사용
+  const ownerAgents = getAgentsByUser(project.userId);
   let selectedAgent: Agent | null = null;
-  let agentToken = decryptedToken;
+  const agentToken = decryptedToken;
   let oldestTime = Infinity;
 
-  for (const pa of assignments) {
-    const running = countActiveExecutionsByAgent(pa.agentId);
+  for (const a of ownerAgents) {
+    const running = countActiveExecutionsByAgent(a.id);
     if (running === 0) {
-      const lastDone = getLastCompletedAt(pa.agentId);
+      const lastDone = getLastCompletedAt(a.id);
       const t = lastDone ? new Date(lastDone).getTime() : 0;
       if (t < oldestTime) {
         oldestTime = t;
-        selectedAgent = pa.agent;
-        if (pa.accessToken) {
-          try { agentToken = decrypt(pa.accessToken); } catch { agentToken = decryptedToken; }
-        }
+        selectedAgent = a;
       }
     }
   }

@@ -2,7 +2,7 @@ import { spawn, ChildProcess } from 'child_process'
 import fs from 'fs'
 import path from 'path'
 import { promisify } from 'util'
-import { getSystemSetting, getProject, getProjectAssignments, countActiveExecutionsByAgent, updateChatSessionCliId } from './db'
+import { getSystemSetting, getProject, getAgentsByUser, countActiveExecutionsByAgent, updateChatSessionCliId } from './db'
 import { decrypt } from './crypto'
 import { defaultLocale } from '@/i18n/config'
 import { Agent, Project } from '@/types'
@@ -37,24 +37,23 @@ export function killChatAgent(sessionId: string) {
 }
 
 /**
- * Pick an available agent assigned to the project.
+ * Pick an available agent from the requester user's pool.
  * An agent is available only if it has no active (running) executions.
+ *
+ * #272: 프로젝트 배정 폐기 → 채팅을 시작하는 사용자(requesterUserId)의 풀에서 선택.
+ * 풀이 비어있거나 모두 바쁘면 null.
  */
-export function pickAgentForChat(projectId: string): { agent: Agent; token: string } | null {
+export function pickAgentForChat(projectId: string, requesterUserId: string): { agent: Agent; token: string } | null {
   const project = getProject(projectId)
   if (!project) return null
-  const assignments = getProjectAssignments(projectId)
-  if (assignments.length === 0) return null
+  const userAgents = getAgentsByUser(requesterUserId)
+  if (userAgents.length === 0) return null
   const decryptedToken = decrypt(project.accessToken)
 
-  for (const pa of assignments) {
-    const activeCount = countActiveExecutionsByAgent(pa.agentId)
+  for (const a of userAgents) {
+    const activeCount = countActiveExecutionsByAgent(a.id)
     if (activeCount === 0) {
-      let token = decryptedToken
-      if (pa.accessToken) {
-        try { token = decrypt(pa.accessToken) } catch { /* use project token */ }
-      }
-      return { agent: pa.agent, token }
+      return { agent: a, token: decryptedToken }
     }
   }
   return null // All agents busy

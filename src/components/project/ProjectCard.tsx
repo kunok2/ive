@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Project, ProjectAssignment, Agent, TaskExecution, StatSnapshot } from '@/types'
+import { Project, Agent, TaskExecution, StatSnapshot } from '@/types'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useStore } from '@/lib/store'
 import { formatDateShort, formatDateMedium } from '@/lib/format-date'
@@ -19,12 +19,6 @@ import type { ToolActivity } from '@/lib/tool-activity'
 import { useTranslations } from 'next-intl'
 import { useTab } from '@/lib/tab-context'
 
-function formatTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
-  return String(n)
-}
-
 function formatDuration(startedAt: string): string {
   const s = Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000)
   if (s < 60) return `${s}s`
@@ -34,7 +28,7 @@ function formatDuration(startedAt: string): string {
 
 
 interface Props {
-  project: Project & { assignedAgents?: (ProjectAssignment & { agent: Agent })[]; shareRole?: string | null }
+  project: Project & { shareRole?: string | null }
 }
 
 interface ProjectStats {
@@ -52,7 +46,6 @@ interface ProjectStats {
 }
 
 export default function ProjectCard({ project }: Props) {
-  const agentCount = project.assignedAgents?.length ?? 0
   const isOwner = !project.shareRole
   const canEdit = isOwner || project.shareRole === 'editor'
   const router = useRouter()
@@ -338,12 +331,6 @@ export default function ProjectCard({ project }: Props) {
           </div>
         )}
 
-        {agentCount === 0 && project.scannerActive && (
-          <div className="mt-3 mx-0 bg-ive-amber/10 border border-ive-amber/20 rounded-lg px-3 py-2 text-sm text-ive-amber/80">
-            <i className="fa-solid fa-triangle-exclamation mr-1.5" />
-            <span className="font-bold">{tp('noAgentWarning')}</span>
-          </div>
-        )}
       </Link>
 
       {/* 대시보드 통계 바 */}
@@ -367,7 +354,7 @@ export default function ProjectCard({ project }: Props) {
         >
           <div className="flex items-baseline gap-0.5">
             <span className={`text-lg font-bold leading-none ${agentWorkingCount > 0 ? 'text-ive-amber animate-pulse' : 'text-ive-text-dim'}`}>
-              {agentWorkingCount}/{agentCount}
+              {agentWorkingCount}
             </span>
           </div>
           <Sparkline data={snapshots.map(s => s.running)} width={40} height={12} color="amber" />
@@ -405,15 +392,6 @@ export default function ProjectCard({ project }: Props) {
           <span className="text-xs text-ive-text-dim font-bold">{tp('completedLabel')}</span>
         </button>
 
-        {/* 토큰 — 측정값(상태 신호 아님) → 중립 */}
-        <div className="flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5">
-          <span className={`text-lg font-bold leading-none ${(stats?.totalTokens ?? 0) > 0 ? 'text-ive-text' : 'text-ive-text-dim'}`}>
-            {formatTokens(stats?.totalTokens ?? 0)}
-          </span>
-          <Sparkline data={snapshots.map(s => s.totalTokens)} width={40} height={12} color="gray" />
-          <span className="text-xs text-ive-text-dim font-bold">{tp('tokensLabel')}</span>
-        </div>
-
         {/* 취합 */}
         <button
           onClick={() => setExpandedPanel(expandedPanel === 'conflicts' ? null : 'conflicts')}
@@ -436,9 +414,12 @@ export default function ProjectCard({ project }: Props) {
           {runningExecs.map(ex => {
             const isChat = ex.id.startsWith('exec-chat-')
             const isVerify = ex.assigneeType === 'user'
-            const agent = isVerify ? null : (project.assignedAgents ?? []).find(pa => pa.agentId === ex.agentId)?.agent
-            const activity = agent ? activities[agent.id] : undefined
-            const displayName = isVerify ? ex.userName : agent?.name
+            // 에이전트 풀이 전역화되어 어느 사용자의 에이전트인지 모르므로
+            // execution row에 inline JOIN된 agent_name/agent_avatar를 우선 사용.
+            const agentName = isVerify ? null : (ex.agentName ?? null)
+            const agentAvatar = isVerify ? null : (ex.agentAvatar ?? 'av-01')
+            const activity = ex.agentId ? activities[ex.agentId] : undefined
+            const displayName = isVerify ? ex.userName : agentName
             return (
               <div key={ex.id} className="flex items-center gap-1.5 text-xs">
                 {isVerify ? (
@@ -447,9 +428,9 @@ export default function ProjectCard({ project }: Props) {
                   ) : ex.userAvatar ? (
                     <AgentAvatar avatar={ex.userAvatar} size="sm" />
                   ) : null
-                ) : agent ? (
+                ) : agentAvatar ? (
                   <AgentAvatar
-                    avatar={agent.avatar}
+                    avatar={agentAvatar}
                     size="sm"
                     toolBadge={isChat ? null : (activity?.category ?? null)}
                   />
@@ -472,13 +453,31 @@ export default function ProjectCard({ project }: Props) {
       {/* 작업 현황 패널 (AI 에이전트만) */}
       {expandedPanel === 'running' && (() => {
         const agentExecs = runningExecs.filter(e => e.assigneeType !== 'user')
+        // #272: 프로젝트 배정 폐기 → 현재 실행 중인 에이전트만 탭으로 표시.
+        // execution row에 inline JOIN된 agent_name/agent_avatar 사용 (다른 사용자 풀의 에이전트도 표시 가능).
+        const agentTabs = agentExecs.map(ex => ({
+          agent: {
+            id: ex.agentId,
+            userId: '',
+            name: ex.agentName ?? '',
+            avatar: ex.agentAvatar ?? 'av-01',
+            cliName: 'claude' as const,
+            cliPath: '',
+            cliVersion: '',
+            modelName: ex.modelName ?? '',
+            maxTurns: 0,
+            status: 'busy' as const,
+            snapshotInterval: 1,
+            sparklinePoints: 60,
+            statsRetention: 7,
+            createdAt: '',
+          } satisfies Agent,
+          execution: ex,
+        }))
         return (
           <div className="flex-1 flex flex-col min-h-0">
             <LiveTracePanel
-              agents={(project.assignedAgents ?? []).map(pa => ({
-                agent: pa.agent,
-                execution: agentExecs.find(e => e.agentId === pa.agentId) ?? null,
-              }))}
+              agents={agentTabs}
               projectId={project.id}
               onKill={handleKill}
               onAllCompleted={() => setExpandedPanel(null)}

@@ -50,14 +50,10 @@ export default function AgentsTab({ onAdd }: { onAdd?: () => void }) {
     await Promise.all([refreshAgents(), fetchVerifiers()])
   }
 
-  function getAssignedProjects(agentId: string): { id: string; name: string; color: string; provider: string }[] {
-    const result: { id: string; name: string; color: string; provider: string }[] = []
-    for (const project of state.projects) {
-      if (project.assignedAgents?.some(pa => pa.agentId === agentId)) {
-        result.push({ id: project.id, name: project.name, color: project.color, provider: project.provider })
-      }
-    }
-    return result
+  // #272: 프로젝트별 배정 폐기. 에이전트는 사용자 풀에 속하므로 특정 프로젝트와의 1:1 관계가 없다.
+  // (실행 이력 기반의 "최근 작업 프로젝트" 표시는 후속 작업.)
+  function getAssignedProjects(_agentId: string): { id: string; name: string; color: string; provider: string }[] {
+    return []
   }
 
   const agentCount = state.agents.length

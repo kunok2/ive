@@ -123,6 +123,6 @@
   "labelStatusExists": "있음",
   "labelStatusMissing": "없음",
   "autoCreateLabels": "레이블 자동 생성",
-  "noAgentWarningTitle": "배정된 에이전트가 없습니다",
-  "noAgentWarningDesc": "이 프로젝트에 배정된 에이전트가 없어 작업을 처리할 수 없습니다. 프로젝트 설정에서 에이전트를 배정해주세요."
+  "noAgentWarningTitle": "에이전트가 없습니다",
+  "noAgentWarningDesc": "사용 가능한 에이전트가 없어 작업이 보류됩니다. 에이전트 탭에서 에이전트를 추가해주세요."
 }

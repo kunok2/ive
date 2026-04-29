@@ -2,11 +2,11 @@
 // 기존 import { ... } from '@/lib/db' 경로를 변경 없이 유지합니다.
 
 export { getDb } from './connection'
-export { mapUser, getUserByEmail, getUserById, getAllUsers, deleteUser, updateUserAvatar, updateUserLocale, updateUserTimezone, createUser } from './users'
+export { mapUser, getUserByEmail, getUserById, getUserByOAuthId, getAllUsers, deleteUser, updateUserAvatar, updateUserLocale, updateUserTimezone, createUser } from './users'
 export { getAllOAuthProviders, getEnabledOAuthProviders, getOAuthProviderById, getOAuthProviderRaw, createOAuthProvider, updateOAuthProvider, deleteOAuthProvider, getUserByOAuth, linkUserOAuth, createOAuthUser, updateUserOAuthTokens, getUserOAuthTokenRaw, getProjectWithUserOAuth } from './oauth'
 export { type ProjectRow, mapProject, getAllProjects, getProjectsByUser, touchProjectActivity, getProject, getProjectAuthToken, createProject, updateProject, updateProjectSortOrders, getVerifyWaitingCount, updateProjectLastChecked, updateProjectError, updateProjectConflictCount, clearProjectError, deleteProject } from './projects'
 export { getAgentsByUser, getAgent, createAgent, updateAgent, deleteAgent, updateAgentStatus } from './agents'
-export { getProjectAssignments, getAgentProjectId, getProjectAssignmentCounts, getProjectAssignmentAgentIds, getAgentAssignmentInfo, assignAgentToProject, updateAssignmentToken, unassignAgentFromProject, countActiveExecutionsByProject, countActiveExecutionsByAgent, getLastCompletedAt } from './assignments'
+export { countActiveExecutionsByProject, countActiveExecutionsByAgent, getLastCompletedAt } from './assignments'
 export { createExecution, updateExecutionStatus, updateExecutionTokens, getExecution, updateExecutionPid, killExecution, resetStuckExecutions, markIssueVerifyStarted, markIssueVerified, markIssueVerifyRejected, resetIssueScheduledAt, hasAnyExecution, hasActiveExecution, getAssignedUserExecution, hasPastExecution, getLatestExecutionsByProject, getLatestExecutionsByAgent, getTodayExecutionsByProject, getTodayExecutionsByAgent, getYesterdayCompletedCount, assignIssueAtomically } from './executions'
 export { createSnapshot, getSnapshots, getDailyAvgSnapshots, getHourlyAvgSnapshots, aggregateSnapshotsToDailySummaries, getDailyWaitingTrend, getDailyWaitingTrendByAgent, cleanOldSnapshots, cleanOldExecutions } from './stats'
 export { getAllTokenPricing, getTokenPricingByModel, findTokenPricingForModel, upsertTokenPricing, deleteTokenPricing, getSystemSetting, getSystemSettings, setSystemSetting, setSystemSettings } from './settings'

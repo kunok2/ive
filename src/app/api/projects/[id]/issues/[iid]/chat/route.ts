@@ -87,8 +87,8 @@ export async function POST(
     return NextResponse.json({ existingChatOnIssue: otherChat.issueIid, existingSessionId: otherChat.id }, { status: 409 })
   }
 
-  // Find an available agent (not busy with any execution)
-  const agentInfo = pickAgentForChat(projectId)
+  // Find an available agent (not busy with any execution) from the current user's pool
+  const agentInfo = pickAgentForChat(projectId, user.id)
   if (!agentInfo) {
     return NextResponse.json({ error: 'noAgentAvailable' }, { status: 400 })
   }

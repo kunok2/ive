@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getProjectsByUser, createProject, getProjectAssignments, getSharedProjectsForUser, countActiveExecutionsByProject, getUserOAuthTokenRaw } from '@/lib/db'
+import { getProjectsByUser, createProject, getSharedProjectsForUser, countActiveExecutionsByProject, getUserOAuthTokenRaw } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { encrypt, decrypt } from '@/lib/crypto'
 import { ensureLabels } from '@/lib/provider'
@@ -14,7 +14,6 @@ export async function GET() {
     ...p,
     accessToken: p.accessToken ? '••••••' : '',
     hasToken: !!p.accessToken,
-    assignedAgents: getProjectAssignments(p.id),
     runningCount: countActiveExecutionsByProject(p.id),
     shareRole: null as string | null, // 소유자
   }))
@@ -23,7 +22,6 @@ export async function GET() {
   const sharedData = sharedProjects.map(p => ({
     ...p,
     accessToken: '', // 공유 사용자에게 토큰 노출하지 않음
-    assignedAgents: getProjectAssignments(p.id),
     runningCount: countActiveExecutionsByProject(p.id),
   }))
 

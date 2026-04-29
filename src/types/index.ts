@@ -159,14 +159,6 @@ export interface Agent {
   pendingCount?: number         // 지정 대기 이슈 수 (API 응답에만 포함, 정렬용)
 }
 
-export interface ProjectAssignment {
-  id: string
-  projectId: string
-  agentId: string
-  accessToken: string    // 개발자별 액세스 토큰 (빈 문자열이면 프로젝트 토큰 사용)
-  assignedAt: string
-}
-
 export type TaskStatus = 'running' | 'success' | 'failed' | 'assigned'
 
 export type AssignMode = 'auto' | 'assignee' | 'agent'
@@ -183,6 +175,7 @@ export interface TaskExecution {
   logPath: string
   pid?: number
   agentName?: string
+  agentAvatar?: string
   modelName?: string
   inputTokens: number
   outputTokens: number

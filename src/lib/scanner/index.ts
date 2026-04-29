@@ -3,7 +3,7 @@ import {
   getProject,
   updateProjectLastChecked,
   updateProjectError,
-  getProjectAssignments,
+  getAgentsByUser,
   createExecution,
   updateExecutionStatus,
   updateExecutionTokens,
@@ -61,6 +61,7 @@ import {
   addGitHubPRNote,
 } from "../github";
 import { Project, Agent } from "@/types";
+import { resolveIssueRequester } from "../ive-author";
 import { startStatsCollector } from "../stats-collector";
 import { startReportScheduler } from "../report-scheduler";
 import fs from "fs";
@@ -660,14 +661,13 @@ async function scanProject(project: Project, force: boolean = false) {
 }
 
 async function processIssues(project: Project, issues: any[], decryptedToken: string): Promise<{ assigned: number; waiting: number }> {
-  const assignments = getProjectAssignments(project.id);
   let assignedCount = 0;
   let waitingCount = 0;
   const busyAgentIds = new Set<string>();
   // assign_mode + preferred_agent_id를 한 번에 조회 (이슈별 개별 쿼리 방지)
   const assignModeMap = getAssignModeMap(project.id);
 
-  console.log(`[Scanner] processIssues: ${issues.length} issues, ${assignments.length} agents`);
+  console.log(`[Scanner] processIssues: ${issues.length} issues`);
   for (const issue of issues) {
     // 이미 진행 중인 실행이 있으면 무조건 스킵 (running + assigned 모두)
     if (hasActiveExecution(project.id, issue.iid)) {
@@ -693,58 +693,61 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
       continue;
     }
 
+    // ── 의뢰자(requester) 판정 → 그 사람의 에이전트 풀 사용 ──
+    // #272: 프로젝트별 배정 폐기. 이슈를 의뢰한 사용자의 에이전트로만 처리.
+    // 마커 > assignees > author > 프로젝트 오너(fallback) 우선순위.
+    const requester = resolveIssueRequester(project, issue);
+    if (!requester) {
+      console.log(`[Scanner] [SKIP] Issue #${issue.iid} — 의뢰자 판정 실패 (오너 정보 없음)`);
+      waitingCount++;
+      continue;
+    }
+    const userAgents = getAgentsByUser(requester.user.id);
+
     // ── 에이전트 선택: 지정 에이전트 우선, 없으면 라운드로빈 ──
     let availableAgent: Agent | null = null;
-    let agentToken = decryptedToken; // 기본: 프로젝트 토큰
-    let selectedPa: typeof assignments[0] | null = null;
+    const agentToken = decryptedToken; // 프로젝트 토큰 사용 (per-user OAuth 토큰은 후속 작업)
     let useRoundRobin = true;
     const preferredAgentId = assignInfo.mode === 'agent' ? assignInfo.agentId : null;
 
     if (preferredAgentId) {
-      const pa = assignments.find(a => a.agentId === preferredAgentId);
-      if (!pa) {
-        // 지정 에이전트가 현재 프로젝트 배정 목록에 없음 → 다른 에이전트로 자동 전환 금지
+      const a = userAgents.find(a => a.id === preferredAgentId);
+      if (!a) {
+        // 지정 에이전트가 의뢰자 풀에 없음 → 다른 에이전트로 자동 전환 금지
         // 사용자가 직접 작업자를 지정했으므로 그 의도를 존중한다.
-        console.log(`[Scanner] [WAIT] Issue #${issue.iid} — 지정 작업자(${preferredAgentId})가 프로젝트 배정 목록에 없음, 대기`);
+        console.log(`[Scanner] [WAIT] Issue #${issue.iid} — 지정 작업자(${preferredAgentId})가 의뢰자(${requester.user.name}) 풀에 없음, 대기`);
         continue;
-      } else if (busyAgentIds.has(pa.agentId) || countActiveExecutionsByAgent(pa.agentId) > 0) {
+      } else if (busyAgentIds.has(a.id) || countActiveExecutionsByAgent(a.id) > 0) {
         // 지정 에이전트가 바쁨 → 이번 스캔 스킵, 다음 스캔에서 재시도
-        console.log(`[Scanner] [WAIT] Issue #${issue.iid} — 지정 작업자 '${pa.agent.name}' 작업 중, 대기`);
+        console.log(`[Scanner] [WAIT] Issue #${issue.iid} — 지정 작업자 '${a.name}' 작업 중, 대기`);
         continue;
       } else {
-        selectedPa = pa;
+        availableAgent = a;
         useRoundRobin = false;
       }
     }
 
-    // 선호 에이전트가 없거나 리셋된 경우: 라운드로빈
-    if (useRoundRobin && !selectedPa) {
+    // 선호 에이전트가 없거나 리셋된 경우: 라운드로빈 (가장 최근 완료가 오래된 에이전트 우선)
+    if (useRoundRobin && !availableAgent) {
       let oldestTime = Infinity;
-      for (const pa of assignments) {
-        if (busyAgentIds.has(pa.agentId)) continue;
-        const running = countActiveExecutionsByAgent(pa.agentId);
+      for (const a of userAgents) {
+        if (busyAgentIds.has(a.id)) continue;
+        const running = countActiveExecutionsByAgent(a.id);
         if (running === 0) {
-          const lastDone = getLastCompletedAt(pa.agentId);
+          const lastDone = getLastCompletedAt(a.id);
           const t = lastDone ? new Date(lastDone).getTime() : 0;
           if (t < oldestTime) {
             oldestTime = t;
-            selectedPa = pa;
+            availableAgent = a;
           }
         }
-      }
-    }
-
-    if (selectedPa) {
-      availableAgent = selectedPa.agent;
-      if (selectedPa.accessToken) {
-        try { agentToken = decrypt(selectedPa.accessToken); } catch { agentToken = decryptedToken; }
       }
     }
 
     if (availableAgent) {
       busyAgentIds.add(availableAgent.id);
       const assignType = preferredAgentId ? ' (지정 작업자)' : '';
-      console.log(`[Scanner] [ASSIGN] Project: ${project.name}, Issue: #${issue.iid}, Agent: ${availableAgent.name}${assignType}${agentToken !== decryptedToken ? ' (자체 토큰)' : ''}`);
+      console.log(`[Scanner] [ASSIGN] Project: ${project.name}, Issue: #${issue.iid}, Requester: ${requester.user.name}(${requester.source}), Agent: ${availableAgent.name}${assignType}`);
 
       // 대기시간 계산 기준: IVE-S 레이블 최초 감지 시각 (이슈 생성 시각이 아님)
       const waitingSince = getIssueScheduledAt(project.id, issue.iid) || new Date().toISOString();

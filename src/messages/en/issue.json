@@ -123,6 +123,6 @@
   "labelStatusExists": "OK",
   "labelStatusMissing": "Missing",
   "autoCreateLabels": "Auto-create labels",
-  "noAgentWarningTitle": "No agent assigned",
-  "noAgentWarningDesc": "No agent is assigned to this project, so tasks cannot be processed. Please assign an agent in the project settings."
+  "noAgentWarningTitle": "No agents available",
+  "noAgentWarningDesc": "You have no agents available — the task is on hold. Add an agent from the Agents tab."
 }

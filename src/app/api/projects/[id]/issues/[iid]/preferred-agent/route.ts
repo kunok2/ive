@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAuthToken, getProjectAccess, isIssueAssignee, getAssignMode, setAssignMode, getProjectAssignments, getAgent, hasActiveExecution, stageFromLabels } from '@/lib/db';
+import { getProject, getProjectAuthToken, getProjectAccess, isIssueAssignee, getAssignMode, setAssignMode, getAgent, getAgentsByUser, hasActiveExecution, stageFromLabels } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { fetchSingleIssue } from '@/lib/provider';
+import { resolveIssueRequester } from '@/lib/ive-author';
 
 export async function GET(
   _req: NextRequest,
@@ -69,11 +70,16 @@ export async function PATCH(
     return NextResponse.json({ error: 'Invalid assign mode' }, { status: 400 });
   }
 
-  // agentId가 있으면 프로젝트에 배정된 에이전트인지 검증
+  // agentId가 있으면 의뢰자 본인의 에이전트 풀에 속하는지 검증
+  // #272: 프로젝트별 배정 폐기. 이슈 의뢰자의 에이전트만 지정 가능.
   if (mode === 'agent' && agentId) {
-    const assignments = getProjectAssignments(projectId);
-    if (!assignments.find(a => a.agentId === agentId)) {
-      return NextResponse.json({ error: '이 프로젝트에 배정되지 않은 개발자입니다.' }, { status: 400 });
+    let issueForRequester: any = null;
+    try { issueForRequester = await fetchSingleIssue(project, Number(iid), token); } catch { /* ignore */ }
+    const requester = issueForRequester ? resolveIssueRequester(project, issueForRequester) : null;
+    const ownerId = requester?.user.id ?? project.userId;
+    const pool = getAgentsByUser(ownerId);
+    if (!pool.find(a => a.id === agentId)) {
+      return NextResponse.json({ error: '의뢰자 본인의 에이전트만 지정할 수 있습니다.' }, { status: 400 });
     }
   }
 
