@@ -83,7 +83,7 @@
   "notFound": "Project not found",
   "editPermission": "Editor",
   "viewerPermission": "Viewer",
-  "gitMembers": "Reviewers ({count})",
+  "gitMembers": "Members ({count})",
   "noGitMembers": "No members found",
   "deleteProject": "Delete Project",
   "deleteProjectConfirm": "Are you sure you want to delete this project? All execution records will be removed.",

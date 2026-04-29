@@ -19,7 +19,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [showDeleteProject, setShowDeleteProject] = useState(false)
   const tc = useTranslations('common')
   const tp = useTranslations('project')
-  const ts = useTranslations('stage')
 
   const [gitMembers, setGitMembers] = useState<{ id: number; username: string; name: string; avatarUrl: string }[]>([])
   const [gitMembersLoading, setGitMembersLoading] = useState(false)
@@ -109,15 +108,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             </div>
           </div>
 
-          <div className="flex items-center justify-between mt-4 pt-4 border-t border-ive-border-dark relative z-10 gap-2">
-            <div className="flex items-center gap-4">
-              <div className="text-center">
-                <div className={`text-xl font-bold leading-none ${(project.lastScannedIssueCount ?? 0) > 0 ? 'text-ive-cyan' : 'text-ive-text-dim'}`}>
-                  {project.lastScannedIssueCount ?? 0}
-                </div>
-                <div className="text-sm text-ive-text-muted mt-1 uppercase tracking-wider font-bold">{ts('waiting')}</div>
-              </div>
-            </div>
+          <div className="flex items-center justify-end mt-4 pt-4 border-t border-ive-border-dark relative z-10 gap-2">
             {canEdit ? (
               <div className="flex gap-2 shrink-0">
                 <button

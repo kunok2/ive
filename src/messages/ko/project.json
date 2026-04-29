@@ -83,7 +83,7 @@
   "notFound": "프로젝트를 찾을 수 없습니다",
   "editPermission": "편집 권한",
   "viewerPermission": "뷰어 권한",
-  "gitMembers": "검증자 ({count})",
+  "gitMembers": "멤버 ({count})",
   "noGitMembers": "등록된 멤버가 없습니다",
   "deleteProject": "프로젝트 삭제",
   "deleteProjectConfirm": "정말 이 프로젝트를 삭제하시겠습니까? 실행 기록이 모두 사라집니다.",
