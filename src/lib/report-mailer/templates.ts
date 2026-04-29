@@ -419,11 +419,18 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
     v.avgVerifyMin = v._verifyMinCnt > 0 ? v._verifyMinAcc / v._verifyMinCnt : 0
   }
 
-  // ─── 사용자별 집계 ───
+  // ─── 담당자별 집계 ─── (이메일 보고서의 "사용자별 현황" 섹션)
+  // 사람이 직접 처리한 작업(assigneeType='user')만 집계.
+  // 에이전트가 처리한 작업은 위쪽 byAgent에서 별도로 집계됨 — 여기서 합치지 않는다.
+  // userName을 정규화 키로 사용해, 같은 사람이 userId 형식 차이로 중복 표시되는 문제를 방지.
+  const userKey = (e: typeof executions[number]) => (e.userName || e.userId || '').trim()
+
   const byUser = new Map<string, { name: string; total: number; success: number; failed: number; cost: number; issueCount: number; projectCount: number }>()
   for (const e of executions) {
-    const uid = e.developerUserId || e.developerName || e.agentName
-    const u = byUser.get(uid) || { name: e.developerName || e.agentName, total: 0, success: 0, failed: 0, cost: 0, issueCount: 0, projectCount: 0 }
+    if (e.assigneeType !== 'user') continue
+    const uid = userKey(e)
+    if (!uid) continue
+    const u = byUser.get(uid) || { name: e.userName || uid, total: 0, success: 0, failed: 0, cost: 0, issueCount: 0, projectCount: 0 }
     u.total++
     if (e.status === 'success') u.success++
     if (e.status === 'failed') u.failed++
@@ -432,14 +439,16 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
     byUser.set(uid, u)
   }
   for (const [uid] of byUser) {
-    const userExecs = executions.filter(e => (e.developerUserId || e.developerName || e.agentName) === uid)
+    const userExecs = executions.filter(e => e.assigneeType === 'user' && userKey(e) === uid)
     byUser.get(uid)!.issueCount = new Set(userExecs.map(e => `${e.projectId}:${e.issueIid}`)).size
     byUser.get(uid)!.projectCount = new Set(userExecs.map(e => e.projectId)).size
   }
 
   const prevByUser = new Map<string, { total: number; cost: number; issueCount: number }>()
   for (const e of prev) {
-    const uid = e.developerUserId || e.developerName || e.agentName
+    if (e.assigneeType !== 'user') continue
+    const uid = userKey(e)
+    if (!uid) continue
     const u = prevByUser.get(uid) || { total: 0, cost: 0, issueCount: 0 }
     u.total++
     const bd = resolveExecutionCostBreakdown(e, humanSalary)
@@ -447,7 +456,7 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
     prevByUser.set(uid, u)
   }
   for (const [uid] of prevByUser) {
-    const userExecs = prev.filter(e => (e.developerUserId || e.developerName || e.agentName) === uid)
+    const userExecs = prev.filter(e => e.assigneeType === 'user' && userKey(e) === uid)
     prevByUser.get(uid)!.issueCount = new Set(userExecs.map(e => `${e.projectId}:${e.issueIid}`)).size
   }
 
