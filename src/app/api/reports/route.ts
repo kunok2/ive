@@ -175,17 +175,17 @@ export async function GET(req: NextRequest) {
     cost: Math.round(aExecs.reduce((s, e) => s + resolveExecutionCost(e, humanSalary), 0) * 100) / 100,
   }))
 
-  // 이전 기간 사용자별 (담당자/검증자 — assigneeType='user'만)
+  // 이전 기간 사용자별 (담당자/검증자 — assigneeType='user'만, 현재 기간 byUser와 동일하게 userName으로 키)
   const prevUserMap = new Map<string, typeof prevExecs>()
   for (const e of prevExecs) {
     if (e.assigneeType !== 'user') continue
-    const uid = e.userId || e.userName || ''
+    const uid = (e.userName || e.userId || '').trim()
     if (!uid) continue
     if (!prevUserMap.has(uid)) prevUserMap.set(uid, [])
     prevUserMap.get(uid)!.push(e)
   }
   const prevByUser = Array.from(prevUserMap.entries()).map(([uid, uExecs]) => ({
-    userId: uid, userName: uExecs[0].userName || uExecs[0].developerName,
+    userId: uid, userName: uExecs[0].userName || uid,
     tasks: uExecs.length,
     issueCount: new Set(uExecs.map(e => `${e.projectId}:${e.issueIid}`)).size,
   }))
@@ -399,12 +399,20 @@ export async function GET(req: NextRequest) {
     return { verifierName, verifierAvatar: vExecs[0].verifierAvatar || 'av-01', tasks: v.tasks, avgVerifyMin: v.avgVerifyMin, avgWaitMin: v.avgWaitMin }
   })
 
-  // By user (담당자별 검증 현황) — 사람(assigneeType='user')이 수행한 exec만 그룹핑
-  // 검증 execution은 agentId=''로 생성됨. 검증자/담당자는 모두 assigneeType='user'.
+  // By user (담당자별 검증 현황) — assigneeType='user' (사람이 직접 담당)인 exec만 그룹핑.
+  // 에이전트 통계는 별도(byAgent)이며 여기서는 절대 합치지 않는다.
+  //
+  // 중복 원인: 같은 사람의 user_id가 execution 생성 경로마다 다르게 저장됨
+  //   - 외부 IVE-E 작업(scanner): userId=null,            userName="홍길동"
+  //   - assignee 모드(scanner):    userId="12345"(GitLab), userName="홍길동"
+  //   - 단계 전환(stage route):    userId="abc-uuid"(IVE), userName="홍길동"
+  //   - 검증자 execution:          userId="abc-uuid"(IVE), userName="홍길동"
+  // 기존 키(`userId || userName`) 사용 시 같은 사람이 2~3개 항목으로 분리 표시됨.
+  // 해결: 모든 경로에서 일관되게 채워지는 userName을 정규화 키로 사용 (없을 때만 userId fallback).
   const userMap = new Map<string, typeof execs>()
   for (const e of execs) {
     if (e.assigneeType !== 'user') continue
-    const uid = e.userId || e.userName || ''
+    const uid = (e.userName || e.userId || '').trim()
     if (!uid) continue
     if (!userMap.has(uid)) userMap.set(uid, [])
     userMap.get(uid)!.push(e)
@@ -420,8 +428,8 @@ export async function GET(req: NextRequest) {
       .filter(e => e.issueCreatedAt && e.startedAt)
       .map(e => (new Date(e.startedAt!).getTime() - new Date(e.issueCreatedAt!).getTime()) / 60000)
       .filter(t => t >= 0 && t < 60 * 24 * 7)
-    // 이름과 아바타는 user_* 컬럼에서 직접 취득 (폴백: 첫 exec의 userName/userAvatar)
-    const userName = uExecs[0].userName || uExecs[0].developerName
+    // 이름/아바타는 user_* 컬럼에서만 취득 (담당자=사람이므로 agent 컬럼 fallback 금지)
+    const userName = uExecs[0].userName || uid
     const userAvatar = uExecs[0].userAvatar || null
     const vInfo = verifierLookup.get(userName) ?? { tasks: 0, avgVerifyMin: 0, avgWaitMin: 0, verified: 0, rejected: 0, waiting: 0 }
 
@@ -606,11 +614,16 @@ export async function GET(req: NextRequest) {
     }
   })
 
-  // User trend (daily breakdown per user) + 검증 추이 포함
+  // User trend (담당자별 일별 추이) — 위 byUser와 동일한 정책:
+  //   · assigneeType='user' (사람 담당자) exec만 포함, 에이전트는 byAgent에 별도 집계됨
+  //   · userName을 정규화 키로 사용 (userId 표현 차이로 인한 중복 방지)
+  // userTrend.userId 는 byUser.userId 와 1:1 매칭되어야 UserVerifySection에서 join이 됨.
   const userDayMap = new Map<string, Map<string, { tasks: number; cost: number; verified: number }>>()
   for (const e of execs) {
+    if (e.assigneeType !== 'user') continue
+    const uid = (e.userName || e.userId || '').trim()
+    if (!uid) continue
     const key = toBucketKey(e.startedAt, type)
-    const uid = e.developerUserId || e.developerName
     if (!userDayMap.has(uid)) {
       const m = new Map<string, { tasks: number; cost: number; verified: number }>()
       for (const k of allKeys) m.set(k, { tasks: 0, cost: 0, verified: 0 })
@@ -622,28 +635,23 @@ export async function GET(req: NextRequest) {
     d.tasks++
     d.cost += resolveExecutionCost(e, humanSalary)
   }
-  // 검증 완료 건수를 verifier 이름 → developer userId로 매핑하여 추가
+  // 검증 완료 건수: verifierName이 담당자 키(userName)와 동일한 경우 해당 사용자에 가산
   for (const e of execs) {
     if (!e.verifierName) continue
     const verifyEnd = e.verifiedAt || e.rejectedAt
     if (!verifyEnd) continue
     const verifyKey = toBucketKey(verifyEnd, type)
-    // verifierName으로 해당 유저의 userDayMap 찾기
-    for (const [uid, uMap] of userDayMap.entries()) {
-      const uInfo = execs.find(ex => (ex.developerUserId || ex.developerName) === uid)
-      if (uInfo?.developerName === e.verifierName) {
-        if (!uMap.has(verifyKey)) uMap.set(verifyKey, { tasks: 0, cost: 0, verified: 0 })
-        uMap.get(verifyKey)!.verified++
-        break
-      }
-    }
+    const uMap = userDayMap.get(e.verifierName.trim())
+    if (!uMap) continue
+    if (!uMap.has(verifyKey)) uMap.set(verifyKey, { tasks: 0, cost: 0, verified: 0 })
+    uMap.get(verifyKey)!.verified++
   }
   const userTrend = Array.from(userDayMap.entries()).map(([uid, uMap]) => {
-    const uInfo = execs.find(e => (e.developerUserId || e.developerName) === uid)!
+    const uInfo = execs.find(ex => ex.assigneeType === 'user' && (ex.userName || ex.userId || '').trim() === uid)
     return {
       userId: uid,
-      userName: uInfo.developerName,
-      userAvatar: uInfo.agentAvatar,
+      userName: uInfo?.userName || uid,
+      userAvatar: uInfo?.userAvatar || null,
       daily: allKeys.map(key => {
         const isFuture = key > todayKey
         const d = uMap.get(key) ?? { tasks: 0, cost: 0, verified: 0 }
