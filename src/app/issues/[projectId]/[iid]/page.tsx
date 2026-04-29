@@ -131,19 +131,17 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   // ===================== Data fetching =====================
 
   const isAssignee = (() => {
-    // 동일한 IVE 사용자라면 로그인 방식(로컬/OAuth)과 무관하게 매칭되어야 한다.
-    // 가능한 식별 경로를 모두 평가하고 하나라도 일치하면 본인으로 판정.
-    //
-    // (a) ive-author 마커 → IVE user.id 매치. 로컬 계정도 항상 판정 가능.
-    if (state.user?.id && issue?.iveAuthorId && issue.iveAuthorId === state.user.id) return true
-    //
-    // 아래 경로는 OAuth 로그인 사용자에 한해 동작 (oauthUserId 가 있어야 비교 가능).
-    if (state.user?.oauthUserId) {
-      const myGitId = String(state.user.oauthUserId)
-      // (b) GitLab/GitHub assignees 매치
-      if (issue?.assignees?.some(a => a.id != null && String(a.id) === myGitId)) return true
-      // (c) Git author id 매치 (assignee 가 비어 있을 때 작성자를 담당자로 간주)
-      if (!issue?.assignees?.length && issue?.authorId != null && String(issue.authorId) === myGitId) return true
+    const myGitId = state.user?.oauthUserId ? String(state.user.oauthUserId) : null
+    const assignees = issue?.assignees || []
+    // 마커 fallback 활성 조건:
+    //   - assignees 비어있음: 작성자를 담당자로 간주
+    //   - 또는 로컬 계정(myGitId 없음): 마커가 유일한 신원 증거
+    // OAuth 사용자가 assignees 에 없으면 마커가 있어도 false → 재배정 보호.
+    const canMatchByMarker = assignees.length === 0 || !myGitId
+    if (canMatchByMarker && state.user?.id && issue?.iveAuthorId && issue.iveAuthorId === state.user.id) return true
+    if (myGitId) {
+      if (assignees.some(a => a.id != null && String(a.id) === myGitId)) return true
+      if (assignees.length === 0 && issue?.authorId != null && String(issue.authorId) === myGitId) return true
     }
     return false
   })()
