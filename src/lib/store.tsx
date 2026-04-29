@@ -94,6 +94,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  // 10초 폴링이 매번 새 배열 reference를 dispatch하면 모든 자식이 리렌더되며
+  // 화면이 깜빡인다. 직렬화 결과가 같으면 dispatch를 건너뛰어 reference를 유지한다.
+  const lastProjectsJsonRef = useRef<string>('')
+  const lastAgentsJsonRef = useRef<string>('')
+
   const refresh = useCallback(async () => {
     const res = await fetch('/api/projects')
     if (res.ok) {
@@ -106,13 +111,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (aRunning === 0 && bRunning > 0) return 1
         return 0
       })
-      dispatch({ type: 'SET_PROJECTS', projects: data })
+      const json = JSON.stringify(data)
+      if (json !== lastProjectsJsonRef.current) {
+        lastProjectsJsonRef.current = json
+        dispatch({ type: 'SET_PROJECTS', projects: data })
+      }
     } else if (res.status === 401) {
       // 세션 만료: 사용자 상태 초기화 → 로그인 페이지로 리다이렉트
       sessionStorage.setItem('ive-session-expired', '1')
       dispatch({ type: 'SET_USER', user: null })
     } else {
-      dispatch({ type: 'SET_PROJECTS', projects: [] })
+      if (lastProjectsJsonRef.current !== '[]') {
+        lastProjectsJsonRef.current = '[]'
+        dispatch({ type: 'SET_PROJECTS', projects: [] })
+      }
     }
   }, [])
 
@@ -126,12 +138,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (a.status !== 'busy' && b.status === 'busy') return 1
         return 0
       })
-      dispatch({ type: 'SET_AGENTS', agents: data })
+      const json = JSON.stringify(data)
+      if (json !== lastAgentsJsonRef.current) {
+        lastAgentsJsonRef.current = json
+        dispatch({ type: 'SET_AGENTS', agents: data })
+      }
     } else if (res.status === 401) {
       sessionStorage.setItem('ive-session-expired', '1')
       dispatch({ type: 'SET_USER', user: null })
     } else {
-      dispatch({ type: 'SET_AGENTS', agents: [] })
+      if (lastAgentsJsonRef.current !== '[]') {
+        lastAgentsJsonRef.current = '[]'
+        dispatch({ type: 'SET_AGENTS', agents: [] })
+      }
     }
   }, [])
 

@@ -157,10 +157,16 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
       return
     }
     const res = await fetch(`/api/projects/${projectId}/issues/${iid}`)
-    if (res.ok) setIssue(await res.json())
+    if (res.ok) {
+      const data = await res.json()
+      setIssue(prev => (prev && JSON.stringify(prev) === JSON.stringify(data)) ? prev : data)
+    }
     setLoading(false)
   }, [projectId, iid])
 
+  // 노트 로딩 표시는 "최초 진입" 한 번만 보여준다. 액션 후 갱신 시에는
+  // 기존 노트 목록을 그대로 둔 채 데이터만 조용히 교체해 화면 깜빡임을 막는다.
+  const notesLoadedOnceRef = useRef(false)
   const fetchNotes = useCallback(async () => {
     const cacheKey = `issue-notes-${projectId}-${iid}`
     const cached = sessionStorage.getItem(cacheKey)
@@ -168,11 +174,20 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
       sessionStorage.removeItem(cacheKey)
       setNotes(JSON.parse(cached))
       setNotesLoading(false)
+      notesLoadedOnceRef.current = true
       return
     }
-    setNotesLoading(true)
+    if (!notesLoadedOnceRef.current) setNotesLoading(true)
     const res = await fetch(`/api/projects/${projectId}/issues/${iid}/notes?t=${Date.now()}`)
-    if (res.ok) setNotes(await res.json())
+    if (res.ok) {
+      const data = await res.json()
+      setNotes(prev => {
+        // 동일 데이터면 reference를 유지해 자식 리렌더 최소화
+        if (prev.length === data.length && JSON.stringify(prev) === JSON.stringify(data)) return prev
+        return data
+      })
+    }
+    notesLoadedOnceRef.current = true
     setNotesLoading(false)
   }, [projectId, iid])
 

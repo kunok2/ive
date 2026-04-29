@@ -106,6 +106,14 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   const setSelectedProjectId = (id: string) => setIssuesProjectId(id)
   const setFilter = (f: string) => setIssuesFilter(f)
 
+  // #272: 프로젝트별 배정 폐기. 이슈 생성/지정 에이전트 picker는 "현재 로그인 사용자(의뢰자) 의 에이전트 풀"을 보여준다.
+  // store의 state.agents 는 현재 사용자가 소유한 에이전트 목록. useMemo로 파생하여
+  // store의 10초 폴링이 reference만 바꾸어도 effect 재실행/네트워크 요청을 유발하지 않게 한다.
+  const projectAgents = useMemo<ProjectAgent[]>(() => state.agents.map(a => ({
+    agentId: a.id,
+    agent: { id: a.id, name: a.name, avatar: a.avatar, cliName: a.cliName, status: a.status },
+  })), [state.agents])
+
   const [issues, setIssues] = useState<IveIssue[]>(() => {
     if (typeof window !== 'undefined') {
       const cached = sessionStorage.getItem('issues-cache')
@@ -144,7 +152,6 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   const [issueSearchQuery, setIssueSearchQuery] = useState('')
   const [closing, setClosing] = useState<number | null>(null)
   const [preferredAgentId, setPreferredAgentId] = useState<string | null>(null)
-  const [projectAgents, setProjectAgents] = useState<ProjectAgent[]>([])
   const [gitMembers, setGitMembers] = useState<{ id: number; username: string; name: string; avatarUrl: string }[]>([])
   const [selectedAssignees, setSelectedAssignees] = useState<{ id: number; username: string; name: string; avatarUrl: string }[]>([])
   const [autoAssign, setAutoAssign] = useState(false)
@@ -209,15 +216,6 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
       .finally(() => setLoading(false))
   }, [selectedProjectId])
 
-  // #272: 프로젝트별 배정 폐기. 이슈 생성/지정 에이전트 picker는 "현재 로그인 사용자(의뢰자) 의 에이전트 풀"을 보여준다.
-  // store의 state.agents 는 현재 사용자가 소유한 에이전트 목록.
-  const fetchProjectAgents = useCallback(() => {
-    setProjectAgents(state.agents.map(a => ({
-      agentId: a.id,
-      agent: { id: a.id, name: a.name, avatar: a.avatar, cliName: a.cliName, status: a.status },
-    })))
-  }, [state.agents])
-
   const fetchGitMembers = useCallback(() => {
     if (!selectedProjectId) { setGitMembers([]); return }
     fetch(`/api/projects/${selectedProjectId}/members`).then(res => res.ok ? res.json() : []).then(setGitMembers).catch(() => setGitMembers([]))
@@ -235,22 +233,16 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   useEffect(() => { setClosedIssues([]) }, [selectedProjectId])
   useEffect(() => { fetchIssues() }, [fetchIssues])
   useEffect(() => { if (filter === 'history' && selectedProjectId) fetchClosedIssues() }, [filter, selectedProjectId, fetchClosedIssues])
-  useEffect(() => { if (activeTab === 'issues' && selectedProjectId) { fetchIssues(); fetchProjectAgents(); fetchGitMembers() } }, [activeTab])
+  useEffect(() => { if (activeTab === 'issues' && selectedProjectId) { fetchIssues(); fetchGitMembers() } }, [activeTab])
 
+  // 이슈 목록은 git 호출이 비싸 자동 갱신하지 않는다.
+  // 사용자가 직접 새로고침 버튼/Pull-to-Refresh 를 누르거나, 본인이 수행한 액션 직후
+  // (close/bulk 등에서 dispatch 되는 'refresh-counts')에만 다시 가져온다.
   useEffect(() => {
     if (activeTab !== 'issues' || !selectedProjectId) return
     const refresh = () => { if (filter === 'history') fetchClosedIssues(); else fetchIssues() }
-    const onVisible = () => { if (document.visibilityState === 'visible') refresh() }
-    document.addEventListener('visibilitychange', onVisible)
-    window.addEventListener('pageshow', refresh)
-    window.addEventListener('focus', refresh)
     window.addEventListener('refresh-counts', refresh)
-    return () => {
-      document.removeEventListener('visibilitychange', onVisible)
-      window.removeEventListener('pageshow', refresh)
-      window.removeEventListener('focus', refresh)
-      window.removeEventListener('refresh-counts', refresh)
-    }
+    return () => { window.removeEventListener('refresh-counts', refresh) }
   }, [activeTab, selectedProjectId, filter, fetchIssues, fetchClosedIssues])
 
   useEffect(() => { if (addTrigger && addTrigger > 0 && selectedProjectId) setShowAddForm(true) }, [addTrigger])
@@ -269,17 +261,15 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
       const draft = localStorage.getItem(`ive-issue-draft-${selectedProjectId}`)
       setNewBody(draft || '')
       if (draft) setShowAddForm(true)
-      fetchProjectAgents()
       fetchGitMembers()
     } else {
       setNewBody('')
-      setProjectAgents([])
       setGitMembers([])
     }
     setPreferredAgentId(null)
     setSelectedAssignees([])
     setAutoAssign(false)
-  }, [selectedProjectId, fetchProjectAgents, fetchGitMembers])
+  }, [selectedProjectId, fetchGitMembers])
 
   // --- Assignee modal ---
   const handleConfirmAssignee = async () => {
