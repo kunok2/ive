@@ -33,8 +33,8 @@ export default function UserVerifySection({ data, helpers }: UserVerifySectionPr
               <button onClick={() => { const n = new Set(expandedUsers); n.has(u.userId) ? n.delete(u.userId) : n.add(u.userId); setExpandedUsers(n) }}
                 className="w-full px-3 py-2.5 text-left">
                 <div className="flex items-center gap-2">
-                  {u.userAvatar === 'photo' && u.userId ? (
-                    <img src={`/api/auth/avatar/image?id=${u.userId}`} alt="" className="w-5 h-5 rounded-lg object-cover shrink-0 border border-ive-border" />
+                  {u.userAvatar === 'photo' && (u.avatarUserId || u.userId) ? (
+                    <img src={`/api/auth/avatar/image?id=${u.avatarUserId || u.userId}`} alt="" className="w-5 h-5 rounded-lg object-cover shrink-0 border border-ive-border" />
                   ) : u.userAvatar ? (
                     <AgentAvatar avatar={u.userAvatar} size="xs" />
                   ) : (

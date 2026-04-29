@@ -21,7 +21,7 @@ export interface ReportData {
   prevDailyTrend: { date: string; tasks: number; inflow: number; verified: number; cost: number }[]
   agentTrend: { agentId: string; agentName: string; agentAvatar: string; daily: { date: string; tasks: number; cost: number }[] }[]
   projectTrend: { projectId: string; projectName: string; projectColor: string; daily: { date: string; tasks: number; cost: number }[] }[]
-  userTrend?: { userId: string; userName: string; userAvatar: string; daily: { date: string; tasks: number | null; cost: number | null; verified: number | null }[] }[]
+  userTrend?: { userId: string; userName: string; userAvatar: string | null; avatarUserId?: string | null; daily: { date: string; tasks: number | null; cost: number | null; verified: number | null }[] }[]
   lifecycle: Lifecycle
   prevLifecycle: { waitAvg: number; waitCount: number; procAvg: number; procCount: number; verifyAvg: number; verifyCount: number; totalAvg: number; totalCount: number }
   waitingTrend: WaitingDay[]
@@ -63,7 +63,7 @@ export interface AgentStat {
   assignedProjectId: string; assignedProjectName: string; currentStatus: string
 }
 
-export interface UserStat { userId: string; userName: string; userAvatar: string; tasks: number; success: number; failed: number; issueCount: number; avgDurationMin: number; cost: number; avgWaitMin: number; verifyTasks: number; avgVerifyMin: number; verifyAvgWaitMin: number; verifyWaiting: number; verifyApproved: number; verifyRejected: number; annotation?: UserAnnotation | null }
+export interface UserStat { userId: string; userName: string; userAvatar: string | null; avatarUserId?: string | null; tasks: number; success: number; failed: number; issueCount: number; avgDurationMin: number; cost: number; avgWaitMin: number; verifyTasks: number; avgVerifyMin: number; verifyAvgWaitMin: number; verifyWaiting: number; verifyApproved: number; verifyRejected: number; annotation?: UserAnnotation | null }
 export interface VerifierStat { verifierName: string; verifierAvatar: string; tasks: number; avgVerifyMin: number; avgWaitMin?: number }
 export interface DailyTrend { date: string; tasks: number | null; inflow: number | null; verified: number | null; success: number | null; failed: number | null; cost: number | null; waitAvg: number | null; procAvg: number | null; verifyAvg: number | null }
 export interface WaitingDay { date: string; total: number; totalWaiting: number; totalVerifyWaiting: number; byProject: { projectId: string; projectName: string; projectColor: string; waiting: number; verifyWaiting: number }[] }
