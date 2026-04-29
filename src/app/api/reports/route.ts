@@ -428,9 +428,15 @@ export async function GET(req: NextRequest) {
       .filter(e => e.issueCreatedAt && e.startedAt)
       .map(e => (new Date(e.startedAt!).getTime() - new Date(e.issueCreatedAt!).getTime()) / 60000)
       .filter(t => t >= 0 && t < 60 * 24 * 7)
-    // 이름/아바타는 user_* 컬럼에서만 취득 (담당자=사람이므로 agent 컬럼 fallback 금지)
+    // 이름/아바타: user_* 컬럼만 사용. 아바타 우선순위: URL 형태 > 'photo'(원본 userId 보존) > null
+    // 'photo'는 IVE 업로드 사진 표식 → UI가 /api/auth/avatar/image?id=<UUID>로 변환.
+    // #284에서 그룹핑 키를 userName으로 통일했기 때문에 byUser.userId는 더 이상 UUID가 아니므로
+    // photo 해상에 쓸 원본 UUID를 avatarUserId 필드로 별도 보존해야 한다.
     const userName = uExecs[0].userName || uid
-    const userAvatar = uExecs[0].userAvatar || null
+    const urlAvatarExec = uExecs.find(e => e.userAvatar && e.userAvatar !== 'photo')
+    const photoExec = uExecs.find(e => e.userAvatar === 'photo' && e.userId)
+    const userAvatar = urlAvatarExec?.userAvatar ?? (photoExec ? 'photo' : null)
+    const avatarUserId = urlAvatarExec ? null : (photoExec?.userId ?? null)
     const vInfo = verifierLookup.get(userName) ?? { tasks: 0, avgVerifyMin: 0, avgWaitMin: 0, verified: 0, rejected: 0, waiting: 0 }
 
     // 담당자 진단 (우선순위: 병목 > 반려율 > 너무 빠름 > 대기 적체 > 유휴)
@@ -447,7 +453,7 @@ export async function GET(req: NextRequest) {
       annotation = { key: 'backlog', params: { waiting: vInfo.waiting }, severity: 'warning' }
     }
     return {
-      userId: uid, userName, userAvatar,
+      userId: uid, userName, userAvatar, avatarUserId,
       tasks: uExecs.length, success: uSuccess, failed: uFailed,
       issueCount: uniqueIssues.size,
       avgDurationMin: uFinished > 0 ? Math.round((uDur / uFinished) * 10) / 10 : 0,
@@ -647,11 +653,17 @@ export async function GET(req: NextRequest) {
     uMap.get(verifyKey)!.verified++
   }
   const userTrend = Array.from(userDayMap.entries()).map(([uid, uMap]) => {
-    const uInfo = execs.find(ex => ex.assigneeType === 'user' && (ex.userName || ex.userId || '').trim() === uid)
+    const uExecs = execs.filter(ex => ex.assigneeType === 'user' && (ex.userName || ex.userId || '').trim() === uid)
+    // byUser와 동일한 아바타 정책: URL > 'photo'(원본 userId 보존) > null
+    const urlAvatarExec = uExecs.find(e => e.userAvatar && e.userAvatar !== 'photo')
+    const photoExec = uExecs.find(e => e.userAvatar === 'photo' && e.userId)
+    const userAvatar = urlAvatarExec?.userAvatar ?? (photoExec ? 'photo' : null)
+    const avatarUserId = urlAvatarExec ? null : (photoExec?.userId ?? null)
     return {
       userId: uid,
-      userName: uInfo?.userName || uid,
-      userAvatar: uInfo?.userAvatar || null,
+      userName: uExecs[0]?.userName || uid,
+      userAvatar,
+      avatarUserId,
       daily: allKeys.map(key => {
         const isFuture = key > todayKey
         const d = uMap.get(key) ?? { tasks: 0, cost: 0, verified: 0 }
