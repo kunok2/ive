@@ -148,7 +148,7 @@ ${userMessage}
 
   if (isOpenCode) {
     const opencodeConfig: any = {
-      agent: { coder: { steps: 20, permission: 'allow', ...(systemCliModel ? { model: systemCliModel } : {}) } },
+      agent: { coder: { steps: 20, permission: { '*': 'allow' }, ...(systemCliModel ? { model: systemCliModel } : {}) } },
       compaction: { auto: true },
     }
     if (mcpServers) opencodeConfig.mcp = mcpServers

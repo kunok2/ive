@@ -83,7 +83,7 @@ export async function runCliProcess(
     if (isOpenCode) {
       // opencode run --format json "prompt"
       const opencodeConfig: any = {
-        agent: { coder: { steps: agent.maxTurns || 200, permission: 'allow', ...(systemCliModel ? { model: systemCliModel } : {}) } },
+        agent: { coder: { steps: agent.maxTurns || 200, permission: { '*': 'allow' }, ...(systemCliModel ? { model: systemCliModel } : {}) } },
         compaction: { auto: true },
       };
       if (mcpServers) opencodeConfig.mcp = mcpServers;

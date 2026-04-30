@@ -3,6 +3,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { getExecutionsInRange, getDailyWaitingTrend, getDailyWaitingTrendByAgent, getAgent, getVerifierBacklogForReport } from '@/lib/db'
 import { resolveExecutionCost, resolveExecutionCostBreakdown, getHumanMonthlySalary } from '@/lib/token-pricing'
 import { getKSTTodayString, utcISOToKSTDate, utcISOToKSTMonth } from '@/lib/date-utils'
+import { isBotName } from '@/lib/git-bot'
 
 function getWeekRange(date: Date): { start: string; end: string } {
   const d = new Date(date)
@@ -214,6 +215,7 @@ export async function GET(req: NextRequest) {
     if (e.assigneeType !== 'user') continue
     const uid = (e.userName || e.userId || '').trim()
     if (!uid) continue
+    if (isBotName(uid)) continue
     if (!prevUserMap.has(uid)) prevUserMap.set(uid, [])
     prevUserMap.get(uid)!.push(e)
   }
@@ -393,7 +395,7 @@ export async function GET(req: NextRequest) {
   // By verifier (검증자별) — byUser 합산용 먼저 계산
   const verifierMap = new Map<string, typeof execs>()
   for (const e of execs) {
-    if (e.verifierName) {
+    if (e.verifierName && !isBotName(e.verifierName)) {
       if (!verifierMap.has(e.verifierName)) verifierMap.set(e.verifierName, [])
       verifierMap.get(e.verifierName)!.push(e)
     }
@@ -447,6 +449,7 @@ export async function GET(req: NextRequest) {
     if (e.assigneeType !== 'user') continue
     const uid = (e.userName || e.userId || '').trim()
     if (!uid) continue
+    if (isBotName(uid)) continue
     if (!userMap.has(uid)) userMap.set(uid, [])
     userMap.get(uid)!.push(e)
   }
@@ -504,7 +507,7 @@ export async function GET(req: NextRequest) {
   // prevByVerifier
   const prevVerifierMap = new Map<string, typeof prevExecs>()
   for (const e of prevExecs) {
-    if (e.verifierName) {
+    if (e.verifierName && !isBotName(e.verifierName)) {
       if (!prevVerifierMap.has(e.verifierName)) prevVerifierMap.set(e.verifierName, [])
       prevVerifierMap.get(e.verifierName)!.push(e)
     }
@@ -662,6 +665,7 @@ export async function GET(req: NextRequest) {
     if (e.assigneeType !== 'user') continue
     const uid = (e.userName || e.userId || '').trim()
     if (!uid) continue
+    if (isBotName(uid)) continue
     const key = toBucketKey(e.startedAt, type)
     if (!userDayMap.has(uid)) {
       const m = new Map<string, { tasks: number; cost: number; verified: number }>()

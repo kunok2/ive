@@ -62,6 +62,7 @@ import {
 } from "../github";
 import { Project, Agent } from "@/types";
 import { resolveIssueRequester } from "../ive-author";
+import { isGitBotUser } from "../git-bot";
 import { startStatsCollector } from "../stats-collector";
 import { startReportScheduler } from "../report-scheduler";
 import fs from "fs";
@@ -421,7 +422,7 @@ async function scanProject(project: Project, force: boolean = false) {
         // assignee 모드 이슈는 기존 로직(아래 블록)에서 처리하므로 여기서 제외
         const assignModeMap = getAssignModeMap(project.id);
         const assignInfo = assignModeMap.get(iid);
-        if (assignInfo?.mode !== 'assignee') {
+        if (assignInfo?.mode !== 'assignee' && !isGitBotUser(issue.author)) {
           const meta = parseIveMeta(issue.description || '');
           const executionId = `ex-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
           const author = issue.author || {};
