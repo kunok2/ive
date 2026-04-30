@@ -14,7 +14,7 @@ interface HelpModalProps {
 const tabSections = [
   { key: 'projects', icon: 'fa-solid fa-folder', steps: 7 },
   { key: 'agents', icon: 'fa-solid fa-robot', steps: 7 },
-  { key: 'issues', icon: 'fa-solid fa-list-check', steps: 5 },
+  { key: 'issues', icon: 'fa-solid fa-list-check', steps: 6 },
   { key: 'reports', icon: 'fa-solid fa-chart-line', steps: 3 },
   { key: 'admin', icon: 'fa-solid fa-gear', steps: 4 },
 ] as const

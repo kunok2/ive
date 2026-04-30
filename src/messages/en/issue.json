@@ -144,7 +144,7 @@
   "assignedToMeTooltip": "Show only tasks assigned to me",
   "labelModalTitle": "Labels required",
   "labelRequiredDesc": "To create a task, IVE labels must exist in the Git repository",
-  "labelTrackingDesc": "IVE tracks task progress (waiting → dev → verify-wait → verify → done) using labels. The labels below must exist in the Git repository for the scanner and agents to manage tasks.",
+  "labelTrackingDesc": "IVE tracks task progress (waiting → dev → verify-wait → verify → confirm-wait → confirm → done) using labels. The labels below must exist in the Git repository for the scanner and agents to manage tasks.",
   "labelAutoCreateHint": "Click the button below to auto-create missing labels.",
   "labelStatusChecking": "Checking label status...",
   "labelStatusExists": "OK",
