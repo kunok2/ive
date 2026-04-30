@@ -26,13 +26,26 @@ export function createActivityLog(log: {
 }
 
 export function getActivityLogs(opts: {
-  limit?: number; offset?: number; userId?: string; category?: string; startDate?: string; endDate?: string
+  limit?: number; offset?: number;
+  userId?: string; category?: string;        // 단일 (하위 호환)
+  userIds?: string[]; categories?: string[]; // 다중 선택
+  startDate?: string; endDate?: string
 }): { logs: UserActivityLog[]; total: number } {
   const conditions: string[] = []
   const params: any[] = []
 
-  if (opts.userId) { conditions.push('al.user_id = ?'); params.push(opts.userId) }
-  if (opts.category) { conditions.push('al.category = ?'); params.push(opts.category) }
+  // 다중이 우선, 없으면 단일을 사용
+  const userIds = (opts.userIds && opts.userIds.length > 0) ? opts.userIds : (opts.userId ? [opts.userId] : [])
+  const categories = (opts.categories && opts.categories.length > 0) ? opts.categories : (opts.category ? [opts.category] : [])
+
+  if (userIds.length > 0) {
+    conditions.push(`al.user_id IN (${userIds.map(() => '?').join(',')})`)
+    params.push(...userIds)
+  }
+  if (categories.length > 0) {
+    conditions.push(`al.category IN (${categories.map(() => '?').join(',')})`)
+    params.push(...categories)
+  }
   if (opts.startDate) { conditions.push('al.created_at >= ?'); params.push(opts.startDate) }
   if (opts.endDate) { conditions.push('al.created_at < ?'); params.push(opts.endDate) }
 
@@ -115,6 +128,61 @@ export function getIssueRetryCounts(projectId: string, issueIid: number): IssueR
     else if (r.action === 'task_reopen') fromDone = r.cnt
   }
   return { fromVerify, fromConfirm, fromDone }
+}
+
+/**
+ * 프로젝트 전체 이슈에 대한 정/역방향 카운트를 한 번에 가져온다 (목록 화면용).
+ * 개별 호출(getIssueForwardCounts/getIssueRetryCounts)은 N+1 문제를 일으키므로 사용 금지.
+ */
+export function getIssueIterationCountsMap(projectId: string): Map<number, { forward: IssueForwardCounts; retry: IssueRetryCounts }> {
+  const result = new Map<number, { forward: IssueForwardCounts; retry: IssueRetryCounts }>()
+  const prefix = `${projectId}:`
+
+  // 활동 로그 기반: task_approve/task_accept (forward), task_reject/task_return_to_dev/task_reopen (retry)
+  const logRows = getDb().prepare(
+    `SELECT target_id, action, COUNT(*) as cnt FROM user_activity_logs
+     WHERE target_type = 'issue' AND target_id LIKE ?
+       AND action IN ('task_approve', 'task_accept', 'task_reject', 'task_return_to_dev', 'task_reopen')
+     GROUP BY target_id, action`
+  ).all(`${prefix}%`) as Array<{ target_id: string; action: string; cnt: number }>
+
+  for (const r of logRows) {
+    const iid = Number(r.target_id.slice(prefix.length))
+    if (!Number.isFinite(iid)) continue
+    let entry = result.get(iid)
+    if (!entry) {
+      entry = { forward: { toProcess: 0, toVerify: 0, toConfirm: 0, toDone: 0 }, retry: { fromVerify: 0, fromConfirm: 0, fromDone: 0 } }
+      result.set(iid, entry)
+    }
+    if (r.action === 'task_approve') entry.forward.toConfirm = r.cnt
+    else if (r.action === 'task_accept') entry.forward.toDone = r.cnt
+    else if (r.action === 'task_reject') entry.retry.fromVerify = r.cnt
+    else if (r.action === 'task_return_to_dev') entry.retry.fromConfirm = r.cnt
+    else if (r.action === 'task_reopen') entry.retry.fromDone = r.cnt
+  }
+
+  // execution 기반: toProcess(전체 dev exec), toVerify(verify_started_at 채워진 것)
+  const DEV_FILTER = "id NOT LIKE 'ex-verify-%' AND id NOT LIKE 'ex-confirm-%'"
+  const execRows = getDb().prepare(
+    `SELECT issue_iid,
+            COUNT(*) AS total,
+            SUM(CASE WHEN verify_started_at IS NOT NULL THEN 1 ELSE 0 END) AS verified
+     FROM task_executions
+     WHERE project_id = ? AND ${DEV_FILTER}
+     GROUP BY issue_iid`
+  ).all(projectId) as Array<{ issue_iid: number; total: number; verified: number }>
+
+  for (const r of execRows) {
+    let entry = result.get(r.issue_iid)
+    if (!entry) {
+      entry = { forward: { toProcess: 0, toVerify: 0, toConfirm: 0, toDone: 0 }, retry: { fromVerify: 0, fromConfirm: 0, fromDone: 0 } }
+      result.set(r.issue_iid, entry)
+    }
+    entry.forward.toProcess = r.total ?? 0
+    entry.forward.toVerify = r.verified ?? 0
+  }
+
+  return result
 }
 
 export function cleanOldActivityLogs(retentionDays: number = 90) {

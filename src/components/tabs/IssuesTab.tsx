@@ -171,6 +171,8 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   const [confirmerMode, setConfirmerMode] = useState<'creator' | 'auto' | 'specific'>('creator')
   const [confirmerUserId, setConfirmerUserId] = useState<string | null>(null)
   const [confirmerUsername, setConfirmerUsername] = useState<string | null>(null)
+  // 마감일 (YYYY-MM-DD). 빈 문자열이면 미설정.
+  const [newDueDate, setNewDueDate] = useState<string>('')
   const [assigneeModalIids, setAssigneeModalIids] = useState<number[]>([])
   const [assigneeModalSearch, setAssigneeModalSearch] = useState('')
   const [assigneeModalPick, setAssigneeModalPick] = useState<{ id: number; username: string; name: string; avatarUrl: string } | null>(null)
@@ -472,6 +474,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
           confirmerMode,
           confirmerUserId: confirmerMode === 'specific' ? confirmerUserId : null,
           confirmerUsername: confirmerMode === 'specific' ? confirmerUsername : null,
+          dueDate: newDueDate || undefined,
         }),
       })
       if (res.ok) {
@@ -479,6 +482,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
         handleBodyChange(''); setShowAddForm(false); setPreferredAgentId(null); setSelectedAssignees([]); setAutoAssign(false)
         setVerifierMode('creator'); setVerifierUserId(null); setVerifierUsername(null)
         setConfirmerMode('creator'); setConfirmerUserId(null); setConfirmerUsername(null)
+        setNewDueDate('')
         const selectedAgent = preferredAgentId ? projectAgents.find(a => a.agentId === preferredAgentId) : null
         const newIssue: IveIssue = {
           iid: created.iid, title: created.title, state: created.state || 'opened',
@@ -668,6 +672,8 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                   setConfirmerUserId(userId)
                   setConfirmerUsername(username)
                 }}
+                dueDate={newDueDate}
+                onDueDateChange={setNewDueDate}
               />
             )}
 

@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAccess, getProjectAuthToken, getAssignModeMap, setAssignMode, setAssigneeAuto, setPresetRoles, getPresetRoles, getActualRoleAssigneesMap, getAgent, hasActiveExecution, hasAnyExecution, stageFromLabels, touchProjectActivity } from '@/lib/db';
+import { getProject, getProjectAccess, getProjectAuthToken, getAssignModeMap, setAssignMode, setAssigneeAuto, setPresetRoles, getPresetRoles, getActualRoleAssigneesMap, getAgent, hasActiveExecution, hasAnyExecution, stageFromLabels, touchProjectActivity, getIssueIterationCountsMap } from '@/lib/db';
 import { triggerScan } from '@/lib/scanner';
 import { getCurrentUser } from '@/lib/auth';
 import { checkLabelsExist, addIssueComment } from '@/lib/provider';
 import { fetchAllProjectIssues, fetchClosedProjectIssues, createIssue } from '@/lib/provider';
 import { withGitToken, friendlyGitError } from '@/lib/git-token';
-import { prependIveAuthorMarker, stripIveAuthorMarker, resolveIveAuthorFromBody } from '@/lib/ive-author';
+import { prependIveAuthorMarker, stripIveAuthorMarker, stripIveDueMarker, resolveIveAuthorFromBody } from '@/lib/ive-author';
 
 export async function GET(
   req: NextRequest,
@@ -33,6 +33,7 @@ export async function GET(
     // 배정 모드 맵 + 실제 수행자 맵 로드 (둘 다 batch 쿼리)
     const assignModeMap = getAssignModeMap(projectId);
     const actualRolesMap = getActualRoleAssigneesMap(projectId);
+    const iterationMap = getIssueIterationCountsMap(projectId);
 
     const isClosed = stateParam === 'closed';
 
@@ -122,7 +123,7 @@ export async function GET(
         return {
           iid: issue.iid,
           title: issue.title,
-          description: stripIveAuthorMarker(issue.description || ''),
+          description: stripIveDueMarker(stripIveAuthorMarker(issue.description || '')),
           state: issue.state,
           stage,
           failReason: null, // 실패 사유는 이슈 코멘트에서 확인
@@ -136,6 +137,7 @@ export async function GET(
           labels: issue.labels,
           createdAt: issue.created_at,
           updatedAt: issue.updated_at,
+          dueDate: issue.due_date ?? null,
           webUrl: issue.web_url,
           author,
           iveAuthorId: iveAuthor?.id ?? null,
@@ -145,6 +147,16 @@ export async function GET(
           actualProcessor: actuals.processor,
           actualVerifier: actuals.verifier,
           actualConfirmer: actuals.confirmer,
+          // 회차 정보 — 처리 시도 횟수 + 되돌리기 합계 (카드 뱃지용)
+          iterationCounts: (() => {
+            const c = iterationMap.get(issue.iid);
+            const fwd = c?.forward ?? { toProcess: 0, toVerify: 0, toConfirm: 0, toDone: 0 };
+            const ret = c?.retry ?? { fromVerify: 0, fromConfirm: 0, fromDone: 0 };
+            return {
+              processCount: fwd.toProcess,                                          // 처리 진입 횟수
+              retryTotal: ret.fromVerify + ret.fromConfirm + ret.fromDone,          // 총 되돌리기 횟수
+            };
+          })(),
         };
       });
 
@@ -171,8 +183,10 @@ export async function POST(
     return NextResponse.json({ error: '작업 생성 권한이 없습니다.' }, { status: 403 });
   }
 
-  const { title, description, asDev, preferredAgentId, assignMode: reqAssignMode, assigneeIds, assigneeUsernames, assigneeAuto, verifierMode, verifierUserId, verifierUsername, confirmerMode, confirmerUserId, confirmerUsername } = await req.json();
+  const { title, description, asDev, preferredAgentId, assignMode: reqAssignMode, assigneeIds, assigneeUsernames, assigneeAuto, verifierMode, verifierUserId, verifierUsername, confirmerMode, confirmerUserId, confirmerUsername, dueDate } = await req.json();
   if (!title?.trim()) return NextResponse.json({ error: '제목을 입력하세요.' }, { status: 400 });
+  // dueDate 검증 (선택). YYYY-MM-DD 외 값은 무시.
+  const dueDateNormalized: string | null = (typeof dueDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dueDate)) ? dueDate : null;
 
   try {
     // 레이블 존재 확인 (asDev일 때만) — 프로젝트 레벨 설정 점검이라 프로젝트 토큰 고정.
@@ -219,7 +233,7 @@ export async function POST(
     // 대원칙 적용: 접속자 OAuth 토큰 우선 → 실패 시 프로젝트 토큰 fallback.
     // withGitToken 이 TokenContext 를 넘겨주므로 ctx.isOAuth 만 그대로 API 함수에 전달.
     const issue: any = await withGitToken(user, project, (ctx) =>
-      createIssue(project, ctx.token, title.trim(), bodyWithMarker, labels, assignees, { isOAuth: ctx.isOAuth })
+      createIssue(project, ctx.token, title.trim(), bodyWithMarker, labels, assignees, { isOAuth: ctx.isOAuth, dueDate: dueDateNormalized })
     );
 
     // 배정 모드 지정

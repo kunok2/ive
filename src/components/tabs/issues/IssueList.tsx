@@ -99,7 +99,6 @@ export default function IssueList({
                 key={issue.iid}
                 issue={issue}
                 stageInfo={stageInfo}
-                cliConfig={CLI_CONFIG}
                 isSelected={selected.has(issue.iid)}
                 bulkMode={bulkMode}
                 navigatingIid={navigatingIid}
@@ -107,13 +106,11 @@ export default function IssueList({
                 canEditAssignees={canEditAssignees}
                 isHistoryTab={isHistoryTab}
                 closing={closing}
-                projectAgents={projectAgents}
                 gitMembers={gitMembers}
                 locale={locale}
                 timezone={timezone}
                 onToggleSelect={onToggleSelect}
                 onNavigate={onNavigate}
-                onOpenAgentPicker={onOpenAgentPicker}
                 onOpenAssigneeModal={onOpenAssigneeModal}
                 onCloseIssue={onCloseIssue}
                 onPresetVerifierChange={onPresetVerifierChange}

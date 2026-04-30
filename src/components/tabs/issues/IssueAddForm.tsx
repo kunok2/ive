@@ -42,6 +42,9 @@ interface IssueAddFormProps {
   confirmerUserId: string | null
   confirmerUsername: string | null
   onConfirmerChange: (mode: RoleMode, userId: string | null, username: string | null) => void
+  // 마감일 (선택). 'YYYY-MM-DD' 또는 빈 문자열.
+  dueDate: string
+  onDueDateChange: (v: string) => void
 }
 
 interface RoleTriggerProps {
@@ -125,6 +128,8 @@ export default function IssueAddForm({
   confirmerUserId,
   confirmerUsername,
   onConfirmerChange,
+  dueDate,
+  onDueDateChange,
 }: IssueAddFormProps) {
   const tIssue = useTranslations('issue')
   const tCommon = useTranslations('common')
@@ -218,6 +223,28 @@ export default function IssueAddForm({
           className="flex-1 bg-ive-bg-deep border border-ive-border-dark rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-green/50"
           autoFocus
         />
+      </div>
+      {/* 마감일 (선택) */}
+      <div className="mb-2 flex items-center gap-2">
+        <label className="text-xs font-bold text-ive-text-dim shrink-0">
+          <i className="fa-solid fa-calendar-days mr-1" />{tIssue('dueDate')}
+        </label>
+        <input
+          type="date"
+          value={dueDate}
+          onChange={e => onDueDateChange(e.target.value)}
+          className="flex-1 bg-ive-bg-deep border border-ive-border-dark rounded-lg px-2 py-1.5 text-xs text-ive-text focus:outline-none focus:border-ive-green/50"
+        />
+        {dueDate && (
+          <button
+            type="button"
+            onClick={() => onDueDateChange('')}
+            className="text-xs font-bold text-ive-text-dim hover:text-ive-red px-2 py-1 rounded-lg hover:bg-white/5 transition-all"
+            title={tIssue('clearDueDate')}
+          >
+            <i className="fa-solid fa-xmark" />
+          </button>
+        )}
       </div>
       {/* 담당자 지정 영역 — 접혀있을 때는 dashed placeholder 카드로 "+추가" 패턴 */}
       {!assigneesExpanded ? (

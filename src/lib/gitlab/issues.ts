@@ -264,7 +264,7 @@ export async function updateGitLabIssue(
   project: Project,
   issueIid: number,
   decryptedToken: string,
-  updates: { title?: string; description?: string; assigneeIds?: number[] }
+  updates: { title?: string; description?: string; assigneeIds?: number[]; dueDate?: string | null }
 ) {
   const projectPath = getProjectPath(project.repoUrl);
   if (!projectPath) throw new Error('Invalid repo URL');
@@ -275,6 +275,8 @@ export async function updateGitLabIssue(
   if (updates.title) payload.title = updates.title;
   if (updates.description !== undefined) payload.description = updates.description;
   if (updates.assigneeIds !== undefined) payload.assignee_ids = updates.assigneeIds;
+  // due_date: 'YYYY-MM-DD' 또는 빈 문자열(해제). GitLab은 null을 받지 않고 ''로 해제.
+  if (updates.dueDate !== undefined) payload.due_date = updates.dueDate ?? '';
 
   const res = await fetch(apiUrl(project, `/issues/${issueIid}`), {
     method: 'PUT',
@@ -296,7 +298,7 @@ export async function createGitLabIssue(
   description: string,
   labels: string[],
   assigneeIds?: number[],
-  options?: { isOAuth?: boolean }
+  options?: { isOAuth?: boolean; dueDate?: string | null }
 ) {
   const projectPath = getProjectPath(project.repoUrl);
   if (!projectPath) throw new Error('Invalid repo URL');
@@ -307,6 +309,7 @@ export async function createGitLabIssue(
 
   const body: any = { title, description, labels: labels.join(',') };
   if (assigneeIds && assigneeIds.length > 0) body.assignee_ids = assigneeIds;
+  if (options?.dueDate) body.due_date = options.dueDate;
 
   const res = await fetch(apiUrl(project, '/issues'), {
     method: 'POST',

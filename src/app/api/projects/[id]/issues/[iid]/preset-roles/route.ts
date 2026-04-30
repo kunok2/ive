@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getProject, getProjectAccess, getPresetRoles, setPresetRoles, isIssueAuthor, getProjectAuthToken } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
+import { fetchSingleIssue } from '@/lib/provider'
 
 /**
  * 이슈의 검증자/확인자 사전 배정(preset)을 갱신한다.
@@ -32,6 +33,15 @@ export async function PATCH(
   const token = getProjectAuthToken(projectId)
   if (!user.isAdmin && !(await isIssueAuthor(project, Number(iid), token, user))) {
     return NextResponse.json({ error: '이 이슈의 작성자 또는 관리자만 수정할 수 있습니다' }, { status: 403 })
+  }
+
+  // 완료된 작업은 검증자/확인자 변경 금지 — 통계/보고서 일관성 보호.
+  const issueNow = await fetchSingleIssue(project, Number(iid), token)
+  if (issueNow) {
+    const labelEnd = project.labelEnd || 'IVE-E'
+    if (issueNow.state === 'closed' || (issueNow.labels || []).includes(labelEnd)) {
+      return NextResponse.json({ error: '완료된 작업은 검증자/확인자를 변경할 수 없습니다' }, { status: 409 })
+    }
   }
 
   const body = await req.json()

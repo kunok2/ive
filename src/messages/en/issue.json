@@ -69,6 +69,7 @@
   "viewDescription": "View Description",
   "iterationCount": "{count} iterations completed",
   "iterationLabel": "#{count}",
+  "retryCount": "{count} retries",
   "viewAll": "View All",
   "chatMode": "Chat",
   "commentMode": "Direct",
@@ -150,5 +151,19 @@
   "noAgentWarningDesc": "You have no agents available — the task is on hold. Add an agent from the Agents tab.",
   "assigneeOnly": "Assignee only",
   "postCommentBack": "Comment + back",
-  "postCommentForward": "Comment + forward"
+  "postCommentForward": "Comment + forward",
+  "dueDate": "Due date",
+  "setDueDate": "Set due date",
+  "changeDueDate": "Change due date",
+  "clearDueDate": "Clear due date",
+  "elapsed": "Elapsed",
+  "left": "left",
+  "overdueBy": "{remain} overdue",
+  "daysRemain": "{days}d",
+  "hoursRemain": "{hours}h",
+  "dueDateUpdateFailed": "Failed to update due date",
+  "completedAt": "Completed",
+  "completedEarly": "Completed {remain} early",
+  "completedLate": "Completed {remain} late",
+  "completedOnTime": "Completed on time"
 }

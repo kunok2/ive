@@ -5,6 +5,7 @@ import { useStore } from '@/lib/store'
 import { formatDateMedium } from '@/lib/format-date'
 import StageActionButtons, { type StageAction } from './StageActions'
 import StageProgress from './StageProgress'
+import DeadlineProgress from './DeadlineProgress'
 import { type PresetRole } from '@/components/issue/RoleAvatarBar'
 import { createImagePasteHandlers } from '@/lib/paste-upload'
 import { useMemo, useRef, useEffect } from 'react'
@@ -26,6 +27,7 @@ interface IssueDetail {
   createdAt: string
   updatedAt: string
   closedAt?: string | null
+  dueDate?: string | null
   stageTimes?: {
     firstDevStartedAt: string | null
     devStartedAt: string | null
@@ -92,6 +94,10 @@ interface IssueHeaderProps {
   onOpenAssigneePicker: () => void
   onPresetVerifierChange: (preset: PresetRole) => Promise<void> | void
   onPresetConfirmerChange: (preset: PresetRole) => Promise<void> | void
+  /** 작성자 또는 관리자만 호출됨. null 이면 마감일 해제. */
+  onDueDateChange: (next: string | null) => Promise<void> | void
+  /** 작성자(생성자) 권한 — DeadlineProgress 노출/편집 제어. */
+  isCreator: boolean
   onToast: (msg: string, type: 'success' | 'error') => void
 }
 
@@ -101,12 +107,17 @@ export default function IssueHeader({
   projectId, gitMembers, preferredAgent,
   onBack, onStageAction, onCloseIssue, onStartEdit, onSaveEdit, onCancelEdit,
   onSetEditTitle, onSetEditDesc, onSetShowDesc, onOpenAssigneePicker,
-  onPresetVerifierChange, onPresetConfirmerChange, onToast,
+  onPresetVerifierChange, onPresetConfirmerChange, onDueDateChange, isCreator, onToast,
 }: IssueHeaderProps) {
   const { state } = useStore()
   const tc = useTranslations('common')
   const tIssue = useTranslations('issue')
   const tAuth = useTranslations('auth')
+
+  // 완료된 작업(닫힘 또는 done 단계)은 담당자/검증자/확인자/마감일 모두 수정 불가.
+  // 이미 종결된 흐름을 사후 변경하면 통계와 보고서가 어그러진다.
+  const isCompleted = issue.state === 'closed' || issue.stage === 'done'
+  const effectiveCanEditAssignees = canEditAssignees && !isCompleted
 
   // Image paste handler for edit description textarea
   const editDescRef = useRef(editDesc)
@@ -254,12 +265,33 @@ export default function IssueHeader({
               actualVerifier: issue.actualVerifier ?? null,
               actualConfirmer: issue.actualConfirmer ?? null,
               gitMembers,
-              canEdit: canEditAssignees,
+              canEdit: effectiveCanEditAssignees,
               onProcessorClick: onOpenAssigneePicker,
               onVerifierChange: onPresetVerifierChange,
               onConfirmerChange: onPresetConfirmerChange,
             }}
           />
+          {/* 마감일 진행 — 시작일시 → 마감일시 + 소진율. 작성자만 수정 가능.
+              완료된 작업(closed/done)은 마감일 대비 조기/지연을 표시하므로 마감일이 있어야만 노출. */}
+          {(() => {
+            const isCompleted = issue.state === 'closed' || issue.stage === 'done'
+            const completedAt = issue.closedAt ?? (issue.stage === 'done' ? issue.stageTimes?.confirmedAt ?? null : null)
+            // 완료 + 마감일 미설정: 비교 대상이 없으니 노출 안함.
+            if (isCompleted && !issue.dueDate) return null
+            // 미완료: 마감일이 있거나 작성자(설정 버튼) 인 경우만 노출.
+            if (!isCompleted && !issue.dueDate && !isCreator) return null
+            return (
+              <div className="mt-2">
+                <DeadlineProgress
+                  createdAt={issue.createdAt}
+                  dueDate={issue.dueDate}
+                  completedAt={isCompleted ? completedAt : null}
+                  canEdit={isCreator && !isCompleted}
+                  onChange={onDueDateChange}
+                />
+              </div>
+            )
+          })()}
         </div>
       )}
     </header>

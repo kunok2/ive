@@ -18,9 +18,9 @@ export function fetchClosedProjectIssues(project: Project, token: string) {
     : gitlab.fetchClosedProjectIssues(project, token);
 }
 
-export function createIssue(project: Project, token: string, title: string, description: string, labels: string[], assignees?: { ids?: number[]; usernames?: string[] }, options?: { isOAuth?: boolean }) {
+export function createIssue(project: Project, token: string, title: string, description: string, labels: string[], assignees?: { ids?: number[]; usernames?: string[] }, options?: { isOAuth?: boolean; dueDate?: string | null }) {
   return project.provider === 'github'
-    ? github.createGitHubIssue(project, token, title, description, labels, assignees?.usernames)
+    ? github.createGitHubIssue(project, token, title, description, labels, assignees?.usernames, { dueDate: options?.dueDate })
     : gitlab.createGitLabIssue(project, token, title, description, labels, assignees?.ids, options);
 }
 
@@ -30,10 +30,10 @@ export function fetchProjectMembers(project: Project, token: string) {
     : gitlab.fetchGitLabProjectMembers(project, token);
 }
 
-export function updateIssue(project: Project, iid: number, token: string, updates: { title?: string; description?: string; assigneeIds?: number[]; assignees?: string[] }) {
+export function updateIssue(project: Project, iid: number, token: string, updates: { title?: string; description?: string; assigneeIds?: number[]; assignees?: string[]; dueDate?: string | null }) {
   return project.provider === 'github'
-    ? github.updateGitHubIssue(project, iid, token, { title: updates.title, description: updates.description, assignees: updates.assignees })
-    : gitlab.updateGitLabIssue(project, iid, token, { title: updates.title, description: updates.description, assigneeIds: updates.assigneeIds });
+    ? github.updateGitHubIssue(project, iid, token, { title: updates.title, description: updates.description, assignees: updates.assignees, dueDate: updates.dueDate })
+    : gitlab.updateGitLabIssue(project, iid, token, { title: updates.title, description: updates.description, assigneeIds: updates.assigneeIds, dueDate: updates.dueDate });
 }
 
 export function closeIssue(project: Project, iid: number, token: string) {

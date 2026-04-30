@@ -1,6 +1,7 @@
 import { Project } from "@/types";
 import { getOwnerRepo, getGitHubAuthHeaders, apiUrl, normalizeIssue } from "./common";
 import { ensureGitHubLabels } from "./labels";
+import { setIveDueMarker } from "@/lib/ive-author";
 
 /**
  * 특정 레이블이 붙은 열린 이슈 목록을 가져옵니다.
@@ -247,16 +248,31 @@ export async function updateGitHubIssue(
   project: Project,
   issueNumber: number,
   decryptedToken: string,
-  updates: { title?: string; description?: string; assignees?: string[] }
+  updates: { title?: string; description?: string; assignees?: string[]; dueDate?: string | null }
 ) {
   const ownerRepo = getOwnerRepo(project.repoUrl);
   if (!ownerRepo) throw new Error('Invalid repo URL');
 
   const headers = getGitHubAuthHeaders(project, decryptedToken);
 
+  // dueDate가 명시된 경우, description이 함께 오지 않으면 GitHub에서 현재 본문을 가져와
+  // ive-due 마커만 갱신해 PATCH한다 (다른 변경 없이 마감일만 수정하는 케이스).
+  let bodyToWrite = updates.description;
+  if (updates.dueDate !== undefined) {
+    const baseBody = bodyToWrite !== undefined
+      ? bodyToWrite
+      : await (async () => {
+          const cur = await fetch(apiUrl(project, `/issues/${issueNumber}`), { headers });
+          if (!cur.ok) return '';
+          const data = await cur.json().catch(() => ({} as any));
+          return (data?.body as string | undefined) ?? '';
+        })();
+    bodyToWrite = setIveDueMarker(baseBody, updates.dueDate);
+  }
+
   const payload: any = {};
   if (updates.title) payload.title = updates.title;
-  if (updates.description !== undefined) payload.body = updates.description;
+  if (bodyToWrite !== undefined) payload.body = bodyToWrite;
   if (updates.assignees !== undefined) payload.assignees = updates.assignees;
 
   const res = await fetch(apiUrl(project, `/issues/${issueNumber}`), {
@@ -278,7 +294,8 @@ export async function createGitHubIssue(
   title: string,
   description: string,
   labels: string[],
-  assignees?: string[]
+  assignees?: string[],
+  options?: { dueDate?: string | null }
 ) {
   const ownerRepo = getOwnerRepo(project.repoUrl);
   if (!ownerRepo) throw new Error('Invalid repo URL');
@@ -303,7 +320,9 @@ export async function createGitHubIssue(
     }
   }
 
-  const body: any = { title, body: description, labels: validLabels };
+  // GitHub은 native due_date 미지원 — 본문에 ive-due 마커로 보존.
+  const bodyText = options?.dueDate ? setIveDueMarker(description, options.dueDate) : description;
+  const body: any = { title, body: bodyText, labels: validLabels };
   if (assignees && assignees.length > 0) body.assignees = assignees;
 
   const res = await fetch(apiUrl(project, '/issues'), {

@@ -9,6 +9,7 @@ export interface IveIssue {
   labels: string[]
   createdAt: string
   updatedAt: string
+  dueDate?: string | null
   author: { name: string; avatar?: string; avatarUrl?: string }
   iveAuthorId?: string | null
   authorId?: number | null
@@ -24,6 +25,8 @@ export interface IveIssue {
   actualProcessor?: { agentId: string | null; agentName: string | null; agentAvatar: string | null; cliName: string | null } | null
   actualVerifier?: { userId: string | null; name: string | null; avatar: string | null } | null
   actualConfirmer?: { userId: string | null; name: string | null; avatar: string | null } | null
+  /** 회차 — 처리 시도 횟수 / 되돌리기 합계. 카드 뱃지용. */
+  iterationCounts?: { processCount: number; retryTotal: number }
 }
 
 export interface ProjectAgent {

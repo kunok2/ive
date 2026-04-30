@@ -155,22 +155,24 @@ export default function RoleAvatarBar({
 
   return (
     <>
-      <div className="flex items-center gap-1">
+      <div className="flex items-center">
         {/* 작성자 — 항상 avatar, 읽기 전용 */}
         <RoleSlot
           dim={dim}
           ringClass="ring-ive-green/40"
+          isCurrent={currentMacro === 1}
           title={tIssue('roleTooltipFormat', { role: tIssue('roleAuthor'), value: creator.name || '-' })}
           interactive={false}
           content={renderAvatar(creator.avatar || creator.avatarUrl, creator.name, dim)}
         />
 
-        <Chevron iconSize={iconSize} />
+        <Chevron size={size} />
 
         {/* 처리자 — 실제 처리 에이전트가 있으면 그걸, 없으면 preset(assignMode) */}
         <RoleSlot
           dim={dim}
           ringClass="ring-ive-cyan/40"
+          isCurrent={currentMacro === 2}
           title={tIssue('roleTooltipFormat', {
             role: tIssue('processor'),
             value: actualProcessor?.agentName
@@ -184,12 +186,13 @@ export default function RoleAvatarBar({
             : renderProcessorContent(processor, creator, dim, iconSize)}
         />
 
-        <Chevron iconSize={iconSize} />
+        <Chevron size={size} />
 
         {/* 검증자 — 실제 검증자(시작/완료) 우선, 없으면 preset */}
         <RoleSlot
           dim={dim}
           ringClass="ring-ive-amber/40"
+          isCurrent={currentMacro === 3}
           title={actualVerifier?.userId
             ? tIssue('roleTooltipFormat', { role: tIssue('verifier'), value: actualVerifier.name || '-' })
             : presetTooltip(tIssue('verifier'), verifier, gitMembers, creator, tIssue)}
@@ -200,12 +203,13 @@ export default function RoleAvatarBar({
             : renderPresetContent(verifier, gitMembers, creator, dim, iconSize)}
         />
 
-        <Chevron iconSize={iconSize} />
+        <Chevron size={size} />
 
         {/* 확인자 — 실제 확인자(시작/완료) 우선, 없으면 preset */}
         <RoleSlot
           dim={dim}
           ringClass="ring-orange-400/50"
+          isCurrent={currentMacro === 4}
           title={actualConfirmer?.userId
             ? tIssue('roleTooltipFormat', { role: tIssue('confirmer'), value: actualConfirmer.name || '-' })
             : presetTooltip(tIssue('confirmer'), confirmer, gitMembers, creator, tIssue)}
@@ -254,8 +258,22 @@ export default function RoleAvatarBar({
 
 // ── helpers ──
 
-function Chevron({ iconSize }: { iconSize: string }) {
-  return <i className={`fa-solid fa-chevron-right text-ive-text-dim/40 ${iconSize} mx-px`} />
+/**
+ * 역할 사이의 화살표 — 선+삼각형. 작업 상세의 StageProgress 와 동일 스타일.
+ * size='sm' 카드용은 짧고 얇게, 'md' 상세는 조금 더 길게.
+ */
+function Chevron({ size = 'md' }: { size?: 'sm' | 'md' }) {
+  // 화살표 자체는 짧게, 양옆에 약간의 숨 공간(mx-1).
+  const lineW = size === 'sm' ? 'w-1.5' : 'w-2'
+  const triBorder = size === 'sm'
+    ? 'border-y-[3px] border-l-[4px]'
+    : 'border-y-[4px] border-l-[5px]'
+  return (
+    <span className="inline-flex items-center mx-1 shrink-0" aria-hidden>
+      <span className={`h-0.5 ${lineW} bg-ive-text-dim/40`} />
+      <span className={`w-0 h-0 ${triBorder} border-y-transparent border-l-ive-text-dim/40`} />
+    </span>
+  )
 }
 
 interface RoleSlotProps {
@@ -263,12 +281,15 @@ interface RoleSlotProps {
   ringClass: string
   title: string
   interactive: boolean
+  /** 현재 진행 중인 단계의 슬롯이면 ring pulse 애니메이션. */
+  isCurrent?: boolean
   onClick?: () => void
   content: React.ReactNode
 }
 
-function RoleSlot({ dim, ringClass, title, interactive, onClick, content }: RoleSlotProps) {
-  const baseCls = `inline-flex items-center justify-center ${dim} rounded-full overflow-hidden ring-2 ${ringClass} bg-ive-bg-deep shrink-0`
+function RoleSlot({ dim, ringClass, title, interactive, isCurrent, onClick, content }: RoleSlotProps) {
+  const animCls = isCurrent ? 'animate-pulse' : ''
+  const baseCls = `inline-flex items-center justify-center ${dim} rounded-full overflow-hidden ring-2 ${ringClass} ${animCls} bg-ive-bg-deep shrink-0`
   if (interactive && onClick) {
     return (
       <button type="button" onClick={onClick} title={title} aria-label={title} className={`${baseCls} hover:ring-ive-green transition-all`}>

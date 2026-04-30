@@ -42,15 +42,20 @@ export function apiUrl(project: Project, path: string): string {
  * GitHub 이슈를 GitLab 이슈와 동일한 형태로 정규화합니다.
  */
 export function normalizeIssue(ghIssue: any): any {
+  // GitHub은 네이티브 due_date가 없다. 본문 ive-due 마커에서 추출 (GitLab과 동일 필드명으로 normalize).
+  const body = ghIssue.body || '';
+  const dueMatch = body.match(/<!--\s*ive-due:(\d{4}-\d{2}-\d{2})\s*-->/);
   return {
     iid: ghIssue.number,
     id: ghIssue.id,
     title: ghIssue.title,
-    description: ghIssue.body || '',
+    description: body,
     state: ghIssue.state === 'open' ? 'opened' : 'closed',
     labels: (ghIssue.labels || []).map((l: any) => typeof l === 'string' ? l : l.name),
     created_at: ghIssue.created_at,
     updated_at: ghIssue.updated_at,
+    closed_at: ghIssue.closed_at ?? null,
+    due_date: dueMatch ? dueMatch[1] : null,
     web_url: ghIssue.html_url,
     author: ghIssue.user ? { id: ghIssue.user.id, name: ghIssue.user.login, username: ghIssue.user.login, avatar_url: ghIssue.user.avatar_url } : undefined,
   };

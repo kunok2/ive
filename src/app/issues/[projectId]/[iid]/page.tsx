@@ -67,6 +67,8 @@ interface IssueDetail {
   labels: string[]
   createdAt: string
   updatedAt: string
+  closedAt?: string | null
+  dueDate?: string | null
   webUrl: string
   author: string
   authorId: number | null
@@ -560,6 +562,26 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
     } finally { setSaving(false) }
   }
 
+  async function handleDueDateChange(next: string | null) {
+    // 낙관적 갱신 — 즉시 UI 반영, 실패 시 롤백.
+    const prev = issue?.dueDate ?? null
+    setIssue(curr => curr ? { ...curr, dueDate: next } : curr)
+    try {
+      const res = await fetch(`/api/projects/${projectId}/issues/${iid}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dueDate: next }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        toast(data.error || tIssue('dueDateUpdateFailed'), 'error')
+        setIssue(curr => curr ? { ...curr, dueDate: prev } : curr)
+      }
+    } catch (e: any) {
+      toast(e?.message || tc('networkError'), 'error')
+      setIssue(curr => curr ? { ...curr, dueDate: prev } : curr)
+    }
+  }
+
   // ===================== Chat logic =====================
 
   useEffect(() => { chatSessionRef.current = chatSessionId }, [chatSessionId])
@@ -832,6 +854,8 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
         iterationCount={iterationCount}
         canProgressStage={canProgressStage}
         canEditAssignees={canEditAssignees}
+        isCreator={isCreator}
+        onDueDateChange={handleDueDateChange}
         isClosing={isClosing}
         editMode={editMode}
         editTitle={editTitle}

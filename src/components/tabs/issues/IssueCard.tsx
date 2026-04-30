@@ -1,13 +1,10 @@
 'use client'
 
 import { useTranslations } from 'next-intl'
-import AgentAvatar from '@/components/agent/AgentAvatar'
 import RoleAvatarBar from '@/components/issue/RoleAvatarBar'
 import { macroIndexFromStage } from '@/app/issues/[projectId]/[iid]/_components/StageProgress'
 import { formatDateMedium } from '@/lib/format-date'
-import type { CliName } from '@/types'
-import type { IveIssue, ProjectAgent, StageInfo } from './types'
-import { CLI_CONFIG } from './types'
+import type { IveIssue, StageInfo } from './types'
 
 interface GitMember {
   id: number
@@ -21,7 +18,6 @@ type RolePresetPayload = { mode: 'creator' | 'auto' | 'specific'; userId: string
 interface IssueCardProps {
   issue: IveIssue
   stageInfo: Record<string, StageInfo>
-  cliConfig: typeof CLI_CONFIG
   isSelected: boolean
   bulkMode: boolean
   navigatingIid: number | null
@@ -30,13 +26,11 @@ interface IssueCardProps {
   canEditAssignees: boolean
   isHistoryTab: boolean
   closing: number | null
-  projectAgents: ProjectAgent[]
   gitMembers: GitMember[]
   locale?: string
   timezone?: string
   onToggleSelect: (iid: number) => void
   onNavigate: (issue: IveIssue) => void
-  onOpenAgentPicker: (iid: number) => void
   onOpenAssigneeModal: (iids: number[]) => void
   onCloseIssue: (e: React.MouseEvent, iid: number) => void
   onPresetVerifierChange?: (iid: number, preset: RolePresetPayload) => Promise<void> | void
@@ -46,7 +40,6 @@ interface IssueCardProps {
 export default function IssueCard({
   issue,
   stageInfo,
-  cliConfig,
   isSelected,
   bulkMode,
   navigatingIid,
@@ -54,13 +47,11 @@ export default function IssueCard({
   canEditAssignees,
   isHistoryTab,
   closing,
-  projectAgents,
   gitMembers,
   locale,
   timezone,
   onToggleSelect,
   onNavigate,
-  onOpenAgentPicker,
   onOpenAssigneeModal,
   onCloseIssue,
   onPresetVerifierChange,
@@ -128,14 +119,6 @@ export default function IssueCard({
         </div>
       )}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ive-text-dim">
-        <AgentBadge
-          issue={issue}
-          canEdit={canEdit}
-          bulkMode={bulkMode}
-          projectAgents={projectAgents}
-          cliConfig={cliConfig}
-          onOpenAgentPicker={onOpenAgentPicker}
-        />
         {/* 4 역할 아바타 — 작성자 › 처리자 › 검증자 › 확인자 (작업 #271) */}
         <span onClick={e => { if (canEdit && !bulkMode) e.stopPropagation() }}>
           <RoleAvatarBar
@@ -167,88 +150,119 @@ export default function IssueCard({
             onConfirmerChange={onPresetConfirmerChange ? (preset) => onPresetConfirmerChange(issue.iid, preset) : undefined}
           />
         </span>
-        {issue.stage !== 'none' && (
-          <span className={`ml-auto shrink-0 inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded border ${info.color}`}>
-            <i className={`fa-solid ${info.icon}`} />
-            {info.label}
-          </span>
-        )}
+        {/* 마감일 + 회차 뱃지 + 상태 배지 — 우측 정렬 그룹.
+            마감일: D-N(남음) / D+N(지남) / 완료 시 일찍/늦게.
+            회차 뱃지: 처리 N회 / 되돌리기 N회. 1회는 평범하니 ≥2회만 노출. */}
+        {(() => {
+          const ic = issue.iterationCounts
+          const showProcess = !!ic && ic.processCount >= 2
+          const showRetry = !!ic && ic.retryTotal >= 1
+          const showState = issue.stage !== 'none'
+          const due = renderDueBadge(issue, tIssue)
+          if (!showProcess && !showRetry && !showState && !due) return null
+          return (
+            <span className="ml-auto shrink-0 inline-flex items-center gap-1">
+              {due}
+              {showProcess && ic && (
+                <span
+                  className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border bg-ive-cyan/10 text-ive-cyan border-ive-cyan/20 text-[10px] font-bold"
+                  title={tIssue('iterationCount', { count: ic.processCount })}
+                >
+                  <i className="fa-solid fa-repeat" />
+                  {ic.processCount}
+                </span>
+              )}
+              {showRetry && ic && (
+                <span
+                  className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border bg-ive-amber/10 text-ive-amber border-ive-amber/20 text-[10px] font-bold"
+                  title={tIssue('retryCount', { count: ic.retryTotal })}
+                >
+                  <i className="fa-solid fa-rotate-left" />
+                  {ic.retryTotal}
+                </span>
+              )}
+              {showState && (
+                <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded border ${info.color}`}>
+                  <i className={`fa-solid ${info.icon}`} />
+                  {info.label}
+                </span>
+              )}
+            </span>
+          )
+        })()}
       </div>
     </div>
   )
 }
 
-/** Inline sub-component for agent/assignee badge in the issue footer */
-function AgentBadge({
-  issue,
-  canEdit,
-  bulkMode,
-  projectAgents,
-  cliConfig,
-  onOpenAgentPicker,
-}: {
-  issue: IveIssue
-  canEdit: boolean
-  bulkMode: boolean
-  projectAgents: ProjectAgent[]
-  cliConfig: typeof CLI_CONFIG
-  onOpenAgentPicker: (iid: number) => void
-}) {
-  const tIssue = useTranslations('issue')
+/**
+ * 카드용 마감일 뱃지.
+ *   - 진행중 + 마감 전: "D-N" (cyan / 90%↑ amber / 1일 이내 amber-strong)
+ *   - 진행중 + 마감 지남: "D+N" (red)
+ *   - 완료(닫힘 또는 done) + 마감 비교: "-N일"(일찍, green) / "+N일"(늦게, red) / "정시"(green)
+ *   - 마감일 없음: null
+ *
+ * "완료" 판정: state === 'closed' 또는 stage === 'done'.
+ * 완료 시각은 issue.updatedAt 을 근사치로 사용 (목록 응답엔 closedAt/confirmedAt 미포함).
+ */
+function renderDueBadge(issue: IveIssue, t: ReturnType<typeof useTranslations<'issue'>>) {
+  if (!issue.dueDate) return null
+  const end = new Date(`${issue.dueDate}T23:59:59+09:00`).getTime()
+  const isCompleted = issue.state === 'closed' || issue.stage === 'done'
 
-  const agentEditable = canEdit && !bulkMode && issue.stage === 'waiting' && projectAgents.length > 0
-  const onClickEdit = agentEditable ? (e: React.MouseEvent) => { e.stopPropagation(); onOpenAgentPicker(issue.iid) } : undefined
-
-  if (issue.assignMode === 'assignee') {
-    const assignee = issue.assignees?.[0]
+  if (isCompleted) {
+    // updatedAt 을 완료 근사 시각으로 사용. closed 시점/done 라벨링 시점에 가까움.
+    const completedTs = new Date(issue.updatedAt).getTime()
+    const diffMs = end - completedTs
+    const days = Math.round(diffMs / 86400000)
+    if (Math.abs(diffMs) < 60_000) {
+      return (
+        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border bg-ive-green/10 text-ive-green border-ive-green/20 text-[10px] font-bold" title={t('completedOnTime')}>
+          <i className="fa-solid fa-calendar-check" />
+          {t('completedOnTime')}
+        </span>
+      )
+    }
+    if (diffMs >= 0) {
+      const text = `-${Math.max(days, 1)}d`
+      return (
+        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border bg-ive-green/10 text-ive-green border-ive-green/20 text-[10px] font-bold" title={t('completedEarly', { remain: t('daysRemain', { days: Math.max(days, 1) }) })}>
+          <i className="fa-solid fa-calendar-check" />
+          {text}
+        </span>
+      )
+    }
+    const text = `+${Math.max(Math.abs(days), 1)}d`
     return (
-      <span
-        className={`inline-flex items-center gap-1 text-ive-cyan ${agentEditable ? 'cursor-pointer hover:text-ive-cyan/80' : ''}`}
-        onClick={onClickEdit}
-      >
-        {assignee?.avatarUrl ? (
-          <img src={assignee.avatarUrl} className="w-4 h-4 rounded-full object-cover bg-ive-bg-deep" alt="" />
-        ) : (
-          <span className="w-4 h-4 rounded-full bg-ive-cyan/20 flex items-center justify-center">
-            <i className="fa-solid fa-user text-[10px] text-ive-cyan" />
-          </span>
-        )}
-        <span className="font-bold truncate max-w-[80px]">{assignee?.name || assignee?.username || tIssue('assigneeHandles')}</span>
-        {agentEditable && <i className="fa-solid fa-pen-to-square text-[9px] opacity-60" />}
+      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border bg-ive-red/10 text-ive-red border-ive-red/20 text-[10px] font-bold" title={t('completedLate', { remain: t('daysRemain', { days: Math.max(Math.abs(days), 1) }) })}>
+        <i className="fa-solid fa-calendar-xmark" />
+        {text}
       </span>
     )
   }
 
-  if (issue.preferredAgentId) {
-    const avatar = issue.preferredAgentAvatar || 'av-01'
+  // 진행중
+  const now = Date.now()
+  const remainMs = end - now
+  const overdue = remainMs < 0
+  if (overdue) {
+    const days = Math.max(Math.ceil(Math.abs(remainMs) / 86400000), 1)
     return (
-      <span
-        className={`inline-flex items-center gap-1 ${agentEditable ? 'cursor-pointer hover:text-ive-text' : ''}`}
-        onClick={onClickEdit}
-      >
-        <AgentAvatar avatar={avatar} size="xs" />
-        <span className="font-bold text-ive-text-muted truncate max-w-[80px]">{issue.preferredAgentName}</span>
-        {issue.preferredAgentCliName && (() => {
-          const cli = cliConfig[issue.preferredAgentCliName as CliName]
-          return cli ? <i className={`${cli.icon} ${cli.color} text-[10px]`} /> : null
-        })()}
-        {agentEditable && <i className="fa-solid fa-pen-to-square text-[9px] opacity-60" />}
+      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border bg-ive-red/10 text-ive-red border-ive-red/20 text-[10px] font-bold" title={t('overdueBy', { remain: t('daysRemain', { days }) })}>
+        <i className="fa-solid fa-triangle-exclamation" />
+        {`D+${days}`}
       </span>
     )
   }
-
-  if (agentEditable) {
-    return (
-      <span
-        className="inline-flex items-center gap-1 cursor-pointer text-ive-text-dim hover:text-ive-green"
-        onClick={onClickEdit}
-      >
-        <i className="fa-solid fa-user-gear text-[10px]" />
-        <span className="font-bold truncate max-w-[80px]">{tIssue('noPreference')}</span>
-        <i className="fa-solid fa-pen-to-square text-[9px] opacity-60" />
-      </span>
-    )
-  }
-
-  return null
+  const days = Math.max(Math.ceil(remainMs / 86400000), 0)
+  // 색상: 1일 이내 amber, 그 외 cyan
+  const cls = days <= 1
+    ? 'bg-ive-amber/10 text-ive-amber border-ive-amber/20'
+    : 'bg-ive-cyan/10 text-ive-cyan border-ive-cyan/20'
+  return (
+    <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border ${cls} text-[10px] font-bold`} title={`${issue.dueDate} (${t('daysRemain', { days })} ${t('left')})`}>
+      <i className="fa-solid fa-calendar-day" />
+      {`D-${days}`}
+    </span>
+  )
 }

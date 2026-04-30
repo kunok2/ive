@@ -88,6 +88,36 @@ export function stripAllIveMarkers(body: string): string {
   return body.replace(IVE_AUTHOR_MARKER_RE, '').replace(IVE_AGENT_MARKER_RE, '').trimStart()
 }
 
+// ──────────────── Due date marker (GitHub 전용 마감일 저장) ────────────────
+//
+// GitHub 이슈에는 네이티브 due_date 필드가 없어, 본문에 `<!-- ive-due:YYYY-MM-DD -->`
+// 형태로 저장한다. GitLab은 네이티브 due_date 를 사용하므로 마커는 GitHub만의 약속.
+
+export const IVE_DUE_MARKER_RE = /<!--\s*ive-due:(\d{4}-\d{2}-\d{2})\s*-->/
+
+/** 본문에서 마감일 추출 (없으면 null). YYYY-MM-DD 형식. */
+export function extractIveDueDate(body: string | null | undefined): string | null {
+  if (!body || typeof body !== 'string') return null
+  const m = body.match(IVE_DUE_MARKER_RE)
+  return m ? m[1] : null
+}
+
+/** 본문에서 ive-due 마커 제거 */
+export function stripIveDueMarker(body: string): string {
+  if (typeof body !== 'string') return body
+  return body.replace(IVE_DUE_MARKER_RE, '').replace(/\n{3,}/g, '\n\n').trim()
+}
+
+/**
+ * 본문에 마감일 마커를 셋팅. dueDate=null 이면 마커 제거.
+ * 기존 마커가 있으면 교체, 없으면 본문 끝에 부착(빈 줄 1개 띄움).
+ */
+export function setIveDueMarker(body: string, dueDate: string | null): string {
+  const base = (body || '').replace(IVE_DUE_MARKER_RE, '').trimEnd()
+  if (!dueDate) return base
+  return base ? `${base}\n\n<!-- ive-due:${dueDate} -->` : `<!-- ive-due:${dueDate} -->`
+}
+
 // ──────────────── Issue requester (이슈 의뢰자) ────────────────
 //
 // 이슈를 처리할 에이전트를 누구의 풀에서 골라올지 결정하는 핵심 로직.

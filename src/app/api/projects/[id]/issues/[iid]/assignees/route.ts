@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getProject, getProjectAccess, getProjectAuthToken, setAssigneeAuto, isIssueAuthor } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
-import { updateIssue } from '@/lib/provider';
+import { updateIssue, fetchSingleIssue } from '@/lib/provider';
 
 export async function PATCH(
   req: NextRequest,
@@ -28,6 +28,20 @@ export async function PATCH(
       { error: '이 이슈의 작성자 또는 관리자만 담당자를 변경할 수 있습니다' },
       { status: 403 }
     );
+  }
+
+  // 완료된 작업(닫힘 또는 IVE-E 레이블)은 담당자 변경 금지 — 통계/보고서 일관성 보호.
+  const current = await fetchSingleIssue(project, issueIid, token);
+  if (current) {
+    const isClosed = current.state === 'closed';
+    const labelEnd = project.labelEnd || 'IVE-E';
+    const isDone = (current.labels || []).includes(labelEnd);
+    if (isClosed || isDone) {
+      return NextResponse.json(
+        { error: '완료된 작업은 담당자를 변경할 수 없습니다' },
+        { status: 409 }
+      );
+    }
   }
 
   const { assigneeIds, assigneeUsernames, assigneeAuto } = await req.json();

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getProject, getProjectAccess, getProjectAuthToken, hasActiveExecution, stageFromLabels, getPresetRoles, getAssigneeAuto, getActualRoleAssignees, getIssueStageTimes, getIssueRetryCounts, getIssueForwardCounts } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { updateIssue, fetchSingleIssue } from '@/lib/provider'
-import { resolveIveAuthorFromBody, stripIveAuthorMarker } from '@/lib/ive-author'
+import { resolveIveAuthorFromBody, stripIveAuthorMarker, stripIveDueMarker } from '@/lib/ive-author'
 
 export async function PUT(
   req: NextRequest,
@@ -21,14 +21,57 @@ export async function PUT(
   }
 
   try {
-    const { title, description } = await req.json()
+    const body = await req.json()
+    const { title, description, dueDate } = body as {
+      title?: string
+      description?: string
+      dueDate?: string | null
+    }
+
+    // 마감일 단독 수정 모드: title/description 없이 dueDate만 들어오면 마감일만 변경.
+    // 작성자(또는 관리자)만 마감일 수정 가능. 다른 작업자가 임의로 일정 바꾸면 안 됨.
+    const isDueOnlyEdit = dueDate !== undefined && title === undefined && description === undefined
+    if (isDueOnlyEdit) {
+      const token = getProjectAuthToken(projectId)
+      const current = await fetchSingleIssue(project, Number(iid), token)
+      if (!current) return NextResponse.json({ error: '이슈를 찾을 수 없습니다' }, { status: 404 })
+      const iveAuthor = resolveIveAuthorFromBody(current.description)
+      const isCreator = (iveAuthor && iveAuthor.id === user.id)
+        || (current.author?.id != null && user.oauthUserId && String(current.author.id) === String(user.oauthUserId))
+      if (!user.isAdmin && !isCreator) {
+        return NextResponse.json({ error: '작성자만 마감일을 변경할 수 있습니다' }, { status: 403 })
+      }
+      // 완료된 작업은 마감일 변경 금지.
+      const labelEnd = project.labelEnd || 'IVE-E'
+      if (current.state === 'closed' || (current.labels || []).includes(labelEnd)) {
+        return NextResponse.json({ error: '완료된 작업은 마감일을 변경할 수 없습니다' }, { status: 409 })
+      }
+      // YYYY-MM-DD 검증 (null/'' 은 해제)
+      const normalized: string | null = dueDate
+        ? (/^\d{4}-\d{2}-\d{2}$/.test(dueDate) ? dueDate : null)
+        : null
+      if (dueDate && !normalized) {
+        return NextResponse.json({ error: '마감일 형식이 올바르지 않습니다 (YYYY-MM-DD)' }, { status: 400 })
+      }
+      const updated: any = await updateIssue(project, Number(iid), token, { dueDate: normalized })
+      return NextResponse.json({
+        iid: updated.iid,
+        dueDate: updated.due_date ?? normalized,
+      })
+    }
+
     if (!title?.trim()) {
       return NextResponse.json({ error: '제목은 필수입니다' }, { status: 400 })
     }
     const token = getProjectAuthToken(projectId)
+    // description 편집 시 기존 마감일 유지 — GitHub은 본문에 마커로 저장하므로
+    // description을 갈아치우면 마커도 사라진다. 현재 마감일을 다시 주입.
+    const current = await fetchSingleIssue(project, Number(iid), token)
+    const existingDue: string | null = current?.due_date ?? null
     const updated = await updateIssue(project, Number(iid), token, {
       title: title.trim(),
       description: description ?? '',
+      dueDate: existingDue,
     })
     return NextResponse.json({
       iid: updated.iid,
@@ -125,7 +168,7 @@ export async function GET(
     return NextResponse.json({
       iid: issue.iid,
       title: issue.title,
-      description: stripIveAuthorMarker(issue.description || ''),
+      description: stripIveDueMarker(stripIveAuthorMarker(issue.description || '')),
       state: issue.state,
       stage: stage || 'none',
       assignees,
@@ -133,6 +176,7 @@ export async function GET(
       createdAt: issue.created_at,
       updatedAt: issue.updated_at,
       closedAt: issue.closed_at ?? null,
+      dueDate: issue.due_date ?? null,
       stageTimes,
       retryCounts,
       forwardCounts,
