@@ -74,7 +74,7 @@ function ChatViewer({ projectId, execution, agent }: { projectId: string; execut
       {messages.map(msg => (
         <div key={msg.id} className={`flex ${msg.role === 'user' ? 'flex-row-reverse' : ''} items-start gap-1.5`}>
           <div className="shrink-0 mt-0.5">
-            <AgentAvatar avatar={msg.role === 'user' ? userAvatar : agent.avatar} size="sm" />
+            <AgentAvatar avatar={msg.role === 'user' ? userAvatar : agent.avatar} size="sm" className="rounded-full overflow-hidden" />
           </div>
           <div className={`rounded-lg px-2.5 py-1.5 text-xs ${msg.role === 'user' ? 'max-w-[80%]' : 'flex-1'} ${
             msg.role === 'user'
@@ -97,7 +97,7 @@ function ChatViewer({ projectId, execution, agent }: { projectId: string; execut
       ))}
       {agentProcessing && (
         <div className="flex items-center gap-1.5">
-          <AgentAvatar avatar={agent.avatar} size="sm" />
+          <AgentAvatar avatar={agent.avatar} size="sm" className="rounded-full overflow-hidden" />
           <ThinkingElapsed />
         </div>
       )}
@@ -200,6 +200,7 @@ export default function LiveTracePanel({ agents, projectId, onKill, onAllComplet
                 avatar={tab.agent.avatar}
                 size="sm"
                 toolBadge={tabIsChat ? null : (activity?.category ?? null)}
+                className="rounded-full overflow-hidden"
               />
               <span className="truncate min-w-0"><MarqueeText className="text-sm">{tab.agent.name}</MarqueeText></span>
             </button>

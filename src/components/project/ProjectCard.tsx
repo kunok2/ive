@@ -472,12 +472,12 @@ export default function ProjectCard({ project }: Props) {
             <div key={`${kind}-${issue.iid}`} className="flex items-center gap-1.5 text-xs">
               {avatarSrc ? (
                 isPhotoUrl ? (
-                  <img src={avatarSrc} alt="" className="w-7 h-7 rounded-lg object-cover shrink-0 border border-ive-border" />
+                  <img src={avatarSrc} alt="" className="w-7 h-7 rounded-full object-cover shrink-0 border border-ive-border" />
                 ) : (
-                  <AgentAvatar avatar={avatarSrc} size="sm" />
+                  <AgentAvatar avatar={avatarSrc} size="sm" className="rounded-full overflow-hidden" />
                 )
               ) : (
-                <div className="w-7 h-7 rounded-lg bg-ive-bg-deep border border-ive-border-subtle flex items-center justify-center shrink-0">
+                <div className="w-7 h-7 rounded-full bg-ive-bg-deep border border-ive-border-subtle flex items-center justify-center shrink-0">
                   <i className="fa-solid fa-user text-[10px] text-ive-text-dim" />
                 </div>
               )}
@@ -507,15 +507,16 @@ export default function ProjectCard({ project }: Props) {
                 <div key={ex.id} className="flex items-center gap-1.5 text-xs">
                   {isVerify ? (
                     ex.userAvatar === 'photo' && ex.userId ? (
-                      <img src={`/api/auth/avatar/image?id=${ex.userId}`} alt="" className="w-7 h-7 rounded-lg object-cover shrink-0 border border-ive-border" />
+                      <img src={`/api/auth/avatar/image?id=${ex.userId}`} alt="" className="w-7 h-7 rounded-full object-cover shrink-0 border border-ive-border" />
                     ) : ex.userAvatar ? (
-                      <AgentAvatar avatar={ex.userAvatar} size="sm" />
+                      <AgentAvatar avatar={ex.userAvatar} size="sm" className="rounded-full overflow-hidden" />
                     ) : null
                   ) : agentAvatar ? (
                     <AgentAvatar
                       avatar={agentAvatar}
                       size="sm"
                       toolBadge={isChat ? null : (activity?.category ?? null)}
+                      className="rounded-full overflow-hidden"
                     />
                   ) : null}
                   {displayName && <span className={`font-bold shrink-0 ${'text-ive-amber/70'}`}>{displayName}</span>}
