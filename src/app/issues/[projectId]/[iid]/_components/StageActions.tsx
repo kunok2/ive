@@ -18,6 +18,7 @@ export function useStageConfig() {
   const tIssue = useTranslations('issue')
 
   const STAGE_INFO: Record<string, { label: string; color: string; icon: string; bg: string }> = {
+    none:            { label: tStage('none'),            color: 'text-ive-text-dim',  icon: 'fa-inbox',              bg: 'bg-white/5' },
     waiting:         { label: tStage('waiting'),         color: 'text-ive-cyan',      icon: 'fa-clock',              bg: 'bg-ive-cyan/10' },
     verify_waiting:  { label: tStage('verify_waiting'),  color: 'text-ive-amber',     icon: 'fa-hourglass-half',     bg: 'bg-ive-amber/10' },
     dev:             { label: tStage('dev'),             color: 'text-ive-cyan',      icon: 'fa-code',               bg: 'bg-ive-cyan/10' },

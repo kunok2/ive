@@ -307,16 +307,17 @@ function CommentModeInput({
 
         {/* 전진 →: 다음 단계 진입 (검증완료/다음단계로) */}
         <div className="flex-1 flex justify-end">
-          {preferredAgent?.assignMode === 'assignee' && NEXT_STAGE[issue.stage] && canProgressStage && (
+          {(preferredAgent?.assignMode === 'assignee' || issue.stage === 'none') && NEXT_STAGE[issue.stage] && canProgressStage && (
             <button
               onClick={onCommentAndNextStage}
               disabled={posting}
               className="shrink-0 h-10 px-3 rounded-lg bg-ive-cyan text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-40 text-xs font-bold whitespace-nowrap"
+              title={issue.stage === 'none' ? tIssue('startProcessingHint') : undefined}
             >
               {postingType === 'next' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><span>{NEXT_STAGE[issue.stage].label}</span><i className="fa-solid fa-arrow-right text-[10px]" /></>}
             </button>
           )}
-          {!(preferredAgent?.assignMode === 'assignee' && NEXT_STAGE[issue.stage]) && canProgressStage && (issue.stage === 'verifying' || issue.stage === 'confirming') && (
+          {!((preferredAgent?.assignMode === 'assignee' || issue.stage === 'none') && NEXT_STAGE[issue.stage]) && canProgressStage && (issue.stage === 'verifying' || issue.stage === 'confirming') && (
             <button
               onClick={onCommentAndDone}
               disabled={posting || !comment.trim()}

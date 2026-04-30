@@ -106,7 +106,9 @@ export function resetStuckExecutions() {
 }
 
 export interface IssueStageTimes {
-  /** 첫 dev execution 의 started_at — 유입→처리 대기시간 측정용 */
+  /** IVE-S 부착(처리대기 진입) 시각 — 처리대기→픽업 대기시간 측정용 */
+  scheduledAt: string | null
+  /** 첫 dev execution 의 started_at — 처리대기→처리 픽업 시점 */
   firstDevStartedAt: string | null
   devStartedAt: string | null
   devEndedAt: string | null
@@ -139,10 +141,11 @@ export function getIssueStageTimes(projectId: string, issueIid: number): IssueSt
   ).get(projectId, issueIid) as any | undefined
 
   const stage = getDb().prepare(
-    'SELECT confirmed_at FROM issue_stages WHERE project_id = ? AND issue_iid = ?'
+    'SELECT confirmed_at, scheduled_at FROM issue_stages WHERE project_id = ? AND issue_iid = ?'
   ).get(projectId, issueIid) as any | undefined
 
   return {
+    scheduledAt: stage?.scheduled_at ?? null,
     firstDevStartedAt: firstExec?.started_at ?? null,
     devStartedAt: lastExec?.started_at ?? null,
     devEndedAt: lastExec?.ended_at ?? null,

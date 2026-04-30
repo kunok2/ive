@@ -8,14 +8,15 @@
  *   confirm_*:   확인자 preset (creator | auto | specific)
  *
  * preset 모드:
- *   - creator:  이슈 생성자(Git author)를 assignee 로 지정
+ *   - creator:  단계 전이를 트리거한 현재 접속자(없으면 Git author) 를 assignee 로 지정
  *   - auto:     같은 프로젝트의 열린 이슈 중 본인 배정수가 가장 적은 멤버 자동 선택
  *   - specific: 사전 지정된 사용자
  */
-import { Project } from '@/types'
+import { Project, User } from '@/types'
 import { updateIssue, fetchSingleIssue, addIssueComment } from './provider'
 import { runAutoAssign } from './scanner/auto-assign'
 import type { PresetRoleInfo } from './db/issues'
+import { getActualRoleAssignees } from './db'
 
 export interface RoleAssignResult {
   success: boolean
@@ -38,7 +39,22 @@ export async function applyRoleAssignee(
   token: string,
   roleLabel: '검증자' | '확인자',
   preset: PresetRoleInfo,
+  options?: { currentUser?: User },
 ): Promise<RoleAssignResult> {
+  // 재진입(retry) 가드: 이미 같은 역할로 배정된 actual 이 있으면 그 사람을 유지한다.
+  // 검증/확인이 한 번 끝난 뒤 step-back 으로 되돌아왔다가 다시 같은 단계에 진입할 때
+  // auto preset 이 또 호출되면 새 사람으로 갈리는 문제를 방지.
+  const actuals = getActualRoleAssignees(project.id, iid)
+  const existing = roleLabel === '검증자' ? actuals.verifier : actuals.confirmer
+  if (existing?.userId) {
+    try {
+      await updateIssue(project, iid, token, {
+        assigneeIds: [Number(existing.userId)],
+      })
+    } catch (e) { console.warn(`[RoleAssignee] re-entry sync failed for #${iid}:`, e) }
+    return { success: true, mode: preset.mode, username: null, userId: existing.userId }
+  }
+
   if (preset.mode === 'auto') {
     const r = await runAutoAssign(project, iid, token)
     return {
@@ -67,7 +83,27 @@ export async function applyRoleAssignee(
     }
   }
 
-  // creator 모드 (default fallback) — 이슈 생성자(Git author)를 assignee 로
+  // creator 모드 (default) — 단계 전이를 트리거한 현재 접속자 우선 배정.
+  //   현재 접속자가 git provider 매핑(oauthUserId)을 가지고 있으면 그 사람을 배정.
+  //   접속자 정보가 없거나 git 매핑이 없으면 (스캐너 자동 처리 등) 이슈 작성자(Git author) 로 fallback.
+  const currentUser = options?.currentUser
+  if (currentUser?.oauthUserId) {
+    try {
+      await updateIssue(project, iid, token, {
+        assigneeIds: [Number(currentUser.oauthUserId)],
+      })
+      try {
+        const note = `<!-- ive-bot -->\n## 🎯 ${roleLabel} 배정\n\n${roleLabel}가 별도로 지정되지 않아 ${currentUser.name} 님이 담당자로 배정되었습니다.`
+        await addIssueComment(project, iid, token, note)
+      } catch (e) { console.warn(`[RoleAssignee] note add failed for #${iid}:`, e) }
+      return { success: true, mode: 'creator', username: null, userId: currentUser.oauthUserId }
+    } catch (e) {
+      console.warn(`[RoleAssignee] current-user assign failed for #${iid}, falling back to issue author:`, e)
+      // fall through to issue.author fallback
+    }
+  }
+
+  // fallback — 이슈 생성자(Git author)를 assignee 로
   try {
     const issue = await fetchSingleIssue(project, iid, token)
     const author = issue?.author

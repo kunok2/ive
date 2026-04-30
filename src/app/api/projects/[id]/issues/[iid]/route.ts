@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getProject, getProjectAccess, getProjectAuthToken, hasActiveExecution, stageFromLabels, getPresetRoles, getAssigneeAuto, getActualRoleAssignees, getIssueStageTimes, getIssueRetryCounts, getIssueForwardCounts } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { updateIssue, fetchSingleIssue } from '@/lib/provider'
-import { resolveIveAuthorFromBody, stripIveAuthorMarker, stripIveDueMarker } from '@/lib/ive-author'
+import { resolveIveAuthorFromBody, stripIveAuthorMarker, stripIveDueMarker, extractIveAuthorId, prependIveAuthorMarker } from '@/lib/ive-author'
 
 export async function PUT(
   req: NextRequest,
@@ -64,13 +64,19 @@ export async function PUT(
       return NextResponse.json({ error: '제목은 필수입니다' }, { status: 400 })
     }
     const token = getProjectAuthToken(projectId)
-    // description 편집 시 기존 마감일 유지 — GitHub은 본문에 마커로 저장하므로
-    // description을 갈아치우면 마커도 사라진다. 현재 마감일을 다시 주입.
+    // description 편집 시 본문에 들어 있던 IVE 마커들을 보존해야 한다 —
+    // 갈아치우면 마커가 사라져 Git 저자(프로젝트 토큰 소유자/봇) 가 IVE UI 에 작성자로 노출됨.
+    //   - ive-due:    GitHub 마감일 저장용 마커 (provider 측 setIveDueMarker 가 dueDate 인자 기준 재주입)
+    //   - ive-author: 원작성자 식별 마커 (여기서 직접 보존해 prepend)
     const current = await fetchSingleIssue(project, Number(iid), token)
     const existingDue: string | null = current?.due_date ?? null
+    const existingAuthorId = extractIveAuthorId(current?.description || '')
+    const newDescription = existingAuthorId
+      ? prependIveAuthorMarker(existingAuthorId, description ?? '')
+      : (description ?? '')
     const updated = await updateIssue(project, Number(iid), token, {
       title: title.trim(),
-      description: description ?? '',
+      description: newDescription,
       dueDate: existingDue,
     })
     return NextResponse.json({

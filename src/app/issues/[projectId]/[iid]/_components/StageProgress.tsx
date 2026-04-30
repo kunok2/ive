@@ -26,8 +26,9 @@ import AssigneePickerModal from './AssigneePickerModal'
 type MacroIndex = 0 | 1 | 2 | 3 | 4 | 5
 
 const STAGE_TO_MACRO: Record<string, MacroIndex> = {
+  // 유입(1) 은 IVE 라벨만 붙은 신규 이슈 상태(stage='none').
   // 'waiting' (IVE-S, 처리대기) 는 처리 macro 의 wait sub-stage 로 본다.
-  // 유입(1) 은 IVE 라벨이 아직 붙지 않은 신규 이슈 상태(stage='none')에 해당.
+  none: 1,
   waiting: 2,
   dev: 2, dev_fail: 2,
   verify_waiting: 3, verifying: 3,
@@ -41,6 +42,8 @@ export function macroIndexFromStage(stage: string | null | undefined): MacroInde
 }
 
 interface StageTimes {
+  /** IVE-S 부착(처리대기 진입) 시각 — 1→2 커넥터 시작점 */
+  scheduledAt: string | null
   firstDevStartedAt: string | null
   devStartedAt: string | null
   devEndedAt: string | null
@@ -125,16 +128,17 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
     5: null,
   }
   // 커넥터 대기시간 (i 번째 → i+1 번째 사이)
-  //   1→2: createdAt → devStartedAt (유입 후 에이전트 픽업 대기) — 진행 중이면 elapsed
+  //   1→2: scheduledAt → firstDevStartedAt (처리대기 진입 후 픽업까지) — 진행 중이면 elapsed
+  //         stage='none'(IVE-S 미부착) 일 때는 시간 카운트 안 함.
   //   2→3: devEndedAt → verifyStartedAt (처리 완료 후 검증 대기) — 진행 중이면 elapsed
   //   3→4: 검증→확인은 시작 시각이 verifyEndedAt 과 동일 (대기 0)
   //   4→5: confirmedAt → closedAt
   const elapsedFrom = (t: string | null | undefined): number | null => t ? Math.max(0, now - new Date(t).getTime()) : null
   const waitDur: Record<number, number | null> = {
-    // 유입 → 처리 대기는 "처음 유입된 후 첫 픽업까지" — 재처리 대기를 더하면 안 됨.
+    // 처리대기 → 처리 픽업: scheduledAt 기준. stage='none' 이면 scheduledAt=null → 표시 안 함.
     1: stageTimes?.firstDevStartedAt
-      ? ms(createdAt, stageTimes.firstDevStartedAt)
-      : (current === 1 ? elapsedFrom(createdAt) : null),
+      ? ms(stageTimes.scheduledAt, stageTimes.firstDevStartedAt)
+      : (stage === 'waiting' ? elapsedFrom(stageTimes?.scheduledAt) : null),
     2: stageTimes?.verifyStartedAt
       ? ms(stageTimes?.devEndedAt, stageTimes.verifyStartedAt)
       : (stage === 'verify_waiting' ? elapsedFrom(stageTimes?.devEndedAt) : null),

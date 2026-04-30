@@ -24,7 +24,8 @@ interface IssueAddFormProps {
   newBody: string
   onBodyChange: (value: string) => void
   creating: boolean
-  onCreateIssue: () => void
+  onCreateIssue: (registerOnly?: boolean) => void
+  creatingMode?: 'register' | 'process' | null
   onCancel: () => void
   preferredAgentId: string | null
   onPreferredAgentIdChange: (id: string | null) => void
@@ -111,6 +112,7 @@ export default function IssueAddForm({
   newBody,
   onBodyChange,
   creating,
+  creatingMode,
   onCreateIssue,
   onCancel,
   preferredAgentId,
@@ -376,13 +378,26 @@ export default function IssueAddForm({
       />
       </>)}
 
-      <button
-        onClick={onCreateIssue}
-        disabled={creating || !newBody.split('\n')[0].trim()}
-        className="w-full py-2 rounded-lg bg-ive-green text-ive-bg-deep text-sm font-bold transition-all active:scale-[0.98] disabled:opacity-40"
-      >
-        {creating ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />{tCommon('creating')}</> : <><i className="fa-solid fa-paper-plane mr-1" />{tIssue('createIssue')}</>}
-      </button>
+      <div className="flex gap-2">
+        <button
+          onClick={() => onCreateIssue(true)}
+          disabled={creating || !newBody.split('\n')[0].trim()}
+          className="flex-1 py-2 rounded-lg border border-ive-green/50 text-ive-green bg-ive-green/10 hover:bg-ive-green/15 text-sm font-bold transition-all active:scale-[0.98] disabled:opacity-40"
+        >
+          {creating && creatingMode === 'register'
+            ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />{tCommon('creating')}</>
+            : <><i className="fa-solid fa-floppy-disk mr-1" />{tIssue('createIssueRegisterOnly')}</>}
+        </button>
+        <button
+          onClick={() => onCreateIssue(false)}
+          disabled={creating || !newBody.split('\n')[0].trim()}
+          className="flex-1 py-2 rounded-lg bg-ive-green text-ive-bg-deep text-sm font-bold transition-all active:scale-[0.98] disabled:opacity-40"
+        >
+          {creating && creatingMode === 'process'
+            ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />{tCommon('creating')}</>
+            : <><i className="fa-solid fa-paper-plane mr-1" />{tIssue('createIssue')}</>}
+        </button>
+      </div>
 
       {/* 검증자 picker 모달 */}
       <AssigneePickerModal

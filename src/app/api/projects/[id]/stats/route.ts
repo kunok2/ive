@@ -115,16 +115,18 @@ export async function GET(
   const totalCost = costResult?.total ?? 0
 
   // 시간당 평균 작업 수
-  const totalActive = agentWorking + verifying
+  const totalActive = agentWorking + verifying + confirming
   const tasksPerHour = totalActive > 0 ? (completed + failed) / 24 : 0
 
   return NextResponse.json({
     agentWorking,
     verifying,
+    confirming,
     completed,
     failed,
     waiting,
     verifyWaiting,
+    confirmWaiting,
     conflictCount: conflicts,
     totalTokens,
     totalCost,

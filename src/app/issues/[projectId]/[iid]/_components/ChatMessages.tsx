@@ -64,7 +64,7 @@ export default function ChatMessages({
         <div key={msg.id} className={`flex ${msg.role === 'user' ? 'flex-row-reverse' : ''} items-start gap-2`}>
           <div className="shrink-0 mt-0.5">
             {msg.role === 'user' ? (
-              <AgentAvatar avatar={state.user?.avatar || 'av-01'} size="sm" />
+              <AgentAvatar avatar={state.user?.avatar || 'av-01'} userId={state.user?.id} size="sm" />
             ) : (
               <AgentAvatar avatar={chatAgentAvatar || 'av-01'} size="sm" />
             )}

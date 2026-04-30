@@ -157,7 +157,9 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   const [labelCreating, setLabelCreating] = useState(false)
   const [labelCreateMsg, setLabelCreateMsg] = useState<string | null>(null)
   const [pendingCreateAfterLabels, setPendingCreateAfterLabels] = useState(false)
-  const handleCreateIssueRef = useRef<() => void>(() => {})
+  const [pendingRegisterOnly, setPendingRegisterOnly] = useState(false)
+  const [creatingMode, setCreatingMode] = useState<'register' | 'process' | null>(null)
+  const handleCreateIssueRef = useRef<(registerOnly?: boolean) => void>(() => {})
   const [issueSearchQuery, setIssueSearchQuery] = useState('')
   const [closing, setClosing] = useState<number | null>(null)
   const [preferredAgentId, setPreferredAgentId] = useState<string | null>(null)
@@ -434,8 +436,8 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
 
   // --- Label creation ---
   useEffect(() => {
-    if (!labelModalOpen && pendingCreateAfterLabels) { setPendingCreateAfterLabels(false); handleCreateIssueRef.current() }
-  }, [labelModalOpen, pendingCreateAfterLabels])
+    if (!labelModalOpen && pendingCreateAfterLabels) { setPendingCreateAfterLabels(false); handleCreateIssueRef.current(pendingRegisterOnly); setPendingRegisterOnly(false) }
+  }, [labelModalOpen, pendingCreateAfterLabels, pendingRegisterOnly])
 
   const handleAutoCreateLabels = async () => {
     if (!selectedProjectId) return
@@ -451,18 +453,20 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   }
 
   // --- Issue creation ---
-  const handleCreateIssue = async () => {
+  const handleCreateIssue = async (registerOnly: boolean = false) => {
     const lines = newBody.split('\n')
     const title = lines[0].trim()
     const description = lines.slice(1).join('\n').trim()
     if (!title || !selectedProjectId) return
-    setCreating(true)
+    setCreating(true); setCreatingMode(registerOnly ? 'register' : 'process')
+    // 등록만: stage='none' (IVE 라벨만). 에이전트/배정 선택은 보존하여 추후 처리 시 사용.
+    const effectiveAsDev = registerOnly ? false : preferredAgentId !== 'none'
     try {
       const res = await fetch(`/api/projects/${selectedProjectId}/issues`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title, description,
-          asDev: preferredAgentId !== 'none',
+          asDev: effectiveAsDev,
           assignMode: preferredAgentId === 'assignee' ? 'assignee' : preferredAgentId === 'none' ? undefined : preferredAgentId ? 'agent' : 'auto',
           preferredAgentId: (preferredAgentId && preferredAgentId !== 'none' && preferredAgentId !== 'assignee') ? preferredAgentId : undefined,
           assigneeIds: selectedAssignees.length > 0 ? selectedAssignees.map(a => a.id) : undefined,
@@ -486,7 +490,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
         const selectedAgent = preferredAgentId ? projectAgents.find(a => a.agentId === preferredAgentId) : null
         const newIssue: IveIssue = {
           iid: created.iid, title: created.title, state: created.state || 'opened',
-          stage: preferredAgentId === 'none' ? 'none' : 'waiting',
+          stage: effectiveAsDev ? 'waiting' : 'none',
           labels: created.labels || [], createdAt: created.created_at || new Date().toISOString(),
           updatedAt: created.updated_at || new Date().toISOString(), author: created.author?.name || '',
           assignMode: preferredAgentId === 'assignee' ? 'assignee' : preferredAgentId && preferredAgentId !== 'none' ? 'agent' : 'auto',
@@ -513,11 +517,11 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
         if (data.labelMissing) {
           try { const lres = await fetch(`/api/projects/${selectedProjectId}/labels`); const ldata = await lres.json().catch(() => []); setLabelStatus(Array.isArray(ldata) ? ldata : []) }
           catch { setLabelStatus([]) }
-          setLabelCreateMsg(null); setLabelModalOpen(true)
+          setLabelCreateMsg(null); setPendingRegisterOnly(registerOnly); setLabelModalOpen(true)
         } else { toast(data.error || tIssue('issueCreateFailed'), 'error') }
       }
     } catch (err: any) { toast(err.message || tIssue('networkErrorOccurred'), 'error') }
-    finally { setCreating(false) }
+    finally { setCreating(false); setCreatingMode(null) }
   }
   handleCreateIssueRef.current = handleCreateIssue
 
@@ -647,6 +651,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                 newBody={newBody}
                 onBodyChange={handleBodyChange}
                 creating={creating}
+                creatingMode={creatingMode}
                 onCreateIssue={handleCreateIssue}
                 onCancel={() => { setShowAddForm(false); handleBodyChange('') }}
                 preferredAgentId={preferredAgentId}

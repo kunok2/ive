@@ -25,6 +25,7 @@ const STAGE_NAMES_KO: Record<string, string> = {
   done: '완료', closed: '완료', rejected: '거부',
 }
 const STAGE_TRANSITION_DESTS: Record<string, Record<string, string>> = {
+  none: { schedule: 'waiting' },
   waiting: { start_dev: 'dev' },
   dev: { complete: 'verify_waiting', cancel: 'waiting', retry: 'waiting' },
   verify_waiting: { start_verification: 'verifying', cancel: 'waiting', retry: 'waiting' },
@@ -506,6 +507,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   }
 
   const NEXT_STAGE: Record<string, { stage: string; action: string; label: string }> = {
+    none:            { stage: 'none',            action: 'schedule',            label: '처리' },
     waiting:         { stage: 'waiting',         action: 'start_dev',           label: '개발 시작' },
     dev:             { stage: 'dev',             action: 'complete',            label: '검증대기' },
     verify_waiting:  { stage: 'verify_waiting',  action: 'start_verification',  label: '검증 시작' },

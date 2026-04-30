@@ -29,6 +29,7 @@ interface IssueDetail {
   closedAt?: string | null
   dueDate?: string | null
   stageTimes?: {
+    scheduledAt: string | null
     firstDevStartedAt: string | null
     devStartedAt: string | null
     devEndedAt: string | null
@@ -233,7 +234,7 @@ export default function IssueHeader({
         )}
       </div>
       {/* 진행막대 — 5단계 흐름 + 단계별 담당자 아바타를 한 줄로 표시 */}
-      {!editMode && issue.stage !== 'none' && (
+      {!editMode && (
         <div className="px-3 pt-1 pb-3 max-w-lg mx-auto">
           <StageProgress
             stage={issue.stage}

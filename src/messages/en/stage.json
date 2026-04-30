@@ -1,4 +1,5 @@
 {
+  "none": "Inflow",
   "waiting": "Waiting",
   "verify_waiting": "Verify Wait",
   "dev": "In Progress",

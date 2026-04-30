@@ -1,4 +1,5 @@
 {
+  "none": "유입",
   "waiting": "대기",
   "verify_waiting": "검증대기",
   "dev": "처리 중",

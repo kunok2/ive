@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb, getProject, getProjectAuthToken, getProjectAccess, hasActiveExecution, stageFromLabels, markIssueVerifyStarted, markIssueVerified, markIssueVerifyRejected, markIssueConfirmed, resetIssueScheduledAt, touchProjectActivity, assignIssueAtomically, getAssignModeMap, getIssueScheduledAt, isIssueAssignee, isIssueAuthor, upsertIssueStageSnapshot, updateExecutionStatus, getVerifyWaitingCount, updateProjectLastChecked, getPresetRoles } from '@/lib/db';
+import { getDb, getProject, getProjectAuthToken, getProjectAccess, hasActiveExecution, stageFromLabels, markIssueVerifyStarted, markIssueVerified, markIssueVerifyRejected, markIssueConfirmed, resetIssueScheduledAt, recordIssueScheduledAt, touchProjectActivity, assignIssueAtomically, getAssignModeMap, getIssueScheduledAt, isIssueAssignee, isIssueAuthor, upsertIssueStageSnapshot, updateExecutionStatus, getVerifyWaitingCount, updateProjectLastChecked, getPresetRoles } from '@/lib/db';
 import { triggerScan } from '@/lib/scanner';
 import { applyRoleAssignee } from '@/lib/role-assignee';
 import type { TaskExecution } from '@/types';
@@ -66,11 +66,12 @@ export async function POST(
     }
     const currentLabels: string[] = currentIssue?.labels || [];
     const hasActive = hasActiveExecution(projectId, Number(iid));
-    const actualStage = stageFromLabels(currentLabels, project, { hasActiveExec: hasActive });
+    // stageFromLabels: IVE 라벨만 있고 단계 라벨이 없으면 null → 클라이언트의 'none' 으로 정규화.
+    const actualStage = stageFromLabels(currentLabels, project, { hasActiveExec: hasActive }) ?? 'none';
     if (actualStage !== stage) {
       return NextResponse.json(
         {
-          error: `이슈 상태가 이미 변경되었습니다. (요청: ${stage}, 현재: ${actualStage ?? 'none'}) 화면을 새로고침한 후 다시 시도해주세요.`,
+          error: `이슈 상태가 이미 변경되었습니다. (요청: ${stage}, 현재: ${actualStage}) 화면을 새로고침한 후 다시 시도해주세요.`,
           actualStage,
         },
         { status: 409 }
@@ -230,7 +231,7 @@ export async function POST(
     if (stage === 'dev' && action === 'complete') {
       try {
         const preset = getPresetRoles(projectId, Number(iid)).verifier;
-        await applyRoleAssignee(project, Number(iid), token, '검증자', preset);
+        await applyRoleAssignee(project, Number(iid), token, '검증자', preset, { currentUser: user });
       } catch (e) { console.warn(`[Stage] Verifier preset apply failed for #${iid}:`, e); }
     }
 
@@ -238,7 +239,7 @@ export async function POST(
     if (stage === 'verifying' && (action === 'approve' || action === 'complete')) {
       try {
         const preset = getPresetRoles(projectId, Number(iid)).confirmer;
-        await applyRoleAssignee(project, Number(iid), token, '확인자', preset);
+        await applyRoleAssignee(project, Number(iid), token, '확인자', preset, { currentUser: user });
       } catch (e) { console.warn(`[Stage] Confirmer preset apply failed for #${iid}:`, e); }
     }
 
@@ -311,8 +312,13 @@ export async function POST(
     }
 
     // 스케줄로 되돌아갈 때 scheduled_at 리셋 (재시도 execution의 대기시간 정확 계산)
+    // 첫 schedule(none→waiting) 은 row 가 없을 수 있어 record 사용 (UPSERT, COALESCE 로 기존값 보존).
     if (isBackToSchedule) {
-      resetIssueScheduledAt(projectId, Number(iid));
+      if (stage === 'none' && action === 'schedule') {
+        recordIssueScheduledAt(projectId, Number(iid), new Date().toISOString());
+      } else {
+        resetIssueScheduledAt(projectId, Number(iid));
+      }
     }
 
     // 프로젝트 최종 활동 시각 갱신

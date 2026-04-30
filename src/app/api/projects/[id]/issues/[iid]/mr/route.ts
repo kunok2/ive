@@ -38,7 +38,7 @@ async function syncLabelsToConfirmWait(project: Project, iid: number, user: User
   // confirm_waiting 진입 시 확인자 preset 기반 assignee 교체
   try {
     const preset = getPresetRoles(projectId, iid).confirmer
-    await withGitToken(user, project, (ctx) => applyRoleAssignee(project, iid, ctx.token, '확인자', preset))
+    await withGitToken(user, project, (ctx) => applyRoleAssignee(project, iid, ctx.token, '확인자', preset, { currentUser: user }))
   } catch (e) { console.warn(`[MR] Confirmer preset apply failed for #${iid}:`, e) }
 
   // 머지 시점에는 dev/verify 단계의 active execution 만 닫는다 (검증자/개발자 작업 완료).
