@@ -73,30 +73,32 @@ export async function fetchGitLabMRByBranch(project: Project, decryptedToken: st
 
   const headers = getAuthHeaders(project, decryptedToken, options);
 
-  try {
-    // opened 먼저 조회
-    let res = await fetch(
-      apiUrl(project, `/merge_requests?source_branch=${encodeURIComponent(sourceBranch)}&state=opened&per_page=1`),
-      { headers }
-    );
-    if (res.ok) {
-      const mrs = await res.json();
-      if (mrs.length > 0) return mrs[0];
-    }
-    // merged도 조회
-    res = await fetch(
-      apiUrl(project, `/merge_requests?source_branch=${encodeURIComponent(sourceBranch)}&state=merged&per_page=1`),
-      { headers }
-    );
-    if (res.ok) {
-      const mrs = await res.json();
-      if (mrs.length > 0) return mrs[0];
-    }
-    return null;
-  } catch (err) {
-    console.error(`[GitLab] Error fetching MR by branch ${sourceBranch}:`, err);
-    return null;
+  // opened 먼저 조회 — 인증 실패(401/403)는 throw 해서 withGitToken fallback 발동시킴.
+  // 빈 결과(200 with [])일 때만 다음 단계(merged)로 진행.
+  let res = await fetch(
+    apiUrl(project, `/merge_requests?source_branch=${encodeURIComponent(sourceBranch)}&state=opened&per_page=1`),
+    { headers }
+  );
+  if (res.status === 401 || res.status === 403) {
+    throw new Error(`GitLab MR fetch failed: ${res.status}`);
   }
+  if (res.ok) {
+    const mrs = await res.json();
+    if (mrs.length > 0) return mrs[0];
+  }
+  // merged도 조회
+  res = await fetch(
+    apiUrl(project, `/merge_requests?source_branch=${encodeURIComponent(sourceBranch)}&state=merged&per_page=1`),
+    { headers }
+  );
+  if (res.status === 401 || res.status === 403) {
+    throw new Error(`GitLab MR fetch failed: ${res.status}`);
+  }
+  if (res.ok) {
+    const mrs = await res.json();
+    if (mrs.length > 0) return mrs[0];
+  }
+  return null;
 }
 
 /**

@@ -129,6 +129,27 @@ export function getUserOAuthTokenRaw(userId: string): { encrypted: string; provi
   return { encrypted: r.oauth_access_token, providerId: r.oauth_provider_id ?? null }
 }
 
+/**
+ * 사용자 OAuth 자격 전체(access/refresh/expiry + provider) 조회 — 토큰 자동 갱신 경로에서 사용.
+ */
+export function getUserOAuthFullRaw(userId: string): {
+  accessEncrypted: string
+  refreshEncrypted: string | null
+  expiresAt: string | null
+  providerId: string | null
+} | null {
+  const r = getDb().prepare(
+    'SELECT oauth_access_token, oauth_refresh_token, oauth_token_expires_at, oauth_provider_id FROM users WHERE id = ?'
+  ).get(userId) as any
+  if (!r || !r.oauth_access_token) return null
+  return {
+    accessEncrypted: r.oauth_access_token,
+    refreshEncrypted: r.oauth_refresh_token ?? null,
+    expiresAt: r.oauth_token_expires_at ?? null,
+    providerId: r.oauth_provider_id ?? null,
+  }
+}
+
 export function getProjectWithUserOAuth(projectId: string) {
   const p = getDb().prepare(`
     SELECT p.*, u.oauth_provider_id, u.oauth_access_token, u.oauth_refresh_token, u.oauth_token_expires_at

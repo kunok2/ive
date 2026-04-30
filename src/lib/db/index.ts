@@ -3,7 +3,7 @@
 
 export { getDb } from './connection'
 export { mapUser, getUserByEmail, getUserById, getUserByOAuthId, getAllUsers, deleteUser, updateUserAvatar, updateUserLocale, updateUserTimezone, createUser } from './users'
-export { getAllOAuthProviders, getEnabledOAuthProviders, getOAuthProviderById, getOAuthProviderRaw, createOAuthProvider, updateOAuthProvider, deleteOAuthProvider, getUserByOAuth, linkUserOAuth, createOAuthUser, updateUserOAuthTokens, getUserOAuthTokenRaw, getProjectWithUserOAuth } from './oauth'
+export { getAllOAuthProviders, getEnabledOAuthProviders, getOAuthProviderById, getOAuthProviderRaw, createOAuthProvider, updateOAuthProvider, deleteOAuthProvider, getUserByOAuth, linkUserOAuth, createOAuthUser, updateUserOAuthTokens, getUserOAuthTokenRaw, getUserOAuthFullRaw, getProjectWithUserOAuth } from './oauth'
 export { type ProjectRow, mapProject, getAllProjects, getProjectsByUser, touchProjectActivity, getProject, getProjectAuthToken, createProject, updateProject, updateProjectSortOrders, getVerifyWaitingCount, updateProjectLastChecked, updateProjectError, updateProjectConflictCount, clearProjectError, deleteProject, updateProjectReportSecret } from './projects'
 export { getAgentsByUser, getAgent, createAgent, updateAgent, deleteAgent, updateAgentStatus } from './agents'
 export { countActiveExecutionsByProject, countActiveExecutionsByAgent, getLastCompletedAt } from './assignments'

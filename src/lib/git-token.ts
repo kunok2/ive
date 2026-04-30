@@ -19,10 +19,14 @@
 import { User, Project } from '@/types'
 import {
   getUserOAuthTokenRaw,
+  getUserOAuthFullRaw,
   getOAuthProviderById,
+  getOAuthProviderRaw,
   getProjectAuthToken,
+  updateUserOAuthTokens,
 } from '@/lib/db'
-import { decrypt } from '@/lib/crypto'
+import { decrypt, encrypt } from '@/lib/crypto'
+import { refreshGitLabToken } from '@/lib/gitlab/common'
 
 export interface GitTokenCtx {
   token: string
@@ -32,16 +36,63 @@ export interface GitTokenCtx {
 }
 
 /**
+ * 만료가 임박했거나 이미 만료된 사용자 OAuth 토큰을 refresh_token으로 갱신.
+ * 성공 시 DB에 새 토큰을 저장하고 평문 access_token 반환.
+ * refresh_token이 없거나 provider 가 GitLab 이 아니거나 갱신 실패 시 null.
+ *
+ * 스캐너의 프로젝트 토큰 갱신 로직(scanner/index.ts)과 동일한 방식.
+ */
+async function refreshUserOAuthIfNeeded(
+  userId: string,
+  project: Project,
+): Promise<string | null> {
+  if (project.provider !== 'gitlab') return null  // GitHub OAuth refresh 미구현
+  const full = getUserOAuthFullRaw(userId)
+  if (!full?.providerId || !full.refreshEncrypted) return null
+
+  const expiresAtMs = full.expiresAt ? new Date(full.expiresAt).getTime() : 0
+  // 만료 10분 이내면 갱신
+  if (expiresAtMs >= Date.now() + 10 * 60 * 1000) return null
+
+  const providerRaw = getOAuthProviderRaw(full.providerId)
+  if (!providerRaw) return null
+  try {
+    const refreshPlain = decrypt(full.refreshEncrypted)
+    const clientSecretPlain = providerRaw.client_secret ? decrypt(providerRaw.client_secret) : ''
+    const refreshed = await refreshGitLabToken(project.repoUrl, providerRaw.client_id, clientSecretPlain, refreshPlain)
+    if (!refreshed?.access_token) return null
+
+    const newExpiry = new Date(Date.now() + (refreshed.expires_in || 7200) * 1000).toISOString()
+    updateUserOAuthTokens(userId, {
+      accessTokenEncrypted: encrypt(refreshed.access_token),
+      refreshTokenEncrypted: encrypt(refreshed.refresh_token || refreshPlain),
+      tokenExpiresAt: newExpiry,
+    })
+    return refreshed.access_token
+  } catch (e) {
+    console.warn('[git-token] user OAuth refresh failed:', e instanceof Error ? e.message : e)
+    return null
+  }
+}
+
+/**
  * 접속자 OAuth 토큰을 담은 TokenContext 반환.
  * 아래 조건을 모두 만족할 때만 non-null:
  *   - user.oauthProviderId 설정됨
  *   - OAuth provider가 project.provider 와 타입 일치 (예: 둘 다 gitlab)
  *   - 복호화 성공
+ *
+ * 토큰 만료 10분 이내면 자동으로 refresh_token 으로 갱신 후 새 토큰 반환.
  */
-export function getUserTokenCtx(user: Pick<User, 'id' | 'oauthProviderId'>, project: Project): GitTokenCtx | null {
+export async function getUserTokenCtx(user: Pick<User, 'id' | 'oauthProviderId'>, project: Project): Promise<GitTokenCtx | null> {
   if (!user.oauthProviderId) return null
   const provider = getOAuthProviderById(user.oauthProviderId)
   if (!provider || provider.type !== project.provider) return null
+
+  // 만료 임박 시 갱신 시도
+  const refreshed = await refreshUserOAuthIfNeeded(user.id, project)
+  if (refreshed) return { token: refreshed, isOAuth: true, source: 'user' }
+
   const raw = getUserOAuthTokenRaw(user.id)
   if (!raw?.encrypted) return null
   try {
@@ -77,7 +128,7 @@ export async function withGitToken<T>(
   project: Project,
   apiFn: (ctx: GitTokenCtx) => Promise<T>,
 ): Promise<T> {
-  const userCtx = getUserTokenCtx(user, project)
+  const userCtx = await getUserTokenCtx(user, project)
   const projectCtx = getProjectTokenCtx(project)
 
   if (userCtx) {
