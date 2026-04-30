@@ -276,6 +276,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   "timestamp": 1234567890,
   "expires": 1234567890,
   "content": "첫 줄: 제목\\n\\n본문 내용...",
+  "dueDate": "2026-05-31",
   "browserInfo": { "referrer": "..." }
 }`}
                         </pre>
@@ -410,6 +411,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   "timestamp": 1234567890,
   "expires": 1234567890,
   "content": "첫 줄: 제목\\n\\n본문 내용...",
+  "dueDate": "2026-05-31",
   "browserInfo": { "referrer": "..." }
 }`}
                         </pre>

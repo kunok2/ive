@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
+import { getKSTTodayString } from '@/lib/date-utils'
 
 const translations: Record<string, Record<string, string>> = {
   ko: {
@@ -23,6 +24,11 @@ const translations: Record<string, Record<string, string>> = {
     retry: '추가 접수하기',
     errorTitle: '접근 불가',
     loading: '로딩 중...',
+    dueDate: '마감일',
+    dueDateOptional: '(선택)',
+    dueDateClear: '마감일 지우기',
+    dueDateTomorrow: '내일',
+    dueDateNextWeek: '다음 주',
   },
   en: {
     title: 'Task Submission — {name}',
@@ -43,6 +49,11 @@ const translations: Record<string, Record<string, string>> = {
     retry: 'Submit another task',
     errorTitle: 'Access Denied',
     loading: 'Loading...',
+    dueDate: 'Due date',
+    dueDateOptional: '(optional)',
+    dueDateClear: 'Clear due date',
+    dueDateTomorrow: 'Tomorrow',
+    dueDateNextWeek: 'Next week',
   },
 }
 
@@ -116,6 +127,7 @@ export default function ReportPage({ params }: { params: Promise<{ projectId: st
   const [success, setSuccess] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [content, setContent] = useState('')
+  const [dueDate, setDueDate] = useState('')
 
   const browserInfo = useMemo(() => getBrowserInfo(), [])
 
@@ -168,6 +180,7 @@ export default function ReportPage({ params }: { params: Promise<{ projectId: st
           timestamp: ts,
           expires: exp,
           content: content.trim(),
+          dueDate: dueDate || null,
           browserInfo,
         }),
       })
@@ -179,12 +192,13 @@ export default function ReportPage({ params }: { params: Promise<{ projectId: st
 
       setSuccess(true)
       setContent('')
+      setDueDate('')
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.')
     } finally {
       setSubmitting(false)
     }
-  }, [content, projectId, token, nonce, ts, exp, browserInfo])
+  }, [content, projectId, token, nonce, ts, exp, browserInfo, dueDate])
 
   const firstLine = content.split('\n')[0]?.trim()
   const hasContent = content.trim().length > 0
@@ -254,6 +268,45 @@ export default function ReportPage({ params }: { params: Promise<{ projectId: st
               {t(locale, 'titlePreview')} <span className="text-ive-text font-bold">{firstLine}</span>
             </div>
           )}
+
+          {/* Due date (optional) */}
+          <div className="mt-4 flex flex-wrap items-center gap-1.5">
+            <label className="text-xs font-bold text-ive-text-muted shrink-0">
+              <i className="fa-solid fa-calendar-days mr-1" />
+              {t(locale, 'dueDate')}
+              <span className="ml-1 text-ive-text-dim font-normal">{t(locale, 'dueDateOptional')}</span>
+            </label>
+            <input
+              type="date"
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+              className="flex-1 min-w-0 bg-ive-bg-input border border-ive-border rounded-lg px-2 py-1.5 text-xs text-ive-text focus:outline-none focus:border-ive-green font-bold"
+            />
+            {dueDate && (
+              <button
+                type="button"
+                onClick={() => setDueDate('')}
+                className="shrink-0 text-xs font-bold text-ive-text-muted hover:text-ive-red px-2 py-1 rounded-lg hover:bg-white/5 transition-all"
+                title={t(locale, 'dueDateClear')}
+              >
+                <i className="fa-solid fa-xmark" />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setDueDate(getKSTTodayString(new Date(Date.now() + 86400000)))}
+              className="shrink-0 text-xs font-bold bg-ive-green/10 text-ive-green border border-ive-green/30 hover:bg-ive-green/20 px-2 py-1.5 rounded-lg transition-all"
+            >
+              {t(locale, 'dueDateTomorrow')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setDueDate(getKSTTodayString(new Date(Date.now() + 7 * 86400000)))}
+              className="shrink-0 text-xs font-bold bg-ive-green/10 text-ive-green border border-ive-green/30 hover:bg-ive-green/20 px-2 py-1.5 rounded-lg transition-all"
+            >
+              {t(locale, 'dueDateNextWeek')}
+            </button>
+          </div>
 
           {/* Auto-collected info */}
           <div className="mt-4 border-t border-ive-border-dark pt-3">

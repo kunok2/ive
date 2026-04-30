@@ -44,7 +44,10 @@ const MAX_CONTENT_LENGTH = 10000 // 10,000자 제한
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
-  const { projectId, token, nonce, timestamp, expires, content, browserInfo } = body
+  const { projectId, token, nonce, timestamp, expires, content, browserInfo, dueDate } = body
+
+  // dueDate 검증 (선택). YYYY-MM-DD 외 값은 무시.
+  const dueDateNormalized: string | null = (typeof dueDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dueDate)) ? dueDate : null
 
   if (!projectId) return NextResponse.json({ error: '프로젝트 ID가 필요합니다.' }, { status: 400 })
   if (!token) return NextResponse.json({ error: '접근 토큰이 필요합니다.' }, { status: 400 })
@@ -129,7 +132,7 @@ export async function POST(req: NextRequest) {
     // IVE + IVE-S (스케줄 대기) 레이블 부착
     const labels = [project.labelTarget, project.labelSchedule || 'IVE-S']
 
-    const issue = await createIssue(project, authToken, title, description, labels, undefined, { isOAuth: project.usesOAuthToken })
+    const issue = await createIssue(project, authToken, title, description, labels, undefined, { isOAuth: project.usesOAuthToken, dueDate: dueDateNormalized })
 
     touchProjectActivity(projectId)
 
