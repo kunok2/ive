@@ -324,7 +324,7 @@ function CommentModeInput({
               title={tIssue('postAndDoneHint')}
               aria-label={tIssue('postAndDone')}
             >
-              {postingType === 'done' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><span>{tIssue('done')}</span><i className="fa-solid fa-arrow-right text-[10px]" /></>}
+              {postingType === 'done' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><span>{NEXT_STAGE[issue.stage]?.label || tIssue('done')}</span><i className="fa-solid fa-arrow-right text-[10px]" /></>}
             </button>
           )}
         </div>

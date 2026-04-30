@@ -559,7 +559,7 @@ async function scanProject(project: Project, force: boolean = false) {
 
               try {
                 createActivityLog({
-                  userId: 'system',
+                  userId: project.userId,
                   category: 'task',
                   action: 'create_task',
                   detail: `작업 배정 (이슈 #${iid}, ${project.name}, 담당자: ${execution.userName}, 브랜치: ${branchName})`,
@@ -586,7 +586,7 @@ async function scanProject(project: Project, force: boolean = false) {
         if (!hasAnyExecution(project.id, iid)) {
           try {
             createActivityLog({
-              userId: 'system', category: 'task', action: 'detect_issue',
+              userId: project.userId, category: 'task', action: 'detect_issue',
               detail: `이슈 감지: #${iid} "${issue.title}" (${project.name})`,
               targetType: 'issue', targetId: `${project.id}-${iid}`,
             });

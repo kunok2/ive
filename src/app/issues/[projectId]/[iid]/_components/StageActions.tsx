@@ -57,7 +57,6 @@ export function useStageConfig() {
     ],
     done: [
       { action: 'reopen',            direction: 'backward', label: tIssue('reopenToWaiting'),   icon: 'fa-rotate' },
-      { action: 'retry',             direction: 'backward', label: tIssue('retryToWaiting'),    icon: 'fa-rotate' },
     ],
     rejected: [
       { action: 'retry',             direction: 'backward', label: tIssue('retryToWaiting'),    icon: 'fa-rotate' },

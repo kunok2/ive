@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getProject, getProjectAccess, getProjectAuthToken, hasActiveExecution, stageFromLabels, getPresetRoles, getAssigneeAuto, getActualRoleAssignees } from '@/lib/db'
+import { getProject, getProjectAccess, getProjectAuthToken, hasActiveExecution, stageFromLabels, getPresetRoles, getAssigneeAuto, getActualRoleAssignees, getIssueStageTimes, getIssueRetryCounts, getIssueForwardCounts } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { updateIssue, fetchSingleIssue } from '@/lib/provider'
 import { resolveIveAuthorFromBody, stripIveAuthorMarker } from '@/lib/ive-author'
@@ -118,6 +118,10 @@ export async function GET(
       }
     }
 
+    const stageTimes = getIssueStageTimes(projectId, Number(iid))
+    const retryCounts = getIssueRetryCounts(projectId, Number(iid))
+    const forwardCounts = getIssueForwardCounts(projectId, Number(iid))
+
     return NextResponse.json({
       iid: issue.iid,
       title: issue.title,
@@ -128,6 +132,10 @@ export async function GET(
       labels: issue.labels,
       createdAt: issue.created_at,
       updatedAt: issue.updated_at,
+      closedAt: issue.closed_at ?? null,
+      stageTimes,
+      retryCounts,
+      forwardCounts,
       webUrl: issue.web_url,
       author,
       authorId,

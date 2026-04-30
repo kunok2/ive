@@ -111,7 +111,7 @@ export async function executeTask(
   if (!isConflictTask) {
     try {
       createActivityLog({
-        userId: 'system',
+        userId: project.userId,
         category: 'task',
         action: 'create_task',
         detail: `작업 등록 (이슈 #${iid}, ${project.name}, 에이전트: ${agent.name})`,

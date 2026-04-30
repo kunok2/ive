@@ -105,6 +105,53 @@ export function resetStuckExecutions() {
   if (stuckRows.length > 0) console.log(`[DB] Reset ${stuckRows.length} stuck execution(s).`)
 }
 
+export interface IssueStageTimes {
+  /** 첫 dev execution 의 started_at — 유입→처리 대기시간 측정용 */
+  firstDevStartedAt: string | null
+  devStartedAt: string | null
+  devEndedAt: string | null
+  verifyStartedAt: string | null
+  verifyEndedAt: string | null   // verified_at OR rejected_at (둘 중 먼저)
+  confirmedAt: string | null
+}
+
+/**
+ * 단계별 타임스탬프.
+ *   - firstDevStartedAt: 처음 dev 가 시작된 시각 (재시도 무관, 진짜 픽업 시점)
+ *   - 그 외: 마지막 execution 기준 (현재 단계 진행 시간/마지막 대기 표시용)
+ * 확인 단계 시작 시각은 별도 컬럼이 없으므로 verifyEndedAt 을 그대로 시작 시각으로 본다.
+ */
+export function getIssueStageTimes(projectId: string, issueIid: number): IssueStageTimes {
+  // ex-verify-% 와 ex-confirm-% 는 사람 작업용 placeholder execution 이므로 제외 — dev exec 만 본다.
+  const DEV_EXEC_FILTER = "id NOT LIKE 'ex-verify-%' AND id NOT LIKE 'ex-confirm-%'"
+  const lastExec = getDb().prepare(
+    `SELECT started_at, ended_at, verify_started_at, verified_at, rejected_at
+     FROM task_executions
+     WHERE project_id = ? AND issue_iid = ? AND ${DEV_EXEC_FILTER}
+     ORDER BY COALESCE(ended_at, started_at) DESC, started_at DESC
+     LIMIT 1`
+  ).get(projectId, issueIid) as any | undefined
+
+  const firstExec = getDb().prepare(
+    `SELECT started_at FROM task_executions
+     WHERE project_id = ? AND issue_iid = ? AND ${DEV_EXEC_FILTER}
+     ORDER BY started_at ASC LIMIT 1`
+  ).get(projectId, issueIid) as any | undefined
+
+  const stage = getDb().prepare(
+    'SELECT confirmed_at FROM issue_stages WHERE project_id = ? AND issue_iid = ?'
+  ).get(projectId, issueIid) as any | undefined
+
+  return {
+    firstDevStartedAt: firstExec?.started_at ?? null,
+    devStartedAt: lastExec?.started_at ?? null,
+    devEndedAt: lastExec?.ended_at ?? null,
+    verifyStartedAt: lastExec?.verify_started_at ?? null,
+    verifyEndedAt: lastExec?.verified_at ?? lastExec?.rejected_at ?? null,
+    confirmedAt: stage?.confirmed_at ?? null,
+  }
+}
+
 export function markIssueVerifyStarted(projectId: string, issueIid: number) {
   const now = new Date().toISOString()
   getDb().prepare(

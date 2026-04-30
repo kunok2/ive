@@ -25,6 +25,26 @@ interface IssueDetail {
   labels: string[]
   createdAt: string
   updatedAt: string
+  closedAt?: string | null
+  stageTimes?: {
+    firstDevStartedAt: string | null
+    devStartedAt: string | null
+    devEndedAt: string | null
+    verifyStartedAt: string | null
+    verifyEndedAt: string | null
+    confirmedAt: string | null
+  }
+  retryCounts?: {
+    fromVerify: number
+    fromConfirm: number
+    fromDone: number
+  }
+  forwardCounts?: {
+    toProcess: number
+    toVerify: number
+    toConfirm: number
+    toDone: number
+  }
   webUrl: string
   author: string
   authorAvatarUrl?: string | null
@@ -206,6 +226,11 @@ export default function IssueHeader({
         <div className="px-3 pt-1 pb-3 max-w-lg mx-auto">
           <StageProgress
             stage={issue.stage}
+            createdAt={issue.createdAt}
+            closedAt={issue.closedAt ?? null}
+            stageTimes={issue.stageTimes ?? null}
+            retryCounts={issue.retryCounts ?? null}
+            forwardCounts={issue.forwardCounts ?? null}
             roles={{
               creator: {
                 name: issue.author,

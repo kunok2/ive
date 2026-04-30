@@ -14,6 +14,35 @@ import BottomInputArea from './_components/BottomInputArea'
 import MrActionModal from './_components/MrActionModal'
 import AssigneePickerModal from './_components/AssigneePickerModal'
 
+// 노트와 함께 stage 변경이 일어날 때 본문에 붙이는 prefix — "이전 → 다음" 라벨
+// IVE-S(waiting) 은 처리 macro 의 waiting sub-stage 이므로 "처리대기" 로 표시.
+// 'none' 은 아직 IVE 라벨이 안 붙은 신규 이슈(유입 macro) 에 해당.
+const STAGE_NAMES_KO: Record<string, string> = {
+  none: '유입',
+  waiting: '처리대기', dev: '처리', dev_fail: '처리(실패)',
+  verify_waiting: '검증대기', verifying: '검증',
+  confirm_waiting: '확인대기', confirming: '확인',
+  done: '완료', closed: '완료', rejected: '거부',
+}
+const STAGE_TRANSITION_DESTS: Record<string, Record<string, string>> = {
+  waiting: { start_dev: 'dev' },
+  dev: { complete: 'verify_waiting', cancel: 'waiting', retry: 'waiting' },
+  verify_waiting: { start_verification: 'verifying', cancel: 'waiting', retry: 'waiting' },
+  verifying: { approve: 'confirm_waiting', complete: 'confirm_waiting', reject: 'waiting', retry: 'waiting' },
+  confirm_waiting: { start_confirmation: 'confirming', cancel: 'waiting', return_to_dev: 'verify_waiting', retry: 'waiting' },
+  confirming: { accept: 'done', return_to_dev: 'verify_waiting', retry: 'waiting' },
+  done: { reopen: 'confirm_waiting', retry: 'waiting' },
+  rejected: { retry: 'waiting' },
+}
+function stageTransitionPrefix(fromStage: string | undefined | null, action: string): string {
+  if (!fromStage) return ''
+  const to = STAGE_TRANSITION_DESTS[fromStage]?.[action]
+  if (!to) return ''
+  const fromName = STAGE_NAMES_KO[fromStage] || fromStage
+  const toName = STAGE_NAMES_KO[to] || to
+  return `**${fromName} → ${toName}**\n\n`
+}
+
 interface ChatMessage {
   id: string
   sessionId: string
@@ -408,9 +437,15 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
     if (!comment.trim() || postingRef.current) return
     postingRef.current = true; setPosting(true); setPostingType('retry')
     try {
+      const stageAction = issue?.stage === 'done' ? 'reopen'
+        : issue?.stage === 'verifying' ? 'reject'
+        : issue?.stage === 'confirming' ? 'return_to_dev'
+        : issue?.stage === 'none' ? 'schedule'
+        : 'retry'
+      const noteBody = stageTransitionPrefix(issue?.stage, stageAction) + comment.trim()
       const res = await fetch(`/api/projects/${projectId}/issues/${iid}/notes`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ body: comment.trim() }),
+        body: JSON.stringify({ body: noteBody }),
       })
       if (!res.ok) { const data = await res.json().catch(() => ({})); toast(data.error || '코멘트 작성에 실패했습니다', 'error'); return }
       setComment(''); localStorage.removeItem(commentKey)
@@ -424,7 +459,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
         else { const data = await agentRes.json().catch(() => ({})); toast(data.error || '에이전트 설정 변경에 실패했습니다', 'error') }
       }
       if (issue?.stage !== 'waiting') {
-        const stageAction = issue?.stage === 'done' ? 'reopen' : issue?.stage === 'verifying' ? 'reject' : issue?.stage === 'none' ? 'schedule' : 'retry'
+        // stageAction 은 위에서 미리 계산 (note prefix 와 동일 값)
         const stageRes = await fetch(`/api/projects/${projectId}/issues/${iid}/stage`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ stage: issue?.stage, action: stageAction }),
@@ -444,9 +479,10 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
     const stageNow = issue.stage
     postingRef.current = true; setPosting(true); setPostingType('done')
     try {
+      const noteBody = stageTransitionPrefix(stageNow, stageAction) + comment.trim()
       const res = await fetch(`/api/projects/${projectId}/issues/${iid}/notes`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ body: comment.trim() }),
+        body: JSON.stringify({ body: noteBody }),
       })
       if (!res.ok) { const data = await res.json().catch(() => ({})); toast(data.error || '코멘트 작성에 실패했습니다', 'error'); return }
       setComment(''); localStorage.removeItem(commentKey)
@@ -471,7 +507,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
     waiting:         { stage: 'waiting',         action: 'start_dev',           label: '개발 시작' },
     dev:             { stage: 'dev',             action: 'complete',            label: '검증대기' },
     verify_waiting:  { stage: 'verify_waiting',  action: 'start_verification',  label: '검증 시작' },
-    verifying:       { stage: 'verifying',       action: 'approve',             label: '확인대기' },
+    verifying:       { stage: 'verifying',       action: 'approve',             label: '확인' },
     confirm_waiting: { stage: 'confirm_waiting', action: 'start_confirmation',  label: '확인 시작' },
     confirming:      { stage: 'confirming',      action: 'accept',              label: '완료' },
   }
@@ -483,9 +519,10 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
     postingRef.current = true; setPosting(true); setPostingType('next')
     try {
       if (comment.trim()) {
+        const noteBody = stageTransitionPrefix(issue.stage, next.action) + comment.trim()
         const res = await fetch(`/api/projects/${projectId}/issues/${iid}/notes`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ body: comment.trim() }),
+          body: JSON.stringify({ body: noteBody }),
         })
         if (!res.ok) return
         setComment(''); localStorage.removeItem(commentKey)
@@ -683,6 +720,8 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
 
   // 이슈가 바뀌면 popup 표시 플래그 리셋
   useEffect(() => { verifyPopupShownRef.current = false; confirmPopupShownRef.current = false }, [iid])
+  // stage 가 바뀔 때마다 팝업 ref 리셋 — 검증대기/확인대기 로 재진입 시 팝업 다시 뜸
+  useEffect(() => { verifyPopupShownRef.current = false; confirmPopupShownRef.current = false }, [issue?.stage])
 
   // 단계 시작 권한 — 검증자/확인자가 지정되었으면 그 사용자에게만, 미지정이면 작성자에게.
   //   1) 관리자: 항상
@@ -711,7 +750,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   const canStartVerification = !!issue && canStartFor(issue.presetVerifier ?? null, issue.actualVerifier ?? null)
   const canStartConfirmation  = !!issue && canStartFor(issue.presetConfirmer ?? null, issue.actualConfirmer ?? null)
 
-  // Verify-waiting popup
+  // Verify-waiting popup — 이슈당 1회 자동 트리거
   useEffect(() => {
     if (loading || !issue || issue.stage !== 'verify_waiting' || !canStartVerification || verifyPopupShownRef.current) return
     verifyPopupShownRef.current = true
@@ -720,7 +759,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [issue, loading, canStartVerification])
 
-  // Confirm-waiting popup
+  // Confirm-waiting popup — 이슈당 1회 자동 트리거
   useEffect(() => {
     if (loading || !issue || issue.stage !== 'confirm_waiting' || !canStartConfirmation || confirmPopupShownRef.current) return
     confirmPopupShownRef.current = true

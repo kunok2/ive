@@ -93,9 +93,13 @@ export async function POST(
       await addIssueLabels(project, Number(iid), token, labelsToAdd);
     }
 
-    // 스케줄로 되돌릴 때 닫힌 이슈는 다시 열기
+    // 종료 라벨(IVE-E) 외 단계로 되돌리는 액션은 닫힌 이슈를 다시 열어준다.
+    //   - 스케줄(IVE-S)로 되돌리는 retry/cancel
+    //   - done → 확인(IVE-C)으로 되돌리는 reopen (step-back)
+    const labelEnd = project.labelEnd || 'IVE-E';
+    const isLeavingDone = sanitizedRemove.includes(labelEnd) && !labelsToAdd.includes(labelEnd);
     const isBackToSchedule = labelsToAdd.some(l => l === (project.labelSchedule || 'IVE-S'));
-    if (isBackToSchedule) {
+    if (isBackToSchedule || isLeavingDone) {
       try {
         const issue = await fetchSingleIssue(project, Number(iid), token);
         if (issue?.state === 'closed') {

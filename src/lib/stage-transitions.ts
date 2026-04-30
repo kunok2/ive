@@ -97,7 +97,7 @@ export const TRANSITIONS: Record<string, StageTransition[]> = {
     },
     {
       action: 'reject',
-      description: '검증 반려 → 스케줄',
+      description: '검증 반려 → 스케줄 (처리 재요청)',
       removeLabels: p => [p.labelVerify || 'IVE-V'],
       addLabels: p => [p.labelSchedule || 'IVE-S'],
     },
@@ -143,9 +143,9 @@ export const TRANSITIONS: Record<string, StageTransition[]> = {
     },
     {
       action: 'return_to_dev',
-      description: '재작업 요청 → 스케줄',
+      description: '재검증 요청 → 검증대기',
       removeLabels: p => [p.labelConfirm || 'IVE-C'],
-      addLabels: p => [p.labelSchedule || 'IVE-S'],
+      addLabels: p => [p.labelVerifyWait || 'IVE-W'],
     },
     {
       action: 'retry',
@@ -157,9 +157,9 @@ export const TRANSITIONS: Record<string, StageTransition[]> = {
   done: [
     {
       action: 'reopen',
-      description: '재오픈 → 스케줄',
+      description: '재확인 요청 → 확인대기',
       removeLabels: p => [p.labelEnd || 'IVE-E'],
-      addLabels: p => [p.labelSchedule || 'IVE-S'],
+      addLabels: p => [p.labelConfirmWait || 'IVE-P'],
     },
     {
       action: 'retry',

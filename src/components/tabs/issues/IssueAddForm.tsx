@@ -71,40 +71,33 @@ function RoleTrigger({ label, icon, mode, userId, username, members, onClick }: 
       <button
         type="button"
         onClick={onClick}
-        className="w-full bg-ive-bg-deep border border-ive-border-dark border-dashed rounded-lg px-3 py-2 text-left flex items-center gap-2 text-sm focus:outline-none hover:border-ive-green/50 transition-colors"
+        className="w-full bg-ive-bg-card border border-ive-border-dark rounded-lg px-3 py-2 text-left flex items-center gap-2 text-sm focus:outline-none hover:border-ive-green/50 transition-colors group"
       >
         {mode === 'auto' ? (
-          <span className="flex items-center gap-1.5">
-            <span className="flex items-center gap-1 bg-ive-cyan/10 rounded px-1.5 py-0.5">
-              <i className="fa-solid fa-shuffle text-xs text-ive-cyan" />
-              <span className="text-ive-cyan font-bold text-xs">{tIssue('roleModeAuto')}</span>
-            </span>
-            <i className="fa-solid fa-pen text-[10px] text-ive-text-dim ml-auto" />
+          <span className="flex items-center gap-1 bg-ive-cyan/10 rounded px-1.5 py-0.5">
+            <i className="fa-solid fa-shuffle text-xs text-ive-cyan" />
+            <span className="text-ive-cyan font-bold text-xs">{tIssue('roleModeAuto')}</span>
           </span>
         ) : mode === 'specific' && member ? (
-          <span className="flex items-center gap-1.5">
-            <span className="flex items-center gap-1 bg-ive-bg-card rounded px-1.5 py-0.5">
-              {member.avatarUrl
-                ? <img src={member.avatarUrl} className="w-4 h-4 rounded-full" alt="" />
-                : <i className="fa-solid fa-user text-xs text-ive-text-dim" />}
-              <span className="text-ive-text font-bold text-xs">{member.name || member.username}</span>
-            </span>
-            <i className="fa-solid fa-pen text-[10px] text-ive-text-dim ml-auto" />
+          <span className="flex items-center gap-1 bg-ive-bg-deep rounded px-1.5 py-0.5">
+            {member.avatarUrl
+              ? <img src={member.avatarUrl} className="w-4 h-4 rounded-full" alt="" />
+              : <i className="fa-solid fa-user text-xs text-ive-text-dim" />}
+            <span className="text-ive-text font-bold text-xs">{member.name || member.username}</span>
           </span>
         ) : mode === 'specific' && username ? (
-          // members 가 아직 로드 안 됐을 때 fallback
-          <span className="flex items-center gap-1.5">
-            <span className="flex items-center gap-1 bg-ive-bg-card rounded px-1.5 py-0.5">
-              <i className="fa-solid fa-user text-xs text-ive-text-dim" />
-              <span className="text-ive-text font-bold text-xs">@{username}</span>
-            </span>
-            <i className="fa-solid fa-pen text-[10px] text-ive-text-dim ml-auto" />
+          <span className="flex items-center gap-1 bg-ive-bg-deep rounded px-1.5 py-0.5">
+            <i className="fa-solid fa-user text-xs text-ive-text-dim" />
+            <span className="text-ive-text font-bold text-xs">@{username}</span>
           </span>
         ) : (
           <span className="text-ive-text-dim font-bold">
             <i className="fa-solid fa-user-plus mr-1.5" />{tIssue('roleModeCreator')}
           </span>
         )}
+        <span className="ml-auto w-6 h-6 flex items-center justify-center rounded text-ive-text-dim group-hover:text-ive-green group-hover:bg-ive-green/10 transition-colors">
+          <i className="fa-solid fa-ellipsis text-xs" />
+        </span>
       </button>
     </div>
   )
@@ -139,6 +132,7 @@ export default function IssueAddForm({
 
   const agentDropdownRef = useRef<HTMLDivElement>(null)
   const [agentDropdownOpen, setAgentDropdownOpen] = useState(false)
+  const [assigneesExpanded, setAssigneesExpanded] = useState(false)
 
   // 검증자/확인자 모달 (프로젝트 멤버가 많을 수 있어 콤보 대신 풀화면 모달 사용)
   const [verifierModalOpen, setVerifierModalOpen] = useState(false)
@@ -225,6 +219,26 @@ export default function IssueAddForm({
           autoFocus
         />
       </div>
+      {/* 담당자 지정 영역 — 접혀있을 때는 dashed placeholder 카드로 "+추가" 패턴 */}
+      {!assigneesExpanded ? (
+        <button
+          type="button"
+          onClick={() => setAssigneesExpanded(true)}
+          className="w-full mb-2 px-3 py-2.5 rounded-lg border border-dashed border-ive-border-dark text-ive-text-dim hover:border-ive-green/50 hover:text-ive-green hover:bg-ive-green/5 transition-colors flex items-center justify-center gap-1.5 text-xs font-bold"
+        >
+          <i className="fa-solid fa-plus" />
+          {tIssue('assignmentToggleAdd')}
+          <span className="text-[10px] font-normal text-ive-text-muted">({tIssue('assignmentOptional')})</span>
+        </button>
+      ) : (<>
+      <button
+        type="button"
+        onClick={() => setAssigneesExpanded(false)}
+        className="w-full flex items-center justify-between gap-2 mb-2 px-2 py-1 text-xs font-bold text-ive-text-dim hover:text-ive-text transition-colors"
+      >
+        <span><i className="fa-solid fa-users-gear mr-1" />{tIssue('preferredAgent')} · {tIssue('verifier')} · {tIssue('confirmer')}</span>
+        <span><i className="fa-solid fa-chevron-up text-[10px] mr-1" />{tIssue('assignmentToggleHide')}</span>
+      </button>
       {/* 에이전트 지정 드롭다운 */}
       <div ref={agentDropdownRef} className="relative mb-2">
         <label className="text-xs font-bold text-ive-text-dim mb-1 block">
@@ -333,6 +347,7 @@ export default function IssueAddForm({
         members={gitMembers}
         onClick={openConfirmerModal}
       />
+      </>)}
 
       <button
         onClick={onCreateIssue}
