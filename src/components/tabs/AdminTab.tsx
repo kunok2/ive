@@ -57,7 +57,7 @@ export default function AdminTab() {
                   : 'text-ive-text-dim'
               }`}
             >
-              <i className={`${t.icon} mr-1`} />{t.label}
+              <i className={`${t.icon} sm:mr-1`} /><span className="hidden sm:inline">{t.label}</span>
             </button>
           ))}
         </div>
