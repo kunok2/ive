@@ -1,6 +1,6 @@
 'use client'
 
-import { use, useState, useEffect, useCallback } from 'react'
+import { use, useState, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useStore } from '@/lib/store'
@@ -8,6 +8,7 @@ import ProjectForm from '@/components/project/ProjectForm'
 import MobileTabBar from '@/components/layout/MobileTabBar'
 import Modal from '@/components/ui/Modal'
 import ConfirmModal from '@/components/ui/ConfirmModal'
+import CustomSelect from '@/components/ui/CustomSelect'
 import { useTranslations } from 'next-intl'
 
 export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -26,6 +27,8 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [copied, setCopied] = useState(false)
   const [gitMembers, setGitMembers] = useState<{ id: number; username: string; name: string; avatarUrl: string }[]>([])
   const [gitMembersLoading, setGitMembersLoading] = useState(false)
+  const [urlTheme, setUrlTheme] = useState<'dark' | 'light'>('dark')
+  const [urlLang, setUrlLang] = useState<'auto' | 'ko' | 'en'>('auto')
 
   const tp = useTranslations('project')
   const tc = useTranslations('common')
@@ -36,7 +39,15 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     if (project?.reportSecret) setReportSecret(project.reportSecret)
   }, [project?.reportSecret])
 
-  const reportUrl = reportToken ? `${typeof window !== 'undefined' ? window.location.origin : ''}/p/${id}/report?token=${reportToken}&nonce=${reportNonce}&ts=${reportTimestamp}&exp=${reportExpires}` : ''
+  const reportUrl = useMemo(() => {
+    if (!reportToken) return ''
+    const origin = typeof window !== 'undefined' ? window.location.origin : ''
+    const base = `${origin}/p/${id}/report?token=${reportToken}&nonce=${reportNonce}&ts=${reportTimestamp}&exp=${reportExpires}`
+    const extra: string[] = []
+    if (urlTheme === 'light') extra.push('theme=light')
+    if (urlLang !== 'auto') extra.push(`lang=${urlLang}`)
+    return extra.length > 0 ? `${base}&${extra.join('&')}` : base
+  }, [id, reportToken, reportNonce, reportTimestamp, reportExpires, urlTheme, urlLang])
 
   const handleGenerateSecret = async () => {
     setGeneratingSecret(true)
@@ -279,7 +290,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {/* URL 복사 */}
+                  {/* URL */}
                   <div className="flex items-center gap-2">
                     <input
                       type="text"
@@ -287,11 +298,54 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                       value={reportUrl}
                       className="flex-1 bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-sm text-ive-text font-bold focus:outline-none"
                     />
+                  </div>
+
+                  {/* 안내: 복사 전 테마/언어 선택 */}
+                  <p className="text-xs text-ive-text-dim flex items-start gap-1.5">
+                    <i className="fa-solid fa-circle-info mt-0.5 text-ive-cyan" />
+                    <span>{tp('reportPageCopyHint')}</span>
+                  </p>
+
+                  {/* 테마/언어 선택 + 복사 */}
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="text-ive-text-dim font-bold">
+                        <i className="fa-solid fa-palette mr-1 text-ive-amber" />{tp('reportPageThemeLabel')}
+                      </span>
+                      <div className="flex items-center bg-ive-bg-deep border border-ive-border-subtle rounded-lg p-0.5">
+                        {(['dark', 'light'] as const).map(opt => (
+                          <button
+                            key={opt}
+                            onClick={() => setUrlTheme(opt)}
+                            className={`font-bold px-2.5 py-1 rounded-md transition-all ${urlTheme === opt ? 'bg-ive-green/20 text-ive-green' : 'text-ive-text-muted hover:text-ive-text'}`}
+                          >
+                            <i className={`fa-solid ${opt === 'dark' ? 'fa-moon' : 'fa-sun'} mr-1`} />
+                            {tp(opt === 'dark' ? 'reportPageThemeDark' : 'reportPageThemeLight')}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-ive-text-dim font-bold shrink-0">
+                        <i className="fa-solid fa-language mr-1 text-ive-amber" />{tp('reportPageLanguage')}
+                      </span>
+                      <CustomSelect
+                        size="sm"
+                        value={urlLang}
+                        onChange={(v) => setUrlLang(v as 'auto' | 'ko' | 'en')}
+                        options={[
+                          { value: 'auto', label: tp('reportPageLangAuto') },
+                          { value: 'ko', label: tp('reportPageLangKo') },
+                          { value: 'en', label: tp('reportPageLangEn') },
+                        ]}
+                        className="min-w-[120px]"
+                      />
+                    </div>
                     <button
                       onClick={handleCopyUrl}
-                      className={`shrink-0 font-bold text-sm px-3 py-3 rounded-lg border transition-all ${copied ? 'bg-ive-green/20 text-ive-green border-ive-green/30' : 'bg-ive-bg-deep text-ive-text-muted border-ive-border-subtle hover:text-ive-green hover:border-ive-green/30'}`}
+                      className={`ml-auto shrink-0 font-bold text-xs px-3 py-1.5 rounded-lg border transition-all ${copied ? 'bg-ive-green/20 text-ive-green border-ive-green/30' : 'bg-ive-bg-deep text-ive-text-muted border-ive-border-subtle hover:text-ive-green hover:border-ive-green/30'}`}
                     >
-                      {copied ? <i className="fa-solid fa-check" /> : <i className="fa-regular fa-copy" />}
+                      {copied ? <i className="fa-solid fa-check" /> : <><i className="fa-regular fa-copy mr-1" />URL</>}
                     </button>
                   </div>
 

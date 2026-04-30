@@ -155,5 +155,13 @@
   "reportPageApi": "API 직접 호출",
   "reportPageApiHint": "화면 없이 프로그램에서 직접 접수할 수 있습니다. POST /api/report 로 projectId, secret, content를 전송하면 이슈가 생성됩니다.",
   "reportPageSecurity": "보안",
-  "reportPageSecurityHint": "URL이 유출되면 'URL 재생성' 버튼으로 이전 링크를 즉시 무효화하고 새 URL을 생성할 수 있습니다. 기존 접수 내역에 영향을 주지 않습니다."
+  "reportPageSecurityHint": "URL이 유출되면 'URL 재생성' 버튼으로 이전 링크를 즉시 무효화하고 새 URL을 생성할 수 있습니다. 기존 접수 내역에 영향을 주지 않습니다.",
+  "reportPageCopyHint": "공유받을 사용자 환경에 맞게 테마와 언어를 먼저 선택한 뒤 URL을 복사하세요.",
+  "reportPageThemeLabel": "테마",
+  "reportPageThemeDark": "다크",
+  "reportPageThemeLight": "라이트",
+  "reportPageLanguage": "언어",
+  "reportPageLangAuto": "자동",
+  "reportPageLangKo": "한국어",
+  "reportPageLangEn": "English"
 }

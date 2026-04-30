@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-@theme inline {
+@theme {
   /* ──────────────────────────────────────────────────────────────
    * IVE 디자인 토큰 (minimal / semantic)
    *
