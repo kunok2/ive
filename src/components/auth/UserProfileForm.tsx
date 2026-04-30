@@ -261,7 +261,7 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
           <button
             type="button"
             onClick={() => setActiveSection(activeSection === 'avatar' ? 'none' : 'avatar')}
-            className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all hover:scale-110 overflow-hidden"
+            className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 transition-all hover:scale-110 overflow-hidden"
             style={avatar !== 'photo' ? { backgroundColor: (() => { const av = DEFAULT_AVATARS.find(a => a.id === avatar); return av ? `${av.color}20` : undefined })() } : undefined}
             title={t('changeAvatar')}
           >

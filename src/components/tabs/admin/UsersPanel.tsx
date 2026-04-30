@@ -182,7 +182,7 @@ export default function UsersPanel() {
               {(() => {
                 const av = DEFAULT_AVATARS.find(a => a.id === u.avatar)
                 return (
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 overflow-hidden"
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 overflow-hidden"
                     style={u.avatar !== 'photo' ? { backgroundColor: av ? `${av.color}20` : '#4ade8020' } : undefined}
                   >
                     {u.avatar === 'photo' ? (

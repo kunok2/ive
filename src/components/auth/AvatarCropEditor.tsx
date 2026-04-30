@@ -208,7 +208,7 @@ export default function AvatarCropEditor({ imageFile, onConfirm, onCancel }: Pro
 
       {/* 캔버스 */}
       <div
-        className="relative rounded-full overflow-hidden cursor-grab active:cursor-grabbing"
+        className="relative rounded-lg overflow-hidden cursor-grab active:cursor-grabbing"
         style={{ width: VIEW_SIZE, height: VIEW_SIZE }}
         onWheel={handleWheel}
       >

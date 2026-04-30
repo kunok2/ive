@@ -73,7 +73,7 @@ export default function AssigneePickerModal({ open, gitMembers, initialPick, onC
           }`}
         >
           {isNoneSelected ? <i className="fa-solid fa-circle-dot text-xs shrink-0 w-4" /> : <i className="fa-regular fa-circle text-xs shrink-0 w-4 opacity-30" />}
-          <div className="w-7 h-7 rounded-full bg-ive-bg-deep flex items-center justify-center shrink-0">
+          <div className="w-7 h-7 rounded-lg bg-ive-bg-deep flex items-center justify-center shrink-0">
             <i className="fa-solid fa-ban text-ive-text-dim text-xs" />
           </div>
           <span className="font-bold">{noneLabel ?? tIssue('noAssignee')}</span>
@@ -87,7 +87,7 @@ export default function AssigneePickerModal({ open, gitMembers, initialPick, onC
             }`}
           >
             {isAutoSelected ? <i className="fa-solid fa-circle-dot text-xs shrink-0 w-4" /> : <i className="fa-regular fa-circle text-xs shrink-0 w-4 opacity-30" />}
-            <div className="w-7 h-7 rounded-full bg-ive-bg-deep flex items-center justify-center shrink-0">
+            <div className="w-7 h-7 rounded-lg bg-ive-bg-deep flex items-center justify-center shrink-0">
               <i className="fa-solid fa-shuffle text-ive-cyan text-xs" />
             </div>
             <div className="min-w-0 flex-1">
@@ -107,7 +107,7 @@ export default function AssigneePickerModal({ open, gitMembers, initialPick, onC
               }`}
             >
               {isPicked ? <i className="fa-solid fa-circle-dot text-xs shrink-0 w-4" /> : <i className="fa-regular fa-circle text-xs shrink-0 w-4 opacity-30" />}
-              {m.avatarUrl ? <img src={m.avatarUrl} className="w-7 h-7 rounded-full shrink-0" alt="" /> : <div className="w-7 h-7 rounded-full bg-ive-bg-deep flex items-center justify-center shrink-0"><i className="fa-solid fa-user text-ive-text-dim text-xs" /></div>}
+              {m.avatarUrl ? <img src={m.avatarUrl} className="w-7 h-7 rounded-lg shrink-0" alt="" /> : <div className="w-7 h-7 rounded-lg bg-ive-bg-deep flex items-center justify-center shrink-0"><i className="fa-solid fa-user text-ive-text-dim text-xs" /></div>}
               <div className="min-w-0 flex-1">
                 <div className="font-bold truncate">{m.name || m.username}</div>
                 {m.name && m.name !== m.username && <div className="text-xs text-ive-text-dim truncate">@{m.username}</div>}

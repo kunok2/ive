@@ -163,7 +163,7 @@ export default function NotesList({
                             {isIveUser && note.iveAuthorAvatar ? (
                               <AgentAvatar avatar={note.iveAuthorAvatar} size="xs" />
                             ) : note.avatarUrl ? (
-                              <img src={note.avatarUrl} alt="" className="w-4 h-4 rounded-full" />
+                              <img src={note.avatarUrl} alt="" className="w-4 h-4 rounded-lg" />
                             ) : (
                               <i className="fa-solid fa-user" />
                             )}

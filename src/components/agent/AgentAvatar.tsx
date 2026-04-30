@@ -50,9 +50,16 @@ export { TOOL_BADGE }
 
 function ToolBadge({ category, size }: { category: ToolCategory; size: 'xs' | 'sm' | 'md' | 'lg' }) {
   const badge = TOOL_BADGE[category]
+  // 배지는 항상 불투명·아바타 위(z-10). 'thinking' 표시는 배지 자체를 흔들지 않고
+  // 외곽으로 퍼지는 별도 ring(animate-ping)으로 표현해야 아이콘이 사라지지 않음.
   return (
-    <div className={`absolute ${badgeSizeMap[size]} rounded-full bg-ive-bg-deep border border-ive-cyan flex items-center justify-center text-ive-cyan ${category === 'thinking' ? 'animate-pulse' : ''}`}>
-      <i className={badge.icon} />
+    <div className={`absolute ${badgeSizeMap[size]} z-10`}>
+      {category === 'thinking' && (
+        <span className="absolute inset-0 rounded-full ring-2 ring-ive-cyan/70 animate-ping pointer-events-none" />
+      )}
+      <span className="absolute inset-0 rounded-full bg-ive-bg-deep border border-ive-cyan flex items-center justify-center text-ive-cyan">
+        <i className={badge.icon} />
+      </span>
     </div>
   )
 }

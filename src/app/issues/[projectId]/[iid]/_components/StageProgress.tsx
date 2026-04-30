@@ -442,7 +442,7 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
                       onClick={slot.onClick}
                       title={slot.title}
                       aria-label={slot.title}
-                      className={`inline-flex items-center justify-center w-[18px] h-[18px] rounded-full overflow-hidden bg-ive-bg-deep ${avatarRing} hover:ring-ive-green transition-all`}
+                      className={`inline-flex items-center justify-center w-[18px] h-[18px] rounded-lg overflow-hidden bg-ive-bg-deep ${avatarRing} hover:ring-ive-green transition-all`}
                     >
                       {slot.node}
                     </button>
@@ -450,13 +450,13 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
                     <span
                       title={slot.title}
                       aria-label={slot.title}
-                      className={`inline-flex items-center justify-center w-[18px] h-[18px] rounded-full overflow-hidden bg-ive-bg-deep ${avatarRing} hover:ring-ive-green transition-all`}
+                      className={`inline-flex items-center justify-center w-[18px] h-[18px] rounded-lg overflow-hidden bg-ive-bg-deep ${avatarRing} hover:ring-ive-green transition-all`}
                     >
                       {slot.node}
                     </span>
                   )
                 ) : (
-                  <span className={`inline-flex items-center justify-center w-[18px] h-[18px] rounded-full text-[10px] ring-2 ${
+                  <span className={`inline-flex items-center justify-center w-[18px] h-[18px] rounded-lg text-[10px] ring-2 ${
                     isPast || isCurrent ? 'bg-ive-green/15 ring-ive-green/40 text-ive-green' : 'bg-white/5 ring-ive-border-subtle text-ive-text-dim'
                   }`}>
                     <i className="fa-solid fa-flag-checkered" />

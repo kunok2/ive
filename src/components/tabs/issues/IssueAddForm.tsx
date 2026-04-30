@@ -86,7 +86,7 @@ function RoleTrigger({ label, icon, mode, userId, username, members, onClick }: 
         ) : mode === 'specific' && member ? (
           <span className="flex items-center gap-1 bg-ive-bg-deep rounded px-1.5 py-0.5">
             {member.avatarUrl
-              ? <img src={member.avatarUrl} className="w-4 h-4 rounded-full" alt="" />
+              ? <img src={member.avatarUrl} className="w-4 h-4 rounded-lg" alt="" />
               : <i className="fa-solid fa-user text-xs text-ive-text-dim" />}
             <span className="text-ive-text font-bold text-xs">{member.name || member.username}</span>
           </span>

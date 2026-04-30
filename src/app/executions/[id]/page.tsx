@@ -116,9 +116,9 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
             <div className="flex items-center gap-2 min-w-0">
               {execInfo.assigneeType === 'user' ? (
                 execInfo.userAvatar ? (
-                  <img src={execInfo.userAvatar} alt="" className="w-7 h-7 rounded-full border border-ive-cyan/30 shrink-0" />
+                  <img src={execInfo.userAvatar} alt="" className="w-7 h-7 rounded-lg border border-ive-cyan/30 shrink-0" />
                 ) : (
-                  <div className="w-7 h-7 rounded-full bg-ive-cyan/20 flex items-center justify-center shrink-0">
+                  <div className="w-7 h-7 rounded-lg bg-ive-cyan/20 flex items-center justify-center shrink-0">
                     <i className="fa-solid fa-user text-ive-cyan text-xs" />
                   </div>
                 )
@@ -188,7 +188,7 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
         <div ref={containerRef} className="flex-1 min-h-0 flex flex-col items-center justify-center gap-4">
           <div className="text-center">
             {execInfo.userAvatar ? (
-              <img src={execInfo.userAvatar} alt="" className="w-20 h-20 rounded-full mx-auto mb-3 border-2 border-ive-cyan/30" />
+              <img src={execInfo.userAvatar} alt="" className="w-20 h-20 rounded-lg mx-auto mb-3 border-2 border-ive-cyan/30" />
             ) : (
               <i className="fa-solid fa-user-circle text-6xl text-ive-cyan/50 mb-3 block" />
             )}

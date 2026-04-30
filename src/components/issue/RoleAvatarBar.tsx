@@ -289,7 +289,7 @@ interface RoleSlotProps {
 
 function RoleSlot({ dim, ringClass, title, interactive, isCurrent, onClick, content }: RoleSlotProps) {
   const animCls = isCurrent ? 'animate-pulse' : ''
-  const baseCls = `inline-flex items-center justify-center ${dim} rounded-full overflow-hidden ring-2 ${ringClass} ${animCls} bg-ive-bg-deep shrink-0`
+  const baseCls = `inline-flex items-center justify-center ${dim} rounded-lg overflow-hidden ring-2 ${ringClass} ${animCls} bg-ive-bg-deep shrink-0`
   if (interactive && onClick) {
     return (
       <button type="button" onClick={onClick} title={title} aria-label={title} className={`${baseCls} hover:ring-ive-green transition-all`}>
