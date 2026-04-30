@@ -147,39 +147,33 @@ export default function ProjectCard({ project }: Props) {
     return () => clearInterval(timer)
   }, [expandedPanel, project.id])
 
-  // 검증 중 패널 열릴 때 이슈 목록 로드 (라벨 기반 — task_execution 없어도 표시)
+  // 검증/확인 이슈 목록 로드 — 라벨 기반(task_execution 없어도 표시).
+  // 패널이 열렸거나, 카드 닫힌 상태에서 인라인 요약에 라벨 기반 행을 표시하기 위해
+  // 통계 카운트 > 0 이면 백그라운드로도 폴링.
   useEffect(() => {
-    if (expandedPanel !== 'verifying') return
-    const fetchVerifying = async () => {
+    const vCount = stats?.verifying ?? 0
+    const cCount = stats?.confirming ?? 0
+    const needForVerify = expandedPanel === 'verifying' || (vCount > 0 && !expandedPanel)
+    const needForConfirm = expandedPanel === 'confirming' || (cCount > 0 && !expandedPanel)
+    if (!needForVerify && !needForConfirm) {
+      setVerifyingIssues([])
+      setConfirmingIssues([])
+      return
+    }
+    const fetchIssues = async () => {
       try {
         const res = await fetch(`/api/projects/${project.id}/issues`)
         if (res.ok) {
           const all = await res.json()
-          setVerifyingIssues(all.filter((i: any) => i.stage === 'verifying'))
+          if (needForVerify) setVerifyingIssues(all.filter((i: any) => i.stage === 'verifying'))
+          if (needForConfirm) setConfirmingIssues(all.filter((i: any) => i.stage === 'confirming'))
         }
       } catch { /* ignore */ }
     }
-    fetchVerifying()
-    const timer = setInterval(fetchVerifying, 10000)
+    fetchIssues()
+    const timer = setInterval(fetchIssues, 10000)
     return () => clearInterval(timer)
-  }, [expandedPanel, project.id])
-
-  // 확인 중 패널 열릴 때 이슈 목록 로드 (검증 중과 동일 패턴)
-  useEffect(() => {
-    if (expandedPanel !== 'confirming') return
-    const fetchConfirming = async () => {
-      try {
-        const res = await fetch(`/api/projects/${project.id}/issues`)
-        if (res.ok) {
-          const all = await res.json()
-          setConfirmingIssues(all.filter((i: any) => i.stage === 'confirming'))
-        }
-      } catch { /* ignore */ }
-    }
-    fetchConfirming()
-    const timer = setInterval(fetchConfirming, 10000)
-    return () => clearInterval(timer)
-  }, [expandedPanel, project.id])
+  }, [expandedPanel, project.id, stats?.verifying, stats?.confirming])
 
   const toggleScanner = async (e: React.MouseEvent) => {
     e.preventDefault(); e.stopPropagation()
@@ -371,6 +365,7 @@ export default function ProjectCard({ project }: Props) {
         {/* 대기 */}
         <button
           onClick={() => setExpandedPanel(expandedPanel === 'waiting' ? null : 'waiting')}
+          title={tp('waitingTooltip')}
           className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'waiting' ? 'bg-ive-cyan/5' : 'hover:bg-white/[0.02]'}`}
         >
           <span className={`text-lg font-bold leading-none ${((stats?.waiting ?? 0) + (stats?.verifyWaiting ?? 0) + (stats?.confirmWaiting ?? 0)) > 0 ? 'text-ive-cyan' : 'text-ive-text-dim'}`}>
@@ -380,9 +375,10 @@ export default function ProjectCard({ project }: Props) {
           <span className="text-xs text-ive-text-dim font-bold">{tp('waitingLabel')}</span>
         </button>
 
-        {/* 작업 (AI 에이전트) */}
+        {/* 처리 (AI 에이전트) */}
         <button
           onClick={() => setExpandedPanel(expandedPanel === 'running' ? null : 'running')}
+          title={tp('workingTooltip')}
           className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'running' ? 'bg-ive-amber/5' : 'hover:bg-white/[0.02]'}`}
         >
           <div className="flex items-baseline gap-0.5">
@@ -397,6 +393,7 @@ export default function ProjectCard({ project }: Props) {
         {/* 검증 (사람) — 검증중은 행동/주의 필요 신호이므로 amber */}
         <button
           onClick={() => setExpandedPanel(expandedPanel === 'verifying' ? null : 'verifying')}
+          title={tp('verifyingTooltip')}
           className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'verifying' ? 'bg-ive-amber/5' : 'hover:bg-white/[0.02]'}`}
         >
           <span className={`text-lg font-bold leading-none ${verifyingCount > 0 ? 'text-ive-amber animate-pulse' : 'text-ive-text-dim'}`}>
@@ -409,6 +406,7 @@ export default function ProjectCard({ project }: Props) {
         {/* 확인 (사람) — 검증과 동일한 amber 톤 */}
         <button
           onClick={() => setExpandedPanel(expandedPanel === 'confirming' ? null : 'confirming')}
+          title={tp('confirmingTooltip')}
           className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'confirming' ? 'bg-ive-amber/5' : 'hover:bg-white/[0.02]'}`}
         >
           <span className={`text-lg font-bold leading-none ${confirmingCount > 0 ? 'text-ive-amber animate-pulse' : 'text-ive-text-dim'}`}>
@@ -421,6 +419,7 @@ export default function ProjectCard({ project }: Props) {
         {/* 완료 (금일) */}
         <button
           onClick={() => setExpandedPanel(expandedPanel === 'done' ? null : 'done')}
+          title={tp('completedTooltip')}
           className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'done' ? 'bg-ive-green/5' : 'hover:bg-white/[0.02]'}`}
         >
           <div className="flex items-baseline gap-1">
@@ -440,6 +439,7 @@ export default function ProjectCard({ project }: Props) {
         {/* 취합 */}
         <button
           onClick={() => setExpandedPanel(expandedPanel === 'conflicts' ? null : 'conflicts')}
+          title={tp('conflictTooltip')}
           className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'conflicts' ? 'bg-ive-amber/5' : 'hover:bg-white/[0.02]'}`}
         >
           <span className={`text-lg font-bold leading-none ${mergeCount === null ? 'text-ive-text-dim/40' : conflictCount > 0 ? 'text-ive-red animate-pulse' : mergeCount > 0 ? 'text-ive-amber' : 'text-ive-text-dim'}`}>
@@ -453,47 +453,88 @@ export default function ProjectCard({ project }: Props) {
         </button>
       </div>
 
-      {/* 진행 중 작업 요약 (패널 펼치지 않았을 때, running 있을 때만) */}
-      {runningExecs.length > 0 && !expandedPanel && (
-        <div className="border-t border-ive-amber/15 px-3 py-1.5 space-y-1">
-          {runningExecs.map(ex => {
-            const isChat = ex.id.startsWith('exec-chat-')
-            const isVerify = ex.assigneeType === 'user'
-            // 에이전트 풀이 전역화되어 어느 사용자의 에이전트인지 모르므로
-            // execution row에 inline JOIN된 agent_name/agent_avatar를 우선 사용.
-            const agentName = isVerify ? null : (ex.agentName ?? null)
-            const agentAvatar = isVerify ? null : (ex.agentAvatar ?? 'av-01')
-            const activity = ex.agentId ? activities[ex.agentId] : undefined
-            const displayName = isVerify ? ex.userName : agentName
-            return (
-              <div key={ex.id} className="flex items-center gap-1.5 text-xs">
-                {isVerify ? (
-                  ex.userAvatar === 'photo' && ex.userId ? (
-                    <img src={`/api/auth/avatar/image?id=${ex.userId}`} alt="" className="w-7 h-7 rounded-lg object-cover shrink-0 border border-ive-border" />
-                  ) : ex.userAvatar ? (
-                    <AgentAvatar avatar={ex.userAvatar} size="sm" />
-                  ) : null
-                ) : agentAvatar ? (
-                  <AgentAvatar
-                    avatar={agentAvatar}
-                    size="sm"
-                    toolBadge={isChat ? null : (activity?.category ?? null)}
-                  />
-                ) : null}
-                {displayName && <span className={`font-bold shrink-0 ${'text-ive-amber/70'}`}>{displayName}</span>}
-                <MarqueeText className="text-ive-text-muted">
-                  {isChat ? `💬 #${ex.issueIid} ${tp('chatLabel')}` : `#${ex.issueIid} `}
-                  {!isChat && ex.issueTitle && `${ex.issueTitle}`}
-                </MarqueeText>
-                <span className={`shrink-0 text-xs font-mono font-bold tabular-nums ml-auto ${'text-ive-amber/70'}`}>
-                  {formatDuration(ex.startedAt)}
-                  {tick >= 0 ? '' : ''}
-                </span>
-              </div>
-            )
-          })}
-        </div>
-      )}
+      {/* 진행 중 작업 요약 (패널 펼치지 않았을 때).
+          runningExecs(=task_executions 기반) 외에 라벨만 verifying/confirming 인 이슈도 표시.
+          GitLab UI 등 외부에서 라벨을 직접 바꾼 경우 exec 가 없어도 한줄 표시되도록 보강. */}
+      {(() => {
+        if (expandedPanel) return null
+        const activeIids = new Set(runningExecs.map(ex => ex.issueIid))
+        const labelOnlyVerify = verifyingIssues.filter((i: any) => !activeIids.has(i.iid))
+        const labelOnlyConfirm = confirmingIssues.filter((i: any) => !activeIids.has(i.iid))
+        if (runningExecs.length === 0 && labelOnlyVerify.length === 0 && labelOnlyConfirm.length === 0) return null
+
+        const renderLabelRow = (issue: any, kind: 'verify' | 'confirm') => {
+          const actor = kind === 'verify' ? issue.actualVerifier : issue.actualConfirmer
+          const badge = kind === 'verify' ? tp('verifyingBadge') : tp('confirmingBadge')
+          const avatarSrc = actor?.avatar
+          const isPhotoUrl = typeof avatarSrc === 'string' && (avatarSrc.startsWith('/') || avatarSrc.startsWith('http'))
+          return (
+            <div key={`${kind}-${issue.iid}`} className="flex items-center gap-1.5 text-xs">
+              {avatarSrc ? (
+                isPhotoUrl ? (
+                  <img src={avatarSrc} alt="" className="w-7 h-7 rounded-lg object-cover shrink-0 border border-ive-border" />
+                ) : (
+                  <AgentAvatar avatar={avatarSrc} size="sm" />
+                )
+              ) : (
+                <div className="w-7 h-7 rounded-lg bg-ive-bg-deep border border-ive-border-subtle flex items-center justify-center shrink-0">
+                  <i className="fa-solid fa-user text-[10px] text-ive-text-dim" />
+                </div>
+              )}
+              {actor?.name && <span className="font-bold shrink-0 text-ive-amber/70">{actor.name}</span>}
+              <MarqueeText className="text-ive-text-muted">
+                {`#${issue.iid} `}{issue.title}
+              </MarqueeText>
+              <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-ive-amber/70 ml-auto">
+                {badge}
+              </span>
+            </div>
+          )
+        }
+
+        return (
+          <div className="border-t border-ive-amber/15 px-3 py-1.5 space-y-1">
+            {runningExecs.map(ex => {
+              const isChat = ex.id.startsWith('exec-chat-')
+              const isVerify = ex.assigneeType === 'user'
+              // 에이전트 풀이 전역화되어 어느 사용자의 에이전트인지 모르므로
+              // execution row에 inline JOIN된 agent_name/agent_avatar를 우선 사용.
+              const agentName = isVerify ? null : (ex.agentName ?? null)
+              const agentAvatar = isVerify ? null : (ex.agentAvatar ?? 'av-01')
+              const activity = ex.agentId ? activities[ex.agentId] : undefined
+              const displayName = isVerify ? ex.userName : agentName
+              return (
+                <div key={ex.id} className="flex items-center gap-1.5 text-xs">
+                  {isVerify ? (
+                    ex.userAvatar === 'photo' && ex.userId ? (
+                      <img src={`/api/auth/avatar/image?id=${ex.userId}`} alt="" className="w-7 h-7 rounded-lg object-cover shrink-0 border border-ive-border" />
+                    ) : ex.userAvatar ? (
+                      <AgentAvatar avatar={ex.userAvatar} size="sm" />
+                    ) : null
+                  ) : agentAvatar ? (
+                    <AgentAvatar
+                      avatar={agentAvatar}
+                      size="sm"
+                      toolBadge={isChat ? null : (activity?.category ?? null)}
+                    />
+                  ) : null}
+                  {displayName && <span className={`font-bold shrink-0 ${'text-ive-amber/70'}`}>{displayName}</span>}
+                  <MarqueeText className="text-ive-text-muted">
+                    {isChat ? `💬 #${ex.issueIid} ${tp('chatLabel')}` : `#${ex.issueIid} `}
+                    {!isChat && ex.issueTitle && `${ex.issueTitle}`}
+                  </MarqueeText>
+                  <span className={`shrink-0 text-xs font-mono font-bold tabular-nums ml-auto ${'text-ive-amber/70'}`}>
+                    {formatDuration(ex.startedAt)}
+                    {tick >= 0 ? '' : ''}
+                  </span>
+                </div>
+              )
+            })}
+            {labelOnlyVerify.map((i: any) => renderLabelRow(i, 'verify'))}
+            {labelOnlyConfirm.map((i: any) => renderLabelRow(i, 'confirm'))}
+          </div>
+        )
+      })()}
 
       {/* 작업 현황 패널 (AI 에이전트만) */}
       {expandedPanel === 'running' && (() => {
