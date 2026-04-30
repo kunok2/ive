@@ -55,7 +55,8 @@ export async function commitPushAndCreateMR(params: {
   const isGitHub = project.provider === 'github';
   const mrLabel = isGitHub ? 'PR' : 'MR';
 
-  // 변경 사항 확인
+  // 변경 사항 확인 — CLI 에이전트가 git add를 빠뜨릴 수 있으므로 모든 변경을 스테이징한 뒤 판정
+  await execFile('git', ['add', '-A'], { cwd: workspacePath });
   const { stdout: diffResult } = await execFile('git', ['diff', '--cached', '--name-only'], { cwd: workspacePath });
 
   if (diffResult.trim()) {
