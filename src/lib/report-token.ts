@@ -25,8 +25,9 @@ export function generateReportToken(secret: string, projectId: string, expiresHo
   return { token, nonce, timestamp, expires }
 }
 
-// HMAC 토큰 검증
-export function verifyReportToken(
+// HMAC 서명 + 만료만 검증 (nonce 재사용 체크/기록 없음).
+// 동일 토큰으로 여러 번 호출되는 보조 동작(이미지 업로드 등)에서 사용한다.
+export function verifyReportTokenSignature(
   secret: string,
   projectId: string,
   token: string,
@@ -34,18 +35,10 @@ export function verifyReportToken(
   timestamp: number,
   expires: number
 ): { valid: boolean; error?: string } {
-  // 만료 확인
   if (Date.now() > expires) {
     return { valid: false, error: 'Token expired' }
   }
 
-  // Replay attack 방지: nonce 재사용 체크
-  const nonceKey = `${projectId}:${nonce}`
-  if (usedNonces.has(nonceKey)) {
-    return { valid: false, error: 'Token already used' }
-  }
-
-  // HMAC 서명 검증
   const data = `${projectId}:${nonce}:${timestamp}:${expires}`
   const expectedToken = crypto
     .createHmac('sha256', secret)
@@ -56,7 +49,26 @@ export function verifyReportToken(
     return { valid: false, error: 'Invalid token' }
   }
 
-  // Nonce 사용 기록
+  return { valid: true }
+}
+
+// HMAC 토큰 검증 (nonce 일회성 보장 포함). 이슈 생성처럼 단 한 번만 허용해야 하는 동작에서 사용한다.
+export function verifyReportToken(
+  secret: string,
+  projectId: string,
+  token: string,
+  nonce: string,
+  timestamp: number,
+  expires: number
+): { valid: boolean; error?: string } {
+  const nonceKey = `${projectId}:${nonce}`
+  if (usedNonces.has(nonceKey)) {
+    return { valid: false, error: 'Token already used' }
+  }
+
+  const sig = verifyReportTokenSignature(secret, projectId, token, nonce, timestamp, expires)
+  if (!sig.valid) return sig
+
   usedNonces.set(nonceKey, Date.now())
 
   return { valid: true }

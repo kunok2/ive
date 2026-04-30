@@ -75,6 +75,11 @@ export interface PasteUploadOptions {
   setValue: (next: string) => void
   /** 업로드 실패 시 호출되는 콜백. 토스트로 알림을 띄울 때 사용하세요. */
   onError?: (message: string) => void
+  /**
+   * 기본 인증 엔드포인트(/api/projects/:id/uploads) 대신 사용할 업로더.
+   * 외부 작업 접수 페이지처럼 비인증 토큰 기반 업로드가 필요한 곳에서 주입한다.
+   */
+  uploadFn?: (file: File) => Promise<{ markdown: string; url: string }>
 }
 
 export interface PasteUploadHandlers {
@@ -87,7 +92,7 @@ export function createImagePasteHandlers(opts: PasteUploadOptions): PasteUploadH
   let counter = 0
 
   const uploadMany = async (ta: HTMLTextAreaElement, files: File[]) => {
-    if (!opts.projectId) {
+    if (!opts.uploadFn && !opts.projectId) {
       opts.onError?.('프로젝트가 선택되지 않았습니다.')
       return
     }
@@ -111,7 +116,9 @@ export function createImagePasteHandlers(opts: PasteUploadOptions): PasteUploadH
       }
       // 2) 실제 업로드 후 플레이스홀더를 실제 마크다운으로 치환
       try {
-        const { markdown } = await uploadFileToProject(opts.projectId, file)
+        const { markdown } = opts.uploadFn
+          ? await opts.uploadFn(file)
+          : await uploadFileToProject(opts.projectId!, file)
         const current = opts.getValue()
         const idx = current.lastIndexOf(placeholder)
         const next = idx >= 0

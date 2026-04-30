@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { getKSTTodayString } from '@/lib/date-utils'
+import { createImagePasteHandlers } from '@/lib/paste-upload'
 
 const translations: Record<string, Record<string, string>> = {
   ko: {
@@ -131,6 +132,40 @@ export default function ReportPage({ params }: { params: Promise<{ projectId: st
 
   const browserInfo = useMemo(() => getBrowserInfo(), [])
 
+  const contentRef = useRef(content)
+  useEffect(() => { contentRef.current = content }, [content])
+
+  const pasteHandlers = useMemo(() => createImagePasteHandlers({
+    projectId: projectId,
+    getValue: () => contentRef.current,
+    setValue: v => setContent(v),
+    onError: msg => alert(msg),
+    uploadFn: async (file) => {
+      if (!projectId || !token || !nonce || !ts || !exp) {
+        throw new Error('인증 정보가 없습니다.')
+      }
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('projectId', projectId)
+      fd.append('token', token)
+      fd.append('nonce', nonce)
+      fd.append('timestamp', String(ts))
+      fd.append('expires', String(exp))
+      const res = await fetch('/api/report/upload', { method: 'POST', body: fd })
+      if (!res.ok) {
+        let msg = `업로드 실패 (${res.status})`
+        try {
+          const data = await res.json()
+          if (data?.error) msg = data.error
+        } catch {
+          // ignore
+        }
+        throw new Error(msg)
+      }
+      return res.json()
+    },
+  }), [projectId, token, nonce, ts, exp])
+
   useEffect(() => {
     const loadProject = async () => {
       const p = await params
@@ -257,6 +292,9 @@ export default function ReportPage({ params }: { params: Promise<{ projectId: st
           <textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
+            onPaste={pasteHandlers.onPaste}
+            onDrop={pasteHandlers.onDrop}
+            onDragOver={pasteHandlers.onDragOver}
             placeholder={t(locale, 'placeholder')}
             className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-base text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green resize-none font-bold"
             rows={10}
