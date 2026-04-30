@@ -207,7 +207,7 @@ export default function DeadlineProgress({ createdAt, dueDate, completedAt, canE
               style={{ width: `${Math.round(ratio * 100)}%` }}
             />
           </div>
-          <div className="mt-1 flex items-center justify-between text-[10px] font-bold text-ive-text-dim">
+          <div className="mt-1 hidden sm:flex items-center justify-between text-[10px] font-bold text-ive-text-dim">
             <span>{isCompleted ? tIssue('completedAt') : tIssue('elapsed')}</span>
             <span className={labelCls}>
               {isCompleted
