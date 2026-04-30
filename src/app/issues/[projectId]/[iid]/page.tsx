@@ -316,6 +316,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
     const { finalApprove } = mrActionModal
     setMrActionBusy(true)
     try {
+      // merge/close 는 MR 처리만 담당. 검증 종료(stage 전이)는 항상 finalApprove 가 수행한다.
       if (choice === 'merge') {
         const res = await fetch(`/api/projects/${projectId}/issues/${iid}/mr`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -325,8 +326,6 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
           const err = await res.json().catch(() => null)
           toast(err?.error || 'MR 머지에 실패했습니다', 'error'); return
         }
-        toast('MR 머지 후 완료 처리되었습니다', 'success')
-        setMrActionModal(null); await refreshAll(); return
       }
       if (choice === 'close') {
         const res = await fetch(`/api/projects/${projectId}/issues/${iid}/mr`, {
