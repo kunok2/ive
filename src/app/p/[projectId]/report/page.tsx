@@ -11,7 +11,6 @@ const translations: Record<string, Record<string, string>> = {
     placeholder: '작업 내용을 입력하세요...\n\n예:\n로그인 버튼이 작동하지 않음\n\n로그인 페이지에서 이메일과 비밀번호를 입력하고 로그인 버튼을 클릭했지만 아무 반응이 없습니다.\n크롬 브라우저 최신 버전에서 확인했습니다.',
     titlePreview: '제목:',
     autoInfo: '자동으로 수집되는 정보 보기',
-    url: 'URL',
     referrer: '이전 페이지',
     browser: '브라우저',
     language: '언어',
@@ -32,7 +31,6 @@ const translations: Record<string, Record<string, string>> = {
     placeholder: 'Describe the task...\n\nExample:\nLogin button not working\n\nI entered my email and password on the login page and clicked the login button, but nothing happened.\nConfirmed on the latest version of Chrome.',
     titlePreview: 'Title:',
     autoInfo: 'View automatically collected info',
-    url: 'URL',
     referrer: 'Referrer',
     browser: 'Browser',
     language: 'Language',
@@ -84,7 +82,6 @@ function t(locale: Locale, key: string): string {
 }
 
 interface BrowserInfo {
-  url: string
   referrer: string
   userAgent: string
   language: string
@@ -95,7 +92,6 @@ interface BrowserInfo {
 
 function getBrowserInfo(): BrowserInfo {
   return {
-    url: typeof window !== 'undefined' ? window.location.href : '',
     referrer: typeof document !== 'undefined' ? document.referrer : '',
     userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
     language: typeof navigator !== 'undefined' ? navigator.language : '',
@@ -266,7 +262,6 @@ export default function ReportPage({ params }: { params: Promise<{ projectId: st
                 {t(locale, 'autoInfo')}
               </summary>
               <div className="mt-2 space-y-1 font-bold">
-                <div>{t(locale, 'url')}: <span className="text-ive-text-muted">{browserInfo.url}</span></div>
                 {browserInfo.referrer && (
                   <div>{t(locale, 'referrer')}: <span className="text-ive-text-muted">{browserInfo.referrer}</span></div>
                 )}

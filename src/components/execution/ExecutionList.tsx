@@ -95,7 +95,7 @@ export default function ExecutionList({ executions, showAgent = true, onKill, ki
                 </span>
               )}
             </div>
-            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+            <span className={`text-xs font-bold px-2 py-0.5 rounded-lg ${
               ex.status === 'assigned' ? 'bg-ive-cyan/20 text-ive-cyan' :
               ex.status === 'running' ? 'bg-ive-amber/20 text-ive-amber animate-pulse' :
               ex.status === 'success' ? 'bg-ive-green/20 text-ive-green' :

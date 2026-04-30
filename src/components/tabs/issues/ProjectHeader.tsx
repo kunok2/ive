@@ -50,7 +50,7 @@ export default function ProjectHeader({
         {canEdit && !bulkMode && (
           <button
             onClick={onToggleAddForm}
-            className="w-9 h-9 rounded-full bg-ive-green/20 border border-ive-green/30 flex items-center justify-center text-ive-green hover:bg-ive-green/30 hover:scale-105 transition-all"
+            className="w-9 h-9 rounded-lg bg-ive-green/20 border border-ive-green/30 flex items-center justify-center text-ive-green hover:bg-ive-green/30 hover:scale-105 transition-all"
             title={tIssue('addNewIssue')}
           >
             <i className="fa-solid fa-plus text-sm" />
@@ -59,7 +59,7 @@ export default function ProjectHeader({
         {canEdit && issueCount > 0 && !bulkMode && !isHistoryTab && (
           <button
             onClick={onEnterBulkMode}
-            className="w-9 h-9 rounded-full bg-ive-bg-deep border border-ive-border-subtle flex items-center justify-center text-ive-text-dim hover:text-ive-text hover:border-ive-green/30 transition-all"
+            className="w-9 h-9 rounded-lg bg-ive-bg-deep border border-ive-border-subtle flex items-center justify-center text-ive-text-dim hover:text-ive-text hover:border-ive-green/30 transition-all"
             title={tIssue('bulkEdit')}
           >
             <i className="fa-solid fa-list-check text-sm" />
@@ -69,7 +69,7 @@ export default function ProjectHeader({
           <button
             onClick={onRefresh}
             disabled={loading || closedLoading}
-            className="w-9 h-9 rounded-full bg-ive-bg-deep border border-ive-border-subtle flex items-center justify-center text-ive-text-dim hover:text-ive-green hover:border-ive-green/30 transition-all disabled:opacity-40"
+            className="w-9 h-9 rounded-lg bg-ive-bg-deep border border-ive-border-subtle flex items-center justify-center text-ive-text-dim hover:text-ive-green hover:border-ive-green/30 transition-all disabled:opacity-40"
             title={tCommon('refresh')}
           >
             <i className={`fa-solid fa-arrows-rotate text-sm ${(loading || closedLoading) ? 'fa-spin' : ''}`} />

@@ -154,15 +154,15 @@ export default function MRReviewSection({ projectId, issueIid }: Props) {
           {/* 상태 표시 */}
           <div className="flex items-center gap-2 mb-4">
             {isMerged ? (
-              <span className="inline-flex items-center gap-1 text-xs font-bold bg-ive-cyan/15 text-ive-cyan px-2 py-1 rounded-full">
+              <span className="inline-flex items-center gap-1 text-xs font-bold bg-ive-cyan/15 text-ive-cyan px-2 py-1 rounded-lg">
                 <i className="fa-solid fa-code-merge" /> {t('mergeComplete')}
               </span>
             ) : hasConflicts ? (
-              <span className="inline-flex items-center gap-1 text-xs font-bold bg-ive-red/15 text-ive-red px-2 py-1 rounded-full">
+              <span className="inline-flex items-center gap-1 text-xs font-bold bg-ive-red/15 text-ive-red px-2 py-1 rounded-lg">
                 <i className="fa-solid fa-triangle-exclamation" /> {t('conflict')}
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1 text-xs font-bold bg-ive-green/15 text-ive-green px-2 py-1 rounded-full">
+              <span className="inline-flex items-center gap-1 text-xs font-bold bg-ive-green/15 text-ive-green px-2 py-1 rounded-lg">
                 <i className="fa-solid fa-circle-check" /> {t('readyToMerge')}
               </span>
             )}

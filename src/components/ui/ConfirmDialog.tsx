@@ -123,7 +123,7 @@ function DialogOverlay({
       <div className="relative w-full max-w-sm bg-ive-bg-card border border-ive-border rounded-2xl shadow-2xl animate-slide-up overflow-hidden">
         <div className="px-5 pt-5 pb-4">
           <div className="flex items-start gap-3">
-            <div className="shrink-0 w-10 h-10 rounded-full bg-ive-bg-deep flex items-center justify-center">
+            <div className="shrink-0 w-10 h-10 rounded-lg bg-ive-bg-deep flex items-center justify-center">
               <i className={`${iconMap[variant]} text-lg`} />
             </div>
             <div className="flex-1 min-w-0">

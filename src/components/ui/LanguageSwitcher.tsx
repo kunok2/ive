@@ -44,7 +44,7 @@ export default function LanguageSwitcher() {
       <button
         onClick={() => setOpen(!open)}
         disabled={isPending}
-        className="h-8 px-2 rounded-full bg-ive-bg-card border border-ive-border-subtle flex items-center gap-1 text-xs font-bold text-ive-text-dim hover:text-ive-text active:scale-95 transition-all disabled:opacity-50"
+        className="h-8 px-2 rounded-lg bg-ive-bg-card border border-ive-border-subtle flex items-center gap-1 text-xs font-bold text-ive-text-dim hover:text-ive-text active:scale-95 transition-all disabled:opacity-50"
       >
         <i className="fa-solid fa-globe text-xs" />
         {localeNames[locale as Locale]}

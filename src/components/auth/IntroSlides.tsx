@@ -128,7 +128,7 @@ export default function IntroSlides({ onComplete }: IntroSlidesProps) {
             <img src="/icon-192.svg" alt="Springware IVE" className="w-full h-full" />
           </div>
         ) : (
-          <div className="w-20 h-20 rounded-full bg-ive-bg-card border border-ive-border-subtle flex items-center justify-center mb-6">
+          <div className="w-20 h-20 rounded-lg bg-ive-bg-card border border-ive-border-subtle flex items-center justify-center mb-6">
             <i className={`${'icon' in slide ? slide.icon : ''} ${'iconColor' in slide ? slide.iconColor : ''} text-3xl`} />
           </div>
         )}

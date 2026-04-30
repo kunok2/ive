@@ -199,7 +199,7 @@ export default function UsersPanel() {
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-bold text-ive-text truncate">{u.name}</span>
                   {u.isAdmin && (
-                    <span className="text-xs font-bold bg-ive-green/15 text-ive-green px-1.5 py-0.5 rounded-full">{t('adminBadge')}</span>
+                    <span className="text-xs font-bold bg-ive-green/15 text-ive-green px-1.5 py-0.5 rounded-lg">{t('adminBadge')}</span>
                   )}
                 </div>
                 <div className="text-xs text-ive-text-dim break-all">{u.email}</div>

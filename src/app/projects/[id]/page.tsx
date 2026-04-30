@@ -206,7 +206,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                 )}
               </div>
             ) : (
-              <span className={`text-xs font-bold px-2.5 py-1 rounded-full leading-none bg-ive-cyan/15 text-ive-cyan border border-ive-cyan/30`}>
+              <span className={`text-xs font-bold px-2.5 py-1 rounded-lg leading-none bg-ive-cyan/15 text-ive-cyan border border-ive-cyan/30`}>
                 <i className="fa-solid fa-share-nodes mr-1" />
                 {tp('viewerPermission')}
               </span>
@@ -234,15 +234,15 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                     </div>
                     <ol className="text-xs text-ive-text-muted space-y-1.5">
                       <li className="flex items-start gap-2">
-                        <span className="shrink-0 w-5 h-5 rounded-full bg-ive-bg-card border border-ive-border flex items-center justify-center text-ive-cyan font-bold">1</span>
+                        <span className="shrink-0 w-5 h-5 rounded-lg bg-ive-bg-card border border-ive-border flex items-center justify-center text-ive-cyan font-bold">1</span>
                         <span>{tp('reportPageStep1')}</span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="shrink-0 w-5 h-5 rounded-full bg-ive-bg-card border border-ive-border flex items-center justify-center text-ive-cyan font-bold">2</span>
+                        <span className="shrink-0 w-5 h-5 rounded-lg bg-ive-bg-card border border-ive-border flex items-center justify-center text-ive-cyan font-bold">2</span>
                         <span>{tp('reportPageStep2')}</span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="shrink-0 w-5 h-5 rounded-full bg-ive-bg-card border border-ive-border flex items-center justify-center text-ive-cyan font-bold">3</span>
+                        <span className="shrink-0 w-5 h-5 rounded-lg bg-ive-bg-card border border-ive-border flex items-center justify-center text-ive-cyan font-bold">3</span>
                         <span>{tp('reportPageStep3')}</span>
                       </li>
                     </ol>
@@ -276,7 +276,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   "timestamp": 1234567890,
   "expires": 1234567890,
   "content": "첫 줄: 제목\\n\\n본문 내용...",
-  "browserInfo": { "url": "...", "referrer": "..." }
+  "browserInfo": { "referrer": "..." }
 }`}
                         </pre>
                         <p className="mt-1 text-ive-text-dim">{tp('reportPageApiHint')}</p>
@@ -368,15 +368,15 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                   <div className="bg-ive-bg-deep/50 border border-ive-border-dark rounded-lg p-3 text-left">
                     <ol className="text-xs text-ive-text-muted space-y-1.5">
                       <li className="flex items-start gap-2">
-                        <span className="shrink-0 w-5 h-5 rounded-full bg-ive-bg-card border border-ive-border flex items-center justify-center text-ive-cyan font-bold">1</span>
+                        <span className="shrink-0 w-5 h-5 rounded-lg bg-ive-bg-card border border-ive-border flex items-center justify-center text-ive-cyan font-bold">1</span>
                         <span>{tp('reportPageStep1')}</span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="shrink-0 w-5 h-5 rounded-full bg-ive-bg-card border border-ive-border flex items-center justify-center text-ive-cyan font-bold">2</span>
+                        <span className="shrink-0 w-5 h-5 rounded-lg bg-ive-bg-card border border-ive-border flex items-center justify-center text-ive-cyan font-bold">2</span>
                         <span>{tp('reportPageStep2')}</span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="shrink-0 w-5 h-5 rounded-full bg-ive-bg-card border border-ive-border flex items-center justify-center text-ive-cyan font-bold">3</span>
+                        <span className="shrink-0 w-5 h-5 rounded-lg bg-ive-bg-card border border-ive-border flex items-center justify-center text-ive-cyan font-bold">3</span>
                         <span>{tp('reportPageStep3')}</span>
                       </li>
                     </ol>
@@ -410,7 +410,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   "timestamp": 1234567890,
   "expires": 1234567890,
   "content": "첫 줄: 제목\\n\\n본문 내용...",
-  "browserInfo": { "url": "...", "referrer": "..." }
+  "browserInfo": { "referrer": "..." }
 }`}
                         </pre>
                         <p className="mt-1 text-ive-text-dim">{tp('reportPageApiHint')}</p>

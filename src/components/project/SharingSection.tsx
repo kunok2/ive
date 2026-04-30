@@ -104,7 +104,7 @@ export default function SharingSection({ existing }: SharingSectionProps) {
         <i className={`fa-solid ${showSharing ? 'fa-chevron-down' : 'fa-chevron-right'} text-sm`} />
         <i className="fa-solid fa-share-nodes mr-0.5" />
         {t('shareProject')}
-        {shares.length > 0 && <span className="text-xs font-bold bg-ive-cyan/20 text-ive-cyan px-1.5 py-0.5 rounded-full">{shares.length}</span>}
+        {shares.length > 0 && <span className="text-xs font-bold bg-ive-cyan/20 text-ive-cyan px-1.5 py-0.5 rounded-lg">{shares.length}</span>}
       </button>
 
       {showSharing && (

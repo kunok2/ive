@@ -148,12 +148,12 @@ export default function ConflictResolutionPanel({ projectId, projectColor, onClo
               !{mr.iid}
             </button>
             {mr.has_conflicts && (
-              <span className="text-xs font-bold px-1.5 py-0.5 rounded-full bg-ive-red/15 text-ive-red border border-ive-red/30">
+              <span className="text-xs font-bold px-1.5 py-0.5 rounded-lg bg-ive-red/15 text-ive-red border border-ive-red/30">
                 {t('conflict')}
               </span>
             )}
             {result && (
-              <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${
+              <span className={`text-xs font-bold px-1.5 py-0.5 rounded-lg ${
                 result.success
                   ? 'bg-ive-green/15 text-ive-green border border-ive-green/30'
                   : 'bg-ive-red/15 text-ive-red border border-ive-red/30'
@@ -246,7 +246,7 @@ export default function ConflictResolutionPanel({ projectId, projectColor, onClo
             <button
               onClick={handleClose}
               disabled={closing || merging || selected.size === 0}
-              className="h-8 px-3 rounded-full text-xs font-bold transition-all disabled:opacity-30 disabled:cursor-not-allowed bg-ive-red/10 text-ive-red/70 border border-ive-red/20 hover:bg-ive-red/15"
+              className="h-8 px-3 rounded-lg text-xs font-bold transition-all disabled:opacity-30 disabled:cursor-not-allowed bg-ive-red/10 text-ive-red/70 border border-ive-red/20 hover:bg-ive-red/15"
             >
               {closing ? (
                 <><i className="fa-solid fa-circle-notch fa-spin mr-1" />{t('closingMR')}</>
@@ -257,7 +257,7 @@ export default function ConflictResolutionPanel({ projectId, projectColor, onClo
             <button
               onClick={handleMerge}
               disabled={merging || closing || selected.size === 0}
-              className="h-8 px-3 rounded-full text-xs font-bold transition-all disabled:opacity-30 disabled:cursor-not-allowed bg-ive-green/15 text-ive-green border border-ive-green/30 hover:bg-ive-green/25"
+              className="h-8 px-3 rounded-lg text-xs font-bold transition-all disabled:opacity-30 disabled:cursor-not-allowed bg-ive-green/15 text-ive-green border border-ive-green/30 hover:bg-ive-green/25"
             >
               {merging ? (
                 <><i className="fa-solid fa-circle-notch fa-spin mr-1" />{t('merging')}</>

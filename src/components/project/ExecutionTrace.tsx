@@ -106,7 +106,7 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
                 >
                   <div className="flex items-center justify-between mb-1.5 gap-2">
                     <MarqueeText className="text-base font-bold text-ive-green-pale">Issue #{ex.issueIid}{ex.issueTitle && ` — ${ex.issueTitle}`}</MarqueeText>
-                    <span className={`text-sm font-bold px-2 py-0.5 rounded-full tracking-tighter ${
+                    <span className={`text-sm font-bold px-2 py-0.5 rounded-lg tracking-tighter ${
                       ex.status === 'assigned' ? 'bg-ive-cyan/20 text-ive-cyan' :
                       ex.status === 'running' ? 'bg-ive-amber/20 text-ive-amber animate-pulse' :
                       ex.status === 'success' ? 'bg-ive-green/20 text-ive-green' :

@@ -241,7 +241,7 @@ export default function ReportScheduleView() {
                       <button
                         key={u.id}
                         onClick={() => toggleRecipient(u.email)}
-                        className={`text-xs px-2 py-1 rounded-full font-bold transition-all ${
+                        className={`text-xs px-2 py-1 rounded-lg font-bold transition-all ${
                           (form.recipients || []).includes(u.email)
                             ? 'bg-ive-green/20 text-ive-green border border-ive-green/30'
                             : 'bg-ive-bg-deep text-ive-text-dim border border-ive-border-subtle'

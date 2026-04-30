@@ -102,7 +102,7 @@ export default function IssueCard({
           <button
             onClick={(e) => onCloseIssue(e, issue.iid)}
             disabled={closing === issue.iid}
-            className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-ive-text-dim border border-ive-border hover:text-ive-red hover:border-ive-red/40 transition-all active:scale-95 disabled:opacity-40"
+            className="shrink-0 w-6 h-6 rounded-lg flex items-center justify-center text-ive-text-dim border border-ive-border hover:text-ive-red hover:border-ive-red/40 transition-all active:scale-95 disabled:opacity-40"
             title={tIssue('closeIssue')}
             aria-label={tCommon('close')}
           >

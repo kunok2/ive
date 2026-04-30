@@ -218,12 +218,12 @@ export default function ActivityContent() {
           return (
             <div key={log.id} className="bg-ive-bg-card border border-ive-border-subtle rounded-lg px-3 py-2.5">
               <div className="flex items-start gap-2">
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5 bg-ive-bg-deep`}>
+                <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 mt-0.5 bg-ive-bg-deep`}>
                   <i className={`${meta.icon} text-xs ${meta.color}`} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 mb-0.5">
-                    <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${meta.color} bg-ive-bg-deep`}>{t(meta.labelKey as any)}</span>
+                    <span className={`text-xs font-bold px-1.5 py-0.5 rounded-lg ${meta.color} bg-ive-bg-deep`}>{t(meta.labelKey as any)}</span>
                     <span className="text-xs text-ive-text-dim">{formatTime(log.createdAt)}</span>
                   </div>
                   <div className="text-xs text-ive-text leading-relaxed">{log.detail}</div>

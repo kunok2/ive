@@ -99,7 +99,7 @@ export default function TopBar() {
               <button
                 data-tour={state.projects.length > 0 ? 'add-project' : undefined}
                 onClick={() => setShowNewProject(true)}
-                className="w-8 h-8 rounded-full bg-ive-green flex items-center justify-center text-ive-bg-deep hover:brightness-110 active:scale-95 transition-all"
+                className="w-8 h-8 rounded-lg bg-ive-green flex items-center justify-center text-ive-bg-deep hover:brightness-110 active:scale-95 transition-all"
               >
                 <i className="fa-solid fa-plus text-sm" />
               </button>
@@ -116,7 +116,7 @@ export default function TopBar() {
                   }
                   setShowNewAgent(true)
                 }}
-                className="w-8 h-8 rounded-full bg-ive-green flex items-center justify-center text-ive-bg-deep hover:brightness-110 active:scale-95 transition-all"
+                className="w-8 h-8 rounded-lg bg-ive-green flex items-center justify-center text-ive-bg-deep hover:brightness-110 active:scale-95 transition-all"
               >
                 <i className="fa-solid fa-plus text-sm" />
               </button>
@@ -131,7 +131,7 @@ export default function TopBar() {
                   onClick={() => {
                     window.dispatchEvent(new CustomEvent('issue-add-trigger'))
                   }}
-                  className="w-8 h-8 rounded-full bg-ive-green flex items-center justify-center text-ive-bg-deep hover:brightness-110 active:scale-95 transition-all"
+                  className="w-8 h-8 rounded-lg bg-ive-green flex items-center justify-center text-ive-bg-deep hover:brightness-110 active:scale-95 transition-all"
                 >
                   <i className="fa-solid fa-plus text-sm" />
                 </button>
@@ -142,7 +142,7 @@ export default function TopBar() {
             {myVerifyCount > 0 && (
               <button
                 onClick={() => { setIssuesFilter('mine'); setActiveTab('issues'); router.push('/') }}
-                className="relative w-8 h-8 rounded-full bg-ive-amber/20 border border-ive-amber/40 flex items-center justify-center text-ive-amber hover:bg-ive-amber/30 active:scale-95 transition-all"
+                className="relative w-8 h-8 rounded-lg bg-ive-amber/20 border border-ive-amber/40 flex items-center justify-center text-ive-amber hover:bg-ive-amber/30 active:scale-95 transition-all"
                 title={`내가 검증해야 할 이슈 ${myVerifyCount}건`}
                 aria-label={`내 검증 대기 ${myVerifyCount}건`}
               >
@@ -156,7 +156,7 @@ export default function TopBar() {
             {/* 도움말 */}
             <button
               onClick={() => setShowHelp(true)}
-              className="w-8 h-8 rounded-full bg-ive-bg-card border border-ive-border-subtle flex items-center justify-center text-ive-text-dim hover:text-ive-cyan active:scale-95 transition-all"
+              className="w-8 h-8 rounded-lg bg-ive-bg-card border border-ive-border-subtle flex items-center justify-center text-ive-text-dim hover:text-ive-cyan active:scale-95 transition-all"
               aria-label={t('title')}
             >
               <i className="fa-solid fa-circle-question text-sm" />
@@ -165,7 +165,7 @@ export default function TopBar() {
             {/* 아바타 + 로그아웃 */}
             <button
               onClick={() => setShowChangePassword(true)}
-              className="w-8 h-8 rounded-full flex items-center justify-center overflow-hidden transition-all hover:scale-110 active:scale-95"
+              className="w-8 h-8 rounded-lg flex items-center justify-center overflow-hidden transition-all hover:scale-110 active:scale-95"
               style={state.user!.avatar !== 'photo' ? { backgroundColor: (() => { const av = DEFAULT_AVATARS.find(a => a.id === state.user!.avatar); return av ? `${av.color}20` : '#4ade8020' })() } : undefined}
               title={state.user!.name}
             >
@@ -181,7 +181,7 @@ export default function TopBar() {
                 const ok = await showConfirm({ title: td('logoutTitle'), message: td('logoutMessage'), confirmText: tAuth('logout'), cancelText: tc('cancel'), variant: 'info' })
                 if (ok) { await logout(); router.push('/login') }
               }}
-              className="w-8 h-8 rounded-full bg-ive-bg-card border border-ive-border-subtle flex items-center justify-center text-ive-text-dim hover:text-ive-text active:scale-95 transition-all"
+              className="w-8 h-8 rounded-lg bg-ive-bg-card border border-ive-border-subtle flex items-center justify-center text-ive-text-dim hover:text-ive-text active:scale-95 transition-all"
               aria-label={tAuth('logout')}
             >
               <i className="fa-solid fa-right-from-bracket text-sm" />

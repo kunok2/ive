@@ -432,7 +432,7 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
               )}
               <div className="flex flex-col items-center shrink-0" ref={el => { pillRefs.current[m.idx] = el }}>
               <div
-                className={`inline-flex items-center gap-1.5 pl-1 pr-2.5 h-7 rounded-full border text-[11px] font-bold transition-all ${chipCls}`}
+                className={`inline-flex items-center gap-1.5 pl-1 pr-2.5 h-7 rounded-lg border text-[11px] font-bold transition-all ${chipCls}`}
                 title={!showAvatar ? m.label : undefined}
               >
                 {showAvatar ? (

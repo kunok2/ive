@@ -92,7 +92,7 @@ export default function BroadcastView() {
             <button
               key={u.id}
               onClick={() => toggleUser(u.id)}
-              className={`text-xs px-2.5 py-1.5 rounded-full font-bold transition-all ${
+              className={`text-xs px-2.5 py-1.5 rounded-lg font-bold transition-all ${
                 selectedIds.has(u.id)
                   ? 'bg-ive-green/20 text-ive-green border border-ive-green/30'
                   : 'bg-ive-bg-card text-ive-text-dim border border-ive-border-subtle'

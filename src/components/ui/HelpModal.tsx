@@ -46,7 +46,7 @@ export default function HelpModal({ open, onClose, onShowIntro, onStartTour }: H
           </h2>
           <button
             onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-full text-ive-text-muted hover:bg-ive-bg-deep transition-colors text-xl"
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-ive-text-muted hover:bg-ive-bg-deep transition-colors text-xl"
           >
             <i className="fa-solid fa-xmark" />
           </button>
@@ -90,7 +90,7 @@ export default function HelpModal({ open, onClose, onShowIntro, onStartTour }: H
                       <ol className="flex flex-col gap-2 mb-2.5">
                         {Array.from({ length: steps }, (_, i) => (
                           <li key={i} className="flex items-start gap-2 text-xs font-bold text-ive-text-muted">
-                            <span className="shrink-0 w-5 h-5 rounded-full bg-ive-cyan/15 text-ive-cyan flex items-center justify-center text-xs">
+                            <span className="shrink-0 w-5 h-5 rounded-lg bg-ive-cyan/15 text-ive-cyan flex items-center justify-center text-xs">
                               {i + 1}
                             </span>
                             <span className="pt-0.5 leading-relaxed">

@@ -43,7 +43,7 @@ export default function Modal({ open, onClose, title, children, size = 'md', clo
           <h2 className="text-base font-bold text-ive-text">{title}</h2>
           <button
             onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-full text-ive-text-muted hover:bg-ive-bg-deep transition-colors text-xl"
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-ive-text-muted hover:bg-ive-bg-deep transition-colors text-xl"
           >
             <i className="fa-solid fa-xmark" />
           </button>

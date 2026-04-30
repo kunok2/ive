@@ -67,11 +67,12 @@
 |------|-----|------|
 | 버튼, 인풋, 카드, 배지, 아바타 | `rounded-lg` | 기본값, 가장 많이 사용. 사용자/에이전트 아바타 포함 |
 | 모달 | `rounded-2xl` | 모달 외곽만 |
-| 상태 점, 알림 뱃지, 아이콘 버튼, 진행률 바, 탑바 프로필 | `rounded-full` | 원형 요소 |
+| 상태 점, 알림 카운트 뱃지, 진행률 바, 토글 스위치, 라벨 컬러 도트, 페이지네이션 도트 | `rounded-full` | 의미적으로 원형이어야 하는 요소만 |
+| 아이콘 버튼, pill/chip 버튼, 상태 뱃지, 단계 번호, 탑바 버튼/아바타 | `rounded-lg` | 라운딩 사각형 (시각적 안정감) |
 
 `rounded-xl`, `rounded-md`, `rounded-sm` 사용 금지. 예외 없음.
 
-아바타는 라운딩 사각형(`rounded-lg`)으로 통일. **단 탑바의 사용자 프로필 아바타만 예외적으로 `rounded-full`** (헤더의 다른 아이콘 버튼들과 어울리도록).
+**원형(`rounded-full`)은 위 우측 행에 명시된 의미를 가질 때만 사용.** 일반 버튼·뱃지·칩·아이콘 컨테이너는 모두 `rounded-lg`. 아바타도 `rounded-lg`.
 
 ## 타이포그래피
 | 용도 | 크기 | 웨이트 |
@@ -91,7 +92,7 @@ Primary:   bg-ive-green-dark text-white font-bold text-sm px-4 py-3 rounded-lg
 Secondary: bg-white/5 text-ive-text-muted font-bold text-sm px-3 py-2 rounded-lg border border-ive-border-subtle
 Danger:    text-ive-red font-bold text-sm px-3 py-2 rounded-lg border border-ive-red/30
 Ghost:     text-ive-text-muted font-bold text-sm px-3 py-2 rounded-lg hover:bg-white/5
-Icon:      w-8 h-8 rounded-full (정사각형 아이콘 버튼)
+Icon:      w-8 h-8 rounded-lg (정사각형 아이콘 버튼)
 ```
 - 모든 버튼 hover: `hover:opacity-80` 또는 `hover:bg-*` 사용
 - disabled: `disabled:opacity-40`

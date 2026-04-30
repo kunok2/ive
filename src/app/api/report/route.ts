@@ -102,7 +102,6 @@ export async function POST(req: NextRequest) {
   // 브라우저 정보 마크다운 블록
   const browserBlock = [
     browserInfo?.referrer ? `📄 이전 페이지: ${browserInfo.referrer}` : '',
-    `🌐 URL: ${browserInfo?.url ?? 'N/A'}`,
     `🖥 브라우저: ${browserInfo?.userAgent ?? 'N/A'}`,
     `🌍 언어: ${browserInfo?.language ?? 'N/A'}`,
     `📐 화면: ${browserInfo?.screenWidth ?? 0}×${browserInfo?.screenHeight ?? 0}`,

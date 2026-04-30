@@ -196,7 +196,7 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
             <div className="text-sm text-ive-cyan mt-2">
               <i className="fa-solid fa-user-check mr-1" />{te('assignedToUser')}
             </div>
-            <div className={`text-xs mt-2 px-3 py-1 rounded-full inline-block font-bold ${
+            <div className={`text-xs mt-2 px-3 py-1 rounded-lg inline-block font-bold ${
               execInfo.status === 'assigned' ? 'bg-ive-cyan/20 text-ive-cyan' :
               execInfo.status === 'success' ? 'bg-ive-green/20 text-ive-green' :
               'bg-ive-red/20 text-ive-red'
