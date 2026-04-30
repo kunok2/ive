@@ -70,6 +70,20 @@ export async function GET(
   `).get(id) as any
   const verifyWaiting = verifyWaitingCount?.count ?? 0
 
+  // 확인 중 (IVE-C 라벨 단계) — verifying 과 동일하게 issue_stages 기준
+  const confirmingCount = db.prepare(`
+    SELECT COUNT(*) as count FROM issue_stages
+    WHERE project_id = ? AND cached_stage = 'confirming'
+  `).get(id) as any
+  const confirming = confirmingCount?.count ?? 0
+
+  // 확인 대기 중인 issue 수 (confirm_waiting 단계)
+  const confirmWaitingCount = db.prepare(`
+    SELECT COUNT(*) as count FROM issue_stages
+    WHERE project_id = ? AND cached_stage = 'confirm_waiting'
+  `).get(id) as any
+  const confirmWaiting = confirmWaitingCount?.count ?? 0
+
   // 병합 중인 MR 수
   const mergeCount = db.prepare(`
     SELECT COUNT(*) as count FROM issue_stages

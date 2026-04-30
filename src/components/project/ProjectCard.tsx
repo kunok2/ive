@@ -34,10 +34,12 @@ interface Props {
 interface ProjectStats {
   agentWorking: number
   verifying: number
+  confirming: number
   completed: number
   failed: number
   waiting: number
   verifyWaiting: number
+  confirmWaiting: number
   conflictCount: number
   totalTokens: number
   totalCost: number
@@ -56,12 +58,12 @@ export default function ProjectCard({ project }: Props) {
   const { navigateToAddIssue } = useTab()
   const tp = useTranslations('project')
   const [scanning, setScanning] = useState(false)
-  const [expandedPanel, _setExpandedPanel] = useState<'running' | 'done' | 'waiting' | 'verifying' | 'conflicts' | null>(() => {
+  const [expandedPanel, _setExpandedPanel] = useState<'running' | 'done' | 'waiting' | 'verifying' | 'confirming' | 'conflicts' | null>(() => {
     if (typeof window === 'undefined') return null
     const saved = sessionStorage.getItem(`pc-panel-${project.id}`)
-    return (saved === 'running' || saved === 'done' || saved === 'waiting' || saved === 'verifying' || saved === 'conflicts') ? saved as any : null
+    return (saved === 'running' || saved === 'done' || saved === 'waiting' || saved === 'verifying' || saved === 'confirming' || saved === 'conflicts') ? saved as any : null
   })
-  const setExpandedPanel = (v: 'running' | 'done' | 'waiting' | 'verifying' | 'conflicts' | null) => {
+  const setExpandedPanel = (v: 'running' | 'done' | 'waiting' | 'verifying' | 'confirming' | 'conflicts' | null) => {
     _setExpandedPanel(v)
     if (v) sessionStorage.setItem(`pc-panel-${project.id}`, v)
     else sessionStorage.removeItem(`pc-panel-${project.id}`)
@@ -72,6 +74,7 @@ export default function ProjectCard({ project }: Props) {
   const [killing, setKilling] = useState<string | null>(null)
   const [waitingIssues, setWaitingIssues] = useState<any[]>([])
   const [verifyingIssues, setVerifyingIssues] = useState<any[]>([])
+  const [confirmingIssues, setConfirmingIssues] = useState<any[]>([])
   const [activities, setActivities] = useState<Record<string, ToolActivity>>({})
   const [liveMRCount, setLiveMRCount] = useState<number | null>(null)
   const [liveConflictCount, setLiveConflictCount] = useState<number | null>(null)
@@ -90,27 +93,27 @@ export default function ProjectCard({ project }: Props) {
 
   useEffect(() => {
     fetchStats()
-    const totalActive = (stats?.agentWorking ?? 0) + (stats?.verifying ?? 0)
+    const totalActive = (stats?.agentWorking ?? 0) + (stats?.verifying ?? 0) + (stats?.confirming ?? 0)
     const interval = totalActive > 0 ? 3000 : 10000
     const timer = setInterval(fetchStats, interval)
     const onVisible = () => { if (document.visibilityState === 'visible') fetchStats() }
     document.addEventListener('visibilitychange', onVisible)
     return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVisible) }
-  }, [fetchStats, stats?.agentWorking, stats?.verifying])
+  }, [fetchStats, stats?.agentWorking, stats?.verifying, stats?.confirming])
 
   // 경과 시간 실시간 업데이트 (진행 중 작업 요약에 표시)
   useEffect(() => {
-    const totalActive = (stats?.agentWorking ?? 0) + (stats?.verifying ?? 0)
+    const totalActive = (stats?.agentWorking ?? 0) + (stats?.verifying ?? 0) + (stats?.confirming ?? 0)
     if (totalActive > 0 && !expandedPanel) {
       const timer = setInterval(() => setTick(t => t + 1), 1000)
       return () => clearInterval(timer)
     }
-  }, [stats?.agentWorking, stats?.verifying, expandedPanel])
+  }, [stats?.agentWorking, stats?.verifying, stats?.confirming, expandedPanel])
 
   // 실행 목록 로드: 패널 열렸을 때 또는 진행 중 건이 있을 때
   useEffect(() => {
-    const needForPanel = expandedPanel === 'running' || expandedPanel === 'done' || expandedPanel === 'verifying'
-    const totalActive = (stats?.agentWorking ?? 0) + (stats?.verifying ?? 0)
+    const needForPanel = expandedPanel === 'running' || expandedPanel === 'done' || expandedPanel === 'verifying' || expandedPanel === 'confirming'
+    const totalActive = (stats?.agentWorking ?? 0) + (stats?.verifying ?? 0) + (stats?.confirming ?? 0)
     const needForSummary = totalActive > 0 && !expandedPanel
     if (!needForPanel && !needForSummary) {
       setExecutions([])
@@ -125,7 +128,7 @@ export default function ProjectCard({ project }: Props) {
     fetchExecs()
     const timer = setInterval(fetchExecs, 5000)
     return () => clearInterval(timer)
-  }, [expandedPanel, project.id, stats?.agentWorking, stats?.verifying])
+  }, [expandedPanel, project.id, stats?.agentWorking, stats?.verifying, stats?.confirming])
 
   // 대기 패널 열릴 때 대기 이슈 목록 로드
   useEffect(() => {
@@ -135,7 +138,7 @@ export default function ProjectCard({ project }: Props) {
         const res = await fetch(`/api/projects/${project.id}/issues`)
         if (res.ok) {
           const all = await res.json()
-          setWaitingIssues(all.filter((i: any) => i.stage === 'waiting' || i.stage === 'verify_waiting'))
+          setWaitingIssues(all.filter((i: any) => i.stage === 'waiting' || i.stage === 'verify_waiting' || i.stage === 'confirm_waiting'))
         }
       } catch { /* ignore */ }
     }
@@ -158,6 +161,23 @@ export default function ProjectCard({ project }: Props) {
     }
     fetchVerifying()
     const timer = setInterval(fetchVerifying, 10000)
+    return () => clearInterval(timer)
+  }, [expandedPanel, project.id])
+
+  // 확인 중 패널 열릴 때 이슈 목록 로드 (검증 중과 동일 패턴)
+  useEffect(() => {
+    if (expandedPanel !== 'confirming') return
+    const fetchConfirming = async () => {
+      try {
+        const res = await fetch(`/api/projects/${project.id}/issues`)
+        if (res.ok) {
+          const all = await res.json()
+          setConfirmingIssues(all.filter((i: any) => i.stage === 'confirming'))
+        }
+      } catch { /* ignore */ }
+    }
+    fetchConfirming()
+    const timer = setInterval(fetchConfirming, 10000)
     return () => clearInterval(timer)
   }, [expandedPanel, project.id])
 
@@ -199,6 +219,7 @@ export default function ProjectCard({ project }: Props) {
   const conflictCount = liveConflictCount ?? 0
   const agentWorkingCount = stats?.agentWorking ?? 0
   const verifyingCount = stats?.verifying ?? 0
+  const confirmingCount = stats?.confirming ?? 0
   const completedCount = stats?.completed ?? 0
   const failedCount = stats?.failed ?? 0
   const totalDone = completedCount + failedCount
@@ -323,11 +344,11 @@ export default function ProjectCard({ project }: Props) {
             </div>
           </div>
           {/* 작업 중 애니메이션 아이콘 — 진행 중 건이 있을 때만 표시 */}
-          {(agentWorkingCount + verifyingCount) > 0 && (
+          {(agentWorkingCount + verifyingCount + confirmingCount) > 0 && (
             <div className="shrink-0 flex items-center">
               <div className="relative w-10 h-10 flex items-center justify-center">
                 <i className="fa-solid fa-gear fa-spin text-xl text-ive-amber" style={{ animationDuration: '2s' }} />
-                <span className="absolute -bottom-0.5 -right-0.5 bg-ive-amber text-ive-bg-deep text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center">{agentWorkingCount + verifyingCount}</span>
+                <span className="absolute -bottom-0.5 -right-0.5 bg-ive-amber text-ive-bg-deep text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center">{agentWorkingCount + verifyingCount + confirmingCount}</span>
               </div>
             </div>
           )}
@@ -352,8 +373,8 @@ export default function ProjectCard({ project }: Props) {
           onClick={() => setExpandedPanel(expandedPanel === 'waiting' ? null : 'waiting')}
           className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'waiting' ? 'bg-ive-cyan/5' : 'hover:bg-white/[0.02]'}`}
         >
-          <span className={`text-lg font-bold leading-none ${((stats?.waiting ?? 0) + (stats?.verifyWaiting ?? 0)) > 0 ? 'text-ive-cyan' : 'text-ive-text-dim'}`}>
-            {(stats?.waiting ?? 0) + (stats?.verifyWaiting ?? 0)}
+          <span className={`text-lg font-bold leading-none ${((stats?.waiting ?? 0) + (stats?.verifyWaiting ?? 0) + (stats?.confirmWaiting ?? 0)) > 0 ? 'text-ive-cyan' : 'text-ive-text-dim'}`}>
+            {(stats?.waiting ?? 0) + (stats?.verifyWaiting ?? 0) + (stats?.confirmWaiting ?? 0)}
           </span>
           <Sparkline data={snapshots.map(s => s.waiting)} width={40} height={12} color="cyan" />
           <span className="text-xs text-ive-text-dim font-bold">{tp('waitingLabel')}</span>
@@ -383,6 +404,18 @@ export default function ProjectCard({ project }: Props) {
           </span>
           <Sparkline data={snapshots.map(s => s.running)} width={40} height={12} color="amber" />
           <span className="text-xs text-ive-text-dim font-bold">{tp('verifyingLabel')}</span>
+        </button>
+
+        {/* 확인 (사람) — 검증과 동일한 amber 톤 */}
+        <button
+          onClick={() => setExpandedPanel(expandedPanel === 'confirming' ? null : 'confirming')}
+          className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'confirming' ? 'bg-ive-amber/5' : 'hover:bg-white/[0.02]'}`}
+        >
+          <span className={`text-lg font-bold leading-none ${confirmingCount > 0 ? 'text-ive-amber animate-pulse' : 'text-ive-text-dim'}`}>
+            {confirmingCount}
+          </span>
+          <Sparkline data={snapshots.map(s => s.running)} width={40} height={12} color="amber" />
+          <span className="text-xs text-ive-text-dim font-bold">{tp('confirmingLabel')}</span>
         </button>
 
         {/* 완료 (금일) */}
@@ -543,6 +576,51 @@ export default function ProjectCard({ project }: Props) {
         </div>
       )}
 
+      {/* 확인 중 패널 — IVE-C 라벨 단계 이슈 목록 (검증 패널과 동일 구조) */}
+      {expandedPanel === 'confirming' && (
+        <div className="flex-1 flex flex-col min-h-0 border-t border-ive-amber/20">
+          {confirmingIssues.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center gap-2 text-ive-text-dim text-sm">
+              <i className="fa-solid fa-inbox text-2xl" />
+              <span>{tp('noConfirming')}</span>
+            </div>
+          ) : (
+            <div className="flex-1 overflow-y-auto space-y-2 p-3">
+              {confirmingIssues.map((issue: any) => (
+                <div
+                  key={issue.iid}
+                  onClick={() => router.push(`/issues/${project.id}/${issue.iid}`)}
+                  className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-3 hover:border-ive-amber/40 transition-all cursor-pointer active:scale-[0.98]"
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-sm font-bold text-ive-text-muted">#{issue.iid}</span>
+                    <span className="text-xs font-bold px-1.5 py-0.5 rounded shrink-0 border text-ive-amber bg-ive-amber/10 border-ive-amber/20">
+                      {tp('confirmingBadge')}
+                    </span>
+                  </div>
+                  <MarqueeText className="text-sm text-ive-text font-bold">{issue.title}</MarqueeText>
+                  <div className="flex items-center gap-3 text-xs text-ive-text-dim mt-1">
+                    {issue.author?.name && (
+                      <span className="flex items-center gap-1">
+                        {issue.author.avatar ? (
+                          <AgentAvatar avatar={issue.author.avatar} size="xs" className="rounded-full overflow-hidden" />
+                        ) : issue.author.avatarUrl ? (
+                          <img src={issue.author.avatarUrl} className="w-4 h-4 rounded-full object-cover bg-ive-bg-deep" alt="" />
+                        ) : (
+                          <i className="fa-solid fa-user" />
+                        )}
+                        {issue.author.name}
+                      </span>
+                    )}
+                    <span>{formatDateShort(issue.createdAt, userLocale, userTz)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* 대기 이슈 패널 */}
       {expandedPanel === 'waiting' && (
         <div className="flex-1 flex flex-col min-h-0 border-t border-ive-cyan/20">
@@ -570,11 +648,11 @@ export default function ProjectCard({ project }: Props) {
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-sm font-bold text-ive-text-muted">#{issue.iid}</span>
                       <span className={`text-xs font-bold px-1.5 py-0.5 rounded shrink-0 border ${
-                        issue.stage === 'verify_waiting'
+                        issue.stage === 'verify_waiting' || issue.stage === 'confirm_waiting'
                           ? 'text-ive-amber bg-ive-amber/10 border-ive-amber/20'
                           : 'text-ive-cyan/70 bg-ive-cyan/10 border-ive-cyan/20'
                       }`}>
-                        {tp(issue.stage === 'verify_waiting' ? 'verifyWaitBadge' : 'waitingBadge')}
+                        {tp(issue.stage === 'verify_waiting' ? 'verifyWaitBadge' : issue.stage === 'confirm_waiting' ? 'confirmWaitBadge' : 'waitingBadge')}
                       </span>
                     </div>
                     <MarqueeText className="text-sm text-ive-text font-bold">{issue.title}</MarqueeText>
