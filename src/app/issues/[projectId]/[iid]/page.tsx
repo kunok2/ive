@@ -765,10 +765,10 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
     if (preset?.mode === 'specific') {
       return matchesUser(preset.userId)
     }
-    if (preset?.mode === 'auto' && actual?.userId) {
-      return matchesUser(actual.userId)
-    }
-    // creator / 미지정 / auto 미해결 → 작성자
+    // 실제 단계를 시작/진행 중인 사람은 preset 모드와 무관하게 통과 (검증자/확인자 본인)
+    if (actual?.userId && matchesUser(actual.userId)) return true
+    if (preset?.mode === 'auto') return false
+    // creator / 미지정 → 작성자
     return isCreator
   }
   const canStartVerification = !!issue && canStartFor(issue.presetVerifier ?? null, issue.actualVerifier ?? null)
