@@ -28,5 +28,9 @@
   "processing": "Processing...",
   "creating": "Creating...",
   "saveFailed": "Save Failed",
-  "deleteFailed": "Delete Failed"
+  "deleteFailed": "Delete Failed",
+  "selectAll": "All",
+  "clearSelection": "Clear",
+  "searchPlaceholder": "Search...",
+  "noResults": "No results"
 }

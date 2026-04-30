@@ -2,6 +2,8 @@
  * 자동배정: 같은 프로젝트의 열린 이슈 중 본인에게 배정된 개수가 가장 적은
  * 프로젝트 멤버를 골라 assignee 로 지정한다.
  */
+import { getLogger } from "../logger";
+const slog = getLogger("AutoAssign");
 import { Project } from "@/types";
 import { fetchProjectMembers, fetchAllProjectIssues, updateIssue, addIssueComment } from "../provider";
 import { setAssigneeAuto } from "../db";
@@ -53,7 +55,7 @@ export async function runAutoAssign(
     const note = `<!-- ive-bot -->\n## 🎯 담당자 자동 배정\n\n@${picked.username} 님이 자동 배정되었습니다.\n현재 열린 이슈 배정 수가 ${pickedCount}건으로 가장 적었습니다.`;
     await addIssueComment(project, iid, token, note);
   } catch (e) {
-    console.warn(`[AutoAssign] Failed to add note on #${iid}:`, e);
+    slog.warn({ err: e }, `[AutoAssign] Failed to add note on #${iid}:`);
   }
 
   return { username: picked.username, name: picked.name || picked.username, count: pickedCount };

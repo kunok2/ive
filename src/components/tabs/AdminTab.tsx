@@ -8,8 +8,9 @@ import UsersPanel from './admin/UsersPanel'
 import MailPanel from './admin/MailPanel'
 import SettingsPanel from './admin/SettingsPanel'
 import OAuthProvidersPanel from './admin/OAuthProvidersPanel'
+import LogsPanel from './admin/LogsPanel'
 
-type SubTab = 'users' | 'mail' | 'settings' | 'oauth' | 'cli'
+type SubTab = 'users' | 'mail' | 'settings' | 'oauth' | 'cli' | 'logs'
 
 export default function AdminTab() {
   const t = useTranslations('admin')
@@ -17,7 +18,7 @@ export default function AdminTab() {
   const [subTab, setSubTab] = useState<SubTab>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('ive-admin-subtab')
-      if (saved && ['users', 'mail', 'settings', 'oauth', 'cli'].includes(saved)) return saved as SubTab
+      if (saved && ['users', 'mail', 'settings', 'oauth', 'cli', 'logs'].includes(saved)) return saved as SubTab
       if (saved === 'activity') return 'users'
     }
     return 'users'
@@ -38,6 +39,7 @@ export default function AdminTab() {
     { key: 'settings', icon: 'fa-solid fa-gear', label: t('settings') },
     { key: 'oauth', icon: 'fa-solid fa-key', label: 'OAuth' },
     { key: 'cli', icon: 'fa-solid fa-terminal', label: t('cli') },
+    { key: 'logs', icon: 'fa-solid fa-file-lines', label: t('logs') },
   ]
 
   return (
@@ -68,6 +70,7 @@ export default function AdminTab() {
           {subTab === 'settings' && <SettingsPanel key={refreshKey} />}
           {subTab === 'oauth' && <OAuthProvidersPanel key={refreshKey} />}
           {subTab === 'cli' && <TerminalTab />}
+          {subTab === 'logs' && <LogsPanel key={refreshKey} />}
         </div>
       </div>
     </PullToRefresh>

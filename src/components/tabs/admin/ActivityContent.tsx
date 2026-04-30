@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import { User, UserActivityLog } from '@/types'
 import { useStore } from '@/lib/store'
 import { formatDateWithSeconds } from '@/lib/format-date'
+import MultiSelectPicker from '@/components/ui/MultiSelectPicker'
 
 // 카테고리는 아이콘으로 구분, 색은 의미가 있을 때만 (위험 admin / 정보 auth)
 const CATEGORY_META: Record<string, { labelKey: string; icon: string; color: string }> = {
@@ -34,27 +35,35 @@ const DATE_PRESETS: { labelKey: string; days: number | null }[] = [
 const ACTIVITY_FILTER_KEY = 'ive-admin-activity-filter'
 
 function loadActivityFilter(): {
-  category: string
-  userId: string
+  categories: string[]
+  userIds: string[]
   startDate: string
   endDate: string
   preset: number | null
 } {
-  if (typeof window === 'undefined') return { category: '', userId: '', startDate: getDateStr(30), endDate: getDateStr(0), preset: 30 }
+  const fallback = { categories: [], userIds: [], startDate: getDateStr(30), endDate: getDateStr(0), preset: 30 }
+  if (typeof window === 'undefined') return fallback
   try {
     const raw = localStorage.getItem(ACTIVITY_FILTER_KEY)
     if (raw) {
       const parsed = JSON.parse(raw)
+      // 하위 호환: 이전 단일 값(category/userId)도 배열로 변환
+      const categories: string[] = Array.isArray(parsed.categories)
+        ? parsed.categories
+        : (parsed.category ? [parsed.category] : [])
+      const userIds: string[] = Array.isArray(parsed.userIds)
+        ? parsed.userIds
+        : (parsed.userId ? [parsed.userId] : [])
       return {
-        category: parsed.category ?? '',
-        userId: parsed.userId ?? '',
+        categories,
+        userIds,
         startDate: parsed.startDate ?? getDateStr(30),
         endDate: parsed.endDate ?? getDateStr(0),
         preset: parsed.preset !== undefined ? parsed.preset : 30,
       }
     }
   } catch {}
-  return { category: '', userId: '', startDate: getDateStr(30), endDate: getDateStr(0), preset: 30 }
+  return fallback
 }
 
 export default function ActivityContent() {
@@ -68,8 +77,8 @@ export default function ActivityContent() {
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const savedFilter = loadActivityFilter()
-  const [filterCategory, setFilterCategory] = useState<string>(savedFilter.category)
-  const [filterUserId, setFilterUserId] = useState<string>(savedFilter.userId)
+  const [filterCategories, setFilterCategories] = useState<string[]>(savedFilter.categories)
+  const [filterUserIds, setFilterUserIds] = useState<string[]>(savedFilter.userIds)
   const [filterStartDate, setFilterStartDate] = useState<string>(savedFilter.startDate)
   const [filterEndDate, setFilterEndDate] = useState<string>(savedFilter.endDate)
   const [activePreset, setActivePreset] = useState<number | null>(savedFilter.preset)
@@ -80,14 +89,14 @@ export default function ActivityContent() {
   useEffect(() => {
     try {
       localStorage.setItem(ACTIVITY_FILTER_KEY, JSON.stringify({
-        category: filterCategory,
-        userId: filterUserId,
+        categories: filterCategories,
+        userIds: filterUserIds,
         startDate: filterStartDate,
         endDate: filterEndDate,
         preset: activePreset,
       }))
     } catch {}
-  }, [filterCategory, filterUserId, filterStartDate, filterEndDate, activePreset])
+  }, [filterCategories, filterUserIds, filterStartDate, filterEndDate, activePreset])
 
   useEffect(() => {
     fetch('/api/admin/users').then(r => r.json()).then(setUsers).catch(() => {})
@@ -100,8 +109,8 @@ export default function ActivityContent() {
     const sp = new URLSearchParams()
     sp.set('limit', String(PAGE_SIZE))
     sp.set('offset', String(offsetRef.current))
-    if (filterCategory) sp.set('category', filterCategory)
-    if (filterUserId) sp.set('userId', filterUserId)
+    if (filterCategories.length > 0) sp.set('category', filterCategories.join(','))
+    if (filterUserIds.length > 0) sp.set('userId', filterUserIds.join(','))
     if (filterStartDate) sp.set('startDate', filterStartDate)
     if (filterEndDate) sp.set('endDate', filterEndDate)
 
@@ -120,7 +129,7 @@ export default function ActivityContent() {
       setLoading(false)
       setLoadingMore(false)
     }
-  }, [filterCategory, filterUserId, filterStartDate, filterEndDate])
+  }, [filterCategories, filterUserIds, filterStartDate, filterEndDate])
 
   useEffect(() => { fetchLogs(true) }, [fetchLogs])
 
@@ -137,28 +146,24 @@ export default function ActivityContent() {
 
   return (
     <>
-      {/* 필터 */}
+      {/* 필터 — 다중 선택 (선택 없음 = 전체) */}
       <div className="flex gap-2 mb-2">
-        <select
-          value={filterCategory}
-          onChange={e => setFilterCategory(e.target.value)}
-          className="flex-1 bg-ive-bg-input border border-ive-border rounded-lg px-2.5 py-2 text-xs text-ive-text focus:outline-none focus:border-ive-green/50"
-        >
-          <option value="">{t('allCategories')}</option>
-          {Object.entries(CATEGORY_META).map(([k, v]) => (
-            <option key={k} value={k}>{t(v.labelKey as any)}</option>
-          ))}
-        </select>
-        <select
-          value={filterUserId}
-          onChange={e => setFilterUserId(e.target.value)}
-          className="flex-1 bg-ive-bg-input border border-ive-border rounded-lg px-2.5 py-2 text-xs text-ive-text focus:outline-none focus:border-ive-green/50"
-        >
-          <option value="">{t('allUsers')}</option>
-          {users.map(u => (
-            <option key={u.id} value={u.id}>{u.name}</option>
-          ))}
-        </select>
+        <MultiSelectPicker
+          size="sm"
+          className="flex-1"
+          values={filterCategories}
+          onChange={setFilterCategories}
+          allLabel={t('allCategories')}
+          options={Object.entries(CATEGORY_META).map(([k, v]) => ({ value: k, label: t(v.labelKey as any) }))}
+        />
+        <MultiSelectPicker
+          size="sm"
+          className="flex-1"
+          values={filterUserIds}
+          onChange={setFilterUserIds}
+          allLabel={t('allUsers')}
+          options={users.map(u => ({ value: u.id, label: u.name }))}
+        />
       </div>
 
       {/* 기간 프리셋 */}

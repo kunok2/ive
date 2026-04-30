@@ -7,12 +7,15 @@ import { useToast } from '@/components/ui/Toast'
 import ModelSelect from './ModelSelect'
 import ModelPricingSection from './ModelPricingSection'
 import HumanPricingSection from './HumanPricingSection'
+import CustomSelect from '@/components/ui/CustomSelect'
 
 // ── Types ──
 
 interface SettingField {
-  key: string; label: string; type: 'text' | 'password' | 'number' | 'textarea' | 'model-select'
+  key: string; label: string; type: 'text' | 'password' | 'number' | 'textarea' | 'model-select' | 'select' | 'boolean'
   placeholder?: string; defaultValue?: string; rows?: number; cliName?: string
+  options?: { value: string; label: string }[]
+  hint?: string
 }
 interface SettingGroup {
   key: string
@@ -77,6 +80,64 @@ const SETTING_GROUPS: SettingGroup[] = [
         type: 'textarea',
         rows: 8,
         placeholder: `{\n  "github": {\n    "type": "local",\n    "command": ["npx", "-y", "@modelcontextprotocol/server-github"],\n    "environment": { "GITHUB_TOKEN": "ghp_xxx" }\n  }\n}`,
+      },
+    ],
+  },
+  {
+    key: 'logging', label: 'logging', icon: 'fa-solid fa-file-lines',
+    fields: [
+      {
+        key: 'log.level',
+        label: 'log.level',
+        type: 'select',
+        defaultValue: 'info',
+        hint: 'log.levelHint',
+        options: [
+          { value: 'trace', label: 'trace' },
+          { value: 'debug', label: 'debug' },
+          { value: 'info', label: 'info' },
+          { value: 'warn', label: 'warn' },
+          { value: 'error', label: 'error' },
+          { value: 'fatal', label: 'fatal' },
+        ],
+      },
+      {
+        key: 'log.file_enabled',
+        label: 'log.fileEnabled',
+        type: 'boolean',
+        defaultValue: 'true',
+        hint: 'log.fileEnabledHint',
+      },
+      {
+        key: 'log.dir',
+        label: 'log.dir',
+        type: 'text',
+        placeholder: 'data/logs/app',
+        hint: 'log.dirHint',
+      },
+      {
+        key: 'log.frequency',
+        label: 'log.frequency',
+        type: 'select',
+        defaultValue: 'daily',
+        options: [
+          { value: 'daily', label: 'log.frequencyDaily' },
+          { value: 'hourly', label: 'log.frequencyHourly' },
+        ],
+      },
+      {
+        key: 'log.max_size_mb',
+        label: 'log.maxSizeMb',
+        type: 'number',
+        defaultValue: '50',
+        placeholder: '50',
+      },
+      {
+        key: 'log.max_files',
+        label: 'log.maxFiles',
+        type: 'number',
+        defaultValue: '14',
+        placeholder: '14',
       },
     ],
   },
@@ -211,9 +272,16 @@ export default function SettingsPanel() {
                 </div>
               )}
 
-              {group.fields.map(field => (
+              {group.fields.map(field => {
+                // Allow `field.label` and option labels to be either literal text
+                // or an i18n key for the `admin` namespace (used by the logging group).
+                const tr = (s: string) => {
+                  if (!s.includes('.') && !/^[a-z]+[A-Z]/.test(s)) return s
+                  try { return t(s as any) } catch { return s }
+                }
+                return (
                 <div key={field.key}>
-                  <label className="block text-xs font-bold text-ive-text-muted mb-1">{field.label}</label>
+                  <label className="block text-xs font-bold text-ive-text-muted mb-1">{tr(field.label)}</label>
                   {field.type === 'model-select' ? (
                     <ModelSelect
                       models={cliModels[field.cliName || ''] || []}
@@ -253,6 +321,26 @@ export default function SettingsPanel() {
                         className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green/50"
                       />
                     )
+                  ) : field.type === 'select' ? (
+                    <CustomSelect
+                      value={settings[field.key] || field.defaultValue || ''}
+                      onChange={v => updateSetting(field.key, v)}
+                      options={(field.options || []).map(opt => ({ value: opt.value, label: tr(opt.label) }))}
+                    />
+                  ) : field.type === 'boolean' ? (
+                    <label className="inline-flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={(settings[field.key] ?? field.defaultValue ?? 'false') === 'true'}
+                        onChange={e => updateSetting(field.key, e.target.checked ? 'true' : 'false')}
+                        className="w-4 h-4 accent-ive-green"
+                      />
+                      <span className="text-sm text-ive-text">
+                        {(settings[field.key] ?? field.defaultValue ?? 'false') === 'true'
+                          ? t('log.fileEnabledOn')
+                          : t('log.fileEnabledOff')}
+                      </span>
+                    </label>
                   ) : (
                     <input
                       type={field.type}
@@ -262,8 +350,12 @@ export default function SettingsPanel() {
                       className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green/50"
                     />
                   )}
+                  {field.hint && (
+                    <p className="mt-1 text-[11px] text-ive-text-dim leading-snug">{tr(field.hint)}</p>
+                  )}
                 </div>
-              ))}
+                )
+              })}
 
               {group.key === 'mail' && (
                 <div className="flex gap-2">

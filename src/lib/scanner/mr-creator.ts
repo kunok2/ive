@@ -1,6 +1,8 @@
 /**
  * MR/PR 생성, 푸시, 완료 노트, 레이블 전환
  */
+import { getLogger } from "../logger";
+const slog = getLogger("Scanner");
 import fs from "fs";
 import { promisify } from "util";
 import { Project, Agent } from "@/types";
@@ -121,7 +123,7 @@ export async function commitPushAndCreateMR(params: {
     try {
       await removeIssueLabels(project, iid, token, [project.labelDev || 'IVE-D']);
       await addIssueLabels(project, iid, token, [project.labelVerifyWait || 'IVE-W']);
-    } catch (e) { console.warn(`[Scanner] Label switch failed:`, e); }
+    } catch (e) { slog.warn({ err: e }, `Label switch failed:`); }
     log("작업 완료 → 검증대기 (IVE-W). 검증자가 검증시작을 클릭하면 검증이 시작됩니다.", 'system');
     updateExecutionStatus(executionId, 'success', new Date().toISOString());
     await maybeAutoAssign(project, iid, token, log);
@@ -140,12 +142,12 @@ export async function commitPushAndCreateMR(params: {
         await addGitLabIssueComment(project, iid, token, noChangeNote);
         await addGitLabSpentTime(project, iid, token, durationStr);
       }
-    } catch (e) { console.warn(`[Scanner] Remote comment failed:`, e); }
+    } catch (e) { slog.warn({ err: e }, `Remote comment failed:`); }
     // 레이블 전환: IVE-D 제거, IVE-W 부착 (검증대기)
     try {
       await removeIssueLabels(project, iid, token, [project.labelDev || 'IVE-D']);
       await addIssueLabels(project, iid, token, [project.labelVerifyWait || 'IVE-W']);
-    } catch (e) { console.warn(`[Scanner] Label switch failed:`, e); }
+    } catch (e) { slog.warn({ err: e }, `Label switch failed:`); }
     updateExecutionStatus(executionId, 'success', new Date().toISOString());
     await maybeAutoAssign(project, iid, token, log);
   }
@@ -207,7 +209,7 @@ export async function postErrorNote(
     } else {
       await addGitLabIssueComment(project, iid, token, errorNote);
     }
-  } catch (e) { console.warn(`[Scanner] Remote comment failed:`, e); }
+  } catch (e) { slog.warn({ err: e }, `Remote comment failed:`); }
 }
 
 /**
@@ -238,7 +240,7 @@ async function handlePushFailure(
     } else {
       await addGitLabIssueComment(project, iid, token, pushFailNote);
     }
-  } catch (e) { console.warn(`[Scanner] Remote comment failed:`, e); }
+  } catch (e) { slog.warn({ err: e }, `Remote comment failed:`); }
   updateExecutionStatus(executionId, 'failed', new Date().toISOString());
   updateAgentStatus(agent.id, 'available');
   logStream.end();

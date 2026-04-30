@@ -2,6 +2,8 @@
  * 에이전트 실행 오케스트레이터.
  * 실제 작업은 git-ops, cli-runner, mr-creator 서브모듈에 위임합니다.
  */
+import { getLogger } from "../logger";
+const slog = getLogger("Scanner");
 import {
   getProject,
   createExecution,
@@ -74,7 +76,7 @@ export async function executeTask(
   };
 
   if (!isConflictTask && !assignIssueAtomically(project.id, iid, 'dev', execution)) {
-    console.log(`[Scanner] [SKIP] Issue #${iid} already has active execution (race condition prevented in executeTask)`);
+    slog.info(`[SKIP] Issue #${iid} already has active execution (race condition prevented in executeTask)`);
     updateAgentStatus(agent.id, 'available');
     return;
   }
@@ -96,7 +98,7 @@ export async function executeTask(
         assigneeGitUserId: assignee && assignee.id != null ? String(assignee.id) : null,
         issueTitle: issue.title || null,
       });
-    } catch (e) { console.warn(`[Scanner] Failed to update cached_stage to dev for #${iid}:`, e); }
+    } catch (e) { slog.warn({ err: e }, `Failed to update cached_stage to dev for #${iid}:`); }
   }
 
   // 레이블 전환: IVE-S 제거, IVE-D 부착 (개발 시작)
@@ -104,7 +106,7 @@ export async function executeTask(
     try {
       await removeIssueLabels(project, iid, token, [project.labelSchedule || 'IVE-S']);
       await addIssueLabels(project, iid, token, [project.labelDev || 'IVE-D']);
-    } catch (e) { console.warn(`[Scanner] Failed to switch labels on #${iid}:`, e); }
+    } catch (e) { slog.warn({ err: e }, `Failed to switch labels on #${iid}:`); }
   }
 
   // 작업 등록 활동 로그
@@ -119,7 +121,7 @@ export async function executeTask(
         targetId: executionId,
       })
     } catch (e) {
-      console.error('[Scanner] Failed to log task activity:', e)
+      slog.error({ err: e }, 'Failed to log task activity:')
     }
   }
 
@@ -144,7 +146,7 @@ export async function executeTask(
     if (type === 'warn') colorCode = '\x1b[1;33m';
     const coloredMsg = colorCode ? `${colorCode}${msg}\x1b[0m` : msg;
     logStream.write(`${coloredMsg}\n`);
-    console.log(`[Task #${iid}] ${msg}`);
+    slog.info(`[Task #${iid}] ${msg}`);
   };
 
   // 프로젝트 소유자의 locale 설정
@@ -269,7 +271,7 @@ export async function executeTask(
     try {
       const freshProject = getProject(project.id);
       if (freshProject && (freshProject.lastScannedIssueCount ?? 0) > 0) {
-        console.log(`[Scanner] Agent ${agent.name} freed — triggering scan for ${freshProject.name}`);
+        slog.info(`Agent ${agent.name} freed — triggering scan for ${freshProject.name}`);
         const { triggerScan } = await import('./index');
         triggerScan(freshProject.id);
       }
@@ -290,7 +292,7 @@ export async function processConflictCheck(project: Project, decryptedToken: str
   }
 
   if (hasActiveExecution(project.id, 0)) {
-    console.log(`[Scanner] [SKIP] Conflict check already running for ${project.name}`);
+    slog.info(`[SKIP] Conflict check already running for ${project.name}`);
     return;
   }
 
@@ -313,11 +315,11 @@ export async function processConflictCheck(project: Project, decryptedToken: str
   }
 
   if (!selectedAgent) {
-    console.log(`[Scanner] [SKIP] No available agent for conflict check on ${project.name}`);
+    slog.info(`[SKIP] No available agent for conflict check on ${project.name}`);
     return;
   }
 
-  console.log(`[Scanner] [ASSIGN-CONFLICT] Project: ${project.name}, Agent: ${selectedAgent.name}, Done issues: ${doneIids.length}`);
+  slog.info(`[ASSIGN-CONFLICT] Project: ${project.name}, Agent: ${selectedAgent.name}, Done issues: ${doneIids.length}`);
 
   const conflictIssue = {
     iid: 0,
@@ -327,9 +329,9 @@ export async function processConflictCheck(project: Project, decryptedToken: str
 
   executeTask(project, conflictIssue, selectedAgent, agentToken)
     .then(() => {
-      console.log(`[Scanner] [DONE-CONFLICT] ${project.name} conflict check completed.`);
+      slog.info(`[DONE-CONFLICT] ${project.name} conflict check completed.`);
     })
     .catch(err => {
-      console.error(`[Scanner] [FAILED-CONFLICT] ${project.name} error:`, err);
+      slog.error({ err: err }, `[FAILED-CONFLICT] ${project.name} error:`);
     });
 }

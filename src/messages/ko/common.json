@@ -28,5 +28,9 @@
   "processing": "처리 중...",
   "creating": "생성 중...",
   "saveFailed": "저장 실패",
-  "deleteFailed": "삭제 실패"
+  "deleteFailed": "삭제 실패",
+  "selectAll": "전체",
+  "clearSelection": "해제",
+  "searchPlaceholder": "검색...",
+  "noResults": "결과 없음"
 }

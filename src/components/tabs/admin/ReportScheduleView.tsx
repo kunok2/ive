@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import { User } from '@/types'
 import { useDialog } from '@/components/ui/ConfirmDialog'
 import { useToast } from '@/components/ui/Toast'
+import CustomSelect from '@/components/ui/CustomSelect'
 
 interface ReportScheduleState {
   id: string; reportType: string; enabled: boolean
@@ -214,15 +215,16 @@ export default function ReportScheduleView() {
                 <div className="flex items-center gap-3">
                   <label className="text-xs font-bold text-ive-text-muted w-20 shrink-0">{t('sendTime')}</label>
                   <span className="text-xs font-bold text-ive-text">{t(opt.sendDayKey)}</span>
-                  <select
-                    value={form.sendHour ?? 9}
-                    onChange={e => setEditForm(prev => ({ ...prev, sendHour: Number(e.target.value) }))}
-                    className="bg-ive-bg-deep border border-ive-border-subtle rounded-lg px-2 py-1.5 text-xs font-bold text-ive-cyan outline-none"
-                  >
-                    {Array.from({ length: 24 }, (_, h) => (
-                      <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
-                    ))}
-                  </select>
+                  <CustomSelect
+                    size="sm"
+                    className="w-[88px]"
+                    value={String(form.sendHour ?? 9)}
+                    onChange={v => setEditForm(prev => ({ ...prev, sendHour: Number(v) }))}
+                    options={Array.from({ length: 24 }, (_, h) => ({
+                      value: String(h),
+                      label: `${String(h).padStart(2, '0')}:00`,
+                    }))}
+                  />
                   <span className="text-xs text-ive-text-dim">KST</span>
                 </div>
 

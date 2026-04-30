@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { getSystemSettings, setSystemSettings } from '@/lib/db'
 import { logActivity } from '@/lib/activity'
+import { reloadLogger, normalizeConfig } from '@/lib/logger'
 
 // 마스킹할 비밀번호 키 목록
 const PASSWORD_KEYS = ['mail.smtp_password']
@@ -39,6 +40,22 @@ export async function POST(req: Request) {
   }
 
   setSystemSettings(filteredSettings)
+
+  // If any log.* setting changed, hot-reload the logger so new policy
+  // takes effect without a restart.
+  const hasLogChange = Object.keys(filteredSettings).some(k => k.startsWith('log.'))
+  if (hasLogChange) {
+    const all = getSystemSettings('log.')
+    reloadLogger(normalizeConfig({
+      level: all['log.level'],
+      fileEnabled: all['log.file_enabled'],
+      dir: all['log.dir'],
+      frequency: all['log.frequency'],
+      maxSizeMb: all['log.max_size_mb'],
+      maxFiles: all['log.max_files'],
+    }))
+  }
+
   logActivity({ userId: user.id, category: 'admin', action: 'update_settings', detail: `시스템 설정 변경 (${Object.keys(filteredSettings).length}개 항목)`, req })
   return NextResponse.json({ success: true })
 }

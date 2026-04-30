@@ -1,3 +1,5 @@
+import { getLogger } from "../logger";
+const slog = getLogger("Scanner");
 import {
   getAllProjects,
   getProject,
@@ -94,12 +96,12 @@ declare global {
 
 export function startScanner() {
   if (global.scanInterval) {
-    console.log("[Scanner] Scanner already running. (V2)");
+    slog.info("Scanner already running. (V2)");
     return;
   }
 
   global.isScanning = false;
-  console.log("[Scanner] Starting background scanner... (V2)");
+  slog.info("Starting background scanner... (V2)");
 
   // 서버 재시작으로 고착된 실행 복구
   resetStuckExecutions();
@@ -120,7 +122,7 @@ export function startScanner() {
 }
 
 export function triggerScan(projectId?: string) {
-  console.log(`[Scanner] Triggered scan${projectId ? ` for project ${projectId}` : ' (all projects)'}`);
+  slog.info(`Triggered scan${projectId ? ` for project ${projectId}` : ' (all projects)'}`);
 
   if (global.isScanning) {
     // 스캔 중이면 pending에 기록해두고 현재 스캔이 끝난 뒤 실행
@@ -131,7 +133,7 @@ export function triggerScan(projectId?: string) {
     } else if (global.pendingScanProjectId !== null && global.pendingScanProjectId !== projectId) {
       global.pendingScanProjectId = null // 다른 프로젝트 → 전체 스캔으로 확장
     }
-    console.log(`[Scanner] Scan in progress, queued for after: projectId=${global.pendingScanProjectId ?? 'all'}`)
+    slog.info(`Scan in progress, queued for after: projectId=${global.pendingScanProjectId ?? 'all'}`)
     return
   }
 
@@ -143,7 +145,7 @@ async function runScanImmediate(projectId?: string) {
 
   global.isScanning = true;
   global.pendingScanProjectId = undefined;
-  console.log(`[Scanner] Running immediate scan${projectId ? ` for project ${projectId}` : ''}...`);
+  slog.info(`Running immediate scan${projectId ? ` for project ${projectId}` : ''}...`);
 
   try {
     if (projectId) {
@@ -158,7 +160,7 @@ async function runScanImmediate(projectId?: string) {
       }
     }
   } catch (err) {
-    console.error(`[Scanner] Immediate scan error:`, err);
+    slog.error({ err: err }, `Immediate scan error:`);
   } finally {
     global.isScanning = false;
 
@@ -166,7 +168,7 @@ async function runScanImmediate(projectId?: string) {
     const pending = global.pendingScanProjectId
     if (pending !== undefined) {
       global.pendingScanProjectId = undefined
-      console.log(`[Scanner] Running pending scan${pending ? ` for project ${pending}` : ''}...`)
+      slog.info(`Running pending scan${pending ? ` for project ${pending}` : ''}...`)
       runScanImmediate(pending ?? undefined)
     }
   }
@@ -177,18 +179,18 @@ export function stopScanner() {
     clearInterval(global.scanInterval);
     global.scanInterval = undefined;
     global.isScanning = false;
-    console.log("[Scanner] Stopped background scanner.");
+    slog.info("Stopped background scanner.");
   }
 }
 
 async function runScan() {
   if (global.isScanning) {
-    console.log("[Scanner] Skip: Previous scan still in progress...");
+    slog.info("Skip: Previous scan still in progress...");
     return;
   }
 
   global.isScanning = true;
-  console.log(`[Scanner] Core Tick: ${new Date().toISOString()}`);
+  slog.info(`Core Tick: ${new Date().toISOString()}`);
 
   try {
     const projects = getAllProjects();
@@ -196,7 +198,7 @@ async function runScan() {
       await scanProject(project, false);
     }
   } catch (err) {
-    console.error(`[Scanner] Core runScan error:`, err);
+    slog.error({ err: err }, `Core runScan error:`);
   } finally {
     global.isScanning = false;
   }
@@ -225,7 +227,7 @@ async function scanProject(project: Project, force: boolean = false) {
       }
     }
 
-    console.log(`[Scanner] ${force ? 'FORCED ' : ''}Scanning project: ${project.name}`);
+    slog.info(`${force ? 'FORCED ' : ''}Scanning project: ${project.name}`);
 
     let decryptedToken = decrypt(project.accessToken);
 
@@ -241,7 +243,7 @@ async function scanProject(project: Project, force: boolean = false) {
           const nowMs = Date.now();
 
           if (expiresAt < nowMs + 10 * 60 * 1000) {
-            console.log(`[Scanner] OAuth token expiring soon for ${project.name}, refreshing...`);
+            slog.info(`OAuth token expiring soon for ${project.name}, refreshing...`);
             const providerRaw = full.oauth_provider_id ? getOAuthProviderRaw(full.oauth_provider_id) : null;
             if (providerRaw && full.oauth_refresh_token) {
               const refreshPlain = decrypt(full.oauth_refresh_token);
@@ -258,15 +260,15 @@ async function scanProject(project: Project, force: boolean = false) {
                   refreshTokenEncrypted: encrypt(refreshed.refresh_token || refreshPlain),
                   tokenExpiresAt: newExpiry
                 });
-                console.log(`[Scanner] OAuth token refreshed for ${project.name}`);
+                slog.info(`OAuth token refreshed for ${project.name}`);
               }
             } else {
-              console.warn(`[Scanner] Cannot refresh OAuth token for ${project.name}: missing provider or refresh_token`);
+              slog.warn(`Cannot refresh OAuth token for ${project.name}: missing provider or refresh_token`);
             }
           }
         }
       } catch (e) {
-        console.error(`[Scanner] OAuth handling failed for ${project.name}:`, e);
+        slog.error({ err: e }, `OAuth handling failed for ${project.name}:`);
         // 실패 시 에러만 남기고 기존 토큰으로 시도 (혹시 모르니)
       }
     }
@@ -288,9 +290,9 @@ async function scanProject(project: Project, force: boolean = false) {
         })).filter((m: { username: string }) => m.username);
         replaceProjectMembers(project.id, mapped);
         memberSyncAt.set(project.id, Date.now());
-        console.log(`[Scanner] Cached ${mapped.length} members for project ${project.name}`);
+        slog.info(`Cached ${mapped.length} members for project ${project.name}`);
       } catch (e) {
-        console.warn(`[Scanner] fetchProjectMembers failed for ${project.name}:`, (e as Error).message);
+        slog.warn(`fetchProjectMembers failed for ${project.name}:`, (e as Error).message);
       }
     }
     let issueCount = 0;           // 처리 대기 (waiting) 이슈 수
@@ -338,7 +340,7 @@ async function scanProject(project: Project, force: boolean = false) {
         const orphanLabels = [labelS, labelD, labelW, labelV, labelE].filter(l => labels.includes(l));
         if (orphanLabels.length > 0) {
           try { await removeIssueLabels(project, iid, decryptedToken, orphanLabels); } catch { /* ignore */ }
-          console.log(`[Scanner] Issue #${iid} — orphan labels removed (no ${labelTarget}): ${orphanLabels.join(', ')}`);
+          slog.info(`Issue #${iid} — orphan labels removed (no ${labelTarget}): ${orphanLabels.join(', ')}`);
         }
         issueMap.delete(iid);
         continue;
@@ -349,7 +351,7 @@ async function scanProject(project: Project, force: boolean = false) {
         const staleLabels = [labelS, labelD, labelW, labelV].filter(l => labels.includes(l));
         if (staleLabels.length > 0) {
           try { await removeIssueLabels(project, iid, decryptedToken, staleLabels); } catch { /* ignore */ }
-          console.log(`[Scanner] Issue #${iid} — cleaned stale labels (has ${labelE}): ${staleLabels.join(', ')}`);
+          slog.info(`Issue #${iid} — cleaned stale labels (has ${labelE}): ${staleLabels.join(', ')}`);
         }
       }
     }
@@ -392,7 +394,7 @@ async function scanProject(project: Project, force: boolean = false) {
           });
         }
       } catch (e) {
-        console.warn(`[Scanner] verify marker update failed (#${iid}):`, (e as Error).message);
+        slog.warn(`verify marker update failed (#${iid}):`, (e as Error).message);
       }
 
       // 검증자별 부하 집계용 스냅샷 — Git assignee + 현재 stage 저장
@@ -410,7 +412,7 @@ async function scanProject(project: Project, force: boolean = false) {
           issueTitle: issue.title || null,
         });
       } catch (e) {
-        console.warn(`[Scanner] upsertIssueStageSnapshot failed (#${iid}):`, (e as Error).message);
+        slog.warn(`upsertIssueStageSnapshot failed (#${iid}):`, (e as Error).message);
       }
 
       // ── 외부 도구 이슈 인식 ──
@@ -460,16 +462,16 @@ async function scanProject(project: Project, force: boolean = false) {
               detail: `외부 도구 작업 인식: #${iid} "${issue.title}" (${project.name}, ${isComplete ? '완료' : '진행중'})`,
               targetType: 'execution', targetId: executionId,
             });
-          } catch (e) { console.error('[Scanner] Failed to log external task activity:', e); }
+          } catch (e) { slog.error({ err: e }, 'Failed to log external task activity:'); }
 
-          console.log(`[Scanner] [EXTERNAL] Project: ${project.name}, Issue: #${iid}, Status: ${isComplete ? 'success' : 'running'}, Author: ${execution.userName}, Tokens: ${meta.inputTokens}/${meta.outputTokens}`);
+          slog.info(`[EXTERNAL] Project: ${project.name}, Issue: #${iid}, Status: ${isComplete ? 'success' : 'running'}, Author: ${execution.userName}, Tokens: ${meta.inputTokens}/${meta.outputTokens}`);
 
           // 완료된 외부 도구 이슈는 자동으로 닫는다 (IVE-E/IVE-W 상태)
           if (isComplete) {
             try {
               await closeIssue(project, iid, decryptedToken);
-              console.log(`[Scanner] [EXTERNAL] Closed issue #${iid} (external tool task completed)`);
-            } catch (e) { console.warn(`[Scanner] Failed to close external issue #${iid}:`, e); }
+              slog.info(`[EXTERNAL] Closed issue #${iid} (external tool task completed)`);
+            } catch (e) { slog.warn({ err: e }, `Failed to close external issue #${iid}:`); }
           }
         }
       }
@@ -485,7 +487,7 @@ async function scanProject(project: Project, force: boolean = false) {
           updateExecutionStatus(ex.id, 'success', new Date().toISOString());
         }
         if (lingering.length > 0) {
-          console.log(`[Scanner] [USER-COMPLETE] Issue #${iid} — 레이블 전환 감지, 활성 사용자 execution ${lingering.length}건 완료 처리 (${stage})`);
+          slog.info(`[USER-COMPLETE] Issue #${iid} — 레이블 전환 감지, 활성 사용자 execution ${lingering.length}건 완료 처리 (${stage})`);
         }
       }
       // 사람 작업 실패 감지: IVE-D가 제거되어 dev_fail, waiting, 또는 레이블 없음(null) 상태가 된 경우
@@ -494,7 +496,7 @@ async function scanProject(project: Project, force: boolean = false) {
         const userExec = getAssignedUserExecution(project.id, iid);
         if (userExec) {
           updateExecutionStatus(userExec.id, 'failed', new Date().toISOString());
-          console.log(`[Scanner] [USER-FAIL] Issue #${iid} — 레이블 변경 감지 (stage: ${stage}), 작업 실패 처리`);
+          slog.info(`[USER-FAIL] Issue #${iid} — 레이블 변경 감지 (stage: ${stage}), 작업 실패 처리`);
         }
       }
 
@@ -539,9 +541,9 @@ async function scanProject(project: Project, force: boolean = false) {
                 const defaultBranch = await getDefaultBranch(project, decryptedToken);
                 const created = await createBranch(project, decryptedToken, branchName, defaultBranch);
                 if (created) {
-                  console.log(`[Scanner] [BRANCH] Created branch '${branchName}' for assignee issue #${iid}`);
+                  slog.info(`[BRANCH] Created branch '${branchName}' for assignee issue #${iid}`);
                 }
-              } catch (e) { console.warn(`[Scanner] Failed to create branch for #${iid}:`, e); }
+              } catch (e) { slog.warn({ err: e }, `Failed to create branch for #${iid}:`); }
 
               // IVE-S 잔류 레이블 정리 (담당자가 IVE-S를 안 지웠을 수 있음)
               try {
@@ -549,13 +551,13 @@ async function scanProject(project: Project, force: boolean = false) {
                 if (hasScheduleLabel) {
                   await removeIssueLabels(project, iid, decryptedToken, [project.labelSchedule || 'IVE-S']);
                 }
-              } catch (e) { console.warn(`[Scanner] Failed to clean IVE-S on #${iid}:`, e); }
+              } catch (e) { slog.warn({ err: e }, `Failed to clean IVE-S on #${iid}:`); }
 
               // 브랜치 안내 코멘트 (담당자 모드 — 에이전트가 아닌 사람 담당자라 ive-agent 마커 없음)
               try {
                 const commentBody = `<!-- ive-bot -->\n## 🌿 작업 브랜치 생성됨\n\n- **브랜치:** \`${branchName}\`\n- **담당자:** ${execution.userName}`;
                 await addIssueComment(project, iid, decryptedToken, commentBody);
-              } catch (e) { console.warn(`[Scanner] Failed to add branch comment on #${iid}:`, e); }
+              } catch (e) { slog.warn({ err: e }, `Failed to add branch comment on #${iid}:`); }
 
               try {
                 createActivityLog({
@@ -566,12 +568,12 @@ async function scanProject(project: Project, force: boolean = false) {
                   targetType: 'execution',
                   targetId: executionId,
                 });
-              } catch (e) { console.error('[Scanner] Failed to log task activity:', e); }
+              } catch (e) { slog.error({ err: e }, 'Failed to log task activity:'); }
 
-              console.log(`[Scanner] [ASSIGN-USER] Project: ${project.name}, Issue: #${iid}, Assignee: ${execution.userName}, Branch: ${branchName}`);
+              slog.info(`[ASSIGN-USER] Project: ${project.name}, Issue: #${iid}, Assignee: ${execution.userName}, Branch: ${branchName}`);
             }
           } else {
-            console.log(`[Scanner] [SKIP] Issue #${iid} — assignee 모드 IVE-D 감지, 담당자 미지정`);
+            slog.info(`[SKIP] Issue #${iid} — assignee 모드 IVE-D 감지, 담당자 미지정`);
           }
         }
       }
@@ -580,7 +582,7 @@ async function scanProject(project: Project, force: boolean = false) {
         // IVE-S 최초 감지 시각 기록 (이미 기록된 경우 보존 — 대기시간 계산 기준)
         try {
           recordIssueScheduledAt(project.id, iid, now.toISOString());
-        } catch (e) { console.error('[Scanner] Failed to record scheduled_at:', e); }
+        } catch (e) { slog.error({ err: e }, 'Failed to record scheduled_at:'); }
 
         // 신규 이슈 감지 로그 (처음 발견된 이슈만)
         if (!hasAnyExecution(project.id, iid)) {
@@ -590,7 +592,7 @@ async function scanProject(project: Project, force: boolean = false) {
               detail: `이슈 감지: #${iid} "${issue.title}" (${project.name})`,
               targetType: 'issue', targetId: `${project.id}-${iid}`,
             });
-          } catch (e) { console.error('[Scanner] Failed to log detect_issue activity:', e); }
+          } catch (e) { slog.error({ err: e }, 'Failed to log detect_issue activity:'); }
         }
         waitingIssues.push(issue);
       } else if (stage === 'verify_waiting') {
@@ -602,7 +604,7 @@ async function scanProject(project: Project, force: boolean = false) {
     if (waitingIssues.length > 0) {
       // 먼저 생성된 이슈부터 배정 (created_at 오름차순)
       waitingIssues.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-      console.log(`[Scanner] Found ${waitingIssues.length} waiting issues for ${project.name}`);
+      slog.info(`Found ${waitingIssues.length} waiting issues for ${project.name}`);
       const { assigned, waiting } = await processIssues(project, waitingIssues, decryptedToken);
       issueCount += waiting;
     }
@@ -616,7 +618,7 @@ async function scanProject(project: Project, force: boolean = false) {
     for (const row of staleRows) {
       if (!processedIids.has(row.issue_iid)) {
         // 이번 스캔 결과(Open 이슈)에 없음 -> Closed 되었거나 IVE 레이블이 제거됨
-        console.log(`[Scanner] Cleaning stale issue #${row.issue_iid} in project ${project.name} (last stage: ${row.cached_stage})`)
+        slog.info(`Cleaning stale issue #${row.issue_iid} in project ${project.name} (last stage: ${row.cached_stage})`)
         upsertIssueStageSnapshot(project.id, row.issue_iid, {
           cachedStage: 'done',
           assigneeUsername: null,
@@ -634,7 +636,7 @@ async function scanProject(project: Project, force: boolean = false) {
           updateExecutionStatus(ex.id, 'failed', new Date().toISOString())
         }
         if (lingeringExecs.length > 0) {
-          console.log(`[Scanner] Cleaned ${lingeringExecs.length} lingering execution(s) for stale issue #${row.issue_iid}`)
+          slog.info(`Cleaned ${lingeringExecs.length} lingering execution(s) for stale issue #${row.issue_iid}`)
         }
       }
     }
@@ -647,7 +649,7 @@ async function scanProject(project: Project, force: boolean = false) {
     // try {
     //   await processConflictCheck(project, decryptedToken);
     // } catch (e) {
-    //   console.warn(`[Scanner] Conflict check failed for ${project.name}:`, e);
+    //   slog.warn({ err: e }, `Conflict check failed for ${project.name}:`);
     // }
 
   } catch (err) {
@@ -656,7 +658,7 @@ async function scanProject(project: Project, force: boolean = false) {
     if (msg.includes('인증 정보가 유효하지 않거나 만료') || msg.includes('인증 실패')) {
       msg = `Git 액세스 토큰 인증 실패 — 프로젝트 설정에서 토큰을 확인하거나 새로 발급하여 교체해주세요.`;
     }
-    console.warn(`[Scanner] Error scanning project ${project.name}: ${msg}`);
+    slog.warn(`Error scanning project ${project.name}: ${msg}`);
     updateProjectError(project.id, msg);
   }
 }
@@ -668,11 +670,11 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
   // assign_mode + preferred_agent_id를 한 번에 조회 (이슈별 개별 쿼리 방지)
   const assignModeMap = getAssignModeMap(project.id);
 
-  console.log(`[Scanner] processIssues: ${issues.length} issues`);
+  slog.info(`processIssues: ${issues.length} issues`);
   for (const issue of issues) {
     // 이미 진행 중인 실행이 있으면 무조건 스킵 (running + assigned 모두)
     if (hasActiveExecution(project.id, issue.iid)) {
-      console.log(`[Scanner] [SKIP] Issue #${issue.iid} (activeExec: true)`);
+      slog.info(`[SKIP] Issue #${issue.iid} (activeExec: true)`);
       continue;
     }
 
@@ -680,7 +682,7 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
     const labels: string[] = issue.labels || [];
     const stage = stageFromLabels(labels, project, { hasActiveExec: false });
     if (stage !== 'waiting') {
-      console.log(`[Scanner] [SKIP] Issue #${issue.iid} (stage: ${stage})`);
+      slog.info(`[SKIP] Issue #${issue.iid} (stage: ${stage})`);
       continue;
     }
 
@@ -690,7 +692,7 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
     // assignee 모드는 자동 배정하지 않음. 담당자가 Git에서 IVE-D를 직접 부여하면 처리됨.
     // 이 상태는 "사람이 직접 처리 중"이므로 진짜 대기가 아님
     if (assignInfo.mode === 'assignee') {
-      console.log(`[Scanner] [WAIT] Issue #${issue.iid} — assignee 모드, 담당자가 IVE-D 레이블 부여 대기`);
+      slog.info(`[WAIT] Issue #${issue.iid} — assignee 모드, 담당자가 IVE-D 레이블 부여 대기`);
       continue;
     }
 
@@ -699,7 +701,7 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
     // 마커 > assignees > author > 프로젝트 오너(fallback) 우선순위.
     const requester = resolveIssueRequester(project, issue);
     if (!requester) {
-      console.log(`[Scanner] [SKIP] Issue #${issue.iid} — 의뢰자 판정 실패 (오너 정보 없음)`);
+      slog.info(`[SKIP] Issue #${issue.iid} — 의뢰자 판정 실패 (오너 정보 없음)`);
       waitingCount++;
       continue;
     }
@@ -716,11 +718,11 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
       if (!a) {
         // 지정 에이전트가 의뢰자 풀에 없음 → 다른 에이전트로 자동 전환 금지
         // 사용자가 직접 작업자를 지정했으므로 그 의도를 존중한다.
-        console.log(`[Scanner] [WAIT] Issue #${issue.iid} — 지정 작업자(${preferredAgentId})가 의뢰자(${requester.user.name}) 풀에 없음, 대기`);
+        slog.info(`[WAIT] Issue #${issue.iid} — 지정 작업자(${preferredAgentId})가 의뢰자(${requester.user.name}) 풀에 없음, 대기`);
         continue;
       } else if (busyAgentIds.has(a.id) || countActiveExecutionsByAgent(a.id) > 0) {
         // 지정 에이전트가 바쁨 → 이번 스캔 스킵, 다음 스캔에서 재시도
-        console.log(`[Scanner] [WAIT] Issue #${issue.iid} — 지정 작업자 '${a.name}' 작업 중, 대기`);
+        slog.info(`[WAIT] Issue #${issue.iid} — 지정 작업자 '${a.name}' 작업 중, 대기`);
         continue;
       } else {
         availableAgent = a;
@@ -748,7 +750,7 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
     if (availableAgent) {
       busyAgentIds.add(availableAgent.id);
       const assignType = preferredAgentId ? ' (지정 작업자)' : '';
-      console.log(`[Scanner] [ASSIGN] Project: ${project.name}, Issue: #${issue.iid}, Requester: ${requester.user.name}(${requester.source}), Agent: ${availableAgent.name}${assignType}`);
+      slog.info(`[ASSIGN] Project: ${project.name}, Issue: #${issue.iid}, Requester: ${requester.user.name}(${requester.source}), Agent: ${availableAgent.name}${assignType}`);
 
       // 대기시간 계산 기준: IVE-S 레이블 최초 감지 시각 (이슈 생성 시각이 아님)
       const waitingSince = getIssueScheduledAt(project.id, issue.iid) || new Date().toISOString();
@@ -756,18 +758,18 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
       // 비동기로 태스크 실행 (개발자별 토큰 우선) — 트랜잭션은 executeTask 내에서 처리
       executeTask(project, issue, availableAgent, agentToken, waitingSince)
         .then(() => {
-          console.log(`[Scanner] [DONE] Issue #${issue.iid} processed.`);
+          slog.info(`[DONE] Issue #${issue.iid} processed.`);
         })
         .catch(err => {
-          console.error(`[Scanner] [FAILED] Issue #${issue.iid} error:`, err);
+          slog.error({ err: err }, `[FAILED] Issue #${issue.iid} error:`);
         });
 
       assignedCount++;
     } else {
       waitingCount++;
-      console.log(`[Scanner] [SKIP] No available agent for Issue #${issue.iid}. Will retry in next scan.`);
+      slog.info(`[SKIP] No available agent for Issue #${issue.iid}. Will retry in next scan.`);
     }
   }
-  console.log(`[Scanner] processIssues result: assigned=${assignedCount}, waiting=${waitingCount}, busyAgents=[${[...busyAgentIds].join(',')}]`);
+  slog.info(`processIssues result: assigned=${assignedCount}, waiting=${waitingCount}, busyAgents=[${[...busyAgentIds].join(',')}]`);
   return { assigned: assignedCount, waiting: waitingCount };
 }
