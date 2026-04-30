@@ -238,6 +238,7 @@
   "utilizationPctLabel": "가동률 {pct}%",
   "projectFlowTitle": "프로젝트별 흐름",
   "agentLoadTitle": "에이전트별 부하",
+  "deletedAgent": "삭제된 에이전트",
   "verifierLoadTitle": "검증자별 부하",
   "userVerifyTitle": "담당자별 검증 현황",
   "assignedAgentsCount": "에이전트 {count}대",

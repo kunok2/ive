@@ -177,6 +177,7 @@ function getTestExecutions(db: Database.Database, userId: string, startISO: stri
     id: r.id, projectId: r.project_id, projectName: r.project_name,
     projectColor: r.project_color, projectAvatarUrl: r.project_avatar_url || '', projectProvider: r.project_provider || 'gitlab',
     agentId: r.agent_id ?? '', agentName: r.agent_name ?? r.te_user_name ?? '', agentAvatar: r.agent_avatar || r.te_user_avatar || 'av-01',
+    agentDeleted: !!r.agent_id && r.agent_name == null && r.te_user_name == null,
     cliName: r.cli_name ?? '', developerName: r.developer_name || r.agent_name || r.te_user_name || '',
     developerUserId: r.developer_user_id ?? null,
     userId: r.te_user_id ?? null, userName: r.te_user_name ?? null, userAvatar: r.te_user_avatar ?? null,

@@ -327,7 +327,7 @@ export async function GET(req: NextRequest) {
       const aFinished = aSuccess + aFailed
       const aCost = aExecs.reduce((s, e) => s + resolveExecutionCost(e, humanSalary), 0)
       return {
-        agentId: aid, agentName: aExecs[0].agentName, agentAvatar: aExecs[0].agentAvatar, cliName: aExecs[0].cliName,
+        agentId: aid, agentName: aExecs[0].agentName, agentAvatar: aExecs[0].agentAvatar, agentDeleted: aExecs[0].agentDeleted, cliName: aExecs[0].cliName,
         tasks: aExecs.length, success: aSuccess, failed: aFailed,
         durationMin: Math.round(aDur * 10) / 10,
         avgDurationMin: aFinished > 0 ? Math.round((aDur / aFinished) * 10) / 10 : 0,
@@ -376,7 +376,7 @@ export async function GET(req: NextRequest) {
     const aCost = aExecs.reduce((s, e) => s + resolveExecutionCost(e, humanSalary), 0)
     const aInfo = agentPrimaryProject[aid]
     return {
-      agentId: aid, agentName: aExecs[0].agentName, agentAvatar: aExecs[0].agentAvatar, cliName: aExecs[0].cliName,
+      agentId: aid, agentName: aExecs[0].agentName, agentAvatar: aExecs[0].agentAvatar, agentDeleted: aExecs[0].agentDeleted, cliName: aExecs[0].cliName,
       tasks: aExecs.length, success: aSuccess, failed: aFailed,
       totalDurationMin: Math.round(aDur * 10) / 10,
       avgDurationMin: aFinished > 0 ? Math.round((aDur / aFinished) * 10) / 10 : 0,

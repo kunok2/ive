@@ -52,11 +52,11 @@ export interface ProjectStat {
   inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheCreationTokens?: number; cost: number
   assignedAgentCount: number
   assignedAgentIds: string[]
-  byAgent: { agentId: string; agentName: string; agentAvatar: string; cliName: string; tasks: number; success: number; failed: number; durationMin: number; avgDurationMin: number; inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheCreationTokens?: number; cost: number; avgTurns: number }[]
+  byAgent: { agentId: string; agentName: string; agentAvatar: string; agentDeleted?: boolean; cliName: string; tasks: number; success: number; failed: number; durationMin: number; avgDurationMin: number; inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheCreationTokens?: number; cost: number; avgTurns: number }[]
 }
 
 export interface AgentStat {
-  agentId: string; agentName: string; agentAvatar: string; cliName: string
+  agentId: string; agentName: string; agentAvatar: string; agentDeleted?: boolean; cliName: string
   tasks: number; success: number; failed: number
   totalDurationMin: number; avgDurationMin: number
   inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheCreationTokens?: number; cost: number; avgTurns: number
@@ -154,7 +154,7 @@ export interface AgentAnnotation {
   severity: AnnotationSeverity
 }
 export interface AgentLoad {
-  agentId: string; agentName: string; agentAvatar: string; cliName: string
+  agentId: string; agentName: string; agentAvatar: string; agentDeleted?: boolean; cliName: string
   assignedProjectId: string; assignedProjectName: string; currentStatus: string
   tasks: number; dailyCapacity: number; currentWaiting: number; cost: number
   successRate: number          // 성공률 (0~100)

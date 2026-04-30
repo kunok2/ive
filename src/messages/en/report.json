@@ -237,6 +237,7 @@
   "utilizationPctLabel": "Utilization {pct}%",
   "projectFlowTitle": "Flow by project",
   "agentLoadTitle": "Load by agent",
+  "deletedAgent": "Deleted agent",
   "verifierLoadTitle": "Load by verifier",
   "userVerifyTitle": "Verification status by user",
   "assignedAgentsCount": "{count} agent(s)",

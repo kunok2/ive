@@ -325,7 +325,7 @@ export function computeAgentLoads(
     }
 
     return {
-      agentId: a.agentId, agentName: a.agentName, agentAvatar: a.agentAvatar, cliName: a.cliName,
+      agentId: a.agentId, agentName: a.agentName, agentAvatar: a.agentAvatar, agentDeleted: a.agentDeleted, cliName: a.cliName,
       assignedProjectId: a.assignedProjectId, assignedProjectName: a.assignedProjectName, currentStatus: a.currentStatus,
       tasks: a.tasks, dailyCapacity: Math.round(dailyCap * 10) / 10, currentWaiting: lastAW, cost: a.cost,
       successRate,

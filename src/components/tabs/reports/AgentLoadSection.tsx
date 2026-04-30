@@ -31,8 +31,14 @@ export default function AgentLoadSection({ d, data, helpers }: AgentLoadSectionP
             <button onClick={() => { const n = new Set(expandedAgents); n.has(a.agentId) ? n.delete(a.agentId) : n.add(a.agentId); setExpandedAgents(n) }}
               className="w-full px-3 py-2.5 text-left">
               <div className="flex items-center gap-2">
-                <AgentAvatar avatar={a.agentAvatar} size="xs" />
-                <span className="text-sm font-bold text-ive-text flex-1 truncate">{a.agentName}</span>
+                <AgentAvatar avatar={a.agentAvatar} size="xs" className={a.agentDeleted ? 'opacity-40 grayscale' : ''} />
+                {a.agentDeleted ? (
+                  <span className="text-sm font-bold text-ive-text-dim flex-1 truncate italic">
+                    <i className="fa-solid fa-user-slash mr-1.5 text-xs" />{tr('deletedAgent')}
+                  </span>
+                ) : (
+                  <span className="text-sm font-bold text-ive-text flex-1 truncate">{a.agentName}</span>
+                )}
                 {a.assignedProjectName && <span className="text-xs text-ive-text-dim truncate max-w-[80px]">→ {a.assignedProjectName}</span>}
                 <i className={`fa-solid fa-chevron-${expandedAgents.has(a.agentId) ? 'up' : 'down'} text-xs text-ive-text-dim`} />
               </div>
