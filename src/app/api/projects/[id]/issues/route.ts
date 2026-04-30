@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAccess, getProjectAuthToken, getAssignModeMap, setAssignMode, setAssigneeAuto, getAgent, hasActiveExecution, hasAnyExecution, stageFromLabels, touchProjectActivity } from '@/lib/db';
+import { getProject, getProjectAccess, getProjectAuthToken, getAssignModeMap, setAssignMode, setAssigneeAuto, setPresetRoles, getPresetRoles, getActualRoleAssigneesMap, getAgent, hasActiveExecution, hasAnyExecution, stageFromLabels, touchProjectActivity } from '@/lib/db';
 import { triggerScan } from '@/lib/scanner';
 import { getCurrentUser } from '@/lib/auth';
 import { checkLabelsExist, addIssueComment } from '@/lib/provider';
@@ -30,8 +30,9 @@ export async function GET(
       ? await fetchClosedProjectIssues(project, token)
       : await fetchAllProjectIssues(project, token);
 
-    // 배정 모드 맵 로드
+    // 배정 모드 맵 + 실제 수행자 맵 로드 (둘 다 batch 쿼리)
     const assignModeMap = getAssignModeMap(projectId);
+    const actualRolesMap = getActualRoleAssigneesMap(projectId);
 
     const isClosed = stateParam === 'closed';
 
@@ -97,6 +98,27 @@ export async function GET(
               avatarUrl: issue.author?.avatar_url ?? null,
             };
 
+        // 검증자/확인자 사전 배정 + 실제 수행자 (이슈 #271)
+        const presetRoles = getPresetRoles(projectId, issue.iid);
+        const actuals = { ...(actualRolesMap.get(issue.iid) || { processor: null, verifier: null, confirmer: null }) };
+
+        // 자동배정/지정 결과 — 단계별 Git assignee 를 해당 역할의 실제 사람으로 fallback
+        const firstAssignee = assignees[0];
+        if (!actuals.verifier && firstAssignee && (stage === 'verify_waiting' || stage === 'verifying')) {
+          actuals.verifier = {
+            userId: String(firstAssignee.id),
+            name: firstAssignee.name || firstAssignee.username,
+            avatar: firstAssignee.avatarUrl || null,
+          };
+        }
+        if (!actuals.confirmer && firstAssignee && (stage === 'confirm_waiting' || stage === 'confirming')) {
+          actuals.confirmer = {
+            userId: String(firstAssignee.id),
+            name: firstAssignee.name || firstAssignee.username,
+            avatar: firstAssignee.avatarUrl || null,
+          };
+        }
+
         return {
           iid: issue.iid,
           title: issue.title,
@@ -116,6 +138,13 @@ export async function GET(
           updatedAt: issue.updated_at,
           webUrl: issue.web_url,
           author,
+          iveAuthorId: iveAuthor?.id ?? null,
+          authorId: issue.author?.id ?? null,
+          presetVerifier: presetRoles.verifier,
+          presetConfirmer: presetRoles.confirmer,
+          actualProcessor: actuals.processor,
+          actualVerifier: actuals.verifier,
+          actualConfirmer: actuals.confirmer,
         };
       });
 
@@ -142,7 +171,7 @@ export async function POST(
     return NextResponse.json({ error: '작업 생성 권한이 없습니다.' }, { status: 403 });
   }
 
-  const { title, description, asDev, preferredAgentId, assignMode: reqAssignMode, assigneeIds, assigneeUsernames, assigneeAuto } = await req.json();
+  const { title, description, asDev, preferredAgentId, assignMode: reqAssignMode, assigneeIds, assigneeUsernames, assigneeAuto, verifierMode, verifierUserId, verifierUsername, confirmerMode, confirmerUserId, confirmerUsername } = await req.json();
   if (!title?.trim()) return NextResponse.json({ error: '제목을 입력하세요.' }, { status: 400 });
 
   try {
@@ -166,9 +195,21 @@ export async function POST(
     const labels = asDev
       ? [project.labelTarget, project.labelSchedule || 'IVE-S']
       : [project.labelTarget];
-    // 자동배정 모드면 생성 시점에는 assignee 비움 (처리 마무리 시 자동 선택)
-    const assignees = !assigneeAuto && (assigneeIds?.length || assigneeUsernames?.length)
-      ? { ids: assigneeIds, usernames: assigneeUsernames } : undefined;
+    // assignee 결정 — 모델: "처리전에는 생성자, 처리때는 처리자 또는 생성자"
+    //   1) 자동배정 모드: 비움 (스캐너가 처리 마무리 시 가장 한가한 멤버 선택)
+    //   2) 명시적 지정: 그대로 사용
+    //   3) 그 외: 생성자(=현재 OAuth 사용자)를 기본 assignee 로
+    //      (로컬 계정 사용자는 Git user id 가 없어 비움 — Git 측에서 unassigned)
+    let assignees: { ids?: number[]; usernames?: string[] } | undefined;
+    if (assigneeAuto) {
+      assignees = undefined;
+    } else if (assigneeIds?.length || assigneeUsernames?.length) {
+      assignees = { ids: assigneeIds, usernames: assigneeUsernames };
+    } else if (user.oauthUserId) {
+      assignees = { ids: [Number(user.oauthUserId)] };
+    } else {
+      assignees = undefined;
+    }
 
     // 본문 맨 앞에 ive-author 마커 주입 — 프로젝트 토큰으로 fallback되어 Git 저자가
     // 프로젝트 소유자로 표시되는 경우에도 IVE UI에서는 실제 작성자로 복원할 수 있게 함.
@@ -190,6 +231,21 @@ export async function POST(
       }
       if (assigneeAuto) {
         setAssigneeAuto(projectId, issue.iid, true);
+      }
+      // 검증자/확인자 사전 배정 — 'creator' / 'auto' / 'specific'
+      if (verifierMode || confirmerMode) {
+        setPresetRoles(projectId, issue.iid, {
+          verifier: {
+            mode: (verifierMode as 'creator' | 'auto' | 'specific') || 'creator',
+            userId: verifierMode === 'specific' ? (verifierUserId ?? null) : null,
+            username: verifierMode === 'specific' ? (verifierUsername ?? null) : null,
+          },
+          confirmer: {
+            mode: (confirmerMode as 'creator' | 'auto' | 'specific') || 'creator',
+            userId: confirmerMode === 'specific' ? (confirmerUserId ?? null) : null,
+            username: confirmerMode === 'specific' ? (confirmerUsername ?? null) : null,
+          },
+        });
       }
     }
 

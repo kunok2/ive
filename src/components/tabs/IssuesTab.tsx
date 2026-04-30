@@ -34,12 +34,14 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
 
   // --- Constants ---
   const STAGE_INFO: Record<string, StageInfo> = useMemo(() => ({
-    waiting:        { label: tStage('waiting'),        color: 'bg-ive-cyan/20 text-ive-cyan border-ive-cyan/30',     icon: 'fa-clock' },
-    verify_waiting: { label: tStage('verify_waiting'), color: 'bg-ive-cyan/20 text-ive-cyan border-ive-cyan/30', icon: 'fa-hourglass-half' },
-    dev:            { label: tStage('dev'),            color: 'bg-ive-amber/20 text-ive-amber border-ive-amber/30',  icon: 'fa-code' },
-    dev_fail:       { label: tStage('dev_fail'),       color: 'bg-ive-red/20 text-ive-red border-ive-red/30',        icon: 'fa-circle-xmark' },
-    verifying:      { label: tStage('verifying'),      color: 'bg-ive-cyan/20 text-ive-cyan border-ive-cyan/30', icon: 'fa-magnifying-glass' },
-    done:           { label: tStage('done'),           color: 'bg-ive-green/20 text-ive-green border-ive-green/30',  icon: 'fa-circle-check' },
+    waiting:         { label: tStage('waiting'),         color: 'bg-ive-cyan/20 text-ive-cyan border-ive-cyan/30',     icon: 'fa-clock' },
+    verify_waiting:  { label: tStage('verify_waiting'),  color: 'bg-ive-amber/20 text-ive-amber border-ive-amber/30', icon: 'fa-hourglass-half' },
+    dev:             { label: tStage('dev'),             color: 'bg-ive-cyan/20 text-ive-cyan border-ive-cyan/30',    icon: 'fa-code' },
+    dev_fail:        { label: tStage('dev_fail'),        color: 'bg-ive-red/20 text-ive-red border-ive-red/30',        icon: 'fa-circle-xmark' },
+    verifying:       { label: tStage('verifying'),       color: 'bg-ive-amber/20 text-ive-amber border-ive-amber/30', icon: 'fa-magnifying-glass' },
+    confirm_waiting: { label: tStage('confirm_waiting'), color: 'bg-ive-amber/20 text-ive-amber border-ive-amber/30', icon: 'fa-hourglass-half' },
+    confirming:      { label: tStage('confirming'),      color: 'bg-ive-amber/20 text-ive-amber border-ive-amber/30', icon: 'fa-clipboard-check' },
+    done:            { label: tStage('done'),            color: 'bg-ive-green/20 text-ive-green border-ive-green/30', icon: 'fa-circle-check' },
     closed:         { label: tStage('closed'),         color: 'bg-white/5 text-ive-text-muted border-ive-border-subtle', icon: 'fa-lock' },
     rejected:       { label: tStage('rejected'),       color: 'bg-ive-red/20 text-ive-red border-ive-red/30',        icon: 'fa-rotate-left' },
     unknown:        { label: tStage('unknown'),        color: 'bg-white/5 text-ive-text-dim border-ive-border-subtle', icon: 'fa-question' },
@@ -49,7 +51,6 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     { key: 'all', label: tFilter('all') },
     { key: 'waiting', label: tFilter('waiting') },
     { key: 'active', label: tFilter('active') },
-    { key: 'verifying', label: tFilter('verifying') },
     { key: 'failed', label: tFilter('failed') },
     { key: 'done', label: tFilter('done') },
     { key: 'history', label: tFilter('history') },
@@ -70,6 +71,14 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     verifying: [
       { action: 'approve', label: tIssue('approveVerify'), icon: 'fa-circle-check' },
       { action: 'reject', label: tIssue('rejectVerify'), icon: 'fa-rotate-left', danger: true },
+    ],
+    confirm_waiting: [
+      { action: 'start_confirmation', label: tIssue('startConfirmation'), icon: 'fa-play' },
+      { action: 'cancel', label: tIssue('cancelConfirmWait'), icon: 'fa-rotate-left', danger: true },
+    ],
+    confirming: [
+      { action: 'accept', label: tIssue('acceptConfirm'), icon: 'fa-circle-check' },
+      { action: 'return_to_dev', label: tIssue('returnToDev'), icon: 'fa-rotate-left', danger: true },
     ],
     done: [
       { action: 'reopen', label: tIssue('reopenToWaiting'), icon: 'fa-rotate' },
@@ -155,6 +164,13 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   const [gitMembers, setGitMembers] = useState<{ id: number; username: string; name: string; avatarUrl: string }[]>([])
   const [selectedAssignees, setSelectedAssignees] = useState<{ id: number; username: string; name: string; avatarUrl: string }[]>([])
   const [autoAssign, setAutoAssign] = useState(false)
+  // 검증자/확인자 사전 배정 — 'creator' | 'auto' | 'specific'
+  const [verifierMode, setVerifierMode] = useState<'creator' | 'auto' | 'specific'>('creator')
+  const [verifierUserId, setVerifierUserId] = useState<string | null>(null)
+  const [verifierUsername, setVerifierUsername] = useState<string | null>(null)
+  const [confirmerMode, setConfirmerMode] = useState<'creator' | 'auto' | 'specific'>('creator')
+  const [confirmerUserId, setConfirmerUserId] = useState<string | null>(null)
+  const [confirmerUsername, setConfirmerUsername] = useState<string | null>(null)
   const [assigneeModalIids, setAssigneeModalIids] = useState<number[]>([])
   const [assigneeModalSearch, setAssigneeModalSearch] = useState('')
   const [assigneeModalPick, setAssigneeModalPick] = useState<{ id: number; username: string; name: string; avatarUrl: string } | null>(null)
@@ -450,11 +466,19 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
           assigneeIds: selectedAssignees.length > 0 ? selectedAssignees.map(a => a.id) : undefined,
           assigneeUsernames: selectedAssignees.length > 0 ? selectedAssignees.map(a => a.username) : undefined,
           assigneeAuto: autoAssign || undefined,
+          verifierMode,
+          verifierUserId: verifierMode === 'specific' ? verifierUserId : null,
+          verifierUsername: verifierMode === 'specific' ? verifierUsername : null,
+          confirmerMode,
+          confirmerUserId: confirmerMode === 'specific' ? confirmerUserId : null,
+          confirmerUsername: confirmerMode === 'specific' ? confirmerUsername : null,
         }),
       })
       if (res.ok) {
         const created = await res.json()
         handleBodyChange(''); setShowAddForm(false); setPreferredAgentId(null); setSelectedAssignees([]); setAutoAssign(false)
+        setVerifierMode('creator'); setVerifierUserId(null); setVerifierUsername(null)
+        setConfirmerMode('creator'); setConfirmerUserId(null); setConfirmerUsername(null)
         const selectedAgent = preferredAgentId ? projectAgents.find(a => a.agentId === preferredAgentId) : null
         const newIssue: IveIssue = {
           iid: created.iid, title: created.title, state: created.state || 'opened',
@@ -537,9 +561,9 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
 
   const filtered = (isHistoryTab ? closedIssues : issues.filter(issue => {
     if (filter === 'all') return true
-    if (filter === 'waiting') return issue.stage === 'waiting' || issue.stage === 'verify_waiting'
-    if (filter === 'active') return issue.stage === 'dev'
-    if (filter === 'verifying') return issue.stage === 'verifying'
+    if (filter === 'waiting') return issue.stage === 'waiting'
+    // 진행: 처리(dev) + 검증(verify_waiting/verifying) + 확인(confirm_waiting/confirming) 통합
+    if (filter === 'active') return issue.stage === 'dev' || issue.stage === 'verify_waiting' || issue.stage === 'verifying' || issue.stage === 'confirm_waiting' || issue.stage === 'confirming'
     if (filter === 'failed') return issue.stage === 'dev_fail' || issue.stage === 'rejected'
     if (filter === 'done') return issue.stage === 'done'
     return true
@@ -628,6 +652,22 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                 selectedAssignees={selectedAssignees}
                 autoAssign={autoAssign}
                 onOpenAssigneeModal={openAssigneeModal}
+                verifierMode={verifierMode}
+                verifierUserId={verifierUserId}
+                verifierUsername={verifierUsername}
+                onVerifierChange={(mode, userId, username) => {
+                  setVerifierMode(mode)
+                  setVerifierUserId(userId)
+                  setVerifierUsername(username)
+                }}
+                confirmerMode={confirmerMode}
+                confirmerUserId={confirmerUserId}
+                confirmerUsername={confirmerUsername}
+                onConfirmerChange={(mode, userId, username) => {
+                  setConfirmerMode(mode)
+                  setConfirmerUserId(userId)
+                  setConfirmerUsername(username)
+                }}
               />
             )}
 
@@ -665,6 +705,9 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
           bulkMode={bulkMode}
           navigatingIid={navigatingIid}
           canEdit={canEdit}
+          isAdmin={!!state.user?.isAdmin}
+          currentUserId={state.user?.id ?? null}
+          currentUserGitId={myGitUserId}
           closing={closing}
           projectAgents={projectAgents}
           gitMembers={gitMembers}
@@ -675,6 +718,44 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
           onOpenAgentPicker={setAgentPickerIid}
           onOpenAssigneeModal={openAssigneeModal}
           onCloseIssue={handleCloseIssue}
+          onPresetVerifierChange={async (iid, preset) => {
+            const target = issues.find(i => i.iid === iid)
+            const prev = target?.presetVerifier
+            setIssues(list => list.map(i => i.iid === iid ? { ...i, presetVerifier: preset } : i))
+            try {
+              const res = await fetch(`/api/projects/${selectedProjectId}/issues/${iid}/preset-roles`, {
+                method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ verifier: preset }),
+              })
+              if (!res.ok) {
+                const d = await res.json().catch(() => ({}))
+                toast(d.error || tIssue('verifierChangeFailed') || '검증자 변경 실패', 'error')
+                setIssues(list => list.map(i => i.iid === iid ? { ...i, presetVerifier: prev } : i))
+              }
+            } catch (e: any) {
+              toast(e?.message || tCommon('networkError') || '네트워크 오류', 'error')
+              setIssues(list => list.map(i => i.iid === iid ? { ...i, presetVerifier: prev } : i))
+            }
+          }}
+          onPresetConfirmerChange={async (iid, preset) => {
+            const target = issues.find(i => i.iid === iid)
+            const prev = target?.presetConfirmer
+            setIssues(list => list.map(i => i.iid === iid ? { ...i, presetConfirmer: preset } : i))
+            try {
+              const res = await fetch(`/api/projects/${selectedProjectId}/issues/${iid}/preset-roles`, {
+                method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ confirmer: preset }),
+              })
+              if (!res.ok) {
+                const d = await res.json().catch(() => ({}))
+                toast(d.error || tIssue('confirmerChangeFailed') || '확인자 변경 실패', 'error')
+                setIssues(list => list.map(i => i.iid === iid ? { ...i, presetConfirmer: prev } : i))
+              }
+            } catch (e: any) {
+              toast(e?.message || tCommon('networkError') || '네트워크 오류', 'error')
+              setIssues(list => list.map(i => i.iid === iid ? { ...i, presetConfirmer: prev } : i))
+            }
+          }}
         />
       )}
 

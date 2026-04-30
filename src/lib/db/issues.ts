@@ -4,7 +4,7 @@ import { getKSTTodayStartISO } from '../date-utils'
 
 // ── Issue Stage (레이블 기반 상태 판정) ──
 
-export type IssueStage = 'waiting' | 'verify_waiting' | 'dev' | 'dev_fail' | 'verifying' | 'done' | 'rejected'
+export type IssueStage = 'waiting' | 'verify_waiting' | 'dev' | 'dev_fail' | 'verifying' | 'confirm_waiting' | 'confirming' | 'done' | 'rejected'
 
 export function stageFromLabels(
   labels: string[],
@@ -17,9 +17,14 @@ export function stageFromLabels(
   const labelD = project.labelDev || 'IVE-D'
   const labelW = project.labelVerifyWait || 'IVE-W'
   const labelV = project.labelVerify || 'IVE-V'
+  const labelP = project.labelConfirmWait || 'IVE-P'
+  const labelC = project.labelConfirm || 'IVE-C'
   const labelE = project.labelEnd || 'IVE-E'
 
+  // 우선순위: E > C > P > V > W > D > S
   if (labels.includes(labelE)) return 'done'
+  if (labels.includes(labelC)) return 'confirming'
+  if (labels.includes(labelP)) return 'confirm_waiting'
   if (labels.includes(labelV)) return 'verifying'
   if (labels.includes(labelW)) return 'verify_waiting'
   if (labels.includes(labelD)) {
@@ -140,6 +145,229 @@ export function getPreferredIssuesByAgent(agentId: string): { projectId: string;
 
 export function clearPreferredAgentRefs(agentId: string) {
   getDb().prepare('UPDATE issue_stages SET preferred_agent_id = NULL WHERE preferred_agent_id = ?').run(agentId)
+}
+
+// ── Preset Verifier / Confirmer (이슈 생성 시 사전 배정) ──
+
+export type RoleMode = 'creator' | 'auto' | 'specific'
+
+export interface PresetRoleInfo {
+  mode: RoleMode
+  userId: string | null      // GitLab/GitHub user id (specific 모드일 때)
+  username: string | null    // 표시용
+}
+
+export interface PresetRolesInfo {
+  verifier: PresetRoleInfo
+  confirmer: PresetRoleInfo
+}
+
+const DEFAULT_ROLE: PresetRoleInfo = { mode: 'creator', userId: null, username: null }
+
+export function getPresetRoles(projectId: string, issueIid: number): PresetRolesInfo {
+  const r = getDb().prepare(
+    'SELECT preset_verifier_mode, preset_verifier_user_id, preset_verifier_username, preset_confirmer_mode, preset_confirmer_user_id, preset_confirmer_username FROM issue_stages WHERE project_id = ? AND issue_iid = ?'
+  ).get(projectId, issueIid) as any
+  return {
+    verifier: {
+      mode: (r?.preset_verifier_mode as RoleMode) || 'creator',
+      userId: r?.preset_verifier_user_id ?? null,
+      username: r?.preset_verifier_username ?? null,
+    },
+    confirmer: {
+      mode: (r?.preset_confirmer_mode as RoleMode) || 'creator',
+      userId: r?.preset_confirmer_user_id ?? null,
+      username: r?.preset_confirmer_username ?? null,
+    },
+  }
+}
+
+export function setPresetRoles(
+  projectId: string,
+  issueIid: number,
+  roles: { verifier?: PresetRoleInfo; confirmer?: PresetRoleInfo },
+) {
+  const v = roles.verifier || DEFAULT_ROLE
+  const c = roles.confirmer || DEFAULT_ROLE
+  getDb().prepare(`
+    INSERT INTO issue_stages (project_id, issue_iid, stage,
+      preset_verifier_mode, preset_verifier_user_id, preset_verifier_username,
+      preset_confirmer_mode, preset_confirmer_user_id, preset_confirmer_username,
+      updated_at)
+    VALUES (?, ?, '', ?, ?, ?, ?, ?, ?, datetime('now'))
+    ON CONFLICT(project_id, issue_iid) DO UPDATE SET
+      preset_verifier_mode = excluded.preset_verifier_mode,
+      preset_verifier_user_id = excluded.preset_verifier_user_id,
+      preset_verifier_username = excluded.preset_verifier_username,
+      preset_confirmer_mode = excluded.preset_confirmer_mode,
+      preset_confirmer_user_id = excluded.preset_confirmer_user_id,
+      preset_confirmer_username = excluded.preset_confirmer_username,
+      updated_at = datetime('now')
+  `).run(
+    projectId, issueIid,
+    v.mode, v.userId, v.username,
+    c.mode, c.userId, c.username,
+  )
+}
+
+// ── Actual Role Assignees (실제 수행 이력) ──
+
+/**
+ * 단계별로 "실제 그 단계를 수행한/수행 중인 사람/에이전트" 를 반환.
+ * preset(규칙)보다 우선해서 표시할 수 있도록 RoleAvatarBar 가 사용.
+ */
+export interface ActualRoleAssignees {
+  processor: { agentId: string | null; agentName: string | null; agentAvatar: string | null; cliName: string | null } | null
+  verifier: { userId: string | null; name: string | null; avatar: string | null } | null
+  confirmer: { userId: string | null; name: string | null; avatar: string | null } | null
+}
+
+const EMPTY_ROLES: ActualRoleAssignees = { processor: null, verifier: null, confirmer: null }
+
+/**
+ * user_avatar 컬럼은 'photo' (업로드 사진) | 'av-XX' (프리셋) | URL | null 중 하나.
+ * 'photo' 인 경우 IVE userId 로 이미지 API URL 을 만든다.
+ */
+function resolveUserAvatar(avatar: string | null | undefined, userId: string | null | undefined): string | null {
+  if (!avatar) return null
+  if (avatar === 'photo') return userId ? `/api/auth/avatar/image?id=${userId}` : null
+  return avatar
+}
+
+export function getActualRoleAssignees(projectId: string, issueIid: number): ActualRoleAssignees {
+  const db = getDb()
+
+  // 1) processor — 가장 최근의 agent execution
+  const pRow = db.prepare(`
+    SELECT te.agent_id as agentId, a.name as agentName, a.avatar as agentAvatar, a.cli_name as cliName
+    FROM task_executions te LEFT JOIN agents a ON a.id = te.agent_id
+    WHERE te.project_id = ? AND te.issue_iid = ? AND te.assignee_type = 'agent'
+    ORDER BY te.started_at DESC LIMIT 1
+  `).get(projectId, issueIid) as any
+  const processor = pRow?.agentId ? {
+    agentId: pRow.agentId, agentName: pRow.agentName, agentAvatar: pRow.agentAvatar, cliName: pRow.cliName,
+  } : null
+
+  // 2) verifier — 활성 verify exec 우선 → 종결된 검증자(verifier_*)
+  const vActive = db.prepare(`
+    SELECT user_id as userId, user_name as name, user_avatar as avatar
+    FROM task_executions
+    WHERE project_id = ? AND issue_iid = ? AND id LIKE 'ex-verify-%'
+      AND status IN ('running', 'assigned')
+    ORDER BY started_at DESC LIMIT 1
+  `).get(projectId, issueIid) as any
+  let verifier: ActualRoleAssignees['verifier'] = null
+  if (vActive?.userId) {
+    verifier = { userId: vActive.userId, name: vActive.name, avatar: resolveUserAvatar(vActive.avatar, vActive.userId) }
+  } else {
+    const vDone = db.prepare(`
+      SELECT verifier_user_id as userId, verifier_name as name, verifier_avatar as avatar
+      FROM task_executions
+      WHERE project_id = ? AND issue_iid = ? AND verifier_user_id IS NOT NULL
+      ORDER BY COALESCE(verified_at, rejected_at) DESC LIMIT 1
+    `).get(projectId, issueIid) as any
+    if (vDone?.userId) verifier = { userId: vDone.userId, name: vDone.name, avatar: resolveUserAvatar(vDone.avatar, vDone.userId) }
+  }
+
+  // 3) confirmer — 활성 confirm exec 우선 → issue_stages.confirmer_*
+  const cActive = db.prepare(`
+    SELECT user_id as userId, user_name as name, user_avatar as avatar
+    FROM task_executions
+    WHERE project_id = ? AND issue_iid = ? AND id LIKE 'ex-confirm-%'
+      AND status IN ('running', 'assigned')
+    ORDER BY started_at DESC LIMIT 1
+  `).get(projectId, issueIid) as any
+  let confirmer: ActualRoleAssignees['confirmer'] = null
+  if (cActive?.userId) {
+    confirmer = { userId: cActive.userId, name: cActive.name, avatar: resolveUserAvatar(cActive.avatar, cActive.userId) }
+  } else {
+    const cDone = db.prepare(`
+      SELECT confirmer_user_id as userId, confirmer_name as name, confirmer_avatar as avatar
+      FROM issue_stages
+      WHERE project_id = ? AND issue_iid = ? AND confirmer_user_id IS NOT NULL
+    `).get(projectId, issueIid) as any
+    if (cDone?.userId) confirmer = { userId: cDone.userId, name: cDone.name, avatar: resolveUserAvatar(cDone.avatar, cDone.userId) }
+  }
+
+  return { processor, verifier, confirmer }
+}
+
+/**
+ * 프로젝트 전체 이슈에 대해 actual role assignees 를 batch 로 조회 (목록 API 용).
+ */
+export function getActualRoleAssigneesMap(projectId: string): Map<number, ActualRoleAssignees> {
+  const db = getDb()
+  const map = new Map<number, ActualRoleAssignees>()
+
+  // processor
+  const pRows = db.prepare(`
+    SELECT te.issue_iid as iid, te.agent_id as agentId, a.name as agentName, a.avatar as agentAvatar, a.cli_name as cliName,
+      te.started_at as startedAt
+    FROM task_executions te LEFT JOIN agents a ON a.id = te.agent_id
+    WHERE te.project_id = ? AND te.assignee_type = 'agent'
+    ORDER BY te.started_at DESC
+  `).all(projectId) as any[]
+  for (const r of pRows) {
+    if (!map.has(r.iid)) map.set(r.iid, { ...EMPTY_ROLES })
+    const e = map.get(r.iid)!
+    if (!e.processor && r.agentId) {
+      e.processor = { agentId: r.agentId, agentName: r.agentName, agentAvatar: r.agentAvatar, cliName: r.cliName }
+    }
+  }
+
+  // active verify exec
+  const vActiveRows = db.prepare(`
+    SELECT issue_iid as iid, user_id as userId, user_name as name, user_avatar as avatar, started_at as startedAt
+    FROM task_executions
+    WHERE project_id = ? AND id LIKE 'ex-verify-%' AND status IN ('running', 'assigned')
+    ORDER BY started_at DESC
+  `).all(projectId) as any[]
+  for (const r of vActiveRows) {
+    if (!map.has(r.iid)) map.set(r.iid, { ...EMPTY_ROLES })
+    const e = map.get(r.iid)!
+    if (!e.verifier && r.userId) e.verifier = { userId: r.userId, name: r.name, avatar: resolveUserAvatar(r.avatar, r.userId) }
+  }
+
+  // verifier from done execs
+  const vDoneRows = db.prepare(`
+    SELECT issue_iid as iid, verifier_user_id as userId, verifier_name as name, verifier_avatar as avatar,
+      COALESCE(verified_at, rejected_at) as ts
+    FROM task_executions
+    WHERE project_id = ? AND verifier_user_id IS NOT NULL
+    ORDER BY ts DESC
+  `).all(projectId) as any[]
+  for (const r of vDoneRows) {
+    if (!map.has(r.iid)) map.set(r.iid, { ...EMPTY_ROLES })
+    const e = map.get(r.iid)!
+    if (!e.verifier && r.userId) e.verifier = { userId: r.userId, name: r.name, avatar: resolveUserAvatar(r.avatar, r.userId) }
+  }
+
+  // active confirm exec
+  const cActiveRows = db.prepare(`
+    SELECT issue_iid as iid, user_id as userId, user_name as name, user_avatar as avatar, started_at as startedAt
+    FROM task_executions
+    WHERE project_id = ? AND id LIKE 'ex-confirm-%' AND status IN ('running', 'assigned')
+    ORDER BY started_at DESC
+  `).all(projectId) as any[]
+  for (const r of cActiveRows) {
+    if (!map.has(r.iid)) map.set(r.iid, { ...EMPTY_ROLES })
+    const e = map.get(r.iid)!
+    if (!e.confirmer && r.userId) e.confirmer = { userId: r.userId, name: r.name, avatar: resolveUserAvatar(r.avatar, r.userId) }
+  }
+
+  // confirmer from issue_stages
+  const cDoneRows = db.prepare(`
+    SELECT issue_iid as iid, confirmer_user_id as userId, confirmer_name as name, confirmer_avatar as avatar
+    FROM issue_stages
+    WHERE project_id = ? AND confirmer_user_id IS NOT NULL
+  `).all(projectId) as any[]
+  for (const r of cDoneRows) {
+    if (!map.has(r.iid)) map.set(r.iid, { ...EMPTY_ROLES })
+    const e = map.get(r.iid)!
+    if (!e.confirmer && r.userId) e.confirmer = { userId: r.userId, name: r.name, avatar: resolveUserAvatar(r.avatar, r.userId) }
+  }
+
+  return map
 }
 
 // ── Project Members ──

@@ -4,9 +4,10 @@
 import fs from "fs";
 import { promisify } from "util";
 import { Project, Agent } from "@/types";
-import { updateExecutionStatus, updateAgentStatus, getAssigneeAuto } from "../db";
+import { updateExecutionStatus, updateAgentStatus, getAssigneeAuto, getPresetRoles } from "../db";
 import { addIssueLabels, removeIssueLabels } from "../provider";
 import { runAutoAssign } from "./auto-assign";
+import { applyRoleAssignee } from "../role-assignee";
 import {
   addGitLabIssueComment,
   addGitLabSpentTime,
@@ -156,16 +157,32 @@ async function maybeAutoAssign(
   token: string,
   log: (msg: string, type?: 'info' | 'error' | 'warn' | 'system') => void,
 ): Promise<void> {
-  if (!getAssigneeAuto(project.id, iid)) return;
+  // 레거시 assigneeAuto flag (구 폼에서 자동배정 토글) — 하위 호환 유지
+  if (getAssigneeAuto(project.id, iid)) {
+    try {
+      const result = await runAutoAssign(project, iid, token);
+      if (result) {
+        log(`자동배정 완료 → ${result.name} (@${result.username}, 현재 배정 ${result.count}건)`, 'system');
+      } else {
+        log("자동배정 스킵 — 후보 멤버가 없습니다.", 'warn');
+      }
+    } catch (e) {
+      log(`자동배정 실패: ${(e as Error).message || e}`, 'warn');
+    }
+    return;
+  }
+
+  // 신규 path — D→W 전이 시 검증자 preset 적용 (이슈 #271)
+  // creator: 작성자 / auto: 가장 한가한 멤버 / specific: 사전 지정 사용자
   try {
-    const result = await runAutoAssign(project, iid, token);
-    if (result) {
-      log(`자동배정 완료 → ${result.name} (@${result.username}, 현재 배정 ${result.count}건)`, 'system');
-    } else {
-      log("자동배정 스킵 — 후보 멤버가 없습니다.", 'warn');
+    const preset = getPresetRoles(project.id, iid).verifier;
+    const r = await applyRoleAssignee(project, iid, token, '검증자', preset);
+    if (r.success) {
+      const modeLabel = preset.mode === 'creator' ? '생성자' : preset.mode === 'auto' ? '자동' : '지정';
+      log(`검증자 배정 완료(${modeLabel}) → ${r.username ? '@' + r.username : '(미지정)'}`, 'system');
     }
   } catch (e) {
-    log(`자동배정 실패: ${(e as Error).message || e}`, 'warn');
+    log(`검증자 preset 적용 실패: ${(e as Error).message || e}`, 'warn');
   }
 }
 

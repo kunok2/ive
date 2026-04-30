@@ -1,6 +1,7 @@
 'use client'
 
-import { ReactNode, useEffect, useRef } from 'react'
+import { ReactNode, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 interface Props {
   open: boolean
@@ -14,6 +15,9 @@ interface Props {
 
 export default function Modal({ open, onClose, title, children, size = 'md', closeOnBackdrop = true }: Props) {
   const backdropRef = useRef<HTMLDivElement>(null)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => { setMounted(true) }, [])
 
   useEffect(() => {
     if (open) {
@@ -24,9 +28,10 @@ export default function Modal({ open, onClose, title, children, size = 'md', clo
     return () => { document.body.style.overflow = '' }
   }, [open])
 
-  if (!open) return null
+  if (!open || !mounted) return null
 
-  return (
+  // Portal 로 document.body 에 렌더 — backdrop-filter 가 있는 조상의 containing block 영향에서 벗어남
+  return createPortal(
     <div
       ref={backdropRef}
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -47,6 +52,7 @@ export default function Modal({ open, onClose, title, children, size = 'md', clo
           {children}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

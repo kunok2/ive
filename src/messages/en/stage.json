@@ -4,8 +4,15 @@
   "dev": "In Progress",
   "dev_fail": "Failed",
   "verifying": "Verifying",
+  "confirm_waiting": "Confirm Wait",
+  "confirming": "Confirming",
   "done": "Done",
   "closed": "Closed",
   "rejected": "Rejected",
-  "unknown": "Unknown"
+  "unknown": "Unknown",
+  "macroInflow": "Inflow",
+  "macroProcess": "Process",
+  "macroVerify": "Verify",
+  "macroConfirm": "Confirm",
+  "macroComplete": "Done"
 }

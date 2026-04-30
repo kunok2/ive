@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getProject, getProjectAccess, getProjectAuthToken, hasActiveExecution, stageFromLabels } from '@/lib/db'
+import { getProject, getProjectAccess, getProjectAuthToken, hasActiveExecution, stageFromLabels, getPresetRoles, getAssigneeAuto, getActualRoleAssignees } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { updateIssue, fetchSingleIssue } from '@/lib/provider'
 import { resolveIveAuthorFromBody, stripIveAuthorMarker } from '@/lib/ive-author'
@@ -94,6 +94,30 @@ export async function GET(
       ? (iveAuthor.avatar === 'photo' ? `/api/auth/avatar/image?id=${iveAuthor.id}` : iveAuthor.avatar)
       : null
 
+    // 검증자/확인자 사전 배정 + 실제 수행자 (이슈 #271)
+    const presetRoles = getPresetRoles(projectId, Number(iid))
+    const assigneeAuto = getAssigneeAuto(projectId, Number(iid))
+    const actuals = getActualRoleAssignees(projectId, Number(iid))
+
+    // 자동배정/지정 결과 — 단계별 Git assignee 를 해당 역할의 실제 사람으로 fallback
+    //   verify_waiting/verifying: Git assignee = 검증자 (auto-assign 또는 수동 지정 결과)
+    //   confirm_waiting/confirming: Git assignee = 확인자
+    const firstAssignee = assignees[0]
+    if (!actuals.verifier && firstAssignee && (stage === 'verify_waiting' || stage === 'verifying')) {
+      actuals.verifier = {
+        userId: String(firstAssignee.id),
+        name: firstAssignee.name || firstAssignee.username,
+        avatar: firstAssignee.avatarUrl || null,
+      }
+    }
+    if (!actuals.confirmer && firstAssignee && (stage === 'confirm_waiting' || stage === 'confirming')) {
+      actuals.confirmer = {
+        userId: String(firstAssignee.id),
+        name: firstAssignee.name || firstAssignee.username,
+        avatar: firstAssignee.avatarUrl || null,
+      }
+    }
+
     return NextResponse.json({
       iid: issue.iid,
       title: issue.title,
@@ -110,6 +134,12 @@ export async function GET(
       iveAuthorId,    // IVE 사용자 id (ive-author 마커 기반). 로컬 계정 담당자 판정용.
       authorAvatarUrl,
       iveAuthorAvatar,
+      assigneeAuto,
+      presetVerifier: presetRoles.verifier,
+      presetConfirmer: presetRoles.confirmer,
+      actualProcessor: actuals.processor,
+      actualVerifier: actuals.verifier,
+      actualConfirmer: actuals.confirmer,
     })
   } catch (err) {
     return NextResponse.json(

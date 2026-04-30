@@ -44,7 +44,10 @@ export default function ProjectForm({ existing, onSuccess, onCancel }: Props) {
   const [labelDev, setLabelDev] = useState(existing?.labelDev ?? 'IVE-D')
   const [labelVerifyWait, setLabelVerifyWait] = useState(existing?.labelVerifyWait ?? 'IVE-W')
   const [labelVerify, setLabelVerify] = useState(existing?.labelVerify ?? 'IVE-V')
+  const [labelConfirmWait, setLabelConfirmWait] = useState(existing?.labelConfirmWait ?? 'IVE-P')
+  const [labelConfirm, setLabelConfirm] = useState(existing?.labelConfirm ?? 'IVE-C')
   const [labelEnd, setLabelEnd] = useState(existing?.labelEnd ?? 'IVE-E')
+  const [confirmBaseBranch, setConfirmBaseBranch] = useState(existing?.confirmBaseBranch ?? '')
 
   // Scanner / monitoring settings
   const [checkInterval, setCheckInterval] = useState(existing?.checkInterval ?? 1)
@@ -67,14 +70,15 @@ export default function ProjectForm({ existing, onSuccess, onCancel }: Props) {
   }, [])
 
   // --- Derived values ---
-  const labelValues: LabelValues = { labelTarget, labelSchedule, labelDev, labelVerifyWait, labelVerify, labelEnd }
+  const labelValues: LabelValues = { labelTarget, labelSchedule, labelDev, labelVerifyWait, labelVerify, labelConfirmWait, labelConfirm, labelEnd }
   const scannerValues: ScannerSettingsValues = { checkInterval, showToolUsage, snapshotInterval, sparklinePoints, statsRetention }
 
   function handleLabelChange(field: keyof LabelValues, value: string) {
     const setters: Record<keyof LabelValues, (v: string) => void> = {
       labelTarget: setLabelTarget, labelSchedule: setLabelSchedule,
       labelDev: setLabelDev, labelVerifyWait: setLabelVerifyWait,
-      labelVerify: setLabelVerify, labelEnd: setLabelEnd,
+      labelVerify: setLabelVerify, labelConfirmWait: setLabelConfirmWait,
+      labelConfirm: setLabelConfirm, labelEnd: setLabelEnd,
     }
     setters[field](value)
   }
@@ -114,8 +118,11 @@ export default function ProjectForm({ existing, onSuccess, onCancel }: Props) {
       labelDev: labelDev.trim() || 'IVE-D',
       labelVerifyWait: labelVerifyWait.trim() || 'IVE-W',
       labelVerify: labelVerify.trim() || 'IVE-V',
+      labelConfirmWait: labelConfirmWait.trim() || 'IVE-P',
+      labelConfirm: labelConfirm.trim() || 'IVE-C',
       labelEnd: labelEnd.trim() || 'IVE-E',
       baseBranch: baseBranch.trim(),
+      confirmBaseBranch: confirmBaseBranch.trim(),
       showToolUsage,
       checkInterval: Number(checkInterval) || 1,
       lastCheckedAt: existing?.lastCheckedAt ?? null,

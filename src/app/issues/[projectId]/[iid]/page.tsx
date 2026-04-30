@@ -45,6 +45,12 @@ interface IssueDetail {
   authorAvatarUrl: string | null
   iveAuthorAvatar: string | null
   assignees?: IssueAssignee[]
+  assigneeAuto?: boolean
+  presetVerifier?: { mode: 'creator' | 'auto' | 'specific'; userId: string | null; username: string | null }
+  presetConfirmer?: { mode: 'creator' | 'auto' | 'specific'; userId: string | null; username: string | null }
+  actualProcessor?: { agentId: string | null; agentName: string | null; agentAvatar: string | null; cliName: string | null } | null
+  actualVerifier?: { userId: string | null; name: string | null; avatar: string | null } | null
+  actualConfirmer?: { userId: string | null; name: string | null; avatar: string | null } | null
 }
 
 interface Note {
@@ -100,6 +106,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
 
   // --- MR action modal state ---
   const verifyPopupShownRef = useRef(false)
+  const confirmPopupShownRef = useRef(false)
   const [mrActionModal, setMrActionModal] = useState<{
     mr: { iid: number; title: string; web_url: string; has_conflicts?: boolean }
     finalApprove: () => Promise<void>
@@ -145,7 +152,30 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
     }
     return false
   })()
-  const canProgressStage = state.user?.isAdmin || isAssignee
+  // 담당자/검증자/확인자 배정 변경은 관리자 또는 이슈 생성자만 가능
+  const isCreator = (() => {
+    if (!state.user || !issue) return false
+    if (issue.iveAuthorId && issue.iveAuthorId === state.user.id) return true
+    const myGitId = state.user.oauthUserId ? String(state.user.oauthUserId) : null
+    if (myGitId && issue.authorId != null && String(issue.authorId) === myGitId) return true
+    return false
+  })()
+  const canEditAssignees = !!state.user?.isAdmin || isCreator
+
+  // 단계 진행 권한 — 검증/확인 단계에서는 지정 담당자(또는 미지정 시 작성자)만 진행 가능.
+  // 그 외 단계(waiting/dev/dev_fail 등): 관리자/Git assignee/작성자.
+  const canProgressStage = (() => {
+    if (!issue) return false
+    if (state.user?.isAdmin) return true
+    if (issue.stage === 'verify_waiting' || issue.stage === 'verifying') {
+      return canStartFor(issue.presetVerifier ?? null, issue.actualVerifier ?? null)
+    }
+    if (issue.stage === 'confirm_waiting' || issue.stage === 'confirming') {
+      return canStartFor(issue.presetConfirmer ?? null, issue.actualConfirmer ?? null)
+    }
+    // dev/waiting/dev_fail 등: 기존 룰 (assignee 또는 creator)
+    return isAssignee || isCreator
+  })()
 
   const fetchIssue = useCallback(async () => {
     const cacheKey = `issue-detail-${projectId}-${iid}`
@@ -156,7 +186,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
       setLoading(false)
       return
     }
-    const res = await fetch(`/api/projects/${projectId}/issues/${iid}`)
+    const res = await fetch(`/api/projects/${projectId}/issues/${iid}`, { cache: 'no-store' })
     if (res.ok) {
       const data = await res.json()
       setIssue(prev => (prev && JSON.stringify(prev) === JSON.stringify(data)) ? prev : data)
@@ -215,6 +245,22 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
       .then(setGitMembers)
       .catch(() => setGitMembers([]))
   }, [fetchIssue, fetchNotes, fetchPreferredAgent, projectId, state.agents])
+
+  // 백그라운드 폴링 — 에이전트 실행/스캐너 등 외부 상태 변화를 자동 반영.
+  //   - 닫힌 이슈 / 종결 단계(done/rejected) 는 폴링 안 함
+  //   - 탭이 가려져 있으면(visibilitychange) 폴링 중지, 다시 보이면 즉시 fetch
+  useEffect(() => {
+    if (!issue || issue.state === 'closed' || issue.stage === 'done' || issue.stage === 'rejected') return
+    let cancelled = false
+    const tick = async () => {
+      if (cancelled || document.hidden) return
+      await Promise.all([fetchIssue(), fetchNotes()])
+    }
+    const id = setInterval(tick, 10000)
+    const onVisible = () => { if (!document.hidden) tick() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { cancelled = true; clearInterval(id); document.removeEventListener('visibilitychange', onVisible) }
+  }, [issue?.state, issue?.stage, fetchIssue, fetchNotes])
 
   // ===================== Stage/issue handlers =====================
 
@@ -303,7 +349,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
     } finally { setIsClosing(false) }
   }
 
-  async function handleConfirmAssignee(pick: IssueAssignee | null) {
+  async function handleConfirmAssignee(pick: IssueAssignee | null, _auto: boolean) {
     if (!issue) return
     const updated = pick ? [pick] : []
     setIssue({ ...issue, assignees: updated })
@@ -391,7 +437,11 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   }
 
   async function handleCommentAndDone() {
-    if (!comment.trim() || postingRef.current) return
+    if (!issue || !comment.trim() || postingRef.current) return
+    // verifying → approve (확인 대기로), confirming → accept (이슈 종결)
+    const isConfirming = issue.stage === 'confirming'
+    const stageAction = isConfirming ? 'accept' : 'approve'
+    const stageNow = issue.stage
     postingRef.current = true; setPosting(true); setPostingType('done')
     try {
       const res = await fetch(`/api/projects/${projectId}/issues/${iid}/notes`, {
@@ -401,24 +451,29 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
       if (!res.ok) { const data = await res.json().catch(() => ({})); toast(data.error || '코멘트 작성에 실패했습니다', 'error'); return }
       setComment(''); localStorage.removeItem(commentKey)
       pendingScrollToBottomRef.current = true; await fetchNotes()
-      const doApprove = async () => {
+      const doStage = async () => {
         const stageRes = await fetch(`/api/projects/${projectId}/issues/${iid}/stage`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ stage: 'verifying', action: 'approve' }),
+          body: JSON.stringify({ stage: stageNow, action: stageAction }),
         })
         if (!stageRes.ok) { const errorData = await stageRes.json().catch(() => null); toast(errorData?.error || `Error: ${stageRes.status} ${stageRes.statusText}`, 'error'); return }
-        await refreshAll(); toast('승인 완료되었습니다', 'success')
+        await refreshAll()
+        toast(isConfirming ? '확인 완료되었습니다' : '승인 완료되었습니다', 'success')
       }
-      await runApproveWithMRCheck(doApprove)
+      // verifying 의 approve 만 MR 체크 적용 (confirming 의 accept 는 단순 종결)
+      if (isConfirming) await doStage()
+      else await runApproveWithMRCheck(doStage)
     } catch (err: any) { toast(err.message || '네트워크 오류가 발생했습니다', 'error') }
     finally { postingRef.current = false; setPosting(false); setPostingType(null) }
   }
 
   const NEXT_STAGE: Record<string, { stage: string; action: string; label: string }> = {
-    waiting:        { stage: 'waiting',        action: 'start_dev',          label: '개발 시작' },
-    dev:            { stage: 'dev',            action: 'complete',           label: '검증대기' },
-    verify_waiting: { stage: 'verify_waiting', action: 'start_verification', label: '검증 시작' },
-    verifying:      { stage: 'verifying',      action: 'approve',           label: '완료' },
+    waiting:         { stage: 'waiting',         action: 'start_dev',           label: '개발 시작' },
+    dev:             { stage: 'dev',             action: 'complete',            label: '검증대기' },
+    verify_waiting:  { stage: 'verify_waiting',  action: 'start_verification',  label: '검증 시작' },
+    verifying:       { stage: 'verifying',       action: 'approve',             label: '확인대기' },
+    confirm_waiting: { stage: 'confirm_waiting', action: 'start_confirmation',  label: '확인 시작' },
+    confirming:      { stage: 'confirming',      action: 'accept',              label: '완료' },
   }
 
   async function handleCommentAndNextStage() {
@@ -626,14 +681,53 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
     requestAnimationFrame(() => notesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }))
   }, [notes])
 
+  // 이슈가 바뀌면 popup 표시 플래그 리셋
+  useEffect(() => { verifyPopupShownRef.current = false; confirmPopupShownRef.current = false }, [iid])
+
+  // 단계 시작 권한 — 검증자/확인자가 지정되었으면 그 사용자에게만, 미지정이면 작성자에게.
+  //   1) 관리자: 항상
+  //   2) preset.specific: 그 userId 가 현재 유저여야 함
+  //   3) preset.auto + 자동배정 완료(actual.userId 결정됨): 그 userId 가 현재 유저여야 함
+  //   4) preset.creator / 미지정 / auto 미해결: 작성자
+  function canStartFor(
+    preset: { mode: string; userId: string | null } | null | undefined,
+    actual: { userId: string | null } | null | undefined,
+  ): boolean {
+    if (!state.user) return false
+    if (state.user.isAdmin) return true
+    const matchesUser = (uid: string | null | undefined) => !!(uid && (
+      uid === state.user!.id
+      || (state.user!.oauthUserId && String(state.user!.oauthUserId) === uid)
+    ))
+    if (preset?.mode === 'specific') {
+      return matchesUser(preset.userId)
+    }
+    if (preset?.mode === 'auto' && actual?.userId) {
+      return matchesUser(actual.userId)
+    }
+    // creator / 미지정 / auto 미해결 → 작성자
+    return isCreator
+  }
+  const canStartVerification = !!issue && canStartFor(issue.presetVerifier ?? null, issue.actualVerifier ?? null)
+  const canStartConfirmation  = !!issue && canStartFor(issue.presetConfirmer ?? null, issue.actualConfirmer ?? null)
+
   // Verify-waiting popup
   useEffect(() => {
-    if (loading || !issue || issue.stage !== 'verify_waiting' || !canProgressStage || verifyPopupShownRef.current) return
+    if (loading || !issue || issue.stage !== 'verify_waiting' || !canStartVerification || verifyPopupShownRef.current) return
     verifyPopupShownRef.current = true
     confirm({ title: tIssue('startVerificationPopupTitle'), message: tIssue('startVerificationPopupMessage'), confirmText: tIssue('startVerification'), cancelText: tc('cancel'), variant: 'info' })
       .then(ok => { if (ok) handleStageAction('start_verification') })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [issue, loading, canProgressStage])
+  }, [issue, loading, canStartVerification])
+
+  // Confirm-waiting popup
+  useEffect(() => {
+    if (loading || !issue || issue.stage !== 'confirm_waiting' || !canStartConfirmation || confirmPopupShownRef.current) return
+    confirmPopupShownRef.current = true
+    confirm({ title: tIssue('startConfirmationPopupTitle'), message: tIssue('startConfirmationPopupMessage'), confirmText: tIssue('startConfirmation'), cancelText: tc('cancel'), variant: 'info' })
+      .then(ok => { if (ok) handleStageAction('start_confirmation') })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [issue, loading, canStartConfirmation])
 
   // Force comment mode if not authorized
   useEffect(() => { if (!canProgressStage && mode === 'chat') setMode('comment') }, [canProgressStage, mode])
@@ -698,6 +792,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
         stageChanging={stageChanging}
         iterationCount={iterationCount}
         canProgressStage={canProgressStage}
+        canEditAssignees={canEditAssignees}
         isClosing={isClosing}
         editMode={editMode}
         editTitle={editTitle}
@@ -705,6 +800,8 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
         saving={saving}
         showDesc={showDesc}
         projectId={projectId}
+        gitMembers={gitMembers}
+        preferredAgent={preferredAgent}
         onBack={() => router.back()}
         onStageAction={handleStageAction}
         onCloseIssue={handleCloseIssue}
@@ -715,6 +812,46 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
         onSetEditDesc={setEditDesc}
         onSetShowDesc={setShowDesc}
         onOpenAssigneePicker={() => setAssigneePickerOpen(true)}
+        onPresetVerifierChange={async (preset) => {
+          const prevPreset = issue?.presetVerifier
+          setIssue(prev => prev ? { ...prev, presetVerifier: preset } : prev)
+          try {
+            const res = await fetch(`/api/projects/${projectId}/issues/${iid}/preset-roles`, {
+              method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ verifier: preset }),
+            })
+            if (!res.ok) {
+              const d = await res.json().catch(() => ({}))
+              toast(d.error || '검증자 변경 실패', 'error')
+              setIssue(prev => prev ? { ...prev, presetVerifier: prevPreset } : prev)
+            } else {
+              window.dispatchEvent(new Event('refresh-counts'))
+            }
+          } catch (e: any) {
+            toast(e?.message || '네트워크 오류', 'error')
+            setIssue(prev => prev ? { ...prev, presetVerifier: prevPreset } : prev)
+          }
+        }}
+        onPresetConfirmerChange={async (preset) => {
+          const prevPreset = issue?.presetConfirmer
+          setIssue(prev => prev ? { ...prev, presetConfirmer: preset } : prev)
+          try {
+            const res = await fetch(`/api/projects/${projectId}/issues/${iid}/preset-roles`, {
+              method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ confirmer: preset }),
+            })
+            if (!res.ok) {
+              const d = await res.json().catch(() => ({}))
+              toast(d.error || '확인자 변경 실패', 'error')
+              setIssue(prev => prev ? { ...prev, presetConfirmer: prevPreset } : prev)
+            } else {
+              window.dispatchEvent(new Event('refresh-counts'))
+            }
+          } catch (e: any) {
+            toast(e?.message || '네트워크 오류', 'error')
+            setIssue(prev => prev ? { ...prev, presetConfirmer: prevPreset } : prev)
+          }
+        }}
         onToast={toast}
       />
 

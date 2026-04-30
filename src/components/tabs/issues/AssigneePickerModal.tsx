@@ -23,6 +23,10 @@ interface AssigneePickerModalProps {
   autoMode: boolean
   onAutoModeChange: (value: boolean) => void
   onConfirm: () => void
+  /** 모달 타이틀(역할). 미지정 시 "담당자". 검증자/확인자 등 다른 역할에도 재사용. */
+  title?: string
+  /** "미배정" 옵션 라벨. 검증자/확인자에서는 "미배정 (생성자)" 식으로 의미가 다름. */
+  noneLabel?: string
 }
 
 export default function AssigneePickerModal({
@@ -37,9 +41,13 @@ export default function AssigneePickerModal({
   autoMode,
   onAutoModeChange,
   onConfirm,
+  title,
+  noneLabel,
 }: AssigneePickerModalProps) {
   const tIssue = useTranslations('issue')
   const tCommon = useTranslations('common')
+  const effectiveTitle = title ?? tIssue('assignee')
+  const effectiveNoneLabel = noneLabel ?? tIssue('noAssignee')
 
   const filtered = gitMembers.filter(m => {
     if (!search) return true
@@ -55,7 +63,7 @@ export default function AssigneePickerModal({
   const selectMember = (m: GitMember) => { onAutoModeChange(false); onPickChange(m) }
 
   return (
-    <Modal open={open} onClose={onClose} title={`${tIssue('assignee')}${iids.length > 1 && !iids.includes(-1) ? ` (${iids.length}${tCommon('items')})` : ''}`} size="sm">
+    <Modal open={open} onClose={onClose} title={`${effectiveTitle}${iids.length > 1 && !iids.includes(-1) ? ` (${iids.length}${tCommon('items')})` : ''}`} size="sm">
       <div className="p-1.5 border-b border-ive-border-dark">
         <input
           type="text"
@@ -78,7 +86,7 @@ export default function AssigneePickerModal({
           <div className="w-7 h-7 rounded-full bg-ive-bg-deep flex items-center justify-center shrink-0">
             <i className="fa-solid fa-ban text-ive-text-dim text-xs" />
           </div>
-          <span className="font-bold">{tIssue('noAssignee')}</span>
+          <span className="font-bold">{effectiveNoneLabel}</span>
         </button>
         {/* 자동배정 */}
         <button

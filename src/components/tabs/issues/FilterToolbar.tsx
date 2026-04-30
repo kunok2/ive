@@ -67,9 +67,8 @@ export default function FilterToolbar({
             {(() => {
               const mineFilter = (i: IveIssue) => !onlyMine || !canFilterMine || isMine(i)
               const count = tab.key === 'all' ? issues.filter(mineFilter).length
-                : tab.key === 'waiting' ? issues.filter(i => (i.stage === 'waiting' || i.stage === 'verify_waiting') && mineFilter(i)).length
-                : tab.key === 'active' ? issues.filter(i => i.stage === 'dev' && mineFilter(i)).length
-                : tab.key === 'verifying' ? issues.filter(i => i.stage === 'verifying' && mineFilter(i)).length
+                : tab.key === 'waiting' ? issues.filter(i => i.stage === 'waiting' && mineFilter(i)).length
+                : tab.key === 'active' ? issues.filter(i => (i.stage === 'dev' || i.stage === 'verify_waiting' || i.stage === 'verifying' || i.stage === 'confirm_waiting' || i.stage === 'confirming') && mineFilter(i)).length
                 : tab.key === 'failed' ? issues.filter(i => (i.stage === 'dev_fail' || i.stage === 'rejected') && mineFilter(i)).length
                 : tab.key === 'done' ? issues.filter(i => i.stage === 'done' && mineFilter(i)).length
                 : tab.key === 'history' ? closedIssues.filter(mineFilter).length

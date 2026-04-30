@@ -30,8 +30,11 @@ export function initSchema(db: Database.Database) {
       label_dev TEXT NOT NULL DEFAULT 'IVE-D',
       label_verify_wait TEXT NOT NULL DEFAULT 'IVE-W',
       label_verify TEXT NOT NULL DEFAULT 'IVE-V',
+      label_confirm_wait TEXT NOT NULL DEFAULT 'IVE-P',
+      label_confirm TEXT NOT NULL DEFAULT 'IVE-C',
       label_end TEXT NOT NULL DEFAULT 'IVE-E',
       base_branch TEXT NOT NULL DEFAULT '',
+      confirm_base_branch TEXT NOT NULL DEFAULT '',
       show_tool_usage INTEGER NOT NULL DEFAULT 0,
       check_interval INTEGER NOT NULL DEFAULT 1,
       last_checked_at TEXT,
@@ -432,6 +435,15 @@ export function initSchema(db: Database.Database) {
     if (!tableInfo.some((col: any) => col.name === 'base_branch')) {
       db.exec("ALTER TABLE projects ADD COLUMN base_branch TEXT NOT NULL DEFAULT ''")
     }
+    if (!tableInfo.some((col: any) => col.name === 'label_confirm_wait')) {
+      db.exec("ALTER TABLE projects ADD COLUMN label_confirm_wait TEXT NOT NULL DEFAULT 'IVE-P'")
+    }
+    if (!tableInfo.some((col: any) => col.name === 'label_confirm')) {
+      db.exec("ALTER TABLE projects ADD COLUMN label_confirm TEXT NOT NULL DEFAULT 'IVE-C'")
+    }
+    if (!tableInfo.some((col: any) => col.name === 'confirm_base_branch')) {
+      db.exec("ALTER TABLE projects ADD COLUMN confirm_base_branch TEXT NOT NULL DEFAULT ''")
+    }
   } catch (e) { console.error("Migration failed for projects:", e) }
 
   // system_settings 테이블
@@ -471,6 +483,18 @@ export function initSchema(db: Database.Database) {
   try { db.exec(`ALTER TABLE issue_stages ADD COLUMN issue_title TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
   try { db.exec(`ALTER TABLE issue_stages ADD COLUMN verify_waiting_since TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
   try { db.exec(`ALTER TABLE issue_stages ADD COLUMN assignee_auto INTEGER DEFAULT 0`) } catch { /* 이미 존재 */ }
+  try { db.exec(`ALTER TABLE issue_stages ADD COLUMN confirmed_at TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
+  try { db.exec(`ALTER TABLE issue_stages ADD COLUMN confirmer_user_id TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
+  try { db.exec(`ALTER TABLE issue_stages ADD COLUMN confirmer_name TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
+  try { db.exec(`ALTER TABLE issue_stages ADD COLUMN confirmer_avatar TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
+  // 검증자/확인자 사전 배정 (이슈 생성 시 지정). mode: 'creator' | 'auto' | 'specific'
+  // (실제 수행자 정보는 task_executions.verifier_* / issue_stages.confirmer_* 사용)
+  try { db.exec(`ALTER TABLE issue_stages ADD COLUMN preset_verifier_mode TEXT DEFAULT 'creator'`) } catch { /* 이미 존재 */ }
+  try { db.exec(`ALTER TABLE issue_stages ADD COLUMN preset_verifier_user_id TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
+  try { db.exec(`ALTER TABLE issue_stages ADD COLUMN preset_verifier_username TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
+  try { db.exec(`ALTER TABLE issue_stages ADD COLUMN preset_confirmer_mode TEXT DEFAULT 'creator'`) } catch { /* 이미 존재 */ }
+  try { db.exec(`ALTER TABLE issue_stages ADD COLUMN preset_confirmer_user_id TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
+  try { db.exec(`ALTER TABLE issue_stages ADD COLUMN preset_confirmer_username TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
   try { db.exec(`CREATE INDEX IF NOT EXISTS idx_issue_stages_assignee ON issue_stages(assignee_username, cached_stage)`) } catch { /* ignore */ }
   try { db.exec(`CREATE INDEX IF NOT EXISTS idx_issue_stages_assignee_id ON issue_stages(assignee_git_user_id)`) } catch { /* ignore */ }
 

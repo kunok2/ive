@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAccess, getProjectAuthToken, setAssigneeAuto } from '@/lib/db';
+import { getProject, getProjectAccess, getProjectAuthToken, setAssigneeAuto, isIssueAuthor } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { updateIssue } from '@/lib/provider';
 
@@ -19,11 +19,20 @@ export async function PATCH(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const { assigneeIds, assigneeUsernames, assigneeAuto } = await req.json();
   const issueIid = Number(iid);
+  const token = getProjectAuthToken(projectId);
+
+  // 담당자 변경은 관리자 또는 이슈 작성자만
+  if (!user.isAdmin && !(await isIssueAuthor(project, issueIid, token, user))) {
+    return NextResponse.json(
+      { error: '이 이슈의 작성자 또는 관리자만 담당자를 변경할 수 있습니다' },
+      { status: 403 }
+    );
+  }
+
+  const { assigneeIds, assigneeUsernames, assigneeAuto } = await req.json();
 
   try {
-    const token = getProjectAuthToken(projectId);
     // 자동배정 모드면 Git 상의 assignee 는 비움 (마무리 시점에 시스템이 채움)
     await updateIssue(project, issueIid, token, {
       assigneeIds: assigneeAuto ? [] : (assigneeIds || []),

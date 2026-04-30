@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
-import { getProject, markIssueVerified, touchProjectActivity, getProjectAccess, isIssueAssignee, getDb, updateExecutionStatus } from '@/lib/db'
+import { getProject, markIssueVerified, touchProjectActivity, getProjectAccess, isIssueAssignee, getDb, updateExecutionStatus, getPresetRoles } from '@/lib/db'
 import { triggerScan } from '@/lib/scanner'
+import { applyRoleAssignee } from '@/lib/role-assignee'
 import { getCurrentUser } from '@/lib/auth'
 import { fetchMRByBranch, mergeMR, closeMR, fetchSingleIssue, addIssueLabels, removeIssueLabels } from '@/lib/provider'
 import { logActivity } from '@/lib/activity'
@@ -8,29 +9,40 @@ import { getProjectTokenCtx, withGitToken, friendlyGitError, type GitTokenCtx } 
 import type { Project, User } from '@/types'
 
 /**
- * 머지 성공 후 현재 단계 레이블(IVE-D/W/V) → IVE-E 로 전환.
+ * 머지 성공 후 현재 단계 레이블(IVE-D/W/V) → IVE-P (확인대기) 로 전환.
+ * 머지 = "코드 합쳐짐" 의 의미이며 완료가 아님. 확인자 검수 단계가 남아있다.
  * 레이블 조작 자체도 사용자 권한이 부족하면 실패할 수 있어 withGitToken 사용 (사용자→프로젝트 fallback).
  */
-async function syncLabelsToDone(project: Project, iid: number, user: User, projectId: string) {
+async function syncLabelsToConfirmWait(project: Project, iid: number, user: User, projectId: string) {
   const labelD = project.labelDev || 'IVE-D'
   const labelW = project.labelVerifyWait || 'IVE-W'
   const labelV = project.labelVerify || 'IVE-V'
+  const labelP = project.labelConfirmWait || 'IVE-P'
+  const labelC = project.labelConfirm || 'IVE-C'
   const labelE = project.labelEnd || 'IVE-E'
 
   const issue = await withGitToken(user, project, (ctx) => fetchSingleIssue(project, iid, ctx.token))
   if (!issue) return
   const labels: string[] = issue.labels || []
-  if (labels.includes(labelE)) return
+  // 이미 done/confirming/confirm_waiting 이면 머지 동기화는 skip
+  if (labels.includes(labelE) || labels.includes(labelC) || labels.includes(labelP)) return
 
   const labelsToRemove = [labelD, labelW, labelV].filter(l => labels.includes(l))
   if (labelsToRemove.length > 0) {
     await withGitToken(user, project, (ctx) => removeIssueLabels(project, iid, ctx.token, labelsToRemove))
   }
-  await withGitToken(user, project, (ctx) => addIssueLabels(project, iid, ctx.token, [labelE]))
+  await withGitToken(user, project, (ctx) => addIssueLabels(project, iid, ctx.token, [labelP]))
+  // 검증자 검수 시간(verified_at) 기록 — 검증자가 머지 직후 액션이면 동시에 검증 완료로 본다.
   markIssueVerified(projectId, iid, { name: user.name, avatar: user.avatar, userId: user.id })
 
-  // 이 이슈에 남아 있는 활성(running/assigned) execution 모두 success로 닫기
-  // (검증자 execution, 담당자 dev execution 등 — 머지 완료 = 검증 승인과 동일)
+  // confirm_waiting 진입 시 확인자 preset 기반 assignee 교체
+  try {
+    const preset = getPresetRoles(projectId, iid).confirmer
+    await withGitToken(user, project, (ctx) => applyRoleAssignee(project, iid, ctx.token, '확인자', preset))
+  } catch (e) { console.warn(`[MR] Confirmer preset apply failed for #${iid}:`, e) }
+
+  // 머지 시점에는 dev/verify 단계의 active execution 만 닫는다 (검증자/개발자 작업 완료).
+  // 확인 단계 execution 은 사용자가 [확인 시작] 을 눌러야 시작되므로 여기서 새로 만들지 않는다.
   const db = getDb()
   const activeExecs = db.prepare(
     "SELECT id FROM task_executions WHERE project_id = ? AND issue_iid = ? AND status IN ('running', 'assigned')"
@@ -44,7 +56,7 @@ async function syncLabelsToDone(project: Project, iid: number, user: User, proje
     userId: user.id,
     category: 'task',
     action: 'task_complete',
-    detail: `머지 완료 → 자동 완료 전환 (이슈 #${iid}, ${project.name})`,
+    detail: `머지 완료 → 확인대기 전환 (이슈 #${iid}, ${project.name})`,
     targetType: 'issue',
     targetId: `${projectId}:${iid}`,
   })
@@ -149,7 +161,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (mr.state === 'merged') {
       console.log(`[MR] Issue #${iid} already merged in Git. Syncing labels...`)
       try {
-        await syncLabelsToDone(project, Number(iid), user, id)
+        await syncLabelsToConfirmWait(project, Number(iid), user, id)
       } catch (err) {
         console.warn(`[MR] Label sync failed for #${iid}:`, err)
       }
@@ -161,7 +173,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const result = await withGitToken(user, project, (ctx) =>
         mergeMR(project, ctx.token, mr.iid, { isOAuth: ctx.isOAuth })
       )
-      await syncLabelsToDone(project, Number(iid), user, id)
+      await syncLabelsToConfirmWait(project, Number(iid), user, id)
       return NextResponse.json({ success: true, mr: result })
     } catch (err) {
       return NextResponse.json({ error: friendlyGitError(err, '머지') }, { status: 400 })

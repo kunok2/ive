@@ -3,8 +3,9 @@
 import { useTranslations } from 'next-intl'
 import { useStore } from '@/lib/store'
 import { formatDateMedium } from '@/lib/format-date'
-import StageActionButtons from './StageActions'
-import AgentAvatar from '@/components/agent/AgentAvatar'
+import StageActionButtons, { type StageAction } from './StageActions'
+import StageProgress from './StageProgress'
+import { type PresetRole } from '@/components/issue/RoleAvatarBar'
 import { createImagePasteHandlers } from '@/lib/paste-upload'
 import { useMemo, useRef, useEffect } from 'react'
 
@@ -29,13 +30,11 @@ interface IssueDetail {
   authorAvatarUrl?: string | null
   iveAuthorAvatar?: string | null   // IVE 사용자 아바타 ID ('photo' 리졸브된 URL 또는 'av-XX')
   assignees?: IssueAssignee[]
-}
-
-interface StageAction {
-  action: string
-  label: string
-  icon: string
-  danger?: boolean
+  presetVerifier?: PresetRole
+  presetConfirmer?: PresetRole
+  actualProcessor?: { agentId: string | null; agentName: string | null; agentAvatar: string | null; cliName: string | null } | null
+  actualVerifier?: { userId: string | null; name: string | null; avatar: string | null } | null
+  actualConfirmer?: { userId: string | null; name: string | null; avatar: string | null } | null
 }
 
 interface IssueHeaderProps {
@@ -45,6 +44,7 @@ interface IssueHeaderProps {
   stageChanging: boolean
   iterationCount: number
   canProgressStage: boolean
+  canEditAssignees: boolean
   isClosing: boolean
   editMode: boolean
   editTitle: string
@@ -52,6 +52,14 @@ interface IssueHeaderProps {
   saving: boolean
   showDesc: boolean
   projectId: string
+  gitMembers: IssueAssignee[]
+  preferredAgent: {
+    assignMode?: string
+    preferredAgentId: string | null
+    preferredAgentName: string | null
+    preferredAgentAvatar: string | null
+    preferredAgentCliName: string | null
+  } | null
   onBack: () => void
   onStageAction: (action: string) => void
   onCloseIssue: () => void
@@ -62,15 +70,18 @@ interface IssueHeaderProps {
   onSetEditDesc: (v: string) => void
   onSetShowDesc: (v: boolean) => void
   onOpenAssigneePicker: () => void
+  onPresetVerifierChange: (preset: PresetRole) => Promise<void> | void
+  onPresetConfirmerChange: (preset: PresetRole) => Promise<void> | void
   onToast: (msg: string, type: 'success' | 'error') => void
 }
 
 export default function IssueHeader({
   issue, stageInfo, actions, stageChanging, iterationCount,
-  canProgressStage, isClosing, editMode, editTitle, editDesc, saving, showDesc,
-  projectId,
+  canProgressStage, canEditAssignees, isClosing, editMode, editTitle, editDesc, saving, showDesc,
+  projectId, gitMembers, preferredAgent,
   onBack, onStageAction, onCloseIssue, onStartEdit, onSaveEdit, onCancelEdit,
-  onSetEditTitle, onSetEditDesc, onSetShowDesc, onOpenAssigneePicker, onToast,
+  onSetEditTitle, onSetEditDesc, onSetShowDesc, onOpenAssigneePicker,
+  onPresetVerifierChange, onPresetConfirmerChange, onToast,
 }: IssueHeaderProps) {
   const { state } = useStore()
   const tc = useTranslations('common')
@@ -94,46 +105,27 @@ export default function IssueHeader({
           <i className="fa-solid fa-arrow-left" />
         </button>
         <span className="text-base font-bold text-ive-green shrink-0">#{issue.iid}</span>
-        {issue.stage !== 'none' && (
-          <span className={`text-xs font-bold px-1.5 py-0.5 rounded border ${stageInfo.bg} ${stageInfo.color} border-current/20 shrink-0`}>
-            <i className={`fa-solid ${stageInfo.icon} mr-0.5`} />{stageInfo.label}
-          </span>
-        )}
         {iterationCount > 0 && (
           <span className="text-xs font-bold px-1.5 py-0.5 rounded border bg-ive-cyan/10 text-ive-cyan border-ive-cyan/20 shrink-0" title={tIssue('iterationCount', { count: iterationCount })}>
             <i className="fa-solid fa-repeat mr-0.5" />{tIssue('iterationLabel', { count: iterationCount })}
           </span>
         )}
-        <span className="text-xs text-ive-text-dim shrink-0 inline-flex items-center gap-1">
-          {issue.iveAuthorAvatar ? (
-            <AgentAvatar avatar={issue.iveAuthorAvatar} size="xs" className="rounded-full overflow-hidden" />
-          ) : issue.authorAvatarUrl ? (
-            <img src={issue.authorAvatarUrl} className="w-4 h-4 rounded-full object-cover bg-ive-bg-deep" alt="" />
-          ) : (
-            <i className="fa-solid fa-user" />
-          )}
-          {issue.author}
-        </span>
-        {/* 담당자 */}
-        <button
-          type="button"
-          onClick={onOpenAssigneePicker}
-          className="flex items-center gap-1 text-xs text-ive-text-dim hover:text-ive-text transition-all shrink-0"
-        >
-          {(issue.assignees && issue.assignees.length > 0) ? (
-            issue.assignees.map(a => (
-              <span key={a.id} className="flex items-center gap-0.5">
-                {a.avatarUrl ? <img src={a.avatarUrl} className="w-4 h-4 rounded-full" alt="" /> : <i className="fa-solid fa-user mr-0.5" />}
-                {a.name || a.username}
-              </span>
-            ))
-          ) : (
-            <><i className="fa-solid fa-user-plus mr-0.5" />{tIssue('selectAssignee')}</>
-          )}
-        </button>
-        <span className="text-xs text-ive-text-dim ml-auto shrink-0">
+        <span className="text-xs text-ive-text-dim shrink min-w-0 truncate">
           {formatDateMedium(issue.updatedAt, state.user?.locale, state.user?.timezone)}
         </span>
+        <span className="ml-auto" />
+        {/* 닫기 — 관리자/생성자(canEditAssignees) 만, 이미 닫힌 이슈 제외 */}
+        {canEditAssignees && issue.state !== 'closed' && (
+          <button
+            onClick={onCloseIssue}
+            disabled={isClosing}
+            className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center bg-ive-bg-card text-ive-text-dim border border-ive-border-subtle hover:text-ive-red hover:border-ive-red/40 transition-all disabled:opacity-40"
+            title={tIssue('closeIssue')}
+            aria-label={tIssue('closeIssue')}
+          >
+            {isClosing ? <i className="fa-solid fa-circle-notch fa-spin text-xs" /> : <i className="fa-solid fa-xmark text-xs" />}
+          </button>
+        )}
         {issue.webUrl && (
           <button
             onClick={() => window.open(issue.webUrl, '_blank')}
@@ -204,26 +196,47 @@ export default function IssueHeader({
                     <i className={`fa-solid fa-file-lines text-xs`} />
                   </button>
                 )}
-                {canProgressStage && <StageActionButtons actions={actions} stageChanging={stageChanging} onAction={onStageAction} />}
-                {canProgressStage && (
-                  <button
-                    onClick={onCloseIssue}
-                    disabled={isClosing || stageChanging}
-                    className="h-7 px-2 rounded-lg text-xs font-bold border text-ive-red/80 border-ive-red/30 bg-ive-bg-card hover:bg-ive-red/10 transition-all active:scale-95 disabled:opacity-40"
-                  >
-                    {isClosing ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-xmark mr-0.5" />{tc('close')}</>}
-                  </button>
-                )}
-                {!canProgressStage && (
-                  <span className="text-xs text-ive-text-dim italic">
-                    <i className="fa-solid fa-lock mr-1" />담당자만 변경 가능
-                  </span>
-                )}
               </div>
             </div>
           </>
         )}
       </div>
+      {/* 진행막대 — 5단계 흐름 + 단계별 담당자 아바타를 한 줄로 표시 */}
+      {!editMode && issue.stage !== 'none' && (
+        <div className="px-3 pt-1 pb-3 max-w-lg mx-auto">
+          <StageProgress
+            stage={issue.stage}
+            roles={{
+              creator: {
+                name: issue.author,
+                avatar: issue.iveAuthorAvatar
+                  ? (issue.iveAuthorAvatar.startsWith('av-') ? null : issue.iveAuthorAvatar)
+                  : (issue.authorAvatarUrl ?? null),
+                avatarUrl: issue.authorAvatarUrl ?? null,
+              },
+              processor: {
+                assignMode: (preferredAgent?.assignMode as 'agent' | 'auto' | 'assignee' | 'none' | undefined) ?? 'auto',
+                agentName: preferredAgent?.preferredAgentName ?? null,
+                agentAvatar: preferredAgent?.preferredAgentAvatar ?? null,
+                username: issue.assignees?.[0]?.username ?? null,
+                name: issue.assignees?.[0]?.name ?? null,
+                avatarUrl: issue.assignees?.[0]?.avatarUrl ?? null,
+                pendingAuto: !!(issue as any).assigneeAuto,
+              },
+              verifier: issue.presetVerifier ?? { mode: 'creator', userId: null, username: null },
+              confirmer: issue.presetConfirmer ?? { mode: 'creator', userId: null, username: null },
+              actualProcessor: issue.actualProcessor ?? null,
+              actualVerifier: issue.actualVerifier ?? null,
+              actualConfirmer: issue.actualConfirmer ?? null,
+              gitMembers,
+              canEdit: canEditAssignees,
+              onProcessorClick: onOpenAssigneePicker,
+              onVerifierChange: onPresetVerifierChange,
+              onConfirmerChange: onPresetConfirmerChange,
+            }}
+          />
+        </div>
+      )}
     </header>
   )
 }

@@ -1,129 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb, getProject, getProjectAuthToken, getProjectAccess, hasActiveExecution, stageFromLabels, markIssueVerifyStarted, markIssueVerified, markIssueVerifyRejected, resetIssueScheduledAt, touchProjectActivity, assignIssueAtomically, getAssignModeMap, getIssueScheduledAt, isIssueAssignee, upsertIssueStageSnapshot, updateExecutionStatus, getVerifyWaitingCount, updateProjectLastChecked } from '@/lib/db';
+import { getDb, getProject, getProjectAuthToken, getProjectAccess, hasActiveExecution, stageFromLabels, markIssueVerifyStarted, markIssueVerified, markIssueVerifyRejected, markIssueConfirmed, resetIssueScheduledAt, touchProjectActivity, assignIssueAtomically, getAssignModeMap, getIssueScheduledAt, isIssueAssignee, isIssueAuthor, upsertIssueStageSnapshot, updateExecutionStatus, getVerifyWaitingCount, updateProjectLastChecked, getPresetRoles } from '@/lib/db';
 import { triggerScan } from '@/lib/scanner';
+import { applyRoleAssignee } from '@/lib/role-assignee';
 import type { TaskExecution } from '@/types';
 import { getCurrentUser } from '@/lib/auth';
-import { reopenIssue, fetchSingleIssue, addIssueLabels, removeIssueLabels, addIssueComment, createBranch, getDefaultBranch } from '@/lib/provider';
+import { reopenIssue, closeIssue, fetchSingleIssue, addIssueLabels, removeIssueLabels, addIssueComment, createBranch, getDefaultBranch } from '@/lib/provider';
 import { logActivity } from '@/lib/activity';
+import { TRANSITIONS, staleStageLabelsToRemove } from '@/lib/stage-transitions';
 import fs from 'fs';
 import path from 'path';
 
-// 허용되는 stage 전환 (레이블 기반)
-// IVE-S: 스케줄 → IVE-D: 개발 → IVE-W: 검증대기 → IVE-V: 검증 → IVE-E: 완료
-const TRANSITIONS: Record<string, { action: string; description: string; removeLabels: (p: any) => string[]; addLabels: (p: any) => string[] }[]> = {
-  none: [
-    {
-      action: 'schedule',
-      description: '스케줄 등록',
-      removeLabels: () => [],
-      addLabels: (p) => [p.labelSchedule || 'IVE-S'],
-    },
-  ],
-  waiting: [
-    {
-      action: 'start_dev',
-      description: '개발 시작 → 개발 중',
-      removeLabels: (p) => [p.labelSchedule || 'IVE-S'],
-      addLabels: (p) => [p.labelDev || 'IVE-D'],
-    },
-  ],
-  dev: [
-    {
-      action: 'cancel',
-      description: '작업 취소 → 스케줄',
-      removeLabels: (p) => [p.labelDev || 'IVE-D'],
-      addLabels: (p) => [p.labelSchedule || 'IVE-S'],
-    },
-    {
-      action: 'complete',
-      description: '머지 완료 → 검증대기',
-      removeLabels: (p) => [p.labelDev || 'IVE-D'],
-      addLabels: (p) => [p.labelVerifyWait || 'IVE-W'],
-    },
-    {
-      action: 'retry',
-      description: '재시도 → 스케줄',
-      removeLabels: (p) => [p.labelDev || 'IVE-D'],
-      addLabels: (p) => [p.labelSchedule || 'IVE-S'],
-    },
-  ],
-  dev_fail: [
-    {
-      action: 'retry',
-      description: '재시도 → 스케줄',
-      removeLabels: (p) => [p.labelDev || 'IVE-D'],
-      addLabels: (p) => [p.labelSchedule || 'IVE-S'],
-    },
-  ],
-  verify_waiting: [
-    {
-      action: 'start_verification',
-      description: '검증시작 → 검증 중',
-      removeLabels: (p) => [p.labelVerifyWait || 'IVE-W'],
-      addLabels: (p) => [p.labelVerify || 'IVE-V'],
-    },
-    {
-      action: 'cancel',
-      description: '검증대기 취소 → 스케줄',
-      removeLabels: (p) => [p.labelVerifyWait || 'IVE-W'],
-      addLabels: (p) => [p.labelSchedule || 'IVE-S'],
-    },
-    {
-      action: 'retry',
-      description: '재시도 → 스케줄',
-      removeLabels: (p) => [p.labelVerifyWait || 'IVE-W'],
-      addLabels: (p) => [p.labelSchedule || 'IVE-S'],
-    },
-  ],
-  verifying: [
-    {
-      action: 'approve',
-      description: '검증 승인 → 완료',
-      removeLabels: (p) => [p.labelVerify || 'IVE-V'],
-      addLabels: (p) => [p.labelEnd || 'IVE-E'],
-    },
-    {
-      action: 'complete',
-      description: '머지 완료 → 완료',
-      removeLabels: (p) => [p.labelVerify || 'IVE-V', p.labelDev || 'IVE-D'],
-      addLabels: (p) => [p.labelEnd || 'IVE-E'],
-    },
-    {
-      action: 'reject',
-      description: '검증 반려 → 스케줄',
-      removeLabels: (p) => [p.labelVerify || 'IVE-V'],
-      addLabels: (p) => [p.labelSchedule || 'IVE-S'],
-    },
-    {
-      action: 'retry',
-      description: '재시도 → 스케줄',
-      removeLabels: (p) => [p.labelVerify || 'IVE-V'],
-      addLabels: (p) => [p.labelSchedule || 'IVE-S'],
-    },
-  ],
-  done: [
-    {
-      action: 'reopen',
-      description: '재오픈 → 스케줄',
-      removeLabels: (p) => [p.labelEnd || 'IVE-E'],
-      addLabels: (p) => [p.labelSchedule || 'IVE-S'],
-    },
-    {
-      action: 'retry',
-      description: '재시도 → 스케줄',
-      removeLabels: (p) => [p.labelEnd || 'IVE-E'],
-      addLabels: (p) => [p.labelSchedule || 'IVE-S'],
-    },
-  ],
-  rejected: [
-    {
-      action: 'retry',
-      description: '재시도 → 스케줄',
-      removeLabels: () => [],
-      addLabels: (p) => [p.labelSchedule || 'IVE-S'],
-    },
-  ],
-};
+// 단계 전이 표는 src/lib/stage-transitions.ts 로 분리됨 (테스트 가능).
+// IVE-S 스케줄 → IVE-D 개발 → IVE-W 검증대기 → IVE-V 검증 → IVE-P 확인대기 → IVE-C 확인 → IVE-E 완료
 
 export async function POST(
   req: NextRequest,
@@ -165,19 +53,16 @@ export async function POST(
     // 다중 사용자 환경에서 캐시된 오래된 stage로 액션이 들어오는 경우를 차단.
     const currentIssue = await fetchSingleIssue(project, Number(iid), token);
 
-    // 권한: 관리자이거나 해당 이슈의 Git assignee(검증자/담당자)만 단계 변경 가능
-    // 담당자가 지정되지 않았으면 이슈 작성자를 담당자로 간주
-    // (viewer 권한이어도 assignee이면 자신의 작업을 진행할 수 있어야 함)
-    if (!user.isAdmin && !(await isIssueAssignee(project, Number(iid), token, user))) {
-      const hasNoAssignee = !currentIssue?.assignees?.length;
-      const isAuthor = hasNoAssignee && currentIssue?.author?.id != null
-        && user.oauthUserId && String(currentIssue.author.id) === String(user.oauthUserId);
-      if (!isAuthor) {
-        return NextResponse.json(
-          { error: '이 이슈의 담당자(Git assignee) 또는 관리자만 단계를 변경할 수 있습니다' },
-          { status: 403 }
-        );
-      }
+    // 권한: 관리자이거나 해당 이슈의 Git assignee(검증자/담당자) 또는 작성자(Git author / ive-author 마커)
+    // 작성자도 자신이 만든 작업의 단계를 진행할 수 있음 (검증/확인 시작 등)
+    if (!user.isAdmin
+      && !(await isIssueAssignee(project, Number(iid), token, user))
+      && !(await isIssueAuthor(project, Number(iid), token, user))
+    ) {
+      return NextResponse.json(
+        { error: '이 이슈의 담당자(Git assignee) 또는 관리자만 단계를 변경할 수 있습니다' },
+        { status: 403 }
+      );
     }
     const currentLabels: string[] = currentIssue?.labels || [];
     const hasActive = hasActiveExecution(projectId, Number(iid));
@@ -192,12 +77,17 @@ export async function POST(
       );
     }
 
-    // 레이블 전환 수행
-    const labelsToRemove = transition.removeLabels(project);
+    // 레이블 전환 수행 + 안전망: 전이 결과로 단계 라벨이 정확히 한 개만 남도록
+    // 이전 단계의 라벨이 의도치 않게 잔류하면 stage 가 잘못 판정되므로 항상 정리.
+    const explicitRemove = transition.removeLabels(project);
     const labelsToAdd = transition.addLabels(project);
+    const keepLabel = labelsToAdd[0] || ''; // 전이 후 유지할 단일 단계 라벨
+    const sanitizedRemove = keepLabel
+      ? Array.from(new Set([...explicitRemove, ...staleStageLabelsToRemove(project, keepLabel)]))
+      : explicitRemove;
 
-    if (labelsToRemove.length > 0) {
-      await removeIssueLabels(project, Number(iid), token, labelsToRemove);
+    if (sanitizedRemove.length > 0) {
+      await removeIssueLabels(project, Number(iid), token, sanitizedRemove);
     }
     if (labelsToAdd.length > 0) {
       await addIssueLabels(project, Number(iid), token, labelsToAdd);
@@ -332,6 +222,22 @@ export async function POST(
       markIssueVerified(projectId, Number(iid), { name: user.name, avatar: user.avatar, userId: user.id });
     }
 
+    // dev → verify_waiting (수동 'complete') 전이 시 검증자 preset 기반 assignee 교체
+    if (stage === 'dev' && action === 'complete') {
+      try {
+        const preset = getPresetRoles(projectId, Number(iid)).verifier;
+        await applyRoleAssignee(project, Number(iid), token, '검증자', preset);
+      } catch (e) { console.warn(`[Stage] Verifier preset apply failed for #${iid}:`, e); }
+    }
+
+    // verifying → confirm_waiting (approve/complete) 전이 시 확인자 preset 기반 assignee 교체
+    if (stage === 'verifying' && (action === 'approve' || action === 'complete')) {
+      try {
+        const preset = getPresetRoles(projectId, Number(iid)).confirmer;
+        await applyRoleAssignee(project, Number(iid), token, '확인자', preset);
+      } catch (e) { console.warn(`[Stage] Confirmer preset apply failed for #${iid}:`, e); }
+    }
+
     // 검증 반려 시 rejected_at 기록
     // (명시적 reject뿐 아니라 검증 단계에서 재실행 클릭 시에도 반려로 집계 — 검증자가 "통과 못함" 판단)
     if (action === 'reject' || (stage === 'verifying' && action === 'retry')) {
@@ -346,6 +252,56 @@ export async function POST(
       ).all(projectId, Number(iid)) as { id: string }[];
       const endStatus = (action === 'approve' || action === 'complete') ? 'success' : 'failed';
       for (const ex of verifyExecs) {
+        updateExecutionStatus(ex.id, endStatus, new Date().toISOString());
+      }
+    }
+
+    // 확인 시작: 확인자 execution 생성 (verify 시작 패턴 거울 대칭)
+    if (action === 'start_confirmation') {
+      try {
+        const confirmIssue = await fetchSingleIssue(project, Number(iid), token);
+        const executionId = `ex-confirm-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+        const logDir = path.join(process.cwd(), 'data', 'logs');
+        if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
+        const logPath = path.join(logDir, `${executionId}.log`);
+        fs.writeFileSync(logPath, '');
+
+        const confirmExecution: TaskExecution = {
+          id: executionId,
+          projectId,
+          agentId: '',
+          issueIid: Number(iid),
+          issueTitle: confirmIssue?.title || '',
+          status: 'assigned',
+          startedAt: new Date().toISOString(),
+          logPath,
+          inputTokens: 0, outputTokens: 0, costUsd: 0, turns: 0,
+          issueCreatedAt: new Date().toISOString(),
+          assigneeType: 'user',
+          userId: user.id,
+          userName: user.name,
+          userAvatar: user.avatar,
+        };
+        const created = assignIssueAtomically(projectId, Number(iid), 'confirming', confirmExecution);
+        console.log(`[Stage] Confirm execution created for #${iid}: ${created}, executionId: ${executionId}`);
+      } catch (e) {
+        console.warn(`[Stage] Failed to create confirm execution for #${iid}:`, e);
+      }
+    }
+
+    // 확인 완료(accept): confirmer 정보 기록만 (이슈 close 는 별도 닫기 버튼으로만 수행)
+    if (action === 'accept' && stage === 'confirming') {
+      markIssueConfirmed(projectId, Number(iid), { name: user.name, avatar: user.avatar, userId: user.id });
+    }
+
+    // confirming 단계 종료 시 확인자 execution 닫기 (verify 종료 패턴과 동일)
+    if (stage === 'confirming' && (action === 'accept' || action === 'return_to_dev' || action === 'retry')) {
+      const db = getDb();
+      const confirmExecs = db.prepare(
+        "SELECT id FROM task_executions WHERE project_id = ? AND issue_iid = ? AND status IN ('running', 'assigned') AND assignee_type = 'user'"
+      ).all(projectId, Number(iid)) as { id: string }[];
+      const endStatus = action === 'accept' ? 'success' : 'failed';
+      for (const ex of confirmExecs) {
         updateExecutionStatus(ex.id, endStatus, new Date().toISOString());
       }
     }
@@ -367,8 +323,8 @@ export async function POST(
     // DB 스냅샷 즉시 업데이트 (탑바/목록 즉시 동기화용)
     // verifying 단계라면 검증자 정보 사용, 아니면 Git assignee 사용
     let assigneeInfo = { username: null as string | null, name: null as string | null, avatar: null as string | null, gitUserId: null as string | null };
-    if (newStage === 'verifying') {
-      // 검증 단계: 현재 사용자(검증자) 정보 저장
+    if (newStage === 'verifying' || newStage === 'confirming') {
+      // 검증/확인 단계: 현재 사용자(검증자/확인자) 정보 저장
       assigneeInfo = {
         username: user.email?.split('@')[0] || null,  // email에서 username 추출
         name: user.name || null,
@@ -405,6 +361,9 @@ export async function POST(
       complete: '머지 완료',
       reject: '검증 반려',
       start_verification: '검증 시작',
+      start_confirmation: '확인 시작',
+      accept: '확인 완료',
+      return_to_dev: '재작업 요청',
       start_dev: '개발 시작',
       schedule: '스케줄 등록',
     };

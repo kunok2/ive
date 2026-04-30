@@ -24,6 +24,12 @@ interface IssueListProps {
   bulkMode: boolean
   navigatingIid: number | null
   canEdit: boolean
+  /** 현재 사용자가 관리자인지 */
+  isAdmin: boolean
+  /** 현재 사용자 IVE id */
+  currentUserId: string | null
+  /** 현재 사용자 Git OAuth id (string) */
+  currentUserGitId: string | null
   closing: number | null
   projectAgents: ProjectAgent[]
   gitMembers: GitMember[]
@@ -34,6 +40,8 @@ interface IssueListProps {
   onOpenAgentPicker: (iid: number) => void
   onOpenAssigneeModal: (iids: number[]) => void
   onCloseIssue: (e: React.MouseEvent, iid: number) => void
+  onPresetVerifierChange?: (iid: number, preset: { mode: 'creator' | 'auto' | 'specific'; userId: string | null; username: string | null }) => Promise<void> | void
+  onPresetConfirmerChange?: (iid: number, preset: { mode: 'creator' | 'auto' | 'specific'; userId: string | null; username: string | null }) => Promise<void> | void
 }
 
 export default function IssueList({
@@ -48,6 +56,9 @@ export default function IssueList({
   bulkMode,
   navigatingIid,
   canEdit,
+  isAdmin,
+  currentUserId,
+  currentUserGitId,
   closing,
   projectAgents,
   gitMembers,
@@ -58,6 +69,8 @@ export default function IssueList({
   onOpenAgentPicker,
   onOpenAssigneeModal,
   onCloseIssue,
+  onPresetVerifierChange,
+  onPresetConfirmerChange,
 }: IssueListProps) {
   const tIssue = useTranslations('issue')
 
@@ -75,7 +88,13 @@ export default function IssueList({
           </div>
         ) : (
           <div className="flex flex-col gap-3">
-            {filtered.map(issue => (
+            {filtered.map(issue => {
+              const isCreator = !!(
+                (currentUserId && issue.iveAuthorId && issue.iveAuthorId === currentUserId)
+                || (currentUserGitId && issue.authorId != null && String(issue.authorId) === currentUserGitId)
+              )
+              const canEditAssignees = isAdmin || isCreator
+              return (
               <IssueCard
                 key={issue.iid}
                 issue={issue}
@@ -85,6 +104,7 @@ export default function IssueList({
                 bulkMode={bulkMode}
                 navigatingIid={navigatingIid}
                 canEdit={canEdit}
+                canEditAssignees={canEditAssignees}
                 isHistoryTab={isHistoryTab}
                 closing={closing}
                 projectAgents={projectAgents}
@@ -96,8 +116,11 @@ export default function IssueList({
                 onOpenAgentPicker={onOpenAgentPicker}
                 onOpenAssigneeModal={onOpenAssigneeModal}
                 onCloseIssue={onCloseIssue}
+                onPresetVerifierChange={onPresetVerifierChange}
+                onPresetConfirmerChange={onPresetConfirmerChange}
               />
-            ))}
+              )
+            })}
           </div>
         )}
       </div>

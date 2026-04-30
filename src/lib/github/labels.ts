@@ -15,7 +15,9 @@ export async function ensureGitHubLabels(project: Project, decryptedToken: strin
     { name: project.labelDev || 'IVE-D', color: '22d3ee', description: '개발 중. 에이전트가 작업을 시작하면 자동 부착됩니다.' },
     { name: project.labelVerifyWait || 'IVE-W', color: 'eab308', description: '검증대기. 개발이 완료되어 검증자의 검증시작을 기다리고 있습니다.' },
     { name: project.labelVerify || 'IVE-V', color: 'fb923c', description: '검증 중. 검증자가 검증을 진행하고 있습니다.' },
-    { name: project.labelEnd || 'IVE-E', color: '60a5fa', description: '처리 완료. 코드가 수정되었으면 MR/PR 머지 대상입니다.' },
+    { name: project.labelConfirmWait || 'IVE-P', color: 'eab308', description: '확인대기. 머지가 완료되어 확인자의 실환경 확인을 기다리고 있습니다.' },
+    { name: project.labelConfirm || 'IVE-C', color: 'fb923c', description: '확인 중. 확인자가 실환경에서 동작을 직접 확인하고 있습니다.' },
+    { name: project.labelEnd || 'IVE-E', color: '60a5fa', description: '처리 완료. 확인까지 마친 최종 완료 상태입니다.' },
   ];
 
   try {
@@ -78,7 +80,9 @@ export async function checkGitHubLabelsExist(project: Project, decryptedToken: s
   const labelsToCheck = [
     project.labelTarget,
     project.labelSchedule || 'IVE-S', project.labelDev || 'IVE-D',
-    project.labelVerifyWait || 'IVE-W', project.labelVerify || 'IVE-V', project.labelEnd || 'IVE-E',
+    project.labelVerifyWait || 'IVE-W', project.labelVerify || 'IVE-V',
+    project.labelConfirmWait || 'IVE-P', project.labelConfirm || 'IVE-C',
+    project.labelEnd || 'IVE-E',
   ];
   try {
     const res = await fetch(apiUrl(project, '/labels?per_page=100'), { headers });

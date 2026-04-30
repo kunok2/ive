@@ -10,6 +10,8 @@ export interface IveIssue {
   createdAt: string
   updatedAt: string
   author: { name: string; avatar?: string; avatarUrl?: string }
+  iveAuthorId?: string | null
+  authorId?: number | null
   assignMode?: string
   preferredAgentId?: string | null
   preferredAgentName?: string | null
@@ -17,6 +19,11 @@ export interface IveIssue {
   preferredAgentCliName?: string | null
   assigneeAuto?: boolean
   assignees?: { id: number; username: string; name: string; avatarUrl: string }[]
+  presetVerifier?: { mode: 'creator' | 'auto' | 'specific'; userId: string | null; username: string | null }
+  presetConfirmer?: { mode: 'creator' | 'auto' | 'specific'; userId: string | null; username: string | null }
+  actualProcessor?: { agentId: string | null; agentName: string | null; agentAvatar: string | null; cliName: string | null } | null
+  actualVerifier?: { userId: string | null; name: string | null; avatar: string | null } | null
+  actualConfirmer?: { userId: string | null; name: string | null; avatar: string | null } | null
 }
 
 export interface ProjectAgent {

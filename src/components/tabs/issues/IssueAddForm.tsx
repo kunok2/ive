@@ -8,6 +8,7 @@ import { useToast } from '@/components/ui/Toast'
 import type { CliName } from '@/types'
 import { CLI_CONFIG } from './types'
 import type { ProjectAgent } from './types'
+import AssigneePickerModal from './AssigneePickerModal'
 
 interface GitMember {
   id: number
@@ -15,6 +16,8 @@ interface GitMember {
   name: string
   avatarUrl: string
 }
+
+type RoleMode = 'creator' | 'auto' | 'specific'
 
 interface IssueAddFormProps {
   selectedProjectId: string
@@ -30,6 +33,81 @@ interface IssueAddFormProps {
   selectedAssignees: GitMember[]
   autoAssign: boolean
   onOpenAssigneeModal: (iids: number[]) => void
+  // 검증자/확인자 사전 배정
+  verifierMode: RoleMode
+  verifierUserId: string | null
+  verifierUsername: string | null
+  onVerifierChange: (mode: RoleMode, userId: string | null, username: string | null) => void
+  confirmerMode: RoleMode
+  confirmerUserId: string | null
+  confirmerUsername: string | null
+  onConfirmerChange: (mode: RoleMode, userId: string | null, username: string | null) => void
+}
+
+interface RoleTriggerProps {
+  label: string
+  icon: string
+  mode: RoleMode
+  userId: string | null
+  username: string | null
+  members: GitMember[]
+  onClick: () => void
+}
+
+/**
+ * 역할 picker 트리거 버튼 — 클릭하면 AssigneePickerModal 이 뜬다.
+ * 표시: 미배정(생성자) / 자동배정 / 선택한 멤버 아바타+이름
+ */
+function RoleTrigger({ label, icon, mode, userId, username, members, onClick }: RoleTriggerProps) {
+  const tIssue = useTranslations('issue')
+  const member = mode === 'specific' && userId
+    ? members.find(m => String(m.id) === userId)
+    : null
+  return (
+    <div className="mb-2">
+      <label className="text-xs font-bold text-ive-text-dim mb-1 block">
+        <i className={`fa-solid ${icon} mr-1`} />{label}
+      </label>
+      <button
+        type="button"
+        onClick={onClick}
+        className="w-full bg-ive-bg-deep border border-ive-border-dark border-dashed rounded-lg px-3 py-2 text-left flex items-center gap-2 text-sm focus:outline-none hover:border-ive-green/50 transition-colors"
+      >
+        {mode === 'auto' ? (
+          <span className="flex items-center gap-1.5">
+            <span className="flex items-center gap-1 bg-ive-cyan/10 rounded px-1.5 py-0.5">
+              <i className="fa-solid fa-shuffle text-xs text-ive-cyan" />
+              <span className="text-ive-cyan font-bold text-xs">{tIssue('roleModeAuto')}</span>
+            </span>
+            <i className="fa-solid fa-pen text-[10px] text-ive-text-dim ml-auto" />
+          </span>
+        ) : mode === 'specific' && member ? (
+          <span className="flex items-center gap-1.5">
+            <span className="flex items-center gap-1 bg-ive-bg-card rounded px-1.5 py-0.5">
+              {member.avatarUrl
+                ? <img src={member.avatarUrl} className="w-4 h-4 rounded-full" alt="" />
+                : <i className="fa-solid fa-user text-xs text-ive-text-dim" />}
+              <span className="text-ive-text font-bold text-xs">{member.name || member.username}</span>
+            </span>
+            <i className="fa-solid fa-pen text-[10px] text-ive-text-dim ml-auto" />
+          </span>
+        ) : mode === 'specific' && username ? (
+          // members 가 아직 로드 안 됐을 때 fallback
+          <span className="flex items-center gap-1.5">
+            <span className="flex items-center gap-1 bg-ive-bg-card rounded px-1.5 py-0.5">
+              <i className="fa-solid fa-user text-xs text-ive-text-dim" />
+              <span className="text-ive-text font-bold text-xs">@{username}</span>
+            </span>
+            <i className="fa-solid fa-pen text-[10px] text-ive-text-dim ml-auto" />
+          </span>
+        ) : (
+          <span className="text-ive-text-dim font-bold">
+            <i className="fa-solid fa-user-plus mr-1.5" />{tIssue('roleModeCreator')}
+          </span>
+        )}
+      </button>
+    </div>
+  )
 }
 
 export default function IssueAddForm({
@@ -46,6 +124,14 @@ export default function IssueAddForm({
   selectedAssignees,
   autoAssign,
   onOpenAssigneeModal,
+  verifierMode,
+  verifierUserId,
+  verifierUsername,
+  onVerifierChange,
+  confirmerMode,
+  confirmerUserId,
+  confirmerUsername,
+  onConfirmerChange,
 }: IssueAddFormProps) {
   const tIssue = useTranslations('issue')
   const tCommon = useTranslations('common')
@@ -53,6 +139,46 @@ export default function IssueAddForm({
 
   const agentDropdownRef = useRef<HTMLDivElement>(null)
   const [agentDropdownOpen, setAgentDropdownOpen] = useState(false)
+
+  // 검증자/확인자 모달 (프로젝트 멤버가 많을 수 있어 콤보 대신 풀화면 모달 사용)
+  const [verifierModalOpen, setVerifierModalOpen] = useState(false)
+  const [verifierSearch, setVerifierSearch] = useState('')
+  const [verifierPick, setVerifierPick] = useState<GitMember | null>(null)
+  const [verifierAuto, setVerifierAuto] = useState(false)
+  const [confirmerModalOpen, setConfirmerModalOpen] = useState(false)
+  const [confirmerSearch, setConfirmerSearch] = useState('')
+  const [confirmerPick, setConfirmerPick] = useState<GitMember | null>(null)
+  const [confirmerAuto, setConfirmerAuto] = useState(false)
+
+  // 부모 상태 → 모달 상태 동기화 (열 때 현재 값 미리 선택)
+  const openVerifierModal = () => {
+    setVerifierAuto(verifierMode === 'auto')
+    setVerifierPick(verifierMode === 'specific' && verifierUserId
+      ? gitMembers.find(m => String(m.id) === verifierUserId) || null
+      : null)
+    setVerifierSearch('')
+    setVerifierModalOpen(true)
+  }
+  const openConfirmerModal = () => {
+    setConfirmerAuto(confirmerMode === 'auto')
+    setConfirmerPick(confirmerMode === 'specific' && confirmerUserId
+      ? gitMembers.find(m => String(m.id) === confirmerUserId) || null
+      : null)
+    setConfirmerSearch('')
+    setConfirmerModalOpen(true)
+  }
+  const confirmVerifier = () => {
+    if (verifierAuto) onVerifierChange('auto', null, null)
+    else if (verifierPick) onVerifierChange('specific', String(verifierPick.id), verifierPick.username)
+    else onVerifierChange('creator', null, null)
+    setVerifierModalOpen(false)
+  }
+  const confirmConfirmer = () => {
+    if (confirmerAuto) onConfirmerChange('auto', null, null)
+    else if (confirmerPick) onConfirmerChange('specific', String(confirmerPick.id), confirmerPick.username)
+    else onConfirmerChange('creator', null, null)
+    setConfirmerModalOpen(false)
+  }
 
   // 이미지 복/붙 업로드 핸들러
   const newBodyRef = useRef(newBody)
@@ -99,41 +225,6 @@ export default function IssueAddForm({
           autoFocus
         />
       </div>
-      {/* 담당자 */}
-      {gitMembers.length > 0 && (
-        <div className="mb-2">
-          <label className="text-xs font-bold text-ive-text-dim mb-1 block">
-            <i className="fa-solid fa-user-tag mr-1" />{tIssue('assignee')}
-          </label>
-          <button
-            type="button"
-            onClick={() => onOpenAssigneeModal([-1])}
-            className="w-full bg-ive-bg-deep border border-ive-border-dark border-dashed rounded-lg px-3 py-2 text-left flex items-center gap-2 text-sm focus:outline-none hover:border-ive-green/50 transition-colors"
-          >
-            {autoAssign ? (
-              <span className="flex items-center gap-1.5">
-                <span className="flex items-center gap-1 bg-ive-cyan/10 rounded px-1.5 py-0.5">
-                  <i className="fa-solid fa-shuffle text-xs text-ive-cyan" />
-                  <span className="text-ive-cyan font-bold text-xs">{tIssue('autoAssign')}</span>
-                </span>
-                <i className="fa-solid fa-pen text-[10px] text-ive-text-dim ml-auto" />
-              </span>
-            ) : selectedAssignees.length > 0 ? (
-              <span className="flex items-center gap-1.5 flex-wrap">
-                {selectedAssignees.map(a => (
-                  <span key={a.id} className="flex items-center gap-1 bg-ive-bg-card rounded px-1.5 py-0.5">
-                    {a.avatarUrl ? <img src={a.avatarUrl} className="w-4 h-4 rounded-full" alt="" /> : <i className="fa-solid fa-user text-xs text-ive-text-dim" />}
-                    <span className="text-ive-text font-bold text-xs">{a.name || a.username}</span>
-                  </span>
-                ))}
-                <i className="fa-solid fa-pen text-[10px] text-ive-text-dim ml-auto" />
-              </span>
-            ) : (
-              <span className="text-ive-text-dim font-bold"><i className="fa-solid fa-user-plus mr-1.5" />{tIssue('selectAssignee')}</span>
-            )}
-          </button>
-        </div>
-      )}
       {/* 에이전트 지정 드롭다운 */}
       <div ref={agentDropdownRef} className="relative mb-2">
         <label className="text-xs font-bold text-ive-text-dim mb-1 block">
@@ -223,13 +314,26 @@ export default function IssueAddForm({
           </div>
         )}
       </div>
-      {/* 담당자가 처리 모드인데 담당자 미지정 시 안내 */}
-      {preferredAgentId === 'assignee' && selectedAssignees.length === 0 && (
-        <div className="mb-2 px-2.5 py-1.5 rounded-lg bg-ive-amber/10 border border-ive-amber/20 text-xs text-ive-amber">
-          <i className="fa-solid fa-triangle-exclamation mr-1" />
-          {tIssue('assigneeRequiredWarning')}
-        </div>
-      )}
+      {/* 검증자 / 확인자 사전 배정 — 모달 트리거 */}
+      <RoleTrigger
+        label={tIssue('verifier')}
+        icon="fa-magnifying-glass"
+        mode={verifierMode}
+        userId={verifierUserId}
+        username={verifierUsername}
+        members={gitMembers}
+        onClick={openVerifierModal}
+      />
+      <RoleTrigger
+        label={tIssue('confirmer')}
+        icon="fa-clipboard-check"
+        mode={confirmerMode}
+        userId={confirmerUserId}
+        username={confirmerUsername}
+        members={gitMembers}
+        onClick={openConfirmerModal}
+      />
+
       <button
         onClick={onCreateIssue}
         disabled={creating || !newBody.split('\n')[0].trim()}
@@ -237,6 +341,40 @@ export default function IssueAddForm({
       >
         {creating ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />{tCommon('creating')}</> : <><i className="fa-solid fa-paper-plane mr-1" />{tIssue('createIssue')}</>}
       </button>
+
+      {/* 검증자 picker 모달 */}
+      <AssigneePickerModal
+        open={verifierModalOpen}
+        onClose={() => setVerifierModalOpen(false)}
+        iids={[-1]}
+        gitMembers={gitMembers}
+        search={verifierSearch}
+        onSearchChange={setVerifierSearch}
+        pick={verifierPick}
+        onPickChange={setVerifierPick}
+        autoMode={verifierAuto}
+        onAutoModeChange={setVerifierAuto}
+        onConfirm={confirmVerifier}
+        title={tIssue('verifier')}
+        noneLabel={tIssue('roleModeCreator')}
+      />
+
+      {/* 확인자 picker 모달 */}
+      <AssigneePickerModal
+        open={confirmerModalOpen}
+        onClose={() => setConfirmerModalOpen(false)}
+        iids={[-1]}
+        gitMembers={gitMembers}
+        search={confirmerSearch}
+        onSearchChange={setConfirmerSearch}
+        pick={confirmerPick}
+        onPickChange={setConfirmerPick}
+        autoMode={confirmerAuto}
+        onAutoModeChange={setConfirmerAuto}
+        onConfirm={confirmConfirmer}
+        title={tIssue('confirmer')}
+        noneLabel={tIssue('roleModeCreator')}
+      />
     </div>
   )
 }

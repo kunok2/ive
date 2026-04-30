@@ -4,8 +4,15 @@
   "dev": "처리 중",
   "dev_fail": "처리 실패",
   "verifying": "검증 중",
+  "confirm_waiting": "확인대기",
+  "confirming": "확인 중",
   "done": "완료",
   "closed": "닫힘",
   "rejected": "반려",
-  "unknown": "알 수 없음"
+  "unknown": "알 수 없음",
+  "macroInflow": "유입",
+  "macroProcess": "처리",
+  "macroVerify": "검증",
+  "macroConfirm": "확인",
+  "macroComplete": "완료"
 }

@@ -72,8 +72,11 @@ export interface Project {
   labelDev: string         // 개발 중 (예: IVE-D) — 에이전트 배정 시 부착
   labelVerifyWait: string  // 검증 대기 (예: IVE-W) — 개발 완료 후 부착 (검증자 시작 전)
   labelVerify: string      // 검증 중 (예: IVE-V) — 검증자가 검증시작 클릭 후 부착
-  labelEnd: string         // 처리 완료 (예: IVE-E) — 검증 완료 후 부착
+  labelConfirmWait: string // 확인 대기 (예: IVE-P) — 머지 완료 후 부착 (확인자 시작 전)
+  labelConfirm: string     // 확인 중 (예: IVE-C) — 확인자가 확인시작 클릭 후 부착
+  labelEnd: string         // 처리 완료 (예: IVE-E) — 확인 완료 후 부착
   baseBranch: string       // 베이스 브랜치 (빈 값이면 origin/HEAD 자동 감지 → main fallback)
+  confirmBaseBranch: string // 확인 단계 승격 베이스 브랜치 (빈 값이면 승격 MR 미생성, accept 시 단순 close)
   showToolUsage: boolean   // 트레이스에 툴 사용 표시 여부
   checkInterval: number    // 체크 간격 (분)
   lastCheckedAt: string | null // 마지막 체크 시간

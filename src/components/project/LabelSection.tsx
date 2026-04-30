@@ -10,6 +10,8 @@ export interface LabelValues {
   labelDev: string
   labelVerifyWait: string
   labelVerify: string
+  labelConfirmWait: string
+  labelConfirm: string
   labelEnd: string
 }
 
@@ -19,31 +21,53 @@ export interface LabelSectionProps {
   onChange: (field: keyof LabelValues, value: string) => void
 }
 
-interface LabelRowProps {
+interface LabelInputProps {
   colorClass: string
-  labelKey: string
-  descKey: string
+  title: string
+  desc: string
   value: string
   placeholder: string
   onChange: (v: string) => void
-  t: ReturnType<typeof useTranslations<'project'>>
 }
 
-function LabelRow({ colorClass, labelKey, descKey, value, placeholder, onChange, t }: LabelRowProps) {
+function LabelInput({ colorClass, title, desc, value, placeholder, onChange }: LabelInputProps) {
   return (
-    <div className="flex items-center gap-2">
-      <span className={`w-3 h-3 rounded-full ${colorClass} shrink-0`} />
-      <span className="flex flex-row items-baseline gap-1.5 flex-1 min-w-0">
-        <span className="text-xs text-ive-text-dim shrink-0">{t(labelKey)}</span>
-        <span className="text-[10px] text-ive-text-dim/60 truncate">{t(descKey)}</span>
+    <div className="flex items-center gap-2 min-w-0">
+      <span className={`w-2.5 h-2.5 rounded-full ${colorClass} shrink-0`} />
+      <span className="flex flex-col min-w-0 flex-1 leading-tight">
+        <span className="text-xs font-bold text-ive-text-muted truncate">{title}</span>
+        <span className="text-[10px] text-ive-text-dim/70 truncate">{desc}</span>
       </span>
       <input
         type="text"
         value={value}
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-24 shrink-0 bg-ive-bg-deep border border-ive-border rounded-lg px-3 py-1.5 text-sm text-ive-text focus:outline-none focus:border-ive-green font-bold"
+        className="w-20 shrink-0 bg-ive-bg-deep border border-ive-border rounded-lg px-2 py-1.5 text-sm text-ive-text focus:outline-none focus:border-ive-green font-bold text-center"
       />
+    </div>
+  )
+}
+
+interface StageGroupProps {
+  title: string
+  desc: string
+  children: React.ReactNode
+}
+
+function StageGroup({ title, desc, children }: StageGroupProps) {
+  return (
+    <div className="bg-white/[0.02] border border-ive-border-subtle rounded-lg p-2.5 space-y-2">
+      <div className="leading-tight">
+        <div className="text-xs font-bold text-ive-text-muted">
+          <i className="fa-solid fa-angle-right mr-1 text-[10px] text-ive-text-dim" />
+          {title}
+        </div>
+        <div className="text-[10px] text-ive-text-dim mt-0.5 ml-2.5">{desc}</div>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 ml-2">
+        {children}
+      </div>
     </div>
   )
 }
@@ -61,19 +85,87 @@ export default function LabelSection({ existing, values, onChange }: LabelSectio
         <i className="fa-solid fa-tags mr-1.5 text-xs" />
         {t('targetLabel')}
       </label>
-      <p className="text-xs text-ive-text-dim mb-2 ml-1 leading-relaxed">
+      <p className="text-xs text-ive-text-dim mb-3 ml-1 leading-relaxed">
         {t('labelSystemHint')}
       </p>
-      <div className="space-y-2">
-        <LabelRow colorClass="bg-ive-cyan" labelKey="labelTarget" descKey="labelTargetDesc" value={values.labelTarget} placeholder="IVE" onChange={v => onChange('labelTarget', v)} t={t} />
-        <LabelRow colorClass="bg-ive-cyan" labelKey="labelSchedule" descKey="labelScheduleDesc" value={values.labelSchedule} placeholder="IVE-S" onChange={v => onChange('labelSchedule', v)} t={t} />
-        <LabelRow colorClass="bg-ive-amber" labelKey="labelDev" descKey="labelDevDesc" value={values.labelDev} placeholder="IVE-D" onChange={v => onChange('labelDev', v)} t={t} />
-        <LabelRow colorClass="bg-ive-amber" labelKey="labelVerifyWait" descKey="labelVerifyWaitDesc" value={values.labelVerifyWait} placeholder="IVE-W" onChange={v => onChange('labelVerifyWait', v)} t={t} />
-        <LabelRow colorClass="bg-ive-amber" labelKey="labelVerify" descKey="labelVerifyDesc" value={values.labelVerify} placeholder="IVE-V" onChange={v => onChange('labelVerify', v)} t={t} />
-        <LabelRow colorClass="bg-ive-green" labelKey="labelEnd" descKey="labelEndDesc" value={values.labelEnd} placeholder="IVE-E" onChange={v => onChange('labelEnd', v)} t={t} />
+
+      <div className="space-y-2.5">
+        <LabelInput
+          colorClass="bg-ive-cyan"
+          title={t('labelTarget')}
+          desc={t('labelTargetDesc')}
+          value={values.labelTarget}
+          placeholder="IVE"
+          onChange={v => onChange('labelTarget', v)}
+        />
+
+        <StageGroup title={t('stageProcess')} desc={t('stageProcessDesc')}>
+          <LabelInput
+            colorClass="bg-ive-cyan"
+            title={t('labelSchedule')}
+            desc={t('labelScheduleDesc')}
+            value={values.labelSchedule}
+            placeholder="IVE-S"
+            onChange={v => onChange('labelSchedule', v)}
+          />
+          <LabelInput
+            colorClass="bg-ive-cyan"
+            title={t('labelDev')}
+            desc={t('labelDevDesc')}
+            value={values.labelDev}
+            placeholder="IVE-D"
+            onChange={v => onChange('labelDev', v)}
+          />
+        </StageGroup>
+
+        <StageGroup title={t('stageVerify')} desc={t('stageVerifyDesc')}>
+          <LabelInput
+            colorClass="bg-ive-amber"
+            title={t('labelVerifyWait')}
+            desc={t('labelVerifyWaitDesc')}
+            value={values.labelVerifyWait}
+            placeholder="IVE-W"
+            onChange={v => onChange('labelVerifyWait', v)}
+          />
+          <LabelInput
+            colorClass="bg-ive-amber"
+            title={t('labelVerify')}
+            desc={t('labelVerifyDesc')}
+            value={values.labelVerify}
+            placeholder="IVE-V"
+            onChange={v => onChange('labelVerify', v)}
+          />
+        </StageGroup>
+
+        <StageGroup title={t('stageConfirm')} desc={t('stageConfirmDesc')}>
+          <LabelInput
+            colorClass="bg-ive-amber"
+            title={t('labelConfirmWait')}
+            desc={t('labelConfirmWaitDesc')}
+            value={values.labelConfirmWait}
+            placeholder="IVE-P"
+            onChange={v => onChange('labelConfirmWait', v)}
+          />
+          <LabelInput
+            colorClass="bg-ive-amber"
+            title={t('labelConfirm')}
+            desc={t('labelConfirmDesc')}
+            value={values.labelConfirm}
+            placeholder="IVE-C"
+            onChange={v => onChange('labelConfirm', v)}
+          />
+        </StageGroup>
+
+        <LabelInput
+          colorClass="bg-ive-green"
+          title={t('labelEnd')}
+          desc={t('labelEndDesc')}
+          value={values.labelEnd}
+          placeholder="IVE-E"
+          onChange={v => onChange('labelEnd', v)}
+        />
       </div>
 
-      {/* Label creation button - existing projects only */}
       {existing && (
         <div className="mt-3">
           <button

@@ -2,6 +2,8 @@
 
 import { useTranslations } from 'next-intl'
 import AgentAvatar from '@/components/agent/AgentAvatar'
+import RoleAvatarBar from '@/components/issue/RoleAvatarBar'
+import { macroIndexFromStage } from '@/app/issues/[projectId]/[iid]/_components/StageProgress'
 import { formatDateMedium } from '@/lib/format-date'
 import type { CliName } from '@/types'
 import type { IveIssue, ProjectAgent, StageInfo } from './types'
@@ -14,6 +16,8 @@ interface GitMember {
   avatarUrl: string
 }
 
+type RolePresetPayload = { mode: 'creator' | 'auto' | 'specific'; userId: string | null; username: string | null }
+
 interface IssueCardProps {
   issue: IveIssue
   stageInfo: Record<string, StageInfo>
@@ -22,6 +26,8 @@ interface IssueCardProps {
   bulkMode: boolean
   navigatingIid: number | null
   canEdit: boolean
+  /** 담당자/검증자/확인자 변경 권한 — 관리자 또는 이슈 생성자만 */
+  canEditAssignees: boolean
   isHistoryTab: boolean
   closing: number | null
   projectAgents: ProjectAgent[]
@@ -33,6 +39,8 @@ interface IssueCardProps {
   onOpenAgentPicker: (iid: number) => void
   onOpenAssigneeModal: (iids: number[]) => void
   onCloseIssue: (e: React.MouseEvent, iid: number) => void
+  onPresetVerifierChange?: (iid: number, preset: RolePresetPayload) => Promise<void> | void
+  onPresetConfirmerChange?: (iid: number, preset: RolePresetPayload) => Promise<void> | void
 }
 
 export default function IssueCard({
@@ -43,6 +51,7 @@ export default function IssueCard({
   bulkMode,
   navigatingIid,
   canEdit,
+  canEditAssignees,
   isHistoryTab,
   closing,
   projectAgents,
@@ -54,6 +63,8 @@ export default function IssueCard({
   onOpenAgentPicker,
   onOpenAssigneeModal,
   onCloseIssue,
+  onPresetVerifierChange,
+  onPresetConfirmerChange,
 }: IssueCardProps) {
   const tIssue = useTranslations('issue')
   const tCommon = useTranslations('common')
@@ -84,17 +95,30 @@ export default function IssueCard({
             </div>
           )}
           <div className="min-w-0 flex-1">
-            <span className="text-sm font-bold text-ive-green">#{issue.iid}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold text-ive-green">#{issue.iid}</span>
+              <span className="text-xs text-ive-text-dim">
+                <i className="fa-solid fa-calendar-day mr-1" />
+                {formatDateMedium(issue.updatedAt, locale, timezone)}
+              </span>
+            </div>
             <h3 className="text-base font-bold text-ive-text leading-snug mt-0.5 line-clamp-2">{issue.title}</h3>
           </div>
         </div>
         {navigatingIid === issue.iid ? (
           <i className="fa-solid fa-circle-notch fa-spin text-ive-green shrink-0" />
-        ) : issue.stage !== 'none' && (
-          <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded border ${info.color} ${displayStage === 'done' ? 'flex items-center gap-1' : ''}`}>
-            <i className={`fa-solid ${info.icon}`} />
-            {info.label}
-          </span>
+        ) : canEditAssignees && !bulkMode && !isHistoryTab && (
+          <button
+            onClick={(e) => onCloseIssue(e, issue.iid)}
+            disabled={closing === issue.iid}
+            className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-ive-text-dim border border-ive-border hover:text-ive-red hover:border-ive-red/40 transition-all active:scale-95 disabled:opacity-40"
+            title={tIssue('closeIssue')}
+            aria-label={tCommon('close')}
+          >
+            {closing === issue.iid
+              ? <i className="fa-solid fa-circle-notch fa-spin text-[10px]" />
+              : <i className="fa-solid fa-xmark text-xs" />}
+          </button>
         )}
       </div>
       {issue.stage === 'dev_fail' && issue.failReason && (
@@ -112,64 +136,42 @@ export default function IssueCard({
           cliConfig={cliConfig}
           onOpenAgentPicker={onOpenAgentPicker}
         />
-        <span className="inline-flex items-center gap-1">
-          {issue.author?.avatar ? (
-            <AgentAvatar avatar={issue.author.avatar} size="xs" className="rounded-full overflow-hidden" />
-          ) : issue.author?.avatarUrl ? (
-            <img src={issue.author.avatarUrl} className="w-4 h-4 rounded-full object-cover bg-ive-bg-deep" alt="" />
-          ) : (
-            <i className="fa-solid fa-user mr-0.5" />
-          )}
-          {issue.author?.name}
-        </span>
-        {/* assignee avatars + edit */}
-        {((issue.assignees && issue.assignees.length > 0) || issue.assigneeAuto || (canEdit && !bulkMode && gitMembers.length > 0)) && (
-          <span className="inline-flex items-center gap-1"
-            onClick={(e) => {
-              if (canEdit && !bulkMode && gitMembers.length > 0) {
-                e.stopPropagation()
-                onOpenAssigneeModal([issue.iid])
-              }
+        {/* 4 역할 아바타 — 작성자 › 처리자 › 검증자 › 확인자 (작업 #271) */}
+        <span onClick={e => { if (canEdit && !bulkMode) e.stopPropagation() }}>
+          <RoleAvatarBar
+            size="sm"
+            canEdit={canEditAssignees && !bulkMode && gitMembers.length > 0}
+            currentMacro={macroIndexFromStage(issue.stage)}
+            gitMembers={gitMembers}
+            creator={{
+              name: issue.author?.name ?? null,
+              avatar: issue.author?.avatar ?? null,
+              avatarUrl: issue.author?.avatarUrl ?? null,
             }}
-          >
-            {(issue.assignees || []).map(a => (
-              <span key={a.id} className="inline-flex items-center gap-0.5">
-                {a.avatarUrl ? (
-                  <img src={a.avatarUrl} className="w-4 h-4 rounded-full object-cover bg-ive-bg-deep" alt="" />
-                ) : (
-                  <span className="w-4 h-4 rounded-full bg-ive-cyan/20 flex items-center justify-center">
-                    <i className="fa-solid fa-user text-[10px] text-ive-cyan" />
-                  </span>
-                )}
-                <span className="text-xs font-bold text-ive-text-muted truncate max-w-[80px]">{a.name || a.username}</span>
-              </span>
-            ))}
-            {issue.assigneeAuto && !(issue.assignees && issue.assignees.length > 0) && (
-              <span className="inline-flex items-center gap-0.5">
-                <span className="w-4 h-4 rounded-full bg-ive-cyan/20 flex items-center justify-center">
-                  <i className="fa-solid fa-shuffle text-[9px] text-ive-cyan" />
-                </span>
-                <span className="text-xs font-bold text-ive-cyan">{tIssue('autoAssign')}</span>
-              </span>
-            )}
-            {canEdit && !bulkMode && gitMembers.length > 0 && !(issue.assignees && issue.assignees.length > 0) && !issue.assigneeAuto && (
-              <i className="fa-solid fa-user-pen text-[10px] text-ive-text-dim hover:text-ive-green cursor-pointer transition-all" />
-            )}
-          </span>
-        )}
-        <span>
-          <i className="fa-solid fa-calendar-day mr-1" />
-          {formatDateMedium(issue.updatedAt, locale, timezone)}
+            processor={{
+              assignMode: (issue.assignMode as 'agent' | 'auto' | 'assignee' | 'none' | undefined) ?? 'auto',
+              agentName: issue.preferredAgentName ?? null,
+              agentAvatar: issue.preferredAgentAvatar ?? null,
+              username: issue.assignees?.[0]?.username ?? null,
+              name: issue.assignees?.[0]?.name ?? null,
+              avatarUrl: issue.assignees?.[0]?.avatarUrl ?? null,
+              pendingAuto: !!issue.assigneeAuto,
+            }}
+            verifier={issue.presetVerifier ?? { mode: 'creator', userId: null, username: null }}
+            confirmer={issue.presetConfirmer ?? { mode: 'creator', userId: null, username: null }}
+            actualProcessor={issue.actualProcessor ?? null}
+            actualVerifier={issue.actualVerifier ?? null}
+            actualConfirmer={issue.actualConfirmer ?? null}
+            onProcessorClick={() => onOpenAssigneeModal([issue.iid])}
+            onVerifierChange={onPresetVerifierChange ? (preset) => onPresetVerifierChange(issue.iid, preset) : undefined}
+            onConfirmerChange={onPresetConfirmerChange ? (preset) => onPresetConfirmerChange(issue.iid, preset) : undefined}
+          />
         </span>
-        {canEdit && !bulkMode && !isHistoryTab && (
-          <button
-            onClick={(e) => onCloseIssue(e, issue.iid)}
-            disabled={closing === issue.iid}
-            className="ml-auto text-xs font-bold text-ive-text-dim hover:text-ive-red border border-ive-border-subtle hover:border-ive-red/30 px-2 py-0.5 rounded-lg transition-all active:scale-95 disabled:opacity-40"
-            title={tIssue('closeIssue')}
-          >
-            {closing === issue.iid ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-xmark mr-0.5" />{tCommon('close')}</>}
-          </button>
+        {issue.stage !== 'none' && (
+          <span className={`ml-auto shrink-0 inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded border ${info.color}`}>
+            <i className={`fa-solid ${info.icon}`} />
+            {info.label}
+          </span>
         )}
       </div>
     </div>

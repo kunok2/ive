@@ -278,7 +278,23 @@ function CommentModeInput({
         rows={1}
         className="w-full min-h-10 bg-ive-bg-card border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-green/50 overflow-hidden"
       />
-      <div className="flex gap-2 justify-end overflow-hidden">
+      <div className="flex gap-2 items-center overflow-hidden">
+        {/* ← 후진: 재실행 (현재 stage 를 스케줄로 되돌림). dev/none 단계에선 backward 액션 없음. */}
+        <div className="flex-1 flex justify-start">
+          {canProgressStage && issue.stage !== 'dev' && issue.stage !== 'none' && !(preferredAgent?.assignMode === 'assignee' && NEXT_STAGE[issue.stage]) && (
+            <button
+              onClick={() => onCommentAndRetry()}
+              disabled={posting || !comment.trim()}
+              className="shrink-0 h-10 px-3 rounded-lg border border-ive-amber/40 text-ive-amber bg-ive-bg-card hover:bg-ive-amber/10 flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold whitespace-nowrap"
+              title={tIssue('postAndRetryHint')}
+              aria-label={tIssue('postAndRetry')}
+            >
+              {postingType === 'retry' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-arrow-left text-[10px]" /><span>{tIssue('rerun')}</span></>}
+            </button>
+          )}
+        </div>
+
+        {/* 가운데: 코멘트만 (stay) */}
         <button
           onClick={onPostComment}
           disabled={posting || !comment.trim()}
@@ -288,42 +304,30 @@ function CommentModeInput({
         >
           {postingType === 'comment' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-paper-plane" /><span>{tIssue('postCommentShort')}</span></>}
         </button>
-        {preferredAgent?.assignMode === 'assignee' && NEXT_STAGE[issue.stage] ? (
-          canProgressStage && (
+
+        {/* 전진 →: 다음 단계 진입 (검증완료/다음단계로) */}
+        <div className="flex-1 flex justify-end">
+          {preferredAgent?.assignMode === 'assignee' && NEXT_STAGE[issue.stage] && canProgressStage && (
             <button
               onClick={onCommentAndNextStage}
               disabled={posting}
               className="shrink-0 h-10 px-3 rounded-lg bg-ive-cyan text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-40 text-xs font-bold whitespace-nowrap"
             >
-              {postingType === 'next' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-forward-step" /><span>{NEXT_STAGE[issue.stage].label}</span></>}
+              {postingType === 'next' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><span>{NEXT_STAGE[issue.stage].label}</span><i className="fa-solid fa-arrow-right text-[10px]" /></>}
             </button>
-          )
-        ) : (
-          <>
-            {canProgressStage && issue.stage !== 'dev' && (
-              <button
-                onClick={() => onCommentAndRetry()}
-                disabled={posting || !comment.trim()}
-                className="shrink-0 h-10 px-3 rounded-lg bg-ive-cyan text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-40 text-xs font-bold whitespace-nowrap"
-                title={tIssue('postAndRetryHint')}
-                aria-label={tIssue('postAndRetry')}
-              >
-                {postingType === 'retry' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-paper-plane" /><span>{issue.stage === 'none' ? tIssue('run') : tIssue('rerun')}</span></>}
-              </button>
-            )}
-            {canProgressStage && issue.stage === 'verifying' && (
-              <button
-                onClick={onCommentAndDone}
-                disabled={posting || !comment.trim()}
-                className="shrink-0 h-10 px-3 rounded-lg bg-ive-green text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-40 text-xs font-bold whitespace-nowrap"
-                title={tIssue('postAndDoneHint')}
-                aria-label={tIssue('postAndDone')}
-              >
-                {postingType === 'done' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-circle-check" /><span>{tIssue('done')}</span></>}
-              </button>
-            )}
-          </>
-        )}
+          )}
+          {!(preferredAgent?.assignMode === 'assignee' && NEXT_STAGE[issue.stage]) && canProgressStage && (issue.stage === 'verifying' || issue.stage === 'confirming') && (
+            <button
+              onClick={onCommentAndDone}
+              disabled={posting || !comment.trim()}
+              className="shrink-0 h-10 px-3 rounded-lg bg-ive-cyan text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-40 text-xs font-bold whitespace-nowrap"
+              title={tIssue('postAndDoneHint')}
+              aria-label={tIssue('postAndDone')}
+            >
+              {postingType === 'done' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><span>{tIssue('done')}</span><i className="fa-solid fa-arrow-right text-[10px]" /></>}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )

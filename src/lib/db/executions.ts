@@ -131,6 +131,25 @@ export function markIssueVerified(projectId: string, issueIid: number, verifier?
   ).run(now, name, avatar, username, userId, projectId, issueIid)
 }
 
+/**
+ * 확인 완료 시 issue_stages 에 confirmer 정보를 기록한다.
+ * task_executions 의 verified_at 패턴과 달리, 확인 단계는 이슈 단위 1회 기록이므로
+ * issue_stages.confirmed_at + confirmer_* 컬럼을 사용한다.
+ */
+export function markIssueConfirmed(projectId: string, issueIid: number, confirmer: { name?: string | null; avatar?: string | null; userId?: string | null }) {
+  const now = new Date().toISOString()
+  getDb().prepare(`
+    INSERT INTO issue_stages (project_id, issue_iid, stage, confirmed_at, confirmer_user_id, confirmer_name, confirmer_avatar, updated_at)
+    VALUES (?, ?, '', ?, ?, ?, ?, datetime('now'))
+    ON CONFLICT(project_id, issue_iid) DO UPDATE SET
+      confirmed_at = excluded.confirmed_at,
+      confirmer_user_id = excluded.confirmer_user_id,
+      confirmer_name = excluded.confirmer_name,
+      confirmer_avatar = excluded.confirmer_avatar,
+      updated_at = datetime('now')
+  `).run(projectId, issueIid, now, confirmer.userId ?? null, confirmer.name ?? null, confirmer.avatar ?? null)
+}
+
 export function markIssueVerifyRejected(projectId: string, issueIid: number, verifier?: { name?: string | null; avatar?: string | null; username?: string | null; userId?: string | null }) {
   const now = new Date().toISOString()
   let username = verifier?.username ?? null
