@@ -159,6 +159,8 @@
   "setDueDate": "마감일 설정",
   "changeDueDate": "마감일 변경",
   "clearDueDate": "마감일 해제",
+  "dueDateTomorrow": "내일",
+  "dueDateNextWeek": "차주",
   "elapsed": "경과",
   "left": "남음",
   "overdueBy": "{remain} 지남",

@@ -159,6 +159,8 @@
   "setDueDate": "Set due date",
   "changeDueDate": "Change due date",
   "clearDueDate": "Clear due date",
+  "dueDateTomorrow": "Tomorrow",
+  "dueDateNextWeek": "Next week",
   "elapsed": "Elapsed",
   "left": "left",
   "overdueBy": "{remain} overdue",
