@@ -8,6 +8,31 @@ function generateSecret(): string {
   return randomBytes(24).toString('hex')
 }
 
+/** 기존 secret으로 새 HMAC 토큰 발급 (페이지 재진입 시 사용) */
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const user = await getCurrentUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { id: projectId } = await params
+  const project = getProject(projectId)
+  if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+
+  const access = getProjectAccess(projectId, user.id)
+  if (!access || access === 'viewer') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  if (!project.reportSecret) {
+    return NextResponse.json({ secret: null, reportToken: null })
+  }
+
+  const reportToken = generateReportToken(project.reportSecret, projectId, 168)
+  return NextResponse.json({ secret: project.reportSecret, reportToken })
+}
+
 /** 작업 접수 페이지 토큰 생성 또는 교체 */
 export async function POST(
   _req: NextRequest,

@@ -27,7 +27,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [copied, setCopied] = useState(false)
   const [gitMembers, setGitMembers] = useState<{ id: number; username: string; name: string; avatarUrl: string }[]>([])
   const [gitMembersLoading, setGitMembersLoading] = useState(false)
-  const [urlTheme, setUrlTheme] = useState<'dark' | 'light'>('dark')
+  const [urlTheme, setUrlTheme] = useState<'dark' | 'light' | 'auto'>('auto')
   const [urlLang, setUrlLang] = useState<'auto' | 'ko' | 'en'>('auto')
 
   const tp = useTranslations('project')
@@ -36,15 +36,31 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const project = state.projects.find(p => p.id === id)
 
   useEffect(() => {
-    if (project?.reportSecret) setReportSecret(project.reportSecret)
-  }, [project?.reportSecret])
+    if (!project?.reportSecret) return
+    setReportSecret(project.reportSecret)
+    // 페이지 재진입 시 기존 secret으로 새 HMAC 토큰을 발급받는다
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch(`/api/projects/${id}/report-secret`)
+        if (!res.ok || cancelled) return
+        const data = await res.json()
+        if (cancelled || !data.reportToken) return
+        setReportToken(data.reportToken.token)
+        setReportNonce(data.reportToken.nonce)
+        setReportTimestamp(data.reportToken.timestamp)
+        setReportExpires(data.reportToken.expires)
+      } catch { /* ignore */ }
+    })()
+    return () => { cancelled = true }
+  }, [id, project?.reportSecret])
 
   const reportUrl = useMemo(() => {
     if (!reportToken) return ''
     const origin = typeof window !== 'undefined' ? window.location.origin : ''
     const base = `${origin}/p/${id}/report?token=${reportToken}&nonce=${reportNonce}&ts=${reportTimestamp}&exp=${reportExpires}`
     const extra: string[] = []
-    if (urlTheme === 'light') extra.push('theme=light')
+    if (urlTheme !== 'dark') extra.push(`theme=${urlTheme}`)
     if (urlLang !== 'auto') extra.push(`lang=${urlLang}`)
     return extra.length > 0 ? `${base}&${extra.join('&')}` : base
   }, [id, reportToken, reportNonce, reportTimestamp, reportExpires, urlTheme, urlLang])
@@ -307,25 +323,24 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                   </p>
 
                   {/* 테마/언어 선택 + 복사 */}
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
-                    <div className="flex items-center gap-2">
-                      <span className="text-ive-text-dim font-bold">
+                  <div className="flex items-center gap-2 text-xs min-w-0">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="text-ive-text-dim font-bold shrink-0">
                         <i className="fa-solid fa-palette mr-1 text-ive-amber" />{tp('reportPageThemeLabel')}
                       </span>
-                      <div className="flex items-center bg-ive-bg-deep border border-ive-border-subtle rounded-lg p-0.5">
-                        {(['dark', 'light'] as const).map(opt => (
-                          <button
-                            key={opt}
-                            onClick={() => setUrlTheme(opt)}
-                            className={`font-bold px-2.5 py-1 rounded-md transition-all ${urlTheme === opt ? 'bg-ive-green/20 text-ive-green' : 'text-ive-text-muted hover:text-ive-text'}`}
-                          >
-                            <i className={`fa-solid ${opt === 'dark' ? 'fa-moon' : 'fa-sun'} mr-1`} />
-                            {tp(opt === 'dark' ? 'reportPageThemeDark' : 'reportPageThemeLight')}
-                          </button>
-                        ))}
-                      </div>
+                      <CustomSelect
+                        size="sm"
+                        value={urlTheme}
+                        onChange={(v) => setUrlTheme(v as 'dark' | 'light' | 'auto')}
+                        options={[
+                          { value: 'auto', label: tp('reportPageThemeAuto') },
+                          { value: 'dark', label: tp('reportPageThemeDark') },
+                          { value: 'light', label: tp('reportPageThemeLight') },
+                        ]}
+                        className="w-[88px]"
+                      />
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
                       <span className="text-ive-text-dim font-bold shrink-0">
                         <i className="fa-solid fa-language mr-1 text-ive-amber" />{tp('reportPageLanguage')}
                       </span>
@@ -338,14 +353,14 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                           { value: 'ko', label: tp('reportPageLangKo') },
                           { value: 'en', label: tp('reportPageLangEn') },
                         ]}
-                        className="min-w-[120px]"
+                        className="w-[100px]"
                       />
                     </div>
                     <button
                       onClick={handleCopyUrl}
                       className={`ml-auto shrink-0 font-bold text-xs px-3 py-1.5 rounded-lg border transition-all ${copied ? 'bg-ive-green/20 text-ive-green border-ive-green/30' : 'bg-ive-bg-deep text-ive-text-muted border-ive-border-subtle hover:text-ive-green hover:border-ive-green/30'}`}
                     >
-                      {copied ? <i className="fa-solid fa-check" /> : <><i className="fa-regular fa-copy mr-1" />URL</>}
+                      {copied ? <i className="fa-solid fa-check" /> : <><i className="fa-regular fa-copy mr-1" />{tp('reportPageCopyUrl')}</>}
                     </button>
                   </div>
 

@@ -6,6 +6,10 @@ export interface CustomSelectOption {
   value: string
   label: string
   hint?: string
+  /** FontAwesome 클래스 (예: 'fa-solid fa-moon') */
+  icon?: string
+  /** 아이콘에 적용할 색상 클래스 (예: 'text-ive-amber') */
+  iconClass?: string
 }
 
 interface CustomSelectProps {
@@ -63,8 +67,9 @@ export default function CustomSelect({
         onClick={() => !disabled && setOpen(o => !o)}
         className={`w-full bg-ive-bg-input border border-ive-border rounded-lg ${padding} text-left flex items-center justify-between focus:outline-none focus:border-ive-green/50 disabled:opacity-50 disabled:cursor-not-allowed`}
       >
-        <span className={`truncate ${isPlaceholder ? 'text-ive-text-dim' : 'text-ive-text'}`}>
-          {displayLabel}
+        <span className={`truncate flex items-center gap-1.5 ${isPlaceholder ? 'text-ive-text-dim' : 'text-ive-text'}`}>
+          {selected?.icon && <i className={`${selected.icon} ${selected.iconClass ?? ''} shrink-0`} />}
+          <span className="truncate">{displayLabel}</span>
         </span>
         <i className={`fa-solid fa-chevron-${open ? 'up' : 'down'} text-xs text-ive-text-dim ml-2 shrink-0`} />
       </button>
@@ -86,6 +91,7 @@ export default function CustomSelect({
                 }`}
               >
                 <i className={`fa-solid fa-check text-xs shrink-0 ${isSel ? '' : 'invisible'}`} />
+                {o.icon && <i className={`${o.icon} ${o.iconClass ?? ''} shrink-0 w-4 text-center`} />}
                 <span className="flex-1 truncate">{o.label}</span>
                 {o.hint && <span className="text-[11px] text-ive-text-dim shrink-0">{o.hint}</span>}
               </button>
