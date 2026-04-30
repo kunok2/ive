@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getProject, getProjectAccess, getProjectAuthToken, hasActiveExecution, stageFromLabels, getPresetRoles, getAssigneeAuto, getActualRoleAssignees, getIssueStageTimes, getIssueRetryCounts, getIssueForwardCounts } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
+import { logActivity } from '@/lib/activity'
 import { updateIssue, fetchSingleIssue } from '@/lib/provider'
 import { resolveIveAuthorFromBody, stripIveAuthorMarker, stripIveDueMarker, extractIveAuthorId, prependIveAuthorMarker } from '@/lib/ive-author'
 
@@ -54,6 +55,15 @@ export async function PUT(
         return NextResponse.json({ error: '마감일 형식이 올바르지 않습니다 (YYYY-MM-DD)' }, { status: 400 })
       }
       const updated: any = await updateIssue(project, Number(iid), token, { dueDate: normalized })
+      logActivity({
+        userId: user.id,
+        category: 'task',
+        action: 'update_issue_due',
+        detail: `이슈 마감일 변경: ${project.name} #${iid} → ${normalized || '해제'}`,
+        targetType: 'issue',
+        targetId: `${projectId}:${iid}`,
+        req,
+      })
       return NextResponse.json({
         iid: updated.iid,
         dueDate: updated.due_date ?? normalized,
@@ -78,6 +88,15 @@ export async function PUT(
       title: title.trim(),
       description: newDescription,
       dueDate: existingDue,
+    })
+    logActivity({
+      userId: user.id,
+      category: 'task',
+      action: 'update_issue',
+      detail: `이슈 수정: ${project.name} #${iid} "${title.trim()}"`,
+      targetType: 'issue',
+      targetId: `${projectId}:${iid}`,
+      req,
     })
     return NextResponse.json({
       iid: updated.iid,

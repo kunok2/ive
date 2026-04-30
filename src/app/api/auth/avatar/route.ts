@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { updateUserAvatar } from '@/lib/db'
+import { logActivity } from '@/lib/activity'
 
 export async function PUT(req: NextRequest) {
   const user = await getCurrentUser()
@@ -17,5 +18,6 @@ export async function PUT(req: NextRequest) {
     console.error('아바타 업데이트 오류:', e)
     return NextResponse.json({ error: '아바타 저장에 실패했습니다.' }, { status: 500 })
   }
+  logActivity({ userId: user.id, category: 'settings', action: 'change_avatar', detail: `아바타 변경: ${avatar}`, req })
   return NextResponse.json({ ok: true })
 }

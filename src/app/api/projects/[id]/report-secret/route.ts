@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getProject, getProjectAccess, updateProjectReportSecret, touchProjectActivity } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
+import { logActivity } from '@/lib/activity'
 import { randomBytes } from 'crypto'
 import { generateReportToken } from '@/lib/report-token'
 
@@ -35,7 +36,7 @@ export async function GET(
 
 /** 작업 접수 페이지 토큰 생성 또는 교체 */
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const user = await getCurrentUser()
@@ -57,12 +58,22 @@ export async function POST(
   // HMAC 토큰 생성 (기본 7일 만료)
   const reportToken = generateReportToken(secret, projectId, 168) // 7 days
 
+  logActivity({
+    userId: user.id,
+    category: 'project',
+    action: 'rotate_report_secret',
+    detail: `작업 접수 토큰 생성/교체: ${project.name}`,
+    targetType: 'project',
+    targetId: projectId,
+    req,
+  })
+
   return NextResponse.json({ secret, reportToken })
 }
 
 /** 작업 접수 페이지 토큰 제거 */
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const user = await getCurrentUser()
@@ -79,6 +90,16 @@ export async function DELETE(
 
   updateProjectReportSecret(projectId, null)
   touchProjectActivity(projectId)
+
+  logActivity({
+    userId: user.id,
+    category: 'project',
+    action: 'revoke_report_secret',
+    detail: `작업 접수 토큰 제거: ${project.name}`,
+    targetType: 'project',
+    targetId: projectId,
+    req,
+  })
 
   return NextResponse.json({ success: true })
 }

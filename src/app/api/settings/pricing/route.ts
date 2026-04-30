@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { getAllTokenPricing, upsertTokenPricing, deleteTokenPricing } from '@/lib/db'
 import { applyLatestPricing } from '@/lib/token-pricing'
+import { logActivity } from '@/lib/activity'
 
 export async function GET() {
   const user = await getCurrentUser()
@@ -28,6 +29,7 @@ export async function PUT(req: NextRequest) {
       updatedAt: now,
     })
   }
+  logActivity({ userId: user.id, category: 'settings', action: 'update_pricing', detail: `토큰 단가 갱신 (${items.length}개 항목)`, req })
   return NextResponse.json(getAllTokenPricing())
 }
 
@@ -40,6 +42,7 @@ export async function DELETE(req: NextRequest) {
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
   deleteTokenPricing(id)
+  logActivity({ userId: user.id, category: 'settings', action: 'delete_pricing', detail: `토큰 단가 삭제 (${id})`, targetType: 'token_pricing', targetId: id, req })
   return NextResponse.json(getAllTokenPricing())
 }
 
@@ -50,6 +53,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}))
   if (body.action === 'auto-fetch') {
     const updated = applyLatestPricing()
+    logActivity({ userId: user.id, category: 'settings', action: 'fetch_pricing', detail: '최신 토큰 단가 자동 적용', req })
     return NextResponse.json(updated)
   }
 

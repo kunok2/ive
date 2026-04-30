@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getProject, getProjectAccess, getProjectAuthToken, isIssueAssignee, getActiveChatSession, getAnyActiveChatSession, getLastEndedChatSession, getChatMessages, createChatSession, createExecution, updateAgentStatus, getAgent } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
+import { logActivity } from '@/lib/activity'
 import { pickAgentForChat, prepareChatWorkspace } from '@/lib/chat-agent'
 
 /**
@@ -126,6 +127,16 @@ export async function POST(
       agentId: agentInfo.agent.id,
       executionId,
       workspacePath,
+    })
+
+    logActivity({
+      userId: user.id,
+      category: 'task',
+      action: 'start_chat',
+      detail: `AI 채팅 시작: ${project.name} #${iid} (에이전트 ${agentInfo.agent.name})`,
+      targetType: 'chat_session',
+      targetId: sessionId,
+      req,
     })
 
     return NextResponse.json({ sessionId, existing: false, agentName: agentInfo.agent.name, agentAvatar: agentInfo.agent.avatar })

@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server'
 import { getAgent, updateAgent, getSystemSetting } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
+import { logActivity } from '@/lib/activity'
 import { execFile } from 'child_process'
 import { existsSync } from 'fs'
 
-export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -41,6 +42,8 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     if (version) {
       updateAgent({ ...agent, cliVersion: version })
     }
+
+    logActivity({ userId: user.id, category: 'agent', action: 'test_agent', detail: `에이전트 CLI 테스트: ${agent.name} (${agent.cliName} ${version || ''})`, targetType: 'agent', targetId: id, req })
 
     return NextResponse.json({
       success: true,

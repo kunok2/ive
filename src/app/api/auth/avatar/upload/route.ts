@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { updateUserAvatar } from '@/lib/db'
+import { logActivity } from '@/lib/activity'
 import fs from 'fs'
 import path from 'path'
 
@@ -47,6 +48,8 @@ export async function POST(req: NextRequest) {
 
   // avatar 필드를 'photo' 로 변경
   updateUserAvatar(user.id, 'photo')
+
+  logActivity({ userId: user.id, category: 'settings', action: 'upload_avatar', detail: `아바타 사진 업로드 (${ext}, ${(file.size / 1024).toFixed(1)}KB)`, req })
 
   return NextResponse.json({ ok: true, avatar: 'photo' })
 }

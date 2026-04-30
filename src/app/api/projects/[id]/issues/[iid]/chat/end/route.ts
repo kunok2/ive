@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getProject, getProjectAccess, getProjectAuthToken, getChatSession, endChatSession, updateExecutionStatus, updateAgentStatus, countActiveExecutionsByAgent, isIssueAssignee } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
+import { logActivity } from '@/lib/activity'
 import { killChatAgent } from '@/lib/chat-agent'
 
 /**
@@ -61,6 +62,16 @@ export async function POST(
 
   // Mark session as ended
   endChatSession(sessionId)
+
+  logActivity({
+    userId: user.id,
+    category: 'task',
+    action: 'end_chat',
+    detail: `AI 채팅 종료: ${project.name} #${iid}`,
+    targetType: 'chat_session',
+    targetId: sessionId,
+    req,
+  })
 
   return NextResponse.json({ ok: true })
 }

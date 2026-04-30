@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getExecution, updateExecutionStatus, getProject, getProjectAccess } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
+import { logActivity } from '@/lib/activity'
 import { decrypt } from '@/lib/crypto'
 import { removeIssueLabels, addIssueLabels } from '@/lib/provider'
 
@@ -45,6 +46,16 @@ export async function POST(
       console.warn(`[CompleteAPI] Failed to switch labels on #${execution.issueIid}:`, e)
     }
   }
+
+  logActivity({
+    userId: user.id,
+    category: 'execution',
+    action: 'complete_execution',
+    detail: `사람 작업 수동 완료: 이슈 #${execution.issueIid} (${finalStatus})`,
+    targetType: 'execution',
+    targetId: id,
+    req,
+  })
 
   return NextResponse.json({ success: true, status: finalStatus })
 }

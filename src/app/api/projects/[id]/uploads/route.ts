@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getProject, getProjectAccess, getProjectAuthToken } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { logActivity } from '@/lib/activity';
 import { uploadIssueAttachment } from '@/lib/provider';
 
 // 이슈 본문/코멘트에 붙여 넣을 이미지(또는 파일)를 업로드합니다.
@@ -50,6 +51,15 @@ export async function POST(
     const filename = blob.name || `paste-${Date.now()}`;
     const mime = blob.type || 'application/octet-stream';
     const result = await uploadIssueAttachment(project, token, filename, buffer, mime);
+    logActivity({
+      userId: user.id,
+      category: 'project',
+      action: 'upload_attachment',
+      detail: `첨부 업로드: ${project.name} ${filename} (${(blob.size / 1024).toFixed(1)}KB)`,
+      targetType: 'project',
+      targetId: projectId,
+      req,
+    });
     return NextResponse.json(result);
   } catch (err) {
     const msg = err instanceof Error ? err.message : '파일 업로드 실패';

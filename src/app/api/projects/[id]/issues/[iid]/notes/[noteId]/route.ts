@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getProject, getProjectAuthToken } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
+import { logActivity } from '@/lib/activity'
 import { decrypt } from '@/lib/crypto'
 import { deleteIssueComment } from '@/lib/provider'
 import { getUserOAuthTokenRaw, getOAuthProviderById } from '@/lib/db'
@@ -39,6 +40,16 @@ export async function DELETE(
     }
 
     await deleteIssueComment(project, Number(iid), Number(noteId), tokenToUse, { isOAuth: usingUserToken })
+
+    logActivity({
+      userId: user.id,
+      category: 'task',
+      action: 'delete_note',
+      detail: `이슈 코멘트 삭제: ${project.name} #${iid} (note ${noteId})`,
+      targetType: 'issue_note',
+      targetId: `${projectId}:${iid}:${noteId}`,
+      req,
+    })
 
     return NextResponse.json({ success: true })
   } catch (err) {

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { setSystemSetting, updateUserLocale, updateUserTimezone } from '@/lib/db'
 import { locales, Locale } from '@/i18n/config'
 import { getCurrentUser } from '@/lib/auth'
+import { logActivity } from '@/lib/activity'
 
 // Intl.supportedValuesOf가 지원되지 않는 환경을 위한 최소 화이트리스트
 const VALID_TIMEZONES = new Set([
@@ -43,6 +44,21 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: 'Invalid timezone' }, { status: 400 })
     }
     updateUserTimezone(user.id, timezone)
+  }
+
+  if (user) {
+    const changes: string[] = []
+    if (locale !== undefined) changes.push(`언어: ${locale}`)
+    if (timezone !== undefined) changes.push(`시간대: ${timezone}`)
+    if (changes.length > 0) {
+      logActivity({
+        userId: user.id,
+        category: 'settings',
+        action: 'update_locale',
+        detail: `로케일 설정 변경 (${changes.join(', ')})`,
+        req,
+      })
+    }
   }
 
   return NextResponse.json({ ok: true })

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getProject, getProjectAuthToken, getProjectAccess, isIssueAssignee, isIssueAuthor, getAssignMode, setAssignMode, getAgent, getAgentsByUser, hasActiveExecution, stageFromLabels } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { logActivity } from '@/lib/activity';
 import { fetchSingleIssue } from '@/lib/provider';
 import { resolveIssueRequester } from '@/lib/ive-author';
 
@@ -89,6 +90,15 @@ export async function PATCH(
   setAssignMode(projectId, Number(iid), mode, agentId || null);
 
   const agent = (mode === 'agent' && agentId) ? getAgent(agentId) : null;
+  logActivity({
+    userId: user.id,
+    category: 'task',
+    action: 'update_assign_mode',
+    detail: `배정 모드 변경: ${project.name} #${iid} → ${mode}${agent ? ` (${agent.name})` : ''}`,
+    targetType: 'issue',
+    targetId: `${projectId}:${iid}`,
+    req,
+  });
   return NextResponse.json({
     assignMode: mode,
     preferredAgentId: (mode === 'agent' ? agentId : null) || null,

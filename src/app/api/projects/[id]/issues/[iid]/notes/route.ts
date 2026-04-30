@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getProject, getProjectAuthToken, getProjectAccess, getUserById, getUserOAuthTokenRaw, getOAuthProviderById, getAgent, touchProjectActivity } from '@/lib/db';
 import { triggerScan } from '@/lib/scanner';
 import { getCurrentUser } from '@/lib/auth';
+import { logActivity } from '@/lib/activity';
 import { decrypt } from '@/lib/crypto';
 import { fetchIssueNotes, addIssueComment } from '@/lib/provider';
 import { IVE_AUTHOR_MARKER_RE, IVE_AGENT_MARKER_RE, stripAllIveMarkers } from '@/lib/ive-author';
@@ -197,6 +198,16 @@ export async function POST(
         console.warn(`[Notes] Failed to trigger scanner:`, e);
       }
     }
+
+    logActivity({
+      userId: user.id,
+      category: 'task',
+      action: 'add_note',
+      detail: `이슈 코멘트 작성: ${project.name} #${iid} (${body.trim().length}자)`,
+      targetType: 'issue',
+      targetId: `${projectId}:${iid}`,
+      req,
+    });
 
     return NextResponse.json({ success: true });
   } catch (err) {

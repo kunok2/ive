@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getProject, getProjectAuthToken, getProjectAccess } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { logActivity } from '@/lib/activity';
 import { checkLabelsExist, ensureLabels } from '@/lib/provider';
 
 // 레이블 존재 확인
@@ -30,7 +31,7 @@ export async function GET(
 
 // 레이블 생성 시도
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const user = await getCurrentUser();
@@ -51,6 +52,15 @@ export async function POST(
     const results = await checkLabelsExist(project, token);
     const allExist = results.every(r => r.exists);
     const missing = results.filter(r => !r.exists).map(r => r.label);
+    logActivity({
+      userId: user.id,
+      category: 'project',
+      action: 'ensure_labels',
+      detail: `레이블 생성 시도: ${project.name}${missing.length > 0 ? ` (누락 ${missing.length}개)` : ' (전체 존재)'}`,
+      targetType: 'project',
+      targetId: projectId,
+      req,
+    });
     return NextResponse.json({
       success: allExist,
       results,

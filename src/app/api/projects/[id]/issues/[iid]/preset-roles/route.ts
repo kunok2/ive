@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getProject, getProjectAccess, getPresetRoles, setPresetRoles, isIssueAuthor, getProjectAuthToken } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
+import { logActivity } from '@/lib/activity'
 import { fetchSingleIssue } from '@/lib/provider'
 
 /**
@@ -66,5 +67,14 @@ export async function PATCH(
   }
 
   setPresetRoles(projectId, Number(iid), next)
+  logActivity({
+    userId: user.id,
+    category: 'task',
+    action: 'update_preset_roles',
+    detail: `검증자/확인자 사전배정 변경: ${project.name} #${iid} (검증=${next.verifier.mode}, 확인=${next.confirmer.mode})`,
+    targetType: 'issue',
+    targetId: `${projectId}:${iid}`,
+    req,
+  })
   return NextResponse.json({ verifier: next.verifier, confirmer: next.confirmer })
 }

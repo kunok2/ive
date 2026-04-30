@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { getProject, getProjectShares, getAllUsers, createProjectShare, updateProjectShareRole, deleteProjectShare } from '@/lib/db'
 import { ShareRole } from '@/types'
+import { logActivity } from '@/lib/activity'
 
 export async function GET(
   _req: NextRequest,
@@ -56,6 +57,15 @@ export async function POST(
     createdAt: new Date().toISOString(),
   }
   createProjectShare(share)
+  logActivity({
+    userId: user.id,
+    category: 'project',
+    action: 'create_share',
+    detail: `프로젝트 공유 추가: ${project.name} → ${targetUserId} (${role})`,
+    targetType: 'project_share',
+    targetId: share.id,
+    req,
+  })
   return NextResponse.json(share, { status: 201 })
 }
 
@@ -76,6 +86,15 @@ export async function PATCH(
   if (!['viewer', 'editor'].includes(role)) return NextResponse.json({ error: '잘못된 권한입니다.' }, { status: 400 })
 
   updateProjectShareRole(shareId, role)
+  logActivity({
+    userId: user.id,
+    category: 'project',
+    action: 'update_share',
+    detail: `프로젝트 공유 권한 변경: ${project.name} (${role})`,
+    targetType: 'project_share',
+    targetId: shareId,
+    req,
+  })
   return NextResponse.json({ success: true })
 }
 
@@ -94,5 +113,14 @@ export async function DELETE(
 
   const { shareId } = await req.json() as { shareId: string }
   deleteProjectShare(shareId)
+  logActivity({
+    userId: user.id,
+    category: 'project',
+    action: 'delete_share',
+    detail: `프로젝트 공유 해제: ${project.name}`,
+    targetType: 'project_share',
+    targetId: shareId,
+    req,
+  })
   return NextResponse.json({ success: true })
 }

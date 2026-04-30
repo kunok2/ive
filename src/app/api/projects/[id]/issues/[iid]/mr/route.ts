@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getProject, getProjectAccess, isIssueAssignee } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
+import { logActivity } from '@/lib/activity'
 import { fetchMRByBranch, mergeMR, closeMR } from '@/lib/provider'
 import { getProjectTokenCtx, withGitToken, friendlyGitError, type GitTokenCtx } from '@/lib/git-token'
 
@@ -109,6 +110,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const result = await withGitToken(user, project, (ctx) =>
         mergeMR(project, ctx.token, mr.iid, { isOAuth: ctx.isOAuth })
       )
+      logActivity({
+        userId: user.id,
+        category: 'task',
+        action: 'merge_mr',
+        detail: `MR 머지: ${project.name} #${iid} (MR !${mr.iid})`,
+        targetType: 'mr',
+        targetId: `${id}:${mr.iid}`,
+        req,
+      })
       return NextResponse.json({ success: true, mr: result })
     } catch (err) {
       return NextResponse.json({ error: friendlyGitError(err, '머지') }, { status: 400 })
@@ -135,6 +145,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const result = await withGitToken(user, project, (ctx) =>
         closeMR(project, ctx.token, mr.iid, { isOAuth: ctx.isOAuth })
       )
+      logActivity({
+        userId: user.id,
+        category: 'task',
+        action: 'close_mr',
+        detail: `MR 닫기: ${project.name} #${iid} (MR !${mr.iid})`,
+        targetType: 'mr',
+        targetId: `${id}:${mr.iid}`,
+        req,
+      })
       return NextResponse.json({ success: true, mr: result })
     } catch (err) {
       return NextResponse.json({ error: friendlyGitError(err, 'MR 닫기') }, { status: 400 })

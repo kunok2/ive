@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { getReportSchedule, getReportScheduleByType } from '@/lib/db'
 import { sendReport } from '@/lib/report-mailer'
+import { logActivity } from '@/lib/activity'
 
 /** 보고서 즉시 발송 */
 export async function POST(req: Request) {
@@ -27,6 +28,15 @@ export async function POST(req: Request) {
 
   try {
     const result = await sendReport(schedule, { force: force ?? true })
+    logActivity({
+      userId: user.id,
+      category: 'admin',
+      action: 'send_report',
+      detail: `보고서 즉시 발송: ${schedule.reportType} (수신자 ${schedule.recipients.length}명)`,
+      targetType: 'report_schedule',
+      targetId: schedule.id,
+      req,
+    })
     return NextResponse.json(result)
   } catch (err: unknown) {
     console.error('[reports/send] failed:', err)

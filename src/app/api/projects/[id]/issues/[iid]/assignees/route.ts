@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getProject, getProjectAccess, getProjectAuthToken, setAssigneeAuto, isIssueAuthor } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { logActivity } from '@/lib/activity';
 import { updateIssue, fetchSingleIssue } from '@/lib/provider';
 
 export async function PATCH(
@@ -53,6 +54,15 @@ export async function PATCH(
       assignees: assigneeAuto ? [] : (assigneeUsernames || []),
     });
     setAssigneeAuto(projectId, issueIid, !!assigneeAuto);
+    logActivity({
+      userId: user.id,
+      category: 'task',
+      action: 'update_assignees',
+      detail: `이슈 담당자 변경: ${project.name} #${iid}${assigneeAuto ? ' (자동배정)' : ` (${(assigneeUsernames || assigneeIds || []).join(', ') || '없음'})`}`,
+      targetType: 'issue',
+      targetId: `${projectId}:${iid}`,
+      req,
+    });
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error('[assignees] failed:', err)

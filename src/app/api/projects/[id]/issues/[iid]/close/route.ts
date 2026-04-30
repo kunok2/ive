@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getProject, getProjectAccess, getProjectAuthToken, isIssueAssignee, isIssueAuthor } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { logActivity } from '@/lib/activity';
 import { closeIssue } from '@/lib/provider';
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string; iid: string }> }
 ) {
   const user = await getCurrentUser();
@@ -39,6 +40,15 @@ export async function POST(
 
   try {
     await closeIssue(project, Number(iid), token);
+    logActivity({
+      userId: user.id,
+      category: 'task',
+      action: 'close_issue',
+      detail: `이슈 닫기: ${project.name} #${iid}`,
+      targetType: 'issue',
+      targetId: `${projectId}:${iid}`,
+      req,
+    });
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error('[close] failed:', err)

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getAgent, getSystemSetting } from '@/lib/db'
 import { defaultLocale } from '@/i18n/config'
 import { getCurrentUser } from '@/lib/auth'
+import { logActivity } from '@/lib/activity'
 import { existsSync } from 'fs'
 import { spawn } from 'child_process'
 import { getLocale } from 'next-intl/server'
@@ -90,6 +91,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         reject(new Error('응답 시간 초과 (30초)'))
       }, 30000)
     })
+
+    logActivity({ userId: user.id, category: 'agent', action: 'interview_agent', detail: `에이전트 인터뷰: ${agent.name} — "${question.slice(0, 80)}${question.length > 80 ? '…' : ''}"`, targetType: 'agent', targetId: id, req })
 
     return NextResponse.json({ answer })
   } catch (err) {

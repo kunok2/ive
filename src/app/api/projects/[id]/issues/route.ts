@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getProject, getProjectAccess, getProjectAuthToken, getAssignModeMap, setAssignMode, setAssigneeAuto, setPresetRoles, getPresetRoles, getActualRoleAssigneesMap, getAgent, hasActiveExecution, hasAnyExecution, stageFromLabels, touchProjectActivity, getIssueIterationCountsMap } from '@/lib/db';
 import { triggerScan } from '@/lib/scanner';
 import { getCurrentUser } from '@/lib/auth';
+import { logActivity } from '@/lib/activity';
 import { checkLabelsExist, addIssueComment } from '@/lib/provider';
 import { fetchAllProjectIssues, fetchClosedProjectIssues, createIssue } from '@/lib/provider';
 import { withGitToken, friendlyGitError } from '@/lib/git-token';
@@ -288,6 +289,16 @@ export async function POST(
     } catch (e) {
       console.warn(`[Issues] Failed to trigger scanner:`, e);
     }
+
+    logActivity({
+      userId: user.id,
+      category: 'task',
+      action: 'create_issue',
+      detail: `이슈 생성: ${project.name} #${issue.iid} "${title.trim()}"${asDev ? ' (개발 등록)' : ''}`,
+      targetType: 'issue',
+      targetId: `${projectId}:${issue.iid}`,
+      req,
+    });
 
     return NextResponse.json(issue);
   } catch (err) {

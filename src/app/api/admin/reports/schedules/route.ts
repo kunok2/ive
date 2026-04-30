@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { getAllReportSchedules, upsertReportSchedule, deleteReportSchedule, getAllUsers } from '@/lib/db'
 import { ReportSchedule } from '@/types'
+import { logActivity } from '@/lib/activity'
 
 export async function GET() {
   const user = await getCurrentUser()
@@ -42,6 +43,15 @@ export async function POST(req: Request) {
   }
 
   upsertReportSchedule(schedule)
+  logActivity({
+    userId: user.id,
+    category: 'admin',
+    action: 'upsert_report_schedule',
+    detail: `보고서 스케줄 저장: ${reportType} (${schedule.enabled ? '활성' : '비활성'}, 수신자 ${recipientEmails.length}명)`,
+    targetType: 'report_schedule',
+    targetId: schedule.id,
+    req,
+  })
   return NextResponse.json(schedule)
 }
 
@@ -53,5 +63,6 @@ export async function DELETE(req: Request) {
   if (!id) return NextResponse.json({ error: 'ID가 필요합니다.' }, { status: 400 })
 
   deleteReportSchedule(id)
+  logActivity({ userId: user.id, category: 'admin', action: 'delete_report_schedule', detail: `보고서 스케줄 삭제 (${id})`, targetType: 'report_schedule', targetId: id, req })
   return NextResponse.json({ success: true })
 }
