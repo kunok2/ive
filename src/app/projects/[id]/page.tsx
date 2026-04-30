@@ -17,11 +17,65 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
   const [showEditProject, setShowEditProject] = useState(false)
   const [showDeleteProject, setShowDeleteProject] = useState(false)
-  const tc = useTranslations('common')
-  const tp = useTranslations('project')
-
+  const [reportSecret, setReportSecret] = useState<string | null>(null)
+  const [reportToken, setReportToken] = useState<string | null>(null)
+  const [reportNonce, setReportNonce] = useState<string | null>(null)
+  const [reportTimestamp, setReportTimestamp] = useState<number>(0)
+  const [reportExpires, setReportExpires] = useState<number>(0)
+  const [generatingSecret, setGeneratingSecret] = useState(false)
+  const [copied, setCopied] = useState(false)
   const [gitMembers, setGitMembers] = useState<{ id: number; username: string; name: string; avatarUrl: string }[]>([])
   const [gitMembersLoading, setGitMembersLoading] = useState(false)
+
+  const tp = useTranslations('project')
+  const tc = useTranslations('common')
+
+  const project = state.projects.find(p => p.id === id)
+
+  useEffect(() => {
+    if (project?.reportSecret) setReportSecret(project.reportSecret)
+  }, [project?.reportSecret])
+
+  const reportUrl = reportToken ? `${typeof window !== 'undefined' ? window.location.origin : ''}/p/${id}/report?token=${reportToken}&nonce=${reportNonce}&ts=${reportTimestamp}&exp=${reportExpires}` : ''
+
+  const handleGenerateSecret = async () => {
+    setGeneratingSecret(true)
+    try {
+      const res = await fetch(`/api/projects/${id}/report-secret`, { method: 'POST' })
+      if (res.ok) {
+        const data = await res.json()
+        setReportSecret(data.secret)
+        setReportToken(data.reportToken?.token ?? null)
+        setReportNonce(data.reportToken?.nonce ?? null)
+        setReportTimestamp(data.reportToken?.timestamp ?? 0)
+        setReportExpires(data.reportToken?.expires ?? 0)
+      }
+    } catch { /* ignore */ }
+    finally { setGeneratingSecret(false) }
+  }
+
+  const handleRevokeSecret = async () => {
+    setGeneratingSecret(true)
+    try {
+      const res = await fetch(`/api/projects/${id}/report-secret`, { method: 'DELETE' })
+      if (res.ok) {
+        setReportSecret(null)
+        setReportToken(null)
+        setReportNonce(null)
+        setReportTimestamp(0)
+        setReportExpires(0)
+      }
+    } catch { /* ignore */ }
+    finally { setGeneratingSecret(false) }
+  }
+
+  const handleCopyUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(reportUrl)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch { /* ignore */ }
+  }
 
   const fetchGitMembers = useCallback(async () => {
     setGitMembersLoading(true)
@@ -36,8 +90,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   }, [id])
 
   useEffect(() => { fetchGitMembers() }, [fetchGitMembers])
-
-  const project = state.projects.find(p => p.id === id)
 
   if (state.loading) {
     return <div className="h-full flex items-center justify-center text-ive-text-muted text-base">{tc('loading')}</div>
@@ -134,6 +186,194 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             )}
           </div>
         </div>
+
+        {/* 작업 접수 페이지 섹션 */}
+        {canEdit && (
+          <div className="mb-6">
+            <h2 className="text-base font-bold text-ive-text uppercase tracking-widest flex items-center gap-2 mb-3 px-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-ive-amber" />
+              {tp('reportPage')}
+            </h2>
+            <div className="bg-ive-bg-card rounded-lg border border-ive-border-subtle p-4">
+              {!reportSecret ? (
+                <div className="py-2">
+                  <p className="text-sm text-ive-text-muted mb-3">
+                    {tp('reportPageDesc')}
+                  </p>
+                  {/* 사용 방법 가이드 */}
+                  <div className="bg-ive-bg-deep/50 border border-ive-border-dark rounded-lg p-3 mb-4 text-left space-y-3">
+                    <div className="text-xs font-bold text-ive-text-muted mb-2 uppercase tracking-wider">
+                      <i className="fa-solid fa-circle-info mr-1" />{tp('reportPageHowTo')}
+                    </div>
+                    <ol className="text-xs text-ive-text-muted space-y-1.5">
+                      <li className="flex items-start gap-2">
+                        <span className="shrink-0 w-5 h-5 rounded-full bg-ive-bg-card border border-ive-border flex items-center justify-center text-ive-cyan font-bold">1</span>
+                        <span>{tp('reportPageStep1')}</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="shrink-0 w-5 h-5 rounded-full bg-ive-bg-card border border-ive-border flex items-center justify-center text-ive-cyan font-bold">2</span>
+                        <span>{tp('reportPageStep2')}</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="shrink-0 w-5 h-5 rounded-full bg-ive-bg-card border border-ive-border flex items-center justify-center text-ive-cyan font-bold">3</span>
+                        <span>{tp('reportPageStep3')}</span>
+                      </li>
+                    </ol>
+                  </div>
+                  <details className="text-xs text-ive-text-muted">
+                    <summary className="cursor-pointer font-bold text-ive-text hover:text-ive-green transition-colors">
+                      <i className="fa-solid fa-code mr-1" />{tp('reportPageAdvanced')}
+                    </summary>
+                    <div className="mt-3 space-y-3">
+                      {/* 테마 변경 */}
+                      <div>
+                        <div className="text-ive-text font-bold mb-1">
+                          <i className="fa-solid fa-palette mr-1 text-ive-amber" />{tp('reportPageTheme')}
+                        </div>
+                        <pre className="bg-ive-bg-input border border-ive-border rounded-lg p-2 text-ive-text-muted overflow-x-auto font-mono text-xs">
+                          {`?theme=light&lang=en`}
+                        </pre>
+                        <p className="mt-1 text-ive-text-dim">{tp('reportPageThemeHint')}</p>
+                      </div>
+                      {/* API 직접 호출 */}
+                      <div>
+                        <div className="text-ive-text font-bold mb-1">
+                          <i className="fa-solid fa-terminal mr-1 text-ive-amber" />{tp('reportPageApi')}
+                        </div>
+                        <pre className="bg-ive-bg-input border border-ive-border rounded-lg p-2 text-ive-text-muted overflow-x-auto font-mono text-xs">
+{`POST /api/report
+{
+  "projectId": "프로젝트 ID",
+  "token": "HMAC 토큰",
+  "nonce": "nonce",
+  "timestamp": 1234567890,
+  "expires": 1234567890,
+  "content": "첫 줄: 제목\\n\\n본문 내용...",
+  "browserInfo": { "url": "...", "referrer": "..." }
+}`}
+                        </pre>
+                        <p className="mt-1 text-ive-text-dim">{tp('reportPageApiHint')}</p>
+                      </div>
+                      {/* 보안 */}
+                      <div>
+                        <div className="text-ive-text font-bold mb-1">
+                          <i className="fa-solid fa-shield-halved mr-1 text-ive-amber" />{tp('reportPageSecurity')}
+                        </div>
+                        <p className="text-ive-text-dim">{tp('reportPageSecurityHint')}</p>
+                      </div>
+                    </div>
+                  </details>
+                  <div className="flex justify-end">
+                    <button
+                      onClick={handleGenerateSecret}
+                      disabled={generatingSecret}
+                      className="bg-ive-green-dark text-white font-bold text-sm px-4 py-3 rounded-lg disabled:opacity-40 hover:opacity-80"
+                    >
+                      {generatingSecret ? (
+                        <><i className="fa-solid fa-circle-notch fa-spin mr-1" />{tc('loading')}</>
+                      ) : (
+                        <><i className="fa-solid fa-link mr-1" />{tp('reportPageEnable')}</>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {/* URL 복사 */}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={reportUrl}
+                      className="flex-1 bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-sm text-ive-text font-bold focus:outline-none"
+                    />
+                    <button
+                      onClick={handleCopyUrl}
+                      className={`shrink-0 font-bold text-sm px-3 py-3 rounded-lg border transition-all ${copied ? 'bg-ive-green/20 text-ive-green border-ive-green/30' : 'bg-ive-bg-deep text-ive-text-muted border-ive-border-subtle hover:text-ive-green hover:border-ive-green/30'}`}
+                    >
+                      {copied ? <i className="fa-solid fa-check" /> : <i className="fa-regular fa-copy" />}
+                    </button>
+                  </div>
+
+                  {/* 사용 방법 요약 */}
+                  <div className="bg-ive-bg-deep/50 border border-ive-border-dark rounded-lg p-3 text-left">
+                    <ol className="text-xs text-ive-text-muted space-y-1.5">
+                      <li className="flex items-start gap-2">
+                        <span className="shrink-0 w-5 h-5 rounded-full bg-ive-bg-card border border-ive-border flex items-center justify-center text-ive-cyan font-bold">1</span>
+                        <span>{tp('reportPageStep1')}</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="shrink-0 w-5 h-5 rounded-full bg-ive-bg-card border border-ive-border flex items-center justify-center text-ive-cyan font-bold">2</span>
+                        <span>{tp('reportPageStep2')}</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="shrink-0 w-5 h-5 rounded-full bg-ive-bg-card border border-ive-border flex items-center justify-center text-ive-cyan font-bold">3</span>
+                        <span>{tp('reportPageStep3')}</span>
+                      </li>
+                    </ol>
+                  </div>
+
+                  {/* 고급 옵션 */}
+                  <details className="text-xs text-ive-text-muted">
+                    <summary className="cursor-pointer font-bold text-ive-text hover:text-ive-green transition-colors">
+                      <i className="fa-solid fa-code mr-1" />{tp('reportPageAdvanced')}
+                    </summary>
+                    <div className="mt-3 space-y-3">
+                      <div>
+                        <div className="text-ive-text font-bold mb-1">
+                          <i className="fa-solid fa-palette mr-1 text-ive-amber" />{tp('reportPageTheme')}
+                        </div>
+                        <pre className="bg-ive-bg-input border border-ive-border rounded-lg p-2 text-ive-text-muted overflow-x-auto font-mono text-xs">
+                          {`?theme=light`}
+                        </pre>
+                        <p className="mt-1 text-ive-text-dim">{tp('reportPageThemeHint')}</p>
+                      </div>
+                      <div>
+                        <div className="text-ive-text font-bold mb-1">
+                          <i className="fa-solid fa-terminal mr-1 text-ive-amber" />{tp('reportPageApi')}
+                        </div>
+                        <pre className="bg-ive-bg-input border border-ive-border rounded-lg p-2 text-ive-text-muted overflow-x-auto font-mono text-xs">
+{`POST /api/report
+{
+  "projectId": "프로젝트 ID",
+  "token": "HMAC 토큰",
+  "nonce": "nonce",
+  "timestamp": 1234567890,
+  "expires": 1234567890,
+  "content": "첫 줄: 제목\\n\\n본문 내용...",
+  "browserInfo": { "url": "...", "referrer": "..." }
+}`}
+                        </pre>
+                        <p className="mt-1 text-ive-text-dim">{tp('reportPageApiHint')}</p>
+                      </div>
+                      <div>
+                        <div className="text-ive-text font-bold mb-1">
+                          <i className="fa-solid fa-shield-halved mr-1 text-ive-amber" />{tp('reportPageSecurity')}
+                        </div>
+                        <p className="text-ive-text-dim">{tp('reportPageSecurityHint')}</p>
+                      </div>
+                    </div>
+                  </details>
+
+                  {/* 보안 상태 + 재생성 */}
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-ive-text-dim">
+                      <i className="fa-solid fa-shield-halved mr-1" />
+                      {tp('reportPageActive')}
+                    </span>
+                    <button
+                      onClick={handleRevokeSecret}
+                      disabled={generatingSecret}
+                      className="text-ive-red/60 font-bold hover:text-ive-red disabled:opacity-40"
+                    >
+                      <i className="fa-solid fa-rotate mr-1" />{tp('reportPageRegenerate')}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Git 프로젝트 멤버 섹션 */}
         <div className="flex items-center justify-between mt-6 mb-3 px-1">

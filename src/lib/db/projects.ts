@@ -28,6 +28,7 @@ export type ProjectRow = {
   base_branch: string;
   confirm_base_branch: string;
   test_site_url: string;
+  report_secret: string | null;
 }
 
 export function mapProject(r: ProjectRow): Project {
@@ -64,6 +65,7 @@ export function mapProject(r: ProjectRow): Project {
     statsRetention: r.stats_retention ?? 7,
     conflictCount: r.conflict_count ?? 0,
     lastActivityAt: r.last_activity_at ?? null,
+    reportSecret: r.report_secret ?? null,
   }
 }
 
@@ -191,4 +193,8 @@ export function clearProjectError(id: string) {
 
 export function deleteProject(id: string, userId: string) {
   getDb().prepare('DELETE FROM projects WHERE id = ? AND user_id = ?').run(id, userId)
+}
+
+export function updateProjectReportSecret(id: string, secret: string | null) {
+  getDb().prepare('UPDATE projects SET report_secret = ? WHERE id = ?').run(secret, id)
 }

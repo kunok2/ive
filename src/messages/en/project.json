@@ -138,5 +138,22 @@
   "confirmingBadge": "Confirming",
   "todayRecords": "Today's Records ({count})",
   "errorLabel": "Error:",
-  "conflictLabel": "Merge"
+  "conflictLabel": "Merge",
+  "reportPage": "Task Submission Page",
+  "reportPageDesc": "Generate a dedicated page where external users can easily submit tasks or report issues.",
+  "reportPageEnable": "Generate Submission URL",
+  "reportPageActive": "Submission page is active",
+  "reportPageRegenerate": "Regenerate URL",
+  "reportPageHowTo": "How to use",
+  "reportPageStep1": "Share the generated URL on your test site, documentation, or email.",
+  "reportPageStep2": "Users who access the link will see a form to submit tasks.",
+  "reportPageStep3": "Submissions are automatically created as issues in this project with IVE and IVE-S labels.",
+  "reportPageStep4": "If the URL is leaked, click 'Regenerate URL' to immediately invalidate the old link.",
+  "reportPageAdvanced": "Advanced options",
+  "reportPageTheme": "Theme & Language",
+  "reportPageThemeHint": "Add ?theme=light&lang=en to the URL for a light theme in English. Default is dark theme in Korean.",
+  "reportPageApi": "Direct API call",
+  "reportPageApiHint": "Submit programmatically without the UI. POST /api/report with projectId, secret, and content to create an issue.",
+  "reportPageSecurity": "Security",
+  "reportPageSecurityHint": "If the URL is leaked, use 'Regenerate URL' to invalidate the old link and generate a new one. Existing submissions are not affected."
 }

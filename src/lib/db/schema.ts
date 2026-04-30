@@ -850,6 +850,15 @@ export function initSchema(db: Database.Database) {
     )
   `)
 
+  // 프로젝트 신고 페이지 시크릿 토큰
+  try {
+    const tableInfo = db.prepare("PRAGMA table_info(projects)").all() as any[]
+    if (!tableInfo.some((col: any) => col.name === 'report_secret')) {
+      db.exec("ALTER TABLE projects ADD COLUMN report_secret TEXT")
+      console.log('[DB] Added report_secret to projects')
+    }
+  } catch (e) { console.error("Migration failed for projects report_secret:", e) }
+
   seedAdmin(db)
   seedTokenPricing(db)
 }

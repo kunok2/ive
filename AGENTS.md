@@ -1,28 +1,60 @@
 ## Commands
 
 ```bash
-npm run dev        # Dev server (tsx server.ts — HTTP + WebSocket + node-pty)
-npm run build     # Next.js production build
-npm run start    # Production server
-npm run lint     # ESLint
-npm run test    # Vitest (tests/**/*.test.ts)
-npm run test:watch  # Watch mode
-npm run deploy   # Docker build + push (manual)
+npm run dev          # Dev server (tsx server.ts — Next.js + WS + node-pty)
+npm run build        # Next.js production build
+npm run start        # Production: NODE_ENV=production tsx server.ts
+npm run lint         # ESLint (no config flag, picks up eslint.config.*)
+npm run test         # Vitest run (tests/**/*.test.ts)
+npm run test:watch   # Vitest watch mode
+npm run deploy       # Docker build + push (manual; CI/CD auto-deploys on main push)
+npm run docker:up    # docker compose up -d
+npm run docker:down  # docker compose down
 ```
 
 ## Tech Stack
 
-- **Framework**: Next.js 16 (App Router) + custom `server.ts` (HTTP/WS + node-pty)
-- **Frontend**: React 19, Tailwind CSS 4, xterm.js, Recharts
-- **DB**: SQLite — `data/springware-ive.db` via better-sqlite3
-- **i18n**: next-intl (ko/en)
-- **Auth**: JWT + bcryptjs
-- **Deploy**: Docker (port 3100→3000), GitLab CI/CD triggers local build+restart
+- **Framework**: Next.js 16 (App Router) + custom `server.ts` (HTTP/HTTPS + WS + node-pty)
+- **Frontend**: React 19, Tailwind CSS 4, xterm.js, Recharts, FontAwesome icons
+- **DB**: SQLite — `data/springware-ive.db` via better-sqlite3 (module split: `src/lib/db/`)
+- **i18n**: next-intl (ko/en) — plugin in `next.config.mjs` from `src/i18n/request.ts`
+- **Auth**: JWT via `ive-token` cookie + bcryptjs
+- **Provider**: GitLab + GitHub (dispatched via `src/lib/provider.ts`)
+- **Deploy**: Docker (host 3100→container 3000), GitLab CI/CD auto-deploys on main push
+- **Logging**: pino + pino-pretty + pino-roll → `data/logs/*.log`
+
+## Architecture Notes
+
+- **Custom server**: `server.ts` boots Next.js, then mounts two WS endpoints:
+  - `/api/terminal` — spawns user shell via node-pty (auth by `ive-token` cookie)
+  - `/api/chat` — chat WS handled by `src/lib/chat-ws.ts`
+  - `/_next/` WS connections pass through (HMR)
+- **DB layer**: `src/lib/db/index.ts` exports all query functions; schema in `src/lib/db/schema.ts`
+- **Scanner**: `src/lib/scanner/` — polls GitLab/GitHub issues → creates `TaskExecution` → runs CLI via node-pty → creates MR/PR
+- **Provider dispatch**: `src/lib/provider.ts` routes all GitLab/GitHub API calls by `project.provider`
+- **State**: `src/lib/store.tsx` — React Context with 10s auto-refresh polling
+- **Path alias**: `@/*` → `./src/*` (tsconfig + vitest)
+
+## Key Directories
+
+```
+src/lib/db/          # SQLite: schema.ts + one file per entity
+src/lib/scanner/     # Issue polling → execution pipeline
+src/lib/gitlab/      # GitLab API integration
+src/lib/github/      # GitHub API integration
+src/lib/report-diagnosis/  # Report diagnosis logic
+src/lib/report-mailer/     # Report email sending
+src/app/api/         # API routes (agents, auth, executions, projects, reports, settings, verifiers, admin)
+data/                # springware-ive.db + logs/
+workspaces/          # Temp agent repos (auto-deleted after completion)
+```
 
 ## Testing
 
-- Run single test: `npm run test -- <pattern>` or vitest directly
-- Test files: `tests/**/*.test.ts`
+- Framework: Vitest (node environment, globals enabled)
+- Pattern: `tests/**/*.test.ts`
+- Single test: `npm run test -- <pattern>`
+- Config: `vitest.config.ts` — `@` alias maps to `./src`
 
 ## Scanner Principles
 
@@ -33,25 +65,25 @@ npm run deploy   # Docker build + push (manual)
 
 Follow [DESIGN_GUIDE.md](DESIGN_GUIDE.md):
 
-- Colors: use only `ive-*` tokens (no raw `amber-*`, `red-*`)
+- Colors: use only `ive-*` tokens (no raw Tailwind palette, no hex literals)
 - Rounding: `rounded-lg` (buttons/inputs/cards), `rounded-2xl` (modals), `rounded-full` (avatars)
-- Typography: `font-bold` default — `font-semibold`, `font-medium` forbidden
-- No `shadow-*` except modals/dropdowns
+- Typography: `font-bold` default — `font-semibold`, `font-medium`, `font-black`, `font-extrabold` forbidden
+- No `shadow-*` except modals (`shadow-2xl`) and dropdowns (`shadow-lg`)
+- Trend deltas: +good→`ive-cyan`, +bad→`ive-red`; ±5%→no color
 
-## Core Flow
+## Env & Security
 
-1. Scanner (`lib/scanner.ts`) polls GitLab/GitHub issues periodically
-2. Finds issues with target label → creates `TaskExecution` in DB
-3. Assigned agent runs CLI (`claude`/`gemini`/`codex`/`opencode`) via node-pty
-4. Logs stream in real-time via WebSocket (xterm.js)
-5. On complete: creates MR/PR or adds issue comment
+- `ENCRYPTION_KEY`: AES-256-GCM key for stored tokens (default: `springware-ive-dev-encryption-key-change-in-prod`)
+- `JWT_SECRET`: default `springware-ive-dev-secret-change-in-production` — change in prod
+- Sensitive env vars (`JWT_SECRET`, `ENCRYPTION_KEY`, `MAIL_SMTP_*`, `DATABASE_URL`) are stripped from PTY env via `getSafeEnv()` in `server.ts`
+- Docker runs as non-root user `ive`
 
-## Key Files
+## CI/CD (GitLab)
 
-- `src/lib/db.ts` — SQLite schema + all queries
-- `src/lib/scanner.ts` — Issue polling + task execution
-- `src/lib/provider.ts` — GitLab/GitHub API
-- `src/lib/store.tsx` — React client state
+- `test` stage: runs on main push before deploy
+- `deploy` stage: auto build + docker compose restart on main push
+- `publish-to-hub` stage: manual Docker Hub push
+- Deploy target: `/home/ubuntu/ive` on remote server
 
 <!-- ive:begin -->
 ## IVE 작업 등록
@@ -90,6 +122,18 @@ started_at: <ISO 시각>
 ended_at: <ISO 시각>
 -->
 ```
+
+`started_at` / `ended_at` 은 **한국시간(KST, +09:00)** 으로 기재. UTC `Z` 표기 사용 금지.
+
+### 작업시간 기록 (GitLab Time Tracking, 필수)
+
+이슈 생성 후 `/spend` quick action을 코멘트로 추가하여 GitLab Time tracking에 반영하세요.
+
+```
+/spend <시간> [<날짜>]
+```
+
+예: `/spend 2h 45m`, `/spend 1h 2026-04-24`
 
 ### 참고
 

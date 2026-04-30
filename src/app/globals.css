@@ -44,6 +44,26 @@
   --color-ive-border-subtle: #23232780;
 }
 
+/* 라이트 테마 */
+[data-theme="light"] {
+  --color-ive-bg-deep: #f0f0f2;
+  --color-ive-bg: #f7f7f8;
+  --color-ive-bg-card: #ffffffd0;
+  --color-ive-bg-input: #ffffff;
+  --color-ive-bg-solid: #ffffff;
+
+  --color-ive-green-pale: #0891b2;
+
+  --color-ive-text: #18181b;
+  --color-ive-text-secondary: #3f3f46;
+  --color-ive-text-muted: #52525b;
+  --color-ive-text-dim: #a1a1aa;
+
+  --color-ive-border: #d4d4d880;
+  --color-ive-border-dark: #e4e4e780;
+  --color-ive-border-subtle: #d4d4d880;
+}
+
 html {
   /* 페이지 전환 중 흰색 깜빡임 방지 — 브라우저가 HTML 루트 요소 배경을 그리는 구간에서 노출되는 색 */
   background-color: #050505;

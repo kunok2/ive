@@ -6,7 +6,7 @@ import { TabProvider } from "@/lib/tab-context";
 import { DialogProvider } from "@/components/ui/ConfirmDialog";
 import { ToastProvider } from "@/components/ui/Toast";
 import PWARegister from "@/components/PWARegister";
-import TopBar from "@/components/layout/TopBar";
+import ClientLayout from "@/components/layout/ClientLayout";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -44,7 +44,7 @@ export default async function RootLayout({
       <body className="h-dvh flex flex-col overflow-hidden">
         <PWARegister />
         <NextIntlClientProvider locale={locale} messages={messages}>
-          <StoreProvider><TabProvider><DialogProvider><ToastProvider><TopBar /><div className="flex-1 min-h-0 overflow-hidden">{children}</div></ToastProvider></DialogProvider></TabProvider></StoreProvider>
+          <StoreProvider><TabProvider><DialogProvider><ToastProvider><ClientLayout>{children}</ClientLayout></ToastProvider></DialogProvider></TabProvider></StoreProvider>
         </NextIntlClientProvider>
       </body>
     </html>
