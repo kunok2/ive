@@ -33,6 +33,7 @@ export default function ProjectForm({ existing, onSuccess, onCancel }: Props) {
   const [accessToken, setAccessToken] = useState('')
   const [avatarUrl, setAvatarUrl] = useState(existing?.avatarUrl ?? '')
   const [baseBranch, setBaseBranch] = useState(existing?.baseBranch ?? '')
+  const [testSiteUrl, setTestSiteUrl] = useState(existing?.testSiteUrl ?? '')
 
   // OAuth token reuse
   const [oauthInfo, setOauthInfo] = useState<OAuthInfo>({ hasToken: false })
@@ -123,6 +124,7 @@ export default function ProjectForm({ existing, onSuccess, onCancel }: Props) {
       labelEnd: labelEnd.trim() || 'IVE-E',
       baseBranch: baseBranch.trim(),
       confirmBaseBranch: confirmBaseBranch.trim(),
+      testSiteUrl: testSiteUrl.trim(),
       showToolUsage,
       checkInterval: Number(checkInterval) || 1,
       lastCheckedAt: existing?.lastCheckedAt ?? null,
@@ -173,6 +175,8 @@ export default function ProjectForm({ existing, onSuccess, onCancel }: Props) {
         onAvatarUrlChange={setAvatarUrl}
         baseBranch={baseBranch}
         onBaseBranchChange={setBaseBranch}
+        testSiteUrl={testSiteUrl}
+        onTestSiteUrlChange={setTestSiteUrl}
       />
 
       <ScannerSettingsSection values={scannerValues} onChange={handleScannerChange} />

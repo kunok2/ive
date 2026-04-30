@@ -274,6 +274,18 @@ export default function ProjectCard({ project }: Props) {
                   {formatDateShort(project.lastCheckedAt, userLocale, userTz).replace(',', '')}
                 </span>
               )}
+              {project.testSiteUrl && (
+                <button
+                  onClick={e => { e.preventDefault(); e.stopPropagation(); window.open(project.testSiteUrl, '_blank') }}
+                  className="flex items-center transition-all"
+                  title={tp('testSiteOpen')}
+                  aria-label={tp('testSiteOpen')}
+                >
+                  <span className="h-8 px-2.5 rounded-full flex items-center gap-1 text-xs font-bold bg-ive-bg-deep text-ive-cyan/60 hover:text-ive-cyan hover:bg-ive-cyan/10 border border-ive-border-dark transition-all">
+                    <i className="fa-solid fa-globe text-xs" />
+                  </span>
+                </button>
+              )}
               {canEdit && (
                 <>
                   <button data-tour="project-scanner-toggle" onClick={toggleScanner} className="flex items-center gap-1 transition-all" title={project.scannerActive ? tp('pauseScanner') : tp('resumeScanner')} aria-label={project.scannerActive ? tp('pauseScanner') : tp('resumeScanner')}>

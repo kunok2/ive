@@ -27,7 +27,7 @@ const project: Project = {
   labelVerifyWait: 'IVE-W', labelVerify: 'IVE-V',
   labelConfirmWait: 'IVE-P', labelConfirm: 'IVE-C',
   labelEnd: 'IVE-E',
-  baseBranch: '', confirmBaseBranch: '',
+  baseBranch: '', confirmBaseBranch: '', testSiteUrl: '',
   showToolUsage: false, checkInterval: 1, lastCheckedAt: null,
   lastScannedIssueCount: null, lastVerifyWaitingCount: null,
   scannerActive: false, usesOAuthToken: false,

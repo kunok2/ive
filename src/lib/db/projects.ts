@@ -27,6 +27,7 @@ export type ProjectRow = {
   label_end: string;
   base_branch: string;
   confirm_base_branch: string;
+  test_site_url: string;
 }
 
 export function mapProject(r: ProjectRow): Project {
@@ -46,6 +47,7 @@ export function mapProject(r: ProjectRow): Project {
     labelEnd: r.label_end || 'IVE-E',
     baseBranch: r.base_branch || '',
     confirmBaseBranch: r.confirm_base_branch || '',
+    testSiteUrl: r.test_site_url || '',
     showToolUsage: r.show_tool_usage === 1,
     checkInterval: r.check_interval,
     lastCheckedAt: r.last_checked_at,
@@ -111,17 +113,17 @@ export function createProject(p: Project) {
   getDb().prepare(
     `INSERT INTO projects (
       id, user_id, name, provider, repo_url, auth_type, git_username, access_token, color,
-      label_target, label_schedule, label_dev, label_verify_wait, label_verify, label_confirm_wait, label_confirm, label_end, base_branch, confirm_base_branch, show_tool_usage,
+      label_target, label_schedule, label_dev, label_verify_wait, label_verify, label_confirm_wait, label_confirm, label_end, base_branch, confirm_base_branch, test_site_url, show_tool_usage,
       check_interval, last_checked_at, last_scanned_issue_count, last_verify_waiting_count, scanner_active, uses_oauth_token, sort_order,
       avatar_url, snapshot_interval, sparkline_points, stats_retention, last_error, last_error_at, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     p.id, p.userId, p.name, p.provider, p.repoUrl, p.authType || 'token', p.gitUsername || '',
     p.accessToken, p.color || '#4ade80',
     p.labelTarget, p.labelSchedule || 'IVE-S', p.labelDev || 'IVE-D',
     p.labelVerifyWait || 'IVE-W', p.labelVerify || 'IVE-V',
     p.labelConfirmWait || 'IVE-P', p.labelConfirm || 'IVE-C',
-    p.labelEnd || 'IVE-E', p.baseBranch || '', p.confirmBaseBranch || '', p.showToolUsage ? 1 : 0,
+    p.labelEnd || 'IVE-E', p.baseBranch || '', p.confirmBaseBranch || '', p.testSiteUrl || '', p.showToolUsage ? 1 : 0,
     p.checkInterval, p.lastCheckedAt, p.lastScannedIssueCount, p.lastVerifyWaitingCount, p.scannerActive ? 1 : 0, p.usesOAuthToken ? 1 : 0, sortOrder,
     p.avatarUrl || '', p.snapshotInterval ?? 1, p.sparklinePoints ?? 60, p.statsRetention ?? 7,
     p.lastError || null, p.lastErrorAt || null, p.createdAt
@@ -135,7 +137,7 @@ export function updateProject(p: Project) {
       auth_type = ?, git_username = ?,
       label_target = ?, label_schedule = ?, label_dev = ?,
       label_verify_wait = ?, label_verify = ?, label_confirm_wait = ?, label_confirm = ?,
-      label_end = ?, base_branch = ?, confirm_base_branch = ?, show_tool_usage = ?,
+      label_end = ?, base_branch = ?, confirm_base_branch = ?, test_site_url = ?, show_tool_usage = ?,
       check_interval = ?, last_checked_at = ?, last_scanned_issue_count = ?,
       scanner_active = ?, uses_oauth_token = ?, sort_order = ?, avatar_url = ?,
       snapshot_interval = ?, sparkline_points = ?, stats_retention = ?
@@ -146,7 +148,7 @@ export function updateProject(p: Project) {
     p.labelTarget, p.labelSchedule || 'IVE-S', p.labelDev || 'IVE-D',
     p.labelVerifyWait || 'IVE-W', p.labelVerify || 'IVE-V',
     p.labelConfirmWait || 'IVE-P', p.labelConfirm || 'IVE-C',
-    p.labelEnd || 'IVE-E', p.baseBranch || '', p.confirmBaseBranch || '', p.showToolUsage ? 1 : 0,
+    p.labelEnd || 'IVE-E', p.baseBranch || '', p.confirmBaseBranch || '', p.testSiteUrl || '', p.showToolUsage ? 1 : 0,
     p.checkInterval, p.lastCheckedAt, p.lastScannedIssueCount,
     p.scannerActive ? 1 : 0, p.usesOAuthToken ? 1 : 0, p.sortOrder ?? 0, p.avatarUrl || '',
     p.snapshotInterval ?? 1, p.sparklinePoints ?? 60, p.statsRetention ?? 7,

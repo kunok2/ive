@@ -20,6 +20,8 @@ export interface ConnectionSectionProps {
   onAvatarUrlChange: (v: string) => void
   baseBranch: string
   onBaseBranchChange: (v: string) => void
+  testSiteUrl: string
+  onTestSiteUrlChange: (v: string) => void
 }
 
 export default function ConnectionSection({
@@ -37,6 +39,8 @@ export default function ConnectionSection({
   onAvatarUrlChange,
   baseBranch,
   onBaseBranchChange,
+  testSiteUrl,
+  onTestSiteUrlChange,
 }: ConnectionSectionProps) {
   const t = useTranslations('project')
   const tc = useTranslations('common')
@@ -382,6 +386,34 @@ export default function ConnectionSection({
         )}
         <p className="text-sm text-ive-text-dim mt-1">
           <i className="fa-solid fa-circle-info mr-1" />{t('baseBranchHint')}
+        </p>
+      </div>
+
+      {/* Test site URL */}
+      <div>
+        <label className="block text-base font-bold text-ive-text-muted mb-2">
+          {t('testSiteUrl')}
+        </label>
+        <div className="flex gap-2">
+          <input
+            type="url"
+            value={testSiteUrl}
+            onChange={e => onTestSiteUrlChange(e.target.value)}
+            placeholder={t('testSiteUrlPlaceholder')}
+            className="flex-1 bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-base text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green"
+          />
+          <button
+            type="button"
+            onClick={() => testSiteUrl.trim() && window.open(testSiteUrl.trim(), '_blank')}
+            disabled={!testSiteUrl.trim()}
+            title={t('testSiteOpen')}
+            className="px-3 py-3 rounded-lg border border-ive-border-subtle bg-ive-bg-card text-ive-text-muted hover:border-ive-green hover:text-ive-green disabled:opacity-40 transition-all"
+          >
+            <i className="fa-solid fa-arrow-up-right-from-square" />
+          </button>
+        </div>
+        <p className="text-sm text-ive-text-dim mt-1">
+          <i className="fa-solid fa-circle-info mr-1" />{t('testSiteUrlHint')}
         </p>
       </div>
     </>

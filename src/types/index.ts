@@ -77,6 +77,7 @@ export interface Project {
   labelEnd: string         // 처리 완료 (예: IVE-E) — 확인 완료 후 부착
   baseBranch: string       // 베이스 브랜치 (빈 값이면 origin/HEAD 자동 감지 → main fallback)
   confirmBaseBranch: string // 확인 단계 승격 베이스 브랜치 (빈 값이면 승격 MR 미생성, accept 시 단순 close)
+  testSiteUrl: string      // 테스트 사이트 URL (프로젝트 카드에서 새 탭으로 열기)
   showToolUsage: boolean   // 트레이스에 툴 사용 표시 여부
   checkInterval: number    // 체크 간격 (분)
   lastCheckedAt: string | null // 마지막 체크 시간

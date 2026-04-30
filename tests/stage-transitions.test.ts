@@ -22,7 +22,7 @@ const project: Project = {
   labelVerifyWait: 'IVE-W', labelVerify: 'IVE-V',
   labelConfirmWait: 'IVE-P', labelConfirm: 'IVE-C',
   labelEnd: 'IVE-E',
-  baseBranch: '', confirmBaseBranch: '',
+  baseBranch: '', confirmBaseBranch: '', testSiteUrl: '',
   showToolUsage: false, checkInterval: 1, lastCheckedAt: null,
   lastScannedIssueCount: null, lastVerifyWaitingCount: null,
   scannerActive: false, usesOAuthToken: false,
@@ -94,13 +94,13 @@ describe('T-1: 전이 결과 라벨 집합에는 단계 라벨이 정확히 1개
 })
 
 describe('T-2: 잔재 라벨 안전망', () => {
-  it('done.reopen — 이전 verify/confirm 잔재가 있어도 IVE-S 만 남는다', () => {
+  it('done.reopen — 이전 verify 잔재가 있어도 IVE-P 만 남는다', () => {
     // 비정상 상태: 어쩌다 IVE-E 와 IVE-V 가 함께 있음
     const next = applyTransition(['IVE', 'IVE-E', 'IVE-V'], 'done', 'reopen')
-    expect(next).toContain('IVE-S')
+    expect(next).toContain('IVE-P')
     expect(next).not.toContain('IVE-E')
     expect(next).not.toContain('IVE-V')
-    expect(stageFromLabels(next, project)).toBe('waiting')
+    expect(stageFromLabels(next, project)).toBe('confirm_waiting')
   })
   it('dev.complete — IVE-S/IVE-V 잔재가 있어도 IVE-W 만 남는다', () => {
     const next = applyTransition(['IVE', 'IVE-D', 'IVE-S', 'IVE-V'], 'dev', 'complete')
@@ -115,10 +115,13 @@ describe('T-2: 잔재 라벨 안전망', () => {
     expect(next).not.toContain('IVE-V')
     expect(next).not.toContain('IVE-D')
   })
-  it('confirming.return_to_dev — IVE-W/IVE-V 잔재 정리', () => {
-    const next = applyTransition(['IVE', 'IVE-C', 'IVE-W', 'IVE-V'], 'confirming', 'return_to_dev')
-    expect(next).toContain('IVE-S')
-    expect(stageFromLabels(next, project)).toBe('waiting')
+  it('confirming.return_to_dev — IVE-D/IVE-S 잔재 정리', () => {
+    const next = applyTransition(['IVE', 'IVE-C', 'IVE-D', 'IVE-S'], 'confirming', 'return_to_dev')
+    expect(next).toContain('IVE-W')
+    expect(next).not.toContain('IVE-C')
+    expect(next).not.toContain('IVE-D')
+    expect(next).not.toContain('IVE-S')
+    expect(stageFromLabels(next, project)).toBe('verify_waiting')
   })
 })
 
@@ -141,19 +144,19 @@ describe('T-3: macro 단계 forward / backward 정의', () => {
     expect(stageFromLabels(labels, project)).toBe('done')
   })
 
-  it('역방향: done → reopen → waiting (작업 다시 처리)', () => {
+  it('역방향: done → reopen → confirm_waiting (이전 macro 의 waiting 으로)', () => {
     const labels = applyTransition(['IVE', 'IVE-E'], 'done', 'reopen')
-    expect(stageFromLabels(labels, project)).toBe('waiting')
+    expect(stageFromLabels(labels, project)).toBe('confirm_waiting')
   })
 
-  it('verifying → reject → waiting (검증 반려)', () => {
+  it('verifying → reject → waiting (검증 반려, 처리 재요청)', () => {
     const labels = applyTransition(['IVE', 'IVE-V'], 'verifying', 'reject')
     expect(stageFromLabels(labels, project)).toBe('waiting')
   })
 
-  it('confirming → return_to_dev → waiting (확인 단계에서 재작업)', () => {
+  it('confirming → return_to_dev → verify_waiting (확인 단계에서 검증 재요청)', () => {
     const labels = applyTransition(['IVE', 'IVE-C'], 'confirming', 'return_to_dev')
-    expect(stageFromLabels(labels, project)).toBe('waiting')
+    expect(stageFromLabels(labels, project)).toBe('verify_waiting')
   })
 })
 
