@@ -370,8 +370,14 @@ export function getCurrentConfig(): LoggerConfig {
  */
 export function initLoggerFromDb(): LoggerConfig {
   try {
-    const { getSystemSettings } = require('./db/settings') as typeof import('./db/settings')
-    const s = getSystemSettings('log.')
+    // Read directly from global.db to avoid the connection→logger→settings→connection
+    // import cycle. Next.js bundler mangles `require()` of ESM modules and breaks
+    // destructured imports here.
+    const db = global.db
+    if (!db) return reloadLogger({})
+    const rows = db.prepare("SELECT key, value FROM system_settings WHERE key LIKE 'log.%'").all() as Array<{ key: string; value: string }>
+    const s: Record<string, string> = {}
+    for (const r of rows) s[r.key] = r.value
     const cfg = normalizeConfig({
       level: s['log.level'],
       fileEnabled: s['log.file_enabled'],
