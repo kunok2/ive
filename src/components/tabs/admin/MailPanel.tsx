@@ -31,9 +31,9 @@ export default function MailPanel() {
   ]
 
   return (
-    <main>
+    <main className="flex-1 flex flex-col min-h-0">
       {/* 서브뷰 토글 */}
-      <div className="sticky top-0 z-10 bg-ive-bg-deep pb-2">
+      <div className="sticky top-0 z-10 bg-ive-bg-deep pb-2 shrink-0">
         <div className="flex gap-1.5">
           {views.map(v => (
             <button

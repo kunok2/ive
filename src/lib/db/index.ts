@@ -16,3 +16,4 @@ export { type ReportExecution, getExecutionsInRange, getGlobalExecutionsInRange,
 export { createActivityLog, getActivityLogs, cleanOldActivityLogs, getIssueRetryCounts, type IssueRetryCounts, getIssueForwardCounts, type IssueForwardCounts, getIssueIterationCountsMap } from './activity-logs'
 export { type ChatSession, type ChatMessage, createChatSession, getAnyActiveChatSession, getActiveChatSession, getChatSession, updateChatSessionActivity, updateChatSessionAgent, updateChatSessionWorkspace, updateChatSessionCliId, endChatSession, saveChatMessage, getChatMessages, getLastEndedChatSession, getChatHistoryForPrompt } from './chat'
 export { saveVerificationCode, getVerificationCode, deleteVerificationCode, cleanExpiredVerificationCodes } from './verification'
+export { type MailBroadcastLog, type MailBroadcastLogSummary, createMailBroadcastLog, getMailBroadcastLogs, getMailBroadcastLogCount, getMailBroadcastLog, deleteMailBroadcastLog } from './mail-logs'

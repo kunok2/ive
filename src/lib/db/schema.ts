@@ -534,6 +534,25 @@ export function initSchema(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_report_send_logs_sent_at ON report_send_logs(sent_at);
   `)
 
+  // 메일 브로드캐스트(관리자 메일발송) 이력 테이블
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS mail_broadcast_logs (
+      id TEXT PRIMARY KEY,
+      sender_user_id TEXT,
+      sender_name TEXT,
+      sender_email TEXT,
+      subject TEXT NOT NULL,
+      body TEXT NOT NULL,
+      recipient_emails TEXT NOT NULL DEFAULT '[]',
+      total_count INTEGER NOT NULL DEFAULT 0,
+      sent_count INTEGER NOT NULL DEFAULT 0,
+      failed_count INTEGER NOT NULL DEFAULT 0,
+      failed_recipients TEXT NOT NULL DEFAULT '[]',
+      sent_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_mail_broadcast_logs_sent_at ON mail_broadcast_logs(sent_at);
+  `)
+
   // project_members 테이블
   db.exec(`
     CREATE TABLE IF NOT EXISTS project_members (

@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
-import { getAllUsers } from '@/lib/db'
+import { createMailBroadcastLog, getAllUsers } from '@/lib/db'
 import { createTransporter, getFromAddress } from '@/lib/mail'
+import { logActivity } from '@/lib/activity'
 
 export async function POST(req: Request) {
   const user = await getCurrentUser()
@@ -26,6 +27,9 @@ export async function POST(req: Request) {
 
   let sent = 0
   let failed = 0
+  const failedRecipients: { email: string; error?: string }[] = []
+  const recipientEmails: string[] = targets.map(t => t.email)
+
   for (const target of targets) {
     try {
       await transporter.sendMail({
@@ -38,8 +42,38 @@ export async function POST(req: Request) {
     } catch (err) {
       console.error(`[admin/mail] 발송 실패 (${target.email}):`, err)
       failed++
+      failedRecipients.push({ email: target.email, error: err instanceof Error ? err.message : String(err) })
     }
   }
+
+  let savedLogId: string | undefined
+  try {
+    const saved = createMailBroadcastLog({
+      senderUserId: user.id,
+      senderName: user.name,
+      senderEmail: user.email,
+      subject,
+      body,
+      recipientEmails,
+      totalCount: targets.length,
+      sentCount: sent,
+      failedCount: failed,
+      failedRecipients,
+    })
+    savedLogId = saved.id
+  } catch (e) {
+    console.error('[admin/mail] 발송이력 기록 실패:', e)
+  }
+
+  logActivity({
+    userId: user.id,
+    category: 'admin',
+    action: 'send_mail',
+    detail: `메일 발송: "${subject}" — 대상 ${targets.length}명, 성공 ${sent}건${failed > 0 ? `, 실패 ${failed}건` : ''}`,
+    targetType: 'mail_broadcast',
+    targetId: savedLogId,
+    req,
+  })
 
   return NextResponse.json({ sent, failed, total: targets.length })
 }
