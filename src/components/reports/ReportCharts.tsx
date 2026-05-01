@@ -29,9 +29,27 @@ const C = {
   primary:   'var(--color-ive-cyan)',
 }
 
-const tooltipStyle = {
-  contentStyle: { background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 11, padding: '8px 12px' },
-  labelStyle: { color: C.textMuted, fontWeight: 700, marginBottom: 4 },
+// 툴팁은 인라인 style로 background를 주면 .bg-ive-bg-card 클래스가 안 붙어서
+// 글로벌 backdrop-filter(blur)가 적용되지 않아 차트가 비쳐 보인다.
+// 클래스로 카드 배경/블러를 적용하는 커스텀 툴팁을 사용한다.
+function ChartTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null
+  return (
+    <div
+      className="border border-ive-border rounded-lg"
+      style={{ fontSize: 11, padding: '8px 12px', background: 'color-mix(in srgb, var(--color-ive-bg-solid) 92%, transparent)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}
+    >
+      {label !== undefined && (
+        <div className="font-bold text-ive-text" style={{ marginBottom: 4 }}>{label}</div>
+      )}
+      {payload.map((p: any, i: number) => (
+        <div key={i} style={{ lineHeight: 1.5 }}>
+          <span className="text-ive-text-secondary">{p.name}: </span>
+          <span className="font-bold" style={{ color: p.color }}>{typeof p.value === 'number' ? p.value.toLocaleString(undefined, { maximumFractionDigits: 2 }) : p.value}</span>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 // ───────────── 일별 현황 테이블 (주간 보고서 형식) ─────────────
@@ -219,7 +237,7 @@ export function DailyTrendChart({ data, prevData, type }: { data: DailyTrend[]; 
           {/* domain을 yMax로 고정하면 현재 tasks=0인 날도 이전 기간 비율이 정확하게 렌더됨 */}
           <YAxis yAxisId="tasks" domain={[0, yMax]} tick={{ fill: C.textMuted, fontSize: 10 }} axisLine={false} tickLine={false} width={24} allowDecimals={false} />
           <YAxis yAxisId="cost" orientation="right" tick={{ fill: C.textMuted, fontSize: 9 }} axisLine={false} tickLine={false} width={36} tickFormatter={v => `$${(v as number).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`} />
-          {!isMobile && <Tooltip {...tooltipStyle} />}
+          {!isMobile && <Tooltip content={<ChartTooltip />} />}
           {/* 현재 작업 막대 (background 전달 → 이전 작업 점선 마커 겹침) + 검증 막대 */}
           <Bar yAxisId="tasks" dataKey="tasks" name={tr('chartTasks')} background={{ fill: 'transparent' }} shape={<TaskBarWithPrev />} />
           <Bar yAxisId="tasks" dataKey="verified" name={tr('chartVerified')} background={{ fill: 'transparent' }} shape={<VerifiedBarWithPrev />} />
@@ -267,7 +285,7 @@ export function FlowCompareChart({ data, prevData, type }: { data: FlowDay[]; pr
           <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
           <XAxis dataKey="label" tick={{ fill: C.textMuted, fontSize: 10 }} axisLine={false} tickLine={false} />
           <YAxis tick={{ fill: C.textMuted, fontSize: 10 }} axisLine={false} tickLine={false} width={24} allowDecimals={false} />
-          {!isMobile && <Tooltip {...tooltipStyle} />}
+          {!isMobile && <Tooltip content={<ChartTooltip />} />}
           {/* 이전 기간 (점선, 채움 없음) — 현재 기간보다 먼저 렌더링해 배경에 위치 */}
           {hasPrev && (
             <Area dataKey="prevInflow" name={tr('chartPrevInflow')} fill="none" stroke={C.textMuted} strokeWidth={1.5} strokeDasharray="4 3" dot={false} connectNulls />
