@@ -29,7 +29,8 @@ export function getActivityLogs(opts: {
   limit?: number; offset?: number;
   userId?: string; category?: string;        // 단일 (하위 호환)
   userIds?: string[]; categories?: string[]; // 다중 선택
-  startDate?: string; endDate?: string
+  startDate?: string; endDate?: string;
+  sortBy?: string; sortOrder?: 'ASC' | 'DESC'
 }): { logs: UserActivityLog[]; total: number } {
   const conditions: string[] = []
   const params: any[] = []
@@ -55,11 +56,20 @@ export function getActivityLogs(opts: {
 
   const limit = opts.limit || 50
   const offset = opts.offset || 0
+
+  // 정렬 컬럼 화이트리스트
+  const validSortColumns = ['created_at', 'category', 'action', 'user_name']
+  const sortBy = validSortColumns.includes(opts.sortBy || '') ? opts.sortBy : 'created_at'
+  const sortOrder = opts.sortOrder === 'ASC' ? 'ASC' : 'DESC'
+
+  // user_name 정렬 시 JOIN된 컬럼 사용
+  const orderColumn = sortBy === 'user_name' ? 'u.name' : `al.${sortBy}`
+
   const rows = getDb().prepare(`
     SELECT al.*, u.name as user_name, u.email as user_email
     FROM user_activity_logs al LEFT JOIN users u ON al.user_id = u.id
     ${where}
-    ORDER BY al.created_at DESC LIMIT ? OFFSET ?
+    ORDER BY ${orderColumn} ${sortOrder} LIMIT ? OFFSET ?
   `).all(...params, limit, offset) as any[]
 
   return { logs: rows.map(mapActivityLog), total: countRow.cnt }

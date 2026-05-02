@@ -32,6 +32,14 @@ const DATE_PRESETS: { labelKey: string; days: number | null }[] = [
   { labelKey: 'dateAll', days: null },
 ]
 
+const SORT_OPTIONS: { labelKey: string; value: string }[] = [
+  { labelKey: 'sortLatest', value: 'created_at-DESC' },
+  { labelKey: 'sortOldest', value: 'created_at-ASC' },
+  { labelKey: 'sortCategory', value: 'category-ASC' },
+  { labelKey: 'sortAction', value: 'action-ASC' },
+  { labelKey: 'sortUser', value: 'user_name-ASC' },
+]
+
 const ACTIVITY_FILTER_KEY = 'ive-admin-activity-filter'
 
 function loadActivityFilter(): {
@@ -85,6 +93,8 @@ export default function ActivityContent() {
   const [users, setUsers] = useState<User[]>([])
   const offsetRef = useRef(0)
   const PAGE_SIZE = 30
+  const [sortBy, setSortBy] = useState<string>('created_at')
+  const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC')
 
   useEffect(() => {
     try {
@@ -113,6 +123,8 @@ export default function ActivityContent() {
     if (filterUserIds.length > 0) sp.set('userId', filterUserIds.join(','))
     if (filterStartDate) sp.set('startDate', filterStartDate)
     if (filterEndDate) sp.set('endDate', filterEndDate)
+    sp.set('sortBy', sortBy)
+    sp.set('sortOrder', sortOrder)
 
     try {
       const res = await fetch(`/api/admin/activity-logs?${sp}`)
@@ -129,7 +141,7 @@ export default function ActivityContent() {
       setLoading(false)
       setLoadingMore(false)
     }
-  }, [filterCategories, filterUserIds, filterStartDate, filterEndDate])
+  }, [filterCategories, filterUserIds, filterStartDate, filterEndDate, sortBy, sortOrder])
 
   useEffect(() => { fetchLogs(true) }, [fetchLogs])
 
@@ -190,6 +202,28 @@ export default function ActivityContent() {
             {t(p.labelKey as any)}
           </button>
         ))}
+      </div>
+
+      {/* 정렬 버튼 */}
+      <div className="flex gap-1 mb-2">
+        <span className="text-xs text-ive-text-dim flex items-center mr-1">{t('sortBy')}:</span>
+        {SORT_OPTIONS.map(opt => {
+          const [col, order] = opt.value.split('-')
+          const isActive = sortBy === col && sortOrder === order
+          return (
+            <button
+              key={opt.value}
+              onClick={() => { setSortBy(col); setSortOrder(order as 'ASC' | 'DESC') }}
+              className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all ${
+                isActive
+                  ? 'bg-ive-green/20 text-ive-green border border-ive-green/40'
+                  : 'bg-ive-bg-card border border-ive-border-subtle text-ive-text-dim active:scale-[0.96]'
+              }`}
+            >
+              {t(opt.labelKey as any)}
+            </button>
+          )
+        })}
       </div>
 
       {/* 일자 범위 직접 입력 */}
