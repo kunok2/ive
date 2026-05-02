@@ -100,11 +100,12 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
   const userLocale = state.user?.locale
   const userTz = state.user?.timezone
   const current = macroIndexFromStage(stage)
+  const isDevFail = stage === 'dev_fail'
 
   // 단계별 시간 계산 — 칩(=stage 지속/경과)과 커넥터(=stage 사이 대기)
   // 진행 중일 때만 1초 타이머로 now 갱신 (현재 단계 경과시간 라이브 업데이트)
   const [now, setNow] = useState(() => Date.now())
-  const isLive = current > 0 && current < 5 && stage !== 'done' && stage !== 'closed' && stage !== 'rejected'
+  const isLive = current > 0 && current < 5 && stage !== 'done' && stage !== 'closed' && stage !== 'rejected' && stage !== 'dev_fail'
   useEffect(() => {
     if (!isLive) return
     const id = setInterval(() => setNow(Date.now()), 1000)
@@ -349,9 +350,12 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
           const isCurrent = m.idx === current && !isWaitingSubstate
           const isPast = current > 0 && m.idx < current
 
+          // dev_fail 상태: 처리 단계(macro 2)에서 에러 발생 — 빨간색 강조
+          const isError = isDevFail && m.idx === 2
+
           // 가본 적 있는 단계 — 현재보다 앞에 있지만 재실행 등으로 한 번 이상 도달했던 경우.
           // (이미 지나간 단계 isPast 와 별개로, 미래 idx 인데 흔적이 남아 있는 단계만 별색 처리)
-          const visitedAhead = !isCurrent && !isPast && (
+          const visitedAhead = !isCurrent && !isPast && !isError && (
             (m.idx === 2 && !!stageTimes?.devStartedAt)
             || (m.idx === 3 && (rc.fromVerify > 0 || !!stageTimes?.verifyStartedAt))
             || (m.idx === 4 && (rc.fromConfirm > 0 || !!stageTimes?.confirmedAt))
@@ -359,7 +363,8 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
           )
 
           let chipCls = ''
-          if (isCurrent) chipCls = 'bg-ive-amber/15 text-ive-amber border-ive-amber/40 ring-1 ring-ive-amber/20'
+          if (isError) chipCls = 'bg-ive-red/15 text-ive-red border-ive-red/40 ring-1 ring-ive-red/20'
+          else if (isCurrent) chipCls = 'bg-ive-amber/15 text-ive-amber border-ive-amber/40 ring-1 ring-ive-amber/20'
           else if (isPast) chipCls = 'bg-ive-green/10 text-ive-green/70 border-ive-green/20'
           else if (visitedAhead) chipCls = 'bg-ive-cyan/5 text-ive-cyan/30 border-ive-cyan/15'
           else chipCls = 'bg-white/[0.02] text-ive-text-dim border-ive-border-subtle'
@@ -368,14 +373,18 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
           //   - incoming: 현재 stage 가 waiting 이고 도착 macro 가 이 pill — 이동 중. amber + 애니메이션.
           //   - past: 이미 통과한 화살표 (m.idx < current 또는 active sub-stage 의 m.idx === current)
           //   - visitedAhead: 가본 적 있는 단계로 향함
+          //   - error: dev_fail 상태일 때 처리 단계로 향하는 커넥터 — 빨간색
           //   - else: 미방문
           const connectorIncoming = m.idx === current && isWaitingSubstate
           const connectorPast = (m.idx < current) || (m.idx === current && !isWaitingSubstate && current > 0)
-          const connectorCls = connectorIncoming ? 'bg-ive-amber/70 animate-pulse'
+          const connectorError = isError && m.idx === 2
+          const connectorCls = connectorError ? 'bg-ive-red/50'
+            : connectorIncoming ? 'bg-ive-amber/70 animate-pulse'
             : connectorPast ? 'bg-ive-green/40'
             : visitedAhead ? 'bg-ive-cyan/15'
             : 'bg-ive-border-subtle'
-          const arrowCls = connectorIncoming ? 'border-l-ive-amber/70 animate-pulse'
+          const arrowCls = connectorError ? 'border-l-ive-red/50'
+            : connectorIncoming ? 'border-l-ive-amber/70 animate-pulse'
             : connectorPast ? 'border-l-ive-green/40'
             : visitedAhead ? 'border-l-ive-cyan/15'
             : 'border-l-ive-border-subtle'
@@ -412,50 +421,55 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
           const waitLabel = i > 0 ? withCount(formatDur(waitDur[i]), connectorCount[i]) : null
 
           return (
-            <Fragment key={m.idx}>
-              {i > 0 && (
-                <div className="flex-1 min-w-3 flex flex-col items-center pt-[10px]">
-                  <div className="w-full flex items-center">
-                    <div
-                      className={`flex-1 ${connectorIncoming ? 'animate-pulse' : ''}`}
-                      style={connectorIncoming ? { height: '2px', backgroundColor: 'rgba(245, 158, 11, 0.75)' } : undefined}
-                    >
-                      {!connectorIncoming && <div className={`h-0.5 w-full ${connectorCls}`} />}
-                    </div>
-                    <div
-                      className={`w-0 h-0 border-y-[4px] border-y-transparent border-l-[6px] ${connectorIncoming ? 'animate-pulse' : arrowCls}`}
-                      style={connectorIncoming ? { borderLeftColor: 'rgba(245, 158, 11, 0.95)' } : undefined}
-                    />
-                  </div>
-                  <span className="hidden sm:block text-[9px] mt-1 leading-none text-ive-text-dim truncate w-full text-center">{waitLabel ?? ''}</span>
-                </div>
-              )}
+             <Fragment key={m.idx}>
+               {i > 0 && (
+                 <div className="flex-1 min-w-3 flex flex-col items-center pt-[10px]">
+                   <div className="w-full flex items-center">
+                     <div
+                       className={`flex-1 ${connectorIncoming || connectorError ? 'animate-pulse' : ''}`}
+                       style={connectorIncoming ? { height: '2px', backgroundColor: 'rgba(245, 158, 11, 0.75)' } : connectorError ? { height: '2px', backgroundColor: 'rgba(239, 68, 68, 0.5)' } : undefined}
+                     >
+                       {!connectorIncoming && !connectorError && <div className={`h-0.5 w-full ${connectorCls}`} />}
+                       {connectorError && <div className={`h-0.5 w-full ${connectorCls}`} />}
+                     </div>
+                     <div
+                       className={`w-0 h-0 border-y-[4px] border-y-transparent border-l-[6px] ${connectorIncoming || connectorError ? 'animate-pulse' : arrowCls}`}
+                       style={connectorIncoming ? { borderLeftColor: 'rgba(245, 158, 11, 0.95)' } : connectorError ? { borderLeftColor: 'rgba(239, 68, 68, 0.5)' } : undefined}
+                     />
+                   </div>
+                   <span className="hidden sm:block text-[9px] mt-1 leading-none text-ive-text-dim truncate w-full text-center">{waitLabel ?? ''}</span>
+                 </div>
+               )}
               <div className="flex flex-col items-center shrink-0" ref={el => { pillRefs.current[m.idx] = el }}>
-              <div
-                className={`inline-flex items-center gap-1.5 pl-1 pr-2.5 h-7 rounded-lg border text-[11px] font-bold transition-all ${chipCls}`}
-                title={!showAvatar ? m.label : undefined}
-              >
-                {showAvatar ? (
-                  slot.clickable && slot.onClick ? (
-                    <button
-                      type="button"
-                      onClick={slot.onClick}
-                      title={slot.title}
-                      aria-label={slot.title}
-                      className={`inline-flex items-center justify-center w-[18px] h-[18px] rounded-lg overflow-hidden bg-ive-bg-deep ${avatarRing} hover:ring-ive-green transition-all`}
-                    >
-                      {slot.node}
-                    </button>
-                  ) : (
-                    <span
-                      title={slot.title}
-                      aria-label={slot.title}
-                      className={`inline-flex items-center justify-center w-[18px] h-[18px] rounded-lg overflow-hidden bg-ive-bg-deep ${avatarRing} hover:ring-ive-green transition-all`}
-                    >
-                      {slot.node}
-                    </span>
-                  )
-                ) : (
+               <div
+                 className={`inline-flex items-center gap-1.5 pl-1 pr-2.5 h-7 rounded-lg border text-[11px] font-bold transition-all ${chipCls}`}
+                 title={!showAvatar ? m.label : undefined}
+               >
+                 {isError ? (
+                   <span className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-lg text-[10px] bg-ive-red/15 ring-2 ring-ive-red/40">
+                     <i className="fa-solid fa-circle-xmark text-ive-red" />
+                   </span>
+                 ) : showAvatar ? (
+                   slot.clickable && slot.onClick ? (
+                     <button
+                       type="button"
+                       onClick={slot.onClick}
+                       title={slot.title}
+                       aria-label={slot.title}
+                       className={`inline-flex items-center justify-center w-[18px] h-[18px] rounded-lg overflow-hidden bg-ive-bg-deep ${avatarRing} hover:ring-ive-green transition-all`}
+                     >
+                       {slot.node}
+                     </button>
+                   ) : (
+                     <span
+                       title={slot.title}
+                       aria-label={slot.title}
+                       className={`inline-flex items-center justify-center w-[18px] h-[18px] rounded-lg overflow-hidden bg-ive-bg-deep ${avatarRing} hover:ring-ive-green transition-all`}
+                     >
+                       {slot.node}
+                     </span>
+                   )
+                 ) : (
                   <span className={`inline-flex items-center justify-center w-[18px] h-[18px] rounded-lg text-[10px] ring-2 ${
                     isPast || isCurrent ? 'bg-ive-green/15 ring-ive-green/40 text-ive-green' : 'bg-white/5 ring-ive-border-subtle text-ive-text-dim'
                   }`}>
