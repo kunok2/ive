@@ -97,6 +97,8 @@ export default function ActivityContent() {
   const PAGE_SIZE = 30
   const [sortBy, setSortBy] = useState<string>('created_at')
   const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC')
+  // 필터 영역 펼침/접힘 — 모바일 세로 공간 확보를 위해 기본 접힘
+  const [filtersExpanded, setFiltersExpanded] = useState(false)
 
   useEffect(() => {
     try {
@@ -158,70 +160,148 @@ export default function ActivityContent() {
 
   if (loading) return <div className="text-center py-10 text-ive-text-dim">{tc('loading')}</div>
 
+  // 활성 필터 칩 데이터 — 사용자가 현재 어떤 필터를 걸고 있는지 한눈에 표시
+  const dateChipLabel = (() => {
+    if (activePreset === -1) return `${filterStartDate} ~ ${filterEndDate}`
+    if (activePreset === null) return t('dateAll')
+    const preset = DATE_PRESETS.find(p => p.days === activePreset)
+    return preset ? t(preset.labelKey as any) : `${filterStartDate} ~ ${filterEndDate}`
+  })()
+  const resetDateFilter = () => {
+    setActivePreset(30)
+    setFilterStartDate(getDateStr(30))
+    setFilterEndDate(getDateStr(0))
+  }
+  const categoryChipLabel = filterCategories.length === 1
+    ? t(CATEGORY_META[filterCategories[0]]?.labelKey as any || 'unknown')
+    : t('chipCategoriesMulti', { count: filterCategories.length })
+  const userChipLabel = filterUserIds.length === 1
+    ? (users.find(u => u.id === filterUserIds[0])?.name ?? '?')
+    : t('chipUsersMulti', { count: filterUserIds.length })
+
   return (
     <>
-      {/* 필터 — 다중 선택 (선택 없음 = 전체) */}
-      <div className="flex gap-2 mb-2">
-        <MultiSelectPicker
-          size="sm"
-          className="flex-1"
-          values={filterCategories}
-          onChange={setFilterCategories}
-          allLabel={t('allCategories')}
-          options={Object.entries(CATEGORY_META).map(([k, v]) => ({ value: k, label: t(v.labelKey as any) }))}
-        />
-        <MultiSelectPicker
-          size="sm"
-          className="flex-1"
-          values={filterUserIds}
-          onChange={setFilterUserIds}
-          allLabel={t('allUsers')}
-          options={users.map(u => ({ value: u.id, label: u.name }))}
-        />
+      {/* 활성 필터 칩 + 펼치기 토글 — 접힌 상태에서 한눈에 현재 필터 파악 */}
+      <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+        <span className="inline-flex items-center gap-1 h-7 pl-2 pr-1 rounded-lg text-xs font-bold bg-ive-green/10 text-ive-green border border-ive-green/30">
+          <i className="fa-solid fa-calendar text-[10px]" />
+          <span className="truncate max-w-[140px]">{dateChipLabel}</span>
+          {(activePreset !== 30) && (
+            <button
+              onClick={resetDateFilter}
+              title={tc('clearSelection')}
+              aria-label={tc('clearSelection')}
+              className="w-4 h-4 inline-flex items-center justify-center rounded-lg hover:bg-ive-green/20"
+            >
+              <i className="fa-solid fa-xmark text-[10px]" />
+            </button>
+          )}
+        </span>
+        {filterCategories.length > 0 && (
+          <span className="inline-flex items-center gap-1 h-7 pl-2 pr-1 rounded-lg text-xs font-bold bg-ive-green/10 text-ive-green border border-ive-green/30">
+            <i className="fa-solid fa-tags text-[10px]" />
+            <span className="truncate max-w-[140px]">{categoryChipLabel}</span>
+            <button
+              onClick={() => setFilterCategories([])}
+              title={tc('clearSelection')}
+              aria-label={tc('clearSelection')}
+              className="w-4 h-4 inline-flex items-center justify-center rounded-lg hover:bg-ive-green/20"
+            >
+              <i className="fa-solid fa-xmark text-[10px]" />
+            </button>
+          </span>
+        )}
+        {filterUserIds.length > 0 && (
+          <span className="inline-flex items-center gap-1 h-7 pl-2 pr-1 rounded-lg text-xs font-bold bg-ive-green/10 text-ive-green border border-ive-green/30">
+            <i className="fa-solid fa-user text-[10px]" />
+            <span className="truncate max-w-[140px]">{userChipLabel}</span>
+            <button
+              onClick={() => setFilterUserIds([])}
+              title={tc('clearSelection')}
+              aria-label={tc('clearSelection')}
+              className="w-4 h-4 inline-flex items-center justify-center rounded-lg hover:bg-ive-green/20"
+            >
+              <i className="fa-solid fa-xmark text-[10px]" />
+            </button>
+          </span>
+        )}
+        <button
+          onClick={() => setFiltersExpanded(v => !v)}
+          className="ml-auto inline-flex items-center gap-1 h-7 px-2 rounded-lg text-xs font-bold bg-ive-bg-card border border-ive-border-subtle text-ive-text-dim hover:text-ive-green hover:border-ive-green/40 transition-all"
+        >
+          <i className="fa-solid fa-sliders text-[10px]" />
+          <span>{t('filtersToggle')}</span>
+          <i className={`fa-solid fa-chevron-${filtersExpanded ? 'up' : 'down'} text-[9px]`} />
+        </button>
       </div>
 
-      {/* 기간 프리셋 */}
-      <div className="flex gap-1 mb-2">
-        {DATE_PRESETS.map(p => (
-          <button
-            key={p.labelKey}
-            onClick={() => {
-              setActivePreset(p.days)
-              if (p.days === null) {
-                setFilterStartDate('')
-                setFilterEndDate('')
-              } else {
-                setFilterStartDate(getDateStr(p.days))
-                setFilterEndDate(getDateStr(0))
-              }
-            }}
-            className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${
-              activePreset === p.days
-                ? 'bg-ive-green/20 text-ive-green border border-ive-green/40'
-                : 'bg-ive-bg-card border border-ive-border-subtle text-ive-text-dim active:scale-[0.96]'
-            }`}
-          >
-            {t(p.labelKey as any)}
-          </button>
-        ))}
-      </div>
+      {/* 펼친 영역 — 기본 접힘. 펼치면 모든 필터 컨트롤 노출 */}
+      {filtersExpanded && (
+        <div className="border-l-2 border-ive-border-subtle pl-2 mb-2 space-y-2">
+          {/* 다중 선택 드롭다운 */}
+          <div className="flex gap-2">
+            <MultiSelectPicker
+              size="sm"
+              className="flex-1"
+              values={filterCategories}
+              onChange={setFilterCategories}
+              allLabel={t('allCategories')}
+              options={Object.entries(CATEGORY_META).map(([k, v]) => ({ value: k, label: t(v.labelKey as any) }))}
+            />
+            <MultiSelectPicker
+              size="sm"
+              className="flex-1"
+              values={filterUserIds}
+              onChange={setFilterUserIds}
+              allLabel={t('allUsers')}
+              options={users.map(u => ({ value: u.id, label: u.name }))}
+            />
+          </div>
 
-      {/* 일자 범위 직접 입력 — 기간 프리셋과 한 묶음으로 인접 배치 */}
-      <div className="flex items-center gap-1.5 mb-2">
-        <input
-          type="date"
-          value={filterStartDate}
-          onChange={e => { setFilterStartDate(e.target.value); setActivePreset(-1) }}
-          className="flex-1 bg-ive-bg-input border border-ive-border rounded-lg px-2 py-1.5 text-xs text-ive-text focus:outline-none focus:border-ive-green/50"
-        />
-        <span className="text-xs text-ive-text-dim">~</span>
-        <input
-          type="date"
-          value={filterEndDate}
-          onChange={e => { setFilterEndDate(e.target.value); setActivePreset(-1) }}
-          className="flex-1 bg-ive-bg-input border border-ive-border rounded-lg px-2 py-1.5 text-xs text-ive-text focus:outline-none focus:border-ive-green/50"
-        />
-      </div>
+          {/* 기간 프리셋 */}
+          <div className="flex gap-1">
+            {DATE_PRESETS.map(p => (
+              <button
+                key={p.labelKey}
+                onClick={() => {
+                  setActivePreset(p.days)
+                  if (p.days === null) {
+                    setFilterStartDate('')
+                    setFilterEndDate('')
+                  } else {
+                    setFilterStartDate(getDateStr(p.days))
+                    setFilterEndDate(getDateStr(0))
+                  }
+                }}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  activePreset === p.days
+                    ? 'bg-ive-green/20 text-ive-green border border-ive-green/40'
+                    : 'bg-ive-bg-card border border-ive-border-subtle text-ive-text-dim active:scale-[0.96]'
+                }`}
+              >
+                {t(p.labelKey as any)}
+              </button>
+            ))}
+          </div>
+
+          {/* 일자 범위 직접 입력 — 기간 프리셋과 한 묶음 */}
+          <div className="flex items-center gap-1.5">
+            <input
+              type="date"
+              value={filterStartDate}
+              onChange={e => { setFilterStartDate(e.target.value); setActivePreset(-1) }}
+              className="flex-1 bg-ive-bg-input border border-ive-border rounded-lg px-2 py-1.5 text-xs text-ive-text focus:outline-none focus:border-ive-green/50"
+            />
+            <span className="text-xs text-ive-text-dim">~</span>
+            <input
+              type="date"
+              value={filterEndDate}
+              onChange={e => { setFilterEndDate(e.target.value); setActivePreset(-1) }}
+              className="flex-1 bg-ive-bg-input border border-ive-border rounded-lg px-2 py-1.5 text-xs text-ive-text focus:outline-none focus:border-ive-green/50"
+            />
+          </div>
+        </div>
+      )}
 
       {/* 카운트 + 정렬 — 한 줄 결합으로 모바일 세로 공간 절약. 정렬은 데이터 영역 직전에 배치. */}
       <div className="flex items-center gap-2 mb-2">
