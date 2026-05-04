@@ -34,11 +34,12 @@ const DATE_PRESETS: { labelKey: string; days: number | null }[] = [
 ]
 
 // 정렬 필드 — 필드 선택 + 방향(ASC/DESC) 토글의 표준 패턴.
-const SORT_FIELDS: { key: 'created_at' | 'category' | 'action' | 'user_name'; labelKey: string; defaultOrder: 'ASC' | 'DESC' }[] = [
-  { key: 'created_at', labelKey: 'sortFieldTime',     defaultOrder: 'DESC' },
-  { key: 'category',   labelKey: 'sortFieldCategory', defaultOrder: 'ASC'  },
-  { key: 'action',     labelKey: 'sortFieldAction',   defaultOrder: 'ASC'  },
-  { key: 'user_name',  labelKey: 'sortFieldUser',     defaultOrder: 'ASC'  },
+// 방향은 사용자가 명시적으로 변경한 값을 유지(필드 전환 시 리셋하지 않음).
+const SORT_FIELDS: { key: 'created_at' | 'category' | 'action' | 'user_name'; labelKey: string }[] = [
+  { key: 'created_at', labelKey: 'sortFieldTime' },
+  { key: 'category',   labelKey: 'sortFieldCategory' },
+  { key: 'action',     labelKey: 'sortFieldAction' },
+  { key: 'user_name',  labelKey: 'sortFieldUser' },
 ]
 
 const ACTIVITY_FILTER_KEY = 'ive-admin-activity-filter'
@@ -205,31 +206,8 @@ export default function ActivityContent() {
         ))}
       </div>
 
-      {/* 정렬 — GitLab 패턴: 필드 드롭다운 + 방향 토글 버튼 */}
-      <div className="flex gap-1.5 mb-2">
-        <CustomSelect
-          size="sm"
-          className="flex-1"
-          value={sortBy}
-          onChange={(v) => {
-            const f = SORT_FIELDS.find(x => x.key === v)
-            setSortBy(v)
-            if (f) setSortOrder(f.defaultOrder)
-          }}
-          options={SORT_FIELDS.map(f => ({ value: f.key, label: t(f.labelKey as any) }))}
-        />
-        <button
-          onClick={() => setSortOrder(o => (o === 'ASC' ? 'DESC' : 'ASC'))}
-          title={t(sortOrder === 'ASC' ? 'sortAsc' : 'sortDesc')}
-          aria-label={t(sortOrder === 'ASC' ? 'sortAsc' : 'sortDesc')}
-          className="shrink-0 w-9 h-[30px] rounded-lg flex items-center justify-center bg-ive-bg-input border border-ive-border text-ive-text-dim hover:text-ive-green hover:border-ive-green/40 transition-all"
-        >
-          <i className={`fa-solid ${sortOrder === 'ASC' ? 'fa-arrow-up-short-wide' : 'fa-arrow-down-wide-short'} text-xs`} />
-        </button>
-      </div>
-
-      {/* 일자 범위 직접 입력 */}
-      <div className="flex items-center gap-1.5 mb-3">
+      {/* 일자 범위 직접 입력 — 기간 프리셋과 한 묶음으로 인접 배치 */}
+      <div className="flex items-center gap-1.5 mb-2">
         <input
           type="date"
           value={filterStartDate}
@@ -245,7 +223,25 @@ export default function ActivityContent() {
         />
       </div>
 
-      <div className="text-xs text-ive-text-dim mb-3">{filterStartDate && filterEndDate ? t('totalCountRange', { count: total, start: filterStartDate, end: filterEndDate }) : filterStartDate ? t('totalCountStartOnly', { count: total, start: filterStartDate }) : filterEndDate ? t('totalCountEndOnly', { count: total, end: filterEndDate }) : t('totalCount', { count: total })}</div>
+      {/* 카운트 + 정렬 — 한 줄 결합으로 모바일 세로 공간 절약. 정렬은 데이터 영역 직전에 배치. */}
+      <div className="flex items-center gap-2 mb-2">
+        <div className="text-xs text-ive-text-dim flex-1 min-w-0 truncate">{filterStartDate && filterEndDate ? t('totalCountRange', { count: total, start: filterStartDate, end: filterEndDate }) : filterStartDate ? t('totalCountStartOnly', { count: total, start: filterStartDate }) : filterEndDate ? t('totalCountEndOnly', { count: total, end: filterEndDate }) : t('totalCount', { count: total })}</div>
+        <CustomSelect
+          size="sm"
+          className="w-28 shrink-0"
+          value={sortBy}
+          onChange={(v) => setSortBy(v)}
+          options={SORT_FIELDS.map(f => ({ value: f.key, label: t(f.labelKey as any) }))}
+        />
+        <button
+          onClick={() => setSortOrder(o => (o === 'ASC' ? 'DESC' : 'ASC'))}
+          title={t(sortOrder === 'ASC' ? 'sortAsc' : 'sortDesc')}
+          aria-label={t(sortOrder === 'ASC' ? 'sortAsc' : 'sortDesc')}
+          className="shrink-0 w-9 h-[30px] rounded-lg flex items-center justify-center bg-ive-bg-input border border-ive-border text-ive-text-dim hover:text-ive-green hover:border-ive-green/40 transition-all"
+        >
+          <i className={`fa-solid ${sortOrder === 'ASC' ? 'fa-arrow-up-short-wide' : 'fa-arrow-down-wide-short'} text-xs`} />
+        </button>
+      </div>
 
       {/* 로그 목록 */}
       <div className="space-y-1.5">
