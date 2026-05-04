@@ -9,6 +9,8 @@ export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams
   const limit = Math.min(parseInt(sp.get('limit') || '50', 10), 200)
   const offset = parseInt(sp.get('offset') || '0', 10)
+  const sortBy = sp.get('sortBy') || undefined
+  const sortOrder = (sp.get('sortOrder') === 'ASC' ? 'ASC' : 'DESC') as 'ASC' | 'DESC'
   // userId / category 모두 다중 선택을 지원 — 콤마로 구분된 값 또는 반복 파라미터.
   const splitCsv = (s: string | null): string[] | undefined => {
     if (!s) return undefined
@@ -26,6 +28,6 @@ export async function GET(req: NextRequest) {
     endDate = d.toISOString().slice(0, 10)
   }
 
-  const result = getActivityLogs({ limit, offset, userIds, categories, startDate, endDate })
+  const result = getActivityLogs({ limit, offset, userIds, categories, startDate, endDate, sortBy, sortOrder })
   return NextResponse.json(result)
 }
