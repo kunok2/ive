@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { getExecutionsInRange, getDailyWaitingTrend, getDailyWaitingTrendByAgent, getAgent, getVerifierBacklogForReport, getGlobalFirstStartedAt } from '@/lib/db'
 import { resolveExecutionCost, resolveExecutionCostBreakdown, getHumanMonthlySalary } from '@/lib/token-pricing'
-import { getKSTTodayString, utcISOToKSTDate, utcISOToKSTMonth } from '@/lib/date-utils'
+import { getKSTTodayString, utcISOToKSTDate, utcISOToKSTMonth, kstDateToUTCISO } from '@/lib/date-utils'
 import { isBotName } from '@/lib/git-bot'
 
 function getWeekRange(date: Date): { start: string; end: string } {
@@ -137,9 +137,16 @@ export async function GET(req: NextRequest) {
 
   // Summary
   const totalTasks = execs.length
-  // 고유 이슈 수 (재시도는 1건으로 집계) — "유입" 계산용
-  const uniqueIssueKeys = new Set(execs.map(e => `${e.projectId}:${e.issueIid}`))
-  const uniqueInflow = uniqueIssueKeys.size
+  // 유입 — 이슈별 글로벌 최초 started_at이 보고 기간 내인 경우만 카운트.
+  // 단순히 '기간 내 execution 있는 고유 이슈' 로 세면, 지난주 시작 이슈가
+  // 이번주에 retry/검증된 경우 이번주 유입으로 둔갑함.
+  const summaryIssueKeys = Array.from(new Set(execs.map(e => `${e.projectId}:${e.issueIid}`)))
+    .map(k => { const [projectId, iidStr] = k.split(':'); return { projectId, issueIid: Number(iidStr) } })
+  const summaryFirstStart = getGlobalFirstStartedAt(user.id, summaryIssueKeys)
+  const rangeStartISO = kstDateToUTCISO(range.start)
+  const rangeEndISO = kstDateToUTCISO(range.end)
+  const uniqueInflow = Array.from(summaryFirstStart.values())
+    .filter(t => t >= rangeStartISO && t < rangeEndISO).length
   // 완료된 고유 이슈 수 — "처리" 계산용 (검증 완료 또는 success/failed)
   const verifiedIssueKeys = new Set(
     execs.filter(e => e.verifiedAt || e.rejectedAt || e.status === 'success' || e.status === 'failed').map(e => `${e.projectId}:${e.issueIid}`)
