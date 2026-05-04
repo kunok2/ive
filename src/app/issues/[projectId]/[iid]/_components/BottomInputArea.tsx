@@ -279,19 +279,28 @@ function CommentModeInput({
         className="w-full min-h-10 bg-ive-bg-card border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-green/50 overflow-hidden"
       />
       <div className="flex gap-2 items-center overflow-hidden">
-        {/* ← 후진: 재실행 (현재 stage 를 스케줄로 되돌림). dev/none 단계에선 backward 액션 없음. */}
+        {/* ← 후진: 재실행 (현재 stage 를 스케줄로 되돌림). dev/none 단계에선 backward 액션 없음.
+            dev_fail 은 처리 단계에서의 실패이므로 '이전 단계'(유입)로 가는 게 아니라 '재처리' 의미. */}
         <div className="flex-1 flex justify-start">
-          {canProgressStage && issue.stage !== 'dev' && issue.stage !== 'none' && !(preferredAgent?.assignMode === 'assignee' && NEXT_STAGE[issue.stage]) && (
-            <button
-              onClick={() => onCommentAndRetry()}
-              disabled={posting || !comment.trim()}
-              className="shrink-0 h-10 px-3 rounded-lg border border-ive-amber/40 text-ive-amber bg-ive-bg-card hover:bg-ive-amber/10 flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold whitespace-nowrap"
-              title={tIssue('postAndRetryHint')}
-              aria-label={tIssue('postAndRetry')}
-            >
-              {postingType === 'retry' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-arrow-left text-[10px]" /><span>{tIssue('rerun')}</span></>}
-            </button>
-          )}
+          {canProgressStage && issue.stage !== 'dev' && issue.stage !== 'none' && !(preferredAgent?.assignMode === 'assignee' && NEXT_STAGE[issue.stage]) && (() => {
+            const isReprocess = issue.stage === 'dev_fail'
+            return (
+              <button
+                onClick={() => onCommentAndRetry()}
+                disabled={posting || !comment.trim()}
+                className="shrink-0 h-10 px-3 rounded-lg border border-ive-amber/40 text-ive-amber bg-ive-bg-card hover:bg-ive-amber/10 flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold whitespace-nowrap"
+                title={tIssue(isReprocess ? 'postAndReprocessHint' : 'postAndRetryHint')}
+                aria-label={tIssue(isReprocess ? 'postAndReprocess' : 'postAndRetry')}
+              >
+                {postingType === 'retry' ? <i className="fa-solid fa-circle-notch fa-spin" /> : (
+                  <>
+                    <i className={`fa-solid ${isReprocess ? 'fa-arrow-rotate-right' : 'fa-arrow-left'} text-[10px]`} />
+                    <span>{tIssue(isReprocess ? 'reprocess' : 'rerun')}</span>
+                  </>
+                )}
+              </button>
+            )
+          })()}
         </div>
 
         {/* 가운데: 코멘트만 (stay) */}
