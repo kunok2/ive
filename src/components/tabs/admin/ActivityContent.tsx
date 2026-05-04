@@ -6,6 +6,7 @@ import { User, UserActivityLog } from '@/types'
 import { useStore } from '@/lib/store'
 import { formatDateWithSeconds } from '@/lib/format-date'
 import MultiSelectPicker from '@/components/ui/MultiSelectPicker'
+import CustomSelect from '@/components/ui/CustomSelect'
 
 // 카테고리는 아이콘으로 구분, 색은 의미가 있을 때만 (위험 admin / 정보 auth)
 const CATEGORY_META: Record<string, { labelKey: string; icon: string; color: string }> = {
@@ -204,35 +205,27 @@ export default function ActivityContent() {
         ))}
       </div>
 
-      {/* 정렬 — 필드 선택 + 방향 토글. 같은 필드 재클릭 시 방향 반전. */}
-      <div className="flex gap-1 mb-2">
-        {SORT_FIELDS.map(f => {
-          const isActive = sortBy === f.key
-          return (
-            <button
-              key={f.key}
-              onClick={() => {
-                if (isActive) {
-                  setSortOrder(o => (o === 'ASC' ? 'DESC' : 'ASC'))
-                } else {
-                  setSortBy(f.key)
-                  setSortOrder(f.defaultOrder)
-                }
-              }}
-              title={isActive ? t(sortOrder === 'ASC' ? 'sortAsc' : 'sortDesc') : undefined}
-              className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${
-                isActive
-                  ? 'bg-ive-green/20 text-ive-green border border-ive-green/40'
-                  : 'bg-ive-bg-card border border-ive-border-subtle text-ive-text-dim active:scale-[0.96]'
-              }`}
-            >
-              <span>{t(f.labelKey as any)}</span>
-              {isActive && (
-                <i className={`fa-solid ${sortOrder === 'ASC' ? 'fa-arrow-up-short-wide' : 'fa-arrow-down-wide-short'} text-[10px]`} />
-              )}
-            </button>
-          )
-        })}
+      {/* 정렬 — GitLab 패턴: 필드 드롭다운 + 방향 토글 버튼 */}
+      <div className="flex gap-1.5 mb-2">
+        <CustomSelect
+          size="sm"
+          className="flex-1"
+          value={sortBy}
+          onChange={(v) => {
+            const f = SORT_FIELDS.find(x => x.key === v)
+            setSortBy(v)
+            if (f) setSortOrder(f.defaultOrder)
+          }}
+          options={SORT_FIELDS.map(f => ({ value: f.key, label: t(f.labelKey as any) }))}
+        />
+        <button
+          onClick={() => setSortOrder(o => (o === 'ASC' ? 'DESC' : 'ASC'))}
+          title={t(sortOrder === 'ASC' ? 'sortAsc' : 'sortDesc')}
+          aria-label={t(sortOrder === 'ASC' ? 'sortAsc' : 'sortDesc')}
+          className="shrink-0 w-9 h-[30px] rounded-lg flex items-center justify-center bg-ive-bg-input border border-ive-border text-ive-text-dim hover:text-ive-green hover:border-ive-green/40 transition-all"
+        >
+          <i className={`fa-solid ${sortOrder === 'ASC' ? 'fa-arrow-up-short-wide' : 'fa-arrow-down-wide-short'} text-xs`} />
+        </button>
       </div>
 
       {/* 일자 범위 직접 입력 */}
