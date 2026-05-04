@@ -215,7 +215,7 @@ export default function IssueHeader({
           <>
             <div className="flex items-start gap-2 flex-wrap">
               <h1 className="text-sm font-bold text-ive-text leading-snug flex-1 min-w-[70%]">{issue.title}</h1>
-              <div className="flex items-center gap-1 shrink-0 ml-auto">
+              <div className="flex items-center gap-2 shrink-0 ml-auto">
                 <button
                   onClick={onStartEdit}
                   className="w-7 h-7 rounded-lg flex items-center justify-center bg-ive-bg-card text-ive-text-dim border border-ive-border-subtle hover:text-ive-green hover:border-ive-green/30 transition-all"
