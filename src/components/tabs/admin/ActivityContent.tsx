@@ -32,12 +32,12 @@ const DATE_PRESETS: { labelKey: string; days: number | null }[] = [
   { labelKey: 'dateAll', days: null },
 ]
 
-const SORT_OPTIONS: { labelKey: string; value: string }[] = [
-  { labelKey: 'sortLatest', value: 'created_at-DESC' },
-  { labelKey: 'sortOldest', value: 'created_at-ASC' },
-  { labelKey: 'sortCategory', value: 'category-ASC' },
-  { labelKey: 'sortAction', value: 'action-ASC' },
-  { labelKey: 'sortUser', value: 'user_name-ASC' },
+// 정렬 필드 — 필드 선택 + 방향(ASC/DESC) 토글의 표준 패턴.
+const SORT_FIELDS: { key: 'created_at' | 'category' | 'action' | 'user_name'; labelKey: string; defaultOrder: 'ASC' | 'DESC' }[] = [
+  { key: 'created_at', labelKey: 'sortFieldTime',     defaultOrder: 'DESC' },
+  { key: 'category',   labelKey: 'sortFieldCategory', defaultOrder: 'ASC'  },
+  { key: 'action',     labelKey: 'sortFieldAction',   defaultOrder: 'ASC'  },
+  { key: 'user_name',  labelKey: 'sortFieldUser',     defaultOrder: 'ASC'  },
 ]
 
 const ACTIVITY_FILTER_KEY = 'ive-admin-activity-filter'
@@ -204,23 +204,32 @@ export default function ActivityContent() {
         ))}
       </div>
 
-      {/* 정렬 버튼 */}
+      {/* 정렬 — 필드 선택 + 방향 토글. 같은 필드 재클릭 시 방향 반전. */}
       <div className="flex gap-1 mb-2">
-        <span className="text-xs text-ive-text-dim flex items-center mr-1">{t('sortBy')}:</span>
-        {SORT_OPTIONS.map(opt => {
-          const [col, order] = opt.value.split('-')
-          const isActive = sortBy === col && sortOrder === order
+        {SORT_FIELDS.map(f => {
+          const isActive = sortBy === f.key
           return (
             <button
-              key={opt.value}
-              onClick={() => { setSortBy(col); setSortOrder(order as 'ASC' | 'DESC') }}
-              className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all ${
+              key={f.key}
+              onClick={() => {
+                if (isActive) {
+                  setSortOrder(o => (o === 'ASC' ? 'DESC' : 'ASC'))
+                } else {
+                  setSortBy(f.key)
+                  setSortOrder(f.defaultOrder)
+                }
+              }}
+              title={isActive ? t(sortOrder === 'ASC' ? 'sortAsc' : 'sortDesc') : undefined}
+              className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${
                 isActive
                   ? 'bg-ive-green/20 text-ive-green border border-ive-green/40'
                   : 'bg-ive-bg-card border border-ive-border-subtle text-ive-text-dim active:scale-[0.96]'
               }`}
             >
-              {t(opt.labelKey as any)}
+              <span>{t(f.labelKey as any)}</span>
+              {isActive && (
+                <i className={`fa-solid ${sortOrder === 'ASC' ? 'fa-arrow-up-short-wide' : 'fa-arrow-down-wide-short'} text-[10px]`} />
+              )}
             </button>
           )
         })}
