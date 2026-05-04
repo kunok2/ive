@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
-import { getExecutionsInRange, getDailyWaitingTrend, getDailyWaitingTrendByAgent, getAgent, getVerifierBacklogForReport } from '@/lib/db'
+import { getExecutionsInRange, getDailyWaitingTrend, getDailyWaitingTrendByAgent, getAgent, getVerifierBacklogForReport, getGlobalFirstStartedAt } from '@/lib/db'
 import { resolveExecutionCost, resolveExecutionCostBreakdown, getHumanMonthlySalary } from '@/lib/token-pricing'
 import { getKSTTodayString, utcISOToKSTDate, utcISOToKSTMonth } from '@/lib/date-utils'
 import { isBotName } from '@/lib/git-bot'
@@ -230,13 +230,10 @@ export async function GET(req: NextRequest) {
   const prevDayMap = new Map<string, { tasks: number; cost: number; waitTimes: number[]; procTimes: number[]; verifyTimes: number[]; inflowIssues: Set<string>; verifiedIssues: Set<string> }>()
   const mkPrevBucket = () => ({ tasks: 0, cost: 0, waitTimes: [] as number[], procTimes: [] as number[], verifyTimes: [] as number[], inflowIssues: new Set<string>(), verifiedIssues: new Set<string>() })
   for (const key of prevAllKeys) prevDayMap.set(key, mkPrevBucket())
-  // 이전 기간: 이슈별 최초 유입일/검증 완료일 계산
-  const prevFirstStart = new Map<string, string>()
-  for (const e of prevExecs) {
-    const k = `${e.projectId}:${e.issueIid}`
-    const pv = prevFirstStart.get(k)
-    if (!pv || e.startedAt < pv) prevFirstStart.set(k, e.startedAt)
-  }
+  // 이전 기간: 이슈별 최초 유입일은 전체 기간 글로벌 min 으로 (재시도 보정)
+  const prevIssueKeys = Array.from(new Set(prevExecs.map(e => `${e.projectId}:${e.issueIid}`)))
+    .map(k => { const [projectId, iidStr] = k.split(':'); return { projectId, issueIid: Number(iidStr) } })
+  const prevFirstStart = getGlobalFirstStartedAt(user.id, prevIssueKeys)
   const prevVerifyDate = new Map<string, string>()
   for (const e of prevExecs) {
     const verifyEnd = e.verifiedAt || e.rejectedAt || ((e.status === 'success' || e.status === 'failed') ? (e.endedAt || e.startedAt) : null)
@@ -526,13 +523,12 @@ export async function GET(req: NextRequest) {
   const mkBucket = (): BucketData => ({ tasks: 0, success: 0, failed: 0, cost: 0, waitTimes: [], procTimes: [], verifyTimes: [], inflowIssues: new Set(), verifiedIssues: new Set() })
   const dayMap = new Map<string, BucketData>()
   for (const key of allKeys) dayMap.set(key, mkBucket())
-  // 각 이슈를 유입일(가장 이른 started_at)에만 카운트 — 재시도로 유입 중복 방지
-  const firstStartByIssue = new Map<string, string>()
-  for (const e of execs) {
-    const k = `${e.projectId}:${e.issueIid}`
-    const prev = firstStartByIssue.get(k)
-    if (!prev || e.startedAt < prev) firstStartByIssue.set(k, e.startedAt)
-  }
+  // 각 이슈를 유입일(전체 기간 가장 이른 started_at)에만 카운트.
+  // 기간 내 execution들만 보면, 지난주에 시작된 이슈가 이번주에 retry 된 경우
+  // 이번주 유입으로 잘못 잡히는 버그가 있어서 전체 기간을 별도 조회한다.
+  const issueKeys = Array.from(new Set(execs.map(e => `${e.projectId}:${e.issueIid}`)))
+    .map(k => { const [projectId, iidStr] = k.split(':'); return { projectId, issueIid: Number(iidStr) } })
+  const firstStartByIssue = getGlobalFirstStartedAt(user.id, issueKeys)
   // 검증 완료일은 verifiedAt 또는 rejectedAt이 있는 exec 중 가장 이른 날짜로 귀속
   const verifyDateByIssue = new Map<string, string>()
   for (const e of execs) {

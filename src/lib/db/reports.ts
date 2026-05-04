@@ -104,6 +104,39 @@ export function getExecutionsInRange(userId: string, start: string, end: string)
   return rows.map(mapReportExecution)
 }
 
+/**
+ * 보고 기간 내 execution이 있는 이슈들의 전체 기간 최초 started_at 을 조회.
+ * 보고서 '유입' 카운팅에서 기간 내 첫 exec 을 유입일로 잘못 보는 버그를 막기 위함 —
+ * 지난주에 시작된 이슈가 이번주에 retry된 경우 이번주 유입으로 둔갑하지 않도록.
+ */
+export function getGlobalFirstStartedAt(
+  userId: string,
+  issueKeys: { projectId: string; issueIid: number }[]
+): Map<string, string> {
+  const map = new Map<string, string>()
+  if (issueKeys.length === 0) return map
+  // 권한 검증을 위해 projectId 별로 조회
+  const projectIds = Array.from(new Set(issueKeys.map(k => k.projectId)))
+  for (const projectId of projectIds) {
+    const iids = issueKeys.filter(k => k.projectId === projectId).map(k => k.issueIid)
+    if (iids.length === 0) continue
+    const placeholders = iids.map(() => '?').join(',')
+    const rows = getDb().prepare(`
+      SELECT te.issue_iid, MIN(te.started_at) as first_start
+      FROM task_executions te
+      JOIN projects p ON p.id = te.project_id
+      WHERE te.project_id = ?
+        AND te.issue_iid IN (${placeholders})
+        AND (p.user_id = ? OR EXISTS (SELECT 1 FROM project_shares ps WHERE ps.project_id = p.id AND ps.user_id = ?))
+      GROUP BY te.issue_iid
+    `).all(projectId, ...iids, userId, userId) as any[]
+    for (const r of rows) {
+      map.set(`${projectId}:${r.issue_iid}`, r.first_start as string)
+    }
+  }
+  return map
+}
+
 export function getGlobalExecutionsInRange(start: string, end: string): ReportExecution[] {
   const startISO = kstDateToUTCISO(start)
   const endISO = kstDateToUTCISO(end)

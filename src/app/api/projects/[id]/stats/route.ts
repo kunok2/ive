@@ -37,24 +37,21 @@ export async function GET(
   `).get(id) as any
   const verifying = verifyingCount?.count ?? 0
 
-  // 오늘 완료된 execution 수
-  // - 검증 완료(verified_at/rejected_at) OR 외부 도구 작업(agent_id 비어있음) → 완료로 카운트
-  // - 검증 exec(ex-verify-%)는 제외
-  // - agent_id는 createExecution에서 `ex.agentId || null`로 저장되어 DB에 NULL로 들어가므로
-  //   '' 와 NULL 둘 다 매치해야 함 (과거 데이터 호환)
-  const completedExec = db.prepare(`
-    SELECT COUNT(*) as count FROM task_executions
-    WHERE project_id = ? AND status = 'success' AND started_at >= ? AND id NOT LIKE 'ex-verify-%' AND (verified_at IS NOT NULL OR rejected_at IS NOT NULL OR agent_id IS NULL OR agent_id = '')
+  // 오늘 완료/반려된 이슈 수 — 권위적 소스(issue_stages.cached_stage)에서 집계.
+  // task_execution 기반은 (a) 수동 라벨 전환을 놓치고 (b) ex-verify/ex-confirm 등
+  // 실행 종류별 필터링이 끼어들어 "오늘 완료 N건"이 실제 done 이슈 수와 어긋남.
+  // updated_at >= todayStart 조건은 오늘 done/rejected로 전이된 이슈만 잡는다.
+  const completedRow = db.prepare(`
+    SELECT COUNT(*) as count FROM issue_stages
+    WHERE project_id = ? AND cached_stage = 'done' AND updated_at >= ?
   `).get(id, todayStartISO) as any
-  const completed = completedExec?.count ?? 0
+  const completed = completedRow?.count ?? 0
 
-  // 오늘 실패한 execution 수
-  // - 검증 반려(rejected_at) OR 외부 도구 작업 실패(agent_id 비어있음) → 실패로 카운트
-  const failedExec = db.prepare(`
-    SELECT COUNT(*) as count FROM task_executions
-    WHERE project_id = ? AND status = 'failed' AND started_at >= ? AND id NOT LIKE 'ex-verify-%' AND (verified_at IS NOT NULL OR rejected_at IS NOT NULL OR agent_id IS NULL OR agent_id = '')
+  const failedRow = db.prepare(`
+    SELECT COUNT(*) as count FROM issue_stages
+    WHERE project_id = ? AND cached_stage = 'rejected' AND updated_at >= ?
   `).get(id, todayStartISO) as any
-  const failed = failedExec?.count ?? 0
+  const failed = failedRow?.count ?? 0
 
   // 대기 중인 issue 수 (waiting 단계)
   const waitingCount = db.prepare(`
