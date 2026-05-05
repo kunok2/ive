@@ -65,7 +65,7 @@ export default function ProjectFlowSection({ d, data, helpers }: ProjectFlowSect
                   <div>
                     <div className="text-ive-text-dim">{tr('metric.utilization')}</div>
                     {p.utilization < 0 ? (
-                      <div className="font-bold text-ive-text-dim">{tr('metric.noAgentAssigned')}</div>
+                      <div className="font-bold text-ive-text-dim">—</div>
                     ) : (() => {
                       const pct = Math.round(p.utilization * 100)
                       const label = pct >= 100 ? tr('metric.utilOverload')
