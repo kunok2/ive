@@ -159,9 +159,7 @@ export function computeProjectFlows(
     const hasBacklog = pEndW >= 3 || (pEndW - pStartW) >= 2
 
     let annotation: ProjectAnnotation | null = null
-    if (p.assignedAgentCount === 0 && pInflow > 0) {
-      annotation = { key: 'noAgent', severity: 'critical' }
-    } else if (hasBacklog && p.assignedAgentCount > 0 && pCapacity < pDailyInflow) {
+    if (hasBacklog && p.assignedAgentCount > 0 && pCapacity < pDailyInflow) {
       const addNeeded = Math.max(1, Math.ceil((pDailyInflow * 1.2 - pCapacity) / avgAgentCap))
       const urgency = pCapacity > 0
         ? Math.round((10 - pEndW) / (pDailyInflow - pCapacity))

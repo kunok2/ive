@@ -33,19 +33,6 @@ export function generateAlerts(
 
   const alerts: AlertCard[] = []
 
-  // 7-1. 무배정 프로젝트 (최우선)
-  for (const p of projectFlows) {
-    if (p.assignedAgents === 0 && p.currentWaiting > 0) {
-      alerts.push({
-        severity: 'critical',
-        title: { key: 'alertNoAgentTitle', params: { project: p.projectName } },
-        detail: { key: 'alertNoAgentDetail', params: { count: p.currentWaiting } },
-        action: { key: 'alertNoAgentAction' },
-        actionTarget: `/projects`,
-      })
-    }
-  }
-
   // 7-1-b. 방치된 대기 — 기간 내 유입/처리 모두 0인데 대기가 쌓여있음
   if (totalInflow === 0 && flow.throughput === 0 && endWaiting > 0) {
     alerts.push({
