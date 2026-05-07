@@ -30,6 +30,12 @@ export interface ReportData {
   prevAgentWaitingTrend: AgentWaitingDay[]
   resolvedIssues?: ResolvedIssue[]
   verifierBacklog?: VerifierBacklogRow[]
+  /**
+   * 에이전트별 직전 30일 historical 일일 처리 능력 (이번 보고 기간과 무관).
+   * 가동률 계산 분모로 사용해 주/월/년 보고서 간 비교 가능한 안정값을 만든다.
+   * samples = 활동한 distinct 일수.
+   */
+  agentHistoricalCapacity?: { agentId: string; dailyCap: number; samples: number }[]
 }
 
 /** Git assignee 기반 현재 검증 대기 스냅샷 (API route에서 DB 조회로 채워짐) */
@@ -78,8 +84,9 @@ export interface FlowMetrics {
   throughput: number        // 기간 총 처리
   currentWaiting: number    // 현재 대기
   dailyInflow: number       // 일 평균 유입
-  dailyCapacity: number     // 일 평균 처리 능력
-  utilization: number       // 가동률 (0~∞)
+  dailyCapacity: number     // 일 평균 처리 능력 (직전 30일 활성일 기준 안정값)
+  utilization: number       // 가동률 = dailyThroughput / dailyCapacity (0~∞)
+  utilizationConfidence: 'high' | 'low' // 'low': 샘플 부족(elapsedDays<3 또는 capacity 샘플 부족) — UI 노출 가드용
   healthLevel: HealthLevel
   totalCost: number
   totalCostAi: number       // AI 모델 토큰 비용만

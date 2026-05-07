@@ -31,19 +31,22 @@ export function generateBriefing(
       briefingLines.push({ key: 'briefingNoInflow' })
     }
   } else {
-    const utilPct = Math.round(utilization * 100)
-    const levelKeyMap: Record<HealthLevel, string> = {
-      overloaded: 'levelOverloaded',
-      tight: 'levelTight',
-      optimal: 'levelOptimal',
-      relaxed: 'levelRelaxed',
-      idle: 'levelIdle',
+    // 신뢰도 낮으면 가동률 라인 생략 — 노이즈가 의사결정 오도하지 않게.
+    if (flow.utilizationConfidence === 'high') {
+      const utilPct = Math.round(utilization * 100)
+      const levelKeyMap: Record<HealthLevel, string> = {
+        overloaded: 'levelOverloaded',
+        tight: 'levelTight',
+        optimal: 'levelOptimal',
+        relaxed: 'levelRelaxed',
+        idle: 'levelIdle',
+      }
+      briefingLines.push({
+        key: 'briefingUtilLevel',
+        params: { pct: utilPct },
+        nestedKeys: { level: levelKeyMap[healthLevel] },
+      })
     }
-    briefingLines.push({
-      key: 'briefingUtilLevel',
-      params: { pct: utilPct },
-      nestedKeys: { level: levelKeyMap[healthLevel] },
-    })
     briefingLines.push({
       key: 'briefingFlowSummary',
       params: {

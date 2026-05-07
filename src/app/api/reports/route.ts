@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
-import { getExecutionsInRange, getDailyWaitingTrend, getDailyWaitingTrendByAgent, getAgent, getVerifierBacklogForReport, getGlobalFirstStartedAt } from '@/lib/db'
+import { getExecutionsInRange, getDailyWaitingTrend, getDailyWaitingTrendByAgent, getAgent, getVerifierBacklogForReport, getIssuesCompletedInRange, getIssuesStartedInRange, getAgentHistoricalDailyCapacity } from '@/lib/db'
 import { resolveExecutionCost, resolveExecutionCostBreakdown, getHumanMonthlySalary } from '@/lib/token-pricing'
 import { getKSTTodayString, utcISOToKSTDate, utcISOToKSTMonth, kstDateToUTCISO } from '@/lib/date-utils'
 import { isBotName } from '@/lib/git-bot'
@@ -110,21 +110,20 @@ export async function GET(req: NextRequest) {
 
   // Summary
   const totalTasks = execs.length
-  // 유입 — 이슈별 글로벌 최초 started_at이 보고 기간 내인 경우만 카운트.
-  // 단순히 '기간 내 execution 있는 고유 이슈' 로 세면, 지난주 시작 이슈가
-  // 이번주에 retry/검증된 경우 이번주 유입으로 둔갑함.
-  const summaryIssueKeys = Array.from(new Set(execs.map(e => `${e.projectId}:${e.issueIid}`)))
-    .map(k => { const [projectId, iidStr] = k.split(':'); return { projectId, issueIid: Number(iidStr) } })
-  const summaryFirstStart = getGlobalFirstStartedAt(user.id, summaryIssueKeys)
   const rangeStartISO = kstDateToUTCISO(range.start)
   const rangeEndISO = kstDateToUTCISO(range.end)
-  const uniqueInflow = Array.from(summaryFirstStart.values())
-    .filter(t => t >= rangeStartISO && t < rangeEndISO).length
-  // 완료된 고유 이슈 수 — "처리" 계산용 (검증 완료 또는 success/failed)
-  const verifiedIssueKeys = new Set(
-    execs.filter(e => e.verifiedAt || e.rejectedAt || e.status === 'success' || e.status === 'failed').map(e => `${e.projectId}:${e.issueIid}`)
-  )
-  const verifiedCount = verifiedIssueKeys.size
+
+  // 유입 = 이슈가 처음 시작된 시각이 기간 내인 이슈 (기간 내 exec 유무와 무관).
+  // 주 경계: W1에 시작 → W2 retry된 이슈는 W1 유입에만 잡힘.
+  const inflowMap = getIssuesStartedInRange(user.id, range.start, range.end)
+  const uniqueInflow = inflowMap.size
+
+  // 유출 = 이슈가 완료된(파이프라인 끝까지 통과한 = cached_stage='done') 시각이 기간 내인 이슈.
+  // 완료 시각 = COALESCE(issue_stages.confirmed_at, MAX(execs.verified_at)).
+  // 주 경계: W1에 시작 → W2에 완료된 이슈는 W2 유출에만 잡힘 (W1 보고서엔 그 시점 미완료).
+  // 검증/확인은 중간 단계, rejected 는 완료 아님.
+  const completionMap = getIssuesCompletedInRange(user.id, range.start, range.end)
+  const verifiedCount = completionMap.size
   const successCount = execs.filter(e => e.status === 'success').length
   const failedCount = execs.filter(e => e.status === 'failed').length
   const runningCount = execs.filter(e => e.status === 'running' || e.status === 'assigned').length
@@ -210,17 +209,18 @@ export async function GET(req: NextRequest) {
   const prevDayMap = new Map<string, { tasks: number; cost: number; waitTimes: number[]; procTimes: number[]; verifyTimes: number[]; inflowIssues: Set<string>; verifiedIssues: Set<string> }>()
   const mkPrevBucket = () => ({ tasks: 0, cost: 0, waitTimes: [] as number[], procTimes: [] as number[], verifyTimes: [] as number[], inflowIssues: new Set<string>(), verifiedIssues: new Set<string>() })
   for (const key of prevAllKeys) prevDayMap.set(key, mkPrevBucket())
-  // 이전 기간: 이슈별 최초 유입일은 전체 기간 글로벌 min 으로 (재시도 보정)
-  const prevIssueKeys = Array.from(new Set(prevExecs.map(e => `${e.projectId}:${e.issueIid}`)))
-    .map(k => { const [projectId, iidStr] = k.split(':'); return { projectId, issueIid: Number(iidStr) } })
-  const prevFirstStart = getGlobalFirstStartedAt(user.id, prevIssueKeys)
-  const prevVerifyDate = new Map<string, string>()
-  for (const e of prevExecs) {
-    const verifyEnd = e.verifiedAt || e.rejectedAt || ((e.status === 'success' || e.status === 'failed') ? (e.endedAt || e.startedAt) : null)
-    if (!verifyEnd) continue
-    const k = `${e.projectId}:${e.issueIid}`
-    const pv = prevVerifyDate.get(k)
-    if (!pv || verifyEnd < pv) prevVerifyDate.set(k, verifyEnd)
+  // 이전 기간 유입/유출 — 현재 기간과 동일 정의 (이슈 단위, 시작/완료 시각 기준).
+  const prevInflowMap = getIssuesStartedInRange(user.id, prevRange.start, prevRange.end)
+  const prevCompletionMap = getIssuesCompletedInRange(user.id, prevRange.start, prevRange.end)
+  for (const [ik, firstStart] of prevInflowMap) {
+    const key = toBucketKey(firstStart, type)
+    if (!prevDayMap.has(key)) prevDayMap.set(key, mkPrevBucket())
+    prevDayMap.get(key)!.inflowIssues.add(ik)
+  }
+  for (const [ik, completionTime] of prevCompletionMap) {
+    const key = toBucketKey(completionTime, type)
+    if (!prevDayMap.has(key)) prevDayMap.set(key, mkPrevBucket())
+    prevDayMap.get(key)!.verifiedIssues.add(ik)
   }
   for (const e of prevExecs) {
     const key = toBucketKey(e.startedAt, type)
@@ -228,8 +228,6 @@ export async function GET(req: NextRequest) {
     const d = prevDayMap.get(key)!
     d.tasks++
     d.cost += resolveExecutionCost(e, humanSalary)
-    const ik = `${e.projectId}:${e.issueIid}`
-    if (prevFirstStart.get(ik) === e.startedAt) d.inflowIssues.add(ik)
     if (e.status === 'success' || e.status === 'failed') {
       const effEnd = e.endedAt || e.startedAt
       const proc = durationMin(e.startedAt, effEnd)
@@ -249,12 +247,6 @@ export async function GET(req: NextRequest) {
         if (vt >= 0) d.verifyTimes.push(vt)
       }
     }
-  }
-  // 검증 완료일 버킷 배정
-  for (const [ik, verifyEnd] of prevVerifyDate) {
-    const key = toBucketKey(verifyEnd, type)
-    if (!prevDayMap.has(key)) prevDayMap.set(key, mkPrevBucket())
-    prevDayMap.get(key)!.verifiedIssues.add(ik)
   }
   const prevDailyTrend = prevAllKeys.map(key => {
     const d = prevDayMap.get(key)!
@@ -318,7 +310,8 @@ export async function GET(req: NextRequest) {
     })
 
     const pUniqueIssues = new Set(pExecs.map(e => `${e.projectId}:${e.issueIid}`)).size
-    const pVerified = new Set(pExecs.filter(e => e.verifiedAt || e.rejectedAt || e.status === 'success' || e.status === 'failed').map(e => `${e.projectId}:${e.issueIid}`)).size
+    // 프로젝트별 유출 = completionMap 중 해당 프로젝트의 이슈 수.
+    const pVerified = Array.from(completionMap.keys()).filter(k => k.startsWith(`${pid}:`)).length
 
     return {
       projectId: pid, projectName: pExecs[0].projectName, projectColor: pExecs[0].projectColor, projectAvatarUrl: pExecs[0].projectAvatarUrl || '', projectProvider: pExecs[0].projectProvider || 'gitlab',
@@ -494,33 +487,34 @@ export async function GET(req: NextRequest) {
   // Daily trend (extended with waitAvg, procAvg, confirmAvg) — 전체 기간 버킷 채움
   const allKeys = periodKeys(range.start, range.end, type)
   const todayKey = toBucketKey(getKSTTodayString(), type)
+  // verifiedIssues 의미: '유출(이슈 완료)' — 이슈가 done 에 도달한 시각이 그 날인 이슈 (이슈 단위 1회).
+  //   필드명은 호환을 위해 verified 유지. 실제로는 검증/확인 단계 통과 후 done 진입 시각 기준.
+  // confirmedIssues 의미: 확인 단계 완료(confirmed_at) 가 그 날인 이슈 (보조 지표).
   type BucketData = { tasks: number; success: number; failed: number; cost: number; waitTimes: number[]; procTimes: number[]; verifyTimes: number[]; confirmTimes: number[]; inflowIssues: Set<string>; verifiedIssues: Set<string>; confirmedIssues: Set<string> }
   const mkBucket = (): BucketData => ({ tasks: 0, success: 0, failed: 0, cost: 0, waitTimes: [], procTimes: [], verifyTimes: [], confirmTimes: [], inflowIssues: new Set(), verifiedIssues: new Set(), confirmedIssues: new Set() })
   const dayMap = new Map<string, BucketData>()
   for (const key of allKeys) dayMap.set(key, mkBucket())
-  // 각 이슈를 유입일(전체 기간 가장 이른 started_at)에만 카운트.
-  // 기간 내 execution들만 보면, 지난주에 시작된 이슈가 이번주에 retry 된 경우
-  // 이번주 유입으로 잘못 잡히는 버그가 있어서 전체 기간을 별도 조회한다.
-  const issueKeys = Array.from(new Set(execs.map(e => `${e.projectId}:${e.issueIid}`)))
-    .map(k => { const [projectId, iidStr] = k.split(':'); return { projectId, issueIid: Number(iidStr) } })
-  const firstStartByIssue = getGlobalFirstStartedAt(user.id, issueKeys)
-  // 검증 완료일은 verifiedAt 또는 rejectedAt이 있는 exec 중 가장 이른 날짜로 귀속
-  const verifyDateByIssue = new Map<string, string>()
-  for (const e of execs) {
-    const verifyEnd = e.verifiedAt || e.rejectedAt || ((e.status === 'success' || e.status === 'failed') ? (e.endedAt || e.startedAt) : null)
-    if (!verifyEnd) continue
-    const k = `${e.projectId}:${e.issueIid}`
-    const prev = verifyDateByIssue.get(k)
-    if (!prev || verifyEnd < prev) verifyDateByIssue.set(k, verifyEnd)
+  // 유입 버킷: 이슈별 글로벌 first_started_at 이 그 날인 이슈만 카운트.
+  const inflowMapForTrend = inflowMap // 위 summary 에서 이미 조회됨
+  for (const [ik, firstStart] of inflowMapForTrend) {
+    const key = toBucketKey(firstStart, type)
+    if (!dayMap.has(key)) dayMap.set(key, mkBucket())
+    dayMap.get(key)!.inflowIssues.add(ik)
   }
-  // 확인 완료일은 confirmedAt이 있는 exec 중 가장 이른 날짜로 귀속
-  const confirmDateByIssue = new Map<string, string>()
+  // 유출 버킷: 이슈가 done 에 도달한 시각(완료 시각)이 그 날인 이슈.
+  for (const [ik, completionTime] of completionMap) {
+    const key = toBucketKey(completionTime, type)
+    if (!dayMap.has(key)) dayMap.set(key, mkBucket())
+    dayMap.get(key)!.verifiedIssues.add(ik)
+  }
+  // 확인 완료 버킷(보조): confirmed_at 이 있는 이슈만, confirmed_at 일자에 배정.
   for (const e of execs) {
     if (!e.confirmedAt) continue
-    const k = `${e.projectId}:${e.issueIid}`
-    const prev = confirmDateByIssue.get(k)
-    if (!prev || e.confirmedAt < prev) confirmDateByIssue.set(k, e.confirmedAt)
+    const key = toBucketKey(e.confirmedAt, type)
+    if (!dayMap.has(key)) dayMap.set(key, mkBucket())
+    dayMap.get(key)!.confirmedIssues.add(`${e.projectId}:${e.issueIid}`)
   }
+  // exec 단위 집계 — 작업 횟수 / 비용 / 소요시간 평균. 시작일 버킷에 누적.
   for (const e of execs) {
     const key = toBucketKey(e.startedAt, type)
     if (!dayMap.has(key)) dayMap.set(key, mkBucket())
@@ -529,11 +523,6 @@ export async function GET(req: NextRequest) {
     if (e.status === 'success') d.success++
     if (e.status === 'failed') d.failed++
     d.cost += resolveExecutionCost(e, humanSalary)
-    // 유입: 이슈별 최초 시작일에만 1회 카운트
-    const ik = `${e.projectId}:${e.issueIid}`
-    if (firstStartByIssue.get(ik) === e.startedAt) {
-      d.inflowIssues.add(ik)
-    }
     if (e.status === 'success' || e.status === 'failed') {
       const effEnd = e.endedAt || e.startedAt
       const proc = durationMin(e.startedAt, effEnd)
@@ -558,18 +547,6 @@ export async function GET(req: NextRequest) {
         if (ct >= 0) d.confirmTimes.push(ct)
       }
     }
-  }
-  // 검증 완료 이슈를 검증 완료일 버킷에 배정 (유입·시작일과 다를 수 있음)
-  for (const [ik, verifyEnd] of verifyDateByIssue) {
-    const key = toBucketKey(verifyEnd, type)
-    if (!dayMap.has(key)) dayMap.set(key, mkBucket())
-    dayMap.get(key)!.verifiedIssues.add(ik)
-  }
-  // 확인 완료 이슈를 확인 완료일 버킷에 배정
-  for (const [ik, confirmEnd] of confirmDateByIssue) {
-    const key = toBucketKey(confirmEnd, type)
-    if (!dayMap.has(key)) dayMap.set(key, mkBucket())
-    dayMap.get(key)!.confirmedIssues.add(ik)
   }
   const dailyTrend = allKeys.map(key => {
     const isFuture = key > todayKey
@@ -1112,5 +1089,10 @@ export async function GET(req: NextRequest) {
     agentWaitingTrend: agentWaitingTrend.daily,
     prevAgentWaitingTrend: prevAgentWaitingTrend.daily,
     verifierBacklog: getVerifierBacklogForReport(user.id),
+    // 에이전트별 직전 30일 historical 처리 능력 — 가동률 분모로 사용 (보고 기간과 무관한 안정값).
+    agentHistoricalCapacity: byAgent.map(a => {
+      const h = getAgentHistoricalDailyCapacity(a.agentId, 30)
+      return { agentId: a.agentId, dailyCap: h.dailyCap, samples: h.samples }
+    }),
   })
 }

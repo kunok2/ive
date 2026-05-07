@@ -13,6 +13,19 @@ export default function UtilizationGauge({ d }: UtilizationGaugeProps) {
 
   if (d.flow.dailyCapacity <= 0) return null
 
+  // 데이터 부족 시 게이지 자체를 숨김 (수치 노이즈로 의사결정에 해 가지 않도록).
+  // 신뢰도 'low' 조건: 경과일 < 3 또는 에이전트 historical 활동일 < 3.
+  if (d.flow.utilizationConfidence === 'low') {
+    return (
+      <section className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-4 space-y-2">
+        <div className="text-sm font-bold text-ive-text flex items-center gap-1.5">
+          <i className="fa-solid fa-gauge-high text-ive-text-dim" /> {tr('utilizationTitle')}
+        </div>
+        <p className="text-[11px] text-ive-text-dim leading-relaxed">{tr('utilizationLowConfidence')}</p>
+      </section>
+    )
+  }
+
   return (
     <section className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-4 space-y-3">
       <div>

@@ -161,6 +161,10 @@ export function setupTestDb(): Database.Database {
       issue_title TEXT DEFAULT NULL,
       verify_waiting_since TEXT DEFAULT NULL,
       assignee_git_user_id TEXT DEFAULT NULL,
+      confirmed_at TEXT DEFAULT NULL,
+      confirmer_user_id TEXT DEFAULT NULL,
+      confirmer_name TEXT DEFAULT NULL,
+      confirmer_avatar TEXT DEFAULT NULL,
       PRIMARY KEY (project_id, issue_iid),
       FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
     );
@@ -286,6 +290,21 @@ export interface SeedExecution {
   verifierUserId?: string | null
   cacheReadInputTokens?: number
   cacheCreationInputTokens?: number
+}
+
+export interface SeedIssueStage {
+  projectId: string
+  issueIid: number
+  cachedStage?: string | null
+  confirmedAt?: string | null
+  issueTitle?: string | null
+}
+
+export function seedIssueStage(db: Database.Database, s: SeedIssueStage) {
+  db.prepare(`
+    INSERT INTO issue_stages (project_id, issue_iid, stage, cached_stage, confirmed_at, issue_title)
+    VALUES (?, ?, '', ?, ?, ?)
+  `).run(s.projectId, s.issueIid, s.cachedStage ?? null, s.confirmedAt ?? null, s.issueTitle ?? null)
 }
 
 export function seedExecution(db: Database.Database, ex: SeedExecution) {

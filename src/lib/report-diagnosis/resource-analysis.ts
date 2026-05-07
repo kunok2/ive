@@ -82,21 +82,32 @@ export interface AgentCapacity {
   agentId: string
   dailyCap: number
   cost: number
+  samples: number  // historical 활동 일수 (3 미만이면 신뢰도 낮음)
 }
 
+/**
+ * 에이전트별 일일 처리 능력 = 직전 30일 활동일 평균 처리 건수.
+ *
+ * 보고 기간(주/월/년)과 무관하게 같은 historical 윈도우를 쓰므로 utilization 이 안정.
+ * historical 데이터가 없는 신규 에이전트는 폴백으로 현재 보고 기간의 a.tasks/elapsedDays 사용.
+ *
+ * @param historicalCapFn  agentId → {dailyCap, samples}.
+ *   테스트나 글로벌 스코프에서 주입 가능. 미지정 시 빈 함수(0) 반환.
+ */
 export function computeAgentCapacities(
   data: ReportData,
   elapsedDays: number,
-  today: string,
+  _today: string,
+  historicalCapFn?: (agentId: string) => { dailyCap: number; samples: number },
 ): { agentCapacities: AgentCapacity[]; avgAgentCap: number } {
   const { byAgent } = data
   const agentCapacities: AgentCapacity[] = []
   for (const a of byAgent) {
-    const trend = data.agentTrend?.find(t => t.agentId === a.agentId)
-    const dailyTasks = trend ? trend.daily.filter(d => d.date <= today).map(d => d.tasks ?? 0) : []
-    const peak = dailyTasks.length > 0 ? Math.max(...dailyTasks) : 0
-    const cap = peak > 0 ? peak : (elapsedDays > 0 ? a.tasks / elapsedDays : 0)
-    agentCapacities.push({ agentId: a.agentId, dailyCap: cap, cost: a.cost })
+    const hist = historicalCapFn ? historicalCapFn(a.agentId) : { dailyCap: 0, samples: 0 }
+    // historical 활동일이 충분하면 그 값 사용. 부족하면 보고 기간 평균으로 폴백.
+    const fallback = elapsedDays > 0 ? a.tasks / elapsedDays : 0
+    const cap = hist.samples >= 3 ? hist.dailyCap : fallback
+    agentCapacities.push({ agentId: a.agentId, dailyCap: cap, cost: a.cost, samples: hist.samples })
   }
   const avgAgentCap = agentCapacities.length > 0
     ? agentCapacities.reduce((s, a) => s + a.dailyCap, 0) / agentCapacities.length

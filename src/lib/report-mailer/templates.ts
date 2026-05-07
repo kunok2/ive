@@ -1,5 +1,5 @@
 import { ReportType } from '@/types'
-import { ReportExecution, getDailyWaitingTrend } from '../db'
+import { ReportExecution, getDailyWaitingTrend, getGlobalIssuesStartedInRange, getGlobalIssuesCompletedInRange } from '../db'
 import { getHumanMonthlySalary, resolveExecutionCostBreakdown } from '../token-pricing'
 import { REPORT_TYPE_LABELS, PREV_PERIOD_LABELS, calculatePreviousPeriod } from './schedule'
 
@@ -230,17 +230,14 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
       return s + Math.max(0, (new Date(effEnd).getTime() - new Date(e.startedAt).getTime()) / 60000)
     }, 0)
 
-  // ─── 유입/처리 흐름 계산 ───
-  // 유입: 기간 내 최초 시작된 고유 이슈 (projectId + issueIid 기준)
-  const seenIssues = new Set<string>()
-  const uniqueInflow = executions.filter(e => {
-    const key = `${e.projectId}:${e.issueIid}`
-    if (seenIssues.has(key)) return false
-    seenIssues.add(key)
-    return true
-  }).length
-  // 처리: verified된 건 (verifiedAt 또는 rejectedAt 있는 건)
-  const verifiedCount = executions.filter(e => e.verifiedAt || e.rejectedAt).length
+  // ─── 유입/유출 흐름 계산 ───
+  // 유입: 이슈가 처음 시작된 시각이 기간 내인 이슈 (이슈 단위 1회).
+  //   주 경계: W1 시작 → W2 retry된 이슈는 W1 유입에만 잡힘.
+  // 유출: 이슈가 done 에 도달한 시각(=COALESCE(confirmed_at, max(verified_at)))이 기간 내인 이슈.
+  //   검증/확인은 중간 단계, rejected 는 완료 아님.
+  //   주 경계: W1 시작 → W2 완료된 이슈는 W2 유출에만 잡힘.
+  const uniqueInflow = getGlobalIssuesStartedInRange(periodStart, periodEnd).size
+  const verifiedCount = getGlobalIssuesCompletedInRange(periodStart, periodEnd).size
   const dailyInflow = uniqueInflow / periodDays
   const dailyCapacity = total / periodDays
 
@@ -322,15 +319,14 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
   }
   const prevProcAvg = avg(prevProcTimes)
 
-  // 전 기간 유입/검증 계산
-  const prevSeenIssues = new Set<string>()
-  const prevUniqueInflow = prev.filter(e => {
-    const key = `${e.projectId}:${e.issueIid}`
-    if (prevSeenIssues.has(key)) return false
-    prevSeenIssues.add(key)
-    return true
-  }).length
-  const prevVerifiedCount = prev.filter(e => e.verifiedAt || e.rejectedAt).length
+  // 전 기간 유입/유출 계산 — 현재 기간과 동일 정의 (이슈 단위, 시작/완료 시각 기준).
+  const prevPeriod = calculatePreviousPeriod(reportType, periodStart, periodEnd)
+  const prevUniqueInflow = hasPrev
+    ? getGlobalIssuesStartedInRange(prevPeriod.start, prevPeriod.end).size
+    : 0
+  const prevVerifiedCount = hasPrev
+    ? getGlobalIssuesCompletedInRange(prevPeriod.start, prevPeriod.end).size
+    : 0
   const prevCurrentWaiting = 0
 
   // ─── 프로젝트별 집계 ───
@@ -494,8 +490,8 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
   const waitingTrend = waitingTrendData
   const prevWaitingData = prevExecutions ? getDailyWaitingTrend(
     null,
-    calculatePreviousPeriod(reportType, periodStart, periodEnd).start,
-    calculatePreviousPeriod(reportType, periodStart, periodEnd).end
+    prevPeriod.start,
+    prevPeriod.end
   ) : null
 
   // 전 기간 대기수 계산 (HTML 섹션에서 사용)

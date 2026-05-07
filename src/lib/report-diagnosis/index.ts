@@ -33,6 +33,13 @@ export function diagnose(
   prevWeeklyData?: ReportData[],
   formatDur: (min: number) => string = defaultFmtDur,
 ): DiagnosisResult {
+  // 에이전트별 historical capacity 룩업 — data.agentHistoricalCapacity 가 API 에서 채워짐.
+  const historicalCapMap = new Map<string, { dailyCap: number; samples: number }>()
+  for (const c of data.agentHistoricalCapacity ?? []) {
+    historicalCapMap.set(c.agentId, { dailyCap: c.dailyCap, samples: c.samples })
+  }
+  const historicalCapFn = (agentId: string) => historicalCapMap.get(agentId) ?? { dailyCap: 0, samples: 0 }
+
   const fmtDur = formatDur
   const { period, summary, prevSummary, byAgent, byVerifier, lifecycle, prevLifecycle, waitingTrend } = data
 
@@ -47,15 +54,27 @@ export function diagnose(
   const endWaiting = pastWaiting.length > 0 ? pastWaiting[pastWaiting.length - 1].total : 0
   const startProcWaiting = pastWaiting.length > 0 ? pastWaiting[0].totalWaiting : 0
   const endProcWaiting = pastWaiting.length > 0 ? pastWaiting[pastWaiting.length - 1].totalWaiting : 0
+  // totalInflow: 표시용(이슈 수). 큐 변화량 합산은 의사결정 지표(가동률) 분모로는 부적절해서 제외.
   const totalInflow = summary.uniqueInflow + (endProcWaiting - startProcWaiting)
   const totalThroughput = summary.verifiedCount
   const dailyInflow = elapsedDays > 0 ? totalInflow / elapsedDays : 0
 
-  // 에이전트 용량 계산 (글로벌 풀)
-  const { agentCapacities, avgAgentCap } = computeAgentCapacities(data, elapsedDays, today)
+  // 에이전트 용량 계산 (글로벌 풀) — 직전 30일 historical 윈도우 기반 안정값.
+  const { agentCapacities, avgAgentCap } = computeAgentCapacities(data, elapsedDays, today, historicalCapFn)
   const dailyCapacity = agentCapacities.reduce((s, a) => s + a.dailyCap, 0)
-  const utilization = dailyCapacity > 0 ? dailyInflow / dailyCapacity : (dailyInflow > 0 ? Infinity : 0)
-  const healthLevel = healthFromUtil(utilization)
+
+  // 가동률 = 일일 처리율 / 일일 처리능력. 큐 변화량(노이즈) 포함하지 않음.
+  // 분자/분모 모두 "일 평균" 단위로 통일 → 주/월/년 보고서에서 비교 가능한 0~∞ 비율.
+  const dailyThroughput = elapsedDays > 0 ? totalThroughput / elapsedDays : 0
+  const utilization = dailyCapacity > 0 ? dailyThroughput / dailyCapacity : 0
+
+  // 신뢰도: 경과일 부족(<3) 또는 capacity 샘플 부족(에이전트 historical 활동일 평균<3)이면 'low'.
+  const avgSamples = agentCapacities.length > 0
+    ? agentCapacities.reduce((s, a) => s + a.samples, 0) / agentCapacities.length
+    : 0
+  const utilizationConfidence: 'high' | 'low' = (elapsedDays >= 3 && avgSamples >= 3) ? 'high' : 'low'
+
+  const healthLevel = utilizationConfidence === 'low' ? 'optimal' : healthFromUtil(utilization)
 
   const costPerTask = summary.totalTasks > 0 ? summary.totalCost / summary.totalTasks : 0
   const prevCostPerTask = prevSummary.totalTasks > 0 ? prevSummary.totalCost / prevSummary.totalTasks : 0
@@ -67,6 +86,7 @@ export function diagnose(
     dailyInflow,
     dailyCapacity,
     utilization,
+    utilizationConfidence,
     healthLevel,
     totalCost: summary.totalCost,
     totalCostAi: summary.totalCostAi ?? 0,
