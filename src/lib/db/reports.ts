@@ -36,6 +36,10 @@ export interface ReportExecution {
   verifiedAt: string | null
   verifyStartedAt: string | null
   rejectedAt: string | null
+  confirmedAt: string | null
+  confirmerName: string | null
+  confirmerAvatar: string | null
+  confirmerUserId: string | null
   modelName: string | null
   verifierName: string | null
   verifierAvatar: string | null
@@ -66,6 +70,10 @@ function mapReportExecution(r: any): ReportExecution {
     verifiedAt: r.verified_at ?? null,
     verifyStartedAt: r.verify_started_at ?? null,
     rejectedAt: r.rejected_at ?? null,
+    confirmedAt: r.confirmed_at ?? null,
+    confirmerName: r.confirmer_name ?? null,
+    confirmerAvatar: r.confirmer_avatar ?? null,
+    confirmerUserId: r.confirmer_user_id ?? null,
     verifierName: r.verifier_name ?? null,
     verifierAvatar: r.verifier_user_avatar ?? r.verifier_avatar ?? null,
     verifierUsername: r.verifier_username ?? null,
@@ -81,6 +89,7 @@ const REPORT_EXEC_QUERY = `
          te.issue_iid, te.issue_title, te.status,
          te.started_at, te.ended_at, te.input_tokens, te.output_tokens, te.cache_read_input_tokens, te.cache_creation_input_tokens, te.cost_usd, te.turns,
          te.issue_created_at, te.model_name, te.verified_at, te.verify_started_at, te.rejected_at,
+         ist.confirmed_at, ist.confirmer_name, ist.confirmer_avatar, ist.confirmer_user_id,
          te.assignee_type, te.user_id as te_user_id, te.user_name as te_user_name, te.user_avatar as te_user_avatar,
          te.verifier_name, te.verifier_avatar, te.verifier_username,
          COALESCE(te.verifier_user_id, vu.id) as verifier_user_id_resolved,
@@ -89,6 +98,7 @@ const REPORT_EXEC_QUERY = `
   JOIN projects p ON p.id = te.project_id
   LEFT JOIN agents a ON a.id = te.agent_id
   LEFT JOIN users u ON u.id = a.user_id
+  LEFT JOIN issue_stages ist ON ist.project_id = te.project_id AND ist.issue_iid = te.issue_iid
   LEFT JOIN users vu ON vu.id = te.verifier_user_id OR (te.verifier_user_id IS NULL AND vu.name = te.verifier_name)
 `
 

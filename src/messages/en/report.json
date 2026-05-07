@@ -229,9 +229,12 @@
   "insightWait": "Waiting takes {pct}% of total time",
   "insightProc": "Processing dominates the time ({pct}%)",
   "insightVerify": "Verification is the bottleneck ({pct}%)",
+  "insightConfirm": "Confirmation is the bottleneck ({pct}%)",
   "stageWait": "Wait",
   "stageProc": "Process",
   "stageVerify": "Verify",
+  "stageConfirm": "Confirm",
+  "confirmPct": "Confirm {pct}%",
   "retryIssueSummary": "Avg {count} retries · {issues} tasks",
   "verifierResourceLine": "{count} verifiers · {capacity}/day",
   "utilizationPctLabel": "Utilization {pct}%",
@@ -363,5 +366,8 @@
   "alertVerifierOverloadAction": "Distribute or add verifiers",
   "alertVerifierStalledTitle": "Verification delayed",
   "alertVerifierStalledDetail": "{name}: has long-waiting verification items",
-  "alertVerifierStalledAction": "Check verifier"
+  "alertVerifierStalledAction": "Check verifier",
+  "alertConfirmBottleneckTitle": "Confirmation bottleneck",
+  "alertConfirmBottleneckDetail": "Confirmation stage takes {pct}% of total time",
+  "alertConfirmBottleneckAction": "Review confirmation process"
 }

@@ -23,7 +23,7 @@ export interface ReportData {
   projectTrend: { projectId: string; projectName: string; projectColor: string; daily: { date: string; tasks: number; cost: number }[] }[]
   userTrend?: { userId: string; userName: string; userAvatar: string | null; avatarUserId?: string | null; daily: { date: string; tasks: number | null; cost: number | null; verified: number | null }[] }[]
   lifecycle: Lifecycle
-  prevLifecycle: { waitAvg: number; waitCount: number; procAvg: number; procCount: number; verifyAvg: number; verifyCount: number; totalAvg: number; totalCount: number }
+  prevLifecycle: { waitAvg: number; waitCount: number; procAvg: number; procCount: number; verifyAvg: number; verifyCount: number; confirmAvg: number; confirmCount: number; totalAvg: number; totalCount: number }
   waitingTrend: WaitingDay[]
   prevWaitingTrend: WaitingDay[]
   agentWaitingTrend: AgentWaitingDay[]
@@ -65,11 +65,11 @@ export interface AgentStat {
 
 export interface UserStat { userId: string; userName: string; userAvatar: string | null; avatarUserId?: string | null; tasks: number; success: number; failed: number; issueCount: number; avgDurationMin: number; cost: number; avgWaitMin: number; verifyTasks: number; avgVerifyMin: number; verifyAvgWaitMin: number; verifyWaiting: number; verifyApproved: number; verifyRejected: number; annotation?: UserAnnotation | null }
 export interface VerifierStat { verifierName: string; verifierAvatar: string; tasks: number; avgVerifyMin: number; avgWaitMin?: number }
-export interface DailyTrend { date: string; tasks: number | null; inflow: number | null; verified: number | null; success: number | null; failed: number | null; cost: number | null; waitAvg: number | null; procAvg: number | null; verifyAvg: number | null }
+export interface DailyTrend { date: string; tasks: number | null; inflow: number | null; verified: number | null; success: number | null; failed: number | null; cost: number | null; waitAvg: number | null; procAvg: number | null; verifyAvg: number | null; confirmAvg: number | null }
 export interface WaitingDay { date: string; total: number; totalWaiting: number; totalVerifyWaiting: number; byProject: { projectId: string; projectName: string; projectColor: string; waiting: number; verifyWaiting: number }[] }
 export interface AgentWaitingDay { date: string; total: number; byAgent: { agentId: string; agentName: string; agentAvatar: string; waiting: number }[] }
-export interface Lifecycle { waitAvg: number; waitMax: number; waitCount: number; procAvg: number; procMax: number; procCount: number; verifyAvg: number; verifyMax: number; verifyCount: number; totalAvg: number; totalMax: number; totalCount: number; avgAttempts: number; retryRate: number; uniqueIssues: number }
-export interface ResolvedIssue { issueIid: number; issueTitle: string; projectId: string; projectName: string; projectColor: string; projectProvider: 'gitlab' | 'github'; agentName: string; agentAvatar: string; verifierName: string | null; verifierAvatar: string | null; verifierUserId: string | null; status: string; startedAt: string; resolvedAt: string; durationMin: number; verifyMin: number | null; totalMin: number; cost: number; waitMin: number | null; turns: number; attempts: number; attemptNo: number }
+export interface Lifecycle { waitAvg: number; waitMax: number; waitCount: number; procAvg: number; procMax: number; procCount: number; verifyAvg: number; verifyMax: number; verifyCount: number; confirmAvg: number; confirmMax: number; confirmCount: number; totalAvg: number; totalMax: number; totalCount: number; avgAttempts: number; retryRate: number; uniqueIssues: number }
+export interface ResolvedIssue { issueIid: number; issueTitle: string; projectId: string; projectName: string; projectColor: string; projectProvider: 'gitlab' | 'github'; agentName: string; agentAvatar: string; verifierName: string | null; verifierAvatar: string | null; verifierUserId: string | null; confirmerName: string | null; confirmerAvatar: string | null; confirmerUserId: string | null; status: string; startedAt: string; resolvedAt: string; durationMin: number; verifyMin: number | null; confirmMin: number | null; totalMin: number; cost: number; waitMin: number | null; turns: number; attempts: number; attemptNo: number }
 
 // ─── 진단 결과 타입 ───
 

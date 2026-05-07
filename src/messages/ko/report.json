@@ -230,9 +230,12 @@
   "insightWait": "대기에서 전체 시간의 {pct}%가 소요됩니다",
   "insightProc": "수행 단계에 시간이 집중됩니다 ({pct}%)",
   "insightVerify": "검증이 병목입니다 ({pct}%)",
+  "insightConfirm": "확인 단계가 병목입니다 ({pct}%)",
   "stageWait": "대기",
   "stageProc": "수행",
   "stageVerify": "검증",
+  "stageConfirm": "확인",
+  "confirmPct": "확인 {pct}%",
   "retryIssueSummary": "재시도 평균 {count}회 · 작업 {issues}건",
   "verifierResourceLine": "검증자 {count}명 · {capacity}건/일",
   "utilizationPctLabel": "가동률 {pct}%",
@@ -364,5 +367,8 @@
   "alertVerifierOverloadAction": "검증자 분산 또는 지원",
   "alertVerifierStalledTitle": "검증 지연",
   "alertVerifierStalledDetail": "{name}: 오래된 검증 대기 존재",
-  "alertVerifierStalledAction": "검증자 확인"
+  "alertVerifierStalledAction": "검증자 확인",
+  "alertConfirmBottleneckTitle": "확인 단계 병목",
+  "alertConfirmBottleneckDetail": "확인 단계가 전체 시간의 {pct}%를 차지합니다",
+  "alertConfirmBottleneckAction": "확인 프로세스 검토"
 }
