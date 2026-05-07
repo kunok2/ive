@@ -175,6 +175,20 @@ export function generateAlerts(
     })
   }
 
+  // 7-10. 확인 단계 병목 (확인 시간이 전체 시간의 30% 이상)
+  if (lifecycle.confirmCount > 0 && lifecycle.totalAvg > 0) {
+    const confirmPct = Math.round((lifecycle.confirmAvg / lifecycle.totalAvg) * 100)
+    if (confirmPct >= 30) {
+      alerts.push({
+        severity: 'warning',
+        title: { key: 'alertConfirmBottleneckTitle' },
+        detail: { key: 'alertConfirmBottleneckDetail', params: { pct: confirmPct } },
+        action: { key: 'alertConfirmBottleneckAction' },
+        actionTarget: '/agents',
+      })
+    }
+  }
+
   return alerts
 }
 

@@ -25,20 +25,22 @@ export default function LifecycleSection({ d, data, helpers }: LifecycleSectionP
         </div>
       )}
 
-      {/* 인사이트 문장 */}
+       {/* 인사이트 문장 */}
       {data.lifecycle.totalAvg > 0 && (() => {
         const waitPct = Math.round((data.lifecycle.waitAvg / data.lifecycle.totalAvg) * 100)
         const procPct = Math.round((data.lifecycle.procAvg / data.lifecycle.totalAvg) * 100)
         const verifyPct = data.lifecycle.verifyCount > 0 ? Math.round((data.lifecycle.verifyAvg / data.lifecycle.totalAvg) * 100) : 0
+        const confirmPct = data.lifecycle.confirmCount > 0 ? Math.round((data.lifecycle.confirmAvg / data.lifecycle.totalAvg) * 100) : 0
         let insight = tr('insightEven')
         if (waitPct >= 50) insight = tr('insightWait', { pct: waitPct })
         else if (procPct >= 60) insight = tr('insightProc', { pct: procPct })
         else if (verifyPct >= 40) insight = tr('insightVerify', { pct: verifyPct })
+        else if (confirmPct >= 30) insight = tr('insightConfirm', { pct: confirmPct })
         return <div className="text-xs text-ive-text-dim">{insight}</div>
       })()}
 
-      {/* 단계별 */}
-      <div className={`grid gap-2 ${data.lifecycle.verifyCount > 0 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+       {/* 단계별 */}
+      <div className={`grid gap-2 ${data.lifecycle.confirmCount > 0 ? 'grid-cols-4' : data.lifecycle.verifyCount > 0 ? 'grid-cols-3' : 'grid-cols-2'}`}>
         {data.lifecycle.waitCount > 0 && (
           <div className="text-center">
             <div className="text-xs text-ive-text-dim">{tr('stageWait')}</div>
@@ -67,24 +69,37 @@ export default function LifecycleSection({ d, data, helpers }: LifecycleSectionP
             })()}
           </div>
         )}
+        {data.lifecycle.confirmCount > 0 && (
+          <div className="text-center">
+            <div className="text-xs text-ive-text-dim">{tr('stageConfirm')}</div>
+            <div className="text-sm font-bold text-ive-text">{fmtDur(data.lifecycle.confirmAvg)}</div>
+            {data.prevLifecycle.confirmAvg > 0 && (() => {
+              const b = diffBadge(data.lifecycle.confirmAvg, data.prevLifecycle.confirmAvg)
+              return b ? <div className={`text-xs font-bold ${diffColor(data.lifecycle.confirmAvg, data.prevLifecycle.confirmAvg, true)}`}>{b}</div> : null
+            })()}
+          </div>
+        )}
       </div>
 
-      {/* 비율 바 */}
+       {/* 비율 바 */}
       {data.lifecycle.totalAvg > 0 && (() => {
         const waitPct = Math.round((data.lifecycle.waitAvg / data.lifecycle.totalAvg) * 100)
         const procPct = Math.round((data.lifecycle.procAvg / data.lifecycle.totalAvg) * 100)
         const verifyPct = data.lifecycle.verifyCount > 0 ? Math.round((data.lifecycle.verifyAvg / data.lifecycle.totalAvg) * 100) : 0
+        const confirmPct = data.lifecycle.confirmCount > 0 ? Math.round((data.lifecycle.confirmAvg / data.lifecycle.totalAvg) * 100) : 0
         return (
           <div>
             <div className="flex h-2 rounded-full overflow-hidden bg-ive-bg-deep">
               {waitPct > 0 && <div className="bg-ive-cyan/30" style={{ width: `${waitPct}%` }} />}
               <div className="bg-ive-cyan/60" style={{ width: `${procPct}%` }} />
               {verifyPct > 0 && <div className="bg-ive-cyan/90" style={{ width: `${verifyPct}%` }} />}
+              {confirmPct > 0 && <div className="bg-ive-green/90" style={{ width: `${confirmPct}%` }} />}
             </div>
             <div className="flex justify-between mt-1 text-xs text-ive-text-dim">
               {waitPct > 0 && <span>{tr('waitPct', { pct: waitPct })}</span>}
               <span>{tr('procPct', { pct: procPct })}</span>
               {verifyPct > 0 && <span>{tr('verifyPct', { pct: verifyPct })}</span>}
+              {confirmPct > 0 && <span>{tr('confirmPct', { pct: confirmPct })}</span>}
             </div>
           </div>
         )

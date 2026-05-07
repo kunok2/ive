@@ -523,11 +523,11 @@ export async function GET(req: NextRequest) {
 
   // User trend (daily breakdown per user) — 전체 기간 버킷 채움 (아래에서 allKeys 사용)
 
-  // Daily trend (extended with waitAvg, procAvg) — 전체 기간 버킷 채움
+  // Daily trend (extended with waitAvg, procAvg, confirmAvg) — 전체 기간 버킷 채움
   const allKeys = periodKeys(range.start, range.end, type)
   const todayKey = toBucketKey(getKSTTodayString(), type)
-  type BucketData = { tasks: number; success: number; failed: number; cost: number; waitTimes: number[]; procTimes: number[]; verifyTimes: number[]; inflowIssues: Set<string>; verifiedIssues: Set<string> }
-  const mkBucket = (): BucketData => ({ tasks: 0, success: 0, failed: 0, cost: 0, waitTimes: [], procTimes: [], verifyTimes: [], inflowIssues: new Set(), verifiedIssues: new Set() })
+  type BucketData = { tasks: number; success: number; failed: number; cost: number; waitTimes: number[]; procTimes: number[]; verifyTimes: number[]; confirmTimes: number[]; inflowIssues: Set<string>; verifiedIssues: Set<string>; confirmedIssues: Set<string> }
+  const mkBucket = (): BucketData => ({ tasks: 0, success: 0, failed: 0, cost: 0, waitTimes: [], procTimes: [], verifyTimes: [], confirmTimes: [], inflowIssues: new Set(), verifiedIssues: new Set(), confirmedIssues: new Set() })
   const dayMap = new Map<string, BucketData>()
   for (const key of allKeys) dayMap.set(key, mkBucket())
   // 각 이슈를 유입일(전체 기간 가장 이른 started_at)에만 카운트.
@@ -544,6 +544,14 @@ export async function GET(req: NextRequest) {
     const k = `${e.projectId}:${e.issueIid}`
     const prev = verifyDateByIssue.get(k)
     if (!prev || verifyEnd < prev) verifyDateByIssue.set(k, verifyEnd)
+  }
+  // 확인 완료일은 confirmedAt이 있는 exec 중 가장 이른 날짜로 귀속
+  const confirmDateByIssue = new Map<string, string>()
+  for (const e of execs) {
+    if (!e.confirmedAt) continue
+    const k = `${e.projectId}:${e.issueIid}`
+    const prev = confirmDateByIssue.get(k)
+    if (!prev || e.confirmedAt < prev) confirmDateByIssue.set(k, e.confirmedAt)
   }
   for (const e of execs) {
     const key = toBucketKey(e.startedAt, type)
@@ -576,6 +584,11 @@ export async function GET(req: NextRequest) {
         const vt = e.verifyStartedAt ? durationMin(e.verifyStartedAt, verifyEnd) : durationMin(effEnd, verifyEnd)
         if (vt >= 0) d.verifyTimes.push(vt)
       }
+      // 확인 시간: verifyEnd → confirmedAt
+      if (e.confirmedAt && verifyEnd) {
+        const ct = durationMin(verifyEnd, e.confirmedAt)
+        if (ct >= 0) d.confirmTimes.push(ct)
+      }
     }
   }
   // 검증 완료 이슈를 검증 완료일 버킷에 배정 (유입·시작일과 다를 수 있음)
@@ -583,6 +596,12 @@ export async function GET(req: NextRequest) {
     const key = toBucketKey(verifyEnd, type)
     if (!dayMap.has(key)) dayMap.set(key, mkBucket())
     dayMap.get(key)!.verifiedIssues.add(ik)
+  }
+  // 확인 완료 이슈를 확인 완료일 버킷에 배정
+  for (const [ik, confirmEnd] of confirmDateByIssue) {
+    const key = toBucketKey(confirmEnd, type)
+    if (!dayMap.has(key)) dayMap.set(key, mkBucket())
+    dayMap.get(key)!.confirmedIssues.add(ik)
   }
   const dailyTrend = allKeys.map(key => {
     const isFuture = key > todayKey
@@ -592,12 +611,14 @@ export async function GET(req: NextRequest) {
       tasks: isFuture ? null : d.tasks,
       inflow: isFuture ? null : d.inflowIssues.size,
       verified: isFuture ? null : d.verifiedIssues.size,
+      confirmed: isFuture ? null : d.confirmedIssues.size,
       success: isFuture ? null : d.success,
       failed: isFuture ? null : d.failed,
       cost: isFuture ? null : Math.round(d.cost * 100) / 100,
       waitAvg: isFuture ? null : (d.waitTimes.length > 0 ? Math.round(d.waitTimes.reduce((a, b) => a + b, 0) / d.waitTimes.length * 10) / 10 : null),
       procAvg: isFuture ? null : (d.procTimes.length > 0 ? Math.round(d.procTimes.reduce((a, b) => a + b, 0) / d.procTimes.length * 10) / 10 : null),
       verifyAvg: isFuture ? null : (d.verifyTimes.length > 0 ? Math.round(d.verifyTimes.reduce((a, b) => a + b, 0) / d.verifyTimes.length * 10) / 10 : null),
+      confirmAvg: isFuture ? null : (d.confirmTimes.length > 0 ? Math.round(d.confirmTimes.reduce((a, b) => a + b, 0) / d.confirmTimes.length * 10) / 10 : null),
     }
   })
 
@@ -743,10 +764,13 @@ export async function GET(req: NextRequest) {
           verifierName: e.verifierName ?? null,
           verifierAvatar: e.verifierAvatar ?? null,
           verifierUserId: e.verifierUserId ?? null,
+          confirmerName: null, // TODO: issue_stages에서 confirmer_name 조회 필요
+          confirmerAvatar: null,
+          confirmerUserId: null,
           status: e.status as 'success' | 'failed',
           startedAt: e.startedAt,
-          // 처리 완료 시각 (검증 끝났으면 그 시점, 아니면 작업 종료 시점)
-          resolvedAt: e.verifiedAt || e.rejectedAt || e.endedAt || e.startedAt,
+          // 처리 완료 시각 (확인 끝났으면 그 시점, 아니면 검증 종료 시점)
+          resolvedAt: e.confirmedAt || e.verifiedAt || e.rejectedAt || e.endedAt || e.startedAt,
           // 작업 시간 (에이전트가 코드를 만든 시간): startedAt → endedAt
           durationMin: Math.round(durationMin(e.startedAt, e.endedAt) * 10) / 10,
           // 검증 시간 (사람이 검증한 시간): verifyStartedAt → verifiedAt | rejectedAt
@@ -755,10 +779,16 @@ export async function GET(req: NextRequest) {
             if (!e.verifyStartedAt || !verifyEnd) return null
             return Math.round(durationMin(e.verifyStartedAt, verifyEnd) * 10) / 10
           })(),
-          // 총 소요 시간: 이슈 생성 → 최종 종료 (검증 끝났으면 그 시점, 아니면 endedAt)
+          // 확인 시간 (사람이 확인한 시간): verifiedAt/rejectedAt → confirmedAt
+          confirmMin: (() => {
+            const verifyEnd = e.verifiedAt || e.rejectedAt
+            if (!e.confirmedAt || !verifyEnd) return null
+            return Math.round(durationMin(verifyEnd, e.confirmedAt) * 10) / 10
+          })(),
+          // 총 소요 시간: 이슈 생성 → 최종 종료 (확인 끝났으면 그 시점, 아니면 검증 종료)
           totalMin: (() => {
             const start = e.issueCreatedAt || e.startedAt
-            const end = e.verifiedAt || e.rejectedAt || e.endedAt || e.startedAt
+            const end = e.confirmedAt || e.verifiedAt || e.rejectedAt || e.endedAt || e.startedAt
             return Math.round(durationMin(start, end) * 10) / 10
           })(),
           cost: Math.round(resolveExecutionCost(e, humanSalary) * 100) / 100,
@@ -804,11 +834,19 @@ export async function GET(req: NextRequest) {
       return e.verifyStartedAt ? durationMin(e.verifyStartedAt, verifyEnd) : durationMin(effEnd, verifyEnd)
     })
     .filter(v => v >= 0)
-  // 총시간: execution별 자체 생애주기 (대기 + 개발 + 검증대기 + 검증)
+  // 확인시간: verified_at/rejectedAt → confirmedAt
+  const confirmTimes = finishedExecs
+    .filter(e => e.confirmedAt && (e.verifiedAt || e.rejectedAt))
+    .map(e => {
+      const verifyEnd = (e.verifiedAt || e.rejectedAt)!
+      return durationMin(verifyEnd, e.confirmedAt!)
+    })
+    .filter(v => v >= 0)
+  // 총시간: execution별 자체 생애주기 (대기 + 개발 + 검증대기 + 검증 + 확인대기 + 확인)
   const totalTimes = finishedExecs
     .filter(e => e.issueCreatedAt)
     .map(e => {
-      const endPoint = e.verifiedAt || e.rejectedAt || e.endedAt || e.startedAt
+      const endPoint = e.confirmedAt || e.verifiedAt || e.rejectedAt || e.endedAt || e.startedAt
       return durationMin(e.issueCreatedAt!, endPoint)
     })
     .filter(v => v >= 0)
@@ -836,6 +874,9 @@ export async function GET(req: NextRequest) {
     verifyAvg: round1(avg(verifyTimes)),
     verifyMax: round1(max(verifyTimes)),
     verifyCount: verifyTimes.length,
+    confirmAvg: round1(avg(confirmTimes)),
+    confirmMax: round1(max(confirmTimes)),
+    confirmCount: confirmTimes.length,
     totalAvg: round1(avg(totalTimes)),
     totalMax: round1(max(totalTimes)),
     totalCount: totalTimes.length,
@@ -870,10 +911,18 @@ export async function GET(req: NextRequest) {
       return e.verifyStartedAt ? durationMin(e.verifyStartedAt, verifyEnd) : durationMin(effEnd, verifyEnd)
     })
     .filter(v => v >= 0)
+  // 이전 기간 확인시간: verified_at/rejectedAt → confirmedAt
+  const prevConfirmTimes = prevFinishedExecs
+    .filter(e => e.confirmedAt && (e.verifiedAt || e.rejectedAt))
+    .map(e => {
+      const verifyEnd = (e.verifiedAt || e.rejectedAt)!
+      return durationMin(verifyEnd, e.confirmedAt!)
+    })
+    .filter(v => v >= 0)
   const prevTotalTimes = prevFinishedExecs
     .filter(e => e.issueCreatedAt)
     .map(e => {
-      const endPoint = e.verifiedAt || e.rejectedAt || e.endedAt || e.startedAt
+      const endPoint = e.confirmedAt || e.verifiedAt || e.rejectedAt || e.endedAt || e.startedAt
       return durationMin(e.issueCreatedAt!, endPoint)
     })
     .filter(v => v >= 0)
@@ -885,6 +934,9 @@ export async function GET(req: NextRequest) {
     procCount: prevProcTimes.length,
     verifyAvg: round1(avg(prevVerifyTimes)),
     verifyCount: prevVerifyTimes.length,
+    confirmAvg: round1(avg(prevConfirmTimes)),
+    confirmMax: round1(max(prevConfirmTimes)),
+    confirmCount: prevConfirmTimes.length,
     totalAvg: round1(avg(prevTotalTimes)),
     totalCount: prevTotalTimes.length,
   }
