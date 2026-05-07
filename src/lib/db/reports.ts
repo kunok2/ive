@@ -181,7 +181,9 @@ export function getIssueCompletionTimes(
              COALESCE(
                ist.confirmed_at,
                MAX(te.verified_at),
-               MAX(CASE WHEN te.status IN ('success', 'failed') THEN te.ended_at END)
+               MAX(CASE WHEN te.status IN ('success', 'failed')
+                                    AND te.ended_at GLOB '????-??-??T??:??:??*'
+                               THEN te.ended_at END)
              ) AS completion_time
       FROM task_executions te
       JOIN projects p ON p.id = te.project_id
@@ -227,7 +229,9 @@ export function getIssuesCompletedInRange(
            COALESCE(
              ist.confirmed_at,
              MAX(te.verified_at),
-             MAX(CASE WHEN te.status IN ('success', 'failed') THEN te.ended_at END)
+             MAX(CASE WHEN te.status IN ('success', 'failed')
+                                    AND te.ended_at GLOB '????-??-??T??:??:??*'
+                               THEN te.ended_at END)
            ) AS completion_time
     FROM task_executions te
     JOIN projects p ON p.id = te.project_id
@@ -323,7 +327,9 @@ export function getGlobalIssuesCompletedInRange(start: string, end: string): Map
            COALESCE(
              ist.confirmed_at,
              MAX(te.verified_at),
-             MAX(CASE WHEN te.status IN ('success', 'failed') THEN te.ended_at END)
+             MAX(CASE WHEN te.status IN ('success', 'failed')
+                                    AND te.ended_at GLOB '????-??-??T??:??:??*'
+                               THEN te.ended_at END)
            ) AS completion_time
     FROM task_executions te
     LEFT JOIN issue_stages ist ON ist.project_id = te.project_id AND ist.issue_iid = te.issue_iid

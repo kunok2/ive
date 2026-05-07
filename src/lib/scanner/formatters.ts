@@ -32,8 +32,10 @@ export function parseIveMeta(body: string): {
       case 'output_tokens': defaults.outputTokens = Number(val) || 0; break;
       case 'cost_usd': defaults.costUsd = Number(val) || 0; break;
       case 'turns': defaults.turns = Number(val) || 0; break;
-      case 'started_at': { const d = new Date(val.trim()); defaults.startedAt = isNaN(d.getTime()) ? val.trim() : d.toISOString(); break; }
-      case 'ended_at': { const d = new Date(val.trim()); defaults.endedAt = isNaN(d.getTime()) ? val.trim() : d.toISOString(); break; }
+      // invalid 한 timestamp 는 null 로 (placeholder 'REPLACE_END' 같은 raw 문자열이 DB 에 저장되어
+      // 보고서 쿼리의 MAX(ended_at) 등으로 흘러 들어가 RangeError 를 일으키는 사고 회귀 방지).
+      case 'started_at': { const d = new Date(val.trim()); defaults.startedAt = isNaN(d.getTime()) ? null : d.toISOString(); break; }
+      case 'ended_at':   { const d = new Date(val.trim()); defaults.endedAt   = isNaN(d.getTime()) ? null : d.toISOString(); break; }
     }
   }
   return defaults;
