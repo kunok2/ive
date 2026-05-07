@@ -8,7 +8,6 @@ export type {
   ReportData, VerifierBacklogRow, ProjectStat, AgentStat, UserStat, VerifierStat,
   DailyTrend, WaitingDay, AgentWaitingDay, Lifecycle, ResolvedIssue,
   HealthLevel, AlertSeverity, FlowMetrics, ResourceDiagnosis,
-  RebalanceItem, ShortageItem, SurplusItem,
   AnnotationSeverity, ProjectAnnotationKey, ProjectAnnotation, ProjectFlow,
   AgentAnnotationKey, AgentAnnotation, AgentLoad,
   VerifierAnnotationKey, VerifierAnnotation, VerifierLoad,
@@ -52,10 +51,9 @@ export function diagnose(
   const totalThroughput = summary.verifiedCount
   const dailyInflow = elapsedDays > 0 ? totalInflow / elapsedDays : 0
 
-  // 에이전트 용량 계산
-  const { agentCapacities, avgAgentCap, idleGlobalAgents, totalAssigned } = computeAgentCapacities(data, elapsedDays, today)
-  const activeCapacity = agentCapacities.reduce((s, a) => s + a.dailyCap, 0)
-  const dailyCapacity = activeCapacity + idleGlobalAgents * avgAgentCap
+  // 에이전트 용량 계산 (글로벌 풀)
+  const { agentCapacities, avgAgentCap } = computeAgentCapacities(data, elapsedDays, today)
+  const dailyCapacity = agentCapacities.reduce((s, a) => s + a.dailyCap, 0)
   const utilization = dailyCapacity > 0 ? dailyInflow / dailyCapacity : (dailyInflow > 0 ? Infinity : 0)
   const healthLevel = healthFromUtil(utilization)
 
@@ -83,21 +81,18 @@ export function diagnose(
 
   // ─── 2. 프로젝트별 흐름 ───
 
-  const projectFlows = computeProjectFlows(data, agentCapacities, avgAgentCap, elapsedDays, today)
+  const projectFlows = computeProjectFlows(data, today)
 
-  // ─── 3. 자원 진단 ───
+  // ─── 3. 자원 진단 (글로벌) ───
 
   const resource = computeResourceDiagnosis(
-    data, projectFlows, agentCapacities, avgAgentCap,
-    idleGlobalAgents, totalAssigned, dailyInflow, dailyCapacity, endWaiting, elapsedDays,
+    data, agentCapacities, avgAgentCap,
+    dailyInflow, dailyCapacity, endWaiting,
   )
 
   // ─── 4. 에이전트 부하 ───
 
-  const shortageProjects = projectFlows.filter(p =>
-    p.annotation?.key === 'shortage' || p.annotation?.key === 'shortageUrgent'
-  )
-  const agentLoads = computeAgentLoads(data, agentCapacities, shortageProjects, today)
+  const agentLoads = computeAgentLoads(data, agentCapacities, today)
 
   // ─── 5. 검증자 진단 ───
 

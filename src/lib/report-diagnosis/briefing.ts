@@ -18,7 +18,7 @@ export function generateBriefing(
 ): I18nMessage[] {
   const { summary, lifecycle, prevLifecycle } = data
   const { costPerTask, prevCostPerTask, utilization, healthLevel } = flow
-  const { scenario, shortagePlan, rebalancePlan, surplusPlan } = resource
+  const { scenario, gap } = resource
   const totalInflow = flow.inflow
 
   const briefingLines: I18nMessage[] = []
@@ -70,21 +70,11 @@ export function generateBriefing(
     }
   }
 
-  // 자원 진단 처방
-  if (scenario === 'shortage' && shortagePlan.length > 0) {
-    const total = shortagePlan.reduce((s, p) => s + p.needed, 0)
-    briefingLines.push({ key: 'briefingShortage', params: { total } })
-  } else if (scenario === 'rebalance' && rebalancePlan.length > 0) {
-    briefingLines.push({
-      key: 'briefingRebalance',
-      params: {
-        agent: rebalancePlan[0].agentName,
-        from: rebalancePlan[0].fromProjectName,
-        to: rebalancePlan[0].toProjectName,
-      },
-    })
-  } else if (scenario === 'surplus' && surplusPlan.length > 0) {
-    briefingLines.push({ key: 'briefingSurplus', params: { count: surplusPlan.length } })
+  // 자원 진단 처방 (글로벌 에이전트 풀 기준)
+  if (scenario === 'shortage' && gap < 0) {
+    briefingLines.push({ key: 'briefingShortage', params: { total: Math.abs(gap) } })
+  } else if (scenario === 'surplus' && gap > 0) {
+    briefingLines.push({ key: 'briefingSurplus', params: { count: gap } })
   }
 
   // 비용 이상

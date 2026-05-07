@@ -23,7 +23,7 @@ export default function ProjectFlowSection({ d, data, helpers }: ProjectFlowSect
       <div className="text-xs font-bold text-ive-text-dim mb-2 uppercase tracking-wider">{tr('projectFlowTitle')}</div>
       <div className="space-y-2">
         {d.projects.sort((a, b) => b.throughput - a.throughput).map(p => (
-          <div key={p.projectId} className={`bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden ${p.healthLevel === 'overloaded' ? 'bg-ive-red/3' : p.healthLevel === 'idle' && p.assignedAgents >= 2 ? 'bg-ive-cyan/3' : ''}`}>
+          <div key={p.projectId} className="bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden">
             <button onClick={() => { const n = new Set(expandedProjects); n.has(p.projectId) ? n.delete(p.projectId) : n.add(p.projectId); setExpandedProjects(n) }}
               className="w-full px-3 py-2.5 text-left">
               <div className="flex items-center gap-2">
@@ -35,7 +35,6 @@ export default function ProjectFlowSection({ d, data, helpers }: ProjectFlowSect
                   </span>
                 )}
                 <span className="text-sm font-bold text-ive-text flex-1 truncate">{p.projectName}</span>
-                <span className="text-xs text-ive-text-dim">{tr('assignedAgentsCount', { count: p.assignedAgents })}</span>
                 <i className={`fa-solid fa-chevron-${expandedProjects.has(p.projectId) ? 'up' : 'down'} text-xs text-ive-text-dim`} />
               </div>
               <div className="flex items-center gap-2 mt-1 text-xs">
@@ -61,30 +60,7 @@ export default function ProjectFlowSection({ d, data, helpers }: ProjectFlowSect
             </button>
             {expandedProjects.has(p.projectId) && (
               <div className="px-3 pb-3 border-t border-ive-border-dark">
-                <div className="grid grid-cols-3 gap-1 mt-2 text-center text-xs">
-                  <div>
-                    <div className="text-ive-text-dim">{tr('metric.utilization')}</div>
-                    {p.utilization < 0 ? (
-                      <div className="font-bold text-ive-text-dim">—</div>
-                    ) : (() => {
-                      const pct = Math.round(p.utilization * 100)
-                      const label = pct >= 100 ? tr('metric.utilOverload')
-                        : pct >= 80 ? tr('metric.utilHigh')
-                        : pct >= 60 ? tr('metric.utilOk')
-                        : pct >= 30 ? tr('metric.utilLow')
-                        : tr('metric.utilVeryLow')
-                      const cls = pct >= 100 ? 'text-ive-red'
-                        : pct >= 80 ? 'text-ive-amber'
-                        : pct >= 60 ? 'text-ive-green'
-                        : 'text-ive-cyan'
-                      return (
-                        <>
-                          <div className={`font-bold ${cls}`}>{pct.toLocaleString()}%</div>
-                          <div className="text-[10px] text-ive-text-dim">{label}</div>
-                        </>
-                      )
-                    })()}
-                  </div>
+                <div className="grid grid-cols-2 gap-1 mt-2 text-center text-xs">
                   <div>
                     <div className="text-ive-text-dim">{tr('metric.costPerTask')}</div>
                     <div className="font-bold text-ive-text">${fmtCost(p.costPerTask)}</div>

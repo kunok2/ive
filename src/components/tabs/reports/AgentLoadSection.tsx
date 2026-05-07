@@ -39,7 +39,6 @@ export default function AgentLoadSection({ d, data, helpers }: AgentLoadSectionP
                 ) : (
                   <span className="text-sm font-bold text-ive-text flex-1 truncate">{a.agentName}</span>
                 )}
-                {a.assignedProjectName && <span className="text-xs text-ive-text-dim truncate max-w-[80px]">→ {a.assignedProjectName}</span>}
                 <i className={`fa-solid fa-chevron-${expandedAgents.has(a.agentId) ? 'up' : 'down'} text-xs text-ive-text-dim`} />
               </div>
               <div className="flex items-center gap-3 mt-1 text-xs">

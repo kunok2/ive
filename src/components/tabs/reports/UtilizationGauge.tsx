@@ -8,9 +8,8 @@ interface UtilizationGaugeProps {
   helpers: ReportHelpers
 }
 
-export default function UtilizationGauge({ d, helpers }: UtilizationGaugeProps) {
+export default function UtilizationGauge({ d }: UtilizationGaugeProps) {
   const tr = useTranslations('report')
-  const { fmtDur } = helpers
 
   if (d.flow.dailyCapacity <= 0) return null
 
@@ -57,7 +56,7 @@ export default function UtilizationGauge({ d, helpers }: UtilizationGaugeProps) 
         <div className="flex justify-between"><span className="text-ive-text-dim">{tr('waitingLabel2')}</span><span className={`font-bold ${d.flow.currentWaiting >= 5 ? 'text-ive-red' : 'text-ive-text'}`}>{tr('countCases', { count: d.flow.currentWaiting })}</span></div>
       </div>
 
-      {/* 진단 결과 */}
+      {/* 진단 결과 — 글로벌 에이전트 풀 기준 충원/적정/잉여 */}
       {d.resource.gap !== 0 && (
         <div className={`text-xs font-bold p-2 rounded-lg ${d.resource.gap < 0 ? 'bg-ive-red/10 text-ive-red' : 'bg-ive-cyan/10 text-ive-cyan'}`}>
           {tr('currentToOptimal', { current: d.resource.currentAgents, optimal: d.resource.optimalAgents })}
@@ -66,43 +65,6 @@ export default function UtilizationGauge({ d, helpers }: UtilizationGaugeProps) 
           {')'}
           {d.resource.queueDrainDays != null && d.resource.queueDrainDays > 0 && <span className="ml-2">{tr('queueDrainSuffix', { days: d.resource.queueDrainDays })}</span>}
           {d.resource.queueDrainDays === null && <span className="ml-2">{tr('queueDrainImpossible')}</span>}
-        </div>
-      )}
-
-      {/* 재배치/충원/감축 안 */}
-      {d.resource.scenario === 'rebalance' && d.resource.rebalancePlan.length > 0 && (
-        <div className="bg-ive-bg-deep rounded-lg p-3 space-y-2">
-          <div className="text-xs font-bold text-ive-amber"><i className="fa-solid fa-shuffle mr-1" />{tr('rebalanceTitle')}</div>
-          {d.resource.rebalancePlan.map((r, i) => (
-            <div key={i} className="text-xs text-ive-text">
-              <span className="font-bold">{r.agentName}</span>: {r.fromProjectName} → {r.toProjectName}
-              <div className="text-ive-text-dim mt-0.5">{tr('rebalanceResult', { from: r.fromProjectName, fromPct: r.resultFromUtil, to: r.toProjectName, toPct: r.resultToUtil })}</div>
-            </div>
-          ))}
-        </div>
-      )}
-      {d.resource.scenario === 'shortage' && d.resource.shortagePlan.length > 0 && (
-        <div className="bg-ive-bg-deep rounded-lg p-3 space-y-1">
-          <div className="text-xs font-bold text-ive-red"><i className="fa-solid fa-plus-circle mr-1" />{tr('shortageTitle')}</div>
-          {d.resource.shortagePlan.map((s, i) => (
-            <div key={i} className="text-xs text-ive-text">
-              {tr('shortageLine', { project: s.projectName, needed: s.needed, cur: s.currentUtil, target: s.targetUtil })}
-              {s.urgencyDays && <span className="text-ive-red ml-1">{tr('urgencyDaysSuffix', { days: s.urgencyDays })}</span>}
-            </div>
-          ))}
-        </div>
-      )}
-      {d.resource.scenario === 'surplus' && d.resource.surplusPlan.length > 0 && (
-        <div className="bg-ive-bg-deep rounded-lg p-3 space-y-1">
-          <div className="text-xs font-bold text-ive-cyan"><i className="fa-solid fa-arrows-left-right mr-1" />{tr('surplusTitle')}</div>
-          {d.resource.surplusPlan.map((s, i) => (
-            <div key={i} className="text-xs text-ive-text">
-              {tr('surplusLine', { agent: s.agentName, project: s.projectName, capacity: s.agentCapacity })}
-            </div>
-          ))}
-          <div className="text-[10px] text-ive-text-dim pt-1 border-t border-ive-border-dark/50 mt-1">
-            {tr('surplusWarning')}
-          </div>
         </div>
       )}
     </section>

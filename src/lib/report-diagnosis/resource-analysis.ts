@@ -6,7 +6,7 @@ import type {
   HealthLevel, ReportData, ProjectFlow, ProjectAnnotation,
   AgentLoad, AgentAnnotation, VerifierDiagnosis, VerifierLoad,
   VerifierAnnotation, VerifierStat, ResourceDiagnosis,
-  RebalanceItem, ShortageItem, SurplusItem, I18nMessage,
+  I18nMessage,
 } from './types'
 
 // ─── 유틸 ───
@@ -88,7 +88,7 @@ export function computeAgentCapacities(
   data: ReportData,
   elapsedDays: number,
   today: string,
-): { agentCapacities: AgentCapacity[]; avgAgentCap: number; idleGlobalAgents: number; totalAssigned: number } {
+): { agentCapacities: AgentCapacity[]; avgAgentCap: number } {
   const { byAgent } = data
   const agentCapacities: AgentCapacity[] = []
   for (const a of byAgent) {
@@ -98,22 +98,17 @@ export function computeAgentCapacities(
     const cap = peak > 0 ? peak : (elapsedDays > 0 ? a.tasks / elapsedDays : 0)
     agentCapacities.push({ agentId: a.agentId, dailyCap: cap, cost: a.cost })
   }
-  const totalAssigned = data.totalAssignedAgents ?? byAgent.length
-  const idleGlobalAgents = Math.max(0, totalAssigned - byAgent.length)
   const avgAgentCap = agentCapacities.length > 0
     ? agentCapacities.reduce((s, a) => s + a.dailyCap, 0) / agentCapacities.length
     : 2 // 기본값
 
-  return { agentCapacities, avgAgentCap, idleGlobalAgents, totalAssigned }
+  return { agentCapacities, avgAgentCap }
 }
 
 // ─── 프로젝트별 흐름 분석 ───
 
 export function computeProjectFlows(
   data: ReportData,
-  agentCapacities: AgentCapacity[],
-  avgAgentCap: number,
-  elapsedDays: number,
   today: string,
 ): ProjectFlow[] {
   const { byProject, waitingTrend } = data
@@ -127,13 +122,6 @@ export function computeProjectFlows(
     const pStartW = pStartProcW + (pVerifyTrend.length > 0 ? pVerifyTrend[0] : 0)
     const pEndW = pEndProcW + (pVerifyTrend.length > 0 ? pVerifyTrend[pVerifyTrend.length - 1] : 0)
     const pInflow = p.uniqueIssues + (pEndProcW - pStartProcW)
-    const pCapacity = p.assignedAgentIds.length > 0
-      ? p.assignedAgentIds.reduce((s, aid) => {
-          const ac = agentCapacities.find(c => c.agentId === aid)
-          return s + (ac?.dailyCap ?? avgAgentCap)
-        }, 0)
-      : 0
-    const pUtil = pCapacity > 0 ? (pInflow / elapsedDays) / pCapacity : (pInflow > 0 ? Infinity : 0)
     const prevP = data.prevByProject?.find(pp => pp.projectId === p.projectId)
     const pPrevCPT = prevP && prevP.tasks > 0 ? prevP.cost / prevP.tasks : 0
 
@@ -149,41 +137,19 @@ export function computeProjectFlows(
     const pIssues = Array.from(issueMap.values())
     const pRetryRate = pIssues.length > 0 ? (pIssues.filter(a => a > 1).length / pIssues.length) * 100 : 0
 
-    const pAgentCaps = p.assignedAgentIds.map(aid => {
-      const ac = agentCapacities.find(c => c.agentId === aid)
-      return ac?.dailyCap ?? avgAgentCap
-    })
-    const pDailyInflow = elapsedDays > 0 ? pInflow / elapsedDays : 0
-    const pOptimal = calcOptimalAgents(pAgentCaps, pDailyInflow)
-
     const hasBacklog = pEndW >= 3 || (pEndW - pStartW) >= 2
 
     let annotation: ProjectAnnotation | null = null
-    if (hasBacklog && p.assignedAgentCount > 0 && pCapacity < pDailyInflow) {
-      const addNeeded = Math.max(1, Math.ceil((pDailyInflow * 1.2 - pCapacity) / avgAgentCap))
-      const urgency = pCapacity > 0
-        ? Math.round((10 - pEndW) / (pDailyInflow - pCapacity))
-        : null
-      if (urgency != null && urgency > 0) {
-        annotation = { key: 'shortageUrgent', params: { count: addNeeded, days: urgency }, severity: 'critical' }
-      } else {
-        annotation = { key: 'shortage', params: { count: addNeeded }, severity: 'critical' }
-      }
-    } else if (pOptimal < p.assignedAgentCount && pInflow > 0 && pEndW === 0) {
-      const removable = p.assignedAgentCount - pOptimal
-      annotation = { key: 'surplus', params: { count: removable }, severity: 'info' }
-    } else if (pRetryRate >= 30) {
+    if (pRetryRate >= 30) {
       annotation = { key: 'highRetry', params: { percent: Math.round(pRetryRate) }, severity: 'warning' }
     } else if (pEndW >= 5) {
       annotation = { key: 'backlog', params: { count: pEndW }, severity: 'warning' }
     }
 
-    const safeUtil = !isFinite(pUtil) ? -1 : Math.round(pUtil * 100) / 100
     return {
       projectId: p.projectId, projectName: p.projectName, projectColor: p.projectColor, projectAvatarUrl: p.projectAvatarUrl, projectProvider: p.projectProvider,
       inflow: pInflow, throughput: p.verified, waitingDelta: pEndW - pStartW, currentWaiting: pEndW,
       cost: p.cost, costPerTask: p.tasks > 0 ? Math.round(p.cost / p.tasks * 100) / 100 : 0, prevCostPerTask: Math.round(pPrevCPT * 100) / 100,
-      assignedAgents: p.assignedAgentCount, utilization: safeUtil, healthLevel: healthFromUtil(pUtil),
       retryRate: Math.round(pRetryRate * 10) / 10,
       hasBacklog,
       annotation,
@@ -191,99 +157,35 @@ export function computeProjectFlows(
   })
 }
 
-// ─── 자원 진단 (재배치/충원/감축) ───
+// ─── 자원 진단 (글로벌 충원/감축) ───
+//
+// 에이전트는 글로벌 풀로 운영되므로 프로젝트 간 재배치 개념은 다루지 않는다.
+// 전체 일일 유입 대비 전체 처리능력(가동률) 만으로 부족/과잉/적정을 판정한다.
 
 export function computeResourceDiagnosis(
   data: ReportData,
-  projectFlows: ProjectFlow[],
   agentCapacities: AgentCapacity[],
   avgAgentCap: number,
-  idleGlobalAgents: number,
-  totalAssigned: number,
   dailyInflow: number,
   dailyCapacity: number,
   endWaiting: number,
-  elapsedDays: number,
 ): ResourceDiagnosis {
   const { byAgent } = data
-  const currentAgents = Math.max(totalAssigned, byAgent.length) || 1
-  const allAgentCaps = [
-    ...agentCapacities.map(a => a.dailyCap),
-    ...Array(idleGlobalAgents).fill(avgAgentCap),
-  ]
+  const currentAgents = byAgent.length || 1
+  const allAgentCaps = agentCapacities.map(a => a.dailyCap)
   const optimalAgents = calcOptimalAgents(allAgentCaps, dailyInflow)
   const gap = currentAgents - optimalAgents
   const queueDrainDays = dailyCapacity > dailyInflow && endWaiting > 0
     ? Math.round(endWaiting / (dailyCapacity - dailyInflow) * 10) / 10
     : dailyCapacity <= dailyInflow && endWaiting > 0 ? null : 0
 
-  const shortageProjects = projectFlows.filter(p =>
-    p.annotation?.key === 'shortage' || p.annotation?.key === 'shortageUrgent'
-  )
-  const surplusProjects = projectFlows.filter(p => p.annotation?.key === 'surplus')
-  const unassigned = projectFlows.filter(p => p.assignedAgents === 0 && p.currentWaiting > 0)
-
   let scenario: ResourceDiagnosis['scenario'] = 'optimal'
-  const rebalancePlan: RebalanceItem[] = []
-  const shortagePlan: ShortageItem[] = []
-  const surplusPlan: SurplusItem[] = []
-
-  if (shortageProjects.length > 0 && surplusProjects.length > 0) {
-    scenario = 'rebalance'
-    for (const sp of surplusProjects) {
-      const spP = data.byProject.find(bp => bp.projectId === sp.projectId)
-      const spCaps = spP?.assignedAgentIds.map(aid => {
-        const ac = agentCapacities.find(c => c.agentId === aid)
-        return ac?.dailyCap ?? avgAgentCap
-      }) ?? []
-      const spOptimal = calcOptimalAgents(spCaps, sp.inflow / elapsedDays)
-      const surplus = sp.assignedAgents - spOptimal
-      const agents = byAgent.filter(a => a.assignedProjectId === sp.projectId).sort((a, b) => a.tasks - b.tasks)
-      for (let i = 0; i < Math.min(surplus, agents.length, shortageProjects.length); i++) {
-        const target = shortageProjects[i]
-        const ac = agentCapacities.find(c => c.agentId === agents[i].agentId)
-        const cap = ac?.dailyCap ?? avgAgentCap
-        const fromCap = agentCapacities.filter(c => byAgent.find(a => a.agentId === c.agentId && a.assignedProjectId === sp.projectId)).reduce((s, c) => s + c.dailyCap, 0) - cap
-        const toCap = agentCapacities.filter(c => byAgent.find(a => a.agentId === c.agentId && a.assignedProjectId === target.projectId)).reduce((s, c) => s + c.dailyCap, 0) + cap
-        rebalancePlan.push({
-          agentId: agents[i].agentId, agentName: agents[i].agentName,
-          fromProject: sp.projectId, fromProjectName: sp.projectName,
-          toProject: target.projectId, toProjectName: target.projectName,
-          agentCapacity: Math.round(cap * 10) / 10,
-          resultFromUtil: fromCap > 0 ? Math.round((sp.inflow / elapsedDays) / fromCap * 100) : 0,
-          resultToUtil: toCap > 0 ? Math.round((target.inflow / elapsedDays) / toCap * 100) : 0,
-        })
-      }
-    }
-  } else if (shortageProjects.length > 0 || unassigned.length > 0) {
-    scenario = 'shortage'
-    for (const sp of [...unassigned, ...shortageProjects]) {
-      const spDailyInflow = sp.inflow / elapsedDays
-      const add = Math.max(1, Math.ceil((spDailyInflow * 1.2 - (sp.assignedAgents > 0 ? sp.utilization * spDailyInflow / (sp.utilization || 1) : 0)) / avgAgentCap) || 1)
-      const capNow = agentCapacities.filter(c => byAgent.find(a => a.agentId === c.agentId && a.assignedProjectId === sp.projectId)).reduce((s, c) => s + c.dailyCap, 0)
-      const urgency = capNow > 0 && capNow < spDailyInflow ? Math.round((10 - sp.currentWaiting) / (spDailyInflow - capNow)) : null
-      const afterCap = capNow + add * avgAgentCap
-      shortagePlan.push({
-        projectId: sp.projectId, projectName: sp.projectName, needed: add,
-        currentUtil: Math.round(sp.utilization * 100), targetUtil: afterCap > 0 ? Math.round(spDailyInflow / afterCap * 100) : 0,
-        urgencyDays: urgency != null && urgency > 0 ? urgency : null,
-      })
-    }
-  } else if (surplusProjects.length > 0) {
-    scenario = 'surplus'
-    for (const sp of surplusProjects) {
-      const agents = byAgent.filter(a => a.assignedProjectId === sp.projectId).sort((a, b) => a.tasks - b.tasks)
-      if (agents.length > 0) {
-        const a = agents[0]
-        const monthCost = a.cost > 0 && elapsedDays > 0 ? Math.round(a.cost / elapsedDays * 30 * 100) / 100 : 0
-        surplusPlan.push({ agentId: a.agentId, agentName: a.agentName, projectId: sp.projectId, projectName: sp.projectName, agentCapacity: agentCapacities.find(c => c.agentId === a.agentId)?.dailyCap ?? 0, monthlyTokenCost: monthCost })
-      }
-    }
-  }
+  if (gap < 0) scenario = 'shortage'
+  else if (gap > 0 && dailyInflow > 0 && endWaiting === 0) scenario = 'surplus'
 
   return {
     currentAgents, optimalAgents, gap, avgAgentCapacity: Math.round(avgAgentCap * 10) / 10,
-    queueDrainDays, scenario, rebalancePlan, shortagePlan, surplusPlan,
+    queueDrainDays, scenario,
   }
 }
 
@@ -292,7 +194,6 @@ export function computeResourceDiagnosis(
 export function computeAgentLoads(
   data: ReportData,
   agentCapacities: AgentCapacity[],
-  shortageProjects: ProjectFlow[],
   today: string,
 ): AgentLoad[] {
   const { byAgent, agentWaitingTrend } = data
@@ -316,15 +217,12 @@ export function computeAgentLoads(
     } else if (totalWaiting > 0 && lastAW / totalWaiting >= 0.6 && lastAW >= 3) {
       annotation = { key: 'concentrated', params: { percent: Math.round(lastAW / totalWaiting * 100) }, severity: 'warning' }
     } else if (zeroPct >= 0.7 && a.tasks <= (byAgent.reduce((s, b) => s + b.tasks, 0) / byAgent.length) * 0.25) {
-      const target = shortageProjects.length > 0 ? shortageProjects[0].projectName : null
-      annotation = target
-        ? { key: 'idleReassign', params: { target }, severity: 'info' }
-        : { key: 'idle', severity: 'info' }
+      annotation = { key: 'idle', severity: 'info' }
     }
 
     return {
       agentId: a.agentId, agentName: a.agentName, agentAvatar: a.agentAvatar, agentDeleted: a.agentDeleted, cliName: a.cliName,
-      assignedProjectId: a.assignedProjectId, assignedProjectName: a.assignedProjectName, currentStatus: a.currentStatus,
+      currentStatus: a.currentStatus,
       tasks: a.tasks, dailyCapacity: Math.round(dailyCap * 10) / 10, currentWaiting: lastAW, cost: a.cost,
       successRate,
       annotation,

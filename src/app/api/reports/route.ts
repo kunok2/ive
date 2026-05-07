@@ -90,40 +90,13 @@ export async function GET(req: NextRequest) {
   const prevExecs = getExecutionsInRange(user.id, prevRange.start, prevRange.end)
   const humanSalary = getHumanMonthlySalary()
 
-  // #272: 프로젝트별 배정 폐기 → 실행 이력 기반으로 "이 기간에 활동한 에이전트" 도출.
-  //
-  // 기존 (project_assignments 기반):
-  //   - assignedAgentCount/Ids: 프로젝트에 사전 배정된 에이전트 수/ID
-  //   - agentAssignInfo: 에이전트의 "현재 배정 프로젝트"
-  //
-  // 변경 (task_executions 기반):
-  //   - projectActiveAgentIds: 기간 내 그 프로젝트에서 실행한 distinct 에이전트 ID
-  //   - agentPrimaryProject: 기간 내 가장 많이 실행한 프로젝트(주된 활동지)
-  const projectActiveAgentIds: Record<string, Set<string>> = {}
-  const agentProjectCount = new Map<string, Map<string, number>>() // agentId → projectId → count
-  const agentProjectName = new Map<string, string>()
+  // 에이전트는 글로벌 풀로 운영되므로 보고서에서는 프로젝트별 에이전트 수/주된 활동지를 더 이상 집계하지 않는다.
+  // 에이전트의 현재 상태(online/offline 등)만 보조로 노출한다.
+  const agentCurrentStatus: Record<string, string> = {}
   for (const e of execs) {
-    if (!e.agentId) continue
-    if (!projectActiveAgentIds[e.projectId]) projectActiveAgentIds[e.projectId] = new Set()
-    projectActiveAgentIds[e.projectId].add(e.agentId)
-    if (!agentProjectCount.has(e.agentId)) agentProjectCount.set(e.agentId, new Map())
-    const pm = agentProjectCount.get(e.agentId)!
-    pm.set(e.projectId, (pm.get(e.projectId) ?? 0) + 1)
-    agentProjectName.set(e.projectId, e.projectName)
-  }
-  const agentPrimaryProject: Record<string, { projectId: string; projectName: string; status: string }> = {}
-  for (const [aid, pm] of agentProjectCount.entries()) {
-    let primaryPid = ''
-    let primaryCount = -1
-    for (const [pid, cnt] of pm.entries()) {
-      if (cnt > primaryCount) { primaryCount = cnt; primaryPid = pid }
-    }
-    const ag = getAgent(aid)
-    agentPrimaryProject[aid] = {
-      projectId: primaryPid,
-      projectName: agentProjectName.get(primaryPid) || '',
-      status: ag?.status || 'offline',
-    }
+    if (!e.agentId || agentCurrentStatus[e.agentId] !== undefined) continue
+    const ag = getAgent(e.agentId)
+    agentCurrentStatus[e.agentId] = ag?.status || 'offline'
   }
 
   // Duration helper (minutes)
@@ -359,8 +332,6 @@ export async function GET(req: NextRequest) {
       cost: Math.round(pCost * 100) / 100,
       costAi: Math.round(pCostBreakdown.ai * 100) / 100,
       costHuman: Math.round(pCostBreakdown.human * 100) / 100,
-      assignedAgentCount: projectActiveAgentIds[pid]?.size ?? 0,
-      assignedAgentIds: projectActiveAgentIds[pid] ? Array.from(projectActiveAgentIds[pid]) : [],
       byAgent,
     }
   })
@@ -378,7 +349,6 @@ export async function GET(req: NextRequest) {
     const aDur = aExecs.reduce((s, e) => s + durationMin(e.startedAt, e.endedAt), 0)
     const aFinished = aSuccess + aFailed
     const aCost = aExecs.reduce((s, e) => s + resolveExecutionCost(e, humanSalary), 0)
-    const aInfo = agentPrimaryProject[aid]
     return {
       agentId: aid, agentName: aExecs[0].agentName, agentAvatar: aExecs[0].agentAvatar, agentDeleted: aExecs[0].agentDeleted, cliName: aExecs[0].cliName,
       tasks: aExecs.length, success: aSuccess, failed: aFailed,
@@ -390,9 +360,7 @@ export async function GET(req: NextRequest) {
       cacheCreationTokens: aExecs.reduce((s, e) => s + (e.cacheCreationInputTokens ?? 0), 0),
       cost: Math.round(aCost * 100) / 100,
       avgTurns: aFinished > 0 ? Math.round(aExecs.reduce((s, e) => s + e.turns, 0) / aFinished * 10) / 10 : 0,
-      assignedProjectId: aInfo?.projectId ?? '',
-      assignedProjectName: aInfo?.projectName ?? '',
-      currentStatus: aInfo?.status ?? 'offline',
+      currentStatus: agentCurrentStatus[aid] ?? 'offline',
     }
   })
 
@@ -1142,12 +1110,6 @@ export async function GET(req: NextRequest) {
     waitingTrend: waitingTrend.daily,
     prevWaitingTrend: prevWaitingTrend.daily,
     agentWaitingTrend: agentWaitingTrend.daily,
-    // #272: 기간 내 활동한 에이전트의 distinct 합 (모든 프로젝트의 활동 에이전트 union)
-    totalAssignedAgents: (() => {
-      const all = new Set<string>()
-      for (const set of Object.values(projectActiveAgentIds)) for (const id of set) all.add(id)
-      return all.size
-    })(),
     prevAgentWaitingTrend: prevAgentWaitingTrend.daily,
     verifierBacklog: getVerifierBacklogForReport(user.id),
   })

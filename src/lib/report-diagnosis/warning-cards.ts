@@ -75,7 +75,7 @@ export function generateAlerts(
   }
 
   // 7-4. 자원 유휴
-  const idleAgents = agentLoads.filter(a => a.annotation?.key === 'idle' || a.annotation?.key === 'idleReassign')
+  const idleAgents = agentLoads.filter(a => a.annotation?.key === 'idle')
   if (idleAgents.length > 0 && byAgent.length >= 3) {
     alerts.push({
       severity: 'info',

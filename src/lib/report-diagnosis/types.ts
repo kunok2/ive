@@ -29,7 +29,6 @@ export interface ReportData {
   agentWaitingTrend: AgentWaitingDay[]
   prevAgentWaitingTrend: AgentWaitingDay[]
   resolvedIssues?: ResolvedIssue[]
-  totalAssignedAgents?: number
   verifierBacklog?: VerifierBacklogRow[]
 }
 
@@ -50,8 +49,6 @@ export interface ProjectStat {
   tasks: number; uniqueIssues: number; verified: number; success: number; failed: number
   totalDurationMin: number; avgDurationMin: number
   inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheCreationTokens?: number; cost: number
-  assignedAgentCount: number
-  assignedAgentIds: string[]
   byAgent: { agentId: string; agentName: string; agentAvatar: string; agentDeleted?: boolean; cliName: string; tasks: number; success: number; failed: number; durationMin: number; avgDurationMin: number; inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheCreationTokens?: number; cost: number; avgTurns: number }[]
 }
 
@@ -60,7 +57,7 @@ export interface AgentStat {
   tasks: number; success: number; failed: number
   totalDurationMin: number; avgDurationMin: number
   inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheCreationTokens?: number; cost: number; avgTurns: number
-  assignedProjectId: string; assignedProjectName: string; currentStatus: string
+  currentStatus: string
 }
 
 export interface UserStat { userId: string; userName: string; userAvatar: string | null; avatarUserId?: string | null; tasks: number; success: number; failed: number; issueCount: number; avgDurationMin: number; cost: number; avgWaitMin: number; verifyTasks: number; avgVerifyMin: number; verifyAvgWaitMin: number; verifyWaiting: number; verifyApproved: number; verifyRejected: number; annotation?: UserAnnotation | null }
@@ -101,29 +98,13 @@ export interface ResourceDiagnosis {
   gap: number               // +면 과잉, -면 부족
   avgAgentCapacity: number  // 에이전트 평균 일일 처리량
   queueDrainDays: number | null  // null=해소불가
-  scenario: 'shortage' | 'surplus' | 'rebalance' | 'optimal'
-  rebalancePlan: RebalanceItem[]
-  shortagePlan: ShortageItem[]
-  surplusPlan: SurplusItem[]
+  scenario: 'shortage' | 'surplus' | 'optimal'
 }
 
-export interface RebalanceItem { agentId: string; agentName: string; fromProject: string; fromProjectName: string; toProject: string; toProjectName: string; agentCapacity: number; resultFromUtil: number; resultToUtil: number }
-export interface ShortageItem { projectId: string; projectName: string; needed: number; currentUtil: number; targetUtil: number; urgencyDays: number | null }
-/**
- * SurplusItem: 에이전트가 과잉 배정된 케이스.
- * 주의: 에이전트를 제거해도 토큰 기반 AI 비용은 줄지 않는다 (일의 양이 같으면 비용 같음).
- * 이 항목은 "재배치 가능성"을 알리는 용도이지 비용 절감 제안이 아니다.
- * monthlyTokenCost는 참고용 — 이 에이전트가 월 기준으로 돌아갔을 때의 추정 토큰 비용.
- */
-export interface SurplusItem { agentId: string; agentName: string; projectId: string; projectName: string; agentCapacity: number; monthlyTokenCost: number }
-
 export type AnnotationSeverity = 'critical' | 'warning' | 'info'
-/** 구조화된 진단 메시지 — UI에서 i18n 키 + params로 렌더링 */
+/** 구조화된 진단 메시지 — UI에서 i18n 키 + params로 렌더링.
+ *  에이전트는 글로벌 풀로 운영되므로 프로젝트별 에이전트 수급 진단(noAgent/shortage/surplus)은 다루지 않는다. */
 export type ProjectAnnotationKey =
-  | 'noAgent'         // 배정된 에이전트 없음
-  | 'shortage'        // 에이전트 부족
-  | 'shortageUrgent'  // 에이전트 부족 (긴급일 내)
-  | 'surplus'         // 에이전트 과잉
   | 'highRetry'       // 재시도율 높음
   | 'backlog'         // 대기 적체
 export interface ProjectAnnotation {
@@ -135,7 +116,6 @@ export interface ProjectFlow {
   projectId: string; projectName: string; projectColor: string; projectAvatarUrl: string; projectProvider: string
   inflow: number; throughput: number; waitingDelta: number; currentWaiting: number
   cost: number; costPerTask: number; prevCostPerTask: number
-  assignedAgents: number; utilization: number; healthLevel: HealthLevel
   retryRate: number
   hasBacklog: boolean
   annotation: ProjectAnnotation | null
@@ -146,7 +126,6 @@ export type AgentAnnotationKey =
   | 'overload'        // 처리 능력보다 대기가 많음
   | 'concentrated'    // 전체 대기의 대부분이 이 에이전트에 몰림
   | 'idle'            // 일이 거의 없음
-  | 'idleReassign'    // 유휴 + 재배치 추천 프로젝트 있음
   | 'lowSuccess'      // 실패율이 높음
 export interface AgentAnnotation {
   key: AgentAnnotationKey
@@ -155,7 +134,7 @@ export interface AgentAnnotation {
 }
 export interface AgentLoad {
   agentId: string; agentName: string; agentAvatar: string; agentDeleted?: boolean; cliName: string
-  assignedProjectId: string; assignedProjectName: string; currentStatus: string
+  currentStatus: string
   tasks: number; dailyCapacity: number; currentWaiting: number; cost: number
   successRate: number          // 성공률 (0~100)
   annotation: AgentAnnotation | null
