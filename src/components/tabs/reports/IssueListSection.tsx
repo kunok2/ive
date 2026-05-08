@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 import { utcISOToKSTDateTime } from '@/lib/date-utils'
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import type { ReportData, ReportHelpers } from './types'
 
 interface IssueListSectionProps {
@@ -67,11 +68,25 @@ export default function IssueListSection({ data, helpers }: IssueListSectionProp
               </button>
             ))}
           </div>
-          {/* 목록 */}
+          {/* 목록 — 각 row 를 ErrorBoundary 로 감싸 한 row 의 렌더 실패가 목록 전체를 죽이지 않게 */}
           <div className="space-y-1">
             {filteredIssues.slice(0, visibleCount).map((issue, i) => (
-              <div
+              <ErrorBoundary
                 key={i}
+                label={`issue #${issue.issueIid}`}
+                fallback={(err, reset) => (
+                  <div
+                    onClick={() => router.push(`/issues/${issue.projectId}/${issue.issueIid}`)}
+                    className="bg-ive-red/5 border border-ive-red/30 rounded-lg px-3 py-2 text-xs cursor-pointer"
+                    title={err.message}
+                  >
+                    <div className="text-ive-red font-bold">#{issue.issueIid} 표시 오류</div>
+                    <div className="text-ive-text-dim mt-0.5 truncate">{issue.issueTitle}</div>
+                    <button onClick={(e) => { e.stopPropagation(); reset() }} className="mt-1 underline text-ive-text-dim">다시 시도</button>
+                  </div>
+                )}
+              >
+              <div
                 onClick={() => router.push(`/issues/${issue.projectId}/${issue.issueIid}`)}
                 className="bg-ive-bg-card border border-ive-border-subtle rounded-lg px-3 py-2.5 space-y-1 cursor-pointer hover:border-ive-cyan/40 active:scale-[0.99] transition-all"
               >
@@ -152,6 +167,7 @@ export default function IssueListSection({ data, helpers }: IssueListSectionProp
                   )}
                 </div>
               </div>
+              </ErrorBoundary>
             ))}
             {filteredIssues.length > visibleCount && (
               <div className="text-center text-xs text-ive-text-dim py-2">{tr('moreItems', { count: filteredIssues.length - visibleCount })}</div>

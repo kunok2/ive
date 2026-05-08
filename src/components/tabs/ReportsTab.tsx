@@ -17,6 +17,7 @@ import UserVerifySection from '@/components/tabs/reports/UserVerifySection'
 import DailyTrendSection from '@/components/tabs/reports/DailyTrendSection'
 import IssueListSection from '@/components/tabs/reports/IssueListSection'
 import { FlowCompareChart, DailyTrendChart } from '@/components/reports/ReportCharts'
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { diagnose, type ReportData, type DiagnosisResult, type I18nMessage } from '@/lib/report-diagnosis'
 import { getKSTTodayString } from '@/lib/date-utils'
 import type { ReportHelpers } from '@/components/tabs/reports/types'
@@ -208,86 +209,115 @@ export default function ReportsTab() {
           {data && !loading && diagnosis && (
             <main className="space-y-3">
 
+              {/* 각 섹션을 ErrorBoundary 로 격리 — 한 섹션의 렌더 실패가 페이지 전체를 다운시키지 않게.
+                  한 섹션이 깨지면 그 자리에 에러 배지만 뜨고 다른 섹션은 정상 표시. */}
+
               {/* ① 진단 브리핑 */}
-              <BriefingSection
-                d={diagnosis}
-                type={type}
-                monthData={monthData}
-                yearData={yearData}
-                helpers={helpers}
-                briefingBg={briefingBg(diagnosis)}
-              />
+              <ErrorBoundary label="브리핑">
+                <BriefingSection
+                  d={diagnosis}
+                  type={type}
+                  monthData={monthData}
+                  yearData={yearData}
+                  helpers={helpers}
+                  briefingBg={briefingBg(diagnosis)}
+                />
+              </ErrorBoundary>
 
               {/* ② 자원 현황 게이지 */}
               {diagnosis.flow.dailyCapacity > 0 && (
-                <UtilizationGauge d={diagnosis} helpers={helpers} />
+                <ErrorBoundary label="가동률">
+                  <UtilizationGauge d={diagnosis} helpers={helpers} />
+                </ErrorBoundary>
               )}
 
               {/* ③ 흐름도 */}
-              <FlowPipeline
-                d={diagnosis}
-                inflowData={inflowData}
-                throughputData={throughputData}
-                waitingData={data?.waitingTrend ? data.waitingTrend.filter(w => w.date <= today).map(w => w.total) : []}
-                helpers={helpers}
-              />
+              <ErrorBoundary label="흐름도">
+                <FlowPipeline
+                  d={diagnosis}
+                  inflowData={inflowData}
+                  throughputData={throughputData}
+                  waitingData={data?.waitingTrend ? data.waitingTrend.filter(w => w.date <= today).map(w => w.total) : []}
+                  helpers={helpers}
+                />
+              </ErrorBoundary>
 
               {/* ③-2 추이 그래프 */}
               {data.dailyTrend.length > 0 && (
-                <div className="space-y-2">
-                  <div className="text-xs font-bold text-ive-text-dim uppercase tracking-wider">{tr('trendChartToggle')}</div>
-                  <FlowCompareChart data={computeFlowDays()} prevData={computePrevFlowDays()} type={type} />
-                  <DailyTrendChart data={data.dailyTrend} prevData={data.prevDailyTrend} type={type} />
-                </div>
+                <ErrorBoundary label="추이 그래프">
+                  <div className="space-y-2">
+                    <div className="text-xs font-bold text-ive-text-dim uppercase tracking-wider">{tr('trendChartToggle')}</div>
+                    <FlowCompareChart data={computeFlowDays()} prevData={computePrevFlowDays()} type={type} />
+                    <DailyTrendChart data={data.dailyTrend} prevData={data.prevDailyTrend} type={type} />
+                  </div>
+                </ErrorBoundary>
               )}
 
               {/* ④ 주의/경고 카드 */}
               {diagnosis.alerts.length > 0 && (
-                <AlertCards d={diagnosis} helpers={helpers} />
+                <ErrorBoundary label="주의 카드">
+                  <AlertCards d={diagnosis} helpers={helpers} />
+                </ErrorBoundary>
               )}
 
               {/* ⑤ 비용 + 재시도 */}
               {diagnosis.flow.totalCost > 0 && (
-                <CostBreakdown d={diagnosis} data={data} helpers={helpers} />
+                <ErrorBoundary label="비용">
+                  <CostBreakdown d={diagnosis} data={data} helpers={helpers} />
+                </ErrorBoundary>
               )}
 
               {/* ⑥ 소요 시간 (파이프라인) */}
               {data.lifecycle.procCount > 0 && (
-                <LifecycleSection d={diagnosis} data={data} helpers={helpers} />
+                <ErrorBoundary label="소요 시간">
+                  <LifecycleSection d={diagnosis} data={data} helpers={helpers} />
+                </ErrorBoundary>
               )}
 
               {/* ⑦ 프로젝트별 흐름 */}
               {diagnosis.projects.length > 0 && (
-                <ProjectFlowSection d={diagnosis} data={data} helpers={helpers} />
+                <ErrorBoundary label="프로젝트별 흐름">
+                  <ProjectFlowSection d={diagnosis} data={data} helpers={helpers} />
+                </ErrorBoundary>
               )}
 
               {/* ⑧ 에이전트별 부하 */}
               {diagnosis.agents.length > 0 && (
-                <AgentLoadSection d={diagnosis} data={data} helpers={helpers} />
+                <ErrorBoundary label="에이전트별 부하">
+                  <AgentLoadSection d={diagnosis} data={data} helpers={helpers} />
+                </ErrorBoundary>
               )}
 
               {/* ⑧-2 검증자별 부하 */}
               {diagnosis.verifierLoads && diagnosis.verifierLoads.length > 0 && (
-                <VerifierLoadSection d={diagnosis} helpers={helpers} />
+                <ErrorBoundary label="검증자별 부하">
+                  <VerifierLoadSection d={diagnosis} helpers={helpers} />
+                </ErrorBoundary>
               )}
 
               {/* ⑨ 담당자별 검증 현황 */}
               {data.byUser && data.byUser.length > 0 && (
-                <UserVerifySection data={data} helpers={helpers} />
+                <ErrorBoundary label="담당자별 검증">
+                  <UserVerifySection data={data} helpers={helpers} />
+                </ErrorBoundary>
               )}
 
               {/* ⑩ 일별 현황 */}
               {data.dailyTrend.length > 0 && (
-                <DailyTrendSection
-                  data={data}
-                  type={type}
-                  today={today}
-                />
+                <ErrorBoundary label="일별 현황">
+                  <DailyTrendSection
+                    data={data}
+                    type={type}
+                    today={today}
+                  />
+                </ErrorBoundary>
               )}
 
               {/* ⑪ 이슈 목록 */}
               {data.resolvedIssues && data.resolvedIssues.length > 0 && (
-                <IssueListSection data={data} helpers={helpers} />
+                <ErrorBoundary label="이슈 목록">
+                  <IssueListSection data={data} helpers={helpers} />
+                </ErrorBoundary>
               )}
 
               {/* 데이터 없음 */}
