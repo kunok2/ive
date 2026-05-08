@@ -51,14 +51,21 @@ export function kstDateToUTCISO(kstDate: string): string {
 /**
  * UTC ISO 문자열을 KST 날짜(YYYY-MM-DD)로 변환 — 버킷 분류용
  * 예: '2026-03-18T17:00:00.000Z' → '2026-03-19' (UTC 03-18 17:00 = KST 03-19 02:00)
+ *
+ * 잘못된 입력(예: 'REPLACE_END' 같은 garbage)이 들어와도 throw 하지 않고
+ * 입력 문자열을 그대로 반환한다. 한 row 의 dirty data 가 페이지 전체를 다운시키는 사고 방지.
  */
 export function utcISOToKSTDate(utcISO: string): string {
-  return toKST(new Date(utcISO)).toISOString().slice(0, 10)
+  const d = new Date(utcISO)
+  if (isNaN(d.getTime())) return utcISO
+  return toKST(d).toISOString().slice(0, 10)
 }
 
 /** UTC ISO 문자열을 KST 날짜+시간(YYYY-MM-DD HH:mm)으로 변환 */
 export function utcISOToKSTDateTime(utcISO: string): string {
-  const iso = toKST(new Date(utcISO)).toISOString()
+  const d = new Date(utcISO)
+  if (isNaN(d.getTime())) return utcISO
+  const iso = toKST(d).toISOString()
   return iso.slice(0, 10) + ' ' + iso.slice(11, 16)
 }
 
@@ -66,5 +73,7 @@ export function utcISOToKSTDateTime(utcISO: string): string {
  * UTC ISO 문자열을 KST 월(YYYY-MM)로 변환 — 연간 버킷 분류용
  */
 export function utcISOToKSTMonth(utcISO: string): string {
-  return toKST(new Date(utcISO)).toISOString().slice(0, 7)
+  const d = new Date(utcISO)
+  if (isNaN(d.getTime())) return utcISO
+  return toKST(d).toISOString().slice(0, 7)
 }

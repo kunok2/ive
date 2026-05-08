@@ -4,6 +4,25 @@ import { getKSTTodayStartISO, getKSTYesterdayStartISO } from '../date-utils'
 import { getIssueAssigneeUsername } from './issues'
 import type { IssueStage } from './issues'
 
+/**
+ * timestamp 정규화 — DB 에 저장하기 전 모든 시각 컬럼은 이걸 통과해야 한다.
+ *
+ * 회귀 방지: 운영 (2026-05-07) 에서 외부 도구 ive-meta 의 'REPLACE_END' 같은
+ * placeholder 가 task_executions.ended_at 에 그대로 저장되어 보고서 페이지의
+ * `new Date(...).toISOString()` 에서 RangeError 가 발생, 사이트 다운.
+ *
+ * 정책: 파싱 가능한 ISO 문자열만 인정. 그 외는 null. 빈 문자열도 null.
+ */
+function sanitizeTimestamp(s: string | null | undefined): string | null {
+  if (s == null) return null
+  const trimmed = String(s).trim()
+  if (!trimmed) return null
+  const d = new Date(trimmed)
+  if (isNaN(d.getTime())) return null
+  // ISO 형태로 정규화해 저장 (SQLite datetime() 형식이 들어와도 ISO 로 통일)
+  return d.toISOString()
+}
+
 function mapExecution(r: any): TaskExecution {
   return {
     id: r.id, projectId: r.project_id, agentId: r.agent_id ?? '',
@@ -30,12 +49,20 @@ function mapExecution(r: any): TaskExecution {
 export function createExecution(ex: TaskExecution) {
   getDb().prepare(
     'INSERT INTO task_executions (id, project_id, agent_id, issue_iid, issue_title, status, started_at, ended_at, log_path, issue_created_at, assignee_type, user_id, user_name, user_avatar) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-  ).run(ex.id, ex.projectId, ex.agentId || null, ex.issueIid, ex.issueTitle ?? null, ex.status, ex.startedAt, ex.endedAt ?? null, ex.logPath, ex.issueCreatedAt ?? null, ex.assigneeType ?? 'agent', ex.userId ?? null, ex.userName ?? null, ex.userAvatar ?? null)
+  ).run(
+    ex.id, ex.projectId, ex.agentId || null, ex.issueIid, ex.issueTitle ?? null, ex.status,
+    sanitizeTimestamp(ex.startedAt) ?? new Date().toISOString(),
+    sanitizeTimestamp(ex.endedAt),
+    ex.logPath,
+    sanitizeTimestamp(ex.issueCreatedAt),
+    ex.assigneeType ?? 'agent', ex.userId ?? null, ex.userName ?? null, ex.userAvatar ?? null,
+  )
 }
 
 export function updateExecutionStatus(id: string, status: TaskStatus, endedAt?: string) {
   const isTerminal = status === 'success' || status === 'failed'
-  const effectiveEndedAt = endedAt || (isTerminal ? new Date().toISOString() : null)
+  const safeEndedAt = sanitizeTimestamp(endedAt)
+  const effectiveEndedAt = safeEndedAt || (isTerminal ? new Date().toISOString() : null)
   if (effectiveEndedAt) {
     getDb().prepare('UPDATE task_executions SET status = ?, ended_at = ? WHERE id = ?').run(status, effectiveEndedAt, id)
   } else {

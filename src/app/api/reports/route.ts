@@ -99,10 +99,21 @@ export async function GET(req: NextRequest) {
     agentCurrentStatus[e.agentId] = ag?.status || 'offline'
   }
 
-  // Duration helper (minutes)
-  function durationMin(startedAt: string, endedAt: string | null): number {
-    if (!endedAt) return 0
-    return Math.max(0, (new Date(endedAt).getTime() - new Date(startedAt).getTime()) / 60000)
+  // Duration helper (minutes). 잘못된 timestamp 가 들어와도 throw 없이 0 반환.
+  function durationMin(startedAt: string | null | undefined, endedAt: string | null | undefined): number {
+    if (!startedAt || !endedAt) return 0
+    const a = new Date(startedAt).getTime()
+    const b = new Date(endedAt).getTime()
+    if (isNaN(a) || isNaN(b)) return 0
+    return Math.max(0, (b - a) / 60000)
+  }
+
+  // 클라이언트에 직렬화하기 전 timestamp 검증 — 'REPLACE_END' 같은 garbage 가 그대로
+  // 응답에 실려 나가서 화면에서 throw 되는 것을 방지한다.
+  function safeISO(s: string | null | undefined): string | null {
+    if (!s) return null
+    const d = new Date(s)
+    return isNaN(d.getTime()) ? null : d.toISOString()
   }
 
   // 대기시간 = issue_created_at(IVE-S 레이블 최초 감지 시각) → started_at(IVE-D, 에이전트 시작 시각)
@@ -713,9 +724,10 @@ export async function GET(req: NextRequest) {
           confirmerAvatar: null,
           confirmerUserId: null,
           status: e.status as 'success' | 'failed',
-          startedAt: e.startedAt,
+          startedAt: safeISO(e.startedAt) ?? new Date().toISOString(),
           // 처리 완료 시각 (확인 끝났으면 그 시점, 아니면 검증 종료 시점)
-          resolvedAt: e.confirmedAt || e.verifiedAt || e.rejectedAt || e.endedAt || e.startedAt,
+          // 각 후보 컬럼을 safeISO 로 정제 — DB 에 garbage 가 남아 있어도 클라이언트에선 안전.
+          resolvedAt: safeISO(e.confirmedAt) || safeISO(e.verifiedAt) || safeISO(e.rejectedAt) || safeISO(e.endedAt) || safeISO(e.startedAt) || new Date().toISOString(),
           // 작업 시간 (에이전트가 코드를 만든 시간): startedAt → endedAt
           durationMin: Math.round(durationMin(e.startedAt, e.endedAt) * 10) / 10,
           // 검증 시간 (사람이 검증한 시간): verifyStartedAt → verifiedAt | rejectedAt
