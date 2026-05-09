@@ -63,7 +63,8 @@ import {
   addGitHubPRNote,
 } from "../github";
 import { Project, Agent } from "@/types";
-import { resolveIssueRequester } from "../ive-author";
+import { resolveIssueRequesterAsync } from "../ive-author";
+import { fetchIssueLabelEvents } from "../provider";
 import { isGitBotUser } from "../git-bot";
 import { startStatsCollector } from "../stats-collector";
 import { startReportScheduler } from "../report-scheduler";
@@ -698,8 +699,13 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
 
     // ── 의뢰자(requester) 판정 → 그 사람의 에이전트 풀 사용 ──
     // #272: 프로젝트별 배정 폐기. 이슈를 의뢰한 사용자의 에이전트로만 처리.
-    // 마커 > assignees > author > 프로젝트 오너(fallback) 우선순위.
-    const requester = resolveIssueRequester(project, issue);
+    // 의뢰자 = "Schedule 레이블(IVE-S) 을 부착한 사람" 이 기본.
+    // 우선순위: 마커 > IVE-S 부착자 > 이슈 작성자 > 프로젝트 오너(fallback)
+    const requester = await resolveIssueRequesterAsync(
+      project,
+      issue,
+      () => fetchIssueLabelEvents(project, issue.iid, decryptedToken),
+    );
     if (!requester) {
       slog.info(`[SKIP] Issue #${issue.iid} — 의뢰자 판정 실패 (오너 정보 없음)`);
       waitingCount++;

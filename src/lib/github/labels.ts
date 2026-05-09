@@ -75,6 +75,41 @@ export async function removeGitHubIssueLabels(project: Project, issueNumber: num
   return res.ok;
 }
 
+export interface IssueLabelEvent {
+  action: 'add' | 'remove'
+  label: string
+  /** Provider 측 사용자 ID (string 화). 익명/시스템 이벤트면 null. */
+  userId: string | null
+  createdAt: string
+}
+
+/**
+ * 이슈의 레이블 부착/제거 이벤트 목록.
+ * GitHub: GET /repos/:owner/:repo/issues/:n/events 에서 labeled/unlabeled 만 추림.
+ */
+export async function fetchGitHubIssueLabelEvents(
+  project: Project,
+  issueNumber: number,
+  decryptedToken: string,
+): Promise<IssueLabelEvent[]> {
+  const headers = getGitHubAuthHeaders(project, decryptedToken);
+  try {
+    const res = await fetch(apiUrl(project, `/issues/${issueNumber}/events?per_page=100`), { headers });
+    if (!res.ok) return [];
+    const events: any[] = await res.json();
+    return events
+      .filter(e => (e?.event === 'labeled' || e?.event === 'unlabeled') && e?.label?.name)
+      .map(e => ({
+        action: e.event === 'labeled' ? 'add' : 'remove',
+        label: e.label.name,
+        userId: e.actor?.id != null ? String(e.actor.id) : null,
+        createdAt: e.created_at,
+      } as IssueLabelEvent));
+  } catch {
+    return [];
+  }
+}
+
 export async function checkGitHubLabelsExist(project: Project, decryptedToken: string): Promise<{ label: string; exists: boolean }[]> {
   const headers = getGitHubAuthHeaders(project, decryptedToken);
   const labelsToCheck = [

@@ -80,6 +80,41 @@ export async function removeGitLabIssueLabels(project: Project, issueIid: number
   return res.ok;
 }
 
+export interface IssueLabelEvent {
+  action: 'add' | 'remove'
+  label: string
+  /** Provider 측 사용자 ID (string 화). 익명/시스템 이벤트면 null. */
+  userId: string | null
+  createdAt: string
+}
+
+/**
+ * 이슈의 레이블 부착/제거 이벤트 목록을 시간순으로 반환.
+ * "누가 IVE-S 를 달았는가" 같은 의뢰자 판정에 사용.
+ */
+export async function fetchGitLabIssueLabelEvents(
+  project: Project,
+  issueIid: number,
+  decryptedToken: string,
+): Promise<IssueLabelEvent[]> {
+  const headers = getAuthHeaders(project, decryptedToken);
+  try {
+    const res = await fetch(apiUrl(project, `/issues/${issueIid}/resource_label_events?per_page=100`), { headers });
+    if (!res.ok) return [];
+    const events: any[] = await res.json();
+    return events
+      .filter(e => e?.label?.name)
+      .map(e => ({
+        action: e.action === 'add' ? 'add' : 'remove',
+        label: e.label.name,
+        userId: e.user?.id != null ? String(e.user.id) : null,
+        createdAt: e.created_at,
+      } as IssueLabelEvent));
+  } catch {
+    return [];
+  }
+}
+
 export async function checkGitLabLabelsExist(project: Project, decryptedToken: string): Promise<{ label: string; exists: boolean }[]> {
   const headers = getAuthHeaders(project, decryptedToken);
   const labelsToCheck = [

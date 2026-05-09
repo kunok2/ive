@@ -121,21 +121,22 @@ export function setIveDueMarker(body: string, dueDate: string | null): string {
 // ──────────────── Issue requester (이슈 의뢰자) ────────────────
 //
 // 이슈를 처리할 에이전트를 누구의 풀에서 골라올지 결정하는 핵심 로직.
-// "의뢰자" = 이 작업을 해달라고 요청한 사람 = 이슈 작성자.
-// (Git assignees는 처리/검증할 사람이지 의뢰자가 아님 — 의뢰자 판정에서 제외.)
+// "의뢰자" = 이 작업의 처리(=IVE 스캐너 트리거)를 의뢰한 사람.
+// 기본은 "Schedule 레이블(IVE-S) 을 부착한 사람" — 작성과 의뢰는 별개의 사건.
 //
-// 우선순위:
-//   1) 본문 ive-author 마커 → IVE 사용자 (IVE 내부에서 만든 이슈)
-//   2) Git author → oauth_user_id 매칭 (외부에서 만든 이슈, IVE 가입자)
-//   3) 모두 실패 → 프로젝트 오너 (외부인이 GitLab에서 직접 IVE 레이블만 단 케이스)
+// 우선순위 (resolveIssueRequesterAsync — 스캐너용):
+//   1) 본문 ive-author 마커 (명시적 위임)
+//   2) Schedule 레이블(IVE-S) 을 가장 최근 부착한 사람 → oauth_user_id 매칭
+//   3) Git author → oauth_user_id 매칭 (레이블 이벤트로 식별 실패 시)
+//   4) 프로젝트 오너 fallback
 //
-// 1~2는 의뢰자가 명확히 식별된 경우. 3은 fallback (오너가 책임).
-// 호출부는 반환값.user.id 로 그 사람의 에이전트 풀을 lookup.
+// 동기 버전 resolveIssueRequester 는 토큰이 없는 호출부(웹 API)에서 사용하며
+// 2단계(레이블 이벤트)는 생략한다.
 
 export interface IssueRequesterResult {
   user: User
-  /** 'marker' | 'author' | 'owner-fallback' — 디버그/로깅용 */
-  source: 'marker' | 'author' | 'owner-fallback'
+  /** 'marker' | 'label-actor' | 'author' | 'owner-fallback' — 디버그/로깅용 */
+  source: 'marker' | 'label-actor' | 'author' | 'owner-fallback'
 }
 
 export function resolveIssueRequester(project: Project, issue: any): IssueRequesterResult | null {
@@ -153,6 +154,58 @@ export function resolveIssueRequester(project: Project, issue: any): IssueReques
   }
 
   // 3) 프로젝트 오너 fallback
+  const owner = getUserById(project.userId)
+  if (owner) return { user: owner, source: 'owner-fallback' }
+  return null
+}
+
+/**
+ * 레이블 이벤트 조회까지 포함한 의뢰자 판정. 스캐너가 사용.
+ *
+ * 동기 버전과의 차이:
+ *   - 본문 마커가 없을 때, "Schedule 레이블(IVE-S) 을 가장 최근 부착한 사람"을
+ *     이슈 작성자보다 우선해 의뢰자로 본다.
+ *
+ * 의뢰 행위 = "스캐너에 처리를 맡긴 행위" = "IVE-S 부착" 으로 정의한다.
+ * 이슈 작성자와 IVE 처리 의뢰자는 다른 사람일 수 있다 (다른 IVE 계정으로
+ * 로그인했거나, 팀원이 대신 만든 이슈를 본인이 IVE-S 로 트리거한 경우 등).
+ *
+ * fetchLabelEvents 는 provider 추상을 깨지 않으려 호출부에서 주입.
+ */
+export async function resolveIssueRequesterAsync(
+  project: Project,
+  issue: any,
+  fetchLabelEvents: () => Promise<Array<{ action: 'add' | 'remove'; label: string; userId: string | null; createdAt: string }>>,
+): Promise<IssueRequesterResult | null> {
+  // 1) 본문 ive-author 마커
+  const markerId = extractIveAuthorId(issue.description || '')
+  if (markerId) {
+    const u = getUserById(markerId)
+    if (u) return { user: u, source: 'marker' }
+  }
+
+  // 2) Schedule 레이블(IVE-S) 을 가장 최근 부착한 사람
+  const scheduleLabel = project.labelSchedule || 'IVE-S'
+  try {
+    const events = await fetchLabelEvents()
+    const sorted = [...events].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+    for (const ev of sorted) {
+      if (ev.action !== 'add' || ev.label !== scheduleLabel) continue
+      if (!ev.userId) continue
+      const u = getUserByOAuthId(project.provider, ev.userId)
+      if (u) return { user: u, source: 'label-actor' }
+    }
+  } catch {
+    // 레이블 이벤트 조회 실패 → 다음 단계로 fallback
+  }
+
+  // 3) Git author → IVE 사용자 매칭
+  if (issue.author?.id != null) {
+    const u = getUserByOAuthId(project.provider, String(issue.author.id))
+    if (u) return { user: u, source: 'author' }
+  }
+
+  // 4) 프로젝트 오너 fallback
   const owner = getUserById(project.userId)
   if (owner) return { user: owner, source: 'owner-fallback' }
   return null

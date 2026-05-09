@@ -172,6 +172,13 @@ export async function removeIssueLabels(project: Project, iid: number, token: st
   }
 }
 
+// Issue label events (누가 어떤 레이블을 언제 달았는지)
+export function fetchIssueLabelEvents(project: Project, iid: number, token: string) {
+  return project.provider === 'github'
+    ? github.fetchGitHubIssueLabelEvents(project, iid, token)
+    : gitlab.fetchGitLabIssueLabelEvents(project, iid, token);
+}
+
 // Fetch issues by label
 export function fetchIssuesByLabel(project: Project, token: string, label: string) {
   return project.provider === 'github'
