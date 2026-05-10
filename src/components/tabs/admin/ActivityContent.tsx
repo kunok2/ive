@@ -20,9 +20,12 @@ const CATEGORY_META: Record<string, { labelKey: string; icon: string; color: str
 }
 
 function getDateStr(daysAgo: number) {
-  const d = new Date()
-  d.setDate(d.getDate() - daysAgo)
-  return d.toISOString().slice(0, 10)
+  // toISOString()은 UTC 날짜 반환 — KST 09:00 이전이면 "어제" 날짜가 나온다.
+  // KST(+9h)로 보정 후 날짜 문자열을 추출해야 사용자 기준 당일 날짜가 정확히 나온다.
+  const KST_OFFSET_MS = 9 * 60 * 60 * 1000
+  const kst = new Date(new Date().getTime() + KST_OFFSET_MS)
+  kst.setUTCDate(kst.getUTCDate() - daysAgo)
+  return kst.toISOString().slice(0, 10)
 }
 
 const DATE_PRESETS: { labelKey: string; days: number | null }[] = [
