@@ -695,7 +695,7 @@ export async function GET(req: NextRequest) {
   const issueAttemptMap = new Map<string, number>()
   for (const e of execs) {
     if (e.status !== 'success' && e.status !== 'failed') continue
-    if (e.id.startsWith('ex-verify-')) continue
+    if (e.id.startsWith('ex-verify-') || e.id.startsWith('ex-confirm-')) continue
     const key = `${e.projectId}:${e.issueIid}`
     issueAttemptMap.set(key, (issueAttemptMap.get(key) || 0) + 1)
   }
@@ -703,7 +703,7 @@ export async function GET(req: NextRequest) {
   const issueAttemptCounter = new Map<string, number>()
   const resolvedIssues = type === 'weekly'
     ? execs
-      .filter(e => (e.status === 'success' || e.status === 'failed') && !e.id.startsWith('ex-verify-'))
+      .filter(e => (e.status === 'success' || e.status === 'failed') && !e.id.startsWith('ex-verify-') && !e.id.startsWith('ex-confirm-'))
       .map(e => {
         const key = `${e.projectId}:${e.issueIid}`
         const attemptNo = (issueAttemptCounter.get(key) || 0) + 1
