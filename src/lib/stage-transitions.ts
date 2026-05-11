@@ -81,6 +81,12 @@ export const TRANSITIONS: Record<string, StageTransition[]> = {
       removeLabels: p => [p.labelVerifyWait || 'IVE-W'],
       addLabels: p => [p.labelSchedule || 'IVE-S'],
     },
+    {
+      action: 'to_inflow',
+      description: '유입 상태로 초기화',
+      removeLabels: p => [p.labelVerifyWait || 'IVE-W'],
+      addLabels: () => [],
+    },
   ],
   verifying: [
     {
@@ -106,6 +112,12 @@ export const TRANSITIONS: Record<string, StageTransition[]> = {
       description: '재시도 → 스케줄',
       removeLabels: p => [p.labelVerify || 'IVE-V'],
       addLabels: p => [p.labelSchedule || 'IVE-S'],
+    },
+    {
+      action: 'to_inflow',
+      description: '유입 상태로 초기화',
+      removeLabels: p => [p.labelVerify || 'IVE-V'],
+      addLabels: () => [],
     },
   ],
   confirm_waiting: [

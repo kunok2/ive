@@ -66,29 +66,32 @@ describe('T-0: 모든 stage.action 정의', () => {
   })
 })
 
-describe('T-1: 전이 결과 라벨 집합에는 단계 라벨이 정확히 1개', () => {
+describe('T-1: 전이 결과 라벨 집합에서 단계 라벨 일관성', () => {
   const stageLabels = allStageLabels(project)
-  const cases: Array<{ stage: string; action: string; from: string[] }> = [
+  const cases: Array<{ stage: string; action: string; from: string[]; expectedCount: number }> = [
     // 정상 흐름
-    { stage: 'none',           action: 'schedule',           from: ['IVE'] },
-    { stage: 'waiting',        action: 'start_dev',          from: ['IVE', 'IVE-S'] },
-    { stage: 'dev',            action: 'complete',           from: ['IVE', 'IVE-D'] },
-    { stage: 'verify_waiting', action: 'start_verification', from: ['IVE', 'IVE-W'] },
-    { stage: 'verifying',      action: 'approve',            from: ['IVE', 'IVE-V'] },
-    { stage: 'confirm_waiting',action: 'start_confirmation', from: ['IVE', 'IVE-P'] },
-    { stage: 'confirming',     action: 'accept',             from: ['IVE', 'IVE-C'] },
+    { stage: 'none',           action: 'schedule',           from: ['IVE'],              expectedCount: 1 },
+    { stage: 'waiting',        action: 'start_dev',          from: ['IVE', 'IVE-S'],     expectedCount: 1 },
+    { stage: 'dev',            action: 'complete',           from: ['IVE', 'IVE-D'],     expectedCount: 1 },
+    { stage: 'verify_waiting', action: 'start_verification', from: ['IVE', 'IVE-W'],     expectedCount: 1 },
+    { stage: 'verifying',      action: 'approve',            from: ['IVE', 'IVE-V'],     expectedCount: 1 },
+    { stage: 'confirm_waiting',action: 'start_confirmation', from: ['IVE', 'IVE-P'],     expectedCount: 1 },
+    { stage: 'confirming',     action: 'accept',             from: ['IVE', 'IVE-C'],     expectedCount: 1 },
     // 후진 흐름
-    { stage: 'dev',            action: 'cancel',             from: ['IVE', 'IVE-D'] },
-    { stage: 'verifying',      action: 'reject',             from: ['IVE', 'IVE-V'] },
-    { stage: 'confirming',     action: 'return_to_dev',      from: ['IVE', 'IVE-C'] },
-    { stage: 'done',           action: 'reopen',             from: ['IVE', 'IVE-E'] },
-    { stage: 'done',           action: 'retry',              from: ['IVE', 'IVE-E'] },
+    { stage: 'dev',            action: 'cancel',             from: ['IVE', 'IVE-D'],     expectedCount: 1 },
+    { stage: 'verifying',      action: 'reject',             from: ['IVE', 'IVE-V'],     expectedCount: 1 },
+    { stage: 'confirming',     action: 'return_to_dev',      from: ['IVE', 'IVE-C'],     expectedCount: 1 },
+    { stage: 'done',           action: 'reopen',             from: ['IVE', 'IVE-E'],     expectedCount: 1 },
+    { stage: 'done',           action: 'retry',              from: ['IVE', 'IVE-E'],     expectedCount: 1 },
+    // 유입 전환 (to_inflow) — 모든 단계 라벨 제거, IVE만 유지
+    { stage: 'verify_waiting', action: 'to_inflow',          from: ['IVE', 'IVE-W'],     expectedCount: 0 },
+    { stage: 'verifying',      action: 'to_inflow',          from: ['IVE', 'IVE-V'],     expectedCount: 0 },
   ]
   for (const c of cases) {
-    it(`${c.stage}.${c.action}: 전이 후 단계 라벨 1개`, () => {
+    it(`${c.stage}.${c.action}: 전이 후 단계 라벨 ${c.expectedCount}개`, () => {
       const next = applyTransition(c.from, c.stage, c.action)
       const stageLabelsInNext = next.filter(l => stageLabels.includes(l))
-      expect(stageLabelsInNext.length, `전이 후: ${next.join(', ')}`).toBe(1)
+      expect(stageLabelsInNext.length, `전이 후: ${next.join(', ')}`).toBe(c.expectedCount)
     })
   }
 })
@@ -157,6 +160,18 @@ describe('T-3: macro 단계 forward / backward 정의', () => {
   it('confirming → return_to_dev → verify_waiting (확인 단계에서 검증 재요청)', () => {
     const labels = applyTransition(['IVE', 'IVE-C'], 'confirming', 'return_to_dev')
     expect(stageFromLabels(labels, project)).toBe('verify_waiting')
+  })
+
+  it('verify_waiting → to_inflow → 단계 라벨 없음 (유입 상태)', () => {
+    const labels = applyTransition(['IVE', 'IVE-W'], 'verify_waiting', 'to_inflow')
+    expect(labels).toEqual(['IVE'])
+    expect(stageFromLabels(labels, project)).toBeNull()
+  })
+
+  it('verifying → to_inflow → 단계 라벨 없음 (유입 상태)', () => {
+    const labels = applyTransition(['IVE', 'IVE-V'], 'verifying', 'to_inflow')
+    expect(labels).toEqual(['IVE'])
+    expect(stageFromLabels(labels, project)).toBeNull()
   })
 })
 
