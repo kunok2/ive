@@ -35,7 +35,7 @@ interface BottomInputAreaProps {
   comment: string
   commentKey: string
   posting: boolean
-  postingType: 'comment' | 'retry' | 'done' | 'next' | null
+  postingType: 'comment' | 'retry' | 'done' | 'next' | 'inflow' | null
   // Chat state
   chatSessionId: string | null
   chatHistoryOnly: boolean
@@ -56,6 +56,7 @@ interface BottomInputAreaProps {
   onCommentAndRetry: (agentId?: string | null) => void
   onCommentAndDone: () => void
   onCommentAndNextStage: () => void
+  onCommentAndInflow: () => void
   onStartChat: (force?: boolean) => void
   onEndChat: () => void
   onSendChatMessage: () => void
@@ -69,7 +70,7 @@ export default function BottomInputArea({
   chatSessionId, chatHistoryOnly, chatStarting, chatSending, chatInput, chatAgentName,
   preferredAgent, projectAgents, NEXT_STAGE,
   onSetMode, onSetComment, onSetChatInput,
-  onPostComment, onCommentAndRetry, onCommentAndDone, onCommentAndNextStage,
+  onPostComment, onCommentAndRetry, onCommentAndDone, onCommentAndNextStage, onCommentAndInflow,
   onStartChat, onEndChat, onSendChatMessage, onChangePreferredAgent, onToast,
 }: BottomInputAreaProps) {
   const tIssue = useTranslations('issue')
@@ -123,6 +124,7 @@ export default function BottomInputArea({
           onCommentAndRetry={onCommentAndRetry}
           onCommentAndDone={onCommentAndDone}
           onCommentAndNextStage={onCommentAndNextStage}
+          onCommentAndInflow={onCommentAndInflow}
         />
       )}
 
@@ -232,13 +234,13 @@ function ModeTabs({
 function CommentModeInput({
   issue, comment, commentKey, posting, postingType, canProgressStage,
   preferredAgent, NEXT_STAGE, commentPasteHandlers,
-  onSetComment, onPostComment, onCommentAndRetry, onCommentAndDone, onCommentAndNextStage,
+  onSetComment, onPostComment, onCommentAndRetry, onCommentAndDone, onCommentAndNextStage, onCommentAndInflow,
 }: {
   issue: BottomInputAreaProps['issue']
   comment: string
   commentKey: string
   posting: boolean
-  postingType: 'comment' | 'retry' | 'done' | 'next' | null
+  postingType: 'comment' | 'retry' | 'done' | 'next' | 'inflow' | null
   canProgressStage: boolean
   preferredAgent: BottomInputAreaProps['preferredAgent']
   NEXT_STAGE: Record<string, { stage: string; action: string; label: string }>
@@ -248,6 +250,7 @@ function CommentModeInput({
   onCommentAndRetry: (agentId?: string | null) => void
   onCommentAndDone: () => void
   onCommentAndNextStage: () => void
+  onCommentAndInflow: () => void
 }) {
   const tIssue = useTranslations('issue')
 
@@ -281,7 +284,20 @@ function CommentModeInput({
       <div className="flex gap-2 items-center overflow-hidden">
         {/* ← 후진: 재실행 (현재 stage 를 스케줄로 되돌림). dev/none 단계에선 backward 액션 없음.
             dev_fail 은 처리 단계에서의 실패이므로 '이전 단계'(유입)로 가는 게 아니라 '재처리' 의미. */}
-        <div className="flex-1 flex justify-start">
+        <div className="flex-1 flex justify-start gap-1.5">
+          {/* 유입 버튼 — 검증대기/검증 단계에서만 표시 (이전 버튼 앞에 위치) */}
+          {canProgressStage && (issue.stage === 'verify_waiting' || issue.stage === 'verifying') && (
+            <button
+              onClick={onCommentAndInflow}
+              disabled={posting || !comment.trim()}
+              className="shrink-0 h-10 px-3 rounded-lg border border-ive-red/40 text-ive-red bg-ive-bg-card hover:bg-ive-red/10 flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold whitespace-nowrap"
+              title="코멘트와 함께 유입 상태로 초기화"
+            >
+              {postingType === 'inflow' ? <i className="fa-solid fa-circle-notch fa-spin" /> : (
+                <><i className="fa-solid fa-rotate-left text-[10px]" /><span>유입</span></>
+              )}
+            </button>
+          )}
           {canProgressStage && issue.stage !== 'dev' && issue.stage !== 'none' && !(preferredAgent?.assignMode === 'assignee' && NEXT_STAGE[issue.stage]) && (() => {
             const isReprocess = issue.stage === 'dev_fail'
             return (

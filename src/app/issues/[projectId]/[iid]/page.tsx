@@ -28,8 +28,8 @@ const STAGE_TRANSITION_DESTS: Record<string, Record<string, string>> = {
   none: { schedule: 'waiting' },
   waiting: { start_dev: 'dev' },
   dev: { complete: 'verify_waiting', cancel: 'waiting', retry: 'waiting' },
-  verify_waiting: { start_verification: 'verifying', cancel: 'waiting', retry: 'waiting' },
-  verifying: { approve: 'confirm_waiting', complete: 'confirm_waiting', reject: 'waiting', retry: 'waiting' },
+  verify_waiting: { start_verification: 'verifying', cancel: 'waiting', retry: 'waiting', to_inflow: 'none' },
+  verifying: { approve: 'confirm_waiting', complete: 'confirm_waiting', reject: 'waiting', retry: 'waiting', to_inflow: 'none' },
   confirm_waiting: { start_confirmation: 'confirming', cancel: 'waiting', return_to_dev: 'verify_waiting', retry: 'waiting' },
   confirming: { accept: 'done', return_to_dev: 'verify_waiting', retry: 'waiting' },
   done: { reopen: 'confirm_waiting', retry: 'waiting' },
@@ -124,7 +124,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
     return ''
   })
   const [posting, setPosting] = useState(false)
-  const [postingType, setPostingType] = useState<'comment' | 'retry' | 'done' | 'next' | null>(null)
+  const [postingType, setPostingType] = useState<'comment' | 'retry' | 'done' | 'next' | 'inflow' | null>(null)
   const postingRef = useRef(false)
 
   // --- Stage/edit state ---
@@ -501,6 +501,30 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
       // verifying 의 approve 만 MR 체크 적용 (confirming 의 accept 는 단순 종결)
       if (isConfirming) await doStage()
       else await runApproveWithMRCheck(doStage)
+    } catch (err: any) { toast(err.message || '네트워크 오류가 발생했습니다', 'error') }
+    finally { postingRef.current = false; setPosting(false); setPostingType(null) }
+  }
+
+  async function handleCommentAndInflow() {
+    if (!issue || !comment.trim() || postingRef.current) return
+    const stageAction = 'to_inflow'
+    const stageNow = issue.stage
+    postingRef.current = true; setPosting(true); setPostingType('inflow')
+    try {
+      const noteBody = stageTransitionPrefix(stageNow, stageAction) + comment.trim()
+      const res = await fetch(`/api/projects/${projectId}/issues/${iid}/notes`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: noteBody }),
+      })
+      if (!res.ok) { const data = await res.json().catch(() => ({})); toast(data.error || '코멘트 작성에 실패했습니다', 'error'); return }
+      setComment(''); localStorage.removeItem(commentKey)
+      pendingScrollToBottomRef.current = true; await fetchNotes()
+      const stageRes = await fetch(`/api/projects/${projectId}/issues/${iid}/stage`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stage: stageNow, action: stageAction }),
+      })
+      if (!stageRes.ok) { const errorData = await stageRes.json().catch(() => null); toast(errorData?.error || `Error: ${stageRes.status} ${stageRes.statusText}`, 'error'); return }
+      await refreshAll(); toast('유입 상태로 변경되었습니다', 'success')
     } catch (err: any) { toast(err.message || '네트워크 오류가 발생했습니다', 'error') }
     finally { postingRef.current = false; setPosting(false); setPostingType(null) }
   }
@@ -968,6 +992,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
         onCommentAndRetry={handleCommentAndRetry}
         onCommentAndDone={handleCommentAndDone}
         onCommentAndNextStage={handleCommentAndNextStage}
+        onCommentAndInflow={handleCommentAndInflow}
         onStartChat={handleStartChat}
         onEndChat={handleEndChat}
         onSendChatMessage={handleSendChatMessage}
