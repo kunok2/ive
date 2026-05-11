@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb, getProject, getProjectAuthToken, getProjectAccess, hasActiveExecution, stageFromLabels, markIssueVerifyStarted, markIssueVerified, markIssueVerifyRejected, markIssueConfirmed, resetIssueScheduledAt, recordIssueScheduledAt, touchProjectActivity, assignIssueAtomically, getAssignModeMap, getIssueScheduledAt, isIssueAssignee, isIssueAuthor, upsertIssueStageSnapshot, updateExecutionStatus, getVerifyWaitingCount, updateProjectLastChecked, getPresetRoles } from '@/lib/db';
+import { getDb, getProject, getProjectAuthToken, getProjectAccess, hasActiveExecution, stageFromLabels, markIssueVerifyStarted, markIssueVerified, markIssueVerifyRejected, markIssueConfirmed, markIssueConfirmStarted, resetIssueScheduledAt, recordIssueScheduledAt, touchProjectActivity, assignIssueAtomically, getAssignModeMap, getIssueScheduledAt, isIssueAssignee, isIssueAuthor, upsertIssueStageSnapshot, updateExecutionStatus, getVerifyWaitingCount, updateProjectLastChecked, getPresetRoles } from '@/lib/db';
 import { triggerScan } from '@/lib/scanner';
 import { applyRoleAssignee } from '@/lib/role-assignee';
 import type { TaskExecution } from '@/types';
@@ -261,8 +261,9 @@ export async function POST(
       }
     }
 
-    // 확인 시작: 확인자 execution 생성 (verify 시작 패턴 거울 대칭)
+    // 확인 시작: confirm_started_at 기록 + 확인자 execution 생성 (verify 시작 패턴 거울 대칭)
     if (action === 'start_confirmation') {
+      markIssueConfirmStarted(projectId, Number(iid));
       try {
         const confirmIssue = await fetchSingleIssue(project, Number(iid), token);
         const executionId = `ex-confirm-${Date.now()}-${Math.floor(Math.random() * 1000)}`;

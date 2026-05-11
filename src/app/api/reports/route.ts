@@ -545,6 +545,12 @@ export async function GET(req: NextRequest) {
           const vw = durationMin(effEnd, e.verifyStartedAt)
           if (vw >= 0) wait += vw
         }
+        // 확인 대기 시간: verifyEnd → confirmStartedAt (대기시간에 포함)
+        const verifyEndForWait = e.verifiedAt || e.rejectedAt
+        if (verifyEndForWait && e.confirmStartedAt) {
+          const cw = durationMin(verifyEndForWait, e.confirmStartedAt)
+          if (cw >= 0) wait += cw
+        }
         if (wait >= 0) d.waitTimes.push(wait)
       }
       const verifyEnd = e.verifiedAt || e.rejectedAt
@@ -552,9 +558,9 @@ export async function GET(req: NextRequest) {
         const vt = e.verifyStartedAt ? durationMin(e.verifyStartedAt, verifyEnd) : durationMin(effEnd, verifyEnd)
         if (vt >= 0) d.verifyTimes.push(vt)
       }
-      // 확인 시간: verifyEnd → confirmedAt
-      if (e.confirmedAt && verifyEnd) {
-        const ct = durationMin(verifyEnd, e.confirmedAt)
+      // 확인 시간: confirmStartedAt → confirmedAt
+      if (e.confirmedAt && e.confirmStartedAt) {
+        const ct = durationMin(e.confirmStartedAt, e.confirmedAt)
         if (ct >= 0) d.confirmTimes.push(ct)
       }
     }
@@ -763,7 +769,7 @@ export async function GET(req: NextRequest) {
   // 이슈 생애주기 집계
   const finishedExecs = execs.filter(e => e.status === 'success' || e.status === 'failed')
 
-  // 대기시간: 개발대기(issue_created_at → started_at) + 검증대기(ended_at → verify_started_at)
+  // 대기시간: 개발대기(issue_created_at → started_at) + 검증대기(ended_at → verify_started_at) + 확인대기(verifyEnd → confirmStartedAt)
   const waitTimes = finishedExecs
     .filter(e => e.issueCreatedAt)
     .map(e => {
@@ -773,6 +779,12 @@ export async function GET(req: NextRequest) {
       if (effEnd && e.verifyStartedAt) {
         const verifyWait = durationMin(effEnd, e.verifyStartedAt)
         if (verifyWait >= 0) wait += verifyWait
+      }
+      // 확인 대기 시간 추가 (confirmStartedAt이 있으면 verifyEnd → confirmStartedAt)
+      const verifyEnd = e.verifiedAt || e.rejectedAt
+      if (verifyEnd && e.confirmStartedAt) {
+        const confirmWait = durationMin(verifyEnd, e.confirmStartedAt)
+        if (confirmWait >= 0) wait += confirmWait
       }
       return wait
     })
@@ -791,13 +803,10 @@ export async function GET(req: NextRequest) {
       return e.verifyStartedAt ? durationMin(e.verifyStartedAt, verifyEnd) : durationMin(effEnd, verifyEnd)
     })
     .filter(v => v >= 0)
-  // 확인시간: verified_at/rejectedAt → confirmedAt
+  // 확인시간: confirmStartedAt → confirmedAt
   const confirmTimes = finishedExecs
-    .filter(e => e.confirmedAt && (e.verifiedAt || e.rejectedAt))
-    .map(e => {
-      const verifyEnd = (e.verifiedAt || e.rejectedAt)!
-      return durationMin(verifyEnd, e.confirmedAt!)
-    })
+    .filter(e => e.confirmedAt && e.confirmStartedAt)
+    .map(e => durationMin(e.confirmStartedAt!, e.confirmedAt!))
     .filter(v => v >= 0)
   // 총시간: execution별 자체 생애주기 (대기 + 개발 + 검증대기 + 검증 + 확인대기 + 확인)
   const totalTimes = finishedExecs
@@ -853,6 +862,11 @@ export async function GET(req: NextRequest) {
         const vw = durationMin(effEnd, e.verifyStartedAt)
         if (vw >= 0) wait += vw
       }
+      const prevVerifyEnd = e.verifiedAt || e.rejectedAt
+      if (prevVerifyEnd && e.confirmStartedAt) {
+        const cw = durationMin(prevVerifyEnd, e.confirmStartedAt)
+        if (cw >= 0) wait += cw
+      }
       return wait
     })
     .filter(v => v >= 0)
@@ -868,13 +882,10 @@ export async function GET(req: NextRequest) {
       return e.verifyStartedAt ? durationMin(e.verifyStartedAt, verifyEnd) : durationMin(effEnd, verifyEnd)
     })
     .filter(v => v >= 0)
-  // 이전 기간 확인시간: verified_at/rejectedAt → confirmedAt
+  // 이전 기간 확인시간: confirmStartedAt → confirmedAt
   const prevConfirmTimes = prevFinishedExecs
-    .filter(e => e.confirmedAt && (e.verifiedAt || e.rejectedAt))
-    .map(e => {
-      const verifyEnd = (e.verifiedAt || e.rejectedAt)!
-      return durationMin(verifyEnd, e.confirmedAt!)
-    })
+    .filter(e => e.confirmedAt && e.confirmStartedAt)
+    .map(e => durationMin(e.confirmStartedAt!, e.confirmedAt!))
     .filter(v => v >= 0)
   const prevTotalTimes = prevFinishedExecs
     .filter(e => e.issueCreatedAt)
