@@ -250,7 +250,7 @@ export async function POST(
     }
 
     // verifying 단계 종료 시 검증자 execution 닫기 (여러 개 있을 수 있으므로 전부 처리)
-    if (stage === 'verifying' && (action === 'approve' || action === 'complete' || action === 'reject' || action === 'retry')) {
+    if (stage === 'verifying' && (action === 'approve' || action === 'complete' || action === 'reject' || action === 'retry' || action === 'to_inflow')) {
       const db = getDb();
       const verifyExecs = db.prepare(
         "SELECT id FROM task_executions WHERE project_id = ? AND issue_iid = ? AND status IN ('running', 'assigned') AND assignee_type = 'user'"
@@ -329,7 +329,7 @@ export async function POST(
     const issue = await fetchSingleIssue(project, Number(iid), token);
     const newLabels = issue?.labels || [];
     const activeExec = hasActiveExecution(projectId, Number(iid));
-    const newStage = stageFromLabels(newLabels, project, { hasActiveExec: activeExec }) || 'waiting';
+    const newStage = stageFromLabels(newLabels, project, { hasActiveExec: activeExec }) ?? 'none';
 
     // DB 스냅샷 즉시 업데이트 (탑바/목록 즉시 동기화용)
     // verifying 단계라면 검증자 정보 사용, 아니면 Git assignee 사용
@@ -377,6 +377,7 @@ export async function POST(
       return_to_dev: '재작업 요청',
       start_dev: '개발 시작',
       schedule: '스케줄 등록',
+      to_inflow: '유입 전환',
     };
     logActivity({
       userId: user.id,
