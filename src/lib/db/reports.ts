@@ -36,6 +36,7 @@ export interface ReportExecution {
   verifiedAt: string | null
   verifyStartedAt: string | null
   rejectedAt: string | null
+  confirmStartedAt: string | null
   confirmedAt: string | null
   confirmerName: string | null
   confirmerAvatar: string | null
@@ -70,6 +71,7 @@ function mapReportExecution(r: any): ReportExecution {
     verifiedAt: r.verified_at ?? null,
     verifyStartedAt: r.verify_started_at ?? null,
     rejectedAt: r.rejected_at ?? null,
+    confirmStartedAt: r.confirm_started_at ?? null,
     confirmedAt: r.confirmed_at ?? null,
     confirmerName: r.confirmer_name ?? null,
     confirmerAvatar: r.confirmer_avatar ?? null,
@@ -89,7 +91,7 @@ const REPORT_EXEC_QUERY = `
          te.issue_iid, te.issue_title, te.status,
          te.started_at, te.ended_at, te.input_tokens, te.output_tokens, te.cache_read_input_tokens, te.cache_creation_input_tokens, te.cost_usd, te.turns,
          te.issue_created_at, te.model_name, te.verified_at, te.verify_started_at, te.rejected_at,
-         ist.confirmed_at, ist.confirmer_name, ist.confirmer_avatar, ist.confirmer_user_id,
+         ist.confirm_started_at, ist.confirmed_at, ist.confirmer_name, ist.confirmer_avatar, ist.confirmer_user_id,
          te.assignee_type, te.user_id as te_user_id, te.user_name as te_user_name, te.user_avatar as te_user_avatar,
          te.verifier_name, te.verifier_avatar, te.verifier_username,
          COALESCE(te.verifier_user_id, vu.id) as verifier_user_id_resolved,

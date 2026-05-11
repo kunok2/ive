@@ -141,6 +141,7 @@ export interface IssueStageTimes {
   devEndedAt: string | null
   verifyStartedAt: string | null
   verifyEndedAt: string | null   // verified_at OR rejected_at (둘 중 먼저)
+  confirmStartedAt: string | null  // 확인 시작 시각 (확인대기→확인 전환 시점)
   confirmedAt: string | null
 }
 
@@ -148,7 +149,7 @@ export interface IssueStageTimes {
  * 단계별 타임스탬프.
  *   - firstDevStartedAt: 처음 dev 가 시작된 시각 (재시도 무관, 진짜 픽업 시점)
  *   - 그 외: 마지막 execution 기준 (현재 단계 진행 시간/마지막 대기 표시용)
- * 확인 단계 시작 시각은 별도 컬럼이 없으므로 verifyEndedAt 을 그대로 시작 시각으로 본다.
+ *   - confirmStartedAt: 확인 시작 클릭 시각 (issue_stages.confirm_started_at)
  */
 export function getIssueStageTimes(projectId: string, issueIid: number): IssueStageTimes {
   // ex-verify-% 와 ex-confirm-% 는 사람 작업용 placeholder execution 이므로 제외 — dev exec 만 본다.
@@ -168,7 +169,7 @@ export function getIssueStageTimes(projectId: string, issueIid: number): IssueSt
   ).get(projectId, issueIid) as any | undefined
 
   const stage = getDb().prepare(
-    'SELECT confirmed_at, scheduled_at FROM issue_stages WHERE project_id = ? AND issue_iid = ?'
+    'SELECT confirmed_at, confirm_started_at, scheduled_at FROM issue_stages WHERE project_id = ? AND issue_iid = ?'
   ).get(projectId, issueIid) as any | undefined
 
   return {
@@ -178,8 +179,20 @@ export function getIssueStageTimes(projectId: string, issueIid: number): IssueSt
     devEndedAt: lastExec?.ended_at ?? null,
     verifyStartedAt: lastExec?.verify_started_at ?? null,
     verifyEndedAt: lastExec?.verified_at ?? lastExec?.rejected_at ?? null,
+    confirmStartedAt: stage?.confirm_started_at ?? null,
     confirmedAt: stage?.confirmed_at ?? null,
   }
+}
+
+export function markIssueConfirmStarted(projectId: string, issueIid: number) {
+  const now = new Date().toISOString()
+  getDb().prepare(`
+    INSERT INTO issue_stages (project_id, issue_iid, stage, confirm_started_at, updated_at)
+    VALUES (?, ?, '', ?, datetime('now'))
+    ON CONFLICT(project_id, issue_iid) DO UPDATE SET
+      confirm_started_at = COALESCE(confirm_started_at, excluded.confirm_started_at),
+      updated_at = datetime('now')
+  `).run(projectId, issueIid, now)
 }
 
 export function markIssueVerifyStarted(projectId: string, issueIid: number) {

@@ -491,6 +491,7 @@ export function initSchema(db: Database.Database) {
   try { db.exec(`ALTER TABLE issue_stages ADD COLUMN confirmer_user_id TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
   try { db.exec(`ALTER TABLE issue_stages ADD COLUMN confirmer_name TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
   try { db.exec(`ALTER TABLE issue_stages ADD COLUMN confirmer_avatar TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
+  try { db.exec(`ALTER TABLE issue_stages ADD COLUMN confirm_started_at TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
   // 검증자/확인자 사전 배정 (이슈 생성 시 지정). mode: 'creator' | 'auto' | 'specific'
   // (실제 수행자 정보는 task_executions.verifier_* / issue_stages.confirmer_* 사용)
   try { db.exec(`ALTER TABLE issue_stages ADD COLUMN preset_verifier_mode TEXT DEFAULT 'creator'`) } catch { /* 이미 존재 */ }

@@ -190,6 +190,7 @@ function getTestExecutions(db: Database.Database, userId: string, startISO: stri
     rejectedAt: r.rejected_at ?? null, verifierName: r.verifier_name ?? null,
     verifierAvatar: r.verifier_avatar ?? null, verifierUsername: r.verifier_username ?? null,
     verifierUserId: r.verifier_user_id_resolved ?? null, assigneeType: r.assignee_type ?? 'agent',
+    confirmStartedAt: null, confirmedAt: null, confirmerName: null, confirmerAvatar: null, confirmerUserId: null,
   }))
 }
 
