@@ -39,6 +39,7 @@ interface IssueDetail {
   }
   retryCounts?: {
     fromVerify: number
+    fromVerifyToInflow: number
     fromConfirm: number
     fromDone: number
   }

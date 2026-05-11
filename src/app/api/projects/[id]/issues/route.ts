@@ -152,10 +152,10 @@ export async function GET(
           iterationCounts: (() => {
             const c = iterationMap.get(issue.iid);
             const fwd = c?.forward ?? { toProcess: 0, toVerify: 0, toConfirm: 0, toDone: 0 };
-            const ret = c?.retry ?? { fromVerify: 0, fromConfirm: 0, fromDone: 0 };
+            const ret = c?.retry ?? { fromVerify: 0, fromVerifyToInflow: 0, fromConfirm: 0, fromDone: 0 };
             return {
               processCount: fwd.toProcess,                                          // 처리 진입 횟수
-              retryTotal: ret.fromVerify + ret.fromConfirm + ret.fromDone,          // 총 되돌리기 횟수
+              retryTotal: ret.fromVerify + ret.fromVerifyToInflow + ret.fromConfirm + ret.fromDone,  // 총 되돌리기 횟수
             };
           })(),
         };
