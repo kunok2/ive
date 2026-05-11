@@ -76,9 +76,10 @@ export function getActivityLogs(opts: {
 }
 
 export interface IssueRetryCounts {
-  fromVerify: number   // 검증→처리 (반려)
-  fromConfirm: number  // 확인→처리 (재작업 요청)
-  fromDone: number     // 완료→재오픈
+  fromVerify: number          // 검증→처리 (반려)
+  fromVerifyToInflow: number  // 검증/검증대기→유입 (유입 전환)
+  fromConfirm: number         // 확인→처리 (재작업 요청)
+  fromDone: number            // 완료→재오픈
 }
 
 export interface IssueForwardCounts {
@@ -128,16 +129,17 @@ export function getIssueRetryCounts(projectId: string, issueIid: number): IssueR
   const rows = getDb().prepare(
     `SELECT action, COUNT(*) as cnt FROM user_activity_logs
      WHERE target_type = 'issue' AND target_id = ?
-       AND action IN ('task_reject', 'task_return_to_dev', 'task_reopen')
+       AND action IN ('task_reject', 'task_return_to_dev', 'task_reopen', 'task_to_inflow')
      GROUP BY action`
   ).all(targetId) as Array<{ action: string; cnt: number }>
-  let fromVerify = 0, fromConfirm = 0, fromDone = 0
+  let fromVerify = 0, fromConfirm = 0, fromDone = 0, fromVerifyToInflow = 0
   for (const r of rows) {
     if (r.action === 'task_reject') fromVerify = r.cnt
     else if (r.action === 'task_return_to_dev') fromConfirm = r.cnt
     else if (r.action === 'task_reopen') fromDone = r.cnt
+    else if (r.action === 'task_to_inflow') fromVerifyToInflow = r.cnt
   }
-  return { fromVerify, fromConfirm, fromDone }
+  return { fromVerify, fromVerifyToInflow, fromConfirm, fromDone }
 }
 
 /**
@@ -148,11 +150,11 @@ export function getIssueIterationCountsMap(projectId: string): Map<number, { for
   const result = new Map<number, { forward: IssueForwardCounts; retry: IssueRetryCounts }>()
   const prefix = `${projectId}:`
 
-  // 활동 로그 기반: task_approve/task_accept (forward), task_reject/task_return_to_dev/task_reopen (retry)
+  // 활동 로그 기반: task_approve/task_accept (forward), task_reject/task_return_to_dev/task_reopen/task_to_inflow (retry)
   const logRows = getDb().prepare(
     `SELECT target_id, action, COUNT(*) as cnt FROM user_activity_logs
      WHERE target_type = 'issue' AND target_id LIKE ?
-       AND action IN ('task_approve', 'task_accept', 'task_reject', 'task_return_to_dev', 'task_reopen')
+       AND action IN ('task_approve', 'task_accept', 'task_reject', 'task_return_to_dev', 'task_reopen', 'task_to_inflow')
      GROUP BY target_id, action`
   ).all(`${prefix}%`) as Array<{ target_id: string; action: string; cnt: number }>
 
@@ -161,7 +163,7 @@ export function getIssueIterationCountsMap(projectId: string): Map<number, { for
     if (!Number.isFinite(iid)) continue
     let entry = result.get(iid)
     if (!entry) {
-      entry = { forward: { toProcess: 0, toVerify: 0, toConfirm: 0, toDone: 0 }, retry: { fromVerify: 0, fromConfirm: 0, fromDone: 0 } }
+      entry = { forward: { toProcess: 0, toVerify: 0, toConfirm: 0, toDone: 0 }, retry: { fromVerify: 0, fromVerifyToInflow: 0, fromConfirm: 0, fromDone: 0 } }
       result.set(iid, entry)
     }
     if (r.action === 'task_approve') entry.forward.toConfirm = r.cnt
@@ -169,6 +171,7 @@ export function getIssueIterationCountsMap(projectId: string): Map<number, { for
     else if (r.action === 'task_reject') entry.retry.fromVerify = r.cnt
     else if (r.action === 'task_return_to_dev') entry.retry.fromConfirm = r.cnt
     else if (r.action === 'task_reopen') entry.retry.fromDone = r.cnt
+    else if (r.action === 'task_to_inflow') entry.retry.fromVerifyToInflow = r.cnt
   }
 
   // execution 기반: toProcess(전체 dev exec), toVerify(verify_started_at 채워진 것)
@@ -185,7 +188,7 @@ export function getIssueIterationCountsMap(projectId: string): Map<number, { for
   for (const r of execRows) {
     let entry = result.get(r.issue_iid)
     if (!entry) {
-      entry = { forward: { toProcess: 0, toVerify: 0, toConfirm: 0, toDone: 0 }, retry: { fromVerify: 0, fromConfirm: 0, fromDone: 0 } }
+      entry = { forward: { toProcess: 0, toVerify: 0, toConfirm: 0, toDone: 0 }, retry: { fromVerify: 0, fromVerifyToInflow: 0, fromConfirm: 0, fromDone: 0 } }
       result.set(r.issue_iid, entry)
     }
     entry.forward.toProcess = r.total ?? 0

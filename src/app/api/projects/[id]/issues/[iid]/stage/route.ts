@@ -244,8 +244,8 @@ export async function POST(
     }
 
     // 검증 반려 시 rejected_at 기록
-    // (명시적 reject뿐 아니라 검증 단계에서 재실행 클릭 시에도 반려로 집계 — 검증자가 "통과 못함" 판단)
-    if (action === 'reject' || (stage === 'verifying' && action === 'retry')) {
+    // (명시적 reject뿐 아니라 검증 단계에서 재실행/유입 초기화 클릭 시에도 반려로 집계 — 검증자가 "통과 못함" 판단)
+    if (action === 'reject' || (stage === 'verifying' && (action === 'retry' || action === 'to_inflow'))) {
       markIssueVerifyRejected(projectId, Number(iid), { name: user.name, avatar: user.avatar, userId: user.id });
     }
 
