@@ -108,6 +108,18 @@ export async function GET(req: NextRequest) {
     return Math.max(0, (b - a) / 60000)
   }
 
+  // 생애주기 시작점: 이슈가 작업 종료 후 등록된 경우(사후 등록)에도 작업시간이 누락되지
+  // 않도록 issue_created_at 과 started_at 중 더 이른 값을 사용한다.
+  function lifecycleStart(issueCreatedAt: string | null | undefined, startedAt: string | null | undefined): string | null {
+    const a = issueCreatedAt ? new Date(issueCreatedAt).getTime() : NaN
+    const b = startedAt ? new Date(startedAt).getTime() : NaN
+    const aOk = !isNaN(a), bOk = !isNaN(b)
+    if (aOk && bOk) return new Date(Math.min(a, b)).toISOString()
+    if (aOk) return issueCreatedAt!
+    if (bOk) return startedAt!
+    return null
+  }
+
   // 클라이언트에 직렬화하기 전 timestamp 검증 — 'REPLACE_END' 같은 garbage 가 그대로
   // 응답에 실려 나가서 화면에서 throw 되는 것을 방지한다.
   function safeISO(s: string | null | undefined): string | null {
@@ -748,9 +760,10 @@ export async function GET(req: NextRequest) {
             if (!e.confirmedAt || !verifyEnd) return null
             return Math.round(durationMin(verifyEnd, e.confirmedAt) * 10) / 10
           })(),
-          // 총 소요 시간: 이슈 생성 → 최종 종료 (확인 끝났으면 그 시점, 아니면 검증 종료)
+          // 총 소요 시간: 생애주기 시작 → 최종 종료
+          // 시작점은 issue_created_at 과 started_at 중 이른 값(사후 등록 케이스 보정).
           totalMin: (() => {
-            const start = e.issueCreatedAt || e.startedAt
+            const start = lifecycleStart(e.issueCreatedAt, e.startedAt) || e.startedAt
             const end = e.confirmedAt || e.verifiedAt || e.rejectedAt || e.endedAt || e.startedAt
             return Math.round(durationMin(start, end) * 10) / 10
           })(),
@@ -809,11 +822,14 @@ export async function GET(req: NextRequest) {
     .map(e => durationMin(e.confirmStartedAt!, e.confirmedAt!))
     .filter(v => v >= 0)
   // 총시간: execution별 자체 생애주기 (대기 + 개발 + 검증대기 + 검증 + 확인대기 + 확인)
+  // 시작점은 issue_created_at 과 started_at 중 이른 값 — 사후 등록 케이스에서
+  // 작업시간이 누락되어 평균이 왜곡되는 것을 방지한다.
   const totalTimes = finishedExecs
     .filter(e => e.issueCreatedAt)
     .map(e => {
+      const startPoint = lifecycleStart(e.issueCreatedAt, e.startedAt) || e.startedAt
       const endPoint = e.confirmedAt || e.verifiedAt || e.rejectedAt || e.endedAt || e.startedAt
-      return durationMin(e.issueCreatedAt!, endPoint)
+      return durationMin(startPoint, endPoint)
     })
     .filter(v => v >= 0)
 
@@ -890,8 +906,9 @@ export async function GET(req: NextRequest) {
   const prevTotalTimes = prevFinishedExecs
     .filter(e => e.issueCreatedAt)
     .map(e => {
+      const startPoint = lifecycleStart(e.issueCreatedAt, e.startedAt) || e.startedAt
       const endPoint = e.confirmedAt || e.verifiedAt || e.rejectedAt || e.endedAt || e.startedAt
-      return durationMin(e.issueCreatedAt!, endPoint)
+      return durationMin(startPoint, endPoint)
     })
     .filter(v => v >= 0)
 

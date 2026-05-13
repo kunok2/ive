@@ -477,6 +477,46 @@ async function scanProject(project: Project, force: boolean = false) {
         }
       }
 
+      // ── ive-meta 사후 보강 ──
+      // 외부 도구가 "이슈 먼저 생성 → 본문 나중 수정" 식으로 분리 호출하는 경우,
+      // 첫 스캔에서 빈 ive-meta 로 execution 이 만들어진 뒤 본문이 채워질 수 있다.
+      // 이 블록은 토큰/모델/비용/turns 가 모두 0/빈값인 user exec 한정으로 본문을 재파싱해
+      // 누락분만 보강한다. 한 번이라도 채워진 행은 SELECT 에서 제외되므로 덮어쓰지 않는다.
+      if (!activeExec && (stage === 'done' || stage === 'verify_waiting' || stage === 'dev_fail')) {
+        const emptyExec = getDb().prepare(
+          `SELECT id, started_at, ended_at FROM task_executions
+           WHERE project_id = ? AND issue_iid = ? AND assignee_type = 'user'
+             AND (agent_id IS NULL OR agent_id = '')
+             AND input_tokens = 0 AND output_tokens = 0 AND cost_usd = 0 AND turns = 0
+             AND (model_name IS NULL OR model_name = '')
+           ORDER BY started_at DESC LIMIT 1`
+        ).get(project.id, iid) as { id: string; started_at: string; ended_at: string | null } | undefined;
+
+        if (emptyExec) {
+          const meta = parseIveMeta(issue.description || '');
+          const hasTokenMeta = !!(meta.inputTokens || meta.outputTokens || meta.costUsd || meta.turns || meta.model);
+          const newStart = meta.startedAt && meta.startedAt !== emptyExec.started_at ? meta.startedAt : null;
+          const newEnd = meta.endedAt && meta.endedAt !== emptyExec.ended_at ? meta.endedAt : null;
+          if (hasTokenMeta || newStart || newEnd) {
+            if (hasTokenMeta) {
+              updateExecutionTokens(emptyExec.id, meta.inputTokens, meta.outputTokens, meta.costUsd, meta.turns, meta.model || undefined, 0, 0);
+            }
+            if (newStart || newEnd) {
+              getDb().prepare('UPDATE task_executions SET started_at = COALESCE(?, started_at), ended_at = COALESCE(?, ended_at) WHERE id = ?')
+                .run(newStart, newEnd, emptyExec.id);
+            }
+            slog.info(`[BACKFILL] Project: ${project.name}, Issue: #${iid}, Exec: ${emptyExec.id} — ive-meta 사후 보강 (tokens=${hasTokenMeta}, times=${!!(newStart || newEnd)})`);
+            try {
+              createActivityLog({
+                userId: project.userId, category: 'task', action: 'backfill_ive_meta',
+                detail: `ive-meta 사후 보강: #${iid} "${issue.title}" (${project.name})`,
+                targetType: 'execution', targetId: emptyExec.id,
+              });
+            } catch (e) { slog.error({ err: e }, 'Failed to log backfill activity:'); }
+          }
+        }
+      }
+
       // 사람 작업 완료 감지: 담당자가 Git에서 레이블을 IVE-W 또는 IVE-E로 변경한 경우
       // ※ verifying 단계는 검증 중이므로 절대 자동 완료 처리하지 않음 — 검증자가 승인/반려할 때만 완료됨
       if (activeExec && stage !== 'verifying' && (stage === 'verify_waiting' || stage === 'done')) {
