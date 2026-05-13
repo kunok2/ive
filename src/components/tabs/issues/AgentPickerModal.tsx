@@ -31,7 +31,7 @@ export default function AgentPickerModal({
 
   return (
     <Modal open={iid !== null} onClose={onClose} title={`#${iid ?? ''} ${tIssue('preferredAgent')}`} size="sm">
-      <div className="max-h-[60vh] overflow-y-auto">
+      <div>
         <button
           disabled={saving}
           onClick={() => iid !== null && onSelect(iid, 'auto', null)}
