@@ -645,42 +645,11 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
               onSortChange={(next) => setIssuesSort(next)}
             />
 
-            {showAddForm && (
-              <IssueAddForm
-                selectedProjectId={selectedProjectId}
-                newBody={newBody}
-                onBodyChange={handleBodyChange}
-                creating={creating}
-                creatingMode={creatingMode}
-                onCreateIssue={handleCreateIssue}
-                onCancel={() => { setShowAddForm(false); handleBodyChange('') }}
-                preferredAgentId={preferredAgentId}
-                onPreferredAgentIdChange={setPreferredAgentId}
-                projectAgents={projectAgents}
-                gitMembers={gitMembers}
-                selectedAssignees={selectedAssignees}
-                autoAssign={autoAssign}
-                onOpenAssigneeModal={openAssigneeModal}
-                verifierMode={verifierMode}
-                verifierUserId={verifierUserId}
-                verifierUsername={verifierUsername}
-                onVerifierChange={(mode, userId, username) => {
-                  setVerifierMode(mode)
-                  setVerifierUserId(userId)
-                  setVerifierUsername(username)
-                }}
-                confirmerMode={confirmerMode}
-                confirmerUserId={confirmerUserId}
-                confirmerUsername={confirmerUsername}
-                onConfirmerChange={(mode, userId, username) => {
-                  setConfirmerMode(mode)
-                  setConfirmerUserId(userId)
-                  setConfirmerUsername(username)
-                }}
-                dueDate={newDueDate}
-                onDueDateChange={setNewDueDate}
-              />
-            )}
+            {/*
+              IssueAddForm 은 헤더(shrink-0) 가 아니라 IssueList 의 스크롤 컨테이너 안에 렌더한다.
+              (issue #357 — 모바일에서 폼이 길어지면 키보드/뷰포트에 가려 스크롤이 불가능했던 문제)
+              아래 IssueList 의 headerSlot 으로 전달한다.
+            */}
 
             {bulkMode && !isHistoryTab && (
               <BulkActionBar
@@ -724,6 +693,42 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
           gitMembers={gitMembers}
           locale={state.user?.locale}
           timezone={state.user?.timezone}
+          headerSlot={showAddForm ? (
+            <IssueAddForm
+              selectedProjectId={selectedProjectId}
+              newBody={newBody}
+              onBodyChange={handleBodyChange}
+              creating={creating}
+              creatingMode={creatingMode}
+              onCreateIssue={handleCreateIssue}
+              onCancel={() => { setShowAddForm(false); handleBodyChange('') }}
+              preferredAgentId={preferredAgentId}
+              onPreferredAgentIdChange={setPreferredAgentId}
+              projectAgents={projectAgents}
+              gitMembers={gitMembers}
+              selectedAssignees={selectedAssignees}
+              autoAssign={autoAssign}
+              onOpenAssigneeModal={openAssigneeModal}
+              verifierMode={verifierMode}
+              verifierUserId={verifierUserId}
+              verifierUsername={verifierUsername}
+              onVerifierChange={(mode, userId, username) => {
+                setVerifierMode(mode)
+                setVerifierUserId(userId)
+                setVerifierUsername(username)
+              }}
+              confirmerMode={confirmerMode}
+              confirmerUserId={confirmerUserId}
+              confirmerUsername={confirmerUsername}
+              onConfirmerChange={(mode, userId, username) => {
+                setConfirmerMode(mode)
+                setConfirmerUserId(userId)
+                setConfirmerUsername(username)
+              }}
+              dueDate={newDueDate}
+              onDueDateChange={setNewDueDate}
+            />
+          ) : null}
           onToggleSelect={toggleSelect}
           onNavigate={handleNavigate}
           onOpenAgentPicker={setAgentPickerIid}

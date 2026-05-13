@@ -6,10 +6,8 @@ import { useTranslations } from 'next-intl'
 import { createImagePasteHandlers } from '@/lib/paste-upload'
 import { getKSTTodayString } from '@/lib/date-utils'
 import { useToast } from '@/components/ui/Toast'
-import type { CliName } from '@/types'
 import { CLI_CONFIG } from './types'
 import type { ProjectAgent } from './types'
-import AssigneePickerModal from './AssigneePickerModal'
 
 interface GitMember {
   id: number
@@ -57,26 +55,29 @@ interface RoleTriggerProps {
   username: string | null
   members: GitMember[]
   onClick: () => void
+  isOpen?: boolean
 }
 
 /**
- * 역할 picker 트리거 버튼 — 클릭하면 AssigneePickerModal 이 뜬다.
+ * 역할 picker 트리거 버튼 — 클릭하면 폼 본문 내 InlineRolePicker 가 펼쳐진다.
  * 표시: 미배정(생성자) / 자동배정 / 선택한 멤버 아바타+이름
  */
-function RoleTrigger({ label, icon, mode, userId, username, members, onClick }: RoleTriggerProps) {
+function RoleTrigger({ label, icon, mode, userId, username, members, onClick, isOpen = false }: RoleTriggerProps) {
   const tIssue = useTranslations('issue')
   const member = mode === 'specific' && userId
     ? members.find(m => String(m.id) === userId)
     : null
   return (
-    <div className="mb-2">
+    <div className={isOpen ? 'mb-0' : 'mb-2'}>
       <label className="text-xs font-bold text-ive-text-dim mb-1 block">
         <i className={`fa-solid ${icon} mr-1`} />{label}
       </label>
       <button
         type="button"
         onClick={onClick}
-        className="w-full bg-ive-bg-card border border-ive-border-dark rounded-lg px-3 py-2 text-left flex items-center gap-2 text-sm focus:outline-none hover:border-ive-green/50 transition-colors group"
+        className={`w-full bg-ive-bg-card border border-ive-border-dark px-3 py-2 text-left flex items-center gap-2 text-sm focus:outline-none hover:border-ive-green/50 transition-colors group ${
+          isOpen ? 'rounded-t-lg border-b-transparent border-ive-green/50' : 'rounded-lg'
+        }`}
       >
         {mode === 'auto' ? (
           <span className="flex items-center gap-1 bg-ive-cyan/10 rounded px-1.5 py-0.5">
@@ -101,9 +102,108 @@ function RoleTrigger({ label, icon, mode, userId, username, members, onClick }: 
           </span>
         )}
         <span className="ml-auto w-6 h-6 flex items-center justify-center rounded text-ive-text-dim group-hover:text-ive-green group-hover:bg-ive-green/10 transition-colors">
-          <i className="fa-solid fa-ellipsis text-xs" />
+          <i className={`fa-solid ${isOpen ? 'fa-chevron-up' : 'fa-chevron-down'} text-xs`} />
         </span>
       </button>
+    </div>
+  )
+}
+
+interface InlineRolePickerProps {
+  mode: RoleMode
+  userId: string | null
+  gitMembers: GitMember[]
+  search: string
+  onSearchChange: (v: string) => void
+  onPick: (mode: RoleMode, userId: string | null, username: string | null) => void
+  noneLabel: string
+}
+
+/**
+ * 폼 본문 안에 펼쳐지는 인라인 picker — 모달이 아니라 일반 블록 요소.
+ * - 페이지의 일반 흐름에 자리잡으므로, 폼이 길어지면 부모 스크롤 컨테이너 가 알아서 처리.
+ * - 모바일 키보드가 올라와도 사용자가 스크롤하면 모든 옵션과 검색창에 접근 가능.
+ */
+function InlineRolePicker({ mode, userId, gitMembers, search, onSearchChange, onPick, noneLabel }: InlineRolePickerProps) {
+  const tIssue = useTranslations('issue')
+  const filtered = gitMembers.filter(m => {
+    if (!search) return true
+    const q = search.toLowerCase()
+    return (m.name || '').toLowerCase().includes(q) || m.username.toLowerCase().includes(q)
+  })
+  const isNoneSelected = mode === 'creator'
+  const isAutoSelected = mode === 'auto'
+  const pickedId = mode === 'specific' ? userId : null
+
+  return (
+    <div className="mb-2 border border-ive-green/50 border-t-0 rounded-b-lg bg-ive-bg-deep/50 overflow-hidden">
+      <div className="p-1.5 border-b border-ive-border-dark bg-ive-bg-card">
+        <input
+          type="text"
+          value={search}
+          onChange={e => onSearchChange(e.target.value)}
+          placeholder={tIssue('searchMember')}
+          className="w-full bg-ive-bg-deep border border-ive-border-dark rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim focus:outline-none focus:border-ive-green/50"
+        />
+      </div>
+      {/*
+        리스트 자체에 max-h + overflow-y-auto 를 두지 않는다.
+        부모(IssueList) 의 스크롤 컨테이너가 폼 전체 길이를 처리하므로, 여기서 따로
+        내부 스크롤을 만들면 모바일 터치 시 어느 영역이 스크롤되는지 모호해진다.
+      */}
+      <div>
+        <button
+          type="button"
+          onClick={() => onPick('creator', null, null)}
+          className={`w-full px-4 py-2.5 text-left text-sm flex items-center gap-3 transition-colors ${
+            isNoneSelected ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text-dim hover:bg-white/5'
+          }`}
+        >
+          {isNoneSelected ? <i className="fa-solid fa-circle-dot text-xs shrink-0 w-4" /> : <i className="fa-regular fa-circle text-xs shrink-0 w-4 opacity-30" />}
+          <div className="w-7 h-7 rounded-lg bg-ive-bg-deep flex items-center justify-center shrink-0">
+            <i className="fa-solid fa-ban text-ive-text-dim text-xs" />
+          </div>
+          <span className="font-bold">{noneLabel}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => onPick('auto', null, null)}
+          className={`w-full px-4 py-2.5 text-left text-sm flex items-center gap-3 transition-colors ${
+            isAutoSelected ? 'bg-ive-cyan/10 text-ive-cyan' : 'text-ive-text-dim hover:bg-white/5'
+          }`}
+        >
+          {isAutoSelected ? <i className="fa-solid fa-circle-dot text-xs shrink-0 w-4" /> : <i className="fa-regular fa-circle text-xs shrink-0 w-4 opacity-30" />}
+          <div className="w-7 h-7 rounded-lg bg-ive-bg-deep flex items-center justify-center shrink-0">
+            <i className="fa-solid fa-shuffle text-ive-cyan text-xs" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="font-bold">{tIssue('autoAssign')}</div>
+            <div className="text-xs text-ive-text-dim truncate">{tIssue('autoAssignDesc')}</div>
+          </div>
+        </button>
+        {filtered.map(m => {
+          const isPicked = pickedId === String(m.id)
+          return (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => onPick('specific', String(m.id), m.username)}
+              className={`w-full px-4 py-2.5 text-left text-sm flex items-center gap-3 transition-colors ${
+                isPicked ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text hover:bg-white/5'
+              }`}
+            >
+              {isPicked ? <i className="fa-solid fa-circle-dot text-xs shrink-0 w-4" /> : <i className="fa-regular fa-circle text-xs shrink-0 w-4 opacity-30" />}
+              {m.avatarUrl
+                ? <img src={m.avatarUrl} className="w-7 h-7 rounded-lg shrink-0" alt="" />
+                : <div className="w-7 h-7 rounded-lg bg-ive-bg-deep flex items-center justify-center shrink-0"><i className="fa-solid fa-user text-ive-text-dim text-xs" /></div>}
+              <div className="min-w-0 flex-1">
+                <div className="font-bold truncate">{m.name || m.username}</div>
+                {m.name && m.name !== m.username && <div className="text-xs text-ive-text-dim truncate">@{m.username}</div>}
+              </div>
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -142,44 +242,20 @@ export default function IssueAddForm({
   const [agentDropdownOpen, setAgentDropdownOpen] = useState(false)
   const [assigneesExpanded, setAssigneesExpanded] = useState(false)
 
-  // 검증자/확인자 모달 (프로젝트 멤버가 많을 수 있어 콤보 대신 풀화면 모달 사용)
-  const [verifierModalOpen, setVerifierModalOpen] = useState(false)
+  // 검증자/확인자 picker — 폼 본문에 인라인으로 펼쳐지는 패널.
+  // (이전: fixed-portal 모달 — 모바일에서 키보드가 뜨면 하단 확인 버튼이 가려져 스크롤 불가능했음)
+  // 한 번에 하나만 열린다 (verifier ↔ confirmer 토글).
+  const [openPicker, setOpenPicker] = useState<null | 'verifier' | 'confirmer'>(null)
   const [verifierSearch, setVerifierSearch] = useState('')
-  const [verifierPick, setVerifierPick] = useState<GitMember | null>(null)
-  const [verifierAuto, setVerifierAuto] = useState(false)
-  const [confirmerModalOpen, setConfirmerModalOpen] = useState(false)
   const [confirmerSearch, setConfirmerSearch] = useState('')
-  const [confirmerPick, setConfirmerPick] = useState<GitMember | null>(null)
-  const [confirmerAuto, setConfirmerAuto] = useState(false)
 
-  // 부모 상태 → 모달 상태 동기화 (열 때 현재 값 미리 선택)
-  const openVerifierModal = () => {
-    setVerifierAuto(verifierMode === 'auto')
-    setVerifierPick(verifierMode === 'specific' && verifierUserId
-      ? gitMembers.find(m => String(m.id) === verifierUserId) || null
-      : null)
+  const openVerifierPicker = () => {
     setVerifierSearch('')
-    setVerifierModalOpen(true)
+    setOpenPicker(prev => prev === 'verifier' ? null : 'verifier')
   }
-  const openConfirmerModal = () => {
-    setConfirmerAuto(confirmerMode === 'auto')
-    setConfirmerPick(confirmerMode === 'specific' && confirmerUserId
-      ? gitMembers.find(m => String(m.id) === confirmerUserId) || null
-      : null)
+  const openConfirmerPicker = () => {
     setConfirmerSearch('')
-    setConfirmerModalOpen(true)
-  }
-  const confirmVerifier = () => {
-    if (verifierAuto) onVerifierChange('auto', null, null)
-    else if (verifierPick) onVerifierChange('specific', String(verifierPick.id), verifierPick.username)
-    else onVerifierChange('creator', null, null)
-    setVerifierModalOpen(false)
-  }
-  const confirmConfirmer = () => {
-    if (confirmerAuto) onConfirmerChange('auto', null, null)
-    else if (confirmerPick) onConfirmerChange('specific', String(confirmerPick.id), confirmerPick.username)
-    else onConfirmerChange('creator', null, null)
-    setConfirmerModalOpen(false)
+    setOpenPicker(prev => prev === 'confirmer' ? null : 'confirmer')
   }
 
   // 이미지 복/붙 업로드 핸들러
@@ -372,7 +448,7 @@ export default function IssueAddForm({
           </div>
         )}
       </div>
-      {/* 검증자 / 확인자 사전 배정 — 모달 트리거 */}
+      {/* 검증자 / 확인자 사전 배정 — 인라인 패널 (폼 본문에 펼쳐짐) */}
       <RoleTrigger
         label={tIssue('verifier')}
         icon="fa-magnifying-glass"
@@ -380,8 +456,23 @@ export default function IssueAddForm({
         userId={verifierUserId}
         username={verifierUsername}
         members={gitMembers}
-        onClick={openVerifierModal}
+        onClick={openVerifierPicker}
+        isOpen={openPicker === 'verifier'}
       />
+      {openPicker === 'verifier' && (
+        <InlineRolePicker
+          mode={verifierMode}
+          userId={verifierUserId}
+          gitMembers={gitMembers}
+          search={verifierSearch}
+          onSearchChange={setVerifierSearch}
+          onPick={(mode, userId, username) => {
+            onVerifierChange(mode, userId, username)
+            setOpenPicker(null)
+          }}
+          noneLabel={tIssue('roleModeCreator')}
+        />
+      )}
       <RoleTrigger
         label={tIssue('confirmer')}
         icon="fa-clipboard-check"
@@ -389,8 +480,23 @@ export default function IssueAddForm({
         userId={confirmerUserId}
         username={confirmerUsername}
         members={gitMembers}
-        onClick={openConfirmerModal}
+        onClick={openConfirmerPicker}
+        isOpen={openPicker === 'confirmer'}
       />
+      {openPicker === 'confirmer' && (
+        <InlineRolePicker
+          mode={confirmerMode}
+          userId={confirmerUserId}
+          gitMembers={gitMembers}
+          search={confirmerSearch}
+          onSearchChange={setConfirmerSearch}
+          onPick={(mode, userId, username) => {
+            onConfirmerChange(mode, userId, username)
+            setOpenPicker(null)
+          }}
+          noneLabel={tIssue('roleModeCreator')}
+        />
+      )}
       </>)}
 
       <div className="flex gap-2">
@@ -414,39 +520,6 @@ export default function IssueAddForm({
         </button>
       </div>
 
-      {/* 검증자 picker 모달 */}
-      <AssigneePickerModal
-        open={verifierModalOpen}
-        onClose={() => setVerifierModalOpen(false)}
-        iids={[-1]}
-        gitMembers={gitMembers}
-        search={verifierSearch}
-        onSearchChange={setVerifierSearch}
-        pick={verifierPick}
-        onPickChange={setVerifierPick}
-        autoMode={verifierAuto}
-        onAutoModeChange={setVerifierAuto}
-        onConfirm={confirmVerifier}
-        title={tIssue('verifier')}
-        noneLabel={tIssue('roleModeCreator')}
-      />
-
-      {/* 확인자 picker 모달 */}
-      <AssigneePickerModal
-        open={confirmerModalOpen}
-        onClose={() => setConfirmerModalOpen(false)}
-        iids={[-1]}
-        gitMembers={gitMembers}
-        search={confirmerSearch}
-        onSearchChange={setConfirmerSearch}
-        pick={confirmerPick}
-        onPickChange={setConfirmerPick}
-        autoMode={confirmerAuto}
-        onAutoModeChange={setConfirmerAuto}
-        onConfirm={confirmConfirmer}
-        title={tIssue('confirmer')}
-        noneLabel={tIssue('roleModeCreator')}
-      />
     </div>
   )
 }
