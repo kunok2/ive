@@ -1,5 +1,6 @@
 'use client'
 
+import type { ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
 import IssueCard from './IssueCard'
 import type { IveIssue, ProjectAgent, StageInfo } from './types'
@@ -35,6 +36,8 @@ interface IssueListProps {
   gitMembers: GitMember[]
   locale?: string
   timezone?: string
+  /** 스크롤 영역 맨 위에 함께 렌더할 노드(예: IssueAddForm). 폼이 커져도 본문 스크롤로 모두 접근 가능하게 한다. */
+  headerSlot?: ReactNode
   onToggleSelect: (iid: number) => void
   onNavigate: (issue: IveIssue) => void
   onOpenAgentPicker: (iid: number) => void
@@ -71,12 +74,14 @@ export default function IssueList({
   onCloseIssue,
   onPresetVerifierChange,
   onPresetConfirmerChange,
+  headerSlot,
 }: IssueListProps) {
   const tIssue = useTranslations('issue')
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar" data-scroll-container="issues-list">
       <div className="pb-20">
+        {headerSlot}
         {(isHistoryTab ? closedLoading : loading) && (isHistoryTab ? closedIssues : issues).length === 0 ? (
           <div className="text-center py-20 text-ive-text-muted">{tIssue('loadingIssues')}</div>
         ) : filtered.length === 0 ? (
