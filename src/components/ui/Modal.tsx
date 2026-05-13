@@ -38,7 +38,7 @@ export default function Modal({ open, onClose, title, children, size = 'md', clo
       onClick={e => { if (closeOnBackdrop && e.target === backdropRef.current) onClose() }}
     >
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm pointer-events-none" />
-      <div className={`relative w-full ${size === 'sm' ? 'max-w-xs' : 'max-w-lg'} bg-ive-bg-card border border-ive-border rounded-2xl max-h-[90vh] flex flex-col animate-slide-up overflow-hidden shadow-2xl`}>
+      <div className={`relative w-full ${size === 'sm' ? 'max-w-xs' : 'max-w-lg'} bg-ive-bg-card border border-ive-border rounded-2xl max-h-[90dvh] flex flex-col animate-slide-up overflow-hidden shadow-2xl`}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-ive-border-dark shrink-0">
           <h2 className="text-base font-bold text-ive-text">{title}</h2>
           <button

@@ -54,7 +54,7 @@ export default function AssigneePickerModal({ open, gitMembers, initialPick, onC
 
   return (
     <Modal open={open} onClose={onClose} title={title ?? tIssue('assignee')} size="sm">
-      <div className="p-1.5 border-b border-ive-border-dark">
+      <div className="sticky top-0 z-10 bg-ive-bg-card p-1.5 border-b border-ive-border-dark">
         <input
           type="text"
           value={search}
@@ -64,7 +64,7 @@ export default function AssigneePickerModal({ open, gitMembers, initialPick, onC
           autoFocus
         />
       </div>
-      <div className="max-h-[50vh] overflow-y-auto">
+      <div>
         {/* 미배정/생성자 옵션 */}
         <button
           onClick={() => { setPick(null); setAuto(false) }}
@@ -116,7 +116,7 @@ export default function AssigneePickerModal({ open, gitMembers, initialPick, onC
           )
         })}
       </div>
-      <div className="p-3 border-t border-ive-border-dark flex gap-2">
+      <div className="sticky bottom-0 z-10 bg-ive-bg-card p-3 border-t border-ive-border-dark flex gap-2">
         <button
           onClick={onClose}
           className="flex-1 py-2 rounded-lg text-sm font-bold text-ive-text-dim border border-ive-border-subtle hover:bg-white/5 transition-all"
