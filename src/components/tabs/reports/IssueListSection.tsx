@@ -165,6 +165,18 @@ export default function IssueListSection({ data, helpers }: IssueListSectionProp
                       </span>
                     </>
                   )}
+                  {issue.confirmerName && (
+                    <>
+                      <i className="fa-solid fa-arrow-right text-[9px] text-ive-text-dim/60 shrink-0" />
+                      <span className="inline-flex items-center gap-1 min-w-0" title={issue.confirmMin != null ? tr('confirmerWithTimeTooltip', { name: issue.confirmerName, duration: fmtDur(issue.confirmMin) }) : tr('confirmerSimpleTooltip', { name: issue.confirmerName })}>
+                        <AgentAvatar avatar={issue.confirmerAvatar || 'av-01'} userId={issue.confirmerUserId} size="xs" />
+                        <span className="truncate max-w-[160px] text-ive-text-muted">
+                          {issue.confirmerName}
+                          {issue.confirmMin != null && <span className="text-ive-text-dim font-mono">({fmtDur(issue.confirmMin)})</span>}
+                        </span>
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
               </ErrorBoundary>

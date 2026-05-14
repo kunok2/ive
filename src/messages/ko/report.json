@@ -285,6 +285,8 @@
   "agentWorkTooltip": "에이전트 {name} — 작업 {duration}",
   "verifierSimpleTooltip": "검증자 {name}",
   "verifierWithTimeTooltip": "검증자 {name} — 검증 {duration}",
+  "confirmerSimpleTooltip": "확인자 {name}",
+  "confirmerWithTimeTooltip": "확인자 {name} — 확인 {duration}",
   "chartPrevTasks": "이전 작업",
   "chartPrevVerified": "이전 검증",
   "chartTasks": "작업",
