@@ -284,6 +284,8 @@
   "agentWorkTooltip": "Agent {name} — work {duration}",
   "verifierSimpleTooltip": "Verifier {name}",
   "verifierWithTimeTooltip": "Verifier {name} — verify {duration}",
+  "confirmerSimpleTooltip": "Confirmer {name}",
+  "confirmerWithTimeTooltip": "Confirmer {name} — confirm {duration}",
   "chartPrevTasks": "Prev Tasks",
   "chartPrevVerified": "Prev Verified",
   "chartTasks": "Tasks",

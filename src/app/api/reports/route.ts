@@ -738,9 +738,9 @@ export async function GET(req: NextRequest) {
           verifierName: e.verifierName ?? null,
           verifierAvatar: e.verifierAvatar ?? null,
           verifierUserId: e.verifierUserId ?? null,
-          confirmerName: null, // TODO: issue_stages에서 confirmer_name 조회 필요
-          confirmerAvatar: null,
-          confirmerUserId: null,
+          confirmerName: e.confirmerName ?? null,
+          confirmerAvatar: e.confirmerAvatar ?? null,
+          confirmerUserId: e.confirmerUserId ?? null,
           status: e.status as 'success' | 'failed',
           startedAt: safeISO(e.startedAt) ?? new Date().toISOString(),
           // 처리 완료 시각 (확인 끝났으면 그 시점, 아니면 검증 종료 시점)
