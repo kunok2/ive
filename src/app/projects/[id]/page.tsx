@@ -18,6 +18,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
   const [showEditProject, setShowEditProject] = useState(false)
   const [showDeleteProject, setShowDeleteProject] = useState(false)
+  const [showLeaveShare, setShowLeaveShare] = useState(false)
   const [reportSecret, setReportSecret] = useState<string | null>(null)
   const [reportToken, setReportToken] = useState<string | null>(null)
   const [reportNonce, setReportNonce] = useState<string | null>(null)
@@ -143,6 +144,11 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     router.push('/')
   }
 
+  async function handleLeaveShare() {
+    await deleteProject(id)
+    router.push('/')
+  }
+
   return (
     <div className="h-full overflow-y-auto">
       <header className="sticky top-0 z-40 bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark">
@@ -196,20 +202,39 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                 >
                   <i className="fa-solid fa-pen-to-square mr-1" />{tc('edit')}
                 </button>
-                {isOwner && (
+                {isOwner ? (
                   <button
                     onClick={() => setShowDeleteProject(true)}
                     className="text-base font-bold text-ive-red/60 border border-ive-red/20 px-3 py-2 rounded-lg hover:bg-ive-red/10 transition-all"
                   >
                     <i className="fa-solid fa-trash-can" />
                   </button>
+                ) : (
+                  <button
+                    onClick={() => setShowLeaveShare(true)}
+                    title={tp('leaveShare')}
+                    aria-label={tp('leaveShare')}
+                    className="text-base font-bold text-ive-red/60 border border-ive-red/20 px-3 py-2 rounded-lg hover:bg-ive-red/10 transition-all"
+                  >
+                    <i className="fa-solid fa-right-from-bracket" />
+                  </button>
                 )}
               </div>
             ) : (
-              <span className={`text-xs font-bold px-2.5 py-1 rounded-lg leading-none bg-ive-cyan/15 text-ive-cyan border border-ive-cyan/30`}>
-                <i className="fa-solid fa-share-nodes mr-1" />
-                {tp('viewerPermission')}
-              </span>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className={`text-xs font-bold px-2.5 py-1 rounded-lg leading-none bg-ive-cyan/15 text-ive-cyan border border-ive-cyan/30`}>
+                  <i className="fa-solid fa-share-nodes mr-1" />
+                  {tp('viewerPermission')}
+                </span>
+                <button
+                  onClick={() => setShowLeaveShare(true)}
+                  title={tp('leaveShare')}
+                  aria-label={tp('leaveShare')}
+                  className="text-base font-bold text-ive-red/60 border border-ive-red/20 px-3 py-2 rounded-lg hover:bg-ive-red/10 transition-all"
+                >
+                  <i className="fa-solid fa-right-from-bracket" />
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -509,6 +534,16 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         title={tp('deleteProject')}
         message={tp('deleteProjectConfirm')}
         confirmLabel={tp('permanentDelete')}
+        danger
+      />
+
+      <ConfirmModal
+        open={showLeaveShare}
+        onClose={() => setShowLeaveShare(false)}
+        onConfirm={handleLeaveShare}
+        title={tp('leaveShare')}
+        message={tp('leaveShareConfirm')}
+        confirmLabel={tp('leaveShareConfirmLabel')}
         danger
       />
 

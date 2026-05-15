@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getProject, updateProject, deleteProject, getProjectAccess } from '@/lib/db'
+import { getProject, updateProject, deleteProject, getProjectAccess, deleteProjectShareByUser } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { encrypt } from '@/lib/crypto'
 import { logActivity } from '@/lib/activity'
@@ -63,7 +63,18 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
 
   const { id } = await params
   const project = getProject(id)
+  if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  // 공유받은 사용자가 호출하면 자신의 공유만 해제 (프로젝트 자체는 유지).
+  // 소유자만 프로젝트를 완전 삭제할 수 있다.
+  if (project.userId !== user.id) {
+    const removed = deleteProjectShareByUser(id, user.id)
+    if (!removed) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    logActivity({ userId: user.id, category: 'project', action: 'leave_share', detail: `공유 프로젝트 목록에서 제거: ${project.name}`, targetType: 'project_share', targetId: id, req: _req })
+    return NextResponse.json({ success: true, left: true })
+  }
+
   deleteProject(id, user.id)
-  logActivity({ userId: user.id, category: 'project', action: 'delete_project', detail: `프로젝트 삭제: ${project?.name || id}`, targetType: 'project', targetId: id, req: _req })
+  logActivity({ userId: user.id, category: 'project', action: 'delete_project', detail: `프로젝트 삭제: ${project.name}`, targetType: 'project', targetId: id, req: _req })
   return NextResponse.json({ success: true })
 }

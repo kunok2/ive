@@ -49,6 +49,11 @@ export function deleteProjectShare(id: string) {
   getDb().prepare('DELETE FROM project_shares WHERE id = ?').run(id)
 }
 
+export function deleteProjectShareByUser(projectId: string, userId: string): boolean {
+  const r = getDb().prepare('DELETE FROM project_shares WHERE project_id = ? AND user_id = ?').run(projectId, userId)
+  return r.changes > 0
+}
+
 export function getProjectAccess(projectId: string, userId: string): 'owner' | ShareRole | null {
   const project = getProject(projectId)
   if (!project) return null
