@@ -288,11 +288,21 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
     }
   }
 
+  // 확인 시간: confirmStartedAt → confirmedAt
+  const confirmTimes: number[] = []
+  for (const e of executions) {
+    if (e.confirmStartedAt && e.confirmedAt) {
+      const c = (new Date(e.confirmedAt).getTime() - new Date(e.confirmStartedAt).getTime()) / 60000
+      if (c >= 0 && c < 10080) confirmTimes.push(c) // 최대 7일
+    }
+  }
+
   const avg = (arr: number[]) => arr.length > 0 ? arr.reduce((s, v) => s + v, 0) / arr.length : 0
   const waitAvg = avg(waitTimes)
   const procAvg = avg(procTimes)
   const verifyAvg = avg(verifyTimes)
-  const totalAvg = waitAvg + procAvg + verifyAvg
+  const confirmAvg = avg(confirmTimes)
+  const totalAvg = waitAvg + procAvg + verifyAvg + confirmAvg
 
   // ─── 전 기간 통계 집계 ───
   const prev = prevExecutions || []
@@ -601,7 +611,7 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
     </div>
 
     <!-- ④ 소요 시간 파이프라인 -->
-    ${procAvg > 0 ? `
+    ${procAvg > 0 || confirmAvg > 0 ? `
     <div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;padding:20px;margin-bottom:16px;">
       <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:12px;">소요 시간 파이프라인</div>
       ${totalAvg > 0 ? `<div style="font-size:13px;color:#111827;margin-bottom:12px;">평균 해결 시간 <strong>${fmtDuration(totalAvg)}</strong>${hasPrev && prevProcAvg > 0 ? ` <span style="font-size:11px;">${changeIndicator(procAvg, prevProcAvg, true)}</span>` : ''}</div>` : ''}
@@ -624,22 +634,31 @@ export function generateReportHtml(reportType: ReportType, periodStart: string, 
             <div style="font-size:10px;color:#6b7280;margin-bottom:2px;">검증</div>
             <div style="font-size:15px;font-weight:700;color:#111827;">${fmtDuration(verifyAvg)}</div>
           </td>` : ''}
+          ${confirmAvg > 0 ? `
+          <td style="text-align:center;color:#9ca3af;font-size:12px;">→</td>
+          <td style="text-align:center;padding:4px 8px;">
+            <div style="font-size:10px;color:#6b7280;margin-bottom:2px;">확인</div>
+            <div style="font-size:15px;font-weight:700;color:#111827;">${fmtDuration(confirmAvg)}</div>
+          </td>` : ''}
         </tr>
       </table>
       ${totalAvg > 0 ? (() => {
         const waitPct = Math.round((waitAvg / totalAvg) * 100)
         const procPct = Math.round((procAvg / totalAvg) * 100)
         const verifyPct = verifyAvg > 0 ? Math.round((verifyAvg / totalAvg) * 100) : 0
+        const confirmPct = confirmAvg > 0 ? Math.round((confirmAvg / totalAvg) * 100) : 0
         return `
       <div style="height:8px;border-radius:4px;overflow:hidden;background:#f3f4f6;display:flex;">
         ${waitPct > 0 ? `<div style="width:${waitPct}%;background:#d1fae5;"></div>` : ''}
         <div style="width:${procPct}%;background:#4ade80;"></div>
         ${verifyPct > 0 ? `<div style="width:${verifyPct}%;background:#16a34a;"></div>` : ''}
+        ${confirmPct > 0 ? `<div style="width:${confirmPct}%;background:#6366f1;"></div>` : ''}
       </div>
       <div style="display:flex;margin-top:4px;font-size:10px;color:#6b7280;gap:12px;">
         ${waitPct > 0 ? `<span>대기 ${waitPct}%</span>` : ''}
         <span>처리 ${procPct}%</span>
         ${verifyPct > 0 ? `<span>검증 ${verifyPct}%</span>` : ''}
+        ${confirmPct > 0 ? `<span>확인 ${confirmPct}%</span>` : ''}
       </div>`
       })() : ''}
     </div>
