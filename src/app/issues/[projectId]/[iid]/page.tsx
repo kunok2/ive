@@ -13,6 +13,8 @@ import NotesList from './_components/NotesList'
 import BottomInputArea from './_components/BottomInputArea'
 import MrActionModal from './_components/MrActionModal'
 import AssigneePickerModal from './_components/AssigneePickerModal'
+import AgentPickerModal from '@/components/tabs/issues/AgentPickerModal'
+import type { ProjectAgent } from '@/components/tabs/issues/types'
 
 // 노트와 함께 stage 변경이 일어날 때 본문에 붙이는 prefix — "이전 → 다음" 라벨
 // IVE-S(waiting) 은 처리 macro 의 waiting sub-stage 이므로 "처리대기" 로 표시.
@@ -113,9 +115,11 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   const [loading, setLoading] = useState(true)
   const [notesLoading, setNotesLoading] = useState(true)
   const [preferredAgent, setPreferredAgent] = useState<{ assignMode?: string; preferredAgentId: string | null; preferredAgentName: string | null; preferredAgentAvatar: string | null; preferredAgentCliName: string | null } | null>(null)
-  const [projectAgents, setProjectAgents] = useState<{ agentId: string; agent: { id: string; name: string; avatar: string; cliName: string; status: string } }[]>([])
+  const [projectAgents, setProjectAgents] = useState<ProjectAgent[]>([])
   const [gitMembers, setGitMembers] = useState<IssueAssignee[]>([])
   const [assigneePickerOpen, setAssigneePickerOpen] = useState(false)
+  const [agentPickerOpen, setAgentPickerOpen] = useState(false)
+  const [agentPickerSaving, setAgentPickerSaving] = useState(false)
 
   // --- Comment state ---
   const commentKey = `issue-comment-${projectId}-${iid}`
@@ -401,6 +405,55 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
       body: JSON.stringify(body),
     })
     if (res.ok) setPreferredAgent(await res.json())
+  }
+
+  // 처리자 picker (에이전트/사람 통합) — 선택 시:
+  //   - assignMode 업데이트 (preferred-agent PATCH)
+  //   - mode='assignee' + assignee 가 있으면 이슈의 git assignees 도 함께 업데이트
+  async function handleAgentPickerSelect(
+    _iidArg: number,
+    mode: 'auto' | 'assignee' | 'agent',
+    agentId: string | null,
+    assignee?: IssueAssignee | null,
+  ) {
+    if (!issue) return
+    setAgentPickerSaving(true)
+    try {
+      const body: any = mode === 'agent' ? { assignMode: 'agent', agentId } : { assignMode: mode }
+      const res = await fetch(`/api/projects/${projectId}/issues/${iid}/preferred-agent`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        toast(d.error || tIssue('settingsSaveFailed') || '설정 저장에 실패했습니다', 'error')
+        return
+      }
+      setPreferredAgent(await res.json())
+
+      // 사람(담당자) 직접 지정 — git assignees 도 함께 변경
+      if (mode === 'assignee' && assignee) {
+        const aRes = await fetch(`/api/projects/${projectId}/issues/${iid}/assignees`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            assigneeIds: [assignee.id],
+            assigneeUsernames: [assignee.username],
+            assigneeAuto: false,
+          }),
+        })
+        if (aRes.ok) {
+          setIssue(prev => prev ? { ...prev, assignees: [assignee] } : prev)
+        } else {
+          const d = await aRes.json().catch(() => ({}))
+          toast(d.error || tIssue('assigneeChangeFailed') || '담당자 변경에 실패했습니다', 'error')
+        }
+      }
+      setAgentPickerOpen(false)
+    } catch (err: any) {
+      toast(err?.message || tc('networkError') || '네트워크 오류', 'error')
+    } finally {
+      setAgentPickerSaving(false)
+    }
   }
 
   // ===================== Comment handlers =====================
@@ -900,6 +953,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
         onSetEditDesc={setEditDesc}
         onSetShowDesc={setShowDesc}
         onOpenAssigneePicker={() => setAssigneePickerOpen(true)}
+        onOpenAgentPicker={() => setAgentPickerOpen(true)}
         onPresetVerifierChange={async (preset) => {
           const prevPreset = issue?.presetVerifier
           setIssue(prev => prev ? { ...prev, presetVerifier: preset } : prev)
@@ -1015,6 +1069,18 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
         initialPick={issue.assignees?.[0] || null}
         onConfirm={handleConfirmAssignee}
         onClose={() => setAssigneePickerOpen(false)}
+      />
+
+      <AgentPickerModal
+        iid={agentPickerOpen ? issue.iid : null}
+        currentMode={(preferredAgent?.assignMode as 'auto' | 'assignee' | 'agent' | undefined) || 'auto'}
+        currentAgentId={preferredAgent?.preferredAgentId || null}
+        currentAssigneeIds={(issue.assignees || []).map(a => a.id)}
+        projectAgents={projectAgents}
+        gitMembers={gitMembers}
+        saving={agentPickerSaving}
+        onSelect={handleAgentPickerSelect}
+        onClose={() => setAgentPickerOpen(false)}
       />
 
       <MobileTabBar />

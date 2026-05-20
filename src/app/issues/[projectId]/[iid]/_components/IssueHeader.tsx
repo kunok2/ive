@@ -94,6 +94,8 @@ interface IssueHeaderProps {
   onSetEditDesc: (v: string) => void
   onSetShowDesc: (v: boolean) => void
   onOpenAssigneePicker: () => void
+  /** 처리자(에이전트) picker — 처리자 아바타 클릭 시 호출. 미지정 시 onOpenAssigneePicker 사용. */
+  onOpenAgentPicker?: () => void
   onPresetVerifierChange: (preset: PresetRole) => Promise<void> | void
   onPresetConfirmerChange: (preset: PresetRole) => Promise<void> | void
   /** 작성자 또는 관리자만 호출됨. null 이면 마감일 해제. */
@@ -108,7 +110,7 @@ export default function IssueHeader({
   canProgressStage, canEditAssignees, isClosing, editMode, editTitle, editDesc, saving, showDesc,
   projectId, gitMembers, preferredAgent,
   onBack, onStageAction, onCloseIssue, onStartEdit, onSaveEdit, onCancelEdit,
-  onSetEditTitle, onSetEditDesc, onSetShowDesc, onOpenAssigneePicker,
+  onSetEditTitle, onSetEditDesc, onSetShowDesc, onOpenAssigneePicker, onOpenAgentPicker,
   onPresetVerifierChange, onPresetConfirmerChange, onDueDateChange, isCreator, onToast,
 }: IssueHeaderProps) {
   const { state } = useStore()
@@ -268,7 +270,8 @@ export default function IssueHeader({
               actualConfirmer: issue.actualConfirmer ?? null,
               gitMembers,
               canEdit: effectiveCanEditAssignees,
-              onProcessorClick: onOpenAssigneePicker,
+              // 처리자 아바타 클릭 — 에이전트 picker 가 있으면 그쪽, 없으면 기존 git 담당자 picker.
+              onProcessorClick: onOpenAgentPicker ?? onOpenAssigneePicker,
               onVerifierChange: onPresetVerifierChange,
               onConfirmerChange: onPresetConfirmerChange,
             }}

@@ -117,6 +117,7 @@ export default function IssueList({
                 onToggleSelect={onToggleSelect}
                 onNavigate={onNavigate}
                 onOpenAssigneeModal={onOpenAssigneeModal}
+                onOpenAgentPicker={onOpenAgentPicker}
                 onCloseIssue={onCloseIssue}
                 onPresetVerifierChange={onPresetVerifierChange}
                 onPresetConfirmerChange={onPresetConfirmerChange}

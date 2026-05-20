@@ -32,6 +32,8 @@ interface IssueCardProps {
   onToggleSelect: (iid: number) => void
   onNavigate: (issue: IveIssue) => void
   onOpenAssigneeModal: (iids: number[]) => void
+  /** 처리자(에이전트) picker — 처리자 아바타 클릭 시 호출. AI 에이전트/자동/담당자 모드 중 선택. */
+  onOpenAgentPicker: (iid: number) => void
   onCloseIssue: (e: React.MouseEvent, iid: number) => void
   onPresetVerifierChange?: (iid: number, preset: RolePresetPayload) => Promise<void> | void
   onPresetConfirmerChange?: (iid: number, preset: RolePresetPayload) => Promise<void> | void
@@ -53,6 +55,7 @@ export default function IssueCard({
   onToggleSelect,
   onNavigate,
   onOpenAssigneeModal,
+  onOpenAgentPicker,
   onCloseIssue,
   onPresetVerifierChange,
   onPresetConfirmerChange,
@@ -145,7 +148,7 @@ export default function IssueCard({
             actualProcessor={issue.actualProcessor ?? null}
             actualVerifier={issue.actualVerifier ?? null}
             actualConfirmer={issue.actualConfirmer ?? null}
-            onProcessorClick={() => onOpenAssigneeModal([issue.iid])}
+            onProcessorClick={() => onOpenAgentPicker(issue.iid)}
             onVerifierChange={onPresetVerifierChange ? (preset) => onPresetVerifierChange(issue.iid, preset) : undefined}
             onConfirmerChange={onPresetConfirmerChange ? (preset) => onPresetConfirmerChange(issue.iid, preset) : undefined}
           />
