@@ -363,25 +363,52 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   }
 
   // --- Agent picker ---
-  const handleChangeIssueAgent = async (iid: number, mode: 'auto' | 'assignee' | 'agent', agentId: string | null) => {
+  // 처리자 picker — AI 에이전트(특정/자동) 또는 사람(담당자) 선택을 한 모달에서 처리.
+  //   - mode='assignee' + assignee 가 있으면: 이슈의 git assignees 도 함께 업데이트.
+  //   - 그 외: 기존대로 preferred-agent 만 업데이트.
+  const handleChangeIssueAgent = async (
+    iid: number,
+    mode: 'auto' | 'assignee' | 'agent',
+    agentId: string | null,
+    assignee?: { id: number; username: string; name: string; avatarUrl: string } | null,
+  ) => {
     setAgentPickerSaving(true)
     try {
+      // 1) assignMode 업데이트
       const body: any = mode === 'agent' ? { assignMode: 'agent', agentId } : { assignMode: mode }
       const res = await fetch(`/api/projects/${selectedProjectId}/issues/${iid}/preferred-agent`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       })
-      if (res.ok) {
-        const data = await res.json()
-        setIssues(prev => prev.map(i => i.iid === iid ? {
-          ...i, assignMode: data.assignMode, preferredAgentId: data.preferredAgentId,
-          preferredAgentName: data.preferredAgentName, preferredAgentAvatar: data.preferredAgentAvatar,
-          preferredAgentCliName: data.preferredAgentCliName,
-        } : i))
-        setAgentPickerIid(null)
-      } else {
+      if (!res.ok) {
         const data = await res.json().catch(() => ({}))
         toast(data.error || tIssue('settingsSaveFailed'), 'error')
+        return
       }
+      const data = await res.json()
+      setIssues(prev => prev.map(i => i.iid === iid ? {
+        ...i, assignMode: data.assignMode, preferredAgentId: data.preferredAgentId,
+        preferredAgentName: data.preferredAgentName, preferredAgentAvatar: data.preferredAgentAvatar,
+        preferredAgentCliName: data.preferredAgentCliName,
+      } : i))
+
+      // 2) 사람(담당자) 직접 지정 — 이슈의 git assignees 도 함께 업데이트
+      if (mode === 'assignee' && assignee) {
+        const aRes = await fetch(`/api/projects/${selectedProjectId}/issues/${iid}/assignees`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            assigneeIds: [assignee.id],
+            assigneeUsernames: [assignee.username],
+            assigneeAuto: false,
+          }),
+        })
+        if (!aRes.ok) {
+          const d = await aRes.json().catch(() => ({}))
+          toast(d.error || tIssue('assigneeChangeFailed'), 'error')
+        } else {
+          setIssues(prev => prev.map(i => i.iid === iid ? { ...i, assignees: [assignee], assigneeAuto: false } : i))
+        }
+      }
+      setAgentPickerIid(null)
     } catch (err: any) { toast(err.message || tIssue('networkErrorOccurred'), 'error') }
     finally { setAgentPickerSaving(false) }
   }
@@ -790,8 +817,20 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
       />
       <AgentPickerModal
         iid={agentPickerIid}
-        issues={issues}
+        currentMode={(() => {
+          const t = agentPickerIid !== null ? issues.find(i => i.iid === agentPickerIid) : null
+          return (t?.assignMode as 'auto' | 'assignee' | 'agent' | undefined) || 'auto'
+        })()}
+        currentAgentId={(() => {
+          const t = agentPickerIid !== null ? issues.find(i => i.iid === agentPickerIid) : null
+          return t?.preferredAgentId || null
+        })()}
+        currentAssigneeIds={(() => {
+          const t = agentPickerIid !== null ? issues.find(i => i.iid === agentPickerIid) : null
+          return (t?.assignees || []).map(a => a.id)
+        })()}
         projectAgents={projectAgents}
+        gitMembers={gitMembers}
         saving={agentPickerSaving}
         onSelect={handleChangeIssueAgent}
         onClose={() => setAgentPickerIid(null)}
