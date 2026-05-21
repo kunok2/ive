@@ -1,12 +1,10 @@
-const CACHE_NAME = 'ive-v1';
+const CACHE_NAME = 'ive-v2';
 const STATIC_ASSETS = [
-  '/',
   '/icon-192.svg',
   '/icon-512.svg',
   '/manifest.json',
 ];
 
-// 설치: 정적 자산 캐싱
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
@@ -14,7 +12,6 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
-// 활성화: 이전 캐시 정리
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
@@ -24,27 +21,40 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// 요청 가로채기: 네트워크 우선, 실패 시 캐시
 self.addEventListener('fetch', (event) => {
-  // API 요청과 WebSocket은 캐싱하지 않음
+  const req = event.request;
+
+  // API/WebSocket은 패스
   if (
-    event.request.url.includes('/api/') ||
-    event.request.url.includes('ws://') ||
-    event.request.url.includes('wss://')
+    req.url.includes('/api/') ||
+    req.url.includes('ws://') ||
+    req.url.includes('wss://')
   ) {
     return;
   }
 
+  // HTML 문서(페이지 네비게이션)는 항상 네트워크. 오프라인이면 짧은 안내.
+  // 캐시된 HTML이 옛 _next 청크 해시를 참조해 JS 로드 실패로 화면이 멈추는 문제 방지.
+  if (req.mode === 'navigate' || (req.method === 'GET' && req.headers.get('accept')?.includes('text/html'))) {
+    event.respondWith(
+      fetch(req).catch(() => new Response('<!doctype html><meta charset="utf-8"><title>Offline</title><p>네트워크 연결을 확인해주세요.', {
+        status: 503,
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      }))
+    );
+    return;
+  }
+
+  // 정적 자산: 네트워크 우선, 실패 시 캐시
   event.respondWith(
-    fetch(event.request)
+    fetch(req)
       .then((response) => {
-        // 성공한 응답은 캐시에 저장
         if (response.ok) {
           const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          caches.open(CACHE_NAME).then((cache) => cache.put(req, clone));
         }
         return response;
       })
-      .catch(() => caches.match(event.request).then((r) => r || new Response('', { status: 503 })))
+      .catch(() => caches.match(req).then((r) => r || new Response('', { status: 503 })))
   );
 });
