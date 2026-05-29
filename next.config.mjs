@@ -11,6 +11,22 @@ const nextConfig = {
   env: {
     APP_VERSION: pkg.version,
   },
+  // dev watcher가 런타임 쓰기 디렉토리(data/, workspaces/)를 감시하면
+  // SQLite WAL/로그 파일 변경마다 Fast Refresh가 무한 rebuilding 됨 → watch 제외.
+  webpack: (config, { dev }) => {
+    if (dev) {
+      config.watchOptions = {
+        ...config.watchOptions,
+        ignored: [
+          '**/node_modules/**',
+          '**/.next/**',
+          '**/data/**',
+          '**/workspaces/**',
+        ],
+      }
+    }
+    return config
+  },
   async headers() {
     return [
       {
