@@ -130,7 +130,7 @@ export function getAssigneeAuto(projectId: string, issueIid: number): boolean {
 }
 
 export function countPreferredIssuesByAgent(agentId: string): number {
-  const r = getDb().prepare("SELECT COUNT(*) as cnt FROM issue_stages WHERE preferred_agent_id = ?").get(agentId) as any
+  const r = getDb().prepare("SELECT COUNT(*) as cnt FROM issue_stages WHERE preferred_agent_id = ? AND (cached_stage IS NULL OR cached_stage IN ('', 'waiting'))").get(agentId) as any
   return r?.cnt || 0
 }
 
@@ -138,7 +138,7 @@ export function getPreferredIssuesByAgent(agentId: string): { projectId: string;
   return getDb().prepare(`
     SELECT s.project_id as projectId, p.name as projectName, s.issue_iid as issueIid
     FROM issue_stages s JOIN projects p ON p.id = s.project_id
-    WHERE s.preferred_agent_id = ?
+    WHERE s.preferred_agent_id = ? AND (s.cached_stage IS NULL OR s.cached_stage IN ('', 'waiting'))
     ORDER BY s.updated_at ASC
   `).all(agentId) as any[]
 }
