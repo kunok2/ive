@@ -162,6 +162,26 @@ export async function runCliProcess(
       log(`PID: ${child.pid} (PGID: -${child.pid})`, 'system');
     }
 
+    // 유휴 워치독: stdout/stderr 무출력이 일정 시간 지속되면 hang으로 간주하고 강제 종료.
+    // 정상 에이전트는 도구/텍스트 이벤트를 계속 흘리므로 오탐 위험이 낮다.
+    // (특히 opencode가 종료 이벤트 없이 멈춰 실행이 'running'에 영구히 박히는 것을 방지)
+    const idleTimeoutSec = Number(getSystemSetting('cli.idleTimeoutSec')) || 900;
+    let killedByWatchdog = false;
+    let idleTimer: NodeJS.Timeout | null = null;
+    const resetIdleTimer = () => {
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        killedByWatchdog = true;
+        log(`CLI 무응답 ${Math.floor(idleTimeoutSec / 60)}분 경과 — hang으로 판단하여 프로세스를 강제 종료합니다.`, 'error');
+        try {
+          if (child.pid) process.kill(-child.pid, 'SIGKILL');
+        } catch (e: any) {
+          if (e.code !== 'ESRCH') log(`워치독 종료 실패: ${e.message}`, 'warn');
+        }
+      }, idleTimeoutSec * 1000);
+    };
+    resetIdleTimer();
+
     // 토큰/비용 누적 변수
     let stdoutBuffer = '';
     let stderrBuffer = '';
@@ -261,6 +281,7 @@ export async function runCliProcess(
     };
 
     child.stdout.on('data', (data: Buffer) => {
+      resetIdleTimer();
       stdoutBuffer += data.toString();
       const lines = stdoutBuffer.split('\n');
       stdoutBuffer = lines.pop() || '';
@@ -275,6 +296,7 @@ export async function runCliProcess(
       }
     });
     child.stderr.on('data', (data: Buffer) => {
+      resetIdleTimer();
       const raw = data.toString();
       stderrBuffer += raw;
       if (stderrBuffer.length > STDERR_BUFFER_MAX) {
@@ -285,6 +307,7 @@ export async function runCliProcess(
     });
 
     child.on('close', (code, signal) => {
+      if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
       // 버퍼에 남은 데이터 처리
       if (stdoutBuffer.trim()) {
         try {
@@ -313,7 +336,9 @@ export async function runCliProcess(
       }
       const detail: string[] = [];
       detail.push(`Agent CLI exited with code ${code}${signal ? ` (signal: ${signal})` : ''}`);
-      if (signal === 'SIGKILL' || code === 137) {
+      if (killedByWatchdog) {
+        detail.push(`힌트: ${Math.floor(idleTimeoutSec / 60)}분간 무응답(hang)으로 워치독이 강제 종료했습니다. CLI 인증 상태나 인터랙티브 프롬프트 대기 여부를 확인하세요.`);
+      } else if (signal === 'SIGKILL' || code === 137) {
         detail.push('힌트: 메모리 부족(OOM) 또는 강제 종료로 추정됩니다.');
       } else if (signal === 'SIGTERM' || code === 143) {
         detail.push('힌트: 외부 신호로 프로세스가 종료되었습니다 (timeout/kill).');
@@ -328,6 +353,7 @@ export async function runCliProcess(
       reject(new Error(detail.join('\n')));
     });
     child.on('error', (err) => {
+      if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
       log(`CLI 실행 실패: ${err.message}`, 'error');
       reject(err);
     });

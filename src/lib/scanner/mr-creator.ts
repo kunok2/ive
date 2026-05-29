@@ -55,14 +55,29 @@ export async function commitPushAndCreateMR(params: {
   const isGitHub = project.provider === 'github';
   const mrLabel = isGitHub ? 'PR' : 'MR';
 
-  // 변경 사항 확인 — CLI 에이전트가 git add를 빠뜨릴 수 있으므로 모든 변경을 스테이징한 뒤 판정
+  // 변경 사항 확인
+  //  - CLI 에이전트가 git add를 빠뜨릴 수 있으므로 모든 변경을 스테이징(add -A)한 뒤 판정
+  //  - 일부 에이전트(opencode 등)는 "commit 금지" 지시를 무시하고 스스로 커밋해버림.
+  //    이 경우 staged diff는 비지만 origin/<base> 대비로는 변경이 존재하므로, base 대비로도 판정해야
+  //    "수정했는데 MR이 안 생기는" 케이스를 막을 수 있다.
   await execFile('git', ['add', '-A'], { cwd: workspacePath });
-  const { stdout: diffResult } = await execFile('git', ['diff', '--cached', '--name-only'], { cwd: workspacePath });
+  const { stdout: uncommittedDiff } = await execFile('git', ['diff', '--cached', '--name-only'], { cwd: workspacePath });
+  let vsBaseDiff = '';
+  try {
+    const { stdout } = await execFile('git', ['diff', `origin/${baseBranch}`, '--name-only'], { cwd: workspacePath });
+    vsBaseDiff = stdout;
+  } catch (e) { slog.warn({ err: e }, `git diff origin/${baseBranch} failed:`); }
+  const hasUncommitted = !!uncommittedDiff.trim();
+  const hasChanges = hasUncommitted || !!vsBaseDiff.trim();
 
-  if (diffResult.trim()) {
+  if (hasChanges) {
     log("변경사항 감지. 브랜치 생성 후 커밋 및 푸시 중...", 'system');
+    // 에이전트가 직접 커밋한 내용은 -B로 그대로 끌고 와서 보존하고,
+    // 스테이징만 된(미커밋) 변경이 있을 때만 추가 커밋한다 (변경 없는데 commit하면 실패).
     await execFile('git', ['checkout', '-B', branchName], { cwd: workspacePath });
-    await execFile('git', ['commit', '-m', `fix: resolve #${iid} - ${issueTitle}`], { cwd: workspacePath });
+    if (hasUncommitted) {
+      await execFile('git', ['commit', '-m', `fix: resolve #${iid} - ${issueTitle}`], { cwd: workspacePath });
+    }
 
     // 푸시
     try {
