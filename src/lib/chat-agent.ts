@@ -112,6 +112,7 @@ async function prepareChatSpawn(opts: ChatAgentOptions) {
   const resolvedCliPath = await resolveCliPath(agent)
   const systemCliModel = getSystemSetting(`cli.${agent.cliName}.model`)
   const isOpenCode = agent.cliName === 'opencode'
+  const isCodex = agent.cliName === 'codex'
   const cliParts = resolvedCliPath.split(' ')
   const mainCmd = cliParts[0]
 
@@ -165,6 +166,26 @@ ${userMessage}
       IVE_GITLAB_TOKEN: token,
       IVE_GITHUB_TOKEN: token,
     }
+  } else if (isCodex) {
+    // Codex: 첫 메시지는 `codex exec`, 이어지는 메시지는 `codex exec resume <SESSION_ID>`로 세션 유지
+    const codexFlags = [
+      '--json',
+      '--skip-git-repo-check',
+      '--dangerously-bypass-approvals-and-sandbox',
+      ...(systemCliModel ? ['-m', systemCliModel] : []),
+    ]
+    if (cliSessionId) {
+      args = [...cliParts.slice(1), 'exec', 'resume', ...codexFlags, cliSessionId, prompt]
+    } else {
+      args = [...cliParts.slice(1), 'exec', ...codexFlags, prompt]
+    }
+    spawnEnv = {
+      ...process.env,
+      GITLAB_TOKEN: token, GITLAB_API_TOKEN: token,
+      GITHUB_TOKEN: token,
+      IVE_GITLAB_TOKEN: token,
+      IVE_GITHUB_TOKEN: token,
+    }
   } else {
     // Claude Code MCP setup
     if (mcpServers) {
@@ -204,7 +225,7 @@ ${userMessage}
     }
   }
 
-  return { mainCmd, args, spawnEnv, isOpenCode, workspacePath, issueIid }
+  return { mainCmd, args, spawnEnv, cliName: agent.cliName, workspacePath, issueIid }
 }
 
 /**
@@ -217,7 +238,7 @@ export async function runChatAgentWithCallback(
   onEvent: (event: { type: 'text' | 'done' | 'error' | 'session_id'; content?: string }) => boolean,
 ): Promise<void> {
   const { sessionId, cliSessionId } = opts
-  const { mainCmd, args, spawnEnv, isOpenCode, workspacePath, issueIid } = await prepareChatSpawn(opts)
+  const { mainCmd, args, spawnEnv, cliName, workspacePath, issueIid } = await prepareChatSpawn(opts)
 
   const child = spawn(mainCmd, args, {
     cwd: workspacePath,
@@ -244,7 +265,7 @@ export async function runChatAgentWithCallback(
 
           // Capture CLI session ID
           if (!capturedCliSessionId && !cliSessionId) {
-            const sid = extractSessionId(event, isOpenCode)
+            const sid = extractSessionId(event, cliName)
             if (sid) {
               capturedCliSessionId = sid
               onEvent({ type: 'session_id', content: sid })
@@ -252,7 +273,7 @@ export async function runChatAgentWithCallback(
             }
           }
 
-          const text = extractTextFromEvent(event, isOpenCode)
+          const text = extractTextFromEvent(event, cliName)
           if (text) {
             const shouldContinue = onEvent({ type: 'text', content: text })
             if (!shouldContinue) {
@@ -294,7 +315,7 @@ export async function runChatAgentWithCallback(
  */
 export async function* runChatAgent(opts: ChatAgentOptions): AsyncGenerator<{ type: 'text' | 'done' | 'error' | 'session_id'; content?: string }> {
   const { sessionId, cliSessionId } = opts
-  const { mainCmd, args, spawnEnv, isOpenCode, workspacePath, issueIid } = await prepareChatSpawn(opts)
+  const { mainCmd, args, spawnEnv, cliName, workspacePath, issueIid } = await prepareChatSpawn(opts)
 
   const child = spawn(mainCmd, args, {
     cwd: workspacePath,
@@ -322,7 +343,7 @@ export async function* runChatAgent(opts: ChatAgentOptions): AsyncGenerator<{ ty
           const event = JSON.parse(line)
 
           if (!capturedCliSessionId && !cliSessionId) {
-            const sid = extractSessionId(event, isOpenCode)
+            const sid = extractSessionId(event, cliName)
             if (sid) {
               capturedCliSessionId = sid
               textChunks.push({ type: 'session_id', content: sid })
@@ -330,7 +351,7 @@ export async function* runChatAgent(opts: ChatAgentOptions): AsyncGenerator<{ ty
             }
           }
 
-          const text = extractTextFromEvent(event, isOpenCode)
+          const text = extractTextFromEvent(event, cliName)
           if (text) {
             textChunks.push({ type: 'text', content: text })
           }
@@ -380,12 +401,15 @@ export async function* runChatAgent(opts: ChatAgentOptions): AsyncGenerator<{ ty
 /**
  * Extract CLI session ID from event.
  */
-function extractSessionId(event: any, isOpenCode: boolean): string | null {
-  if (isOpenCode) {
+function extractSessionId(event: any, cliName: string): string | null {
+  if (cliName === 'opencode') {
     // OpenCode: session info in init/session event
     if (event.session?.id) return event.session.id
     if (event.sessionId) return event.sessionId
     if (event.type === 'session' && event.id) return event.id
+  } else if (cliName === 'codex') {
+    // Codex: thread.started 이벤트의 thread_id가 resume에 쓰이는 세션 id
+    if (event.type === 'thread.started' && event.thread_id) return event.thread_id
   } else {
     // Claude Code: session_id in init or system event
     if (event.session_id) return event.session_id
@@ -395,12 +419,17 @@ function extractSessionId(event: any, isOpenCode: boolean): string | null {
 }
 
 /**
- * Extract text content from a CLI event (Claude Code or OpenCode).
+ * Extract text content from a CLI event (Claude Code / OpenCode / Codex).
  */
-function extractTextFromEvent(event: any, isOpenCode: boolean): string | null {
-  if (isOpenCode) {
+function extractTextFromEvent(event: any, cliName: string): string | null {
+  if (cliName === 'opencode') {
     if (event.type === 'text') {
       return event.part?.text ?? event.content ?? event.text ?? null
+    }
+  } else if (cliName === 'codex') {
+    // Codex: 완료된 agent_message 아이템의 text만 사용자에게 전달
+    if (event.type === 'item.completed' && event.item?.type === 'agent_message') {
+      return event.item.text ?? null
     }
   } else {
     // Claude Code

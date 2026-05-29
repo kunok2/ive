@@ -27,6 +27,7 @@
   "deleteAgent": "Delete Agent",
   "deleteAgentConfirm": "Deleting this agent will unassign it from all projects. Continue?",
   "claudeDesc": "Anthropic's AI Coding CLI",
+  "codexDesc": "OpenAI's AI Coding CLI",
   "opencodeDesc": "sst.dev's Open Source AI Coding CLI",
   "cliPathNotSet": "CLI path not configured.",
   "statusAvailable": "Available",

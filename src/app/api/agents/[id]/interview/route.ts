@@ -41,6 +41,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const prompt = `${systemPrompt}\n\n${interviewerLabel}: ${question}`
 
   const isOpenCode = agent.cliName === 'opencode'
+  const isCodex = agent.cliName === 'codex'
 
   try {
     const cliParts = cliPath.split(' ')
@@ -52,6 +53,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       args = [
         ...cliParts.slice(1),
         'run',
+        prompt,
+      ]
+    } else if (isCodex) {
+      // codex exec "prompt" — JSON 없이 기본 텍스트 출력(답변만 stdout, 메타데이터는 stderr)
+      args = [
+        ...cliParts.slice(1),
+        'exec',
+        '--skip-git-repo-check',
+        '-s', 'read-only',
         prompt,
       ]
     } else {

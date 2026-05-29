@@ -91,6 +91,10 @@ const LATEST_PRICING: { id: string; cliName: string; modelName: string; input: n
   // OpenAI
   { id: 'tp-gpt41', cliName: 'model', modelName: 'GPT-4.1',  input: 2.00, output: 8.00 },
   { id: 'tp-o3',    cliName: 'model', modelName: 'o3',       input: 10.00, output: 40.00 },
+  // OpenAI Codex (GPT-5 계열) — ChatGPT 구독 로그인 시 마진 비용은 0이나, API 과금 시 환산용 단가
+  { id: 'tp-gpt5-codex', cliName: 'model', modelName: 'GPT-5 Codex', input: 1.25, output: 10.00 },
+  { id: 'tp-gpt5',       cliName: 'model', modelName: 'GPT-5',       input: 1.25, output: 10.00 },
+  { id: 'tp-gpt5-mini',  cliName: 'model', modelName: 'GPT-5 mini',  input: 0.25, output: 2.00 },
   // 사람
   { id: 'tp-human', cliName: 'human', modelName: '관리자 (월급 USD)', input: 5000.00, output: 0.00 },
 ]

@@ -12,6 +12,8 @@ import { calcCostFromDb } from "../token-pricing";
 import {
   formatOpenCodeEvent,
   formatOpenCodeEventMarkdown,
+  formatCodexEvent,
+  formatCodexEventMarkdown,
   formatStreamEvent,
   formatStreamEventMarkdown,
   formatToolInput,
@@ -62,6 +64,7 @@ export async function runCliProcess(
   log: (msg: string, type?: 'info' | 'error' | 'warn' | 'system') => void,
 ): Promise<CliRunResult> {
   const isOpenCode = agent.cliName === 'opencode';
+  const isCodex = agent.cliName === 'codex';
   const systemCliModel = agent.modelName || getSystemSetting(`cli.${agent.cliName}.model`);
   const conversationParts: string[] = [];
   const startTime = Date.now();
@@ -97,6 +100,28 @@ export async function runCliProcess(
       spawnEnv = {
         ...process.env,
         OPENCODE_CONFIG_CONTENT: JSON.stringify(opencodeConfig),
+        IVE_GITLAB_TOKEN: token,
+        IVE_GITHUB_TOKEN: token,
+      };
+    } else if (isCodex) {
+      // Codex: codex exec --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox "prompt"
+      //   - exec: 비대화형 실행, --json: JSONL 이벤트 스트림
+      //   - IVE는 Docker로 외부 샌드박싱되며 브랜치/커밋/푸시는 IVE가 직접 처리하므로,
+      //     승인 대기로 인한 hang을 막기 위해 승인/샌드박스를 우회한다(claude의 --dangerously-skip-permissions와 동일 취지).
+      //   - codex 자체 MCP는 ~/.codex/config.toml에서 로드되므로 IVE mcp.config는 주입하지 않는다.
+      args = [
+        ...cliParts.slice(1),
+        'exec',
+        '--json',
+        '--skip-git-repo-check',
+        '--dangerously-bypass-approvals-and-sandbox',
+        ...(systemCliModel ? ['-m', systemCliModel] : []),
+        prompt,
+      ];
+      spawnEnv = {
+        ...process.env,
+        GITLAB_TOKEN: token, GITLAB_API_TOKEN: token,
+        GITHUB_TOKEN: token,
         IVE_GITLAB_TOKEN: token,
         IVE_GITHUB_TOKEN: token,
       };
@@ -145,7 +170,7 @@ export async function runCliProcess(
       };
     }
 
-    log(`CMD: ${mainCmd} ${args.slice(0, isOpenCode ? -1 : -2).join(' ')} [prompt omitted]`, 'system');
+    log(`CMD: ${mainCmd} ${args.slice(0, (isOpenCode || isCodex) ? -1 : -2).join(' ')} [prompt omitted]`, 'system');
     if (systemCliModel) log(`MODEL: ${systemCliModel}`, 'system');
     log(`CWD: ${workspacePath}`, 'system');
 
@@ -240,6 +265,39 @@ export async function runCliProcess(
           totalOutputTokens += Number(oT);
           totalCostUsd += Number(cost);
           totalTurns = Math.max(totalTurns, Number(turns));
+        }
+      } else if (isCodex) {
+        // Codex exec --json 이벤트 처리
+        const formatted = formatCodexEvent(event, project.showToolUsage);
+        if (formatted) logStream.write(formatted + '\n');
+        const md = formatCodexEventMarkdown(event);
+        if (md) conversationParts.push(md);
+        // 도구/사고 활동 추적
+        if (event.type === 'item.started') {
+          const item = event.item ?? {};
+          if (item.type === 'command_execution') {
+            const cmd = String(item.command ?? '').substring(0, 120);
+            setToolActivity(executionId, agent.id, 'Bash', cmd ? `$ ${cmd}` : '');
+          } else if (item.type === 'file_change') {
+            const files = (item.changes ?? []).map((c: any) => c.path).filter(Boolean).join(', ');
+            setToolActivity(executionId, agent.id, 'Edit', files);
+          }
+        } else if (event.type === 'item.completed') {
+          const item = event.item ?? {};
+          if (item.type === 'agent_message') {
+            setThinking(executionId, agent.id);
+            assistantTurnCount++;
+          } else if (item.type === 'reasoning') {
+            setThinking(executionId, agent.id);
+          }
+        }
+        // 토큰 누적 (codex는 turn.completed에서 usage 제공, 비용 필드는 없음 → DB 단가로 환산)
+        if (event.type === 'turn.completed') {
+          const u = event.usage ?? {};
+          totalInputTokens += Number(u.input_tokens ?? 0);
+          totalCacheReadTokens += Number(u.cached_input_tokens ?? 0);
+          totalOutputTokens += Number(u.output_tokens ?? 0) + Number(u.reasoning_output_tokens ?? 0);
+          totalTurns += 1;
         }
       } else {
         // Claude Code 이벤트 처리

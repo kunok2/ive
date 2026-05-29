@@ -17,6 +17,17 @@ const CLAUDE_MODELS = [
   'claude-haiku-4-5-20251001',
 ]
 
+/** Codex 주요 모델명 (codex에는 models 조회 명령이 없어 고정 목록 제공. 빈 값=config.toml 기본값 사용) */
+const CODEX_MODELS = [
+  'gpt-5.4',
+  'gpt-5.4-mini',
+  'gpt-5-codex',
+  'gpt-5',
+  'gpt-5-mini',
+  'o4-mini',
+  'o3',
+]
+
 /** CLI별 사용 가능한 모델 목록 조회 */
 export async function GET() {
   const user = await getCurrentUser()
@@ -27,6 +38,9 @@ export async function GET() {
 
   // Claude: 고정 목록 (CLI에 models 명령 없음)
   result.claude = CLAUDE_MODELS
+
+  // Codex: 고정 목록 (CLI에 models 조회 명령 없음)
+  result.codex = CODEX_MODELS
 
   // OpenCode: `opencode models` 명령으로 동적 조회
   const opencodePath = settings['cli.opencode.path'] || '/usr/local/bin/opencode'

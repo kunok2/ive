@@ -27,6 +27,7 @@
   "deleteAgent": "에이전트 삭제",
   "deleteAgentConfirm": "이 에이전트를 삭제하면 배정된 프로젝트에서도 해제됩니다. 삭제하시겠습니까?",
   "claudeDesc": "Anthropic의 AI 코딩 CLI",
+  "codexDesc": "OpenAI의 AI 코딩 CLI",
   "opencodeDesc": "sst.dev의 오픈소스 AI 코딩 CLI",
   "cliPathNotSet": "CLI 경로를 설정하지 않았습니다.",
   "statusAvailable": "대기",

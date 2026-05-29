@@ -71,7 +71,7 @@ export default function UsersPanel() {
   async function handleToggleAdmin(userId: string, currentAdmin: boolean) {
     const newAdmin = !currentAdmin
     const body: any = { userId, isAdmin: newAdmin }
-    if (newAdmin) body.allowedClis = ['claude', 'opencode']
+    if (newAdmin) body.allowedClis = ['claude', 'codex', 'opencode']
     const res = await fetch('/api/admin/users', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -81,7 +81,7 @@ export default function UsersPanel() {
       setUsers(prev => prev.map(u => u.id === userId ? {
         ...u,
         isAdmin: newAdmin,
-        ...(newAdmin ? { allowedClis: ['claude', 'opencode'] as User['allowedClis'] } : {}),
+        ...(newAdmin ? { allowedClis: ['claude', 'codex', 'opencode'] as User['allowedClis'] } : {}),
       } : u))
     } else {
       const data = await res.json()
@@ -289,7 +289,7 @@ export default function UsersPanel() {
                     <i className="fa-solid fa-terminal mr-1" />{t('cliTools')}
                   </label>
                   <div className="flex gap-2 flex-1">
-                    {[{ value: 'claude', label: 'Claude Code', icon: 'fa-solid fa-atom' }, { value: 'opencode', label: 'OpenCode', icon: 'fa-solid fa-terminal' }].map(cli => {
+                    {[{ value: 'claude', label: 'Claude Code', icon: 'fa-solid fa-atom' }, { value: 'codex', label: 'Codex CLI', icon: 'fa-solid fa-brain' }, { value: 'opencode', label: 'OpenCode', icon: 'fa-solid fa-terminal' }].map(cli => {
                       const checked = limitValues.allowedClis.includes(cli.value)
                       return (
                         <button

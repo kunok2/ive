@@ -19,7 +19,7 @@ export function parseIveMeta(body: string): {
 } {
   const defaults = { model: null as string | null, inputTokens: 0, outputTokens: 0, costUsd: 0, turns: 0, startedAt: null as string | null, endedAt: null as string | null };
   if (!body) return defaults;
-  const match = body.match(/<!--\s*ive-meta\s*\n([\s\S]*?)-->/);
+  const match = body.match(/<!--\s*ive-meta\s([\s\S]*?)-->/);
   if (!match) return defaults;
   const lines = match[1].split('\n');
   for (const line of lines) {
@@ -130,6 +130,94 @@ export function formatOpenCodeEventMarkdown(event: any): string | null {
     default:
       return null;
   }
+}
+
+/**
+ * Codex CLI `exec --json` 이벤트(JSONL)를 읽기 좋은 로그 텍스트로 변환.
+ *
+ * 이벤트 형태:
+ *   {type:"thread.started", thread_id}
+ *   {type:"turn.started"}
+ *   {type:"item.started"|"item.completed", item:{id, type, ...}}
+ *     - item.type: "agent_message"({text}), "reasoning"({text}),
+ *       "command_execution"({command, aggregated_output, exit_code, status}),
+ *       "file_change"({changes:[{path, kind}], status})
+ *   {type:"turn.completed", usage:{input_tokens, cached_input_tokens, output_tokens, reasoning_output_tokens}}
+ *   {type:"turn.failed"|"error", ...}
+ */
+export function formatCodexEvent(event: any, showToolUsage: boolean = false): string | null {
+  switch (event.type) {
+    case 'item.started':
+    case 'item.completed': {
+      const item = event.item ?? {};
+      if (item.type === 'agent_message') {
+        if (event.type !== 'item.completed') return null;
+        return (item.text ?? '').trim() || null;
+      }
+      if (item.type === 'reasoning') {
+        if (event.type !== 'item.completed') return null;
+        const text = (item.text ?? item.summary ?? '').trim();
+        return text ? `\x1b[90m${text}\x1b[0m` : null;
+      }
+      if (item.type === 'command_execution') {
+        if (!showToolUsage || event.type !== 'item.started') return null;
+        const cmd = String(item.command ?? '').substring(0, 120);
+        return cmd ? `\x1b[1;34m[Tool] Bash\x1b[0m \x1b[33m$ ${cmd}\x1b[0m` : null;
+      }
+      if (item.type === 'file_change') {
+        if (!showToolUsage || event.type !== 'item.completed') return null;
+        const files = (item.changes ?? []).map((c: any) => `${c.kind ?? ''} ${c.path ?? ''}`.trim()).filter(Boolean).join(', ');
+        return files ? `\x1b[1;34m[Tool] Edit\x1b[0m ${files}` : null;
+      }
+      return null;
+    }
+    case 'turn.completed': {
+      const u = event.usage ?? {};
+      const inputT = Number(u.input_tokens ?? 0);
+      const outputT = Number(u.output_tokens ?? 0) + Number(u.reasoning_output_tokens ?? 0);
+      const cachedT = Number(u.cached_input_tokens ?? 0);
+      const meta: string[] = [];
+      if (inputT || outputT) {
+        const parts = [`입력 ${inputT.toLocaleString()}`];
+        if (cachedT) parts.push(`캐시 ${cachedT.toLocaleString()}`);
+        parts.push(`출력 ${outputT.toLocaleString()} 토큰`);
+        meta.push(parts.join(' + '));
+      }
+      const metaStr = meta.length > 0 ? `\x1b[90m(${meta.join(' | ')})\x1b[0m ` : '';
+      return `\x1b[1;32m[완료]\x1b[0m ${metaStr}`;
+    }
+    case 'turn.failed':
+    case 'error': {
+      const msg = event.error?.message ?? event.error ?? event.message ?? '알 수 없는 오류';
+      return `\x1b[1;31m[오류]\x1b[0m ${msg}`;
+    }
+    default:
+      return null;
+  }
+}
+
+export function formatCodexEventMarkdown(event: any): string | null {
+  if (event.type === 'item.completed') {
+    const item = event.item ?? {};
+    if (item.type === 'agent_message') return (item.text ?? '').trim() || null;
+    if (item.type === 'command_execution') {
+      const cmd = String(item.command ?? '').substring(0, 100);
+      return cmd ? `> **🔧 Bash** \`$ ${cmd}\`` : null;
+    }
+    if (item.type === 'file_change') {
+      const files = (item.changes ?? []).map((c: any) => c.path).filter(Boolean).join(', ');
+      return files ? `> **🔧 Edit** \`${files}\`` : null;
+    }
+  }
+  if (event.type === 'turn.completed') {
+    const u = event.usage ?? {};
+    const inputT = Number(u.input_tokens ?? 0);
+    const outputT = Number(u.output_tokens ?? 0) + Number(u.reasoning_output_tokens ?? 0);
+    const info: string[] = [];
+    if (inputT || outputT) info.push(`토큰: ${(inputT + outputT).toLocaleString()}`);
+    return `\n---\n**📊 실행 결과** ${info.join(' | ')}`;
+  }
+  return null;
 }
 
 /**
