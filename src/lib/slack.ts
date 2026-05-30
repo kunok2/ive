@@ -223,9 +223,10 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
   // 봇 자기 멘션/봇 메시지 무한루프 차단
   if (event.bot_id || event.subtype || slackUser === workspace.botUserId) return
 
-  // 스레드 루트 = 대화 단위. 스레드 안이면 그 스레드, 채널 최상위 멘션이면 그 메시지(ts)로 스레드를 만들어 답.
-  const threadRoot = event.thread_ts || event.ts || ''
-  const replyTs = threadRoot
+  // 답변 위치: 스레드 안에서 부르면 그 스레드, 채널 최상위면 채널에 그대로 답(스레드 강제 안 함).
+  const replyTs = event.thread_ts
+  // 대화 단위 키: 스레드 안이면 thread_ts(스레드별 독립), 채널 최상위면 channel(채널 단위 연속).
+  const convoId = event.thread_ts || channel
   const cleanText = stripBotMention(event.text || '', workspace.botUserId)
 
   // Slack 기본 sink (테스트에서는 providedSink로 콘솔 출력 등 주입)
@@ -259,19 +260,19 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
     const token = decrypt(project.accessToken)
 
     // 스레드 단위 독립 대화: 세션/이슈바인딩/CLI세션을 thread_ts 기준으로 유지
-    const sessionKey = `slack:${workspace.id}:${channel}:${threadRoot}`
+    const sessionKey = `slack:${workspace.id}:${channel}:${convoId}`
     if (isChatAgentRunning(sessionKey)) {
       await sink.post(`아직 이전 메시지를 처리 중이에요. 잠시만요…`)
       return
     }
 
     // 스레드 첫 멘션에서 이슈 번호를 바인딩, 이후 멘션은 그 바인딩 유지(번호 재입력 불필요)
-    let session = getSlackThreadSession(workspace.id, channel, threadRoot)
+    let session = getSlackThreadSession(workspace.id, channel, convoId)
     let issueIid: number | null
     if (!session) {
       issueIid = parseIssueNumber(cleanText)
-      createSlackThreadSession({ workspaceId: workspace.id, channelId: channel, threadTs: threadRoot, issueIid })
-      session = getSlackThreadSession(workspace.id, channel, threadRoot)
+      createSlackThreadSession({ workspaceId: workspace.id, channelId: channel, threadTs: convoId, issueIid })
+      session = getSlackThreadSession(workspace.id, channel, convoId)
     } else {
       issueIid = session.issueIid ?? null
     }
@@ -329,7 +330,7 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
       },
       (ev) => {
         if (ev.type === 'session_id' && ev.content) {
-          updateSlackThreadCliSession(workspace.id, channel, threadRoot, ev.content)
+          updateSlackThreadCliSession(workspace.id, channel, convoId, ev.content)
         } else if (ev.type === 'text' && ev.content) {
           full += ev.content
           void flush(false)
