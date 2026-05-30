@@ -886,15 +886,23 @@ export function initSchema(db: Database.Database) {
       id TEXT PRIMARY KEY,
       team_id TEXT NOT NULL UNIQUE,
       team_name TEXT NOT NULL DEFAULT '',
+      team_url TEXT NOT NULL DEFAULT '',
       name TEXT NOT NULL DEFAULT '',
       bot_token TEXT NOT NULL,
       signing_secret TEXT NOT NULL,
       bot_user_id TEXT NOT NULL DEFAULT '',
       default_user_id TEXT,
+      max_instances INTEGER NOT NULL DEFAULT 3,
       enabled INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `)
+  // 기존 slack_workspaces 컬럼 보강
+  try {
+    const cols = (db.prepare("PRAGMA table_info(slack_workspaces)").all() as any[]).map(c => c.name)
+    if (!cols.includes('max_instances')) db.exec("ALTER TABLE slack_workspaces ADD COLUMN max_instances INTEGER NOT NULL DEFAULT 3")
+    if (!cols.includes('team_url')) db.exec("ALTER TABLE slack_workspaces ADD COLUMN team_url TEXT NOT NULL DEFAULT ''")
+  } catch { /* ignore */ }
   // 채널 ↔ 프로젝트 연결 (채널 = 프로젝트)
   db.exec(`
     CREATE TABLE IF NOT EXISTS slack_channel_config (

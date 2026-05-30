@@ -262,9 +262,10 @@ export interface SlackWorkspace {
   id: string
   teamId: string          // Slack 워크스페이스 ID (이벤트 라우팅 키, 고유)
   teamName: string        // Slack 측 워크스페이스 이름 (auth.test로 자동 채움)
+  teamUrl: string         // Slack 워크스페이스 URL (auth.test url)
   name: string            // IVE 내 표시 이름
   botUserId: string       // 봇 자신의 user id (자기멘션 무한루프 차단용)
-  defaultUserId: string | null  // 이 워크스페이스 멘션의 기본 IVE 유저
+  defaultUserId: string | null  // 워크스페이스 소유자(IVE 유저). 이 유저의 에이전트·프로젝트만 사용
   enabled: boolean
   createdAt: string
   // botToken / signingSecret은 암호화 저장되며 응답에 포함하지 않음

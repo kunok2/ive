@@ -8,6 +8,7 @@ function mapWorkspace(r: any): SlackWorkspace {
     id: r.id,
     teamId: r.team_id,
     teamName: r.team_name || '',
+    teamUrl: r.team_url || '',
     name: r.name || '',
     botUserId: r.bot_user_id || '',
     defaultUserId: r.default_user_id ?? null,
@@ -43,26 +44,27 @@ export function getSlackWorkspaceRawById(id: string): { id: string; team_id: str
 }
 
 export function createSlackWorkspace(w: {
-  id: string; teamId: string; teamName: string; name: string;
+  id: string; teamId: string; teamName: string; teamUrl?: string; name: string;
   botTokenEncrypted: string; signingSecretEncrypted: string; botUserId: string;
   defaultUserId?: string | null; enabled?: boolean
 }) {
   getDb().prepare(`
-    INSERT INTO slack_workspaces (id, team_id, team_name, name, bot_token, signing_secret, bot_user_id, default_user_id, enabled)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO slack_workspaces (id, team_id, team_name, team_url, name, bot_token, signing_secret, bot_user_id, default_user_id, enabled)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    w.id, w.teamId, w.teamName, w.name, w.botTokenEncrypted, w.signingSecretEncrypted,
+    w.id, w.teamId, w.teamName, w.teamUrl ?? '', w.name, w.botTokenEncrypted, w.signingSecretEncrypted,
     w.botUserId, w.defaultUserId ?? null, w.enabled === false ? 0 : 1
   )
 }
 
 export function updateSlackWorkspace(id: string, patch: {
-  teamId?: string; teamName?: string; name?: string;
+  teamId?: string; teamName?: string; teamUrl?: string; name?: string;
   botTokenEncrypted?: string; signingSecretEncrypted?: string; botUserId?: string;
   defaultUserId?: string | null; enabled?: boolean
 }) {
   const fields: string[] = []
   const values: any[] = []
+  if (patch.teamUrl !== undefined) { fields.push('team_url = ?'); values.push(patch.teamUrl) }
   if (patch.teamId !== undefined) { fields.push('team_id = ?'); values.push(patch.teamId) }
   if (patch.teamName !== undefined) { fields.push('team_name = ?'); values.push(patch.teamName) }
   if (patch.name !== undefined) { fields.push('name = ?'); values.push(patch.name) }
@@ -74,6 +76,44 @@ export function updateSlackWorkspace(id: string, patch: {
   if (fields.length === 0) return
   values.push(id)
   getDb().prepare(`UPDATE slack_workspaces SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+}
+
+/**
+ * OAuth(Add to Slack) 설치 결과로 워크스페이스를 upsert.
+ * team_id로 기존 행이 있으면 봇 토큰/정보 갱신, 없으면 생성.
+ * signing_secret은 앱 단위(시스템 설정)를 쓰므로 행에는 빈 값으로 둔다(events 라우트가 폴백).
+ */
+export function upsertSlackWorkspaceFromOAuth(w: {
+  teamId: string; teamName: string; teamUrl?: string; name: string;
+  botTokenEncrypted: string; botUserId: string; defaultUserId?: string | null;
+}): string {
+  const existing = getSlackWorkspaceByTeamId(w.teamId)
+  if (existing) {
+    updateSlackWorkspace(existing.id, {
+      teamName: w.teamName,
+      teamUrl: w.teamUrl ?? '',
+      botTokenEncrypted: w.botTokenEncrypted,
+      botUserId: w.botUserId,
+      signingSecretEncrypted: '',
+      enabled: true,
+      ...(w.defaultUserId ? { defaultUserId: w.defaultUserId } : {}),
+    })
+    return existing.id
+  }
+  const id = `sw-${w.teamId}`
+  createSlackWorkspace({
+    id,
+    teamId: w.teamId,
+    teamName: w.teamName,
+    teamUrl: w.teamUrl ?? '',
+    name: w.name,
+    botTokenEncrypted: w.botTokenEncrypted,
+    signingSecretEncrypted: '',
+    botUserId: w.botUserId,
+    defaultUserId: w.defaultUserId ?? null,
+    enabled: true,
+  })
+  return id
 }
 
 export function deleteSlackWorkspace(id: string) {

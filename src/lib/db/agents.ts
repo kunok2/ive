@@ -28,6 +28,12 @@ export function getAgent(id: string): Agent | null {
   return mapAgent(r)
 }
 
+/** 전체 에이전트 (관리자 선택용) */
+export function getAllAgents(): Agent[] {
+  const rows = getDb().prepare('SELECT * FROM agents ORDER BY created_at ASC').all() as any[]
+  return rows.map(mapAgent)
+}
+
 export function createAgent(a: Agent) {
   getDb().prepare(
     'INSERT INTO agents (id, user_id, name, avatar, cli_name, cli_path, cli_version, model, max_turns, status, snapshot_interval, sparkline_points, stats_retention, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'

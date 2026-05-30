@@ -25,6 +25,15 @@ export function isChatAgentRunning(sessionId: string): boolean {
   return !!child && !child.killed && child.exitCode === null
 }
 
+/** sessionId가 주어진 접두사로 시작하는 실행 중 프로세스 수 (동시 인스턴스 상한용) */
+export function countRunningAgents(prefix: string): number {
+  let n = 0
+  for (const [key, child] of getAgentMap()) {
+    if (key.startsWith(prefix) && !child.killed && child.exitCode === null) n++
+  }
+  return n
+}
+
 export function killChatAgent(sessionId: string) {
   const child = getAgentMap().get(sessionId)
   if (child && !child.killed) {
@@ -73,6 +82,7 @@ interface ChatAgentOptions {
   workspacePath: string
   userLocale?: string
   generalMode?: boolean  // true = 이슈 미바인딩 일반 질문 (워크스페이스/이슈 컨텍스트 없음)
+  availableProjects?: string[]  // 소유자의 프로젝트 이름 목록 (general 모드에서 "어떤 프로젝트?" 응답용)
 }
 
 /**
@@ -85,7 +95,7 @@ interface ChatAgentOptions {
  * Shared by both the legacy SSE generator and the WebSocket callback version.
  */
 async function prepareChatSpawn(opts: ChatAgentOptions) {
-  const { cliSessionId, project, agent, token, issueIid, issueTitle, issueDescription, userMessage, workspacePath, userLocale, generalMode } = opts
+  const { cliSessionId, project, agent, token, issueIid, issueTitle, issueDescription, userMessage, workspacePath, userLocale, generalMode, availableProjects } = opts
 
   const locale = userLocale || getSystemSetting('locale') || defaultLocale
   const isKo = locale === 'ko'
@@ -100,17 +110,20 @@ async function prepareChatSpawn(opts: ChatAgentOptions) {
   // Build prompt
   let prompt: string
   if (isFirstMessage && generalMode) {
-    // 이슈 미바인딩 일반 질문 — 워크스페이스/이슈 컨텍스트 없음
-    prompt = `You are a helpful AI assistant for the "${project.name}" project. ${langInstruction}
+    // 이슈 미바인딩 — 프로젝트 레포가 작업 디렉토리에 clone 되어 있음
+    const projectsLine = availableProjects && availableProjects.length > 0
+      ? `\nThe user owns these IVE projects: ${availableProjects.join(', ')}. If asked which projects exist / are available, list exactly these.\n`
+      : ''
+    prompt = `You are a helpful AI assistant working in the "${project.name}" project repository. ${langInstruction}
 
-You are in a lightweight chat session. There is no specific issue or code workspace bound to this conversation — answer general questions about the project, give advice, or explain concepts.
-
+The project's repository is checked out in your current working directory — read and explore the actual code/files to answer accurately. Do NOT describe any other project's code; only this repository.
+${projectsLine}
 ## User Message:
 ${userMessage}
 
 ## Instructions:
-- Answer questions clearly and concisely.
-- You do NOT have the repository checked out here. If the user needs code-level work, suggest they start a thread bound to an issue (e.g. mention an issue number).
+- Answer clearly and concisely, grounded in the actual files of this repository.
+- If asked to make code changes, make them using git add (do NOT commit or push), then briefly list what you modified.
 - IMPORTANT: ${langInstruction}`
   } else if (isFirstMessage) {
     prompt = `You are a helpful AI assistant for issue #${issueIid} "${issueTitle}". ${langInstruction}
@@ -429,5 +442,36 @@ export async function prepareChatWorkspace(project: Project, issueIid: number, t
     console.log(`[Chat] Branch ${branchName} not found, staying on default branch`)
   }
 
+  return workspacePath
+}
+
+/** project.repoUrl에 토큰을 끼운 clone URL */
+function authedRepoUrl(project: Project, token: string): string {
+  if (project.authType === 'basic') {
+    return project.repoUrl.replace('https://', `https://${encodeURIComponent(project.gitUsername)}:${encodeURIComponent(token)}@`)
+  } else if (project.provider === 'github') {
+    return project.repoUrl.replace('https://', `https://x-access-token:${token}@`)
+  }
+  return project.repoUrl.replace('https://', `https://oauth2:${token}@`)
+}
+
+/**
+ * 이슈 미바인딩 — 프로젝트 레포(기본 브랜치)를 clone한 작업 디렉토리.
+ * 빈 디렉토리(IVE 호스트 레포 노출) 대신 실제 프로젝트 레포를 cwd로 둔다.
+ */
+export async function prepareProjectWorkspace(project: Project, token: string): Promise<string> {
+  const workspacePath = path.join(process.cwd(), 'workspaces', project.id, 'chat-project')
+
+  if (fs.existsSync(workspacePath)) {
+    try {
+      await execFile('git', ['pull', '--rebase'], { cwd: workspacePath })
+      return workspacePath
+    } catch {
+      fs.rmSync(workspacePath, { recursive: true, force: true })
+    }
+  }
+
+  fs.mkdirSync(workspacePath, { recursive: true })
+  await execFile('git', ['clone', authedRepoUrl(project, token), '.'], { cwd: workspacePath })
   return workspacePath
 }

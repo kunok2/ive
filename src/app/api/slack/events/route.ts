@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSlackWorkspaceRaw } from '@/lib/db'
 import { decrypt } from '@/lib/crypto'
-import { verifySlackSignature, handleAppMention, DecryptedWorkspace } from '@/lib/slack'
+import { verifySlackSignature, handleAppMention, getSlackAppConfig, DecryptedWorkspace } from '@/lib/slack'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -41,7 +41,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true })
   }
 
-  const signingSecret = decrypt(raw.signing_secret)
+  // 워크스페이스별 signing secret(수동 등록) 우선, 비어 있으면 앱 단위(OAuth 설치) 사용
+  const signingSecret = decrypt(raw.signing_secret) || getSlackAppConfig().signingSecret
   const valid = verifySlackSignature({
     signingSecret,
     timestamp: req.headers.get('x-slack-request-timestamp'),
