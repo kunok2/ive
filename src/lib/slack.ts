@@ -1,6 +1,7 @@
 import crypto from 'crypto'
 import {
-  getProjectsByUser, getSystemSetting, getAgentsByUser,
+  getProjectsByUser, getSharedProjectsForUser, getProjectAuthToken,
+  getSystemSetting, getAgentsByUser,
   getSlackThreadSession, createSlackThreadSession, updateSlackThreadCliSession,
 } from './db'
 import { decrypt } from './crypto'
@@ -248,7 +249,11 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
       return
     }
 
-    const ownerProjects = getProjectsByUser(ownerUserId)
+    // 소유 프로젝트 + 공유받은 프로젝트(프로젝트 화면과 동일 범위). id로 중복 제거.
+    const owned = getProjectsByUser(ownerUserId)
+    const shared = getSharedProjectsForUser(ownerUserId)
+    const seen = new Set(owned.map(p => p.id))
+    const ownerProjects = [...owned, ...shared.filter(p => !seen.has(p.id))]
     if (ownerProjects.length === 0) {
       await sink.post(`소유자에게 연결된 프로젝트가 없어요. 관리자에게 문의해 주세요.`)
       return
@@ -257,7 +262,9 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
     // "무엇을 할지(조회/생성/설명…)"는 규칙으로 가르지 않고 에이전트가 대화로 판단한다.
     const namedProject = ownerProjects.find(p => p.name && cleanText.includes(p.name))
     const project = namedProject || ownerProjects[0]
-    const token = decrypt(project.accessToken)
+    // 공유 프로젝트는 accessToken이 비어있을 수 있고 OAuth 토큰 케이스도 있어
+    // getProjectAuthToken으로 해석(OAuth/일반 토큰 모두 처리).
+    const token = getProjectAuthToken(project.id)
 
     // 스레드 단위 독립 대화: 세션/이슈바인딩/CLI세션을 thread_ts 기준으로 유지
     const sessionKey = `slack:${workspace.id}:${channel}:${convoId}`
