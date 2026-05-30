@@ -247,15 +247,15 @@ export function computeVerifierDiagnosis(
   data: ReportData,
   elapsedDays: number,
 ): VerifierDiagnosis | null {
-  const { byVerifier, lifecycle, prevLifecycle } = data
+  const { byVerifier, lifecycle, prevLifecycle, verifierBacklog } = data
 
   if (!byVerifier || byVerifier.length === 0 || lifecycle.verifyCount === 0) return null
 
   const verifierCount = byVerifier.length
   const dailyVerifyInflow = elapsedDays > 0 ? lifecycle.verifyCount / elapsedDays : 0
   const dailyVerifyCap = elapsedDays > 0 ? byVerifier.reduce((s, v) => s + (v.tasks / elapsedDays), 0) : 0
-  const verifyUtil = 0
-  const verifyWaiting = 0
+  const verifyUtil = dailyVerifyCap > 0 ? dailyVerifyInflow / dailyVerifyCap : 0
+  const verifyWaiting = verifierBacklog?.reduce((s, b) => s + b.verifyWaiting, 0) ?? 0
 
   let ann: I18nMessage | null = null
   if (prevLifecycle.verifyCount > 0 && lifecycle.verifyAvg > prevLifecycle.verifyAvg * 1.5) {
@@ -287,7 +287,7 @@ export function computeVerifierLoads(
     const b = backlog.find(x => x.username === username)!
     const byName = byNameMap.get(b.name)
     const approved = byName?.tasks ?? 0
-    const rejected = 0
+    const rejected = byName?.rejected ?? 0
     const avgVerifyMin = byName?.avgVerifyMin ?? 0
     const dailyCap = elapsedDays > 0 && approved > 0 ? approved / elapsedDays : 0
 

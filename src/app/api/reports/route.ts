@@ -419,7 +419,7 @@ export async function GET(req: NextRequest) {
   }
   const byVerifier = Array.from(verifierLookup.entries()).map(([verifierName, v]) => {
     const vExecs = verifierMap.get(verifierName)!
-    return { verifierName, verifierAvatar: vExecs[0].verifierAvatar || 'av-01', tasks: v.tasks, avgVerifyMin: v.avgVerifyMin, avgWaitMin: v.avgWaitMin }
+    return { verifierName, verifierAvatar: vExecs[0].verifierAvatar || 'av-01', tasks: v.tasks, avgVerifyMin: v.avgVerifyMin, avgWaitMin: v.avgWaitMin, rejected: v.rejected }
   })
 
   // By user (담당자별 검증 현황) — assigneeType='user' (사람이 직접 담당)인 exec만 그룹핑.
@@ -1100,6 +1100,7 @@ export async function GET(req: NextRequest) {
     },
     prevSummary: {
       totalTasks: prevTotalTasks,
+      uniqueInflow: prevInflowMap.size,
       successCount: prevSuccessCount,
       failedCount: prevFailedCount,
       successRate: Math.round(prevSuccessRate * 10) / 10,

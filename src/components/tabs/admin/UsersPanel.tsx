@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import { User, DEFAULT_AVATARS } from '@/types'
 import { useDialog } from '@/components/ui/ConfirmDialog'
 import { useToast } from '@/components/ui/Toast'
+import CliLogo from '@/components/ui/CliLogo'
 import ActivityContent from './ActivityContent'
 
 type UsersSubView = 'users' | 'activity'
@@ -213,8 +214,8 @@ export default function UsersPanel() {
                   </span>
                   <span className="text-ive-text-dim">|</span>
                   {(u.allowedClis || []).map(cli => (
-                    <span key={cli} className="inline-flex items-center">
-                      <i className={`${cli === 'claude' ? 'fa-solid fa-atom' : 'fa-solid fa-terminal'} mr-0.5`} />{cli}
+                    <span key={cli} className="inline-flex items-center gap-1">
+                      <CliLogo cli={cli} className="w-3.5 h-3.5" />{cli}
                     </span>
                   ))}
                 </div>
@@ -284,12 +285,12 @@ export default function UsersPanel() {
                     <span className="text-xs text-ive-text-dim">{t('unlimited')}</span>
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <label className="text-xs font-bold text-ive-text-muted w-24 shrink-0">
+                <div className="flex items-start gap-3">
+                  <label className="text-xs font-bold text-ive-text-muted w-24 shrink-0 pt-1.5">
                     <i className="fa-solid fa-terminal mr-1" />{t('cliTools')}
                   </label>
-                  <div className="flex gap-2 flex-1">
-                    {[{ value: 'claude', label: 'Claude Code', icon: 'fa-solid fa-atom' }, { value: 'codex', label: 'Codex CLI', icon: 'fa-solid fa-brain' }, { value: 'opencode', label: 'OpenCode', icon: 'fa-solid fa-terminal' }].map(cli => {
+                  <div className="flex flex-wrap gap-2 flex-1 min-w-0">
+                    {[{ value: 'claude', label: 'Claude Code', icon: 'fa-solid fa-atom' }, { value: 'gemini', label: 'Gemini CLI', icon: 'fa-brands fa-google' }, { value: 'codex', label: 'Codex CLI', icon: 'fa-solid fa-brain' }, { value: 'opencode', label: 'OpenCode', icon: 'fa-solid fa-terminal' }].map(cli => {
                       const checked = limitValues.allowedClis.includes(cli.value)
                       return (
                         <button
@@ -305,7 +306,7 @@ export default function UsersPanel() {
                             checked ? 'bg-ive-green/10 border-ive-green text-ive-green' : 'bg-ive-bg-deep border-ive-border-subtle text-ive-text-dim'
                           }`}
                         >
-                          <i className={cli.icon} />{cli.label}
+                          <CliLogo cli={cli.value} className="w-4 h-4" />{cli.label}
                         </button>
                       )
                     })}

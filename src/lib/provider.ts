@@ -133,10 +133,9 @@ export async function fetchSingleIssue(project: Project, iid: number, token: str
     return github.fetchGitHubIssue(project, iid, token);
   }
   // GitLab: 직접 API 호출
-  const { getApiBaseUrl, getProjectPath, getAuthHeaders } = await import('./gitlab');
-  const base = getApiBaseUrl(project.repoUrl);
-  const projectPath = getProjectPath(project.repoUrl);
-  const headers = getAuthHeaders(project, token);
+  const base = gitlab.getApiBaseUrl(project.repoUrl);
+  const projectPath = gitlab.getProjectPath(project.repoUrl);
+  const headers = gitlab.getAuthHeaders(project, token);
   const res = await fetch(`${base}/projects/${projectPath}/issues/${iid}`, { headers });
   if (!res.ok) {
     if (res.status === 404) return null;
@@ -166,7 +165,7 @@ export async function addIssueLabels(project: Project, iid: number, token: strin
 
 export async function removeIssueLabels(project: Project, iid: number, token: string, labels: string[]) {
   if (project.provider === 'github') {
-    for (const label of labels) await github.removeGitHubIssueLabels(project, iid, token, label);
+    await Promise.allSettled(labels.map(label => github.removeGitHubIssueLabels(project, iid, token, label)));
   } else {
     await gitlab.removeGitLabIssueLabels(project, iid, token, labels);
   }

@@ -204,7 +204,7 @@ async function fetchGitHubProfile(p: ResolvedProvider, accessToken: string): Pro
   // /user의 email은 public이 아니면 null → /user/emails로 primary & verified 조회
   let email: string | null = user.email || null
   let emailVerified = false
-  if (!email || !user.email) {
+  if (!email) {
     const emailsRes = await fetch(`${apiBase}/user/emails`, { headers })
     if (emailsRes.ok) {
       const emails = await emailsRes.json() as Array<{ email: string; primary: boolean; verified: boolean }>

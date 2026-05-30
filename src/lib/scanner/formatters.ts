@@ -221,6 +221,72 @@ export function formatCodexEventMarkdown(event: any): string | null {
 }
 
 /**
+ * Gemini CLI stream-json 이벤트를 읽기 좋은 로그 텍스트(ANSI)로 변환
+ * 이벤트: init / message(user|assistant, delta) / tool_use / tool_result / result(stats)
+ */
+export function formatGeminiEvent(event: any, showToolUsage: boolean = false): string | null {
+  switch (event.type) {
+    case 'message': {
+      if (event.role !== 'assistant') return null;
+      return (event.content ?? '').toString() || null;
+    }
+    case 'tool_use': {
+      if (!showToolUsage) return null;
+      const name = event.tool_name ?? '';
+      if (!name) return null;
+      const p = event.parameters ?? {};
+      const detail = p.command ?? p.file_path ?? p.path ?? p.summary ?? '';
+      const detailStr = detail ? ` \x1b[33m${String(detail).substring(0, 120)}\x1b[0m` : '';
+      return `\x1b[1;34m[Tool] ${name}\x1b[0m${detailStr}`;
+    }
+    case 'result': {
+      const s = event.stats ?? {};
+      const inputT = Number(s.input_tokens ?? 0);
+      const outputT = Number(s.output_tokens ?? 0);
+      const cachedT = Number(s.cached ?? 0);
+      const status = event.status === 'success' ? '완료' : (event.status ?? '종료');
+      const meta: string[] = [];
+      if (inputT || outputT) {
+        const parts = [`입력 ${inputT.toLocaleString()}`];
+        if (cachedT) parts.push(`캐시 ${cachedT.toLocaleString()}`);
+        parts.push(`출력 ${outputT.toLocaleString()} 토큰`);
+        meta.push(parts.join(' + '));
+      }
+      const metaStr = meta.length > 0 ? `\x1b[90m(${meta.join(' | ')})\x1b[0m ` : '';
+      return `\x1b[1;32m[${status}]\x1b[0m ${metaStr}`;
+    }
+    case 'error': {
+      const msg = event.error?.message ?? event.error ?? event.message ?? '알 수 없는 오류';
+      return `\x1b[1;31m[오류]\x1b[0m ${msg}`;
+    }
+    default:
+      return null;
+  }
+}
+
+export function formatGeminiEventMarkdown(event: any): string | null {
+  if (event.type === 'message' && event.role === 'assistant') {
+    return (event.content ?? '').toString() || null;
+  }
+  if (event.type === 'tool_use') {
+    const name = event.tool_name ?? '';
+    if (!name) return null;
+    const p = event.parameters ?? {};
+    const detail = p.command ?? p.file_path ?? p.path ?? p.summary ?? '';
+    return detail ? `> **🔧 ${name}** \`${String(detail).substring(0, 100)}\`` : `> **🔧 ${name}**`;
+  }
+  if (event.type === 'result') {
+    const s = event.stats ?? {};
+    const inputT = Number(s.input_tokens ?? 0);
+    const outputT = Number(s.output_tokens ?? 0);
+    const info: string[] = [];
+    if (inputT || outputT) info.push(`토큰: ${(inputT + outputT).toLocaleString()}`);
+    return `\n---\n**📊 실행 결과** ${info.join(' | ')}`;
+  }
+  return null;
+}
+
+/**
  * Claude CLI stream-json 이벤트를 읽기 좋은 로그 텍스트로 변환
  */
 export function extractMeta(event: any, usage?: any): string | null {

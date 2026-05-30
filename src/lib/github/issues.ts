@@ -259,15 +259,16 @@ export async function updateGitHubIssue(
   // ive-due 마커만 갱신해 PATCH한다 (다른 변경 없이 마감일만 수정하는 케이스).
   let bodyToWrite = updates.description;
   if (updates.dueDate !== undefined) {
-    const baseBody = bodyToWrite !== undefined
-      ? bodyToWrite
-      : await (async () => {
-          const cur = await fetch(apiUrl(project, `/issues/${issueNumber}`), { headers });
-          if (!cur.ok) return '';
-          const data = await cur.json().catch(() => ({} as any));
-          return (data?.body as string | undefined) ?? '';
-        })();
-    bodyToWrite = setIveDueMarker(baseBody, updates.dueDate);
+    if (bodyToWrite !== undefined) {
+      bodyToWrite = setIveDueMarker(bodyToWrite, updates.dueDate);
+    } else {
+      const cur = await fetch(apiUrl(project, `/issues/${issueNumber}`), { headers });
+      if (cur.ok) {
+        const data = await cur.json().catch(() => ({} as any));
+        const baseBody = (data?.body as string | undefined) ?? '';
+        bodyToWrite = setIveDueMarker(baseBody, updates.dueDate);
+      }
+    }
   }
 
   const payload: any = {};

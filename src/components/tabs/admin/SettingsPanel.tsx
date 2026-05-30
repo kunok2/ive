@@ -37,6 +37,8 @@ const SETTING_GROUPS: SettingGroup[] = [
     fields: [
       { key: 'cli.claude.path', label: 'Claude Code', type: 'text', placeholder: '/usr/local/bin/claude', defaultValue: '/usr/local/bin/claude' },
       { key: 'cli.claude.model', label: 'Claude Model', type: 'model-select', cliName: 'claude' },
+      { key: 'cli.gemini.path', label: 'Gemini CLI', type: 'text', placeholder: '/usr/local/bin/gemini', defaultValue: '/usr/local/bin/gemini' },
+      { key: 'cli.gemini.model', label: 'Gemini Model', type: 'model-select', cliName: 'gemini' },
       { key: 'cli.opencode.path', label: 'OpenCode', type: 'text', placeholder: '/usr/local/bin/opencode', defaultValue: '/usr/local/bin/opencode' },
       { key: 'cli.opencode.model', label: 'OpenCode Model', type: 'model-select', cliName: 'opencode' },
     ],

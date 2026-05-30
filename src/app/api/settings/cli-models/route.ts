@@ -28,6 +28,14 @@ const CODEX_MODELS = [
   'o3',
 ]
 
+/** Gemini 주요 모델명 (고정 목록. 빈 값=CLI 기본 모델 사용) */
+const GEMINI_MODELS = [
+  'gemini-3-pro-preview',
+  'gemini-3-flash-preview',
+  'gemini-2.5-pro',
+  'gemini-2.5-flash',
+]
+
 /** CLI별 사용 가능한 모델 목록 조회 */
 export async function GET() {
   const user = await getCurrentUser()
@@ -41,6 +49,9 @@ export async function GET() {
 
   // Codex: 고정 목록 (CLI에 models 조회 명령 없음)
   result.codex = CODEX_MODELS
+
+  // Gemini: 고정 목록 (CLI에 models 조회 명령 없음)
+  result.gemini = GEMINI_MODELS
 
   // OpenCode: `opencode models` 명령으로 동적 조회
   const opencodePath = settings['cli.opencode.path'] || '/usr/local/bin/opencode'

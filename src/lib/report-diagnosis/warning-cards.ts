@@ -29,7 +29,7 @@ export function generateAlerts(
   // 이전 기간 유입 계산
   const prevStartWaiting = data.prevWaitingTrend.length > 0 ? (data.prevWaitingTrend[0].totalWaiting ?? 0) : 0
   const prevEndWaiting = data.prevWaitingTrend.length > 0 ? (data.prevWaitingTrend[data.prevWaitingTrend.length - 1].totalWaiting ?? 0) : 0
-  const prevInflow = prevSummary.totalTasks + (prevEndWaiting - prevStartWaiting)
+  const prevInflow = prevSummary.uniqueInflow + (prevEndWaiting - prevStartWaiting)
 
   const alerts: AlertCard[] = []
 

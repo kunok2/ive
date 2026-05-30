@@ -1,3 +1,4 @@
+import fs from 'fs'
 import { StatSnapshot } from '@/types'
 import { getDb } from './connection'
 
@@ -285,7 +286,6 @@ export function cleanOldSnapshots(retentionDays: number = 7) {
 }
 
 export function cleanOldExecutions(retentionDays: number = 30) {
-  const fs = require('fs')
   const cutoff = new Date(Date.now() - retentionDays * 86400000).toISOString()
   const rows = getDb().prepare(
     "SELECT id, log_path FROM task_executions WHERE status != 'running' AND ended_at IS NOT NULL AND ended_at < ?"

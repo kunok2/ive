@@ -101,7 +101,7 @@ const REPORT_EXEC_QUERY = `
   LEFT JOIN agents a ON a.id = te.agent_id
   LEFT JOIN users u ON u.id = a.user_id
   LEFT JOIN issue_stages ist ON ist.project_id = te.project_id AND ist.issue_iid = te.issue_iid
-  LEFT JOIN users vu ON vu.id = te.verifier_user_id OR (te.verifier_user_id IS NULL AND vu.name = te.verifier_name)
+  LEFT JOIN users vu ON vu.id = COALESCE(te.verifier_user_id, (SELECT u2.id FROM users u2 WHERE u2.name = te.verifier_name LIMIT 1))
 `
 
 export function getExecutionsInRange(userId: string, start: string, end: string): ReportExecution[] {
@@ -199,7 +199,7 @@ export function getIssueCompletionTimes(
           WHERE te2.project_id = te.project_id AND te2.issue_iid = te.issue_iid
             AND te2.status IN ('running', 'assigned')
         )
-      GROUP BY te.issue_iid, ist.confirmed_at
+      GROUP BY te.issue_iid
     `).all(projectId, ...iids, userId, userId) as any[]
     for (const r of rows) {
       if (r.completion_time) {
@@ -245,7 +245,7 @@ export function getIssuesCompletedInRange(
         WHERE te2.project_id = te.project_id AND te2.issue_iid = te.issue_iid
           AND te2.status IN ('running', 'assigned')
       )
-    GROUP BY te.project_id, te.issue_iid, ist.confirmed_at
+    GROUP BY te.project_id, te.issue_iid
     HAVING completion_time IS NOT NULL
        AND completion_time >= ?
        AND completion_time < ?

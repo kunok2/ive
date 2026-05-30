@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Modal from '@/components/ui/Modal'
 import AgentAvatar from '@/components/agent/AgentAvatar'
+import CliLogo from '@/components/ui/CliLogo'
 import { useTranslations } from 'next-intl'
 import { CLI_CONFIG } from './types'
 import type { ProjectAgent } from './types'
@@ -134,7 +135,7 @@ export default function AgentPickerModal({
                 : <i className="fa-regular fa-circle text-xs shrink-0 w-4 opacity-30" />}
               <AgentAvatar avatar={pa.agent.avatar} size="xs" />
               <span className="font-bold">{pa.agent.name}</span>
-              <span className={`text-xs ${cli.color}`}><i className={`${cli.icon} mr-0.5`} />{cli.label}</span>
+              <span className={`text-xs inline-flex items-center gap-0.5 ${cli.color}`}><CliLogo cli={pa.agent.cliName} className="w-3 h-3" />{cli.label}</span>
               {isOffline && <span className="text-xs text-ive-red ml-auto"><i className="fa-solid fa-circle-exclamation mr-0.5" />{tIssue('agentOfflineWarning')}</span>}
               {!isOffline && pa.agent.status === 'busy' && <span className="ml-auto w-2 h-2 rounded-full bg-ive-cyan animate-pulse" />}
               {!isOffline && pa.agent.status === 'available' && <span className="ml-auto w-2 h-2 rounded-full bg-ive-green" />}

@@ -14,6 +14,8 @@ import {
   formatOpenCodeEventMarkdown,
   formatCodexEvent,
   formatCodexEventMarkdown,
+  formatGeminiEvent,
+  formatGeminiEventMarkdown,
   formatStreamEvent,
   formatStreamEventMarkdown,
   formatToolInput,
@@ -65,6 +67,7 @@ export async function runCliProcess(
 ): Promise<CliRunResult> {
   const isOpenCode = agent.cliName === 'opencode';
   const isCodex = agent.cliName === 'codex';
+  const isGemini = agent.cliName === 'gemini';
   const systemCliModel = agent.modelName || getSystemSetting(`cli.${agent.cliName}.model`);
   const conversationParts: string[] = [];
   const startTime = Date.now();
@@ -125,6 +128,27 @@ export async function runCliProcess(
         IVE_GITLAB_TOKEN: token,
         IVE_GITHUB_TOKEN: token,
       };
+    } else if (isGemini) {
+      // Gemini CLI: gemini --yolo --skip-trust --output-format stream-json -m <model> -p "prompt"
+      //   - --yolo: 모든 도구 호출 자동 승인(claude --dangerously-skip-permissions와 동일 취지)
+      //   - --skip-trust: headless 환경에서 워크스페이스 신뢰 확인 건너뜀(미설정 시 도구 실행이 차단됨)
+      //   - gemini 자체 MCP는 `gemini mcp`로 관리되므로 IVE mcp.config는 주입하지 않는다(codex와 동일).
+      args = [
+        ...cliParts.slice(1),
+        '--yolo',
+        '--skip-trust',
+        '--output-format', 'stream-json',
+        ...(systemCliModel ? ['-m', systemCliModel] : []),
+        '-p', prompt,
+      ];
+      spawnEnv = {
+        ...process.env,
+        GEMINI_CLI_TRUST_WORKSPACE: 'true',
+        GITLAB_TOKEN: token, GITLAB_API_TOKEN: token,
+        GITHUB_TOKEN: token,
+        IVE_GITLAB_TOKEN: token,
+        IVE_GITHUB_TOKEN: token,
+      };
     } else {
       // Claude Code: claude --dangerously-skip-permissions --output-format stream-json ...
       if (mcpServers) {
@@ -170,7 +194,7 @@ export async function runCliProcess(
       };
     }
 
-    log(`CMD: ${mainCmd} ${args.slice(0, (isOpenCode || isCodex) ? -1 : -2).join(' ')} [prompt omitted]`, 'system');
+    // 보안: 호출 명령어(플래그·인자 포함)는 상세보기 로그에 남기지 않는다.
     if (systemCliModel) log(`MODEL: ${systemCliModel}`, 'system');
     log(`CWD: ${workspacePath}`, 'system');
 
@@ -219,6 +243,8 @@ export async function runCliProcess(
     let totalTurns = 0;
     let assistantTurnCount = 0;
     let detectedModel = '';
+    // Gemini: assistant 메시지가 delta로 여러 번 쪼개져 오므로, 연속된 assistant 구간을 1턴으로 묶기 위한 플래그
+    let prevGeminiAssistant = false;
 
     const processEvent = (event: any) => {
       // 모델명 캡처
@@ -298,6 +324,35 @@ export async function runCliProcess(
           totalCacheReadTokens += Number(u.cached_input_tokens ?? 0);
           totalOutputTokens += Number(u.output_tokens ?? 0) + Number(u.reasoning_output_tokens ?? 0);
           totalTurns += 1;
+        }
+      } else if (isGemini) {
+        // Gemini stream-json 이벤트 처리: init / message / tool_use / tool_result / result
+        const formatted = formatGeminiEvent(event, project.showToolUsage);
+        if (formatted) logStream.write(formatted + '\n');
+        const md = formatGeminiEventMarkdown(event);
+        if (md) conversationParts.push(md);
+        // 도구/사고 활동 추적
+        if (event.type === 'tool_use') {
+          prevGeminiAssistant = false;
+          const toolName = event.tool_name ?? '';
+          if (toolName) {
+            const detail = formatToolInput(toolName, event.parameters ?? {});
+            setToolActivity(executionId, agent.id, toolName, detail);
+          }
+        } else if (event.type === 'message' && event.role === 'assistant') {
+          setThinking(executionId, agent.id);
+          if (!prevGeminiAssistant) assistantTurnCount++; // 연속 delta는 1턴으로 묶음
+          prevGeminiAssistant = true;
+        } else if (event.type === 'tool_result' || (event.type === 'message' && event.role === 'user')) {
+          prevGeminiAssistant = false;
+        }
+        // 토큰 누적 (result.stats; 비용 필드 없음 → DB 단가로 환산)
+        if (event.type === 'result') {
+          const s = event.stats ?? {};
+          // input_tokens는 캐시 포함 총 입력, cached는 캐시 읽기분(claude 패턴과 동일하게 총입력에 포함)
+          totalInputTokens += Number(s.input_tokens ?? 0);
+          totalCacheReadTokens += Number(s.cached ?? 0);
+          totalOutputTokens += Number(s.output_tokens ?? 0);
         }
       } else {
         // Claude Code 이벤트 처리

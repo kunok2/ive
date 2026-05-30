@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import { CliName, DEFAULT_AVATARS } from '@/types'
 import { useStore } from '@/lib/store'
 import { AvatarSelector } from '@/components/agent/AgentAvatar'
+import CliLogo from '@/components/ui/CliLogo'
 
 interface Props {
   onSuccess?: () => void
@@ -22,6 +23,7 @@ export default function AgentForm({ onSuccess, onCancel }: Props) {
 
   const cliTools: { value: CliName; label: string; icon: string; desc: string; defaultName: string }[] = [
     { value: 'claude', label: 'Claude Code', icon: 'fa-solid fa-atom', desc: t('claudeDesc'), defaultName: 'Claude' },
+    { value: 'gemini', label: 'Gemini CLI', icon: 'fa-brands fa-google', desc: t('geminiDesc'), defaultName: 'Gemini' },
     { value: 'codex', label: 'Codex CLI', icon: 'fa-solid fa-brain', desc: t('codexDesc'), defaultName: 'Codex' },
     { value: 'opencode', label: 'OpenCode', icon: 'fa-solid fa-terminal', desc: t('opencodeDesc'), defaultName: 'OpenCode' },
   ]
@@ -114,7 +116,7 @@ export default function AgentForm({ onSuccess, onCancel }: Props) {
                   : 'bg-ive-bg-card border-ive-border-subtle'
               }`}
             >
-              <i className={`${t.icon} text-xl w-6 text-center`} />
+              <CliLogo cli={t.value} className="w-6 h-6 shrink-0" />
               <div>
                 <div className={`text-base font-bold ${cliName === t.value ? 'text-ive-green' : 'text-ive-text'}`}>
                   {t.label}

@@ -104,17 +104,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (res.ok) {
       const data = await res.json()
       // 작업 중인 프로젝트를 최상단으로. 나머지는 서버의 last_activity_at DESC 순서 유지.
-      data.sort((a: any, b: any) => {
+      const sorted = [...data].sort((a: any, b: any) => {
         const aRunning = a.runningCount ?? 0
         const bRunning = b.runningCount ?? 0
         if (aRunning > 0 && bRunning === 0) return -1
         if (aRunning === 0 && bRunning > 0) return 1
         return 0
       })
-      const json = JSON.stringify(data)
+      const json = JSON.stringify(sorted)
       if (json !== lastProjectsJsonRef.current) {
         lastProjectsJsonRef.current = json
-        dispatch({ type: 'SET_PROJECTS', projects: data })
+        dispatch({ type: 'SET_PROJECTS', projects: sorted })
       }
     } else if (res.status === 401) {
       // 세션 만료: 사용자 상태 초기화 → 로그인 페이지로 리다이렉트

@@ -74,12 +74,15 @@ export function verifyReportToken(
   return { valid: true }
 }
 
-// 만료된 nonce 정리 (5분마다)
-setInterval(() => {
-  const now = Date.now()
-  for (const [key, ts] of usedNonces.entries()) {
-    if (now - ts > NONCE_EXPIRY_MS) {
-      usedNonces.delete(key)
+// 만료된 nonce 정리 (5분마다) — globalThis로 HMR 중복 등록 방지
+const CLEANUP_KEY = '__ive_nonce_cleanup'
+if (!(globalThis as any)[CLEANUP_KEY]) {
+  ;(globalThis as any)[CLEANUP_KEY] = setInterval(() => {
+    const now = Date.now()
+    for (const [key, ts] of usedNonces.entries()) {
+      if (now - ts > NONCE_EXPIRY_MS) {
+        usedNonces.delete(key)
+      }
     }
-  }
-}, 5 * 60 * 1000)
+  }, 5 * 60 * 1000)
+}
