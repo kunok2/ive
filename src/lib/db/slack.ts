@@ -170,6 +170,7 @@ function mapThreadSession(r: any): SlackThreadSession {
     threadTs: r.thread_ts,
     issueIid: r.issue_iid ?? null,
     cliSessionId: r.cli_session_id ?? null,
+    cliName: r.cli_name ?? null,
     updatedAt: r.updated_at,
   }
 }
@@ -188,11 +189,11 @@ export function createSlackThreadSession(s: { workspaceId: string; channelId: st
   `).run(s.workspaceId, s.channelId, s.threadTs, s.issueIid ?? null)
 }
 
-export function updateSlackThreadCliSession(workspaceId: string, channelId: string, threadTs: string, cliSessionId: string) {
+export function updateSlackThreadCliSession(workspaceId: string, channelId: string, threadTs: string, cliSessionId: string, cliName: string) {
   getDb().prepare(`
-    UPDATE slack_thread_session SET cli_session_id = ?, updated_at = datetime('now')
+    UPDATE slack_thread_session SET cli_session_id = ?, cli_name = ?, updated_at = datetime('now')
     WHERE workspace_id = ? AND channel_id = ? AND thread_ts = ?
-  `).run(cliSessionId, workspaceId, channelId, threadTs)
+  `).run(cliSessionId, cliName, workspaceId, channelId, threadTs)
 }
 
 // ── User mapping (Slack 유저 ↔ IVE 유저) ──

@@ -276,7 +276,9 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
     } else {
       issueIid = session.issueIid ?? null
     }
-    const cliSessionId = session?.cliSessionId ?? null
+    // resume은 같은 CLI가 만든 세션에만 (claude는 UUID, opencode는 ses_… 등 형식이 달라 호환 안 됨).
+    // CLI가 다르거나 기록이 없으면 새 대화로 시작.
+    const cliSessionId = (session?.cliSessionId && session?.cliName === agent.cliName) ? session.cliSessionId : null
 
     // 이슈 모드(레포 + dev-N 브랜치) / 프로젝트 모드(레포 기본 브랜치) — 둘 다 실제 레포 clone
     let workspacePath: string
@@ -330,7 +332,7 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
       },
       (ev) => {
         if (ev.type === 'session_id' && ev.content) {
-          updateSlackThreadCliSession(workspace.id, channel, convoId, ev.content)
+          updateSlackThreadCliSession(workspace.id, channel, convoId, ev.content, agent.cliName)
         } else if (ev.type === 'text' && ev.content) {
           full += ev.content
           void flush(false)

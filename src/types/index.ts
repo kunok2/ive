@@ -288,6 +288,7 @@ export interface SlackThreadSession {
   threadTs: string
   issueIid: number | null    // null = 일반 질문
   cliSessionId: string | null // chat-agent --resume 용
+  cliName: string | null      // 그 세션을 만든 CLI (resume 호환성 — 다른 CLI면 재사용 금지)
   updatedAt: string
 }
 

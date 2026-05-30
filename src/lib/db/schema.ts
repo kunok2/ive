@@ -923,10 +923,16 @@ export function initSchema(db: Database.Database) {
       thread_ts TEXT NOT NULL,
       issue_iid INTEGER,
       cli_session_id TEXT,
+      cli_name TEXT,
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       PRIMARY KEY (workspace_id, channel_id, thread_ts)
     );
   `)
+  // 기존 slack_thread_session에 cli_name 보강 (어느 CLI가 만든 세션인지 — resume 호환성 판단용)
+  try {
+    const cols = (db.prepare("PRAGMA table_info(slack_thread_session)").all() as any[]).map(c => c.name)
+    if (!cols.includes('cli_name')) db.exec("ALTER TABLE slack_thread_session ADD COLUMN cli_name TEXT")
+  } catch { /* ignore */ }
   // Slack 유저 ↔ IVE 유저 개인 매핑 (워크스페이스 기본유저 덮어쓰기)
   db.exec(`
     CREATE TABLE IF NOT EXISTS slack_user_map (
