@@ -255,6 +255,48 @@ export interface ReportSendLog {
   sentAt: string
 }
 
+// ── Slack 통합 ──
+
+// Slack 워크스페이스 (행마다 워크스페이스 1개 = 봇 토큰 1쌍). 멀티 워크스페이스 관리.
+export interface SlackWorkspace {
+  id: string
+  teamId: string          // Slack 워크스페이스 ID (이벤트 라우팅 키, 고유)
+  teamName: string        // Slack 측 워크스페이스 이름 (auth.test로 자동 채움)
+  name: string            // IVE 내 표시 이름
+  botUserId: string       // 봇 자신의 user id (자기멘션 무한루프 차단용)
+  defaultUserId: string | null  // 이 워크스페이스 멘션의 기본 IVE 유저
+  enabled: boolean
+  createdAt: string
+  // botToken / signingSecret은 암호화 저장되며 응답에 포함하지 않음
+}
+
+// 채널 ↔ 프로젝트 연결 (채널 = 프로젝트)
+export interface SlackChannelConfig {
+  workspaceId: string
+  channelId: string
+  channelName: string | null
+  projectId: string | null   // null = 일반 대화
+  iveUserId: string | null   // 이 채널 멘션 시 사용할 IVE 유저 (null = 워크스페이스 기본)
+  updatedAt: string
+}
+
+// 스레드 ↔ 이슈 바인딩 (스레드 = 이슈)
+export interface SlackThreadSession {
+  workspaceId: string
+  channelId: string
+  threadTs: string
+  issueIid: number | null    // null = 일반 질문
+  cliSessionId: string | null // chat-agent --resume 용
+  updatedAt: string
+}
+
+// Slack 유저 ↔ IVE 유저 개인 매핑 (워크스페이스 기본유저 덮어쓰기)
+export interface SlackUserMap {
+  workspaceId: string
+  slackUserId: string
+  iveUserId: string
+}
+
 // 사용자 활동 로그 카테고리
 export type ActivityCategory = 'auth' | 'project' | 'agent' | 'execution' | 'admin' | 'settings' | 'task'
 

@@ -879,6 +879,56 @@ export function initSchema(db: Database.Database) {
     }
   } catch (e) { console.error("Migration failed for projects report_secret:", e) }
 
+  // ── Slack 통합 ──
+  // 워크스페이스 (행마다 워크스페이스 1개 = 봇 토큰 1쌍). 멀티 워크스페이스 관리.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS slack_workspaces (
+      id TEXT PRIMARY KEY,
+      team_id TEXT NOT NULL UNIQUE,
+      team_name TEXT NOT NULL DEFAULT '',
+      name TEXT NOT NULL DEFAULT '',
+      bot_token TEXT NOT NULL,
+      signing_secret TEXT NOT NULL,
+      bot_user_id TEXT NOT NULL DEFAULT '',
+      default_user_id TEXT,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `)
+  // 채널 ↔ 프로젝트 연결 (채널 = 프로젝트)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS slack_channel_config (
+      workspace_id TEXT NOT NULL,
+      channel_id TEXT NOT NULL,
+      channel_name TEXT,
+      project_id TEXT,
+      ive_user_id TEXT,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (workspace_id, channel_id)
+    );
+  `)
+  // 스레드 ↔ 이슈 바인딩 (스레드 = 이슈)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS slack_thread_session (
+      workspace_id TEXT NOT NULL,
+      channel_id TEXT NOT NULL,
+      thread_ts TEXT NOT NULL,
+      issue_iid INTEGER,
+      cli_session_id TEXT,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (workspace_id, channel_id, thread_ts)
+    );
+  `)
+  // Slack 유저 ↔ IVE 유저 개인 매핑 (워크스페이스 기본유저 덮어쓰기)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS slack_user_map (
+      workspace_id TEXT NOT NULL,
+      slack_user_id TEXT NOT NULL,
+      ive_user_id TEXT NOT NULL,
+      PRIMARY KEY (workspace_id, slack_user_id)
+    );
+  `)
+
   seedAdmin(db)
   seedTokenPricing(db)
 }

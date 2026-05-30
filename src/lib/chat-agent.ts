@@ -88,6 +88,7 @@ interface ChatAgentOptions {
   userMessage: string
   workspacePath: string
   userLocale?: string
+  generalMode?: boolean  // true = 이슈 미바인딩 일반 질문 (워크스페이스/이슈 컨텍스트 없음)
 }
 
 /**
@@ -100,7 +101,7 @@ interface ChatAgentOptions {
  * Shared by both the legacy SSE generator and the WebSocket callback version.
  */
 async function prepareChatSpawn(opts: ChatAgentOptions) {
-  const { cliSessionId, project, agent, token, issueIid, issueTitle, issueDescription, userMessage, workspacePath, userLocale } = opts
+  const { cliSessionId, project, agent, token, issueIid, issueTitle, issueDescription, userMessage, workspacePath, userLocale, generalMode } = opts
 
   const locale = userLocale || getSystemSetting('locale') || defaultLocale
   const isKo = locale === 'ko'
@@ -114,7 +115,7 @@ async function prepareChatSpawn(opts: ChatAgentOptions) {
   const isOpenCode = agent.cliName === 'opencode'
   const isCodex = agent.cliName === 'codex'
   const cliParts = resolvedCliPath.split(' ')
-  const mainCmd = cliParts[0]
+  let mainCmd = cliParts[0]
 
   // MCP config
   const mcpConfigRaw = getSystemSetting('mcp.config')
@@ -125,7 +126,20 @@ async function prepareChatSpawn(opts: ChatAgentOptions) {
 
   // Build prompt
   let prompt: string
-  if (isFirstMessage) {
+  if (isFirstMessage && generalMode) {
+    // 이슈 미바인딩 일반 질문 — 워크스페이스/이슈 컨텍스트 없음
+    prompt = `You are a helpful AI assistant for the "${project.name}" project. ${langInstruction}
+
+You are in a lightweight chat session. There is no specific issue or code workspace bound to this conversation — answer general questions about the project, give advice, or explain concepts.
+
+## User Message:
+${userMessage}
+
+## Instructions:
+- Answer questions clearly and concisely.
+- You do NOT have the repository checked out here. If the user needs code-level work, suggest they start a thread bound to an issue (e.g. mention an issue number).
+- IMPORTANT: ${langInstruction}`
+  } else if (isFirstMessage) {
     prompt = `You are a helpful AI assistant for issue #${issueIid} "${issueTitle}". ${langInstruction}
 
 You are in a chat session to help the user with questions, quick fixes, or explanations about this issue.
@@ -146,6 +160,9 @@ ${userMessage}
 
   let args: string[]
   let spawnEnv: Record<string, string | undefined>
+  // opencode 바이너리를 node가 직접 spawn하면 (특히 macOS) 출력 없이 종료되는 문제가 있다.
+  // sh -c 로 감싸고 프롬프트를 stdin으로 전달하면 정상 동작 + 스트리밍 OK.
+  let stdinInput: string | undefined
 
   if (isOpenCode) {
     const opencodeConfig: any = {
@@ -154,11 +171,11 @@ ${userMessage}
     }
     if (mcpServers) opencodeConfig.mcp = mcpServers
 
-    args = [...cliParts.slice(1), 'run', '--format', 'json']
-    if (cliSessionId) {
-      args.push('-s', cliSessionId)
-    }
-    args.push(prompt)
+    const shq = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`
+    const ocParts = [...cliParts, 'run', '--format', 'json', ...(cliSessionId ? ['-s', cliSessionId] : [])]
+    mainCmd = 'sh'
+    args = ['-c', `exec ${ocParts.map(shq).join(' ')}`]
+    stdinInput = prompt  // 프롬프트는 arg 대신 stdin으로
 
     spawnEnv = {
       ...process.env,
@@ -225,7 +242,7 @@ ${userMessage}
     }
   }
 
-  return { mainCmd, args, spawnEnv, cliName: agent.cliName, workspacePath, issueIid }
+  return { mainCmd, args, spawnEnv, cliName: agent.cliName, workspacePath, issueIid, stdinInput }
 }
 
 /**
@@ -238,14 +255,19 @@ export async function runChatAgentWithCallback(
   onEvent: (event: { type: 'text' | 'done' | 'error' | 'session_id'; content?: string }) => boolean,
 ): Promise<void> {
   const { sessionId, cliSessionId } = opts
-  const { mainCmd, args, spawnEnv, cliName, workspacePath, issueIid } = await prepareChatSpawn(opts)
+  const { mainCmd, args, spawnEnv, cliName, workspacePath, issueIid, stdinInput } = await prepareChatSpawn(opts)
 
   const child = spawn(mainCmd, args, {
     cwd: workspacePath,
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: [stdinInput !== undefined ? 'pipe' : 'ignore', 'pipe', 'pipe'],
     env: spawnEnv as NodeJS.ProcessEnv,
     detached: true,
   })
+
+  // 프롬프트를 stdin으로 전달하는 CLI(opencode)는 여기서 써주고 닫는다.
+  if (stdinInput !== undefined && child.stdin) {
+    try { child.stdin.write(stdinInput); child.stdin.end() } catch { /* ignore */ }
+  }
 
   getAgentMap().set(sessionId, child)
 
@@ -315,14 +337,18 @@ export async function runChatAgentWithCallback(
  */
 export async function* runChatAgent(opts: ChatAgentOptions): AsyncGenerator<{ type: 'text' | 'done' | 'error' | 'session_id'; content?: string }> {
   const { sessionId, cliSessionId } = opts
-  const { mainCmd, args, spawnEnv, cliName, workspacePath, issueIid } = await prepareChatSpawn(opts)
+  const { mainCmd, args, spawnEnv, cliName, workspacePath, issueIid, stdinInput } = await prepareChatSpawn(opts)
 
   const child = spawn(mainCmd, args, {
     cwd: workspacePath,
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: [stdinInput !== undefined ? 'pipe' : 'ignore', 'pipe', 'pipe'],
     env: spawnEnv as NodeJS.ProcessEnv,
     detached: true,
   })
+
+  if (stdinInput !== undefined && child.stdin) {
+    try { child.stdin.write(stdinInput); child.stdin.end() } catch { /* ignore */ }
+  }
 
   getAgentMap().set(sessionId, child)
 
@@ -403,7 +429,9 @@ export async function* runChatAgent(opts: ChatAgentOptions): AsyncGenerator<{ ty
  */
 function extractSessionId(event: any, cliName: string): string | null {
   if (cliName === 'opencode') {
-    // OpenCode: session info in init/session event
+    // OpenCode: 각 이벤트에 sessionID(대문자 ID)가 박혀 있음. part 안에도 존재.
+    if (event.sessionID) return event.sessionID
+    if (event.part?.sessionID) return event.part.sessionID
     if (event.session?.id) return event.session.id
     if (event.sessionId) return event.sessionId
     if (event.type === 'session' && event.id) return event.id
@@ -449,6 +477,18 @@ function extractTextFromEvent(event: any, cliName: string): string | null {
     }
   }
   return null
+}
+
+/**
+ * Prepare a lightweight workspace for an issue-less general chat (no clone).
+ * The CLI just needs a cwd; no repository context is provided.
+ */
+export function prepareGeneralWorkspace(projectId: string): string {
+  const workspacePath = path.join(process.cwd(), 'workspaces', projectId, 'chat-general')
+  if (!fs.existsSync(workspacePath)) {
+    fs.mkdirSync(workspacePath, { recursive: true })
+  }
+  return workspacePath
 }
 
 /**

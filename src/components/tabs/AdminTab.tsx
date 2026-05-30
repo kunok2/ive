@@ -3,23 +3,22 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import PullToRefresh from '@/components/ui/PullToRefresh'
-import TerminalTab from './TerminalTab'
 import UsersPanel from './admin/UsersPanel'
 import MailPanel from './admin/MailPanel'
 import SettingsPanel from './admin/SettingsPanel'
 import OAuthProvidersPanel from './admin/OAuthProvidersPanel'
+import SlackWorkspacesPanel from './admin/SlackWorkspacesPanel'
 import LogsPanel from './admin/LogsPanel'
 
-type SubTab = 'users' | 'mail' | 'settings' | 'oauth' | 'cli' | 'logs'
+type SubTab = 'users' | 'mail' | 'settings' | 'oauth' | 'slack' | 'logs'
 
 export default function AdminTab() {
   const t = useTranslations('admin')
-  const tc = useTranslations('common')
   const [subTab, setSubTab] = useState<SubTab>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('ive-admin-subtab')
-      if (saved && ['users', 'mail', 'settings', 'oauth', 'cli', 'logs'].includes(saved)) return saved as SubTab
-      if (saved === 'activity') return 'users'
+      if (saved && ['users', 'mail', 'settings', 'oauth', 'slack', 'logs'].includes(saved)) return saved as SubTab
+      if (saved === 'activity' || saved === 'cli') return 'users'
     }
     return 'users'
   })
@@ -38,7 +37,7 @@ export default function AdminTab() {
     { key: 'mail', icon: 'fa-solid fa-envelope', label: t('mail') },
     { key: 'settings', icon: 'fa-solid fa-gear', label: t('settings') },
     { key: 'oauth', icon: 'fa-solid fa-key', label: 'OAuth' },
-    { key: 'cli', icon: 'fa-solid fa-terminal', label: t('cli') },
+    { key: 'slack', icon: 'fa-brands fa-slack', label: 'Slack' },
     { key: 'logs', icon: 'fa-solid fa-file-lines', label: t('logs') },
   ]
 
@@ -69,7 +68,7 @@ export default function AdminTab() {
           {subTab === 'mail' && <MailPanel key={refreshKey} />}
           {subTab === 'settings' && <SettingsPanel key={refreshKey} />}
           {subTab === 'oauth' && <OAuthProvidersPanel key={refreshKey} />}
-          {subTab === 'cli' && <TerminalTab />}
+          {subTab === 'slack' && <SlackWorkspacesPanel key={refreshKey} />}
           {subTab === 'logs' && <LogsPanel key={refreshKey} />}
         </div>
       </div>
