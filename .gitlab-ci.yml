@@ -41,9 +41,8 @@ deploy:
     - sleep 5
     - docker compose ps
     - docker compose logs --tail=20
-    - echo "=== 6. 미사용 이미지 정리 ==="
-    - docker image prune -f
-    - docker builder prune -a -f --filter 'until=24h'
+    # 미사용 이미지/빌드 캐시 정리는 배포 서버의 일일 크론(/usr/local/bin/docker-cleanup.sh, 매일 03:00)이
+    # 더 광범위하게(container/image -a/builder/volume prune) 수행하므로 CI에서는 중복 정리하지 않는다.
     - echo "=== 배포 완료 ==="
   only:
     - main
