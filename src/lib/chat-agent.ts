@@ -6,6 +6,7 @@ import { getSystemSetting, getProject, getAgentsByUser, countActiveExecutionsByA
 import { decrypt } from './crypto'
 import { defaultLocale } from '@/i18n/config'
 import { Agent, Project } from '@/types'
+import { resolveCliPath, buildCliInvocation } from './cli-invocation'
 
 const execFile = promisify(require('child_process').execFile)
 
@@ -59,23 +60,6 @@ export function pickAgentForChat(projectId: string, requesterUserId: string): { 
   return null // All agents busy
 }
 
-/**
- * Resolve CLI path (same logic as scanner).
- */
-async function resolveCliPath(agent: Agent): Promise<string> {
-  const systemCliPath = getSystemSetting(`cli.${agent.cliName}.path`)
-  let resolved = systemCliPath || agent.cliPath
-  const mainBin = resolved.split(' ')[0]
-  if (!fs.existsSync(mainBin)) {
-    try {
-      const { stdout } = await execFile('which', [path.basename(mainBin)])
-      const detected = stdout.trim()
-      if (detected) resolved = resolved.replace(mainBin, detected)
-    } catch { /* keep original */ }
-  }
-  return resolved
-}
-
 interface ChatAgentOptions {
   sessionId: string
   cliSessionId: string | null  // null = first message, string = resume
@@ -111,18 +95,7 @@ async function prepareChatSpawn(opts: ChatAgentOptions) {
 
   const isFirstMessage = !cliSessionId
   const resolvedCliPath = await resolveCliPath(agent)
-  const systemCliModel = getSystemSetting(`cli.${agent.cliName}.model`)
-  const isOpenCode = agent.cliName === 'opencode'
-  const isCodex = agent.cliName === 'codex'
-  const cliParts = resolvedCliPath.split(' ')
-  let mainCmd = cliParts[0]
-
-  // MCP config
-  const mcpConfigRaw = getSystemSetting('mcp.config')
-  let mcpServers: Record<string, any> | null = null
-  if (mcpConfigRaw) {
-    try { mcpServers = JSON.parse(mcpConfigRaw) } catch { /* ignore */ }
-  }
+  const model = getSystemSetting(`cli.${agent.cliName}.model`) || null
 
   // Build prompt
   let prompt: string
@@ -158,91 +131,20 @@ ${userMessage}
     prompt = userMessage
   }
 
-  let args: string[]
-  let spawnEnv: Record<string, string | undefined>
-  // opencode 바이너리를 node가 직접 spawn하면 (특히 macOS) 출력 없이 종료되는 문제가 있다.
-  // sh -c 로 감싸고 프롬프트를 stdin으로 전달하면 정상 동작 + 스트리밍 OK.
-  let stdinInput: string | undefined
+  // CLI별 명령/인자/환경 조립은 단일 모듈(cli-invocation)에 위임.
+  // 채팅은 maxTurns 20 고정, resume(cliSessionId) 지원.
+  const inv = buildCliInvocation({
+    cliName: agent.cliName,
+    resolvedCliPath,
+    prompt,
+    token,
+    workspacePath,
+    maxTurns: 20,
+    model,
+    cliSessionId,
+  })
 
-  if (isOpenCode) {
-    const opencodeConfig: any = {
-      agent: { coder: { steps: 20, permission: { '*': 'allow' }, ...(systemCliModel ? { model: systemCliModel } : {}) } },
-      compaction: { auto: true },
-    }
-    if (mcpServers) opencodeConfig.mcp = mcpServers
-
-    const shq = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`
-    const ocParts = [...cliParts, 'run', '--format', 'json', ...(cliSessionId ? ['-s', cliSessionId] : [])]
-    mainCmd = 'sh'
-    args = ['-c', `exec ${ocParts.map(shq).join(' ')}`]
-    stdinInput = prompt  // 프롬프트는 arg 대신 stdin으로
-
-    spawnEnv = {
-      ...process.env,
-      OPENCODE_CONFIG_CONTENT: JSON.stringify(opencodeConfig),
-      IVE_GITLAB_TOKEN: token,
-      IVE_GITHUB_TOKEN: token,
-    }
-  } else if (isCodex) {
-    // Codex: 첫 메시지는 `codex exec`, 이어지는 메시지는 `codex exec resume <SESSION_ID>`로 세션 유지
-    const codexFlags = [
-      '--json',
-      '--skip-git-repo-check',
-      '--dangerously-bypass-approvals-and-sandbox',
-      ...(systemCliModel ? ['-m', systemCliModel] : []),
-    ]
-    if (cliSessionId) {
-      args = [...cliParts.slice(1), 'exec', 'resume', ...codexFlags, cliSessionId, prompt]
-    } else {
-      args = [...cliParts.slice(1), 'exec', ...codexFlags, prompt]
-    }
-    spawnEnv = {
-      ...process.env,
-      GITLAB_TOKEN: token, GITLAB_API_TOKEN: token,
-      GITHUB_TOKEN: token,
-      IVE_GITLAB_TOKEN: token,
-      IVE_GITHUB_TOKEN: token,
-    }
-  } else {
-    // Claude Code MCP setup
-    if (mcpServers) {
-      const claudeMcp: Record<string, any> = {}
-      for (const [name, cfg] of Object.entries(mcpServers)) {
-        if ((cfg as any).type === 'local' && Array.isArray((cfg as any).command) && (cfg as any).command.length > 0) {
-          claudeMcp[name] = { command: (cfg as any).command[0], args: (cfg as any).command.slice(1), ...((cfg as any).environment ? { env: (cfg as any).environment } : {}) }
-        } else if ((cfg as any).type === 'remote' && (cfg as any).url) {
-          claudeMcp[name] = { url: (cfg as any).url, ...((cfg as any).headers ? { headers: (cfg as any).headers } : {}) }
-        }
-      }
-      if (Object.keys(claudeMcp).length > 0) {
-        try { fs.writeFileSync(path.join(workspacePath, '.mcp.json'), JSON.stringify({ mcpServers: claudeMcp }, null, 2)) } catch { /* ignore */ }
-      }
-    }
-
-    args = [
-      ...cliParts.slice(1),
-      '--dangerously-skip-permissions',
-      '--output-format', 'stream-json',
-      '--verbose',
-      '--max-turns', '20',
-      ...(systemCliModel ? ['--model', systemCliModel] : []),
-      '--allowedTools', 'Read', 'Edit', 'Write', 'Grep', 'Glob', 'Bash', 'WebFetch',
-    ]
-    if (cliSessionId) {
-      args.push('--resume', cliSessionId)
-    }
-    args.push('-p', prompt)
-
-    spawnEnv = {
-      ...process.env,
-      GITLAB_TOKEN: token, GITLAB_API_TOKEN: token,
-      GITHUB_TOKEN: token,
-      IVE_GITLAB_TOKEN: token,
-      IVE_GITHUB_TOKEN: token,
-    }
-  }
-
-  return { mainCmd, args, spawnEnv, cliName: agent.cliName, workspacePath, issueIid, stdinInput }
+  return { mainCmd: inv.mainCmd, args: inv.args, spawnEnv: inv.env, cliName: agent.cliName, workspacePath, issueIid, stdinInput: inv.stdinInput }
 }
 
 /**

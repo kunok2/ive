@@ -1,14 +1,13 @@
 /**
- * CLI 프로세스 실행: node-pty/spawn, 이벤트 파싱, 토큰 집계
+ * CLI 프로세스 실행: 이벤트 파싱, 토큰 집계.
+ * (CLI 경로 해석·명령/인자 조립은 ../cli-invocation 으로 통합)
  */
-import fs from "fs";
-import path from "path";
-import { promisify } from "util";
 import { spawn } from "child_process";
 import { Project, Agent } from "@/types";
 import { getSystemSetting, updateExecutionPid, updateExecutionTokens } from "../db";
 import { setToolActivity, setThinking, clearActivity } from "../tool-activity";
 import { calcCostFromDb } from "../token-pricing";
+import { buildCliInvocation, resolveCliPath } from "../cli-invocation";
 import {
   formatOpenCodeEvent,
   formatOpenCodeEventMarkdown,
@@ -21,34 +20,12 @@ import {
   formatToolInput,
 } from "./formatters";
 
-const execFile = promisify(require('child_process').execFile);
+// resolveCliPath는 cli-invocation으로 이동. 기존 import 경로(execute.ts) 호환을 위해 re-export.
+export { resolveCliPath };
 
 export interface CliRunResult {
   durationSeconds: number;
   conversationParts: string[];
-}
-
-/**
- * CLI 경로를 검증/해석합니다. 존재하지 않으면 which로 자동 탐색합니다.
- */
-export async function resolveCliPath(
-  agent: Agent,
-  log: (msg: string, type?: 'info' | 'error' | 'warn' | 'system') => void,
-): Promise<string> {
-  const systemCliPath = getSystemSetting(`cli.${agent.cliName}.path`);
-  let resolvedCliPath = systemCliPath || agent.cliPath;
-  const mainBin = resolvedCliPath.split(' ')[0];
-  if (!fs.existsSync(mainBin)) {
-    try {
-      const { stdout } = await execFile('which', [path.basename(mainBin)]);
-      const detected = stdout.trim();
-      if (detected) {
-        log(`CLI 경로 "${mainBin}" 없음 → "${detected}" 감지`, 'system');
-        resolvedCliPath = resolvedCliPath.replace(mainBin, detected);
-      }
-    } catch { /* which 실패 시 원래 경로 유지 */ }
-  }
-  return resolvedCliPath;
 }
 
 /**
@@ -73,126 +50,19 @@ export async function runCliProcess(
   const startTime = Date.now();
 
   await new Promise<void>((resolve, reject) => {
-    const cliParts = resolvedCliPath.split(' ');
-    const mainCmd = cliParts[0];
-
-    let args: string[];
-    let spawnEnv: Record<string, string | undefined>;
-
-    // MCP 설정 로드 (시스템 전체 설정)
-    const mcpConfigRaw = getSystemSetting('mcp.config');
-    let mcpServers: Record<string, any> | null = null;
-    if (mcpConfigRaw) {
-      try { mcpServers = JSON.parse(mcpConfigRaw); } catch { /* 잘못된 JSON 무시 */ }
-    }
-
-    if (isOpenCode) {
-      // opencode run --format json "prompt"
-      const opencodeConfig: any = {
-        agent: { coder: { steps: agent.maxTurns || 200, permission: { '*': 'allow' }, ...(systemCliModel ? { model: systemCliModel } : {}) } },
-        compaction: { auto: true },
-      };
-      if (mcpServers) opencodeConfig.mcp = mcpServers;
-
-      args = [
-        ...cliParts.slice(1),
-        'run',
-        '--format', 'json',
-        prompt,
-      ];
-      spawnEnv = {
-        ...process.env,
-        OPENCODE_CONFIG_CONTENT: JSON.stringify(opencodeConfig),
-        IVE_GITLAB_TOKEN: token,
-        IVE_GITHUB_TOKEN: token,
-      };
-    } else if (isCodex) {
-      // Codex: codex exec --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox "prompt"
-      //   - exec: 비대화형 실행, --json: JSONL 이벤트 스트림
-      //   - IVE는 Docker로 외부 샌드박싱되며 브랜치/커밋/푸시는 IVE가 직접 처리하므로,
-      //     승인 대기로 인한 hang을 막기 위해 승인/샌드박스를 우회한다(claude의 --dangerously-skip-permissions와 동일 취지).
-      //   - codex 자체 MCP는 ~/.codex/config.toml에서 로드되므로 IVE mcp.config는 주입하지 않는다.
-      args = [
-        ...cliParts.slice(1),
-        'exec',
-        '--json',
-        '--skip-git-repo-check',
-        '--dangerously-bypass-approvals-and-sandbox',
-        ...(systemCliModel ? ['-m', systemCliModel] : []),
-        prompt,
-      ];
-      spawnEnv = {
-        ...process.env,
-        GITLAB_TOKEN: token, GITLAB_API_TOKEN: token,
-        GITHUB_TOKEN: token,
-        IVE_GITLAB_TOKEN: token,
-        IVE_GITHUB_TOKEN: token,
-      };
-    } else if (isGemini) {
-      // Gemini CLI: gemini --yolo --skip-trust --output-format stream-json -m <model> -p "prompt"
-      //   - --yolo: 모든 도구 호출 자동 승인(claude --dangerously-skip-permissions와 동일 취지)
-      //   - --skip-trust: headless 환경에서 워크스페이스 신뢰 확인 건너뜀(미설정 시 도구 실행이 차단됨)
-      //   - gemini 자체 MCP는 `gemini mcp`로 관리되므로 IVE mcp.config는 주입하지 않는다(codex와 동일).
-      args = [
-        ...cliParts.slice(1),
-        '--yolo',
-        '--skip-trust',
-        '--output-format', 'stream-json',
-        ...(systemCliModel ? ['-m', systemCliModel] : []),
-        '-p', prompt,
-      ];
-      spawnEnv = {
-        ...process.env,
-        GEMINI_CLI_TRUST_WORKSPACE: 'true',
-        GITLAB_TOKEN: token, GITLAB_API_TOKEN: token,
-        GITHUB_TOKEN: token,
-        IVE_GITLAB_TOKEN: token,
-        IVE_GITHUB_TOKEN: token,
-      };
-    } else {
-      // Claude Code: claude --dangerously-skip-permissions --output-format stream-json ...
-      if (mcpServers) {
-        const claudeMcp: Record<string, any> = {};
-        for (const [name, cfg] of Object.entries(mcpServers)) {
-          if (cfg.type === 'local' && Array.isArray(cfg.command) && cfg.command.length > 0) {
-            claudeMcp[name] = {
-              command: cfg.command[0],
-              args: cfg.command.slice(1),
-              ...(cfg.environment ? { env: cfg.environment } : {}),
-            };
-          } else if (cfg.type === 'remote' && cfg.url) {
-            claudeMcp[name] = { url: cfg.url, ...(cfg.headers ? { headers: cfg.headers } : {}) };
-          }
-        }
-        if (Object.keys(claudeMcp).length > 0) {
-          try {
-            fs.writeFileSync(
-              path.join(workspacePath, '.mcp.json'),
-              JSON.stringify({ mcpServers: claudeMcp }, null, 2)
-            );
-          } catch { /* 파일 쓰기 실패 시 무시 */ }
-        }
-      }
-
-      const allowedTools = ['Read', 'Edit', 'Write', 'Grep', 'Glob', 'Bash', 'WebFetch'];
-      args = [
-        ...cliParts.slice(1),
-        '--dangerously-skip-permissions',
-        '--output-format', 'stream-json',
-        '--verbose',
-        '--max-turns', String(agent.maxTurns || 200),
-        ...(systemCliModel ? ['--model', systemCliModel] : []),
-        '--allowedTools', ...allowedTools,
-        '-p', prompt,
-      ];
-      spawnEnv = {
-        ...process.env,
-        GITLAB_TOKEN: token, GITLAB_API_TOKEN: token,
-        GITHUB_TOKEN: token,
-        IVE_GITLAB_TOKEN: token,
-        IVE_GITHUB_TOKEN: token,
-      };
-    }
+    // CLI별 명령/인자/환경 조립은 단일 모듈(cli-invocation)에 위임한다.
+    // 스캐너는 resume 안 하고(maxTurns는 에이전트 설정), 모델은 systemCliModel을 그대로 전달.
+    // (opencode는 macOS 호환을 위해 sh -c + stdin 으로 실행됨 — cli-invocation 참고)
+    const { mainCmd, args, env: spawnEnv, stdinInput } = buildCliInvocation({
+      cliName: agent.cliName,
+      resolvedCliPath,
+      prompt,
+      token,
+      workspacePath,
+      maxTurns: agent.maxTurns || 200,
+      model: systemCliModel || null,
+      cliSessionId: null,
+    });
 
     // 보안: 호출 명령어(플래그·인자 포함)는 상세보기 로그에 남기지 않는다.
     if (systemCliModel) log(`MODEL: ${systemCliModel}`, 'system');
@@ -200,10 +70,15 @@ export async function runCliProcess(
 
     const child = spawn(mainCmd, args, {
       cwd: workspacePath,
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: [stdinInput !== undefined ? 'pipe' : 'ignore', 'pipe', 'pipe'],
       env: spawnEnv as NodeJS.ProcessEnv,
       detached: true,
     });
+
+    // 프롬프트를 stdin으로 전달하는 CLI(opencode)는 여기서 써주고 닫는다.
+    if (stdinInput !== undefined && child.stdin) {
+      try { child.stdin.write(stdinInput); child.stdin.end(); } catch { /* ignore */ }
+    }
 
     // PID를 DB에 저장 (강제 종료 및 좀비 프로세스 정리용)
     if (child.pid) {
@@ -393,7 +268,7 @@ export async function runCliProcess(
       }
     };
 
-    child.stdout.on('data', (data: Buffer) => {
+    child.stdout?.on('data', (data: Buffer) => {
       resetIdleTimer();
       stdoutBuffer += data.toString();
       const lines = stdoutBuffer.split('\n');
@@ -408,7 +283,7 @@ export async function runCliProcess(
         }
       }
     });
-    child.stderr.on('data', (data: Buffer) => {
+    child.stderr?.on('data', (data: Buffer) => {
       resetIdleTimer();
       const raw = data.toString();
       stderrBuffer += raw;
