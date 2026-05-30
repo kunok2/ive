@@ -8,7 +8,7 @@ import {
   prepareChatWorkspace, prepareProjectWorkspace,
   runChatAgentWithCallback, isChatAgentRunning,
 } from './chat-agent'
-import { fetchSingleIssue, fetchAllProjectIssues } from './provider'
+import { fetchSingleIssue } from './provider'
 import { Agent } from '@/types'
 
 const SLACK_API = 'https://slack.com/api'
@@ -187,16 +187,6 @@ export function parseIssueNumber(text: string): number | null {
   return null
 }
 
-const ASK_VERB = /(있|어떤|무슨|뭐|목록|보여|알려|리스트|list|what|which|show)/i
-/** "어떤 작업/이슈 있어?" 류 — 작업(이슈) 목록 조회 의도 */
-function asksIssueList(text: string): boolean {
-  return /(작업|이슈|issue|task)/i.test(text) && ASK_VERB.test(text)
-}
-/** "어떤 프로젝트 있어?" 류 — 프로젝트 목록 조회 의도 */
-function asksProjectList(text: string): boolean {
-  return /(프로젝트|project)/i.test(text) && ASK_VERB.test(text)
-}
-
 // ── 멘션 처리 (백그라운드) ──
 
 interface AppMentionEvent {
@@ -211,10 +201,20 @@ interface AppMentionEvent {
 }
 
 /**
+ * 응답 출력 싱크 — Slack 포스팅을 추상화해서 로컬 테스트(콘솔)로도 구동 가능하게 함.
+ * post: 새 메시지(placeholder/응답) 게시, 메시지 id 반환. update: 그 메시지를 갱신(스트리밍).
+ */
+export interface MentionSink {
+  post(text: string): Promise<string | null>
+  update(id: string, text: string): Promise<void>
+}
+
+/**
  * app_mention 이벤트 처리. events 라우트가 200 ACK 후 fire-and-forget으로 호출.
  * 커스텀 long-running 서버라 응답 이후에도 안전하게 백그라운드 실행됨.
+ * sink 미지정 시 Slack으로 포스팅. 로컬 테스트는 콘솔 sink를 주입.
  */
-export async function handleAppMention(workspace: DecryptedWorkspace, event: AppMentionEvent): Promise<void> {
+export async function handleAppMention(workspace: DecryptedWorkspace, event: AppMentionEvent, providedSink?: MentionSink): Promise<void> {
   const { botToken } = workspace
   const channel = event.channel
   const slackUser = event.user
@@ -223,73 +223,57 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
   // 봇 자기 멘션/봇 메시지 무한루프 차단
   if (event.bot_id || event.subtype || slackUser === workspace.botUserId) return
 
-  // 답변 포스팅 대상: 스레드 안에서 부른 경우에만 스레드, 평소엔 채널에 바로 답.
-  const replyTs = event.thread_ts
+  // 스레드 루트 = 대화 단위. 스레드 안이면 그 스레드, 채널 최상위 멘션이면 그 메시지(ts)로 스레드를 만들어 답.
+  const threadRoot = event.thread_ts || event.ts || ''
+  const replyTs = threadRoot
   const cleanText = stripBotMention(event.text || '', workspace.botUserId)
+
+  // Slack 기본 sink (테스트에서는 providedSink로 콘솔 출력 등 주입)
+  const sink: MentionSink = providedSink ?? {
+    post: (text) => postMessage(botToken, channel, text, replyTs),
+    update: (id, text) => updateMessage(botToken, channel, id, text),
+  }
 
   try {
     // 워크스페이스 소유자(IVE 유저). 이 유저의 에이전트·프로젝트만 사용 (남의 것 접근 불가).
     const ownerUserId = workspace.defaultUserId
     if (!ownerUserId) {
-      await postMessage(botToken, channel, `이 워크스페이스에 소유자(IVE 유저)가 지정되지 않았어요. 관리자에게 문의해 주세요.`, replyTs)
+      await sink.post(`이 워크스페이스에 소유자(IVE 유저)가 지정되지 않았어요. 관리자에게 문의해 주세요.`)
       return
     }
     const agent = pickOwnerAgent(ownerUserId)
     if (!agent) {
-      await postMessage(botToken, channel, `소유자에게 사용할 수 있는 에이전트가 없어요. 관리자에게 문의해 주세요.`, replyTs)
+      await sink.post(`소유자에게 사용할 수 있는 에이전트가 없어요. 관리자에게 문의해 주세요.`)
       return
     }
 
     const ownerProjects = getProjectsByUser(ownerUserId)
     if (ownerProjects.length === 0) {
-      await postMessage(botToken, channel, `소유자에게 연결된 프로젝트가 없어요. 관리자에게 문의해 주세요.`, replyTs)
+      await sink.post(`소유자에게 연결된 프로젝트가 없어요. 관리자에게 문의해 주세요.`)
       return
     }
-    const projectListStr = ownerProjects.map(p => p.name).join(', ')
+    // 대상 프로젝트: 멘션에 이름이 있으면 그걸로, 없으면 소유자의 첫 프로젝트.
+    // "무엇을 할지(조회/생성/설명…)"는 규칙으로 가르지 않고 에이전트가 대화로 판단한다.
     const namedProject = ownerProjects.find(p => p.name && cleanText.includes(p.name))
-    const issueIid = parseIssueNumber(cleanText)
-
-    // ── 대화형 조회 (LLM 안 거치고 즉답) ──
-    // 1) 작업(이슈) 목록 — 번호가 없을 때만
-    if (issueIid == null && asksIssueList(cleanText)) {
-      const proj = namedProject || (ownerProjects.length === 1 ? ownerProjects[0] : null)
-      if (!proj) {
-        await postMessage(botToken, channel, `어느 프로젝트의 작업을 볼까요? 프로젝트 이름을 알려주세요.\n프로젝트: ${projectListStr}`, replyTs)
-        return
-      }
-      const issues = await fetchAllProjectIssues(proj, decrypt(proj.accessToken)).catch(() => [] as any[])
-      const lines = (issues || []).slice(0, 20).map((i: any) => `• #${i.iid ?? i.number} ${i.title}`).join('\n')
-      await postMessage(botToken, channel, lines ? `*${proj.name}* 작업 목록:\n${lines}` : `*${proj.name}* 에 열린 작업이 없어요.`, replyTs)
-      return
-    }
-    // 2) 프로젝트 목록
-    if (asksProjectList(cleanText)) {
-      await postMessage(botToken, channel, `연결된 사용자(${ownerUserId === workspace.defaultUserId ? '소유자' : ''})의 프로젝트:\n${ownerProjects.map(p => `• ${p.name}`).join('\n')}`, replyTs)
-      return
-    }
-
-    // ── 대화/작업 — 대상 프로젝트 결정 (모호하면 되묻기) ──
-    const project = namedProject || (ownerProjects.length === 1 ? ownerProjects[0] : null)
-    if (!project) {
-      const what = issueIid != null ? `#${issueIid}` : '이 요청'
-      await postMessage(botToken, channel, `${what} 은(는) 어느 프로젝트인가요? 프로젝트 이름을 함께 알려주세요.\n프로젝트: ${projectListStr}`, replyTs)
-      return
-    }
+    const project = namedProject || ownerProjects[0]
     const token = decrypt(project.accessToken)
 
-    // 대화 연속성: 채널 + (이슈|일반) 단위로 CLI 세션 유지
-    const convoKey = issueIid != null ? `i${issueIid}` : 'general'
-    const threadKey = `${channel}:${convoKey}`
-    const sessionKey = `slack:${workspace.id}:${channel}:${convoKey}`
+    // 스레드 단위 독립 대화: 세션/이슈바인딩/CLI세션을 thread_ts 기준으로 유지
+    const sessionKey = `slack:${workspace.id}:${channel}:${threadRoot}`
     if (isChatAgentRunning(sessionKey)) {
-      await postMessage(botToken, channel, `아직 이전 메시지를 처리 중이에요. 잠시만요…`, replyTs)
+      await sink.post(`아직 이전 메시지를 처리 중이에요. 잠시만요…`)
       return
     }
 
-    let session = getSlackThreadSession(workspace.id, channel, threadKey)
+    // 스레드 첫 멘션에서 이슈 번호를 바인딩, 이후 멘션은 그 바인딩 유지(번호 재입력 불필요)
+    let session = getSlackThreadSession(workspace.id, channel, threadRoot)
+    let issueIid: number | null
     if (!session) {
-      createSlackThreadSession({ workspaceId: workspace.id, channelId: channel, threadTs: threadKey, issueIid })
-      session = getSlackThreadSession(workspace.id, channel, threadKey)
+      issueIid = parseIssueNumber(cleanText)
+      createSlackThreadSession({ workspaceId: workspace.id, channelId: channel, threadTs: threadRoot, issueIid })
+      session = getSlackThreadSession(workspace.id, channel, threadRoot)
+    } else {
+      issueIid = session.issueIid ?? null
     }
     const cliSessionId = session?.cliSessionId ?? null
 
@@ -302,7 +286,7 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
       if (!cliSessionId) {
         const issue = await fetchSingleIssue(project, issueIid, token).catch(() => null)
         if (!issue) {
-          await postMessage(botToken, channel, `프로젝트 *${project.name}* 에서 #${issueIid} 을(를) 못 찾았어요. 번호를 확인해 주세요.`, replyTs)
+          await sink.post(`프로젝트 *${project.name}* 에서 #${issueIid} 을(를) 못 찾았어요. 번호를 확인해 주세요.`)
           return
         }
         issueTitle = issue.title || `Issue #${issueIid}`
@@ -314,7 +298,7 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
     }
 
     // 처리 중 placeholder
-    const msgTs = await postMessage(botToken, channel, issueIid != null ? `:hourglass_flowing_sand: #${issueIid} 살펴보는 중…` : `:speech_balloon: …`, replyTs)
+    const msgTs = await sink.post(issueIid != null ? `:hourglass_flowing_sand: #${issueIid} 살펴보는 중…` : `:speech_balloon: …`)
 
     // CLI 구동 + Slack 스트리밍 (throttled chat.update)
     let full = ''
@@ -325,7 +309,7 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
       if (!force && now - lastUpdate < 1500) return
       lastUpdate = now
       const text = full.trim()
-      if (text) await updateMessage(botToken, channel, msgTs, text.slice(0, 38000))
+      if (text) await sink.update(msgTs, text.slice(0, 38000))
     }
 
     await runChatAgentWithCallback(
@@ -345,7 +329,7 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
       },
       (ev) => {
         if (ev.type === 'session_id' && ev.content) {
-          updateSlackThreadCliSession(workspace.id, channel, threadKey, ev.content)
+          updateSlackThreadCliSession(workspace.id, channel, threadRoot, ev.content)
         } else if (ev.type === 'text' && ev.content) {
           full += ev.content
           void flush(false)
@@ -360,14 +344,14 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
     )
 
     if (msgTs && !full.trim()) {
-      await updateMessage(botToken, channel, msgTs, `(응답이 비어 있어요. 다시 한 번 말 걸어 주세요.)`)
+      await sink.update(msgTs, `(응답이 비어 있어요. 다시 한 번 말 걸어 주세요.)`)
     } else if (msgTs) {
-      await updateMessage(botToken, channel, msgTs, full.trim().slice(0, 38000))
+      await sink.update(msgTs, full.trim().slice(0, 38000))
     }
   } catch (err) {
     console.error('[Slack] handleAppMention error:', err)
     try {
-      await postMessage(botToken, channel, `처리 중 오류가 발생했어요. 잠시 후 다시 시도해 주세요.`, replyTs)
+      await sink.post(`처리 중 오류가 발생했어요. 잠시 후 다시 시도해 주세요.`)
     } catch { /* ignore */ }
   }
 }

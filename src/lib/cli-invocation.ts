@@ -90,6 +90,11 @@ export function buildCliInvocation(o: BuildCliOpts): CliInvocation {
     }
     if (mcpServers) opencodeConfig.mcp = mcpServers
 
+    // opencode는 외부 디렉토리(/tmp) 접근을 비대화형에서 자동 거부 → 빈 응답 유발.
+    // 임시 디렉토리를 프로젝트 루트 안(.octmp)으로 돌려 opencode가 외부 /tmp를 건드리지 않게 함.
+    const ocTmp = path.join(workspacePath, '.octmp')
+    try { fs.mkdirSync(ocTmp, { recursive: true }) } catch { /* ignore */ }
+
     const ocParts = [...cliParts, 'run', '--format', 'json', ...(cliSessionId ? ['-s', cliSessionId] : [])]
     return {
       mainCmd: 'sh',
@@ -98,6 +103,10 @@ export function buildCliInvocation(o: BuildCliOpts): CliInvocation {
       env: {
         ...process.env,
         OPENCODE_CONFIG_CONTENT: JSON.stringify(opencodeConfig),
+        TMPDIR: ocTmp, TMP: ocTmp, TEMP: ocTmp,
+        // glab/gh CLI 인증용 (에이전트가 이슈 조회·생성에 사용)
+        GITLAB_TOKEN: token, GITLAB_API_TOKEN: token,
+        GITHUB_TOKEN: token, GH_TOKEN: token,
         IVE_GITLAB_TOKEN: token,
         IVE_GITHUB_TOKEN: token,
       },

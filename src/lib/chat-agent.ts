@@ -107,6 +107,9 @@ async function prepareChatSpawn(opts: ChatAgentOptions) {
   const resolvedCliPath = await resolveCliPath(agent)
   const model = getSystemSetting(`cli.${agent.cliName}.model`) || null
 
+  // 이슈 관리에 쓸 CLI (provider별). 토큰은 환경변수에 설정돼 있음.
+  const issueCli = project.provider === 'github' ? 'gh' : 'glab'
+
   // Build prompt
   let prompt: string
   if (isFirstMessage && generalMode) {
@@ -123,6 +126,8 @@ ${userMessage}
 
 ## Instructions:
 - Answer clearly and concisely, grounded in the actual files of this repository.
+- You can manage this repository's issues with the \`${issueCli}\` CLI (auth token is already in your environment, run inside this repo). Use it to LIST issues (e.g. \`${issueCli} issue list\`), VIEW an issue (\`${issueCli} issue view <number>\`), or CREATE an issue when asked.
+- When asked to create an issue: create it via \`${issueCli}\`, report the new issue's number and URL, then ASK the user whether you should start working on it now.
 - If asked to make code changes, make them using git add (do NOT commit or push), then briefly list what you modified.
 - IMPORTANT: ${langInstruction}`
   } else if (isFirstMessage) {
@@ -373,6 +378,11 @@ function extractTextFromEvent(event: any, cliName: string): string | null {
     // Codex: 완료된 agent_message 아이템의 text만 사용자에게 전달
     if (event.type === 'item.completed' && event.item?.type === 'agent_message') {
       return event.item.text ?? null
+    }
+  } else if (cliName === 'gemini') {
+    // Gemini stream-json: assistant 메시지의 content
+    if (event.type === 'message' && event.role === 'assistant') {
+      return (event.content ?? '').toString() || null
     }
   } else {
     // Claude Code
