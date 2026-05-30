@@ -2,6 +2,7 @@
 
 import { DEFAULT_AVATARS } from '@/types'
 import type { ToolCategory } from '@/lib/tool-activity'
+import CliLogo, { CLI_LOGO_NAMES } from '@/components/ui/CliLogo'
 
 interface Props {
   /**
@@ -73,6 +74,18 @@ export default function AgentAvatar({ avatar, userId, size = 'md', className = '
     resolved = `/api/auth/avatar/image?id=${userId}`
   }
 
+  // CLI 회사 브랜드 로고 아바타 ('cli-claude' | 'cli-gemini' | 'cli-codex' | 'cli-opencode')
+  if (resolved.startsWith('cli-') && CLI_LOGO_NAMES.includes(resolved.slice(4))) {
+    return (
+      <div className={`relative shrink-0 ${wh} ${className}`}>
+        <div className="w-full h-full rounded-lg flex items-center justify-center bg-ive-bg-deep border border-ive-border-subtle">
+          <CliLogo cli={resolved.slice(4)} className="w-[64%] h-[64%]" />
+        </div>
+        {toolBadge && <ToolBadge category={toolBadge} size={size} />}
+      </div>
+    )
+  }
+
   // URL인 경우 (GitLab 아바타, 업로드된 IVE 사용자 사진, data URL)
   if (resolved.startsWith('http') || resolved.startsWith('/') || resolved.startsWith('data:')) {
     return (
@@ -109,11 +122,29 @@ export default function AgentAvatar({ avatar, userId, size = 'md', className = '
 interface SelectorProps {
   value: string
   onChange: (avatar: string) => void
+  /** 지정 시 해당 CLI 회사 브랜드 로고를 첫 옵션으로 추가 */
+  cliName?: string
 }
 
-export function AvatarSelector({ value, onChange }: SelectorProps) {
+export function AvatarSelector({ value, onChange, cliName }: SelectorProps) {
+  const cliAvatarId = cliName && CLI_LOGO_NAMES.includes(cliName) ? `cli-${cliName}` : null
   return (
     <div className="grid grid-cols-10 gap-1.5">
+      {cliAvatarId && (
+        <button
+          key={cliAvatarId}
+          type="button"
+          onClick={() => onChange(cliAvatarId)}
+          title={cliName}
+          className={`w-9 h-9 rounded-lg flex items-center justify-center bg-ive-bg-deep transition-all ${
+            value === cliAvatarId
+              ? 'ring-2 ring-ive-cyan ring-offset-2 ring-offset-ive-bg-deep scale-110'
+              : 'border border-ive-border-subtle hover:scale-105 opacity-80 hover:opacity-100'
+          }`}
+        >
+          <CliLogo cli={cliName!} className="w-3/5 h-3/5" />
+        </button>
+      )}
       {DEFAULT_AVATARS.map(av => {
         const selected = value === av.id
         return (

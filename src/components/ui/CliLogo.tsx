@@ -7,6 +7,9 @@ const CLI_LOGOS: Record<string, { src: string; invert?: boolean }> = {
   opencode: { src: '/cli/opencode.svg' },
 }
 
+/** 브랜드 로고가 등록된 CLI 이름 목록 (아바타 등에서 유효성 가드용) */
+export const CLI_LOGO_NAMES = Object.keys(CLI_LOGOS)
+
 interface Props {
   cli: string
   /** 크기/여백 등 Tailwind 클래스 (기본 w-4 h-4) */

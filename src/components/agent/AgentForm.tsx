@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
-import { CliName, DEFAULT_AVATARS } from '@/types'
+import { CliName } from '@/types'
 import { useStore } from '@/lib/store'
 import { AvatarSelector } from '@/components/agent/AgentAvatar'
 import CliLogo from '@/components/ui/CliLogo'
@@ -34,7 +34,8 @@ export default function AgentForm({ onSuccess, onCancel }: Props) {
 
   const [cliName, setCliName] = useState<CliName>(defaultCli)
   const [name, setName] = useState(availableTools[0]?.defaultName ?? 'Agent')
-  const [avatar, setAvatar] = useState<string>(() => DEFAULT_AVATARS[Math.floor(Math.random() * DEFAULT_AVATARS.length)].id)
+  // 기본 아바타 = 선택된 CLI(회사) 브랜드 로고
+  const [avatar, setAvatar] = useState<string>(`cli-${defaultCli}`)
   const [cliPaths, setCliPaths] = useState<Record<string, string>>({})
   const [cliModels, setCliModels] = useState<Record<string, string[]>>({})
   const [modelName, setModelName] = useState('')
@@ -59,6 +60,8 @@ export default function AgentForm({ onSuccess, onCancel }: Props) {
     if (tool) {
       setName(tool.defaultName)
     }
+    // 회사 로고 기본 아바타를 쓰던 중이면 새 CLI 로고로 갱신 (사용자가 직접 고른 아바타는 유지)
+    setAvatar(prev => (prev.startsWith('cli-') ? `cli-${cli}` : prev))
   }
 
   const currentCliPath = cliPaths[cliName] || ''
@@ -162,7 +165,7 @@ export default function AgentForm({ onSuccess, onCancel }: Props) {
       {/* 아바타 선택 */}
       <div>
         <label className="block text-base font-bold text-ive-text-muted mb-2">{t('avatar')}</label>
-        <AvatarSelector value={avatar} onChange={setAvatar} />
+        <AvatarSelector value={avatar} onChange={setAvatar} cliName={cliName} />
       </div>
 
       {/* 버전 (선택) */}

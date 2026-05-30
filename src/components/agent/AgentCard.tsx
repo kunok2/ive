@@ -333,7 +333,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
           </div>
           <div>
             <label className="block text-xs font-bold text-ive-text-muted mb-1">{t('avatar')}</label>
-            <AvatarSelector value={editAvatar} onChange={setEditAvatar} />
+            <AvatarSelector value={editAvatar} onChange={setEditAvatar} cliName={agent.cliName} />
           </div>
           {editCliModels.length > 0 && (
             <div>
