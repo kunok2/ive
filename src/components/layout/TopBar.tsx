@@ -79,8 +79,8 @@ export default function TopBar() {
 
   return (
     <>
-      <header className="shrink-0 z-40 bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark">
-        <div className="px-4 py-3 max-w-lg mx-auto flex items-center justify-between">
+      <header className="shrink-0 z-40 w-full max-w-lg mx-auto bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark">
+        <div className="px-4 py-3 flex items-center justify-between">
           <button
             onClick={() => router.push('/')}
             className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity"

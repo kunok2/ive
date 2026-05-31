@@ -1,3 +1,4 @@
+import './src/lib/load-env' // 반드시 첫 import — 다른 모듈이 process.env를 읽기 전에 .env 로드
 import { createServer as createHttpServer } from 'http'
 import { createServer as createHttpsServer } from 'https'
 import { readFileSync, existsSync } from 'fs'

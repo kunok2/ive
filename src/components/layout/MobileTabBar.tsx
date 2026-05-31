@@ -24,8 +24,8 @@ export default function MobileTabBar() {
     : baseTabs
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-ive-bg-deep/95 backdrop-blur-sm border-t border-ive-border-dark" aria-label={t('mainNavigation')}>
-      <div className="flex justify-around items-start pt-2 h-16 max-w-lg mx-auto">
+    <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg z-40 bg-ive-bg-deep/95 backdrop-blur-sm border-t border-ive-border-dark" aria-label={t('mainNavigation')}>
+      <div className="flex justify-around items-start pt-2 h-16">
         {tabs.map(tab => (
           <button
             key={tab.key}

@@ -134,8 +134,8 @@ export default function IssueHeader({
   }), [projectId, onSetEditDesc, onToast])
 
   return (
-    <header className="sticky top-0 z-40 bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark shrink-0">
-      <div className="flex items-center gap-2 px-3 py-2 max-w-lg mx-auto">
+    <header className="sticky top-0 z-40 w-full max-w-lg mx-auto bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark shrink-0">
+      <div className="flex items-center gap-2 px-3 py-2">
         <button onClick={onBack} className="text-ive-green font-bold p-1 hover:bg-ive-green/5 rounded shrink-0">
           <i className="fa-solid fa-arrow-left" />
         </button>
@@ -173,7 +173,7 @@ export default function IssueHeader({
         )}
       </div>
       {/* 제목 + 설명 토글 + 단계 변경 */}
-      <div className="px-3 pb-2 max-w-lg mx-auto">
+      <div className="px-3 pb-2">
         {editMode ? (
           <div className="space-y-2">
             <div className="flex gap-2 items-center">
