@@ -17,6 +17,8 @@ services:
       - ./data:/app/data
       - ./workspaces:/app/workspaces
       - ./claude-config:/home/ive/.claude
+      - ./codex-config:/home/ive/.codex
+      - ./gemini-config:/home/ive/.gemini
     # 앱 로거가 죽거나 우회되더라도 컨테이너 stdout이 무한정 커지지 않도록
     # 도커 레벨에서 로테이션 한도를 둔다 (앱 파일 로거와 별도 안전망).
     logging:
