@@ -64,7 +64,7 @@ export default function AgentsTab({ onAdd }: { onAdd?: () => void }) {
   const empty = state.agents.length === 0 && (verifiersLoaded && verifiers.length === 0)
 
   return (
-    <PullToRefresh onRefresh={onRefresh} className="w-full flex-1 flex flex-col max-w-lg mx-auto overflow-hidden">
+    <PullToRefresh onRefresh={onRefresh} className="w-full flex-1 flex flex-col max-w-lg mx-auto px-4 overflow-hidden">
       <div className="pt-4 shrink-0">
         {state.loading ? (
           <div className="flex flex-col items-center justify-center py-20 gap-3 text-ive-text-muted text-base">

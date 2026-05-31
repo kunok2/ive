@@ -178,7 +178,7 @@ export default function ReportsTab() {
   const throughputData = computeFlowDays().filter(f => f.throughput !== null).map(f => f.throughput as number)
 
   return (
-    <PullToRefresh onRefresh={fetchReport} className="w-full flex-1 flex flex-col max-w-lg mx-auto overflow-hidden">
+    <PullToRefresh onRefresh={fetchReport} className="w-full flex-1 flex flex-col max-w-lg mx-auto px-4 overflow-hidden">
       {/* Period selector */}
       <div className="shrink-0 pt-4 pb-2">
         <div data-tour="reports-period">

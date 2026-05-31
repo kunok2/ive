@@ -42,7 +42,7 @@ export default function AdminTab() {
   ]
 
   return (
-    <PullToRefresh onRefresh={handleRefresh} className="w-full flex-1 flex flex-col max-w-lg mx-auto overflow-hidden">
+    <PullToRefresh onRefresh={handleRefresh} className="w-full flex-1 flex flex-col max-w-lg mx-auto px-4 overflow-hidden">
       {/* 서브 탭 바 */}
       <div className="shrink-0 pt-4 pb-3">
         <div data-tour="admin-sub-tabs" className="flex">

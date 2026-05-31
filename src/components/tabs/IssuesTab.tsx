@@ -614,7 +614,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
 
   // --- Render ---
   return (
-    <PullToRefresh onRefresh={isHistoryTab ? fetchClosedIssues : fetchIssues} className="w-full flex-1 flex flex-col max-w-lg mx-auto overflow-hidden">
+    <PullToRefresh onRefresh={isHistoryTab ? fetchClosedIssues : fetchIssues} className="w-full flex-1 flex flex-col max-w-lg mx-auto px-4 overflow-hidden">
       <div className="pt-4 shrink-0">
         <ProjectSelector
           projects={state.projects}
