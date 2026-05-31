@@ -1,7 +1,9 @@
 'use client'
 
-import { ReactNode, useEffect, useRef, useState, createContext, useContext, useCallback } from 'react'
+import { ReactNode, useEffect, useLayoutEffect, useRef, useState, createContext, useContext, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
+
+type Anchor = { x: number; y: number }
 
 // ── Types ──
 interface DialogOptions {
@@ -38,17 +40,34 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     type: 'confirm' | 'alert'
     options: DialogOptions | AlertOptions
     resolve: (value: any) => void
+    anchor: Anchor | null
   } | null>(null)
+
+  // 마지막 포인터(클릭) 위치 추적 — 팝업을 누른 버튼 근처에 띄우기 위함.
+  const lastPointerRef = useRef<{ x: number; y: number; t: number } | null>(null)
+  useEffect(() => {
+    const onDown = (e: PointerEvent) => {
+      lastPointerRef.current = { x: e.clientX, y: e.clientY, t: Date.now() }
+    }
+    window.addEventListener('pointerdown', onDown, true)
+    return () => window.removeEventListener('pointerdown', onDown, true)
+  }, [])
+
+  // 최근(2초 이내) 클릭이 있으면 그 좌표를 앵커로. 자동 트리거 팝업은 앵커 없음 → 가운데 표시.
+  const grabAnchor = (): Anchor | null => {
+    const p = lastPointerRef.current
+    return p && Date.now() - p.t < 2000 ? { x: p.x, y: p.y } : null
+  }
 
   const confirm = useCallback((options: DialogOptions) => {
     return new Promise<boolean>((resolve) => {
-      setDialog({ type: 'confirm', options, resolve })
+      setDialog({ type: 'confirm', options, resolve, anchor: grabAnchor() })
     })
   }, [])
 
   const alert = useCallback((options: AlertOptions) => {
     return new Promise<void>((resolve) => {
-      setDialog({ type: 'alert', options, resolve })
+      setDialog({ type: 'alert', options, resolve, anchor: grabAnchor() })
     })
   }, [])
 
@@ -65,6 +84,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
         <DialogOverlay
           type={dialog.type}
           options={dialog.options}
+          anchor={dialog.anchor}
           onClose={handleClose}
         />
       )}
@@ -76,15 +96,37 @@ export function DialogProvider({ children }: { children: ReactNode }) {
 function DialogOverlay({
   type,
   options,
+  anchor,
   onClose,
 }: {
   type: 'confirm' | 'alert'
   options: DialogOptions | AlertOptions
+  anchor: Anchor | null
   onClose: (result: boolean) => void
 }) {
   const backdropRef = useRef<HTMLDivElement>(null)
+  const boxRef = useRef<HTMLDivElement>(null)
   const tDialog = useTranslations('dialog')
   const tCommon = useTranslations('common')
+
+  // 앵커가 있으면 클릭 지점 근처에 팝오버로 배치. 렌더 후 실제 크기를 재서 뷰포트 안으로 클램프.
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
+  useLayoutEffect(() => {
+    if (!anchor || !boxRef.current) return
+    const b = boxRef.current.getBoundingClientRect()
+    const vw = window.innerWidth
+    const vh = window.innerHeight
+    const margin = 8
+    const gap = 10
+    let left = anchor.x - b.width / 2
+    left = Math.max(margin, Math.min(left, vw - b.width - margin))
+    let top = anchor.y + gap // 클릭 아래
+    if (top + b.height > vh - margin) {
+      top = anchor.y - gap - b.height // 공간 부족 시 위쪽
+      if (top < margin) top = Math.max(margin, vh - b.height - margin)
+    }
+    setPos({ left, top })
+  }, [anchor])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -113,14 +155,25 @@ function DialogOverlay({
     info: 'bg-ive-green-dark text-white',
   }
 
+  const popover = !!anchor
+
   return (
     <div
       ref={backdropRef}
-      className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+      className={popover ? 'fixed inset-0 z-[60]' : 'fixed inset-0 z-[60] flex items-center justify-center p-4'}
       onClick={(e) => { if (e.target === backdropRef.current) onClose(false) }}
     >
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm pointer-events-none" />
-      <div className="relative w-full max-w-sm bg-ive-bg-card border border-ive-border rounded-2xl shadow-2xl animate-slide-up overflow-hidden">
+      {/* 팝오버 모드: 투명 클릭-캐처(마우스 이동 최소화). 가운데 모드: 어두운 오버레이. */}
+      {!popover && <div className="absolute inset-0 bg-black/60 backdrop-blur-sm pointer-events-none" />}
+      <div
+        ref={boxRef}
+        className={
+          popover
+            ? 'fixed w-[min(320px,calc(100vw-16px))] bg-ive-bg-solid border border-ive-border rounded-2xl shadow-2xl animate-slide-up overflow-hidden'
+            : 'relative w-full max-w-sm bg-ive-bg-solid border border-ive-border rounded-2xl shadow-2xl animate-slide-up overflow-hidden'
+        }
+        style={popover ? { left: pos?.left ?? -9999, top: pos?.top ?? -9999, visibility: pos ? 'visible' : 'hidden' } : undefined}
+      >
         <div className="px-5 pt-5 pb-4">
           <div className="flex items-start gap-3">
             <div className="shrink-0 w-10 h-10 rounded-lg bg-ive-bg-deep flex items-center justify-center">
