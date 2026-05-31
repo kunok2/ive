@@ -122,6 +122,7 @@ interface ChatAgentOptions {
   userLocale?: string
   generalMode?: boolean  // true = 이슈 미바인딩 일반 질문 (워크스페이스/이슈 컨텍스트 없음)
   availableProjects?: string[]  // 소유자의 프로젝트 이름 목록 (general 모드에서 "어떤 프로젝트?" 응답용)
+  attachedImages?: string[]  // 첨부 이미지 절대경로 (Slack 등). workspacePath 하위에 저장됨
 }
 
 /**
@@ -134,7 +135,7 @@ interface ChatAgentOptions {
  * Shared by both the legacy SSE generator and the WebSocket callback version.
  */
 async function prepareChatSpawn(opts: ChatAgentOptions) {
-  const { cliSessionId, project, agent, token, issueIid, issueTitle, issueDescription, userMessage, workspacePath, userLocale, generalMode, availableProjects } = opts
+  const { cliSessionId, project, agent, token, issueIid, issueTitle, issueDescription, userMessage, workspacePath, userLocale, generalMode, availableProjects, attachedImages } = opts
 
   const locale = userLocale || getSystemSetting('locale') || defaultLocale
   const isKo = locale === 'ko'
@@ -188,6 +189,16 @@ ${userMessage}
     prompt = userMessage
   }
 
+  // 첨부 이미지 안내. codex(-i)·opencode(-f)는 전용 플래그로도 전달되지만,
+  // claude/gemini는 전용 플래그가 없어 프롬프트의 경로 안내로 Read/파일참조해 인식한다.
+  // 경로는 workspacePath 하위라 cwd 기준 상대경로로도 접근 가능.
+  if (attachedImages && attachedImages.length > 0) {
+    const list = attachedImages.map(p => `- ${path.relative(workspacePath, p) || p}`).join('\n')
+    prompt += isKo
+      ? `\n\n## 첨부 이미지\n사용자가 다음 이미지 파일을 첨부했습니다(현재 작업 디렉토리 기준 경로). 질문에 답하기 전에 반드시 이 이미지들을 확인하세요:\n${list}`
+      : `\n\n## Attached images\nThe user attached the following image file(s) (paths relative to the current working directory). You MUST view these images before answering:\n${list}`
+  }
+
   // CLI별 명령/인자/환경 조립은 단일 모듈(cli-invocation)에 위임.
   // 채팅은 maxTurns 20 고정, resume(cliSessionId) 지원.
   const inv = buildCliInvocation({
@@ -199,6 +210,7 @@ ${userMessage}
     maxTurns: 20,
     model,
     cliSessionId,
+    imagePaths: attachedImages,
   })
 
   // 채팅은 토큰 단위 스트리밍을 위해 claude 에 한해 부분 메시지 이벤트를 켠다.

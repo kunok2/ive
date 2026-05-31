@@ -60,6 +60,9 @@ export interface BuildCliOpts {
   cliSessionId?: string | null
   /** MCP 서버 설정. undefined면 시스템 설정에서 로드. */
   mcpServers?: Record<string, any> | null
+  /** 첨부 이미지 파일 경로(절대경로). codex는 -i, opencode는 -f로 전달.
+   *  claude/gemini는 전용 플래그가 없어 호출 측이 프롬프트에 경로를 안내한다(Read/파일참조). */
+  imagePaths?: string[]
 }
 
 const shq = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`
@@ -72,6 +75,7 @@ const shq = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`
  */
 export function buildCliInvocation(o: BuildCliOpts): CliInvocation {
   const { cliName, resolvedCliPath, prompt, token, workspacePath, maxTurns, model, cliSessionId } = o
+  const imagePaths = o.imagePaths ?? []
   const cliParts = resolvedCliPath.split(' ')
   const mainCmd = cliParts[0]
 
@@ -95,7 +99,9 @@ export function buildCliInvocation(o: BuildCliOpts): CliInvocation {
     const ocTmp = path.join(workspacePath, '.octmp')
     try { fs.mkdirSync(ocTmp, { recursive: true }) } catch { /* ignore */ }
 
-    const ocParts = [...cliParts, 'run', '--format', 'json', ...(cliSessionId ? ['-s', cliSessionId] : [])]
+    // 첨부 이미지: opencode는 -f(--file)로 메시지에 파일 첨부
+    const ocImageArgs = imagePaths.flatMap(p => ['-f', p])
+    const ocParts = [...cliParts, 'run', '--format', 'json', ...ocImageArgs, ...(cliSessionId ? ['-s', cliSessionId] : [])]
     return {
       mainCmd: 'sh',
       args: ['-c', `exec ${ocParts.map(shq).join(' ')}`],
@@ -120,6 +126,9 @@ export function buildCliInvocation(o: BuildCliOpts): CliInvocation {
       '--skip-git-repo-check',
       '--dangerously-bypass-approvals-and-sandbox',
       ...(model ? ['-m', model] : []),
+      // 첨부 이미지: codex는 -i(--image). prompt가 마지막 positional이라
+      // 한 플래그에 여러 파일(variadic)을 넣으면 prompt까지 삼키므로 이미지마다 -i 반복.
+      ...imagePaths.flatMap(p => ['-i', p]),
     ]
     const args = cliSessionId
       ? [...cliParts.slice(1), 'exec', 'resume', ...codexFlags, cliSessionId, prompt]
