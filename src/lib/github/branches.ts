@@ -146,3 +146,22 @@ export async function uploadGitHubFile(
   const markdown = isImage ? `![${safe}](${rawUrl})` : `[${safe}](${rawUrl})`;
   return { markdown, url: rawUrl };
 }
+
+/**
+ * GitHub 첨부(raw download_url)를 인증 토큰으로 다운로드한다.
+ * private 저장소의 raw URL 은 인증이 필요하므로 헤더를 붙여 받는다.
+ */
+export async function downloadGitHubFile(
+  project: Project,
+  decryptedToken: string,
+  url: string,
+): Promise<{ buffer: Buffer; contentType: string } | null> {
+  const res = await fetch(url, { headers: getGitHubAuthHeaders(project, decryptedToken) });
+  if (!res.ok) {
+    console.error(`[GitHub] file download failed (${res.status}) ${url}`);
+    return null;
+  }
+  const contentType = res.headers.get('content-type') || 'application/octet-stream';
+  const buffer = Buffer.from(await res.arrayBuffer());
+  return { buffer, contentType };
+}

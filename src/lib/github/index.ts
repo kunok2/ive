@@ -13,5 +13,5 @@ export {
 } from "./mr";
 export {
   createGitHubBranch, getGitHubDefaultBranch,
-  readGitHubRepoFile, upsertGitHubRepoFile, uploadGitHubFile,
+  readGitHubRepoFile, upsertGitHubRepoFile, uploadGitHubFile, downloadGitHubFile,
 } from "./branches";

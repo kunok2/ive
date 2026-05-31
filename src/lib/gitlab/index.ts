@@ -43,4 +43,5 @@ export {
   readGitLabRepoFile,
   upsertGitLabRepoFile,
   uploadGitLabFile,
+  downloadGitLabUpload,
 } from './repository';

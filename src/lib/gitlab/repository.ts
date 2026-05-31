@@ -137,3 +137,31 @@ export async function uploadGitLabFile(
   const data = await res.json();
   return { markdown: String(data.markdown || ''), url: String(data.url || '') };
 }
+
+/**
+ * GitLab 업로드 첨부(/uploads/<secret>/<file>)를 인증 토큰으로 다운로드한다.
+ * uploadGitLabFile 이 돌려주는 url 은 프로젝트 상대 경로라 직접 접근이 불가 →
+ * 프로젝트 web base + 상대경로로 절대화하고 인증 헤더를 붙여 받는다.
+ */
+export async function downloadGitLabUpload(
+  project: Project,
+  decryptedToken: string,
+  url: string,
+): Promise<{ buffer: Buffer; contentType: string } | null> {
+  let abs: string;
+  if (/^https?:\/\//.test(url)) {
+    abs = url;
+  } else {
+    const u = new URL(project.repoUrl.replace(/\.git$/, ''));
+    // url 은 "/uploads/<secret>/<file>" (프로젝트 경로 기준 상대)
+    abs = `${u.origin}${u.pathname}${url.startsWith('/') ? '' : '/'}${url}`;
+  }
+  const res = await fetch(abs, { headers: getAuthHeaders(project, decryptedToken) });
+  if (!res.ok) {
+    console.error(`[GitLab] upload download failed (${res.status}) ${abs}`);
+    return null;
+  }
+  const contentType = res.headers.get('content-type') || 'application/octet-stream';
+  const buffer = Buffer.from(await res.arrayBuffer());
+  return { buffer, contentType };
+}

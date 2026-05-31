@@ -82,6 +82,16 @@ export function uploadIssueAttachment(
     : gitlab.uploadGitLabFile(project, token, filename, buffer, mimeType);
 }
 
+/**
+ * 업로드된 첨부(uploadIssueAttachment 가 돌려준 url)를 인증 토큰으로 다운로드한다.
+ * 채팅/스캐너에서 첨부 이미지를 워크스페이스에 저장해 에이전트에게 넘길 때 사용.
+ */
+export function downloadProjectUpload(project: Project, token: string, url: string) {
+  return project.provider === 'github'
+    ? github.downloadGitHubFile(project, token, url)
+    : gitlab.downloadGitLabUpload(project, token, url);
+}
+
 // MR / PR
 export function fetchMRByBranch(project: Project, token: string, branch: string, options?: { isOAuth?: boolean }) {
   return project.provider === 'github'
