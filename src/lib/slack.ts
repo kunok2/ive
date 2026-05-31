@@ -349,11 +349,15 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
     }
 
     // 첨부 이미지 다운로드 (워크스페이스 하위에 저장 → 에이전트가 읽음)
+    // [진단] app_mention 페이로드에 files 가 오는지 / 다운로드가 되는지 구분하기 위한 로그
+    console.log(`[Slack][diag] app_mention files=${(event.files || []).length} ` +
+      JSON.stringify((event.files || []).map(f => ({ mimetype: f.mimetype, filetype: f.filetype, hasPrivate: !!f.url_private, hasDownload: !!f.url_private_download }))))
     const attachedImages = await downloadSlackImages(
       botToken,
       event.files || [],
       path.join(workspacePath, '.slack-attachments'),
-    ).catch(() => [] as string[])
+    ).catch((e) => { console.error('[Slack][diag] downloadSlackImages threw:', e); return [] as string[] })
+    console.log(`[Slack][diag] attachedImages=${attachedImages.length}`)
 
     // 처리 중 placeholder
     const placeholderBase = issueIid != null ? `:hourglass_flowing_sand: #${issueIid} 살펴보는 중…` : `:speech_balloon: …`
