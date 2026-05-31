@@ -198,14 +198,14 @@ export default function UsersPanel() {
               })()}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-bold text-ive-text truncate">{u.name}</span>
+                  <span className="text-sm font-bold text-ive-text truncate min-w-0">{u.name}</span>
                   {u.isAdmin && (
-                    <span className="text-xs font-bold bg-ive-green/15 text-ive-green px-1.5 py-0.5 rounded-lg">{t('adminBadge')}</span>
+                    <span className="text-xs font-bold bg-ive-green/15 text-ive-green px-1.5 py-0.5 rounded-lg shrink-0">{t('adminBadge')}</span>
                   )}
                 </div>
                 <div className="text-xs text-ive-text-dim break-all">{u.email}</div>
                 <div className="text-xs text-ive-text-dim">{new Date(u.createdAt).toLocaleDateString('ko-KR')} {t('joined')}</div>
-                <div className="flex items-center gap-x-2 text-xs mt-0.5 text-ive-text-muted">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs mt-0.5 text-ive-text-muted min-w-0">
                   <span className="inline-flex items-center">
                     <i className="fa-solid fa-robot mr-0.5" />{u.maxAgents || '∞'}
                   </span>

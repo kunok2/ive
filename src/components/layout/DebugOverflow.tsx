@@ -61,40 +61,51 @@ export default function DebugOverflow() {
         `→ 가로 초과=${overscroll}px ${overscroll > 0.5 ? '⚠️ 스크롤 발생' : 'OK'}`,
       )
 
-      // 뷰포트 오른쪽/왼쪽 경계를 넘는 엘리먼트 수집
-      const offenders: { el: Element; right: number; left: number; over: number }[] = []
+      // 두 종류의 가로 오버플로를 한 번에 수집한다.
+      //  (A) 박스 자체가 뷰포트(vw) 경계를 넘는 엘리먼트 (오른쪽 밖으로 삐져나옴)
+      //  (B) 박스는 화면 안에 있지만 "내부 콘텐츠"가 가로로 넘쳐 스크롤되는 엘리먼트
+      //      (scrollWidth > clientWidth). overflow-y-auto 는 CSS 상 overflow-x 도 auto 로
+      //      승격되므로, 안쪽 콘텐츠가 살짝만 넓어도 그 컨테이너가 가로 스크롤된다.
+      //      → "화면보다 약간 큰" 증상의 실제 정체. (A)로는 안 잡히는 사각지대.
+      const offenders: { el: Element; r: DOMRect; over: number }[] = []
+      const scrollers: { el: Element; sx: number; ox: string }[] = []
       const all = document.querySelectorAll('*')
       for (const el of Array.from(all)) {
-        // 보이지 않는 요소 스킵
         const cs = getComputedStyle(el)
         if (cs.display === 'none' || cs.visibility === 'hidden') continue
         const r = el.getBoundingClientRect()
         if (r.width === 0 && r.height === 0) continue
-        const overRight = r.right - vw
-        const overLeft = -r.left
-        const over = Math.max(overRight, overLeft)
-        if (over > 0.5) {
-          offenders.push({ el, right: r.right, left: r.left, over })
-        }
+        const over = Math.max(r.right - vw, -r.left)
+        if (over > 0.5) offenders.push({ el, r, over })
+        const sx = el.scrollWidth - el.clientWidth
+        if (sx > 1 && el.clientWidth > 0) scrollers.push({ el, sx, ox: cs.overflowX })
       }
-
       offenders.sort((a, b) => b.over - a.over)
+      scrollers.sort((a, b) => b.sx - a.sx)
 
+      // (A) 뷰포트 경계 초과
       if (offenders.length === 0) {
-        console.log(`${TAG} 경계를 넘는 엘리먼트 없음`)
-        return
+        console.log(`${TAG} (A) 뷰포트 경계 넘는 엘리먼트: 없음`)
+      } else {
+        console.log(`${TAG} (A) 뷰포트 경계 넘는 엘리먼트 ${offenders.length}개 (상위 15):`)
+        offenders.slice(0, 15).forEach((o, i) => console.log(
+          `${TAG}  A#${i + 1} +${o.over.toFixed(1)}px  ${describe(o.el)}\n` +
+          `       left=${o.r.left.toFixed(1)} right=${o.r.right.toFixed(1)} width=${o.r.width.toFixed(1)} (vw=${vw})`,
+          o.el,
+        ))
       }
 
-      console.log(`${TAG} 경계 초과 엘리먼트 ${offenders.length}개 (초과량 큰 순, 상위 20):`)
-      offenders.slice(0, 20).forEach((o, i) => {
-        const r = o.el.getBoundingClientRect()
-        console.log(
-          `${TAG}  #${i + 1} +${o.over.toFixed(1)}px  ${describe(o.el)}\n` +
-          `       left=${r.left.toFixed(1)} right=${r.right.toFixed(1)} ` +
-          `width=${r.width.toFixed(1)} (vw=${vw})`,
-          o.el, // DOM 참조 — 인스펙터에서 클릭해 강조 가능
-        )
-      })
+      // (B) 내부 가로 오버플로(스크롤 발생) — 이게 핵심 진단
+      if (scrollers.length === 0) {
+        console.log(`${TAG} (B) 내부 가로 오버플로(스크롤) 엘리먼트: 없음`)
+      } else {
+        console.log(`${TAG} (B) 내부 가로 오버플로 엘리먼트 ${scrollers.length}개 (넘침 큰 순, 상위 15):`)
+        scrollers.slice(0, 15).forEach((s, i) => console.log(
+          `${TAG}  B#${i + 1} 내부 +${s.sx}px  overflow-x:${s.ox}  ${describe(s.el)}\n` +
+          `       clientWidth=${s.el.clientWidth} scrollWidth=${s.el.scrollWidth}`,
+          s.el, // DOM 참조 — 인스펙터에서 클릭해 강조 가능
+        ))
+      }
     }
 
     // 초기 + 비동기 콘텐츠 로드 대비 지연 스캔, 리사이즈/회전 시 재스캔
