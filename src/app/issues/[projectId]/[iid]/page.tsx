@@ -888,8 +888,8 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   if (!loading && !issue) {
     return (
       <div className="h-full flex flex-col">
-        <header className="sticky top-0 z-40 bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark shrink-0">
-          <div className="flex items-center gap-2 px-3 py-2 max-w-lg mx-auto">
+        <header className="sticky top-0 z-40 w-full max-w-lg mx-auto bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark shrink-0">
+          <div className="flex items-center gap-2 px-3 py-2">
             <button onClick={() => router.back()} className="text-ive-green font-bold p-1 hover:bg-ive-green/5 rounded shrink-0">
               <i className="fa-solid fa-arrow-left" />
             </button>

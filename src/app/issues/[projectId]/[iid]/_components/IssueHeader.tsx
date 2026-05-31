@@ -238,7 +238,7 @@ export default function IssueHeader({
       </div>
       {/* 진행막대 — 5단계 흐름 + 단계별 담당자 아바타를 한 줄로 표시 */}
       {!editMode && (
-        <div className="px-3 pt-1 pb-3 max-w-lg mx-auto">
+        <div className="px-3 pt-1 pb-3">
           <StageProgress
             stage={issue.stage}
             createdAt={issue.createdAt}
