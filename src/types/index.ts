@@ -289,6 +289,7 @@ export interface SlackThreadSession {
   issueIid: number | null    // null = 일반 질문
   cliSessionId: string | null // chat-agent --resume 용
   cliName: string | null      // 그 세션을 만든 CLI (resume 호환성 — 다른 CLI면 재사용 금지)
+  projectId: string | null    // 그 세션이 바인딩된 프로젝트 (바뀌면 워크스페이스 cwd가 달라져 resume 불가)
   updatedAt: string
 }
 

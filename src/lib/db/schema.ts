@@ -924,14 +924,18 @@ export function initSchema(db: Database.Database) {
       issue_iid INTEGER,
       cli_session_id TEXT,
       cli_name TEXT,
+      project_id TEXT,
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       PRIMARY KEY (workspace_id, channel_id, thread_ts)
     );
   `)
-  // 기존 slack_thread_session에 cli_name 보강 (어느 CLI가 만든 세션인지 — resume 호환성 판단용)
+  // 기존 slack_thread_session 컬럼 보강
+  //  - cli_name: 어느 CLI가 만든 세션인지 (resume 호환성 판단용)
+  //  - project_id: 어느 프로젝트로 시작한 대화인지 (프로젝트가 바뀌면 claude 세션 cwd가 달라져 resume 실패)
   try {
     const cols = (db.prepare("PRAGMA table_info(slack_thread_session)").all() as any[]).map(c => c.name)
     if (!cols.includes('cli_name')) db.exec("ALTER TABLE slack_thread_session ADD COLUMN cli_name TEXT")
+    if (!cols.includes('project_id')) db.exec("ALTER TABLE slack_thread_session ADD COLUMN project_id TEXT")
   } catch { /* ignore */ }
   // Slack 유저 ↔ IVE 유저 개인 매핑 (워크스페이스 기본유저 덮어쓰기)
   db.exec(`

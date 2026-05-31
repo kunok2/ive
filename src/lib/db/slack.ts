@@ -171,6 +171,7 @@ function mapThreadSession(r: any): SlackThreadSession {
     issueIid: r.issue_iid ?? null,
     cliSessionId: r.cli_session_id ?? null,
     cliName: r.cli_name ?? null,
+    projectId: r.project_id ?? null,
     updatedAt: r.updated_at,
   }
 }
@@ -180,20 +181,28 @@ export function getSlackThreadSession(workspaceId: string, channelId: string, th
   return r ? mapThreadSession(r) : null
 }
 
-export function createSlackThreadSession(s: { workspaceId: string; channelId: string; threadTs: string; issueIid?: number | null }) {
+export function createSlackThreadSession(s: { workspaceId: string; channelId: string; threadTs: string; issueIid?: number | null; projectId?: string | null }) {
   getDb().prepare(`
-    INSERT INTO slack_thread_session (workspace_id, channel_id, thread_ts, issue_iid, updated_at)
-    VALUES (?, ?, ?, ?, datetime('now'))
+    INSERT INTO slack_thread_session (workspace_id, channel_id, thread_ts, issue_iid, project_id, updated_at)
+    VALUES (?, ?, ?, ?, ?, datetime('now'))
     ON CONFLICT(workspace_id, channel_id, thread_ts) DO UPDATE SET
       issue_iid = excluded.issue_iid, updated_at = excluded.updated_at
-  `).run(s.workspaceId, s.channelId, s.threadTs, s.issueIid ?? null)
+  `).run(s.workspaceId, s.channelId, s.threadTs, s.issueIid ?? null, s.projectId ?? null)
 }
 
-export function updateSlackThreadCliSession(workspaceId: string, channelId: string, threadTs: string, cliSessionId: string, cliName: string) {
+export function updateSlackThreadCliSession(workspaceId: string, channelId: string, threadTs: string, cliSessionId: string, cliName: string, projectId?: string | null) {
   getDb().prepare(`
-    UPDATE slack_thread_session SET cli_session_id = ?, cli_name = ?, updated_at = datetime('now')
+    UPDATE slack_thread_session SET cli_session_id = ?, cli_name = ?, project_id = COALESCE(?, project_id), updated_at = datetime('now')
     WHERE workspace_id = ? AND channel_id = ? AND thread_ts = ?
-  `).run(cliSessionId, cliName, workspaceId, channelId, threadTs)
+  `).run(cliSessionId, cliName, projectId ?? null, workspaceId, channelId, threadTs)
+}
+
+/** 스레드 세션의 대상 프로젝트를 갱신하고 CLI 세션을 초기화한다(프로젝트가 바뀌면 resume 불가하므로). */
+export function resetSlackThreadProject(workspaceId: string, channelId: string, threadTs: string, projectId: string) {
+  getDb().prepare(`
+    UPDATE slack_thread_session SET project_id = ?, cli_session_id = NULL, updated_at = datetime('now')
+    WHERE workspace_id = ? AND channel_id = ? AND thread_ts = ?
+  `).run(projectId, workspaceId, channelId, threadTs)
 }
 
 // ── User mapping (Slack 유저 ↔ IVE 유저) ──

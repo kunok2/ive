@@ -4,7 +4,7 @@ import path from 'path'
 import {
   getProjectsByUser, getSharedProjectsForUser, getProjectAuthToken,
   getSystemSetting, getAgentsByUser,
-  getSlackThreadSession, createSlackThreadSession, updateSlackThreadCliSession,
+  getSlackThreadSession, createSlackThreadSession, updateSlackThreadCliSession, resetSlackThreadProject,
 } from './db'
 import { decrypt } from './crypto'
 import {
@@ -365,14 +365,20 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
     let issueIid: number | null
     if (!session) {
       issueIid = parseIssueNumber(cleanText)
-      createSlackThreadSession({ workspaceId: workspace.id, channelId: channel, threadTs: convoId, issueIid })
+      createSlackThreadSession({ workspaceId: workspace.id, channelId: channel, threadTs: convoId, issueIid, projectId: project.id })
       session = getSlackThreadSession(workspace.id, channel, convoId)
     } else {
       issueIid = session.issueIid ?? null
     }
-    // resume은 같은 CLI가 만든 세션에만 (claude는 UUID, opencode는 ses_… 등 형식이 달라 호환 안 됨).
-    // CLI가 다르거나 기록이 없으면 새 대화로 시작.
-    const cliSessionId = (session?.cliSessionId && session?.cliName === agent.cliName) ? session.cliSessionId : null
+    // resume 조건 (셋 다 충족해야 이전 CLI 세션 이어가기):
+    //  1) 같은 CLI (claude=UUID, opencode=ses_… 등 형식 달라 호환 안 됨)
+    //  2) 같은 프로젝트 — claude 세션은 워크스페이스(cwd)별로 저장되므로 프로젝트가 바뀌면
+    //     이전 세션을 못 찾아 "No conversation found" 가 난다. 다르면 새 대화로 시작.
+    let cliSessionId = (
+      session?.cliSessionId &&
+      session?.cliName === agent.cliName &&
+      session?.projectId === project.id
+    ) ? session.cliSessionId : null
 
     // 이슈 모드(레포 + dev-N 브랜치) / 프로젝트 모드(레포 기본 브랜치) — 둘 다 실제 레포 clone
     let workspacePath: string
@@ -417,37 +423,50 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
       if (text) await sink.update(msgTs, text.slice(0, 38000))
     }
 
-    await runChatAgentWithCallback(
-      {
-        sessionId: sessionKey,
-        cliSessionId,
-        project,
-        agent,
-        token,
-        issueIid: issueIid ?? 0,
-        issueTitle,
-        issueDescription,
-        userMessage: cleanText,
-        workspacePath,
-        generalMode,
-        availableProjects: ownerProjects.map(p => p.name),
-        attachedImages,
-      },
-      (ev) => {
-        if (ev.type === 'session_id' && ev.content) {
-          updateSlackThreadCliSession(workspace.id, channel, convoId, ev.content, agent.cliName)
-        } else if (ev.type === 'text' && ev.content) {
-          full += ev.content
-          void flush(false)
-        } else if (ev.type === 'done') {
-          void flush(true)
-        } else if (ev.type === 'error') {
+    const baseOpts = {
+      sessionId: sessionKey,
+      project,
+      agent,
+      token,
+      issueIid: issueIid ?? 0,
+      issueTitle,
+      issueDescription,
+      userMessage: cleanText,
+      workspacePath,
+      generalMode,
+      availableProjects: ownerProjects.map(p => p.name),
+      attachedImages,
+    }
+    let resumeLost = false
+    const onEvent = (ev: { type: string; content?: string }) => {
+      if (ev.type === 'session_id' && ev.content) {
+        updateSlackThreadCliSession(workspace.id, channel, convoId, ev.content, agent.cliName, project.id)
+      } else if (ev.type === 'text' && ev.content) {
+        full += ev.content
+        void flush(false)
+      } else if (ev.type === 'done') {
+        void flush(true)
+      } else if (ev.type === 'error') {
+        // resume 대상 세션이 사라진 경우(배포 재시작/워크스페이스 변경 등) → 표시하지 않고 새 대화로 재시도
+        if (cliSessionId && /no conversation found|session .*not found|no such session/i.test(ev.content || '')) {
+          resumeLost = true
+        } else {
           full += `\n\n:warning: ${ev.content || '오류가 발생했습니다.'}`
           void flush(true)
         }
-        return true
-      },
-    )
+      }
+      return true
+    }
+
+    await runChatAgentWithCallback({ ...baseOpts, cliSessionId }, onEvent)
+
+    // resume 실패(세션 유실) → CLI 세션 초기화 후 새 대화로 1회 자동 재시도
+    if (resumeLost && !full.trim()) {
+      resetSlackThreadProject(workspace.id, channel, convoId, project.id)
+      cliSessionId = null
+      full = ''
+      await runChatAgentWithCallback({ ...baseOpts, cliSessionId: null }, onEvent)
+    }
 
     if (msgTs && !full.trim()) {
       await sink.update(msgTs, `(응답이 비어 있어요. 다시 한 번 말 걸어 주세요.)`)
