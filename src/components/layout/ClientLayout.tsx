@@ -2,6 +2,7 @@
 
 import { usePathname, useSearchParams } from 'next/navigation'
 import TopBar from '@/components/layout/TopBar'
+import DebugOverflow from '@/components/layout/DebugOverflow'
 
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
@@ -23,6 +24,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     <>
       <TopBar />
       <div className="flex-1 min-h-0 overflow-hidden">{children}</div>
+      <DebugOverflow />
     </>
   )
 }
