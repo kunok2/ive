@@ -82,8 +82,16 @@ export interface DecryptedWorkspace {
 }
 
 /** 소유자의 에이전트 중 하나를 선택 (OpenCode 우선, 없으면 첫 에이전트). 남의 에이전트는 쓰지 않음. */
-function pickOwnerAgent(ownerUserId: string): Agent | null {
+function pickOwnerAgent(ownerUserId: string, preferVision = false): Agent | null {
   const list = getAgentsByUser(ownerUserId)
+  if (preferVision) {
+    // 이미지 첨부 시: 이미지(vision) 분석이 되는 CLI를 우선.
+    // opencode 는 모델에 따라 이미지 미지원이라(기본 모델이 vision 아님) 후순위.
+    for (const cli of ['claude', 'gemini', 'codex']) {
+      const a = list.find(x => x.cliName === cli)
+      if (a) return a
+    }
+  }
   return list.find(a => a.cliName === 'opencode') || list[0] || null
 }
 
@@ -216,6 +224,30 @@ interface AppMentionEvent {
 }
 
 /**
+ * app_mention 이벤트엔 첨부 files 가 비어 오므로(Slack 동작), 멘션된 메시지를
+ * conversations.history(채널) / conversations.replies(스레드)로 재조회해 files 를 가져온다.
+ * 스코프: channels:history, groups:history, files:read.
+ */
+async function fetchMentionFiles(botToken: string, channel: string, ts: string, threadTs?: string): Promise<SlackFile[]> {
+  const method = threadTs ? 'conversations.replies' : 'conversations.history'
+  const params: Record<string, string> = threadTs
+    ? { channel, ts: threadTs, limit: '50' }
+    : { channel, latest: ts, oldest: ts, inclusive: 'true', limit: '1' }
+  try {
+    const qs = new URLSearchParams(params).toString()
+    const res = await fetch(`${SLACK_API}/${method}?${qs}`, { headers: { Authorization: `Bearer ${botToken}` } })
+    const json: any = await res.json().catch(() => ({ ok: false, error: 'invalid_json' }))
+    if (!json.ok) { console.warn(`[Slack] ${method} failed:`, json.error); return [] }
+    const msgs: any[] = json.messages || []
+    const msg = msgs.find(m => m.ts === ts) || msgs[0]
+    return (msg?.files || []) as SlackFile[]
+  } catch (e) {
+    console.warn('[Slack] fetchMentionFiles error:', e)
+    return []
+  }
+}
+
+/**
  * Slack 첨부 이미지를 봇 토큰으로 다운로드해 destDir에 저장하고 저장 경로 배열을 반환.
  * url_private 는 인증이 필요해 Authorization: Bearer <botToken> 헤더로 받아야 한다.
  */
@@ -230,6 +262,13 @@ async function downloadSlackImages(botToken: string, files: SlackFile[], destDir
     try {
       const res = await fetch(url, { headers: { Authorization: `Bearer ${botToken}` } })
       if (!res.ok) { console.error(`[Slack] image download failed (${res.status}) ${url}`); continue }
+      // files:read 스코프가 없으면 url_private 가 실제 이미지 대신 HTML 로그인 페이지를 반환한다.
+      // 그걸 이미지로 저장하면 에이전트가 "이미지 처리 불가"로 실패 → content-type 으로 걸러낸다.
+      const ct = res.headers.get('content-type') || ''
+      if (!ct.startsWith('image/')) {
+        console.error(`[Slack] 첨부 다운로드가 이미지가 아님 (content-type=${ct}). 봇 토큰의 files:read 스코프(앱 재설치)를 확인하세요.`)
+        continue
+      }
       const buf = Buffer.from(await res.arrayBuffer())
       const ext = (f.filetype || f.mimetype?.split('/')[1] || 'png').replace(/[^a-z0-9]/gi, '') || 'png'
       const fp = path.join(destDir, `slack-image-${i + 1}.${ext}`)
@@ -284,7 +323,14 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
       await sink.post(`이 워크스페이스에 소유자(IVE 유저)가 지정되지 않았어요. 관리자에게 문의해 주세요.`)
       return
     }
-    const agent = pickOwnerAgent(ownerUserId)
+    // app_mention 엔 files 가 비어 오므로 멘션 메시지를 재조회해 첨부를 보완한다.
+    let mentionFiles: SlackFile[] = (event.files && event.files.length) ? event.files : []
+    if (mentionFiles.length === 0 && channel && event.ts) {
+      mentionFiles = await fetchMentionFiles(botToken, channel, event.ts, event.thread_ts).catch(() => [])
+    }
+    // 이미지 첨부가 있으면 vision 가능한 에이전트를 우선 선택
+    const hasImages = mentionFiles.some(f => f.mimetype?.startsWith('image/'))
+    const agent = pickOwnerAgent(ownerUserId, hasImages)
     if (!agent) {
       await sink.post(`소유자에게 사용할 수 있는 에이전트가 없어요. 관리자에게 문의해 주세요.`)
       return
@@ -349,15 +395,11 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
     }
 
     // 첨부 이미지 다운로드 (워크스페이스 하위에 저장 → 에이전트가 읽음)
-    // [진단] app_mention 페이로드에 files 가 오는지 / 다운로드가 되는지 구분하기 위한 로그
-    console.log(`[Slack][diag] app_mention files=${(event.files || []).length} ` +
-      JSON.stringify((event.files || []).map(f => ({ mimetype: f.mimetype, filetype: f.filetype, hasPrivate: !!f.url_private, hasDownload: !!f.url_private_download }))))
     const attachedImages = await downloadSlackImages(
       botToken,
-      event.files || [],
+      mentionFiles,
       path.join(workspacePath, '.slack-attachments'),
-    ).catch((e) => { console.error('[Slack][diag] downloadSlackImages threw:', e); return [] as string[] })
-    console.log(`[Slack][diag] attachedImages=${attachedImages.length}`)
+    ).catch(() => [] as string[])
 
     // 처리 중 placeholder
     const placeholderBase = issueIid != null ? `:hourglass_flowing_sand: #${issueIid} 살펴보는 중…` : `:speech_balloon: …`
