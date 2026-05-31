@@ -43,8 +43,8 @@ export default function AdminTab() {
 
   return (
     <PullToRefresh onRefresh={handleRefresh} className="w-full flex-1 flex flex-col max-w-lg mx-auto px-4 overflow-hidden">
-      {/* 서브 탭 바 */}
-      <div className="shrink-0 pt-4 pb-3">
+      {/* 서브 탭 바 — 버튼이 투명 배경이라 pt-4면 아이콘이 색박스 토글 탭들보다 더 내려가 보임. pt-1로 시각 정렬 */}
+      <div className="shrink-0 pt-1 pb-3">
         <div data-tour="admin-sub-tabs" className="flex">
           {subTabs.map(t => (
             <button
