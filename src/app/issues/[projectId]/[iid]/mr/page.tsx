@@ -116,7 +116,7 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
   return (
     <div className="h-full flex flex-col">
       <header className="shrink-0 z-40 w-full max-w-lg mx-auto bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark">
-        <div className="px-4 py-3">
+        <div className="px-3 py-3">
           <div className="flex items-center gap-3">
             <button onClick={() => router.back()} className="text-ive-green text-base font-bold p-1 hover:bg-ive-green/5 rounded">
               <i className="fa-solid fa-arrow-left mr-1" />뒤로
@@ -139,9 +139,9 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
         </div>
       </header>
 
-      <div className="flex-1 min-h-0 w-full max-w-lg mx-auto px-4 flex flex-col overflow-hidden">
-      <div className="flex-1 min-h-0 overflow-y-auto">
-      <main className="pt-4 pb-20">
+      <div className="flex-1 min-h-0 w-full max-w-lg mx-auto flex flex-col overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-y-auto pl-3 pr-1">
+      <main className="pt-4 pb-4">
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <i className="fa-solid fa-spinner fa-spin text-2xl text-ive-text-dim" />
@@ -158,57 +158,58 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
             </div>
 
             <DiffViewer changes={changes} />
-
-            {mergeError && (
-              <div className="mt-4 text-sm text-ive-red bg-ive-red/10 rounded-lg px-3 py-2 border border-ive-red/20">
-                <i className="fa-solid fa-circle-exclamation mr-1" />{mergeError}
-              </div>
-            )}
-
-            {/* 머지/닫기 버튼 */}
-            {!isMerged && (
-              <div className="mt-6 mb-4 flex gap-2">
-                <button
-                  onClick={() => canMerge && setShowMergeConfirm(true)}
-                  disabled={!canMerge || merging || closing}
-                  className={`flex-1 text-base font-bold py-3 rounded-lg active:scale-[0.98] transition-all ${
-                    canMerge
-                      ? 'text-white bg-ive-green hover:bg-ive-green/90'
-                      : 'text-ive-text-dim bg-ive-bg-card border border-ive-border-subtle cursor-not-allowed'
-                  }`}
-                >
-                  {merging ? (
-                    <><i className="fa-solid fa-spinner fa-spin mr-1.5" />머지 중...</>
-                  ) : mr?.has_conflicts ? (
-                    <><i className="fa-solid fa-ban mr-1.5" />충돌로 머지 불가</>
-                  ) : (
-                    <><i className="fa-solid fa-code-merge mr-1.5" />머지</>
-                  )}
-                </button>
-                <button
-                  onClick={() => setShowCloseConfirm(true)}
-                  disabled={merging || closing}
-                  className="text-base font-bold text-ive-red/70 bg-ive-red/5 px-4 py-3 rounded-lg active:scale-[0.98] transition-all hover:bg-ive-red/10 border border-ive-red/20"
-                >
-                  {closing ? (
-                    <i className="fa-solid fa-spinner fa-spin" />
-                  ) : (
-                    <><i className="fa-solid fa-xmark mr-1.5" />버림</>
-                  )}
-                </button>
-              </div>
-            )}
-
-            {isMerged && (
-              <div className="mt-6 mb-4 text-center py-3 bg-ive-cyan/10 rounded-lg border border-ive-cyan/20">
-                <i className="fa-solid fa-code-merge text-ive-cyan mr-1.5" />
-                <span className="text-sm font-bold text-ive-cyan">이미 머지된 MR입니다</span>
-              </div>
-            )}
           </>
         )}
       </main>
       </div>
+
+      {/* 항상 보이는 하단 액션 바 — 스크롤과 무관 */}
+      {!loading && !error && (
+        <div className="shrink-0 px-3 pt-3 pb-20 bg-ive-bg-deep border-t border-ive-border-dark">
+          {mergeError && (
+            <div className="mb-3 text-sm text-ive-red bg-ive-red/10 rounded-lg px-3 py-2 border border-ive-red/20">
+              <i className="fa-solid fa-circle-exclamation mr-1" />{mergeError}
+            </div>
+          )}
+          {!isMerged ? (
+            <div className="flex gap-2">
+              <button
+                onClick={() => canMerge && setShowMergeConfirm(true)}
+                disabled={!canMerge || merging || closing}
+                className={`flex-1 text-base font-bold py-3 rounded-lg active:scale-[0.98] transition-all ${
+                  canMerge
+                    ? 'text-white bg-ive-green hover:bg-ive-green/90'
+                    : 'text-ive-text-dim bg-ive-bg-card border border-ive-border-subtle cursor-not-allowed'
+                }`}
+              >
+                {merging ? (
+                  <><i className="fa-solid fa-spinner fa-spin mr-1.5" />머지 중...</>
+                ) : mr?.has_conflicts ? (
+                  <><i className="fa-solid fa-ban mr-1.5" />충돌로 머지 불가</>
+                ) : (
+                  <><i className="fa-solid fa-code-merge mr-1.5" />머지</>
+                )}
+              </button>
+              <button
+                onClick={() => setShowCloseConfirm(true)}
+                disabled={merging || closing}
+                className="text-base font-bold text-ive-red/70 bg-ive-red/5 px-4 py-3 rounded-lg active:scale-[0.98] transition-all hover:bg-ive-red/10 border border-ive-red/20"
+              >
+                {closing ? (
+                  <i className="fa-solid fa-spinner fa-spin" />
+                ) : (
+                  <><i className="fa-solid fa-xmark mr-1.5" />버림</>
+                )}
+              </button>
+            </div>
+          ) : (
+            <div className="text-center py-3 bg-ive-cyan/10 rounded-lg border border-ive-cyan/20">
+              <i className="fa-solid fa-code-merge text-ive-cyan mr-1.5" />
+              <span className="text-sm font-bold text-ive-cyan">이미 머지된 MR입니다</span>
+            </div>
+          )}
+        </div>
+      )}
       </div>
 
       <ConfirmModal

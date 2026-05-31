@@ -167,15 +167,26 @@ async function runScanImmediate(projectId?: string) {
   } catch (err) {
     slog.error({ err: err }, `Immediate scan error:`);
   } finally {
-    global.isScanning = false;
+    finishScan();
+  }
+}
 
-    // pending 트리거가 있으면 실행
-    const pending = global.pendingScanProjectId
-    if (pending !== undefined) {
-      global.pendingScanProjectId = undefined
-      slog.info(`Running pending scan${pending ? ` for project ${pending}` : ''}...`)
-      runScanImmediate(pending ?? undefined)
-    }
+/**
+ * 스캔 종료 공통 처리. 백그라운드 루프(runScan)와 즉시 스캔(runScanImmediate)이
+ * 모두 이 함수로 끝나야 한다. isScanning을 해제하고, 스캔 중 들어와 큐잉된
+ * 수동/이벤트 트리거(pendingScanProjectId)가 있으면 이어서 실행한다.
+ *
+ * ※ 과거에는 드레인 로직이 runScanImmediate에만 있어, 백그라운드 스캔이 진행 중일 때
+ *   들어온 triggerScan이 pending에 쌓이기만 하고 영영 실행되지 않는 버그가 있었다.
+ */
+function finishScan() {
+  global.isScanning = false;
+
+  const pending = global.pendingScanProjectId;
+  if (pending !== undefined) {
+    global.pendingScanProjectId = undefined;
+    slog.info(`Running pending scan${pending ? ` for project ${pending}` : ''}...`);
+    runScanImmediate(pending ?? undefined);
   }
 }
 
@@ -205,7 +216,7 @@ async function runScan() {
   } catch (err) {
     slog.error({ err: err }, `Core runScan error:`);
   } finally {
-    global.isScanning = false;
+    finishScan();
   }
 }
 

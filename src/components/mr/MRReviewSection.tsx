@@ -28,9 +28,11 @@ interface MRInfo {
 interface Props {
   projectId: string
   issueIid: number
+  /** MR 데이터 로드/표시로 섹션 높이가 바뀐 직후 호출 (부모가 채팅 스크롤 보정용) */
+  onLayoutChange?: () => void
 }
 
-export default function MRReviewSection({ projectId, issueIid }: Props) {
+export default function MRReviewSection({ projectId, issueIid, onLayoutChange }: Props) {
   const router = useRouter()
   const { state } = useStore()
   const userLocale = state.user?.locale
@@ -61,6 +63,9 @@ export default function MRReviewSection({ projectId, issueIid }: Props) {
   }, [projectId, issueIid])
 
   useEffect(() => { fetchMR() }, [fetchMR])
+
+  // 로딩 완료/MR 표시로 섹션 높이가 바뀐 직후 부모에 알림 (늦게 그려지며 아래 채팅을 밀어내는 문제 보정)
+  useEffect(() => { onLayoutChange?.() }, [loading, mr]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleMerge() {
     setMerging(true)

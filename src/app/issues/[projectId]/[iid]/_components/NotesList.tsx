@@ -191,7 +191,14 @@ export default function NotesList({
 
               {/* 작업결과 반영(MR) — 처리 결과(노트) 다음, 채팅 이전의 시간순 위치 */}
               {canProgressStage && (issue.stage === 'done' || issue.stage === 'dev' || issue.stage === 'verify_waiting' || issue.stage === 'verifying') && (
-                <MRReviewSection projectId={projectId} issueIid={Number(iid)} />
+                <MRReviewSection
+                  projectId={projectId}
+                  issueIid={Number(iid)}
+                  onLayoutChange={() => {
+                    // MR이 늦게 그려지며 아래 채팅을 뷰 밖으로 밀어내므로, 채팅 모드면 바닥으로 보정
+                    if (mode === 'chat') requestAnimationFrame(() => notesEndRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' }))
+                  }}
+                />
               )}
 
               {/* Chat messages inline in timeline (머지 이후 작업이므로 MR 다음) */}
