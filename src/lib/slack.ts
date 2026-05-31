@@ -19,8 +19,9 @@ const SLACK_API = 'https://slack.com/api'
 // ── Slack 앱 자격증명 (앱 단위 1세트, OAuth 로그인·봇설치 공통) ──
 
 /** 봇 설치(Add to Slack) 때 요청하는 bot scope */
-// files:read — 멘션에 첨부된 이미지(url_private)를 봇 토큰으로 다운로드하기 위해 필요.
-export const SLACK_BOT_SCOPES = 'app_mentions:read,chat:write,channels:history,groups:history,channels:read,groups:read,files:read'
+// files:read — 멘션 첨부 이미지(url_private) 다운로드.
+// users:read — 멘션한 사용자의 언어 설정(locale)을 읽어 응답 언어를 맞추기 위해 필요.
+export const SLACK_BOT_SCOPES = 'app_mentions:read,chat:write,channels:history,groups:history,channels:read,groups:read,files:read,users:read'
 
 export interface SlackAppConfig {
   clientId: string
@@ -199,6 +200,54 @@ export function parseIssueNumber(text: string): number | null {
   return null
 }
 
+// ── 사용자 언어(locale) + 표시 메시지 ──
+
+type SlackLocale = 'ko' | 'en'
+
+/** 멘션한 슬랙 사용자의 언어 설정을 읽어 ko/en 으로 매핑. 실패 시 ko. (users:read 스코프 필요) */
+async function fetchUserLocale(botToken: string, slackUserId: string): Promise<SlackLocale> {
+  try {
+    const qs = new URLSearchParams({ user: slackUserId, include_locale: 'true' }).toString()
+    const res = await fetch(`${SLACK_API}/users.info?${qs}`, { headers: { Authorization: `Bearer ${botToken}` } })
+    const json: any = await res.json().catch(() => ({ ok: false }))
+    if (!json.ok) { console.warn('[Slack] users.info failed:', json.error); return 'ko' }
+    const loc = String(json?.user?.locale || '').toLowerCase()
+    return loc.startsWith('ko') ? 'ko' : 'en'
+  } catch {
+    return 'ko'
+  }
+}
+
+/** 슬랙에 표시할 IVE 시스템 메시지 (멘션 사용자 언어별). 에이전트 응답이 아니라 IVE 자체 안내/오류 문구. */
+const SLACK_MSG = {
+  ko: {
+    noOwner: '이 워크스페이스에 소유자(IVE 유저)가 지정되지 않았어요. 관리자에게 문의해 주세요.',
+    noAgent: '소유자에게 사용할 수 있는 에이전트가 없어요. 관리자에게 문의해 주세요.',
+    noProject: '소유자에게 연결된 프로젝트가 없어요. 관리자에게 문의해 주세요.',
+    busy: '아직 이전 메시지를 처리 중이에요. 잠시만요…',
+    issueNotFound: (p: string, iid: number) => `프로젝트 *${p}* 에서 #${iid} 을(를) 못 찾았어요. 번호를 확인해 주세요.`,
+    placeholderIssue: (iid: number) => `:hourglass_flowing_sand: #${iid} 살펴보는 중…`,
+    placeholderChat: ':speech_balloon: …',
+    imageChecking: (n: number) => `:frame_with_picture: 이미지 ${n}장 확인 중…`,
+    emptyResponse: '(응답이 비어 있어요. 다시 한 번 말 걸어 주세요.)',
+    errorGeneric: '오류가 발생했습니다.',
+    processingError: (detail: string) => `처리 중 오류가 발생했어요.${detail ? `\n\`${detail}\`` : ' 잠시 후 다시 시도해 주세요.'}`,
+  },
+  en: {
+    noOwner: 'This workspace has no IVE owner assigned. Please contact your admin.',
+    noAgent: 'The owner has no available agent. Please contact your admin.',
+    noProject: 'The owner has no connected project. Please contact your admin.',
+    busy: 'Still working on your previous message. One moment…',
+    issueNotFound: (p: string, iid: number) => `Couldn't find #${iid} in project *${p}*. Please check the number.`,
+    placeholderIssue: (iid: number) => `:hourglass_flowing_sand: Looking into #${iid}…`,
+    placeholderChat: ':speech_balloon: …',
+    imageChecking: (n: number) => `:frame_with_picture: Checking ${n} image(s)…`,
+    emptyResponse: '(Empty response. Please mention me again.)',
+    errorGeneric: 'An error occurred.',
+    processingError: (detail: string) => `Something went wrong.${detail ? `\n\`${detail}\`` : ' Please try again later.'}`,
+  },
+} as const
+
 // ── 멘션 처리 (백그라운드) ──
 
 /** Slack 파일 첨부(이미지 등). app_mention 이벤트의 files 배열 요소. */
@@ -316,11 +365,15 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
     update: (id, text) => updateMessage(botToken, channel, id, text),
   }
 
+  // 멘션한 사용자의 언어로 IVE 시스템 메시지를 표시(에이전트 응답 언어도 이 locale 을 따른다).
+  const locale = await fetchUserLocale(botToken, slackUser)
+  const M = SLACK_MSG[locale]
+
   try {
     // 워크스페이스 소유자(IVE 유저). 이 유저의 에이전트·프로젝트만 사용 (남의 것 접근 불가).
     const ownerUserId = workspace.defaultUserId
     if (!ownerUserId) {
-      await sink.post(`이 워크스페이스에 소유자(IVE 유저)가 지정되지 않았어요. 관리자에게 문의해 주세요.`)
+      await sink.post(M.noOwner)
       return
     }
     // app_mention 엔 files 가 비어 오므로 멘션 메시지를 재조회해 첨부를 보완한다.
@@ -338,7 +391,7 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
       : null
     const agent = pinnedAgent || pickOwnerAgent(ownerUserId, hasImages)
     if (!agent) {
-      await sink.post(`소유자에게 사용할 수 있는 에이전트가 없어요. 관리자에게 문의해 주세요.`)
+      await sink.post(M.noAgent)
       return
     }
 
@@ -348,7 +401,7 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
     const seen = new Set(owned.map(p => p.id))
     const ownerProjects = [...owned, ...shared.filter(p => !seen.has(p.id))]
     if (ownerProjects.length === 0) {
-      await sink.post(`소유자에게 연결된 프로젝트가 없어요. 관리자에게 문의해 주세요.`)
+      await sink.post(M.noProject)
       return
     }
     // 대상 프로젝트: 멘션에 이름이 있으면 그걸로, 없으면 소유자의 첫 프로젝트.
@@ -362,7 +415,7 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
     // 스레드 단위 독립 대화: 세션/이슈바인딩/CLI세션을 thread_ts 기준으로 유지
     const sessionKey = `slack:${workspace.id}:${channel}:${convoId}`
     if (isChatAgentRunning(sessionKey)) {
-      await sink.post(`아직 이전 메시지를 처리 중이에요. 잠시만요…`)
+      await sink.post(M.busy)
       return
     }
 
@@ -395,7 +448,7 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
       if (!cliSessionId) {
         const issue = await fetchSingleIssue(project, issueIid, token).catch(() => null)
         if (!issue) {
-          await sink.post(`프로젝트 *${project.name}* 에서 #${issueIid} 을(를) 못 찾았어요. 번호를 확인해 주세요.`)
+          await sink.post(M.issueNotFound(project.name, issueIid))
           return
         }
         issueTitle = issue.title || `Issue #${issueIid}`
@@ -414,8 +467,8 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
     ).catch(() => [] as string[])
 
     // 처리 중 placeholder
-    const placeholderBase = issueIid != null ? `:hourglass_flowing_sand: #${issueIid} 살펴보는 중…` : `:speech_balloon: …`
-    const msgTs = await sink.post(attachedImages.length > 0 ? `:frame_with_picture: 이미지 ${attachedImages.length}장 확인 중…` : placeholderBase)
+    const placeholderBase = issueIid != null ? M.placeholderIssue(issueIid) : M.placeholderChat
+    const msgTs = await sink.post(attachedImages.length > 0 ? M.imageChecking(attachedImages.length) : placeholderBase)
 
     // CLI 구동 + Slack 스트리밍 (throttled chat.update)
     let full = ''
@@ -442,6 +495,7 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
       generalMode,
       availableProjects: ownerProjects.map(p => p.name),
       attachedImages,
+      userLocale: locale,
     }
     let resumeLost = false
     const onEvent = (ev: { type: string; content?: string }) => {
@@ -457,7 +511,7 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
         if (cliSessionId && /no conversation found|session .*not found|no such session/i.test(ev.content || '')) {
           resumeLost = true
         } else {
-          full += `\n\n:warning: ${ev.content || '오류가 발생했습니다.'}`
+          full += `\n\n:warning: ${ev.content || M.errorGeneric}`
           void flush(true)
         }
       }
@@ -475,7 +529,7 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
     }
 
     if (msgTs && !full.trim()) {
-      await sink.update(msgTs, `(응답이 비어 있어요. 다시 한 번 말 걸어 주세요.)`)
+      await sink.update(msgTs, M.emptyResponse)
     } else if (msgTs) {
       await sink.update(msgTs, full.trim().slice(0, 38000))
     }
@@ -483,7 +537,7 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
     console.error('[Slack] handleAppMention error:', err)
     const detail = maskSecrets(err instanceof Error ? err.message : String(err)).slice(0, 250)
     try {
-      await sink.post(`처리 중 오류가 발생했어요.${detail ? `\n\`${detail}\`` : ' 잠시 후 다시 시도해 주세요.'}`)
+      await sink.post(M.processingError(detail))
     } catch { /* ignore */ }
   }
 }
