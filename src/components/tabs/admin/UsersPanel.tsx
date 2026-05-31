@@ -134,7 +134,7 @@ export default function UsersPanel() {
   if (view === 'activity') {
     return (
       <main>
-        <div className="sticky top-0 z-10 bg-ive-bg-deep pb-2">
+        <div className="pb-2">
           <div className="flex gap-1.5">
             {views.map(v => (
               <button
@@ -142,8 +142,8 @@ export default function UsersPanel() {
                 onClick={() => setView(v.key)}
                 className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
                   view === v.key
-                    ? 'bg-ive-green/15 text-ive-green border border-ive-green/30'
-                    : 'bg-ive-bg-card border border-ive-border-subtle text-ive-text-dim active:scale-[0.96]'
+                    ? 'bg-ive-green text-ive-bg-deep'
+                    : 'bg-ive-bg-card text-ive-text-dim active:scale-[0.96]'
                 }`}
               >
                 <i className={`${v.icon} mr-1`} />{v.label}
@@ -158,7 +158,7 @@ export default function UsersPanel() {
 
   return (
     <main>
-      <div className="sticky top-0 z-10 bg-ive-bg-deep pb-2">
+      <div className="pb-2">
         <div className="flex gap-1.5">
           {views.map(v => (
             <button
@@ -166,8 +166,8 @@ export default function UsersPanel() {
               onClick={() => setView(v.key)}
               className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
                 view === v.key
-                  ? 'bg-ive-green/15 text-ive-green border border-ive-green/30'
-                  : 'bg-ive-bg-card border border-ive-border-subtle text-ive-text-dim active:scale-[0.96]'
+                  ? 'bg-ive-green text-ive-bg-deep'
+                  : 'bg-ive-bg-card text-ive-text-dim active:scale-[0.96]'
               }`}
             >
               <i className={`${v.icon} mr-1`} />{v.label}

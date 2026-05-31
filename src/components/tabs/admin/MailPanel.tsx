@@ -33,7 +33,7 @@ export default function MailPanel() {
   return (
     <main className="flex-1 flex flex-col min-h-0">
       {/* 서브뷰 토글 */}
-      <div className="sticky top-0 z-10 bg-ive-bg-deep pb-2 shrink-0">
+      <div className="pb-2 shrink-0">
         <div className="flex gap-1.5">
           {views.map(v => (
             <button
@@ -41,8 +41,8 @@ export default function MailPanel() {
               onClick={() => handleSetView(v.key)}
               className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
                 view === v.key
-                  ? 'bg-ive-green/15 text-ive-green border border-ive-green/30'
-                  : 'bg-ive-bg-card text-ive-text-dim border border-ive-border-subtle'
+                  ? 'bg-ive-green text-ive-bg-deep'
+                  : 'bg-ive-bg-card text-ive-text-dim'
               }`}
             >
               <i className={`${v.icon} mr-1`} />{v.label}
