@@ -2,7 +2,7 @@ import { spawn, ChildProcess } from 'child_process'
 import fs from 'fs'
 import path from 'path'
 import { promisify } from 'util'
-import { getSystemSetting, getProject, getAgentsByUser, countActiveExecutionsByAgent, updateChatSessionCliId } from './db'
+import { getSystemSetting, getProject, getAgentsByUser, countActiveExecutionsByAgent, updateChatSessionCliId, getStaleActiveChatSessions, getChatSession, endChatSession, updateExecutionStatus, updateAgentStatus } from './db'
 import { decrypt } from './crypto'
 import { defaultLocale } from '@/i18n/config'
 import { Agent, Project } from '@/types'
@@ -44,6 +44,45 @@ export function killChatAgent(sessionId: string) {
     }
   }
   getAgentMap().delete(sessionId)
+}
+
+// ── 서버측 채팅 세션 idle 리퍼 ──
+// 사용자가 페이지를 떠나면 클라이언트 idle-close 가 동작하지 않는다.
+// 실행 중이지 않으면서 N분간 활동이 없는 active 세션을 정리해 에이전트/실행 점유를 푼다
+// (스캐너가 에이전트를 다시 쓸 수 있도록 — /chat/end 와 동일한 정리 절차).
+const CHAT_IDLE_TIMEOUT_MIN = 10
+let chatReaperStarted = false
+
+function reapChatSession(sessionId: string) {
+  const session = getChatSession(sessionId)
+  if (!session || session.status !== 'active') return
+  killChatAgent(sessionId) // 안전망 (호출 시점엔 이미 실행 중이 아님)
+  if (session.executionId) {
+    try { updateExecutionStatus(session.executionId, 'success', new Date().toISOString()) } catch { /* ignore */ }
+  }
+  if (session.agentId) {
+    try {
+      if (countActiveExecutionsByAgent(session.agentId) === 0) updateAgentStatus(session.agentId, 'available')
+    } catch { /* ignore */ }
+  }
+  endChatSession(sessionId)
+  console.log(`[ChatReaper] Reaped idle chat session ${sessionId} (issue #${session.issueIid})`)
+}
+
+export function startChatSessionReaper() {
+  if (chatReaperStarted) return
+  chatReaperStarted = true
+  setInterval(() => {
+    try {
+      for (const s of getStaleActiveChatSessions(CHAT_IDLE_TIMEOUT_MIN)) {
+        if (isChatAgentRunning(s.id)) continue // 아직 생각 중이면 건드리지 않음
+        reapChatSession(s.id)
+      }
+    } catch (e) {
+      console.error('[ChatReaper] error:', e)
+    }
+  }, 60_000)
+  console.log('[ChatReaper] Started')
 }
 
 /**

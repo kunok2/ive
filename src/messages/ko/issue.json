@@ -78,6 +78,8 @@
   "retryCount": "되돌리기 {count}회",
   "viewAll": "전체 보기",
   "chatMode": "채팅",
+  "chatBadgeActive": "대화중",
+  "chatBadgeThinking": "생각중",
   "commentMode": "지시",
   "startChat": "AI 채팅 시작",
   "startingChat": "채팅 준비 중...",

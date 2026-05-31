@@ -101,12 +101,6 @@ export default function NotesList({
               <MarkdownNote body={cleanNoteBody(issue.description)} projectId={projectId} />
             </div>
           )}
-          {/* MR 리뷰 섹션 - 담당자 또는 관리자만 표시 */}
-          {canProgressStage && (issue.stage === 'done' || issue.stage === 'dev' || issue.stage === 'verify_waiting' || issue.stage === 'verifying') && (
-            <div className="pr-2">
-              <MRReviewSection projectId={projectId} issueIid={Number(iid)} />
-            </div>
-          )}
           <div className="py-1.5 pr-2 flex items-center justify-between mt-2 sticky top-0 z-10 bg-ive-bg-deep/95 backdrop-blur-sm">
             <span className="text-xs font-bold text-ive-text-dim uppercase tracking-widest">
               <i className="fa-solid fa-comments mr-1" />{tIssue('activityLog')}
@@ -135,11 +129,12 @@ export default function NotesList({
 
           {notesLoading ? (
             <div className="text-center py-10 text-ive-text-dim text-sm">{tIssue('loadingNotes')}</div>
-          ) : notes.length === 0 ? (
-            <div className="text-center py-10 text-ive-text-dim text-sm">{tIssue('noActivity')}</div>
           ) : (
             <div className="space-y-1.5">
-              {[...notes].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()).map(note => {
+              {notes.length === 0 ? (
+                <div className="text-center py-10 text-ive-text-dim text-sm">{tIssue('noActivity')}</div>
+              ) : (
+                [...notes].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()).map(note => {
                 const isIveUser = !!note.iveAuthorAvatar
                 const isBot = !note.system && !isIveUser && (note.body.includes('<!-- ive-bot -->') || note.body.includes('IVE(봇)'))
                 return (
@@ -191,9 +186,15 @@ export default function NotesList({
                     </div>
                   </div>
                 )
-              })}
+                })
+              )}
 
-              {/* Chat messages inline in timeline */}
+              {/* 작업결과 반영(MR) — 처리 결과(노트) 다음, 채팅 이전의 시간순 위치 */}
+              {canProgressStage && (issue.stage === 'done' || issue.stage === 'dev' || issue.stage === 'verify_waiting' || issue.stage === 'verifying') && (
+                <MRReviewSection projectId={projectId} issueIid={Number(iid)} />
+              )}
+
+              {/* Chat messages inline in timeline (머지 이후 작업이므로 MR 다음) */}
               <ChatMessages
                 mode={mode}
                 chatSessionId={chatSessionId}
@@ -208,12 +209,6 @@ export default function NotesList({
               />
 
               <div ref={notesEndRef} />
-            </div>
-          )}
-          {/* MR 리뷰 섹션 - 노트 목록 하단에도 표시 */}
-          {canProgressStage && (issue.stage === 'done' || issue.stage === 'dev' || issue.stage === 'verify_waiting' || issue.stage === 'verifying') && (
-            <div className="pr-2 mt-2">
-              <MRReviewSection projectId={projectId} issueIid={Number(iid)} />
             </div>
           )}
         </PullToRefresh>

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAccess, getProjectAuthToken, getAssignModeMap, setAssignMode, setAssigneeAuto, setPresetRoles, getPresetRoles, getActualRoleAssigneesMap, getAgent, hasActiveExecution, hasAnyExecution, stageFromLabels, touchProjectActivity, getIssueIterationCountsMap } from '@/lib/db';
+import { getProject, getProjectAccess, getProjectAuthToken, getAssignModeMap, setAssignMode, setAssigneeAuto, setPresetRoles, getPresetRoles, getActualRoleAssigneesMap, getAgent, hasActiveExecution, hasAnyExecution, stageFromLabels, touchProjectActivity, getIssueIterationCountsMap, getActiveChatSessionsByProject } from '@/lib/db';
+import { isChatAgentRunning } from '@/lib/chat-agent';
 import { triggerScan } from '@/lib/scanner';
 import { getCurrentUser } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
@@ -35,6 +36,9 @@ export async function GET(
     const assignModeMap = getAssignModeMap(projectId);
     const actualRolesMap = getActualRoleAssigneesMap(projectId);
     const iterationMap = getIssueIterationCountsMap(projectId);
+    // 진행 중인 AI 채팅(이슈별) — 카드 "대화중"/"생각중" 표시용
+    const activeChatMap = new Map<number, string>();
+    for (const s of getActiveChatSessionsByProject(projectId)) activeChatMap.set(s.issueIid, s.id);
 
     const isClosed = stateParam === 'closed';
 
@@ -127,6 +131,9 @@ export async function GET(
           description: stripIveDueMarker(stripIveAuthorMarker(issue.description || '')),
           state: issue.state,
           stage,
+          // 진행 중 AI 채팅 표시 — 세션 있으면 대화중, 에이전트가 돌고 있으면 생각중
+          chatActive: activeChatMap.has(issue.iid),
+          chatProcessing: activeChatMap.has(issue.iid) && isChatAgentRunning(activeChatMap.get(issue.iid)!),
           failReason: null, // 실패 사유는 이슈 코멘트에서 확인
           assignMode: assignInfo.mode,
           preferredAgentId,

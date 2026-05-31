@@ -6,6 +6,10 @@ export interface IveIssue {
   stage: string
   failReason?: string | null
   state: string
+  /** 진행 중인 AI 채팅 세션이 있는지 (카드 "대화중" 표시) */
+  chatActive?: boolean
+  /** 채팅 에이전트가 현재 응답 생성 중인지 (카드 "생각중" 애니메이션) */
+  chatProcessing?: boolean
   labels: string[]
   createdAt: string
   updatedAt: string

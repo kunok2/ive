@@ -292,6 +292,7 @@
     "noMappings": "등록된 개인 매핑이 없습니다",
     "appTitle": "Slack 앱 (원클릭 설치)",
     "appDesc": "Slack 앱의 Client ID/Secret/Signing Secret을 한 번 저장하면, 우측 상단 '워크스페이스 추가' 버튼으로 토큰 복사 없이 워크스페이스를 설치할 수 있습니다.",
+    "appCreateHint": "앱이 없다면 <link>api.slack.com/apps</link>에서 새 앱(Create New App → From scratch)을 만들고, Basic Information에서 아래 자격증명을 발급받으세요.",
     "appSave": "자격증명 저장",
     "appSaved": "앱 자격증명을 저장했습니다",
     "addToSlack": "Slack에 추가",

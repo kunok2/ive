@@ -110,6 +110,8 @@
   "scanError": "스캔 실행 중 오류가 발생했습니다.",
   "shareEditor": "참조·편집",
   "shareViewer": "참조·뷰어",
+  "chatBadgeActive": "대화중",
+  "chatBadgeThinking": "생각중",
   "searchRepoPlaceholder": "저장소 이름 검색...",
   "noRepos": "저장소가 없습니다",
   "projectListLoadFailed": "프로젝트 목록 조회 실패",

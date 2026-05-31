@@ -150,9 +150,9 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   }
 
   return (
-    <div className="h-full overflow-y-auto">
-      <header className="sticky top-0 z-40 bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark">
-        <div className="flex items-center gap-3 px-4 py-3 max-w-lg mx-auto">
+    <div className="h-full flex flex-col">
+      <header className="shrink-0 z-40 w-full max-w-lg mx-auto bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark">
+        <div className="flex items-center gap-3 px-4 py-3">
           <Link href="/" className="text-ive-green text-base font-bold p-1 hover:bg-ive-green/5 rounded">
             <i className="fa-solid fa-arrow-left mr-1" />{tc('back')}
           </Link>
@@ -160,7 +160,9 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         </div>
       </header>
 
-      <main className="px-4 pt-4 pb-20 max-w-lg mx-auto">
+      <div className="flex-1 min-h-0 w-full max-w-lg mx-auto px-4 flex flex-col overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-y-auto">
+      <main className="pt-4 pb-20">
         {/* 프로젝트 정보 헤더 */}
         <div
           className="bg-ive-bg-card rounded-lg p-5 border border-ive-border-subtle mb-6 relative overflow-hidden group"
@@ -512,6 +514,8 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           </div>
         )}
       </main>
+      </div>
+      </div>
 
       {/* 모달들 */}
       <Modal

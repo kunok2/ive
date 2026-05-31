@@ -28,7 +28,7 @@ function formatDuration(startedAt: string): string {
 
 
 interface Props {
-  project: Project & { shareRole?: string | null }
+  project: Project & { shareRole?: string | null; chatActive?: boolean; chatProcessing?: boolean }
 }
 
 interface ProjectStats {
@@ -276,6 +276,13 @@ export default function ProjectCard({ project }: Props) {
                 <span className="shrink-0 text-xs font-bold px-1.5 py-0.5 rounded-lg leading-none flex items-center gap-0.5 bg-white/5 text-ive-text-muted border border-ive-border-subtle">
                   <i className="fa-solid fa-share-nodes" />
                   {project.shareRole === 'editor' ? tp('shareEditor') : tp('shareViewer')}
+                </span>
+              )}
+              {project.chatActive && (
+                <span className={`shrink-0 text-xs font-bold px-1.5 py-0.5 rounded-lg leading-none flex items-center gap-0.5 bg-ive-cyan/15 text-ive-cyan ${project.chatProcessing ? 'animate-pulse' : ''}`}>
+                  {project.chatProcessing
+                    ? <><i className="fa-solid fa-circle-notch fa-spin" />{tp('chatBadgeThinking')}</>
+                    : <><i className="fa-solid fa-comments" />{tp('chatBadgeActive')}</>}
                 </span>
               )}
             </div>

@@ -682,16 +682,12 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   }, [projectId, iid])
 
   useEffect(() => {
-    const endSession = () => {
-      const sid = chatSessionRef.current; if (!sid) return
-      navigator.sendBeacon(`/api/projects/${projectId}/issues/${iid}/chat/end`,
-        new Blob([JSON.stringify({ sessionId: sid })], { type: 'application/json' }))
-    }
-    window.addEventListener('beforeunload', endSession)
+    // 페이지를 떠나도(다른 페이지로 이동·탭 닫기) 채팅 세션을 종료하지 않는다.
+    // 진행 중인 에이전트는 서버에서 계속 돌아 응답을 끝까지 DB에 저장하고,
+    // 돌아오면 세션이 복원되며 아직 생각 중이면 "생각중" 상태로 이어 보여준다.
+    // WS만 닫아 구독을 해제하고, 세션 정리는 서버측 idle 리퍼 + 명시적 "대화 종료" 버튼이 담당.
     return () => {
-      window.removeEventListener('beforeunload', endSession)
       if (chatWsRef.current) { try { chatWsRef.current.close() } catch {} chatWsRef.current = null }
-      endSession()
     }
   }, [projectId, iid])
 

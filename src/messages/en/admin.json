@@ -292,6 +292,7 @@
     "noMappings": "No per-user mappings yet",
     "appTitle": "Slack App (one-click install)",
     "appDesc": "Save the Slack app's Client ID/Secret/Signing Secret once, then use the 'Add Workspace' button (top right) to install a workspace without copying tokens.",
+    "appCreateHint": "No app yet? Create one at <link>api.slack.com/apps</link> (Create New App → From scratch), then get the credentials below from Basic Information.",
     "appSave": "Save credentials",
     "appSaved": "Slack app credentials saved",
     "addToSlack": "Add to Slack",

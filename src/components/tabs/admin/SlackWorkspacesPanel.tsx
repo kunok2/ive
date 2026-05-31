@@ -181,6 +181,16 @@ export default function SlackWorkspacesPanel() {
           <i className="fa-solid fa-rocket mr-1.5" />{t('appTitle')}
         </div>
         <div className="text-xs text-ive-text-dim mb-2 leading-relaxed">{t('appDesc')}</div>
+        <div className="text-xs text-ive-text-muted mb-2 leading-relaxed">
+          <i className="fa-solid fa-circle-info mr-1 text-ive-cyan" />
+          {t.rich('appCreateHint', {
+            link: (chunks) => (
+              <a href="https://api.slack.com/apps" target="_blank" rel="noreferrer" className="text-ive-cyan font-bold hover:underline">
+                {chunks}<i className="fa-solid fa-arrow-up-right-from-square ml-0.5 text-[9px]" />
+              </a>
+            ),
+          })}
+        </div>
         <div className="flex flex-col gap-2">
           <div>
             <label className="block text-xs font-bold text-ive-text-muted mb-1">Client ID</label>

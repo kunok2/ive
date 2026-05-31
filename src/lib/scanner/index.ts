@@ -68,6 +68,7 @@ import { fetchIssueLabelEvents } from "../provider";
 import { isGitBotUser } from "../git-bot";
 import { startStatsCollector } from "../stats-collector";
 import { startReportScheduler } from "../report-scheduler";
+import { startChatSessionReaper } from "../chat-agent";
 import fs from "fs";
 import path from "path";
 import { parseIveMeta } from "./formatters";
@@ -119,6 +120,9 @@ export function startScanner() {
 
   // 보고서 자동 발송 스케줄러 시작
   startReportScheduler();
+
+  // 채팅 세션 idle 리퍼 시작 (페이지 이탈로 방치된 세션 정리)
+  startChatSessionReaper();
 
 }
 

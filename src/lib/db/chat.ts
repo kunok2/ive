@@ -61,6 +61,25 @@ export function getChatSession(id: string): ChatSession | null {
   return r ? mapChatSession(r) : null
 }
 
+/** 프로젝트의 모든 active 채팅 세션 (카드 "대화중" 표시용 — 이슈별로 1개 이상일 수 있음) */
+export function getActiveChatSessionsByProject(projectId: string): ChatSession[] {
+  const rows = getDb().prepare(
+    "SELECT * FROM chat_sessions WHERE project_id = ? AND status = 'active'"
+  ).all(projectId) as any[]
+  return rows.map(mapChatSession)
+}
+
+/**
+ * last_active_at 이 N분보다 오래된 active 세션 (서버측 idle 리퍼용).
+ * last_active_at 은 ISO(Z)와 datetime('now') 형식이 섞일 수 있어 datetime()으로 정규화 비교.
+ */
+export function getStaleActiveChatSessions(minutes: number): ChatSession[] {
+  const rows = getDb().prepare(
+    "SELECT * FROM chat_sessions WHERE status = 'active' AND datetime(last_active_at) < datetime('now', ?)"
+  ).all(`-${minutes} minutes`) as any[]
+  return rows.map(mapChatSession)
+}
+
 export function updateChatSessionActivity(id: string) {
   getDb().prepare("UPDATE chat_sessions SET last_active_at = datetime('now') WHERE id = ?").run(id)
 }

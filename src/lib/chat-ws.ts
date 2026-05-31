@@ -1,5 +1,5 @@
 import { WebSocket } from 'ws'
-import { getProject, getProjectAccess, getChatSession, saveChatMessage, getAgent } from './db'
+import { getProject, getProjectAccess, getChatSession, saveChatMessage, getAgent, updateChatSessionActivity } from './db'
 import { decrypt } from './crypto'
 import { runChatAgentWithCallback, isChatAgentRunning } from './chat-agent'
 import { fetchSingleIssue } from './provider'
@@ -123,6 +123,7 @@ async function handleSend(
     role: 'user',
     content: message.trim(),
   })
+  updateChatSessionActivity(sessionId)
 
   const decryptedToken = decrypt(project.accessToken)
   let issueTitle = `Issue #${issueIid}`
@@ -162,7 +163,9 @@ async function handleSend(
         userLocale: locale || '',
       },
       (event) => {
-        if (ws.readyState !== WebSocket.OPEN) return false // signal to abort
+        // WS가 끊겨도(사용자가 다른 페이지로 이동) 실행을 중단하지 않는다.
+        // 출력은 계속 누적해 완료 시 DB에 저장하고, 사용자가 돌아오면 복원/표시한다.
+        // (safeSend 는 OPEN 일 때만 전송하므로 끊긴 소켓엔 무해)
         if (event.type === 'text' && event.content) {
           fullResponse += event.content
           safeSend({ type: 'text', content: event.content })
@@ -171,7 +174,7 @@ async function handleSend(
         } else if (event.type === 'error') {
           safeSend({ type: 'error', content: event.content })
         }
-        return true // continue
+        return true // 항상 계속 — 절대 abort 하지 않음
       },
     )
   } catch (err) {
@@ -188,4 +191,6 @@ async function handleSend(
       content: fullResponse.trim(),
     })
   }
+  // 완료 시각 갱신 — 리퍼의 idle 기준이 응답 완료 이후부터 계산되도록
+  updateChatSessionActivity(sessionId)
 }

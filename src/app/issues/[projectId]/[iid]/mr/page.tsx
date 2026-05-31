@@ -114,9 +114,9 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
   const isMerged = mr?.state === 'merged'
 
   return (
-    <div className="h-full overflow-y-auto">
-      <header className="sticky top-0 z-40 bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark">
-        <div className="px-4 py-3 max-w-lg mx-auto">
+    <div className="h-full flex flex-col">
+      <header className="shrink-0 z-40 w-full max-w-lg mx-auto bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark">
+        <div className="px-4 py-3">
           <div className="flex items-center gap-3">
             <button onClick={() => router.back()} className="text-ive-green text-base font-bold p-1 hover:bg-ive-green/5 rounded">
               <i className="fa-solid fa-arrow-left mr-1" />뒤로
@@ -139,7 +139,9 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
         </div>
       </header>
 
-      <main className="px-4 pt-4 pb-20 max-w-lg mx-auto">
+      <div className="flex-1 min-h-0 w-full max-w-lg mx-auto px-4 flex flex-col overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-y-auto">
+      <main className="pt-4 pb-20">
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <i className="fa-solid fa-spinner fa-spin text-2xl text-ive-text-dim" />
@@ -206,6 +208,8 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
           </>
         )}
       </main>
+      </div>
+      </div>
 
       <ConfirmModal
         open={showMergeConfirm}

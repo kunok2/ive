@@ -95,6 +95,13 @@ export default function IssueCard({
                 <i className="fa-solid fa-calendar-day mr-1" />
                 {formatDateMedium(issue.updatedAt, locale, timezone)}
               </span>
+              {issue.chatActive && (
+                <span className={`inline-flex items-center gap-1 text-xs font-bold px-1.5 py-0.5 rounded-lg bg-ive-cyan/15 text-ive-cyan ${issue.chatProcessing ? 'animate-pulse' : ''}`}>
+                  {issue.chatProcessing
+                    ? <><i className="fa-solid fa-circle-notch fa-spin" />{tIssue('chatBadgeThinking')}</>
+                    : <><i className="fa-solid fa-comments" />{tIssue('chatBadgeActive')}</>}
+                </span>
+              )}
             </div>
             <h3 className="text-base font-bold text-ive-text leading-snug mt-0.5 line-clamp-2">{issue.title}</h3>
           </div>

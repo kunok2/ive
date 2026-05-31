@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { getProjectsByUser, createProject, getSharedProjectsForUser, countActiveExecutionsByProject, getUserOAuthTokenRaw } from '@/lib/db'
+import { getProjectsByUser, createProject, getSharedProjectsForUser, countActiveExecutionsByProject, getUserOAuthTokenRaw, getActiveChatSessionsByProject } from '@/lib/db'
+import { isChatAgentRunning } from '@/lib/chat-agent'
 import { getCurrentUser } from '@/lib/auth'
 import { encrypt, decrypt } from '@/lib/crypto'
 import { ensureLabels } from '@/lib/provider'
@@ -9,12 +10,19 @@ export async function GET() {
   const user = await getCurrentUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  // 진행 중인 AI 채팅 플래그 (카드 "대화중"/"생각중" 표시용)
+  const chatFlags = (projectId: string) => {
+    const sessions = getActiveChatSessionsByProject(projectId)
+    return { chatActive: sessions.length > 0, chatProcessing: sessions.some(s => isChatAgentRunning(s.id)) }
+  }
+
   const ownProjects = getProjectsByUser(user.id)
   const ownData = ownProjects.map(p => ({
     ...p,
     accessToken: p.accessToken ? '••••••' : '',
     hasToken: !!p.accessToken,
     runningCount: countActiveExecutionsByProject(p.id),
+    ...chatFlags(p.id),
     shareRole: null as string | null, // 소유자
   }))
 
@@ -23,6 +31,7 @@ export async function GET() {
     ...p,
     accessToken: '', // 공유 사용자에게 토큰 노출하지 않음
     runningCount: countActiveExecutionsByProject(p.id),
+    ...chatFlags(p.id),
   }))
 
   return NextResponse.json([...ownData, ...sharedData])

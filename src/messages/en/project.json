@@ -110,6 +110,8 @@
   "scanError": "An error occurred while scanning.",
   "shareEditor": "Shared · Editor",
   "shareViewer": "Shared · Viewer",
+  "chatBadgeActive": "In chat",
+  "chatBadgeThinking": "Thinking",
   "searchRepoPlaceholder": "Search repository name...",
   "noRepos": "No repositories",
   "projectListLoadFailed": "Failed to load project list",

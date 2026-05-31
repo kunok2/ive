@@ -78,6 +78,8 @@
   "retryCount": "{count} retries",
   "viewAll": "View All",
   "chatMode": "Chat",
+  "chatBadgeActive": "In chat",
+  "chatBadgeThinking": "Thinking",
   "commentMode": "Direct",
   "startChat": "Start AI Chat",
   "startingChat": "Preparing chat...",
