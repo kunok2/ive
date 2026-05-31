@@ -41,6 +41,7 @@ export async function runCliProcess(
   resolvedCliPath: string,
   logStream: { write(data: string): void; end(): void },
   log: (msg: string, type?: 'info' | 'error' | 'warn' | 'system') => void,
+  imagePaths?: string[],
 ): Promise<CliRunResult> {
   const isOpenCode = agent.cliName === 'opencode';
   const isCodex = agent.cliName === 'codex';
@@ -62,6 +63,7 @@ export async function runCliProcess(
       maxTurns: agent.maxTurns || 200,
       model: systemCliModel || null,
       cliSessionId: null,
+      imagePaths,
     });
 
     // 보안: 호출 명령어(플래그·인자 포함)는 상세보기 로그에 남기지 않는다.

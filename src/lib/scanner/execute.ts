@@ -30,6 +30,7 @@ import fs from "fs";
 import path from "path";
 import { setupWorkspace } from "./git-ops";
 import { resolveCliPath, runCliProcess } from "./cli-runner";
+import { downloadIssueImages } from "./issue-images";
 import { commitPushAndCreateMR, postErrorNote } from "./mr-creator";
 import { buildPrompt, buildConflictPrompt } from "./prompt-builder";
 
@@ -176,6 +177,8 @@ export async function executeTask(
     let iterationCount = 1;
     let latestFeedback = "";
     let iterationContext = "";
+    // 이슈 본문 + (사용자) 코멘트의 첨부 이미지를 모아 에이전트에게 분석시킬 텍스트
+    const issueImageTexts: string[] = [issue.description || issue.body || ""];
 
     if (!isConflictTask) {
       const notes = isGitHub
@@ -189,6 +192,8 @@ export async function executeTask(
         !n.body.includes("<!-- ive-bot -->") &&
         !n.body.includes("IVE(봇)")
       );
+      // 사용자 코멘트의 첨부 이미지도 분석 대상에 포함 (봇/시스템 노트 제외)
+      issueImageTexts.push(...userNotes.map((n: any) => n.body || ""));
 
       if (botCompletions.length > 0) {
         const lastBotNoteId = botCompletions[botCompletions.length - 1].id;
@@ -219,9 +224,27 @@ export async function executeTask(
     // PAT 기반이면 PRIVATE-TOKEN 유지. 잘못된 헤더는 401 → 에이전트가 "토큰 만료"로 오해함.
     const prompt = buildPrompt(project, issue, iid, isConflictTask, isGitHub, isKo, iterationCount, latestFeedback, iterationContext, !!project.usesOAuthToken, agent.id);
 
+    // 4-1. 첨부 이미지 다운로드 → 워크스페이스 저장 → 프롬프트에 경로 안내 (에이전트가 분석)
+    const issueImagePaths = await downloadIssueImages(
+      project, token, issueImageTexts, path.join(workspacePath, '.issue-attachments'), log,
+    ).catch(() => [] as string[]);
+    let finalPrompt = prompt;
+    if (issueImagePaths.length > 0) {
+      // 다운로드한 첨부는 참고용 — MR/커밋에 섞이지 않도록 git 로컬 exclude 처리
+      try {
+        const excludePath = path.join(workspacePath, '.git', 'info', 'exclude');
+        const cur = fs.existsSync(excludePath) ? fs.readFileSync(excludePath, 'utf8') : '';
+        if (!cur.includes('.issue-attachments')) fs.appendFileSync(excludePath, '\n.issue-attachments/\n');
+      } catch { /* ignore */ }
+      const rels = issueImagePaths.map(p => `- ${path.relative(workspacePath, p)}`).join('\n');
+      finalPrompt += isKo
+        ? `\n\n## 첨부 이미지\n이 이슈(본문/코멘트)에 다음 이미지가 첨부되어 있습니다(현재 작업 디렉토리 기준 경로). 작업과 관련하여 반드시 확인하세요. 단, 이 파일들은 참고용이므로 커밋/스테이징하지 마세요:\n${rels}`
+        : `\n\n## Attached images\nThis issue has the following attached image(s) (paths relative to the current working directory). You MUST review them as relevant to the task. Do NOT commit or stage these files — they are reference only:\n${rels}`;
+    }
+
     // 5. CLI 실행
     const cliPath = await resolveCliPath(agent, log);
-    const cliResult = await runCliProcess(executionId, project, agent, prompt, workspacePath, token, cliPath, logStream, log);
+    const cliResult = await runCliProcess(executionId, project, agent, finalPrompt, workspacePath, token, cliPath, logStream, log, issueImagePaths);
     conversationParts = cliResult.conversationParts;
     const durationSeconds = cliResult.durationSeconds;
     const durationStr = `${Math.max(1, Math.floor(durationSeconds / 60))}m`;
