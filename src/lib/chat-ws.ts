@@ -1,8 +1,10 @@
+import fs from 'fs'
+import path from 'path'
 import { WebSocket } from 'ws'
 import { getProject, getProjectAccess, getChatSession, saveChatMessage, getAgent, updateChatSessionActivity } from './db'
 import { decrypt } from './crypto'
 import { runChatAgentWithCallback, isChatAgentRunning } from './chat-agent'
-import { fetchSingleIssue } from './provider'
+import { fetchSingleIssue, downloadProjectUpload } from './provider'
 
 /**
  * Handle a WebSocket connection for chat.
@@ -89,13 +91,19 @@ export function handleChatWebSocket(ws: WebSocket) {
 
 async function handleSend(
   ws: WebSocket,
-  msg: { sessionId: string; projectId: string; issueIid: string; message: string; locale?: string },
+  msg: {
+    sessionId: string; projectId: string; issueIid: string; message: string; locale?: string
+    // 첨부 이미지: 기존 /uploads 로 올린 뒤의 url 목록과(서버가 토큰으로 다시 다운로드),
+    // 대화 기록에 남길 마크다운 목록(선택).
+    imageUrls?: string[]; imageMarkdowns?: string[]
+  },
   safeSend: (data: object) => void,
 ) {
-  const { sessionId, projectId, issueIid, message, locale } = msg
+  const { sessionId, projectId, issueIid, message, locale, imageUrls, imageMarkdowns } = msg
+  const hasImages = Array.isArray(imageUrls) && imageUrls.length > 0
 
-  if (!sessionId || !message?.trim()) {
-    safeSend({ type: 'error', content: 'sessionId and message required' })
+  if (!sessionId || (!message?.trim() && !hasImages)) {
+    safeSend({ type: 'error', content: 'sessionId and message (or image) required' })
     return
   }
 
@@ -116,16 +124,39 @@ async function handleSend(
     return
   }
 
-  // Save user message
+  const decryptedToken = decrypt(project.accessToken)
+
+  // 첨부 이미지: 프론트가 /uploads 로 올린 url 을 토큰으로 다시 다운로드해
+  // 워크스페이스 하위에 저장하고, 그 경로를 에이전트에 넘긴다(Slack 과 동일 패턴).
+  const attachedImages: string[] = []
+  if (hasImages && session.workspacePath) {
+    const destDir = path.join(session.workspacePath, '.chat-attachments')
+    try { fs.mkdirSync(destDir, { recursive: true }) } catch { /* ignore */ }
+    for (let i = 0; i < imageUrls!.length; i++) {
+      try {
+        const r = await downloadProjectUpload(project, decryptedToken, imageUrls![i])
+        if (!r) continue
+        const ext = (r.contentType.split(';')[0].split('/')[1] || 'png').replace(/[^a-z0-9]/gi, '') || 'png'
+        const fp = path.join(destDir, `chat-image-${Date.now()}-${i + 1}.${ext}`)
+        fs.writeFileSync(fp, r.buffer)
+        attachedImages.push(fp)
+      } catch (e) {
+        console.error('[chat] image download error:', e)
+      }
+    }
+  }
+
+  // Save user message (이미지 마크다운 포함 — 대화 기록/표시용)
+  const userContent = (imageMarkdowns && imageMarkdowns.length > 0)
+    ? [message.trim(), ...imageMarkdowns].filter(Boolean).join('\n\n')
+    : message.trim()
   saveChatMessage({
     id: `msg-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
     sessionId,
     role: 'user',
-    content: message.trim(),
+    content: userContent,
   })
   updateChatSessionActivity(sessionId)
-
-  const decryptedToken = decrypt(project.accessToken)
   let issueTitle = `Issue #${issueIid}`
   let issueDescription = ''
   if (!session.cliSessionId) {
@@ -161,6 +192,7 @@ async function handleSend(
         userMessage: message.trim(),
         workspacePath: session.workspacePath || '',
         userLocale: locale || '',
+        attachedImages,
       },
       (event) => {
         // WS가 끊겨도(사용자가 다른 페이지로 이동) 실행을 중단하지 않는다.

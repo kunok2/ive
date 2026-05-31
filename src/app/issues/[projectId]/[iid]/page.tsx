@@ -161,6 +161,8 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   const [chatInput, setChatInput] = useState('')
   const [chatSending, setChatSending] = useState(false)
   const [chatSendingStartTime, setChatSendingStartTime] = useState<number | null>(null)
+  // 채팅 첨부 이미지: /uploads 로 올려 url/markdown 을 얻고, 전송 시 WS 로 함께 보낸다.
+  const [chatImages, setChatImages] = useState<{ id: string; preview: string; url: string | null; markdown: string | null; uploading: boolean; error?: boolean }[]>([])
   const [chatStarting, setChatStarting] = useState(false)
   const [chatStreamText, setChatStreamText] = useState('')
   const [chatAgentName, setChatAgentName] = useState<string | null>(null)
@@ -782,13 +784,42 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
     return ws
   }
 
+  // 채팅 첨부 이미지 추가: 즉시 /uploads 로 올려 url/markdown 확보(미리보기는 로컬 objectURL)
+  async function addChatImages(files: File[]) {
+    for (const file of files) {
+      const id = `ci-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      const preview = URL.createObjectURL(file)
+      setChatImages(prev => [...prev, { id, preview, url: null, markdown: null, uploading: true }])
+      try {
+        const fd = new FormData(); fd.append('file', file)
+        const res = await fetch(`/api/projects/${projectId}/uploads`, { method: 'POST', body: fd })
+        if (!res.ok) throw new Error(`upload ${res.status}`)
+        const data = await res.json()
+        setChatImages(prev => prev.map(c => c.id === id ? { ...c, url: String(data.url || ''), markdown: String(data.markdown || ''), uploading: false } : c))
+      } catch {
+        setChatImages(prev => prev.map(c => c.id === id ? { ...c, uploading: false, error: true } : c))
+        toast(tIssue('imageUploadFailed') || '이미지 업로드 실패', 'error')
+      }
+    }
+  }
+  function removeChatImage(id: string) {
+    setChatImages(prev => { const t = prev.find(c => c.id === id); if (t) { try { URL.revokeObjectURL(t.preview) } catch {} } return prev.filter(c => c.id !== id) })
+  }
+
   async function handleSendChatMessage() {
-    if (!chatInput.trim() || !chatSessionId || chatSending) return
+    if (!chatSessionId || chatSending) return
+    if (chatImages.some(c => c.uploading)) { toast(tIssue('imageUploading') || '이미지 업로드 중이에요…', 'error'); return }
+    const ready = chatImages.filter(c => c.url && !c.error)
+    if (!chatInput.trim() && ready.length === 0) return
     const msg = chatInput.trim(); setChatInput(''); setChatSending(true); setChatSendingStartTime(Date.now())
+    const imageUrls = ready.map(c => c.url!).filter(Boolean)
+    const imageMarkdowns = ready.map(c => c.markdown || '').filter(Boolean)
+    setChatImages([])
     chatStreamTextRef.current = ''; setChatStreamText('')
-    setChatMessages(prev => [...prev, { id: `temp-${Date.now()}`, sessionId: chatSessionId, role: 'user', content: msg, createdAt: new Date().toISOString() }])
+    const tempContent = [msg, ...imageMarkdowns].filter(Boolean).join('\n\n')
+    setChatMessages(prev => [...prev, { id: `temp-${Date.now()}`, sessionId: chatSessionId, role: 'user', content: tempContent, createdAt: new Date().toISOString() }])
     const ws = getChatWs()
-    const sendPayload = () => { ws.send(JSON.stringify({ type: 'send', sessionId: chatSessionId, projectId, issueIid: iid, message: msg, locale: state.user?.locale || '' })) }
+    const sendPayload = () => { ws.send(JSON.stringify({ type: 'send', sessionId: chatSessionId, projectId, issueIid: iid, message: msg, locale: state.user?.locale || '', imageUrls, imageMarkdowns })) }
     try {
       if (ws.readyState === WebSocket.OPEN) { sendPayload() }
       else if (ws.readyState === WebSocket.CONNECTING) {
@@ -1031,6 +1062,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
         chatStarting={chatStarting}
         chatSending={chatSending}
         chatInput={chatInput}
+        chatImages={chatImages}
         chatAgentName={chatAgentName}
         preferredAgent={preferredAgent}
         projectAgents={projectAgents}
@@ -1038,6 +1070,8 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
         onSetMode={setMode}
         onSetComment={setComment}
         onSetChatInput={setChatInput}
+        onAddChatImages={addChatImages}
+        onRemoveChatImage={removeChatImage}
         onPostComment={handlePostComment}
         onCommentAndRetry={handleCommentAndRetry}
         onCommentAndDone={handleCommentAndDone}
