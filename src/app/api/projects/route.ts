@@ -34,6 +34,8 @@ export async function GET() {
     ...chatFlags(p.id),
   }))
 
+  // 소유/공유를 한 배열로 합쳐 반환. 정렬(실행중 우선 → last_activity_at 최신순)은
+  // 클라이언트(store.tsx refresh)가 단일 출처로 수행하므로 여기서는 순서를 보장하지 않음.
   return NextResponse.json([...ownData, ...sharedData])
 }
 
