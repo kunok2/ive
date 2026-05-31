@@ -482,54 +482,17 @@ async function scanProject(project: Project, force: boolean = false) {
 
           slog.info(`[EXTERNAL] Project: ${project.name}, Issue: #${iid}, Status: ${isComplete ? 'success' : 'running'}, Author: ${execution.userName}, Tokens: ${meta.inputTokens}/${meta.outputTokens}`);
 
-          // 완료된 외부 도구 이슈는 자동으로 닫는다 (IVE-E/IVE-W 상태)
-          if (isComplete) {
-            try {
-              await closeIssue(project, iid, decryptedToken);
-              slog.info(`[EXTERNAL] Closed issue #${iid} (external tool task completed)`);
-            } catch (e) { slog.warn({ err: e }, `Failed to close external issue #${iid}:`); }
-          }
+          // 완료된 외부 도구 이슈의 닫기는 아래 "재조정 블록"이 담당한다.
+          // (닫기를 한 곳으로 일원화해, API 실패로 열린 채 남은 이슈를 다음 스캔에 재시도 닫기)
         }
       }
 
-      // ── ive-meta 사후 보강 ──
-      // 외부 도구가 "이슈 먼저 생성 → 본문 나중 수정" 식으로 분리 호출하는 경우,
-      // 첫 스캔에서 빈 ive-meta 로 execution 이 만들어진 뒤 본문이 채워질 수 있다.
-      // 이 블록은 토큰/모델/비용/turns 가 모두 0/빈값인 user exec 한정으로 본문을 재파싱해
-      // 누락분만 보강한다. 한 번이라도 채워진 행은 SELECT 에서 제외되므로 덮어쓰지 않는다.
+      // ── 외부 도구 이슈 재조정 (이미 인식된 이슈) ──
+      // 위 "외부 도구 이슈 인식" 블록은 !hasAnyExecution 조건이라 이슈당 한 번만 동작한다.
+      // 그 이후의 후속 상황(본문 ive-meta 사후 수정, 닫기 실패로 열린 채 남음)을
+      // reconcileExternalIssue 가 멱등하게 처리한다. (로직/근거는 함수 doc 참고)
       if (!activeExec && (stage === 'done' || stage === 'verify_waiting' || stage === 'dev_fail')) {
-        const emptyExec = getDb().prepare(
-          `SELECT id, started_at, ended_at FROM task_executions
-           WHERE project_id = ? AND issue_iid = ? AND assignee_type = 'user'
-             AND (agent_id IS NULL OR agent_id = '')
-             AND input_tokens = 0 AND output_tokens = 0 AND cost_usd = 0 AND turns = 0
-             AND (model_name IS NULL OR model_name = '')
-           ORDER BY started_at DESC LIMIT 1`
-        ).get(project.id, iid) as { id: string; started_at: string; ended_at: string | null } | undefined;
-
-        if (emptyExec) {
-          const meta = parseIveMeta(issue.description || '');
-          const hasTokenMeta = !!(meta.inputTokens || meta.outputTokens || meta.costUsd || meta.turns || meta.model);
-          const newStart = meta.startedAt && meta.startedAt !== emptyExec.started_at ? meta.startedAt : null;
-          const newEnd = meta.endedAt && meta.endedAt !== emptyExec.ended_at ? meta.endedAt : null;
-          if (hasTokenMeta || newStart || newEnd) {
-            if (hasTokenMeta) {
-              updateExecutionTokens(emptyExec.id, meta.inputTokens, meta.outputTokens, meta.costUsd, meta.turns, meta.model || undefined, 0, 0);
-            }
-            if (newStart || newEnd) {
-              getDb().prepare('UPDATE task_executions SET started_at = COALESCE(?, started_at), ended_at = COALESCE(?, ended_at) WHERE id = ?')
-                .run(newStart, newEnd, emptyExec.id);
-            }
-            slog.info(`[BACKFILL] Project: ${project.name}, Issue: #${iid}, Exec: ${emptyExec.id} — ive-meta 사후 보강 (tokens=${hasTokenMeta}, times=${!!(newStart || newEnd)})`);
-            try {
-              createActivityLog({
-                userId: project.userId, category: 'task', action: 'backfill_ive_meta',
-                detail: `ive-meta 사후 보강: #${iid} "${issue.title}" (${project.name})`,
-                targetType: 'execution', targetId: emptyExec.id,
-              });
-            } catch (e) { slog.error({ err: e }, 'Failed to log backfill activity:'); }
-          }
-        }
+        await reconcileExternalIssue(project, issue, stage, (p, i) => closeIssue(p, i, decryptedToken));
       }
 
       // 사람 작업 완료 감지: 담당자가 Git에서 레이블을 IVE-W 또는 IVE-E로 변경한 경우
@@ -833,4 +796,86 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
   }
   slog.info(`processIssues result: assigned=${assignedCount}, waiting=${waitingCount}, busyAgents=[${[...busyAgentIds].join(',')}]`);
   return { assigned: assignedCount, waiting: waitingCount };
+}
+
+/**
+ * 외부 도구 이슈 재조정.
+ *
+ * "외부 도구 이슈 인식" 블록은 !hasAnyExecution 조건이라 이슈당 한 번만 동작한다.
+ * 그 이후에 발생하는 두 가지 후속 상황을 이 함수가 멱등하게 처리한다:
+ *   (a) 본문 ive-meta 가 (사후 수정/추가 작업으로) 바뀜
+ *       → DB 값을 본문 값으로 "덮어쓴다"(set, 누적 아님). 몇 번을 읽어도 결과가 같아 중복집계 위험 없음.
+ *       빈 ive-meta(토큰/모델 전부 0·빈값)는 무시 → 기존 값을 지우지 않는다.
+ *   (b) IVE-E/IVE-W(완료)인데 닫기 API 실패로 이슈가 열린 채 남음
+ *       → closeFn 으로 닫기를 재시도한다. 닫히면 다음 스캔부터 조회 대상에서 빠지므로 자동으로 멈춘다.
+ *
+ * 대상은 "외부 도구 execution"(agent_id 빈값 + assignee_type='user' + user_id NULL) 한정.
+ *   에이전트 실행(agent_id 존재)·담당자 모드 실행(user_id 존재)은 실제 실행 기록이므로 절대 건드리지 않는다.
+ *
+ * @returns 무엇을 했는지 (테스트/관측용). resynced=DB 갱신 발생, closed=닫기 시도 성공.
+ */
+export async function reconcileExternalIssue(
+  project: Project,
+  issue: { iid: number; description?: string | null; title?: string | null },
+  stage: string | null,
+  closeFn: (project: Project, iid: number) => Promise<unknown>,
+): Promise<{ resynced: boolean; closed: boolean }> {
+  const iid = issue.iid;
+  let resynced = false;
+  let closed = false;
+
+  const extExec = getDb().prepare(
+    `SELECT id, started_at, ended_at, input_tokens, output_tokens, cost_usd, turns, model_name
+       FROM task_executions
+      WHERE project_id = ? AND issue_iid = ? AND assignee_type = 'user'
+        AND (agent_id IS NULL OR agent_id = '') AND user_id IS NULL
+      ORDER BY started_at DESC LIMIT 1`
+  ).get(project.id, iid) as {
+    id: string; started_at: string; ended_at: string | null;
+    input_tokens: number; output_tokens: number; cost_usd: number; turns: number; model_name: string | null;
+  } | undefined;
+
+  if (!extExec) return { resynced, closed };
+
+  // (a) ive-meta 재동기화 — 본문 값과 다르면 덮어쓰기
+  const meta = parseIveMeta(issue.description || '');
+  const hasTokenMeta = !!(meta.inputTokens || meta.outputTokens || meta.costUsd || meta.turns || meta.model);
+  const tokensChanged = hasTokenMeta && (
+    meta.inputTokens !== extExec.input_tokens ||
+    meta.outputTokens !== extExec.output_tokens ||
+    meta.costUsd !== extExec.cost_usd ||
+    meta.turns !== extExec.turns ||
+    (meta.model || null) !== (extExec.model_name || null)
+  );
+  const newStart = meta.startedAt && meta.startedAt !== extExec.started_at ? meta.startedAt : null;
+  const newEnd = meta.endedAt && meta.endedAt !== extExec.ended_at ? meta.endedAt : null;
+  if (tokensChanged) {
+    updateExecutionTokens(extExec.id, meta.inputTokens, meta.outputTokens, meta.costUsd, meta.turns, meta.model || undefined, 0, 0);
+  }
+  if (newStart || newEnd) {
+    getDb().prepare('UPDATE task_executions SET started_at = COALESCE(?, started_at), ended_at = COALESCE(?, ended_at) WHERE id = ?')
+      .run(newStart, newEnd, extExec.id);
+  }
+  if (tokensChanged || newStart || newEnd) {
+    resynced = true;
+    slog.info(`[RESYNC] Project: ${project.name}, Issue: #${iid}, Exec: ${extExec.id} — ive-meta 재동기화 (tokens=${tokensChanged}, times=${!!(newStart || newEnd)})`);
+    try {
+      createActivityLog({
+        userId: project.userId, category: 'task', action: 'resync_ive_meta',
+        detail: `ive-meta 재동기화: #${iid} "${issue.title}" (${project.name})`,
+        targetType: 'execution', targetId: extExec.id,
+      });
+    } catch (e) { slog.error({ err: e }, 'Failed to log resync activity:'); }
+  }
+
+  // (b) 완료(IVE-E/IVE-W) 상태인데 아직 열려 있으면 닫기 재시도 (멱등)
+  if (stage === 'done' || stage === 'verify_waiting') {
+    try {
+      await closeFn(project, iid);
+      closed = true;
+      slog.info(`[RECLOSE] Closed external issue #${iid} (${stage})`);
+    } catch (e) { slog.warn({ err: e }, `Failed to (re)close external issue #${iid}:`); }
+  }
+
+  return { resynced, closed };
 }
