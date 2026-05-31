@@ -219,6 +219,7 @@
   "retryIssueSummary": "Avg {count} retries · {issues} tasks",
   "verifierResourceLine": "{count} verifiers · {capacity}/day",
   "utilizationPctLabel": "Utilization {pct}%",
+  "verifyUtilizationPctLabel": "Verify load {pct}%",
   "projectFlowTitle": "Flow by project",
   "agentLoadTitle": "Load by agent",
   "deletedAgent": "Deleted agent",
