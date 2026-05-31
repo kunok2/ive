@@ -220,6 +220,7 @@
   "retryIssueSummary": "재시도 평균 {count}회 · 작업 {issues}건",
   "verifierResourceLine": "검증자 {count}명 · {capacity}건/일",
   "utilizationPctLabel": "가동률 {pct}%",
+  "verifyUtilizationPctLabel": "검증 부하율 {pct}%",
   "projectFlowTitle": "프로젝트별 흐름",
   "agentLoadTitle": "에이전트별 부하",
   "deletedAgent": "삭제된 에이전트",
