@@ -10,7 +10,7 @@ export default function ProjectsTab({ onAdd }: { onAdd?: () => void }) {
   const t = useTranslations('project')
 
   return (
-    <PullToRefresh onRefresh={refresh} className="w-full flex-1 flex flex-col max-w-lg mx-auto px-4 overflow-hidden">
+    <PullToRefresh onRefresh={refresh} className="w-full flex-1 flex flex-col max-w-lg mx-auto overflow-hidden">
       <div className="shrink-0 pt-4" />
       <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="pb-20">

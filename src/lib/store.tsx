@@ -262,6 +262,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const res = await fetch(`/api/projects/${id}/scan`, { method: 'POST' })
     if (res.ok) {
       await refresh()
+      // 스캔은 서버에서 비동기(fire-and-forget)로 실행돼 응답 시점엔 아직 끝나지 않는다.
+      // 완료 후 lastCheckedAt 등이 반영되도록 잠시 뒤 한 번 더 새로고침해 체감 반응을 준다.
+      // (refresh는 변경분이 있을 때만 dispatch하므로 변화 없으면 사실상 no-op)
+      setTimeout(() => { refresh() }, 2000)
+      setTimeout(() => { refresh() }, 5000)
     } else {
       const data = await res.json()
       throw new Error(data.error || '스캔 실행 실패')

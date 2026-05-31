@@ -201,7 +201,16 @@ ${userMessage}
     cliSessionId,
   })
 
-  return { mainCmd: inv.mainCmd, args: inv.args, spawnEnv: inv.env, cliName: agent.cliName, workspacePath, issueIid, stdinInput: inv.stdinInput }
+  // 채팅은 토큰 단위 스트리밍을 위해 claude 에 한해 부분 메시지 이벤트를 켠다.
+  // (스캐너가 공유하는 buildCliInvocation 본체는 건드리지 않음 — 채팅 경로 한정)
+  let finalArgs = inv.args
+  if (agent.cliName === 'claude') {
+    const pIdx = finalArgs.indexOf('-p')
+    const at = pIdx >= 0 ? pIdx : finalArgs.length
+    finalArgs = [...finalArgs.slice(0, at), '--include-partial-messages', ...finalArgs.slice(at)]
+  }
+
+  return { mainCmd: inv.mainCmd, args: finalArgs, spawnEnv: inv.env, cliName: agent.cliName, workspacePath, issueIid, stdinInput: inv.stdinInput }
 }
 
 /**
@@ -231,6 +240,7 @@ export async function runChatAgentWithCallback(
   getAgentMap().set(sessionId, child)
 
   let capturedCliSessionId: string | null = null
+  const extractState = { sawDelta: false } // claude 부분메시지 델타 수신 여부 (중복/폴백 판정용)
 
   return new Promise<void>((resolve) => {
     let stdoutBuffer = ''
@@ -254,7 +264,7 @@ export async function runChatAgentWithCallback(
             }
           }
 
-          const text = extractTextFromEvent(event, cliName)
+          const text = extractTextFromEvent(event, cliName, extractState)
           if (text) {
             const shouldContinue = onEvent({ type: 'text', content: text })
             if (!shouldContinue) {
@@ -316,6 +326,7 @@ export async function* runChatAgent(opts: ChatAgentOptions): AsyncGenerator<{ ty
   let done = false
   let error: string | null = null
   let capturedCliSessionId: string | null = null
+  const extractState = { sawDelta: false }
 
   const resultPromise = new Promise<void>((resolve) => {
     child.stdout?.on('data', (data: Buffer) => {
@@ -336,7 +347,7 @@ export async function* runChatAgent(opts: ChatAgentOptions): AsyncGenerator<{ ty
             }
           }
 
-          const text = extractTextFromEvent(event, cliName)
+          const text = extractTextFromEvent(event, cliName, extractState)
           if (text) {
             textChunks.push({ type: 'text', content: text })
           }
@@ -408,7 +419,7 @@ function extractSessionId(event: any, cliName: string): string | null {
 /**
  * Extract text content from a CLI event (Claude Code / OpenCode / Codex).
  */
-function extractTextFromEvent(event: any, cliName: string): string | null {
+function extractTextFromEvent(event: any, cliName: string, state?: { sawDelta?: boolean }): string | null {
   if (cliName === 'opencode') {
     if (event.type === 'text') {
       return event.part?.text ?? event.content ?? event.text ?? null
@@ -424,8 +435,29 @@ function extractTextFromEvent(event: any, cliName: string): string | null {
       return (event.content ?? '').toString() || null
     }
   } else {
-    // Claude Code
+    // Claude Code — 채팅은 --include-partial-messages 로 토큰 델타를 받아 스트리밍한다.
+    // 부분 메시지: 델타가 stream_event 로 감싸여 옴 → 증분 텍스트를 흘린다.
+    if (event.type === 'stream_event') {
+      const inner = event.event
+      if (inner?.type === 'content_block_delta' && inner.delta?.type === 'text_delta' && inner.delta.text) {
+        if (state) state.sawDelta = true
+        return inner.delta.text
+      }
+      return null
+    }
+    // 안전망: 일부 환경이 델타를 top-level 로 줄 수 있음
+    if (event.type === 'content_block_delta') {
+      const delta = event.delta
+      if (delta?.type === 'text_delta' && delta.text) {
+        if (state) state.sawDelta = true
+        return delta.text
+      }
+      return null
+    }
+    // 최종 'assistant'(전체 메시지) — 델타로 이미 흘렸으면 중복이므로 건너뛰고,
+    // 델타를 한 번도 못 받았을 때만(플래그 미지원 등) 전체 텍스트로 폴백한다.
     if (event.type === 'assistant') {
+      if (state?.sawDelta) return null
       const parts = event.message?.content || []
       const texts: string[] = []
       for (const part of parts) {
@@ -434,10 +466,6 @@ function extractTextFromEvent(event: any, cliName: string): string | null {
         }
       }
       return texts.length > 0 ? texts.join('\n') : null
-    }
-    if (event.type === 'content_block_delta') {
-      const delta = event.delta
-      if (delta?.type === 'text_delta' && delta.text) return delta.text
     }
   }
   return null
