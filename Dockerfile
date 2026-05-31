@@ -53,6 +53,12 @@ RUN npm install -g @anthropic-ai/claude-code
 # OpenCode CLI 설치
 RUN npm install -g opencode-ai
 
+# Codex CLI 설치
+RUN npm install -g @openai/codex
+
+# Gemini CLI 설치
+RUN npm install -g @google/gemini-cli
+
 # Playwright (에이전트가 웹 스크래핑/브라우저 자동화 시 사용)
 # 브라우저 바이너리는 매번 ~150MB CDN 다운로드(느린 상류 회선에 취약) 대신
 # 공식 playwright 이미지(v1.55.0)에서 COPY → 빌드 중 Playwright CDN 다운로드 제거.
