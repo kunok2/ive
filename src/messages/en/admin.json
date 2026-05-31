@@ -258,7 +258,7 @@
     "requestUrlHint": "Enable Event Subscriptions in your Slack app, set the URL below as the Request URL, and subscribe to the app_mention event.",
     "copyBtn": "Copy",
     "copiedBtn": "Copied",
-    "step1": "Create an app at api.slack.com/apps → add Bot Token Scopes (app_mentions:read, chat:write, channels:history, groups:history, channels:read, groups:read)",
+    "step1": "Create an app at api.slack.com/apps → add Bot Token Scopes (app_mentions:read, chat:write, channels:history, groups:history, channels:read, groups:read, files:read, users:read)",
     "step2": "Enable Event Subscriptions, set Request URL ① above + subscribe to app_mention",
     "step3": "OAuth & Permissions → add Redirect URL ② above",
     "step4": "Save the Client ID / Client Secret / Signing Secret from Basic Information into the 'Slack App' section above",
