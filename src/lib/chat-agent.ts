@@ -125,6 +125,35 @@ interface ChatAgentOptions {
   attachedImages?: string[]  // 첨부 이미지 절대경로 (Slack 등). workspacePath 하위에 저장됨
 }
 
+/** 로그/에러 메시지에 섞일 수 있는 토큰류를 마스킹 (clone URL, gh/glab 토큰 등). */
+export function maskSecrets(s: string): string {
+  return (s || '')
+    .replace(/(x-access-token|oauth2):[^@\s]+@/gi, '$1:***@')
+    .replace(/\b(gh[pousr]_[A-Za-z0-9]{20,})\b/g, 'gh***')
+    .replace(/\b(glpat-[A-Za-z0-9_-]{10,})\b/g, 'glpat-***')
+}
+
+/**
+ * CLI 비정상 종료(code !== 0)를 사용자에게 보일 메시지로 변환한다.
+ * "Process exited with code 1" 같은 무의미한 메시지 대신, stderr 에서 원인을 추출/요약한다.
+ */
+function describeCliFailure(code: number | null, stderr: string): string {
+  const tail = maskSecrets((stderr || '').trim().split('\n').filter(Boolean).slice(-3).join(' ')).slice(-300)
+  if (/authentication|invalid[_ ]?token|bad credentials|401|403|permission denied|could not read Username|terminal prompts disabled/i.test(stderr)) {
+    return `Git 또는 토큰 인증에 실패했어요. 프로젝트의 접근 토큰(또는 OAuth 연결)을 확인/갱신해 주세요.${tail ? `\n\`${tail}\`` : ''}`
+  }
+  if (/ENOENT|command not found|not found|spawn .* ENOENT/i.test(stderr)) {
+    return `에이전트 CLI 실행 파일을 찾지 못했어요. CLI 경로 설정을 확인해 주세요.${tail ? `\n\`${tail}\`` : ''}`
+  }
+  if (/rate.?limit|quota|429|overloaded|529/i.test(stderr)) {
+    return `요청 한도(rate limit)에 걸렸어요. 잠시 후 다시 시도해 주세요.${tail ? `\n\`${tail}\`` : ''}`
+  }
+  if (/Could not process image|invalid_request_error/i.test(stderr)) {
+    return `에이전트가 입력(이미지 등)을 처리하지 못했어요.${tail ? `\n\`${tail}\`` : ''}`
+  }
+  return `에이전트 실행이 실패했어요 (종료 코드 ${code}).${tail ? `\n원인: \`${tail}\`` : ' 자세한 내용은 실행 로그를 확인해 주세요.'}`
+}
+
 /**
  * Spawn a chat agent subprocess and stream text responses.
  * First message: sends system prompt + user message, captures CLI session ID.
@@ -289,15 +318,16 @@ export async function runChatAgentWithCallback(
       }
     })
 
+    let lastStderr = ''
     child.stderr?.on('data', (data: Buffer) => {
       const msg = data.toString().trim()
-      if (msg) console.warn(`[Chat #${issueIid}] stderr: ${msg}`)
+      if (msg) { lastStderr = (lastStderr + '\n' + msg).slice(-600); console.warn(`[Chat #${issueIid}] stderr: ${msg}`) }
     })
 
     child.on('close', (code) => {
       getAgentMap().delete(sessionId)
       if (code && code !== 0) {
-        onEvent({ type: 'error', content: `Process exited with code ${code}` })
+        onEvent({ type: 'error', content: describeCliFailure(code, lastStderr) })
       } else {
         onEvent({ type: 'done' })
       }
@@ -367,14 +397,15 @@ export async function* runChatAgent(opts: ChatAgentOptions): AsyncGenerator<{ ty
       }
     })
 
+    let lastStderr2 = ''
     child.stderr?.on('data', (data: Buffer) => {
       const msg = data.toString().trim()
-      if (msg) console.warn(`[Chat #${issueIid}] stderr: ${msg}`)
+      if (msg) { lastStderr2 = (lastStderr2 + '\n' + msg).slice(-600); console.warn(`[Chat #${issueIid}] stderr: ${msg}`) }
     })
 
     child.on('close', (code) => {
       done = true
-      if (code && code !== 0) error = `Process exited with code ${code}`
+      if (code && code !== 0) error = describeCliFailure(code, lastStderr2)
       getAgentMap().delete(sessionId)
       resolve()
     })

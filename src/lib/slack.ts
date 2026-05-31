@@ -9,7 +9,7 @@ import {
 import { decrypt } from './crypto'
 import {
   prepareChatWorkspace, prepareProjectWorkspace,
-  runChatAgentWithCallback, isChatAgentRunning,
+  runChatAgentWithCallback, isChatAgentRunning, maskSecrets,
 } from './chat-agent'
 import { fetchSingleIssue } from './provider'
 import { Agent } from '@/types'
@@ -456,8 +456,9 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
     }
   } catch (err) {
     console.error('[Slack] handleAppMention error:', err)
+    const detail = maskSecrets(err instanceof Error ? err.message : String(err)).slice(0, 250)
     try {
-      await sink.post(`처리 중 오류가 발생했어요. 잠시 후 다시 시도해 주세요.`)
+      await sink.post(`처리 중 오류가 발생했어요.${detail ? `\n\`${detail}\`` : ' 잠시 후 다시 시도해 주세요.'}`)
     } catch { /* ignore */ }
   }
 }
