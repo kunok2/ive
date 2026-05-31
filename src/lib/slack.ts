@@ -328,9 +328,15 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
     if (mentionFiles.length === 0 && channel && event.ts) {
       mentionFiles = await fetchMentionFiles(botToken, channel, event.ts, event.thread_ts).catch(() => [])
     }
-    // 이미지 첨부가 있으면 vision 가능한 에이전트를 우선 선택
+    // 스레드(대화) 세션을 먼저 로드 — 이미 이 스레드를 처리한 CLI 가 있으면 그 CLI 에이전트를 유지한다.
+    // 같은 스레드에서 CLI 가 바뀌면(claude→codex 등) 세션을 이어받지 못해 대화 맥락이 끊기므로,
+    // 한번 시작한 CLI 로 고정한다. 기록이 없을 때만(첫 멘션) 새로 선택.
+    let session = getSlackThreadSession(workspace.id, channel, convoId)
     const hasImages = mentionFiles.some(f => f.mimetype?.startsWith('image/'))
-    const agent = pickOwnerAgent(ownerUserId, hasImages)
+    const pinnedAgent = session?.cliName
+      ? getAgentsByUser(ownerUserId).find(a => a.cliName === session!.cliName)
+      : null
+    const agent = pinnedAgent || pickOwnerAgent(ownerUserId, hasImages)
     if (!agent) {
       await sink.post(`소유자에게 사용할 수 있는 에이전트가 없어요. 관리자에게 문의해 주세요.`)
       return
@@ -361,7 +367,7 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
     }
 
     // 스레드 첫 멘션에서 이슈 번호를 바인딩, 이후 멘션은 그 바인딩 유지(번호 재입력 불필요)
-    let session = getSlackThreadSession(workspace.id, channel, convoId)
+    // (session 은 위에서 이미 로드함)
     let issueIid: number | null
     if (!session) {
       issueIid = parseIssueNumber(cleanText)
