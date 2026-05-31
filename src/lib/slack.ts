@@ -1,4 +1,6 @@
 import crypto from 'crypto'
+import fs from 'fs'
+import path from 'path'
 import {
   getProjectsByUser, getSharedProjectsForUser, getProjectAuthToken,
   getSystemSetting, getAgentsByUser,
@@ -17,7 +19,8 @@ const SLACK_API = 'https://slack.com/api'
 // ── Slack 앱 자격증명 (앱 단위 1세트, OAuth 로그인·봇설치 공통) ──
 
 /** 봇 설치(Add to Slack) 때 요청하는 bot scope */
-export const SLACK_BOT_SCOPES = 'app_mentions:read,chat:write,channels:history,groups:history,channels:read,groups:read'
+// files:read — 멘션에 첨부된 이미지(url_private)를 봇 토큰으로 다운로드하기 위해 필요.
+export const SLACK_BOT_SCOPES = 'app_mentions:read,chat:write,channels:history,groups:history,channels:read,groups:read,files:read'
 
 export interface SlackAppConfig {
   clientId: string
@@ -190,6 +193,16 @@ export function parseIssueNumber(text: string): number | null {
 
 // ── 멘션 처리 (백그라운드) ──
 
+/** Slack 파일 첨부(이미지 등). app_mention 이벤트의 files 배열 요소. */
+interface SlackFile {
+  id?: string
+  mimetype?: string
+  filetype?: string
+  name?: string
+  url_private?: string
+  url_private_download?: string
+}
+
 interface AppMentionEvent {
   type: string
   user?: string
@@ -199,6 +212,34 @@ interface AppMentionEvent {
   channel?: string
   bot_id?: string
   subtype?: string
+  files?: SlackFile[]
+}
+
+/**
+ * Slack 첨부 이미지를 봇 토큰으로 다운로드해 destDir에 저장하고 저장 경로 배열을 반환.
+ * url_private 는 인증이 필요해 Authorization: Bearer <botToken> 헤더로 받아야 한다.
+ */
+async function downloadSlackImages(botToken: string, files: SlackFile[], destDir: string): Promise<string[]> {
+  const images = (files || []).filter(f => f.mimetype?.startsWith('image/') && (f.url_private_download || f.url_private))
+  if (images.length === 0) return []
+  try { fs.mkdirSync(destDir, { recursive: true }) } catch { /* ignore */ }
+  const saved: string[] = []
+  for (let i = 0; i < images.length; i++) {
+    const f = images[i]
+    const url = f.url_private_download || f.url_private!
+    try {
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${botToken}` } })
+      if (!res.ok) { console.error(`[Slack] image download failed (${res.status}) ${url}`); continue }
+      const buf = Buffer.from(await res.arrayBuffer())
+      const ext = (f.filetype || f.mimetype?.split('/')[1] || 'png').replace(/[^a-z0-9]/gi, '') || 'png'
+      const fp = path.join(destDir, `slack-image-${i + 1}.${ext}`)
+      fs.writeFileSync(fp, buf)
+      saved.push(fp)
+    } catch (err) {
+      console.error('[Slack] image download error:', err)
+    }
+  }
+  return saved
 }
 
 /**
@@ -307,8 +348,16 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
       workspacePath = await prepareProjectWorkspace(project, token)
     }
 
+    // 첨부 이미지 다운로드 (워크스페이스 하위에 저장 → 에이전트가 읽음)
+    const attachedImages = await downloadSlackImages(
+      botToken,
+      event.files || [],
+      path.join(workspacePath, '.slack-attachments'),
+    ).catch(() => [] as string[])
+
     // 처리 중 placeholder
-    const msgTs = await sink.post(issueIid != null ? `:hourglass_flowing_sand: #${issueIid} 살펴보는 중…` : `:speech_balloon: …`)
+    const placeholderBase = issueIid != null ? `:hourglass_flowing_sand: #${issueIid} 살펴보는 중…` : `:speech_balloon: …`
+    const msgTs = await sink.post(attachedImages.length > 0 ? `:frame_with_picture: 이미지 ${attachedImages.length}장 확인 중…` : placeholderBase)
 
     // CLI 구동 + Slack 스트리밍 (throttled chat.update)
     let full = ''
@@ -336,6 +385,7 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
         workspacePath,
         generalMode,
         availableProjects: ownerProjects.map(p => p.name),
+        attachedImages,
       },
       (ev) => {
         if (ev.type === 'session_id' && ev.content) {
