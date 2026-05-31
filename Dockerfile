@@ -2,15 +2,12 @@
 FROM node:24-slim AS builder
 
 # node-pty, better-sqlite3 네이티브 빌드에 필요한 도구
-# - 메인 아카이브(/debian)만 국내(kakao)로 고정 → deb.debian.org CDN 지연 회피 (서버 KR).
-#   보안 아카이브(debian-security)는 kakao 에 동일 경로가 없어 InRelease 404 → CDN 그대로 둠.
-#   (78MB 크롬 의존성은 전부 메인 아카이브에 있어 속도 이득은 유지)
-# - apt 캐시 마운트: 받은 .deb 를 빌드 간 보관 → 미러가 느려도 재다운로드 회피.
+# apt 캐시 마운트: 받은 .deb 를 빌드 간 보관 → 느린 회선이어도 재다운로드 회피.
 #   (캐시 마운트 내용은 이미지 레이어에 포함되지 않으므로 별도 rm 불필요)
+# 미러는 deb.debian.org(공식 CDN) 유지 — 빌드가 arm64 라 국내 미러(kakao 등)는
+# arm64 패키지를 제공하지 않아 404. CDN 은 전 아키텍처 제공.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    sed -i '/debian-security/!s|deb\.debian\.org|mirror.kakao.com|g' \
-      /etc/apt/sources.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true; \
     apt-get update && apt-get install -y \
     python3 make g++
 
@@ -31,12 +28,9 @@ RUN find /ms-playwright -maxdepth 1 -type d \( -name 'firefox*' -o -name 'webkit
 # ---- Runtime stage ----
 FROM node:24-slim
 
-# Debian 메인 아카이브만 국내(kakao) 고정 + apt 캐시 마운트 (위 builder stage 와 동일 이유).
-# 여기서 sources.list 를 수정하면 같은 이미지의 이후 RUN(playwright install-deps 등)도 자동으로 kakao 사용.
+# apt 캐시 마운트 (위 builder stage 와 동일 이유). 미러는 deb.debian.org CDN 유지(arm64 제공).
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    sed -i '/debian-security/!s|deb\.debian\.org|mirror.kakao.com|g' \
-      /etc/apt/sources.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true; \
     apt-get update && apt-get install -y \
     python3 make g++ git \
     curl wget jq unzip zip \
