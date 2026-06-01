@@ -129,23 +129,25 @@ export function getAssigneeAuto(projectId: string, issueIid: number): boolean {
   return !!r?.assignee_auto
 }
 
-// "지정 대기" = 에이전트에 지정됐으나 아직 한 번도 성공 처리되지 않은 이슈.
+// "지정 대기" = 에이전트에 지정됐으나 아직 처리되지 않은(=대기 중) 이슈.
 //   cached_stage 필터만으로는, 완료된 이슈(IVE-E/done)라도 스캐너가 매 틱 행을 다시 쓰는
 //   순간 cached_stage가 잠깐 비어 'waiting'으로 오인되어 대기로 집계되는 경우가 있었다(#365).
-//   이미 성공 실행이 존재하는 이슈는 stage 순간값과 무관하게 절대 대기가 아니므로 제외한다.
-const NOT_SUCCEEDED_GUARD = `
+//   성공 실행이 있는 이슈는 제외했지만, "처리 중(running)"인 이슈는 success가 아직 없어
+//   같은 찰나에 cached_stage가 비면 running 이면서 동시에 waiting으로 이중 집계되는 재발 버그가 있었다.
+//   → success뿐 아니라 running 실행이 있는 이슈도 stage 순간값과 무관하게 대기가 아니므로 제외한다.
+const NOT_PENDING_GUARD = `
   AND NOT EXISTS (
     SELECT 1 FROM task_executions te
     WHERE te.project_id = issue_stages.project_id
       AND te.issue_iid = issue_stages.issue_iid
-      AND te.status = 'success'
+      AND te.status IN ('success', 'running')
   )`
 
 export function countPreferredIssuesByAgent(agentId: string): number {
   const r = getDb().prepare(`
     SELECT COUNT(*) as cnt FROM issue_stages
     WHERE preferred_agent_id = ? AND (cached_stage IS NULL OR cached_stage IN ('', 'waiting'))
-    ${NOT_SUCCEEDED_GUARD}
+    ${NOT_PENDING_GUARD}
   `).get(agentId) as any
   return r?.cnt || 0
 }
@@ -159,7 +161,7 @@ export function getPreferredIssuesByAgent(agentId: string): { projectId: string;
         SELECT 1 FROM task_executions te
         WHERE te.project_id = s.project_id
           AND te.issue_iid = s.issue_iid
-          AND te.status = 'success'
+          AND te.status IN ('success', 'running')
       )
     ORDER BY s.updated_at ASC
   `).all(agentId) as any[]
