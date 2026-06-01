@@ -131,7 +131,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
       const child = spawn(mainCmd, args, {
         stdio: [opencodeStdin !== null ? 'pipe' : 'ignore', 'pipe', 'pipe'],
-        timeout: 30000,
         ...(opencodeEnv ? { env: opencodeEnv } : {}),
       })
 
@@ -152,8 +151,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             if (!line.trim()) continue
             try {
               const event = JSON.parse(line)
-              if (event.type === 'error') {
-                ocError = event.error?.data?.message ?? event.error?.message ?? '알 수 없는 오류'
+              // error / session.error 두 타입 모두 처리
+              if (event.type === 'error' || event.type === 'session.error') {
+                ocError = event.error?.data?.message ?? event.error?.message ?? event.message ?? '알 수 없는 오류'
               } else if (event.type === 'text') {
                 const text = event.part?.text ?? event.content ?? event.text ?? ''
                 if (text) texts.push(text)
@@ -165,7 +165,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           } else if (ocError) {
             reject(new Error(ocError))
           } else {
-            reject(new Error('응답을 가져오지 못했습니다. OpenCode 설정(모델, API 키)을 확인해 주세요.'))
+            // stderr에 실제 에러 메시지가 있으면 우선 사용
+            const stderrMsg = stderr.trim()
+            if (stderrMsg) {
+              reject(new Error(`OpenCode 오류: ${stderrMsg.split('\n').slice(-3).join(' ')}`))
+            } else {
+              reject(new Error('응답을 가져오지 못했습니다. 에이전트 설정에서 OpenCode 모델명을 확인해 주세요.'))
+            }
           }
         } else if (code === 0) {
           resolve(stdout.trim())

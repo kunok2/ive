@@ -176,7 +176,8 @@ async function prepareChatSpawn(opts: ChatAgentOptions) {
 
   const isFirstMessage = !cliSessionId
   const resolvedCliPath = await resolveCliPath(agent)
-  const model = getSystemSetting(`cli.${agent.cliName}.model`) || null
+  // 에이전트 설정 → 시스템 설정 순으로 모델 결정 (cli-runner.ts와 동일한 우선순위)
+  const model = agent.modelName || getSystemSetting(`cli.${agent.cliName}.model`) || null
 
   // 이슈 관리에 쓸 CLI (provider별). 토큰은 환경변수에 설정돼 있음. (projectless 면 미사용)
   const issueCli = project?.provider === 'github' ? 'gh' : 'glab'
@@ -326,10 +327,10 @@ export async function runChatAgentWithCallback(
         try {
           const event = JSON.parse(line)
 
-          // opencode: {"type":"error",...} — 종료 코드와 무관하게 오류 이벤트로 처리
-          if (cliName === 'opencode' && event.type === 'error' && !ocErrorEmitted) {
+          // opencode: error / session.error — 종료 코드와 무관하게 오류 이벤트로 처리
+          if (cliName === 'opencode' && (event.type === 'error' || event.type === 'session.error') && !ocErrorEmitted) {
             ocErrorEmitted = true
-            const msg = event.error?.data?.message ?? event.error?.message ?? '알 수 없는 오류'
+            const msg = event.error?.data?.message ?? event.error?.message ?? event.message ?? '알 수 없는 오류'
             onEvent({ type: 'error', content: `OpenCode 오류: ${msg}` })
             continue
           }
@@ -420,10 +421,10 @@ export async function* runChatAgent(opts: ChatAgentOptions): AsyncGenerator<{ ty
         try {
           const event = JSON.parse(line)
 
-          // opencode: {"type":"error",...} — 종료 코드와 무관하게 오류로 처리
-          if (cliName === 'opencode' && event.type === 'error' && !ocErrorEmitted2) {
+          // opencode: error / session.error — 종료 코드와 무관하게 오류로 처리
+          if (cliName === 'opencode' && (event.type === 'error' || event.type === 'session.error') && !ocErrorEmitted2) {
             ocErrorEmitted2 = true
-            const msg = event.error?.data?.message ?? event.error?.message ?? '알 수 없는 오류'
+            const msg = event.error?.data?.message ?? event.error?.message ?? event.message ?? '알 수 없는 오류'
             error = `OpenCode 오류: ${msg}`
             done = true
             resolve()
