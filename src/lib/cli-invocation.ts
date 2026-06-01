@@ -103,8 +103,10 @@ export function buildCliInvocation(o: BuildCliOpts): CliInvocation {
     const ocImageArgs = imagePaths.flatMap(p => ['-f', p])
     // -m: 모델을 CLI 수준에서 명시적으로 지정. OPENCODE_CONFIG_CONTENT의 agent.coder.model과 함께
     //      사용해 "The requested model is not supported" 에러를 방지한다.
+    // --dangerously-skip-permissions: 비대화형 환경에서 권한 확인 프롬프트 없이 실행.
+    //      config의 permission: {'*': 'allow'}와 함께 사용해야 완전히 건너뜀.
     const ocParts = [
-      ...cliParts, 'run', '--format', 'json',
+      ...cliParts, 'run', '--format', 'json', '--dangerously-skip-permissions',
       ...(model ? ['-m', model] : []),
       ...ocImageArgs,
       ...(cliSessionId ? ['-s', cliSessionId] : []),
