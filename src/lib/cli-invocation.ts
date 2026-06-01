@@ -101,7 +101,14 @@ export function buildCliInvocation(o: BuildCliOpts): CliInvocation {
 
     // 첨부 이미지: opencode는 -f(--file)로 메시지에 파일 첨부
     const ocImageArgs = imagePaths.flatMap(p => ['-f', p])
-    const ocParts = [...cliParts, 'run', '--format', 'json', ...ocImageArgs, ...(cliSessionId ? ['-s', cliSessionId] : [])]
+    // -m: 모델을 CLI 수준에서 명시적으로 지정. OPENCODE_CONFIG_CONTENT의 agent.coder.model과 함께
+    //      사용해 "The requested model is not supported" 에러를 방지한다.
+    const ocParts = [
+      ...cliParts, 'run', '--format', 'json',
+      ...(model ? ['-m', model] : []),
+      ...ocImageArgs,
+      ...(cliSessionId ? ['-s', cliSessionId] : []),
+    ]
     return {
       mainCmd: 'sh',
       args: ['-c', `exec ${ocParts.map(shq).join(' ')}`],
