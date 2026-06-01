@@ -258,7 +258,7 @@
     "requestUrlHint": "Slack 앱 설정의 Event Subscriptions 를 켜고 아래 주소를 Request URL 로 넣은 뒤, app_mention 이벤트를 구독하세요.",
     "copyBtn": "복사",
     "copiedBtn": "복사됨",
-    "step1": "api.slack.com/apps 에서 앱 생성 → Bot Token Scopes 추가 (app_mentions:read, chat:write, channels:history, groups:history, channels:read, groups:read, files:read, users:read)",
+    "step1": "api.slack.com/apps 에서 앱 생성 → Bot Token Scopes 추가 (app_mentions:read, chat:write, channels:history, groups:history, channels:read, groups:read, files:read, files:write, users:read)",
     "step2": "Event Subscriptions 켜고 위 ① Request URL 등록 + app_mention 구독",
     "step3": "OAuth & Permissions → Redirect URLs 에 위 ② 등록",
     "step4": "Basic Information 의 Client ID / Client Secret / Signing Secret 을 위 'Slack 앱' 섹션에 저장",

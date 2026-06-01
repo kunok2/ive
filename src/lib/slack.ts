@@ -19,9 +19,10 @@ const SLACK_API = 'https://slack.com/api'
 // ── Slack 앱 자격증명 (앱 단위 1세트, OAuth 로그인·봇설치 공통) ──
 
 /** 봇 설치(Add to Slack) 때 요청하는 bot scope */
-// files:read — 멘션 첨부 이미지(url_private) 다운로드.
-// users:read — 멘션한 사용자의 언어 설정(locale)을 읽어 응답 언어를 맞추기 위해 필요.
-export const SLACK_BOT_SCOPES = 'app_mentions:read,chat:write,channels:history,groups:history,channels:read,groups:read,files:read,users:read'
+// files:read  — 멘션 첨부 이미지(url_private) 다운로드.
+// files:write — 에이전트가 만든 이미지(차트/도식)를 채널에 업로드(files.completeUploadExternal).
+// users:read  — 멘션한 사용자의 언어 설정(locale)을 읽어 응답 언어를 맞추기 위해 필요.
+export const SLACK_BOT_SCOPES = 'app_mentions:read,chat:write,channels:history,groups:history,channels:read,groups:read,files:read,files:write,users:read'
 
 export interface SlackAppConfig {
   clientId: string
@@ -266,6 +267,7 @@ const SLACK_MSG = {
     placeholderChat: ':speech_balloon: …',
     imageChecking: (n: number) => `:frame_with_picture: 이미지 ${n}장 확인 중…`,
     emptyResponse: '(응답이 비어 있어요. 다시 한 번 말 걸어 주세요.)',
+    imagesAttached: (n: number) => `:frame_with_picture: 이미지 ${n}장을 첨부했어요.`,
     errorGeneric: '오류가 발생했습니다.',
     processingError: (detail: string) => `처리 중 오류가 발생했어요.${detail ? `\n\`${detail}\`` : ' 잠시 후 다시 시도해 주세요.'}`,
   },
@@ -280,6 +282,7 @@ const SLACK_MSG = {
     placeholderChat: ':speech_balloon: …',
     imageChecking: (n: number) => `:frame_with_picture: Checking ${n} image(s)…`,
     emptyResponse: '(Empty response. Please mention me again.)',
+    imagesAttached: (n: number) => `:frame_with_picture: Attached ${n} image(s).`,
     errorGeneric: 'An error occurred.',
     processingError: (detail: string) => `Something went wrong.${detail ? `\n\`${detail}\`` : ' Please try again later.'}`,
   },
@@ -367,13 +370,71 @@ async function downloadSlackImages(botToken: string, files: SlackFile[], destDir
   return saved
 }
 
+/** 이미지로 인식할 확장자(에이전트가 outbox 에 떨군 산출물 중 업로드 대상). */
+const OUTBOX_IMAGE_RE = /\.(png|jpe?g|gif|webp|svg)$/i
+/** 한 멘션에서 업로드할 최대 이미지 수(폭주 방지). 초과분은 로그로 남기고 버린다. */
+const OUTBOX_UPLOAD_LIMIT = 10
+
+/** outbox 폴더에서 업로드할 이미지 파일 경로 목록(이름순). */
+function listOutboxImages(dir: string): string[] {
+  try {
+    return fs.readdirSync(dir)
+      .filter(f => OUTBOX_IMAGE_RE.test(f))
+      .sort()
+      .map(f => path.join(dir, f))
+  } catch {
+    return []
+  }
+}
+
+/**
+ * 로컬 파일을 Slack 채널/스레드에 업로드한다 (files.getUploadURLExternal → 업로드 → completeUploadExternal).
+ * files.upload 는 deprecated 라 외부 업로드 3단계 플로우를 쓴다. files:write 스코프 필요.
+ */
+async function uploadFileToSlack(botToken: string, channel: string, filePath: string, threadTs?: string): Promise<boolean> {
+  try {
+    const buf = fs.readFileSync(filePath)
+    const filename = path.basename(filePath)
+    // 1) 업로드 URL 발급
+    const form = new URLSearchParams({ filename, length: String(buf.length) })
+    const r1 = await fetch(`${SLACK_API}/files.getUploadURLExternal`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${botToken}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: form.toString(),
+    })
+    const j1: any = await r1.json().catch(() => ({ ok: false }))
+    if (!j1.ok || !j1.upload_url || !j1.file_id) {
+      console.warn('[Slack] files.getUploadURLExternal failed:', j1.error)
+      return false
+    }
+    // 2) 발급된 URL 로 파일 바이트 업로드
+    const r2 = await fetch(j1.upload_url, { method: 'POST', body: buf })
+    if (!r2.ok) {
+      console.warn('[Slack] file upload POST failed:', r2.status)
+      return false
+    }
+    // 3) 채널/스레드에 공유 (완료)
+    const j3 = await slackApi(botToken, 'files.completeUploadExternal', {
+      files: [{ id: j1.file_id, title: filename }],
+      channel_id: channel,
+      ...(threadTs ? { thread_ts: threadTs } : {}),
+    })
+    return !!j3.ok
+  } catch (e) {
+    console.warn('[Slack] uploadFileToSlack error:', e)
+    return false
+  }
+}
+
 /**
  * 응답 출력 싱크 — Slack 포스팅을 추상화해서 로컬 테스트(콘솔)로도 구동 가능하게 함.
  * post: 새 메시지(placeholder/응답) 게시, 메시지 id 반환. update: 그 메시지를 갱신(스트리밍).
+ * uploadImage: 에이전트가 만든 이미지 파일을 채널에 업로드(선택적 — 미구현 sink 는 무시).
  */
 export interface MentionSink {
   post(text: string): Promise<string | null>
   update(id: string, text: string): Promise<void>
+  uploadImage?(filePath: string): Promise<void>
 }
 
 /**
@@ -400,6 +461,7 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
   const sink: MentionSink = providedSink ?? {
     post: (text) => postMessage(botToken, channel, text, replyTs),
     update: (id, text) => updateMessage(botToken, channel, id, text),
+    uploadImage: (filePath) => uploadFileToSlack(botToken, channel, filePath, replyTs).then(() => {}),
   }
 
   // 멘션한 사용자의 언어로 IVE 시스템 메시지를 표시(에이전트 응답 언어도 이 locale 을 따른다).
@@ -516,6 +578,15 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
       path.join(workspacePath, '.slack-attachments'),
     ).catch(() => [] as string[])
 
+    // 나가는 이미지 폴더(.slack-outbox): 에이전트가 차트/도식을 여기 저장하면 실행 후 업로드한다.
+    // 워크스페이스는 멘션마다 재사용되므로, 이번 실행 산출물만 잡도록 실행 전에 비운다.
+    const outboxRel = '.slack-outbox'
+    const outboxDir = path.join(workspacePath, outboxRel)
+    try {
+      fs.rmSync(outboxDir, { recursive: true, force: true })
+      fs.mkdirSync(outboxDir, { recursive: true })
+    } catch { /* ignore */ }
+
     // 처리 중 placeholder
     const placeholderBase = issueIid != null ? M.placeholderIssue(issueIid) : M.placeholderChat
     const msgTs = await sink.post(attachedImages.length > 0 ? M.imageChecking(attachedImages.length) : placeholderBase)
@@ -546,6 +617,7 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
       availableProjects: ownerProjects.map(p => p.name),
       attachedImages,
       userLocale: locale,
+      imageOutbox: outboxRel,
     }
     let resumeLost = false
     const onEvent = (ev: { type: string; content?: string }) => {
@@ -578,8 +650,26 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
       await runChatAgentWithCallback({ ...baseOpts, cliSessionId: null }, onEvent)
     }
 
+    // 에이전트가 outbox 에 만든 이미지를 채널에 업로드(차트/도식 등 "이미지로 보여줘").
+    let uploadedImages = 0
+    if (sink.uploadImage) {
+      const outImages = listOutboxImages(outboxDir)
+      if (outImages.length > OUTBOX_UPLOAD_LIMIT) {
+        console.warn(`[Slack] outbox 이미지 ${outImages.length}장 중 ${OUTBOX_UPLOAD_LIMIT}장만 업로드(초과분 무시)`)
+      }
+      for (const img of outImages.slice(0, OUTBOX_UPLOAD_LIMIT)) {
+        try {
+          await sink.uploadImage(img)
+          uploadedImages++
+        } catch (e) {
+          console.warn('[Slack] outbox 이미지 업로드 실패:', img, e)
+        }
+      }
+    }
+
     if (msgTs && !full.trim()) {
-      await sink.update(msgTs, M.emptyResponse)
+      // 텍스트가 비어도 이미지를 올렸으면 "비었음"이 아니라 첨부 안내로 마무리.
+      await sink.update(msgTs, uploadedImages > 0 ? M.imagesAttached(uploadedImages) : M.emptyResponse)
     } else if (msgTs) {
       await sink.update(msgTs, full.trim().slice(0, 38000))
     }

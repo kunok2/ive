@@ -123,6 +123,7 @@ interface ChatAgentOptions {
   generalMode?: boolean  // true = 이슈 미바인딩 일반 질문 (워크스페이스/이슈 컨텍스트 없음)
   availableProjects?: string[]  // 소유자의 프로젝트 이름 목록 (general 모드에서 "어떤 프로젝트?" 응답용)
   attachedImages?: string[]  // 첨부 이미지 절대경로 (Slack 등). workspacePath 하위에 저장됨
+  imageOutbox?: string  // 설정 시(Slack): 여기 저장한 이미지가 채널에 업로드됨. cwd 기준 상대 폴더명.
 }
 
 /** 로그/에러 메시지에 섞일 수 있는 토큰류를 마스킹 (clone URL, gh/glab 토큰 등). */
@@ -164,7 +165,7 @@ function describeCliFailure(code: number | null, stderr: string): string {
  * Shared by both the legacy SSE generator and the WebSocket callback version.
  */
 async function prepareChatSpawn(opts: ChatAgentOptions) {
-  const { cliSessionId, project, agent, token, issueIid, issueTitle, issueDescription, userMessage, workspacePath, userLocale, generalMode, availableProjects, attachedImages } = opts
+  const { cliSessionId, project, agent, token, issueIid, issueTitle, issueDescription, userMessage, workspacePath, userLocale, generalMode, availableProjects, attachedImages, imageOutbox } = opts
 
   const locale = userLocale || getSystemSetting('locale') || defaultLocale
   const isKo = locale === 'ko'
@@ -226,6 +227,15 @@ ${userMessage}
     prompt += isKo
       ? `\n\n## 첨부 이미지\n사용자가 다음 이미지 파일을 첨부했습니다(현재 작업 디렉토리 기준 경로). 질문에 답하기 전에 반드시 이 이미지들을 확인하세요:\n${list}`
       : `\n\n## Attached images\nThe user attached the following image file(s) (paths relative to the current working directory). You MUST view these images before answering:\n${list}`
+  }
+
+  // 이미지로 보여주기 규약(Slack 등에서만 imageOutbox 설정). 에이전트가 차트/도식을
+  // 이미지 파일로 만들어 이 폴더에 저장하면, 호출 측이 그걸 채널에 업로드해 사용자에게 보인다.
+  // 텍스트로 충분하면 굳이 파일을 만들지 않도록 안내한다(불필요한 렌더링 방지).
+  if (imageOutbox) {
+    prompt += isKo
+      ? `\n\n## 이미지로 보여주기\n사용자가 차트·다이어그램·그림 등을 "이미지로 보여달라"고 하면, 결과를 현재 작업 디렉토리의 \`${imageOutbox}/\` 폴더에 이미지 파일로 저장하세요(PNG 권장, SVG 가능). 그 폴더에 저장된 이미지는 자동으로 메신저에 첨부되어 사용자에게 보입니다. 텍스트 설명만으로 충분하면 파일을 만들지 마세요.`
+      : `\n\n## Showing images\nIf the user asks you to "show" a chart, diagram, or picture, render the result as an image file into the \`${imageOutbox}/\` folder in the current working directory (prefer PNG, SVG is fine). Images saved there are automatically attached in the messenger for the user to see. Don't create a file when a text explanation suffices.`
   }
 
   // CLI별 명령/인자/환경 조립은 단일 모듈(cli-invocation)에 위임.
