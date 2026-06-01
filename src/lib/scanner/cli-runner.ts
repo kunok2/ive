@@ -23,6 +23,30 @@ import {
 // resolveCliPath는 cli-invocation으로 이동. 기존 import 경로(execute.ts) 호환을 위해 re-export.
 export { resolveCliPath };
 
+/**
+ * opencode가 stderr로 내보내는 양성(benign) 잡음 줄을 걸러낸다.
+ * opencode는 자기 내부 DB(~/.local/share/opencode/opencode.db)를 처음 만들 때
+ * "Performing one time database migration..." 류 배너를 stderr에 찍는다. IVE DB와 무관하며,
+ * 이걸 끄는 opencode 플래그가 없으므로(실측 확인) 우리 쪽에서 거른다.
+ * 진짜 오류(인증 실패, 모델 미지원 등)는 통과시켜야 하므로 알려진 줄만 제거한다.
+ */
+const OPENCODE_BENIGN_STDERR = [
+  /performing one time database migration/i,
+  /^sqlite-migration:/i,
+  /database migration complete/i,
+  /service=db\b.*\b(opening database|applying migrations)/i,
+];
+function stripBenignOpencodeStderr(raw: string): string {
+  return raw
+    .split('\n')
+    .filter((line) => {
+      const t = line.trim();
+      if (!t) return true; // 빈 줄은 join에서 정리됨
+      return !OPENCODE_BENIGN_STDERR.some((re) => re.test(t));
+    })
+    .join('\n');
+}
+
 export interface CliRunResult {
   durationSeconds: number;
   conversationParts: string[];
@@ -120,6 +144,8 @@ export async function runCliProcess(
     let totalTurns = 0;
     let assistantTurnCount = 0;
     let detectedModel = '';
+    // opencode 오류 이벤트 메시지(있으면 종료 시 표면화)
+    let ocErrorMsg = '';
     // Gemini: assistant 메시지가 delta로 여러 번 쪼개져 오므로, 연속된 assistant 구간을 1턴으로 묶기 위한 플래그
     let prevGeminiAssistant = false;
 
@@ -148,26 +174,29 @@ export async function runCliProcess(
           setThinking(executionId, agent.id);
         }
         // 토큰/비용 누적
+        // opencode 토큰 스키마(실측): part.tokens = {total, input, output, reasoning, cache:{read, write}}
+        //   total = input + output + reasoning + cache.read + cache.write
+        //   input/output은 캐시·추론을 제외한 순수치이므로, claude/codex와 동일하게
+        //   캐시는 총 입력에 합산하고 reasoning은 출력에 합산해 집계 일관성을 맞춘다.
         if (event.type === 'step_finish') {
           const tokens = event.part?.tokens ?? {};
-          const iT = tokens.input ?? 0;
-          const oT = tokens.output ?? 0;
-          const cost = event.part?.cost ?? 0;
-          totalInputTokens += Number(iT);
-          totalOutputTokens += Number(oT);
-          totalCostUsd += Number(cost);
+          const cacheRead = Number(tokens.cache?.read ?? 0);
+          const cacheWrite = Number(tokens.cache?.write ?? 0);
+          const iT = Number(tokens.input ?? 0);
+          const oT = Number(tokens.output ?? 0) + Number(tokens.reasoning ?? 0);
+          const cost = Number(event.part?.cost ?? 0);
+          totalInputTokens += iT + cacheRead + cacheWrite;
+          totalCacheReadTokens += cacheRead;
+          totalCacheCreationTokens += cacheWrite;
+          totalOutputTokens += oT;
+          totalCostUsd += cost;
           if (event.part?.reason === 'stop') totalTurns = assistantTurnCount;
         }
-        // Legacy session.status 이벤트 처리
-        if (event.type === 'session.status') {
-          const iT = event.inputTokens ?? event.input_tokens ?? event.tokens?.input ?? 0;
-          const oT = event.outputTokens ?? event.output_tokens ?? event.tokens?.output ?? 0;
-          const cost = event.cost ?? event.costUsd ?? event.cost_usd ?? 0;
-          const turns = event.turns ?? event.numTurns ?? event.num_turns ?? 0;
-          totalInputTokens += Number(iT);
-          totalOutputTokens += Number(oT);
-          totalCostUsd += Number(cost);
-          totalTurns = Math.max(totalTurns, Number(turns));
+        // opencode error/session.error: 종료 코드와 무관하게 오류를 표면화한다.
+        // (opencode는 오류 시에도 exit 0으로 끝나 성공으로 오인될 수 있음)
+        if (event.type === 'error' || event.type === 'session.error') {
+          const emsg = event.error?.data?.message ?? event.error?.message ?? event.error ?? event.message ?? '알 수 없는 오류';
+          if (!ocErrorMsg) ocErrorMsg = typeof emsg === 'string' ? emsg : JSON.stringify(emsg);
         }
       } else if (isCodex) {
         // Codex exec --json 이벤트 처리
@@ -288,11 +317,13 @@ export async function runCliProcess(
     child.stderr?.on('data', (data: Buffer) => {
       resetIdleTimer();
       const raw = data.toString();
-      stderrBuffer += raw;
+      // opencode 양성 마이그레이션 배너는 경고 로그/실패진단 양쪽에서 제외한다.
+      const cleaned = isOpenCode ? stripBenignOpencodeStderr(raw) : raw;
+      stderrBuffer += cleaned;
       if (stderrBuffer.length > STDERR_BUFFER_MAX) {
         stderrBuffer = stderrBuffer.slice(-STDERR_BUFFER_MAX);
       }
-      const text = raw.trim();
+      const text = cleaned.trim();
       if (text) log(text, 'warn');
     });
 
@@ -308,6 +339,11 @@ export async function runCliProcess(
         }
       }
       clearActivity(executionId);
+      // opencode가 오류 이벤트를 냈다면 exit 0이라도 실패로 처리한다.
+      if (ocErrorMsg) {
+        log(`OpenCode 오류: ${ocErrorMsg}`, 'error');
+        conversationParts.push(`> **⚠️ 오류** ${ocErrorMsg}`);
+      }
       log(`CLI 종료: code=${code}, signal=${signal}`, code === 0 ? 'system' : 'error');
       // 토큰/비용/턴 DB 저장
       const finalTurns = totalTurns > 0 ? totalTurns : assistantTurnCount;
@@ -320,11 +356,14 @@ export async function runCliProcess(
       } else if (finalModel) {
         updateExecutionTokens(executionId, 0, 0, 0, 0, finalModel, 0, 0);
       }
-      if (code === 0) {
+      if (code === 0 && !ocErrorMsg) {
         resolve();
         return;
       }
       const detail: string[] = [];
+      if (ocErrorMsg) {
+        detail.push(`OpenCode 오류: ${ocErrorMsg}`);
+      }
       detail.push(`Agent CLI exited with code ${code}${signal ? ` (signal: ${signal})` : ''}`);
       if (killedByWatchdog) {
         detail.push(`힌트: ${Math.floor(idleTimeoutSec / 60)}분간 무응답(hang)으로 워치독이 강제 종료했습니다. CLI 인증 상태나 인터랙티브 프롬프트 대기 여부를 확인하세요.`);

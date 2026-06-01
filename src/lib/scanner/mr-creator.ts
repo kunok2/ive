@@ -26,6 +26,13 @@ import {
 
 const execFile = promisify(require('child_process').execFile);
 
+// 수행 작업 로그(conversationParts)에 파일 수정 도구 사용 흔적이 있는지 판정.
+// "에이전트가 고쳤다고 말은 하는데 실제 diff는 빈" 케이스를 무변경 처리에서 구분하기 위함.
+const EDIT_TOOL_RE = /🔧\s*\**\s*(edit|write|multiedit|str[_-]?replace|apply[_-]?patch|patch|create_file|update_file|file_change|notebookedit)\b/i;
+function agentAttemptedEdits(conversationParts: string[]): boolean {
+  return conversationParts.some((p) => EDIT_TOOL_RE.test(p));
+}
+
 /**
  * 변경사항을 커밋, 푸시하고 MR/PR을 생성합니다.
  * 변경사항이 없으면 완료 노트만 남깁니다.
@@ -145,12 +152,21 @@ export async function commitPushAndCreateMR(params: {
     await maybeAutoAssign(project, iid, token, log);
   } else {
     // 코드 변경사항 없음
-    log("코드 변경사항 없음. 작업 완료로 처리.", 'system');
+    const attemptedEdits = agentAttemptedEdits(conversationParts);
+    if (attemptedEdits) {
+      log("⚠️ 에이전트가 파일 수정 도구를 사용했으나 실제 변경사항이 없습니다 (미반영·되돌림·잘못된 경로 의심).", 'warn');
+    } else {
+      log("코드 변경사항 없음. 작업 완료로 처리.", 'system');
+    }
     const iterLine = iterationCount > 1 ? `\n- **반복 횟수:** ${iterationCount}회` : '';
     const workSummary = conversationParts.length > 0
       ? `\n\n### 📝 수행 작업\n${conversationParts.filter(p => p.trim()).join('\n')}`
       : '';
-    const noChangeNote = `<!-- ive-bot -->\n<!-- ive-agent:${agent.id} -->\n## ✅ 개발 완료 — ${agent.name}\n\n코드 변경사항 없이 완료되었습니다.\n- **소요 시간:** ${durationStr}${iterLine}${workSummary}`;
+    // 수정 흔적이 있는데 diff가 비면 "확인 필요"로 표면화한다. 깔끔한 "완료"로 덮지 않는다.
+    const noChangeHeading = attemptedEdits
+      ? `## ⚠️ 변경사항 없음 — 확인 필요 — ${agent.name}\n\n에이전트가 파일 수정 도구를 사용했으나 저장소에 남은 변경이 없습니다. (변경 미반영·되돌림 또는 잘못된 경로 수정 의심)`
+      : `## ✅ 개발 완료 — ${agent.name}\n\n코드 변경사항 없이 완료되었습니다.`;
+    const noChangeNote = `<!-- ive-bot -->\n<!-- ive-agent:${agent.id} -->\n${noChangeHeading}\n- **소요 시간:** ${durationStr}${iterLine}${workSummary}`;
     try {
       if (isGitHub) {
         await addGitHubIssueComment(project, iid, token, noChangeNote);

@@ -84,14 +84,12 @@ export function formatOpenCodeEvent(event: any, showToolUsage: boolean = false):
       const metaStr = meta.length > 0 ? `\x1b[90m(${meta.join(' | ')})\x1b[0m ` : '';
       return `\x1b[1;32m[완료]\x1b[0m ${metaStr}`;
     }
-    case 'session.error': {
-      const msg = event.error ?? event.message ?? '알 수 없는 오류';
-      return `\x1b[1;31m[오류]\x1b[0m ${msg}`;
-    }
+    case 'session.error':
     case 'error': {
       // opencode 1.x JSON 오류 이벤트: {"type":"error","error":{"data":{"message":"..."},...}}
-      const msg = event.error?.data?.message ?? event.error?.message ?? event.message ?? '알 수 없는 오류';
-      return `\x1b[1;31m[오류]\x1b[0m ${msg}`;
+      // session.error도 동일 구조를 가질 수 있으므로 같은 추출 체인을 쓴다(객체 stringify 방지).
+      const msg = event.error?.data?.message ?? event.error?.message ?? event.error ?? event.message ?? '알 수 없는 오류';
+      return `\x1b[1;31m[오류]\x1b[0m ${typeof msg === 'string' ? msg : JSON.stringify(msg)}`;
     }
     default:
       return null;
@@ -132,9 +130,11 @@ export function formatOpenCodeEventMarkdown(event: any): string | null {
       if (inputT || outputT) meta.push(`토큰: ${(Number(inputT) + Number(outputT)).toLocaleString()}`);
       return `\n---\n**📊 실행 결과** ${meta.join(' | ')}`;
     }
+    case 'session.error':
     case 'error': {
-      const msg = event.error?.data?.message ?? event.error?.message ?? event.message ?? '알 수 없는 오류';
-      return `> **⚠️ 오류** ${msg}`;
+      // session.error도 markdown 노트(이슈 코멘트)에 반드시 남긴다 — 과거엔 error만 처리해 누락됐음.
+      const msg = event.error?.data?.message ?? event.error?.message ?? event.error ?? event.message ?? '알 수 없는 오류';
+      return `> **⚠️ 오류** ${typeof msg === 'string' ? msg : JSON.stringify(msg)}`;
     }
     default:
       return null;

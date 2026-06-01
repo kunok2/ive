@@ -67,6 +67,70 @@ export interface BuildCliOpts {
 
 const shq = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`
 
+export interface OpencodeInvocationOpts {
+  cliParts: string[]
+  prompt: string
+  /** glab/gh 인증 토큰. 비어 있으면 토큰 env를 주입하지 않는다(인터뷰 등 git 불필요 경로). */
+  token: string
+  /** .octmp 임시 디렉토리를 만들 기준 경로 */
+  workspacePath: string
+  /** opencode steps(=maxTurns). 인터뷰처럼 1회성이면 1을 넘긴다. */
+  maxTurns: number
+  model?: string | null
+  mcpServers?: Record<string, any> | null
+  imagePaths?: string[]
+  cliSessionId?: string | null
+}
+
+/**
+ * opencode `run --format json` 호출(명령/인자/환경)을 조립한다.
+ * 스캐너 실행과 인터뷰 엔드포인트가 동일 로직을 공유하도록 단일화한다.
+ * (과거엔 interview/route.ts가 이 로직을 따로 복제해 #404 수정을 양쪽에 중복 반영해야 했음)
+ *
+ * - OPENCODE_CONFIG_CONTENT: 모델을 agent.coder.model에 주입(미설정 시 "model not supported" 에러 가능).
+ * - -m: CLI 수준에서 모델을 명시해 config보다 우선 적용.
+ * - --dangerously-skip-permissions: 비대화형에서 권한 프롬프트 없이 실행(config permission '*':'allow'와 함께).
+ * - TMPDIR을 .octmp로 돌림: opencode가 외부 /tmp 접근을 비대화형에서 거부해 빈 응답이 나는 문제 회피.
+ */
+export function buildOpencodeInvocation(o: OpencodeInvocationOpts): CliInvocation {
+  const { cliParts, prompt, token, workspacePath, maxTurns, model, mcpServers, cliSessionId } = o
+  const imagePaths = o.imagePaths ?? []
+
+  const opencodeConfig: any = {
+    agent: { coder: { steps: maxTurns || 200, permission: { '*': 'allow' }, ...(model ? { model } : {}) } },
+    compaction: { auto: true },
+  }
+  if (mcpServers) opencodeConfig.mcp = mcpServers
+
+  const ocTmp = path.join(workspacePath, '.octmp')
+  try { fs.mkdirSync(ocTmp, { recursive: true }) } catch { /* ignore */ }
+
+  // 첨부 이미지: opencode는 -f(--file)로 메시지에 파일 첨부
+  const ocImageArgs = imagePaths.flatMap(p => ['-f', p])
+  const ocParts = [
+    ...cliParts, 'run', '--format', 'json', '--dangerously-skip-permissions',
+    ...(model ? ['-m', model] : []),
+    ...ocImageArgs,
+    ...(cliSessionId ? ['-s', cliSessionId] : []),
+  ]
+  return {
+    mainCmd: 'sh',
+    args: ['-c', `exec ${ocParts.map(shq).join(' ')}`],
+    stdinInput: prompt, // 프롬프트는 arg 대신 stdin으로
+    env: {
+      ...process.env,
+      OPENCODE_CONFIG_CONTENT: JSON.stringify(opencodeConfig),
+      TMPDIR: ocTmp, TMP: ocTmp, TEMP: ocTmp,
+      // glab/gh CLI 인증용 (에이전트가 이슈 조회·생성에 사용). 토큰이 있을 때만 주입.
+      ...(token ? {
+        GITLAB_TOKEN: token, GITLAB_API_TOKEN: token,
+        GITHUB_TOKEN: token, GH_TOKEN: token,
+        IVE_GITLAB_TOKEN: token, IVE_GITHUB_TOKEN: token,
+      } : {}),
+    },
+  }
+}
+
 /**
  * CLI별 spawn 명령/인자/환경을 조립한다.
  *
@@ -88,44 +152,9 @@ export function buildCliInvocation(o: BuildCliOpts): CliInvocation {
   }
 
   if (cliName === 'opencode') {
-    const opencodeConfig: any = {
-      agent: { coder: { steps: maxTurns || 200, permission: { '*': 'allow' }, ...(model ? { model } : {}) } },
-      compaction: { auto: true },
-    }
-    if (mcpServers) opencodeConfig.mcp = mcpServers
-
-    // opencode는 외부 디렉토리(/tmp) 접근을 비대화형에서 자동 거부 → 빈 응답 유발.
-    // 임시 디렉토리를 프로젝트 루트 안(.octmp)으로 돌려 opencode가 외부 /tmp를 건드리지 않게 함.
-    const ocTmp = path.join(workspacePath, '.octmp')
-    try { fs.mkdirSync(ocTmp, { recursive: true }) } catch { /* ignore */ }
-
-    // 첨부 이미지: opencode는 -f(--file)로 메시지에 파일 첨부
-    const ocImageArgs = imagePaths.flatMap(p => ['-f', p])
-    // -m: 모델을 CLI 수준에서 명시적으로 지정. OPENCODE_CONFIG_CONTENT의 agent.coder.model과 함께
-    //      사용해 "The requested model is not supported" 에러를 방지한다.
-    // --dangerously-skip-permissions: 비대화형 환경에서 권한 확인 프롬프트 없이 실행.
-    //      config의 permission: {'*': 'allow'}와 함께 사용해야 완전히 건너뜀.
-    const ocParts = [
-      ...cliParts, 'run', '--format', 'json', '--dangerously-skip-permissions',
-      ...(model ? ['-m', model] : []),
-      ...ocImageArgs,
-      ...(cliSessionId ? ['-s', cliSessionId] : []),
-    ]
-    return {
-      mainCmd: 'sh',
-      args: ['-c', `exec ${ocParts.map(shq).join(' ')}`],
-      stdinInput: prompt, // 프롬프트는 arg 대신 stdin으로
-      env: {
-        ...process.env,
-        OPENCODE_CONFIG_CONTENT: JSON.stringify(opencodeConfig),
-        TMPDIR: ocTmp, TMP: ocTmp, TEMP: ocTmp,
-        // glab/gh CLI 인증용 (에이전트가 이슈 조회·생성에 사용)
-        GITLAB_TOKEN: token, GITLAB_API_TOKEN: token,
-        GITHUB_TOKEN: token, GH_TOKEN: token,
-        IVE_GITLAB_TOKEN: token,
-        IVE_GITHUB_TOKEN: token,
-      },
-    }
+    return buildOpencodeInvocation({
+      cliParts, prompt, token, workspacePath, maxTurns, model, mcpServers, imagePaths, cliSessionId,
+    })
   }
 
   if (cliName === 'codex') {

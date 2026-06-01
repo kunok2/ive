@@ -4,10 +4,10 @@ import { isAgentAvailableNow } from '@/types'
 import { defaultLocale } from '@/i18n/config'
 import { getCurrentUser } from '@/lib/auth'
 import { logActivity } from '@/lib/activity'
-import { existsSync, mkdirSync } from 'fs'
+import { existsSync } from 'fs'
 import { spawn } from 'child_process'
 import { getLocale } from 'next-intl/server'
-import path from 'path'
+import { buildOpencodeInvocation } from '@/lib/cli-invocation'
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser()
@@ -59,10 +59,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // 모델: 에이전트 설정 → 시스템 설정 순으로 결정 (opencode는 provider/model 형식 필요)
   const model = agent.modelName || getSystemSetting(`cli.${agent.cliName}.model`) || null
 
-  // sh -c "exec ..." 래핑에 쓸 shell quoting (opencode 전용)
-  const shq = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`
-
-  // OpenCode 인터뷰용 환경변수 (모델 설정 포함)
+  // OpenCode 인터뷰용 환경변수 (헬퍼가 조립)
   let opencodeEnv: NodeJS.ProcessEnv | undefined
 
   try {
@@ -72,31 +69,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     let opencodeStdin: string | null = null
 
     if (isOpenCode) {
-      // opencode 기본 포맷은 stdout에 아무것도 출력하지 않으므로(TUI 스타일)
-      // --format json으로 실행 후 JSON 이벤트에서 텍스트를 파싱한다.
-      // sh -c "exec ..." 래핑 + stdin 프롬프트 전달 (buildCliInvocation과 동일 패턴)
-      //
-      // OPENCODE_CONFIG_CONTENT: 모델을 agent.coder.model에 주입.
-      //   미설정 시 OpenCode 기본 모델이 적용되어 "The requested model is not supported" 에러 발생 가능.
-      // -m 플래그: CLI 수준에서 모델을 명시적으로 지정해 config보다 우선 적용.
-      const opencodeConfig: Record<string, unknown> = {
-        agent: { coder: { steps: 1, permission: { '*': 'allow' }, ...(model ? { model } : {}) } },
-        compaction: { auto: true },
-      }
-      const ocTmp = path.join(process.cwd(), '.octmp-interview')
-      try { mkdirSync(ocTmp, { recursive: true }) } catch { /* ignore */ }
-      opencodeEnv = {
-        ...process.env,
-        OPENCODE_CONFIG_CONTENT: JSON.stringify(opencodeConfig),
-        TMPDIR: ocTmp, TMP: ocTmp, TEMP: ocTmp,
-      }
-      const ocParts = [
-        ...cliParts, 'run', '--format', 'json', '--dangerously-skip-permissions',
-        ...(model ? ['-m', model] : []),
-      ]
-      args = ['-c', `exec ${ocParts.map(shq).join(' ')}`]
-      mainCmd = 'sh'
-      opencodeStdin = prompt
+      // 스캐너 실행과 동일한 단일 조립 지점(buildOpencodeInvocation)을 재사용한다.
+      // 인터뷰는 1회성 Q&A이므로 steps=1(maxTurns:1), git 토큰 불필요(token:''), 세션/이미지 없음.
+      const inv = buildOpencodeInvocation({
+        cliParts, prompt, token: '', workspacePath: process.cwd(),
+        maxTurns: 1, model, mcpServers: null,
+      })
+      mainCmd = inv.mainCmd
+      args = inv.args
+      opencodeStdin = inv.stdinInput ?? prompt
+      opencodeEnv = inv.env
     } else if (isCodex) {
       // codex exec "prompt" — JSON 없이 기본 텍스트 출력(답변만 stdout, 메타데이터는 stderr)
       args = [
