@@ -100,23 +100,22 @@ function slideOverview(){ return `
   <path d="M640,304 L640,222"                   fill="none" stroke="${CYAN}" stroke-width="2" marker-end="url(#ah)"/>   <!-- ③ IVE->CLI -->
   <path d="M845,160 C950,168 1012,230 1080,290" fill="none" stroke="${CYAN}" stroke-width="2" marker-end="url(#ah)"/>   <!-- ④ CLI->verify -->
   <path d="M982,381 C890,392 800,392 726,388"   fill="none" stroke="${CYAN}" stroke-width="2" marker-end="url(#ah)"/>   <!-- ⑤ verify->IVE -->
-  <!-- delivery / output (amber) -->
-  <path d="M676,456 C720,500 745,548 758,584"   fill="none" stroke="${AMBER}" stroke-width="2" marker-end="url(#aha)"/> <!-- ⑥ IVE->report -->
-  <path d="M901,637 L928,637"                   fill="none" stroke="${AMBER}" stroke-width="2" marker-end="url(#aha)"/> <!-- ⑦ report->manager -->
-  <!-- code delivery track (amber) -->
-  <path d="M470,206 C360,224 250,250 210,281"   fill="none" stroke="${AMBER}" stroke-width="2" marker-end="url(#aha)"/> <!-- A cli->git MR/PR -->
-  <path d="M175,382 L175,562"                   fill="none" stroke="${AMBER}" stroke-width="2" marker-end="url(#aha)"/> <!-- B git->ci/cd -->
+  <!-- 산출/전달 (자동 흐름 → cyan) -->
+  <path d="M676,456 C720,500 745,548 758,584"   fill="none" stroke="${CYAN}" stroke-width="2" marker-end="url(#ah)"/> <!-- ⑥ IVE->report -->
+  <path d="M901,637 L928,637"                   fill="none" stroke="${CYAN}" stroke-width="2" marker-end="url(#ah)"/> <!-- ⑦ report->manager -->
+  <!-- 코드 전달 (자동 흐름 → cyan) -->
+  <path d="M470,206 C360,224 250,250 210,281"   fill="none" stroke="${CYAN}" stroke-width="2" marker-end="url(#ah)"/> <!-- A cli->git MR/PR -->
+  <path d="M175,382 L175,562"                   fill="none" stroke="${CYAN}" stroke-width="2" marker-end="url(#ah)"/> <!-- B git->ci/cd -->
   <!-- Slack realtime (cyan dashed, bidirectional) -->
   <path d="M468,586 C505,556 540,500 585,456"   fill="none" stroke="${CYAN}" stroke-width="2" stroke-dasharray="6 5" marker-start="url(#ahc)" marker-end="url(#ahc)"/>
 
   <!-- ===== Central HUB: IVE ===== -->
-  <clipPath id="hubclip"><circle cx="640" cy="388" r="80"/></clipPath>
-  <circle cx="640" cy="388" r="98" fill="${CYAN}" opacity="0.07" filter="url(#glow)"/>
-  <circle cx="640" cy="388" r="84" fill="url(#hub)"/>
-  <image href="${iveLogo}" x="540" y="288" width="200" height="200" clip-path="url(#hubclip)"/>
-  <circle cx="640" cy="388" r="84" fill="none" stroke="${CYAN}" stroke-width="2.5"/>
-  <circle cx="640" cy="388" r="84" fill="none" stroke="${CYAN}" stroke-width="6" opacity="0.12"/>
-  ${text(640,500,'오케스트레이터',{size:11.5,fill:MUT,weight:700})}
+  <circle cx="640" cy="388" r="106" fill="${CYAN}" opacity="0.08" filter="url(#glow)"/>
+  <rect x="561" y="309" width="158" height="158" rx="32" fill="#101016" stroke="${CYAN}" stroke-width="2.5"/>
+  <rect x="571" y="319" width="138" height="138" rx="24" fill="none" stroke="#23232a" stroke-width="2"/>
+  ${text(640,400,'IVE',{size:56,fill:CYAN,weight:800,ls:2})}
+  <text x="640" y="433" font-size="20" font-weight="700" text-anchor="middle" font-family="system-ui"><tspan fill="${SPRING}">Spring</tspan><tspan fill="${AMBER}">ware</tspan></text>
+  ${text(640,503,'오케스트레이터',{size:11.5,fill:MUT,weight:700})}
 
   <!-- ===== DEVELOPER ===== -->
   ${card(60,100,230,92)}
@@ -142,13 +141,13 @@ function slideOverview(){ return `
   ${text(140,366,'이슈 · MR/PR · 버전 관리',{anchor:'start',size:12,fill:TXT,weight:700})}
 
   <!-- ===== CI/CD + 운영 반영 ===== -->
-  ${card(60,565,230,120,{stroke:AMBER})}
-  <g transform="translate(86,584)" stroke="${AMBER}" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  ${card(60,565,230,120,{stroke:CYAND})}
+  <g transform="translate(86,584)" stroke="${CYAN}" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round">
     <path d="M11,3 L11,23 M3,12 L11,3 L19,12"/><path d="M2,30 L20,30"/>
   </g>
   ${text(150,598,'CI/CD · 자동 배포',{anchor:'start',size:17,fill:TXT})}
   ${text(86,626,'MR/PR 병합 → 자동 빌드',{anchor:'start',size:12.5,fill:MUT,weight:600})}
-  <rect x="86" y="640" width="172" height="26" rx="13" fill="${BG}" stroke="${AMBER}" stroke-width="1.2"/>
+  <rect x="86" y="640" width="172" height="26" rx="13" fill="${BG}" stroke="${CYAND}" stroke-width="1.2"/>
   ${text(99,657,'운영 시스템 자동 반영',{anchor:'start',size:12.5,fill:TXT,weight:700})}
 
   <!-- ===== IVE 수집 링크 (확인자·고객·운영시스템 → Git 이슈 등록) ===== -->
@@ -196,9 +195,9 @@ function slideOverview(){ return `
   ${text(390,661,'다자간 대화로 실시간 업무 수행',{anchor:'start',size:12,fill:TXT,weight:700})}
 
   <!-- ===== REPORT / MAIL ===== -->
-  ${card(615,588,286,98,{stroke:AMBER})}
+  ${card(615,588,286,98,{stroke:CYAND})}
   <g transform="translate(637,614)">
-    <rect x="0" y="20" width="8" height="18" fill="${AMBER}"/><rect x="13" y="10" width="8" height="28" fill="${AMBER}"/><rect x="26" y="0" width="8" height="38" fill="${AMBER}"/>
+    <rect x="0" y="20" width="8" height="18" fill="${CYAN}"/><rect x="13" y="10" width="8" height="28" fill="${CYAN}"/><rect x="26" y="0" width="8" height="38" fill="${CYAN}"/>
   </g>
   ${text(689,620,'보고서 · 통계',{anchor:'start',size:16,fill:TXT})}
   ${text(689,642,'처리량·토큰·비용·가동률 집계',{anchor:'start',size:12,fill:MUT,weight:600})}
@@ -220,10 +219,10 @@ function slideOverview(){ return `
   ${badge(640,260,'3','작업 배정·실행',132)}
   ${badge(1018,232,'4','결과 제출',104)}
   ${badge(858,378,'5','검증·확인 통과',136)}
-  ${badge(742,524,'6','이력·통계',102,AMBER)}
-  ${badge(916,560,'7','리포트 전달',120,AMBER)}
-  ${pill(345,210,'MR/PR 자동 생성',156,AMBER)}
-  ${pill(175,470,'병합·배포',104,AMBER)}
+  ${badge(742,524,'6','이력·통계',102)}
+  ${badge(916,560,'7','리포트 전달',120)}
+  ${pill(345,210,'MR/PR 자동 생성',156,CYAN)}
+  ${pill(175,470,'병합·배포',104,CYAN)}
   ${pill(495,562,'다자간 대화',118,CYAN,true)}
 
   ${text(640,710,'IVE — Issue-driven aI deVelopment Engine · 한 장으로 보는 전체 운영 구조',{size:11.5,fill:DIM,weight:600})}
