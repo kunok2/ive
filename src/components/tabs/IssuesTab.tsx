@@ -144,6 +144,8 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   const [bulkProgress, setBulkProgress] = useState<{ total: number; done: number; failed: number } | null>(null)
   const cancelRef = useRef(false)
   const [showAddForm, setShowAddForm] = useState(false)
+  const previousActiveTabRef = useRef(activeTab)
+  const handledAddTriggerRef = useRef(addTrigger ?? 0)
   const [newBody, setNewBody] = useState(() => {
     if (typeof window !== 'undefined') {
       const pid = issuesProjectId ?? ''
@@ -265,7 +267,20 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     return () => { window.removeEventListener('refresh-counts', refresh) }
   }, [activeTab, selectedProjectId, filter, fetchIssues, fetchClosedIssues])
 
-  useEffect(() => { if (addTrigger && addTrigger > 0 && selectedProjectId) setShowAddForm(true) }, [addTrigger])
+  useEffect(() => {
+    const previousActiveTab = previousActiveTabRef.current
+    previousActiveTabRef.current = activeTab
+    const enteredIssuesTab = activeTab === 'issues' && previousActiveTab !== 'issues'
+
+    const trigger = addTrigger ?? 0
+    if (trigger > handledAddTriggerRef.current && selectedProjectId) {
+      handledAddTriggerRef.current = trigger
+      setShowAddForm(true)
+      return
+    }
+
+    if (enteredIssuesTab) setShowAddForm(false)
+  }, [activeTab, addTrigger, selectedProjectId])
 
   // --- Draft persistence ---
   const saveDraft = useCallback((value: string) => {
@@ -280,7 +295,6 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     if (selectedProjectId) {
       const draft = localStorage.getItem(`ive-issue-draft-${selectedProjectId}`)
       setNewBody(draft || '')
-      if (draft) setShowAddForm(true)
       fetchGitMembers()
     } else {
       setNewBody('')
