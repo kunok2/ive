@@ -13,14 +13,14 @@ fi
 node build-brochure.js
 
 # 멀티페이지 브로셔 + 개별 슬라이드 PDF
-for n in ive-overview ive-impact ive-screens ive-brochure; do
+for n in ive-cover ive-overview ive-screens ive-impact ive-poc ive-brochure; do
   "$CHROME" --headless --disable-gpu --no-pdf-header-footer \
     --print-to-pdf="$n.pdf" "file://$PWD/$n.html" 2>/dev/null
   echo "PDF  → $n.pdf"
 done
 
 # 미리보기 PNG (개별 슬라이드, 2x)
-for n in ive-overview ive-impact ive-screens; do
+for n in ive-cover ive-overview ive-screens ive-impact ive-poc; do
   "$CHROME" --headless --disable-gpu --screenshot="$n.png" \
     --window-size=1280,720 --force-device-scale-factor=2 "file://$PWD/$n.html" 2>/dev/null
   echo "PNG  → $n.png"

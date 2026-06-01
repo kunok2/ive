@@ -354,6 +354,87 @@ function slideScreens(){
 }
 
 // ============================================================
+// SLIDE 0 — 표지 (Cover · 한 줄 결과 약속)
+// ============================================================
+function slideCover(){
+  const ECO=[['Claude',claude],['Codex',codex],['Gemini',gemini],['OpenCode',opencode],['GitLab',gitlab],['GitHub',github],['Slack',slack]];
+  const tw=44,tg=14,n=ECO.length,totalW=n*tw+(n-1)*tg,sx=640-totalW/2,ly=556;
+  const CH=[['기존 스택 그대로',176,447],['사람이 최종 검토',176,640],['비용·성과 자동 측정',188,833]];
+  return `
+<svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="cv" cx="50%" cy="32%" r="82%"><stop offset="0%" stop-color="#12202a"/><stop offset="58%" stop-color="#0e1419"/><stop offset="100%" stop-color="${BG}"/></radialGradient>
+    <filter id="cglow" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="14" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <rect width="1280" height="720" fill="url(#cv)"/>
+  <text x="1216" y="50" font-size="17" font-weight="700" text-anchor="end" font-family="system-ui"><tspan fill="${SPRING}">Spring</tspan><tspan fill="${AMBER}">ware</tspan></text>
+  ${text(1216,70,'PRODUCT BRIEF · 2026',{anchor:'end',size:11,fill:DIM,weight:700,ls:1.5})}
+
+  <circle cx="640" cy="196" r="118" fill="${CYAN}" opacity="0.08" filter="url(#cglow)"/>
+  <rect x="556" y="116" width="168" height="168" rx="34" fill="#101016" stroke="${CYAN}" stroke-width="2.5"/>
+  <rect x="567" y="127" width="146" height="146" rx="26" fill="none" stroke="#23232a" stroke-width="2"/>
+  ${text(640,210,'IVE',{size:62,fill:CYAN,weight:800,ls:2})}
+  <text x="640" y="248" font-size="22" font-weight="700" text-anchor="middle" font-family="system-ui"><tspan fill="${SPRING}">Spring</tspan><tspan fill="${AMBER}">ware</tspan></text>
+
+  ${text(640,358,'이슈만 올리면, AI가 개발한다',{size:46,fill:TXT,weight:800})}
+  ${text(640,396,'AI CLI 에이전트가 Git 이슈를 자동 처리하고, 사람은 검토·결정만 — 처리량·비용은 자동 측정.',{size:16,fill:'#b4b4bc',weight:600})}
+
+  ${CH.map(([l,w,cx])=>`<rect x="${cx-w/2}" y="440" width="${w}" height="32" rx="16" fill="${BG}" stroke="${CYAN}" stroke-width="1.3"/>${text(cx,461,l,{size:13.5,fill:TXT,weight:700})}`).join('')}
+
+  ${text(640,532,'함께 동작',{size:12,fill:DIM,weight:700,ls:2})}
+  ${ECO.map((e,i)=>{const x=sx+i*(tw+tg);return `<rect x="${x}" y="${ly}" width="${tw}" height="${tw}" rx="11" fill="${BG}" stroke="${BORDER}" stroke-width="1"/><image href="${e[1]}" x="${x+9}" y="${ly+9}" width="26" height="26"/>`;}).join('')}
+
+  ${text(640,650,'Issue-driven aI deVelopment Engine',{size:13,fill:MUT,weight:700,ls:1})}
+  ${text(640,690,'GitLab · GitHub   |   Claude · Codex · Gemini · OpenCode   |   Slack   |   Docker · 온프레미스',{size:11.5,fill:DIM,weight:600})}
+</svg>`;
+}
+
+// ============================================================
+// SLIDE 4 — POC 제안 (CTA)
+// ============================================================
+function slidePOC(){
+  const COLS=[
+    {t:'스코프 — 작게 시작',ic:'scope',b:['저장소 1개 · 2주','이슈에 라벨만 부착','온프레미스 · Docker','기존 AI 구독 그대로']},
+    {t:'성공 기준 — 사전 합의',ic:'chart',b:['이슈 자동 처리율','리드타임 단축 %','검토 통과율','주간 집계 리포트 산출']},
+    {t:'리스크 제거 — 안전',ic:'shield',b:['사람의 최종 검토 게이트','데이터 온프레미스 보관','벤더 락인 없음','즉시 롤백 가능']},
+  ];
+  const X=[64,454,844],W=372;
+  const icon=t=> t==='scope'?`<circle cx="14" cy="14" r="12"/><circle cx="14" cy="14" r="4.5"/>`
+    : t==='chart'?`<path d="M3,25 L25,25"/><rect x="5" y="15" width="5" height="10"/><rect x="13" y="9" width="5" height="16"/><rect x="21" y="4" width="5" height="21"/>`
+    : `<path d="M14,2 L25,7 V15 C25,22 20,26 14,28 C8,26 3,22 3,15 V7 Z"/><path d="M9,15 l4,4 l7,-8"/>`;
+  return `
+<svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="pv" cx="50%" cy="38%" r="85%"><stop offset="0%" stop-color="#16161b"/><stop offset="100%" stop-color="${BG}"/></radialGradient>
+    <marker id="pah" markerWidth="10" markerHeight="10" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="${CYAN}"/></marker>
+  </defs>
+  <rect width="1280" height="720" fill="url(#pv)"/>
+  ${header('POC 제안 — 2주, 리스크 0',"작게 시작해 '당신의 숫자'로 직접 확인하세요")}
+
+  ${badge(380,120,'1','저장소 연결',150)}
+  ${badge(640,120,'2','이슈에 라벨',150)}
+  ${badge(905,120,'3','자동 처리·검토',162)}
+  <path d="M462,120 L556,120" stroke="${CYAN}" stroke-width="2" marker-end="url(#pah)"/>
+  <path d="M722,120 L818,120" stroke="${CYAN}" stroke-width="2" marker-end="url(#pah)"/>
+
+  ${COLS.map((c,i)=>{const x=X[i];return `
+    ${card(x,170,W,330)}
+    <circle cx="${x+42}" cy="210" r="22" fill="${BG}" stroke="${CYAN}" stroke-width="1.5"/>
+    <g transform="translate(${x+28},196)" stroke="${CYAN}" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round">${icon(c.ic)}</g>
+    ${text(x+78,206,c.t,{size:16,fill:TXT,anchor:'start'})}
+    <line x1="${x+24}" y1="238" x2="${x+W-24}" y2="238" stroke="${BORDER}" stroke-width="1"/>
+    ${c.b.map((b,j)=>bullet(x+30,280+j*42,b,CYAN,TXT)).join('')}
+  `;}).join('')}
+
+  ${card(64,524,1152,150,{stroke:CYAN,fill:'#0f1f24'})}
+  ${text(640,572,'이번 분기, 저장소 하나만 — 2주 뒤 당신의 데이터로 보고드립니다.',{size:23,fill:TXT,weight:800})}
+  ${text(640,605,'사람이 검토하고, 데이터는 당신 안에 남고, 결과는 숫자로 증명됩니다.',{size:14,fill:'#b4b4bc',weight:600})}
+  <rect x="516" y="628" width="248" height="34" rx="17" fill="${CYAN}"/>
+  ${text(640,650,'데모·문의   ive.dazzleat.link',{size:14,fill:'#06262e',weight:800})}
+</svg>`;
+}
+
+// ============================================================
 // HTML wrappers
 // ============================================================
 const PAGE_CSS = `
@@ -368,9 +449,11 @@ const single = (svg) => `<!DOCTYPE html><html lang="ko"><head><meta charset="utf
  html,body{width:1280px;height:720px;overflow:hidden;}</style></head><body><div class="page">${svg}</div></body></html>`;
 const multi = (svgs) => `<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><style>${PAGE_CSS}</style></head><body>${svgs.map(s=>`<div class="page">${s}</div>`).join('')}</body></html>`;
 
-const ov = slideOverview(), im = slideImpact(), scr = slideScreens();
+const cover = slideCover(), ov = slideOverview(), scr = slideScreens(), im = slideImpact(), poc = slidePOC();
+fs.writeFileSync(path.join(__dirname,'ive-cover.html'),    single(cover));
 fs.writeFileSync(path.join(__dirname,'ive-overview.html'), single(ov));
-fs.writeFileSync(path.join(__dirname,'ive-impact.html'),   single(im));
 fs.writeFileSync(path.join(__dirname,'ive-screens.html'),  single(scr));
-fs.writeFileSync(path.join(__dirname,'ive-brochure.html'), multi([ov, scr, im]));
-console.log('built: ive-overview.html, ive-impact.html, ive-screens.html, ive-brochure.html');
+fs.writeFileSync(path.join(__dirname,'ive-impact.html'),   single(im));
+fs.writeFileSync(path.join(__dirname,'ive-poc.html'),      single(poc));
+fs.writeFileSync(path.join(__dirname,'ive-brochure.html'), multi([cover, ov, scr, im, poc]));
+console.log('built: cover, overview, screens, impact, poc, brochure(5p)');
