@@ -414,8 +414,17 @@ function freshOutboxImages(dir: string, before: Map<string, number>): string[] {
 export async function prepareImageForUpload(filePath: string): Promise<{ buffer: Buffer; filename: string }> {
   const base = path.basename(filePath)
   if (/\.svg$/i.test(filePath)) {
-    const png = await sharp(fs.readFileSync(filePath)).png().toBuffer()
-    return { buffer: png, filename: base.replace(/\.svg$/i, '.png') }
+    const svgBuf = fs.readFileSync(filePath)
+    try {
+      const png = await sharp(svgBuf).png().toBuffer()
+      return { buffer: png, filename: base.replace(/\.svg$/i, '.png') }
+    } catch (e) {
+      // 에이전트가 만든 SVG 가 깨진 XML(미닫힌 태그 등)이면 resvg 가 거부한다.
+      // 완전 실패시키지 말고 원본 SVG 라도 올린다(클라이언트가 렌더할 수도 있음). 진단용으로 앞부분 로깅.
+      const head = svgBuf.toString('utf8').slice(0, 300)
+      console.warn(`[Slack] SVG→PNG 변환 실패, 원본 SVG 업로드로 폴백: ${(e as Error).message}\n  svg head: ${head}`)
+      return { buffer: svgBuf, filename: base }
+    }
   }
   return { buffer: fs.readFileSync(filePath), filename: base }
 }

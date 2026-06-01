@@ -27,6 +27,15 @@ describe('prepareImageForUpload', () => {
     expect(buffer.length).toBeGreaterThan(0)
   })
 
+  it('깨진 SVG(미닫힌 태그)는 변환 실패 시 원본 SVG 로 폴백한다(완전 실패 방지)', async () => {
+    // resvg 가 거부하는 잘못된 XML — 운영에서 실제로 난 케이스(<defs> 미닫힘).
+    const broken = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><defs><rect/></svg>'
+    const svg = tmpFile('bad.svg', broken)
+    const { buffer, filename } = await prepareImageForUpload(svg)
+    expect(filename).toBe('bad.svg')              // PNG 변환 못 했으니 원본 그대로
+    expect(buffer.toString('utf8')).toBe(broken)  // 내용 보존(드롭하지 않음)
+  })
+
   it('PNG 등은 변환 없이 그대로 통과한다', async () => {
     const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3, 4])
     const png = tmpFile('pic.png', bytes)
