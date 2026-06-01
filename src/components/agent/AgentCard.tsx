@@ -350,9 +350,9 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
         <div className="flex flex-col items-end gap-1.5 shrink-0">
           <div className="flex items-center gap-2">
           {!onVacation && (
-            <div className="flex items-center gap-1.5 whitespace-nowrap">
+            <div className="flex items-center gap-1.5">
               <div className={`w-2 h-2 rounded-full shrink-0 ${status.dot}`} />
-              <span className="text-sm text-ive-text-muted">{status.label}</span>
+              <span className="hidden sm:inline text-sm text-ive-text-muted">{status.label}</span>
             </div>
           )}
           {/* 사용 ↔ 휴가 토글 */}
@@ -370,7 +370,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
             </button>
           </div>
           {collapsed && (
-            <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+            <div className="hidden sm:flex items-center gap-1" onClick={e => e.stopPropagation()}>
               <button
                 onClick={handleTest}
                 disabled={testing}
