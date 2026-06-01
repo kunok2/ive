@@ -88,6 +88,11 @@ export function formatOpenCodeEvent(event: any, showToolUsage: boolean = false):
       const msg = event.error ?? event.message ?? '알 수 없는 오류';
       return `\x1b[1;31m[오류]\x1b[0m ${msg}`;
     }
+    case 'error': {
+      // opencode 1.x JSON 오류 이벤트: {"type":"error","error":{"data":{"message":"..."},...}}
+      const msg = event.error?.data?.message ?? event.error?.message ?? event.message ?? '알 수 없는 오류';
+      return `\x1b[1;31m[오류]\x1b[0m ${msg}`;
+    }
     default:
       return null;
   }
@@ -126,6 +131,10 @@ export function formatOpenCodeEventMarkdown(event: any): string | null {
       if (cost) meta.push(`비용: $${Number(cost).toFixed(4)}`);
       if (inputT || outputT) meta.push(`토큰: ${(Number(inputT) + Number(outputT)).toLocaleString()}`);
       return `\n---\n**📊 실행 결과** ${meta.join(' | ')}`;
+    }
+    case 'error': {
+      const msg = event.error?.data?.message ?? event.error?.message ?? event.message ?? '알 수 없는 오류';
+      return `> **⚠️ 오류** ${msg}`;
     }
     default:
       return null;
