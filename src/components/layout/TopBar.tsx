@@ -156,7 +156,7 @@ export default function TopBar() {
             {/* 도움말 */}
             <button
               onClick={() => setShowHelp(true)}
-              className="w-8 h-8 rounded-lg bg-ive-bg-card border border-ive-border-subtle flex items-center justify-center text-ive-text-dim hover:text-ive-cyan active:scale-95 transition-all"
+              className="w-8 h-8 rounded-lg bg-ive-cyan/20 border border-ive-cyan/40 flex items-center justify-center text-ive-cyan hover:bg-ive-cyan/30 active:scale-95 transition-all"
               aria-label={t('title')}
             >
               <i className="fa-solid fa-circle-question text-sm" />
