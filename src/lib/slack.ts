@@ -1,9 +1,10 @@
 import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
+import sharp from 'sharp' // next 의 의존성으로 항상 설치됨(SVG→PNG 변환용). 별도 선언 불필요.
 import {
   getProjectsByUser, getSharedProjectsForUser, getProjectAuthToken,
-  getSystemSetting, getAgentsByUser,
+  getSystemSetting, getAvailableAgentsByUser,
   getSlackThreadSession, createSlackThreadSession, updateSlackThreadCliSession, resetSlackThreadProject, switchSlackThreadProject,
 } from './db'
 import { decrypt } from './crypto'
@@ -85,7 +86,7 @@ export interface DecryptedWorkspace {
 
 /** 소유자의 에이전트 중 하나를 선택 (OpenCode 우선, 없으면 첫 에이전트). 남의 에이전트는 쓰지 않음. */
 function pickOwnerAgent(ownerUserId: string, preferVision = false): Agent | null {
-  const list = getAgentsByUser(ownerUserId)
+  const list = getAvailableAgentsByUser(ownerUserId) // 사용중지 에이전트 제외
   if (preferVision) {
     // 이미지 첨부 시: 이미지(vision) 분석이 되는 CLI를 우선.
     // opencode 는 모델에 따라 이미지 미지원이라(기본 모델이 vision 아님) 후순위.
@@ -270,6 +271,7 @@ const SLACK_MSG = {
     imageChecking: (n: number) => `:frame_with_picture: 이미지 ${n}장 확인 중…`,
     emptyResponse: '(응답이 비어 있어요. 다시 한 번 말 걸어 주세요.)',
     imagesAttached: (n: number) => `:frame_with_picture: 이미지 ${n}장을 첨부했어요.`,
+    imageUploadFailed: ':warning: 이미지를 만들었지만 업로드에 실패했어요. 봇의 `files:write` 스코프와 앱 재설치를 확인해 주세요.',
     errorGeneric: '오류가 발생했습니다.',
     processingError: (detail: string) => `처리 중 오류가 발생했어요.${detail ? `\n\`${detail}\`` : ' 잠시 후 다시 시도해 주세요.'}`,
   },
@@ -284,6 +286,7 @@ const SLACK_MSG = {
     imageChecking: (n: number) => `:frame_with_picture: Checking ${n} image(s)…`,
     emptyResponse: '(Empty response. Please mention me again.)',
     imagesAttached: (n: number) => `:frame_with_picture: Attached ${n} image(s).`,
+    imageUploadFailed: ':warning: I created an image but failed to upload it. Please check the bot\'s `files:write` scope and reinstall the app.',
     errorGeneric: 'An error occurred.',
     processingError: (detail: string) => `Something went wrong.${detail ? `\n\`${detail}\`` : ' Please try again later.'}`,
   },
@@ -376,26 +379,55 @@ const OUTBOX_IMAGE_RE = /\.(png|jpe?g|gif|webp|svg)$/i
 /** 한 멘션에서 업로드할 최대 이미지 수(폭주 방지). 초과분은 로그로 남기고 버린다. */
 const OUTBOX_UPLOAD_LIMIT = 10
 
-/** outbox 폴더에서 업로드할 이미지 파일 경로 목록(이름순). */
-function listOutboxImages(dir: string): string[] {
+/** outbox 폴더의 이미지 파일 → mtime(ms) 스냅샷. 실행 전후 비교로 "이번에 새로 생기거나 바뀐 것"만 골라낸다. */
+// (이전 listOutboxImages 는 freshOutboxImages 로 대체 — 매 멘션마다 옛 이미지를 재업로드하지 않기 위함)
+function snapshotOutbox(dir: string): Map<string, number> {
+  const m = new Map<string, number>()
   try {
-    return fs.readdirSync(dir)
-      .filter(f => OUTBOX_IMAGE_RE.test(f))
-      .sort()
-      .map(f => path.join(dir, f))
-  } catch {
-    return []
+    for (const f of fs.readdirSync(dir)) {
+      if (!OUTBOX_IMAGE_RE.test(f)) continue
+      try { m.set(f, fs.statSync(path.join(dir, f)).mtimeMs) } catch { /* ignore */ }
+    }
+  } catch { /* ignore */ }
+  return m
+}
+
+/** 실행 전 스냅샷(before) 대비 새로 생기거나 갱신된 이미지 경로만(이름순). 이전 산출물은 재업로드하지 않는다. */
+function freshOutboxImages(dir: string, before: Map<string, number>): string[] {
+  const out: string[] = []
+  try {
+    for (const f of fs.readdirSync(dir).sort()) {
+      if (!OUTBOX_IMAGE_RE.test(f)) continue
+      let mtime = 0
+      try { mtime = fs.statSync(path.join(dir, f)).mtimeMs } catch { continue }
+      const prev = before.get(f)
+      if (prev === undefined || mtime > prev) out.push(path.join(dir, f))
+    }
+  } catch { /* ignore */ }
+  return out
+}
+
+/**
+ * 업로드용 이미지 준비. Slack 은 SVG 를 인라인 렌더하지 않으므로 SVG 는 sharp 로 PNG 로 변환한다
+ * (그래야 채팅창에 그림으로 보인다). 그 외(png/jpg/gif/webp)는 그대로 올린다.
+ */
+export async function prepareImageForUpload(filePath: string): Promise<{ buffer: Buffer; filename: string }> {
+  const base = path.basename(filePath)
+  if (/\.svg$/i.test(filePath)) {
+    const png = await sharp(fs.readFileSync(filePath)).png().toBuffer()
+    return { buffer: png, filename: base.replace(/\.svg$/i, '.png') }
   }
+  return { buffer: fs.readFileSync(filePath), filename: base }
 }
 
 /**
  * 로컬 파일을 Slack 채널/스레드에 업로드한다 (files.getUploadURLExternal → 업로드 → completeUploadExternal).
  * files.upload 는 deprecated 라 외부 업로드 3단계 플로우를 쓴다. files:write 스코프 필요.
+ * SVG 는 PNG 로 변환해서 올린다(Slack 인라인 렌더용).
  */
 async function uploadFileToSlack(botToken: string, channel: string, filePath: string, threadTs?: string): Promise<boolean> {
   try {
-    const buf = fs.readFileSync(filePath)
-    const filename = path.basename(filePath)
+    const { buffer: buf, filename } = await prepareImageForUpload(filePath)
     // 1) 업로드 URL 발급
     const form = new URLSearchParams({ filename, length: String(buf.length) })
     const r1 = await fetch(`${SLACK_API}/files.getUploadURLExternal`, {
@@ -409,7 +441,7 @@ async function uploadFileToSlack(botToken: string, channel: string, filePath: st
       return false
     }
     // 2) 발급된 URL 로 파일 바이트 업로드
-    const r2 = await fetch(j1.upload_url, { method: 'POST', body: buf })
+    const r2 = await fetch(j1.upload_url, { method: 'POST', body: new Uint8Array(buf) })
     if (!r2.ok) {
       console.warn('[Slack] file upload POST failed:', r2.status)
       return false
@@ -435,7 +467,7 @@ async function uploadFileToSlack(botToken: string, channel: string, filePath: st
 export interface MentionSink {
   post(text: string): Promise<string | null>
   update(id: string, text: string): Promise<void>
-  uploadImage?(filePath: string): Promise<void>
+  uploadImage?(filePath: string): Promise<boolean>
 }
 
 /**
@@ -462,7 +494,7 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
   const sink: MentionSink = providedSink ?? {
     post: (text) => postMessage(botToken, channel, text, replyTs),
     update: (id, text) => updateMessage(botToken, channel, id, text),
-    uploadImage: (filePath) => uploadFileToSlack(botToken, channel, filePath, replyTs).then(() => {}),
+    uploadImage: (filePath) => uploadFileToSlack(botToken, channel, filePath, replyTs),
   }
 
   // 멘션한 사용자의 언어로 IVE 시스템 메시지를 표시(에이전트 응답 언어도 이 locale 을 따른다).
@@ -486,8 +518,9 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
     // 한번 시작한 CLI 로 고정한다. 기록이 없을 때만(첫 멘션) 새로 선택.
     let session = getSlackThreadSession(workspace.id, channel, convoId)
     const hasImages = mentionFiles.some(f => f.mimetype?.startsWith('image/'))
+    // 스레드 고정 에이전트도 사용중지면 재사용하지 않는다(아래 pickOwnerAgent 로 폴백).
     const pinnedAgent = session?.cliName
-      ? getAgentsByUser(ownerUserId).find(a => a.cliName === session!.cliName)
+      ? getAvailableAgentsByUser(ownerUserId).find(a => a.cliName === session!.cliName)
       : null
     const agent = pinnedAgent || pickOwnerAgent(ownerUserId, hasImages)
     if (!agent) {
@@ -574,13 +607,12 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
     ).catch(() => [] as string[])
 
     // 나가는 이미지 폴더(.slack-outbox): 에이전트가 차트/도식을 여기 저장하면 실행 후 업로드한다.
-    // 워크스페이스는 멘션마다 재사용되므로, 이번 실행 산출물만 잡도록 실행 전에 비운다.
+    // 파괴적으로 비우지 않고(이전 산출물 보존 — "그거 다시 보여줘"·후속 변환 대비) 실행 전 스냅샷만
+    // 떠서, 실행 후 "새로 생기거나 바뀐 이미지"만 업로드한다.
     const outboxRel = '.slack-outbox'
     const outboxDir = path.join(workspacePath, outboxRel)
-    try {
-      fs.rmSync(outboxDir, { recursive: true, force: true })
-      fs.mkdirSync(outboxDir, { recursive: true })
-    } catch { /* ignore */ }
+    try { fs.mkdirSync(outboxDir, { recursive: true }) } catch { /* ignore */ }
+    const outboxBefore = snapshotOutbox(outboxDir)
 
     // 처리 중 placeholder
     const placeholderBase = issueIid != null ? M.placeholderIssue(issueIid) : M.placeholderChat
@@ -646,28 +678,35 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
       await runChatAgentWithCallback({ ...baseOpts, cliSessionId: null }, onEvent)
     }
 
-    // 에이전트가 outbox 에 만든 이미지를 채널에 업로드(차트/도식 등 "이미지로 보여줘").
+    // 에이전트가 이번 실행에 outbox 에 만든(또는 바꾼) 이미지를 채널에 업로드(SVG 는 PNG 로 변환됨).
+    let attemptedImages = 0
     let uploadedImages = 0
     if (sink.uploadImage) {
-      const outImages = listOutboxImages(outboxDir)
+      const outImages = freshOutboxImages(outboxDir, outboxBefore)
       if (outImages.length > OUTBOX_UPLOAD_LIMIT) {
         console.warn(`[Slack] outbox 이미지 ${outImages.length}장 중 ${OUTBOX_UPLOAD_LIMIT}장만 업로드(초과분 무시)`)
       }
       for (const img of outImages.slice(0, OUTBOX_UPLOAD_LIMIT)) {
+        attemptedImages++
         try {
-          await sink.uploadImage(img)
-          uploadedImages++
+          if (await sink.uploadImage(img)) uploadedImages++
         } catch (e) {
           console.warn('[Slack] outbox 이미지 업로드 실패:', img, e)
         }
       }
     }
+    // 이미지를 만들었는데 한 장도 못 올렸으면(스코프/네트워크 등) 조용히 넘기지 말고 알린다.
+    const uploadAllFailed = attemptedImages > 0 && uploadedImages === 0
 
     if (msgTs && !full.trim()) {
       // 텍스트가 비어도 이미지를 올렸으면 "비었음"이 아니라 첨부 안내로 마무리.
-      await sink.update(msgTs, uploadedImages > 0 ? M.imagesAttached(uploadedImages) : M.emptyResponse)
+      const note = uploadedImages > 0 ? M.imagesAttached(uploadedImages)
+        : uploadAllFailed ? M.imageUploadFailed
+        : M.emptyResponse
+      await sink.update(msgTs, note)
     } else if (msgTs) {
-      await sink.update(msgTs, full.trim().slice(0, 38000))
+      const suffix = uploadAllFailed ? `\n\n${M.imageUploadFailed}` : ''
+      await sink.update(msgTs, (full.trim() + suffix).slice(0, 38000))
     }
   } catch (err) {
     console.error('[Slack] handleAppMention error:', err)

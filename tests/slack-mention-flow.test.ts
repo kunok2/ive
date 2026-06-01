@@ -13,15 +13,18 @@
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import Database from 'better-sqlite3'
+import fs from 'fs'
+import os from 'os'
+import path from 'path'
 import { setupTestDb, teardownTestDb, seedUser, seedProject, seedAgent } from './helpers/test-db'
 
 // ── I/O 경계 스텁 (hoist 되므로 외부 변수 참조 금지) ──
 vi.mock('@/lib/chat-agent', () => ({
   isChatAgentRunning: vi.fn(() => false),
   maskSecrets: (s: string) => s,
-  prepareGeneralWorkspace: vi.fn(() => '/tmp/ive-mention-test/general'),
-  prepareProjectWorkspace: vi.fn(async () => '/tmp/ive-mention-test/project'),
-  prepareChatWorkspace: vi.fn(async () => '/tmp/ive-mention-test/issue'),
+  prepareGeneralWorkspace: vi.fn(),
+  prepareProjectWorkspace: vi.fn(),
+  prepareChatWorkspace: vi.fn(),
   runChatAgentWithCallback: vi.fn(),
 }))
 vi.mock('@/lib/provider', () => ({
@@ -29,7 +32,7 @@ vi.mock('@/lib/provider', () => ({
 }))
 
 import { handleAppMention, type MentionSink, type DecryptedWorkspace } from '@/lib/slack'
-import { runChatAgentWithCallback } from '@/lib/chat-agent'
+import { runChatAgentWithCallback, prepareGeneralWorkspace, prepareProjectWorkspace, prepareChatWorkspace } from '@/lib/chat-agent'
 
 let db: Database.Database
 
@@ -51,13 +54,15 @@ function lastRunOpts(): any {
   return calls[calls.length - 1]?.[0]
 }
 
-function makeSink(): MentionSink & { posts: string[]; updates: string[] } {
+function makeSink(): MentionSink & { posts: string[]; updates: string[]; uploads: string[] } {
   const posts: string[] = []
   const updates: string[] = []
+  const uploads: string[] = []
   return {
-    posts, updates,
+    posts, updates, uploads,
     post: async (t: string) => { posts.push(t); return `ts-${posts.length}` },
     update: async (_id: string, t: string) => { updates.push(t) },
+    uploadImage: async (filePath: string) => { uploads.push(filePath); return true },
   }
 }
 
@@ -76,6 +81,12 @@ beforeEach(() => {
   seedProject(db, 'p-apm', 'u1', 'springware-apm')
   seedProject(db, 'p-splink', 'u1', 'splink')
   seedAgent(db, 'a1', 'u1', 'Claude', { cliName: 'claude' })
+
+  // 워크스페이스 준비 스텁: 호출마다 격리된 임시 디렉토리(이전 실행 산출물 간섭 방지).
+  const freshWs = () => fs.mkdtempSync(path.join(os.tmpdir(), 'ive-ws-'))
+  vi.mocked(prepareGeneralWorkspace).mockImplementation(() => freshWs())
+  vi.mocked(prepareProjectWorkspace).mockImplementation(async () => freshWs())
+  vi.mocked(prepareChatWorkspace).mockImplementation(async () => freshWs())
 
   // CLI 스폰 스텁: 프로젝트별로 결정적 세션 id 를 emit 하고 텍스트 응답 후 종료.
   vi.mocked(runChatAgentWithCallback).mockImplementation(async (opts: any, onEvent: any) => {
@@ -154,5 +165,22 @@ describe('handleAppMention — 프로젝트 없음으로 시작, 거론 시 바�
     expect(opts.projectless).toBe(true)                // 되묻기/루프 대신 일반 대화
     expect(sessionRow('C2').project_id).toBeNull()
     expect(sink.posts.length).toBe(1)                  // 무한 되묻기 아님
+  })
+
+  it('에이전트가 outbox 에 만든 이미지를 채널에 업로드한다', async () => {
+    const sink = makeSink()
+    // 이번 실행에 에이전트가 .slack-outbox/ 에 SVG 를 저장하는 상황 재현
+    vi.mocked(runChatAgentWithCallback).mockImplementationOnce(async (opts: any, onEvent: any) => {
+      const dir = path.join(opts.workspacePath, opts.imageOutbox)
+      fs.mkdirSync(dir, { recursive: true })
+      fs.writeFileSync(path.join(dir, 'diagram.svg'), '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>')
+      onEvent({ type: 'session_id', content: 'sess-x' })
+      onEvent({ type: 'text', content: '그렸어요' })
+      onEvent({ type: 'done' })
+    })
+    await mention('C3', 'splink 구조 그려서 보여줘', sink)
+
+    expect(sink.uploads.length).toBe(1)               // 실행 산출물 1장 업로드 시도
+    expect(sink.uploads[0]).toMatch(/diagram\.svg$/)  // outbox 의 그 파일
   })
 })

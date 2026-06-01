@@ -2,7 +2,7 @@ import { spawn, ChildProcess } from 'child_process'
 import fs from 'fs'
 import path from 'path'
 import { promisify } from 'util'
-import { getSystemSetting, getProject, getAgentsByUser, countActiveExecutionsByAgent, updateChatSessionCliId, getStaleActiveChatSessions, getChatSession, endChatSession, updateExecutionStatus, updateAgentStatus } from './db'
+import { getSystemSetting, getProject, getAvailableAgentsByUser, countActiveExecutionsByAgent, updateChatSessionCliId, getStaleActiveChatSessions, getChatSession, endChatSession, updateExecutionStatus, updateAgentStatus } from './db'
 import { decrypt } from './crypto'
 import { defaultLocale } from '@/i18n/config'
 import { Agent, Project } from '@/types'
@@ -95,7 +95,7 @@ export function startChatSessionReaper() {
 export function pickAgentForChat(projectId: string, requesterUserId: string): { agent: Agent; token: string } | null {
   const project = getProject(projectId)
   if (!project) return null
-  const userAgents = getAgentsByUser(requesterUserId)
+  const userAgents = getAvailableAgentsByUser(requesterUserId) // 사용중지 에이전트 제외
   if (userAgents.length === 0) return null
   const decryptedToken = decrypt(project.accessToken)
 
@@ -253,8 +253,8 @@ ${userMessage}
   // 텍스트로 충분하면 굳이 파일을 만들지 않도록 안내한다(불필요한 렌더링 방지).
   if (imageOutbox) {
     prompt += isKo
-      ? `\n\n## 이미지로 보여주기\n사용자가 차트·다이어그램·그림 등을 "이미지로 보여달라"고 하면, 결과를 현재 작업 디렉토리의 \`${imageOutbox}/\` 폴더에 이미지 파일로 저장하세요(PNG 권장, SVG 가능). 그 폴더에 저장된 이미지는 자동으로 메신저에 첨부되어 사용자에게 보입니다. 텍스트 설명만으로 충분하면 파일을 만들지 마세요.`
-      : `\n\n## Showing images\nIf the user asks you to "show" a chart, diagram, or picture, render the result as an image file into the \`${imageOutbox}/\` folder in the current working directory (prefer PNG, SVG is fine). Images saved there are automatically attached in the messenger for the user to see. Don't create a file when a text explanation suffices.`
+      ? `\n\n## 이미지로 보여주기\n사용자가 차트·다이어그램·그림 등을 "이미지로 보여달라"고 하면, 결과를 현재 작업 디렉토리의 \`${imageOutbox}/\` 폴더에 파일로 저장하세요. **SVG 를 권장합니다**(별도 도구 없이 텍스트로 만들 수 있고, 저장하면 시스템이 자동으로 PNG 로 변환해 메신저에 띄웁니다). PNG 를 직접 만들 수 있으면 그것도 됩니다. 직접 PNG 변환 도구(sharp 등)를 찾아 쓰려 하지 말고 SVG 만 저장하면 됩니다. 텍스트 설명만으로 충분하면 파일을 만들지 마세요.`
+      : `\n\n## Showing images\nIf the user asks you to "show" a chart, diagram, or picture, save the result as a file into the \`${imageOutbox}/\` folder in the current working directory. **Prefer SVG** (you can write it as text without any tools, and the system auto-converts it to PNG for the messenger). PNG is also fine if you can produce one. Do NOT hunt for a PNG-conversion tool (sharp etc.) — just save an SVG. Don't create a file when a text explanation suffices.`
   }
 
   // CLI별 명령/인자/환경 조립은 단일 모듈(cli-invocation)에 위임.
