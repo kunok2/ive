@@ -72,7 +72,7 @@ RUN npm install -g playwright@1.55.0 \
 
 # non-root 사용자 생성 (Claude Code의 root 제한 우회)
 RUN useradd -m -s /bin/bash ive \
-    && mkdir -p data/logs workspaces /home/ive/.claude \
+    && mkdir -p data/logs workspaces /home/ive/.claude /home/ive/.local/share/opencode \
     && ln -s /home/ive/.claude/.claude.json /home/ive/.claude.json \
     && chown -R ive:ive /app /home/ive \
     && git config --global user.email "ive-agent@springware-ive.local" \
