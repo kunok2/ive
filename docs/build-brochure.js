@@ -118,8 +118,8 @@ function slideOverview(){ return `
   ${text(640,503,'오케스트레이터',{size:11.5,fill:MUT,weight:700})}
 
   <!-- ===== DEVELOPER ===== -->
-  ${card(60,100,230,92)}
-  <g transform="translate(86,126)" stroke="${SPRING}" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  ${card(60,100,230,92,{stroke:AMBER})}
+  <g transform="translate(86,126)" stroke="${AMBER}" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round">
     <path d="M13,2 L3,15 L13,28"/><path d="M31,2 L41,15 L31,28"/><path d="M27,0 L17,30"/>
   </g>
   ${text(148,134,'개발자',{anchor:'start',size:17,fill:TXT})}
@@ -151,8 +151,8 @@ function slideOverview(){ return `
   ${text(99,657,'운영 시스템 자동 반영',{anchor:'start',size:12.5,fill:TXT,weight:700})}
 
   <!-- ===== IVE 수집 링크 (확인자·고객·운영시스템 → Git 이슈 등록) ===== -->
-  ${card(300,448,230,96,{stroke:CYAND})}
-  <g transform="translate(316,464)" stroke="${CYAN}" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  ${card(300,448,230,96,{stroke:AMBER})}
+  <g transform="translate(316,464)" stroke="${AMBER}" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round">
     <path d="M11,1 L11,15 M5,9 L11,15 L17,9"/><path d="M2,19 L2,23 L22,23 L22,19"/>
   </g>
   ${text(352,470,'IVE 수집 링크',{anchor:'start',size:16,fill:TXT})}
@@ -263,8 +263,7 @@ function column(x0,col){
   <line x1="${x0+18}" y1="166" x2="${x0+COLW-18}" y2="166" stroke="${BORDER}" stroke-width="1"/>
 
   ${card(x0+16,180,COLW-32,140,{fill:BEFORE_FILL,stroke:RED+'55',r:12})}
-  <rect x="${x0+16}" y="180" width="4" height="140" rx="2" fill="${RED}"/>
-  ${text(x0+34,206,'● 도입 전',{size:12.5,fill:RED,weight:700,anchor:'start'})}
+  ${text(x0+34,206,'도입 전',{size:12.5,fill:RED,weight:700,anchor:'start'})}
   ${col.before.map((b,i)=>bullet(x0+34,238+i*28,b,RED,MUT)).join('')}
 
   <g transform="translate(${cx},330)" stroke="${CYAN}" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round">
@@ -272,8 +271,7 @@ function column(x0,col){
   </g>
 
   ${card(x0+16,352,COLW-32,138,{fill:AFTER_FILL,stroke:CYAN,r:12})}
-  <rect x="${x0+16}" y="352" width="4" height="138" rx="2" fill="${CYAN}"/>
-  ${text(x0+34,378,'★ IVE 도입 후',{size:12.5,fill:CYAN,weight:700,anchor:'start'})}
+  ${text(x0+34,378,'IVE 도입 후',{size:12.5,fill:CYAN,weight:700,anchor:'start'})}
   ${col.after.map((b,i)=>bullet(x0+34,408+i*28,b,CYAN,TXT)).join('')}
   `;
 }
