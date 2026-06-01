@@ -1,0 +1,7 @@
+{
+  "title": "My verification queue",
+  "badgeTitle": "{count} issue(s) awaiting your verification",
+  "empty": "No issues to verify",
+  "loading": "Loading...",
+  "loadFailed": "Failed to load the queue"
+}

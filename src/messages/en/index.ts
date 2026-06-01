@@ -21,6 +21,7 @@ import pipeline from './pipeline.json'
 import errors from './errors.json'
 import help from './help.json'
 import tour from './tour.json'
+import verifyQueue from './verifyQueue.json'
 
 const messages = {
   common,
@@ -46,6 +47,7 @@ const messages = {
   errors,
   help,
   tour,
+  verifyQueue,
 }
 
 export default messages

@@ -11,6 +11,7 @@ import UserProfileForm from '@/components/auth/UserProfileForm'
 import ProjectForm from '@/components/project/ProjectForm'
 import AgentForm from '@/components/agent/AgentForm'
 import Modal from '@/components/ui/Modal'
+import VerifyQueueModal from '@/components/layout/VerifyQueueModal'
 import HelpModal from '@/components/ui/HelpModal'
 import TourOverlay, { tourSteps } from '@/components/ui/TourOverlay'
 import IntroSlides from '@/components/auth/IntroSlides'
@@ -19,7 +20,7 @@ export default function TopBar() {
   const router = useRouter()
   const pathname = usePathname()
   const { state, logout, refreshUser } = useStore()
-  const { activeTab, setActiveTab, setIssuesFilter, issuesProjectId } = useTab()
+  const { activeTab, setActiveTab, issuesProjectId } = useTab()
   const { alert: showAlert, confirm: showConfirm } = useDialog()
   const tn = useTranslations('nav')
   const tc = useTranslations('common')
@@ -29,7 +30,9 @@ export default function TopBar() {
   const tp = useTranslations('project')
   const t = useTranslations('help')
 
+  const tVerify = useTranslations('verifyQueue')
   const [myVerifyCount, setMyVerifyCount] = useState(0)
+  const [showVerifyQueue, setShowVerifyQueue] = useState(false)
   const [showChangePassword, setShowChangePassword] = useState(false)
   const [avatarTs, setAvatarTs] = useState(() => Date.now())
   const [showNewProject, setShowNewProject] = useState(false)
@@ -141,10 +144,10 @@ export default function TopBar() {
             {/* 내 검증 대기 뱃지 */}
             {myVerifyCount > 0 && (
               <button
-                onClick={() => { setIssuesFilter('mine'); setActiveTab('issues'); router.push('/') }}
+                onClick={() => setShowVerifyQueue(true)}
                 className="relative w-8 h-8 rounded-lg bg-ive-amber/20 border border-ive-amber/40 flex items-center justify-center text-ive-amber hover:bg-ive-amber/30 active:scale-95 transition-all"
-                title={`내가 검증해야 할 이슈 ${myVerifyCount}건`}
-                aria-label={`내 검증 대기 ${myVerifyCount}건`}
+                title={tVerify('badgeTitle', { count: myVerifyCount })}
+                aria-label={tVerify('badgeTitle', { count: myVerifyCount })}
               >
                 <i className="fa-solid fa-user-check text-sm" />
                 <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 rounded-full bg-ive-red text-white text-[10px] font-bold flex items-center justify-center leading-none">
@@ -256,6 +259,8 @@ export default function TopBar() {
       {showIntro && (
         <IntroSlides onComplete={() => setShowIntro(false)} />
       )}
+
+      <VerifyQueueModal open={showVerifyQueue} onClose={() => setShowVerifyQueue(false)} />
     </>
   )
 }
