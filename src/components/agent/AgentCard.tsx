@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Agent, CliName, TaskExecution, StatSnapshot } from '@/types'
+import { Agent, CliName, TaskExecution, StatSnapshot, isAgentAvailableNow } from '@/types'
 import { useStore } from '@/lib/store'
 import { getKSTTodayStartISO } from '@/lib/date-utils'
 import Sparkline from '@/components/ui/Sparkline'
@@ -52,6 +52,23 @@ const cliConfig: Record<CliName, { label: string; icon: string; color: string; d
   opencode: { label: 'OpenCode', icon: 'fa-solid fa-terminal', color: 'text-ive-text-muted', desc: 'sst.dev' },
 }
 
+// ISO 시각 → datetime-local 입력값(YYYY-MM-DDTHH:mm, 로컬시간). 없거나 잘못되면 빈 문자열.
+function isoToLocalInput(iso?: string | null): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+// ISO 시각 → 배지용 짧은 표기(MM/DD HH:mm, 로컬시간).
+function formatPausedUntil(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 export default function AgentCard({ agent, onDelete, compact, assignedProjects, onRemove }: Props) {
   const { state, refreshAgents, updateAgent } = useStore()
   const t = useTranslations('agent')
@@ -63,6 +80,49 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
   }
   const cli = cliConfig[agent.cliName]
   const status = statusConfig[agent.status]
+
+  // ── 사용여부(휴가) 상태 ──
+  const onVacation = !isAgentAvailableNow(agent)
+  const vacationLabel = agent.enabled === false
+    ? t('vacationIndefinite')
+    : agent.pausedUntil
+      ? t('vacationUntil', { time: formatPausedUntil(agent.pausedUntil) })
+      : ''
+
+  // 사용 ↔ 휴가(무기한) 토글. 휴가 중이면 즉시 복귀(예약도 해제).
+  const toggleVacation = async () => {
+    if (onVacation) await updateAgent({ ...agent, enabled: true, pausedUntil: null })
+    else await updateAgent({ ...agent, enabled: false, pausedUntil: null })
+  }
+
+  // 헤더에서 바로 복귀시각을 고치는 인라인 에디터.
+  // 날짜는 사용자가 고르고(type=date — 부분입력 함정 없음), 시간은 기본값이 채워진 상태로 둔다(type=time).
+  const [vacEditing, setVacEditing] = useState(false)
+  const [vacDate, setVacDate] = useState('')   // YYYY-MM-DD
+  const [vacTime, setVacTime] = useState('')   // HH:mm
+  const openVacEditor = () => {
+    const existing = isoToLocalInput(agent.pausedUntil)
+    if (existing) {
+      const [d, t] = existing.split('T')
+      setVacDate(d); setVacTime(t)
+    } else {
+      // 기본값: 내일 날짜 + 00:00
+      const tomorrow = isoToLocalInput(new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()).split('T')[0]
+      setVacDate(tomorrow); setVacTime('00:00')
+    }
+    setVacEditing(v => !v)
+  }
+  // 날짜가 있으면 기간제 휴가(자동 복귀), 비우면 무기한 휴가. 시간은 비면 09:00로 보정.
+  const saveVacation = async () => {
+    const pu = vacDate ? new Date(`${vacDate}T${vacTime || '00:00'}`).toISOString() : null
+    await updateAgent({ ...agent, pausedUntil: pu, enabled: pu ? true : false })
+    setVacEditing(false)
+  }
+  const resumeAgent = async () => {
+    await updateAgent({ ...agent, enabled: true, pausedUntil: null })
+    setVacEditing(false)
+  }
+
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window === 'undefined') return true
     return sessionStorage.getItem(`ac-collapsed-${agent.id}`) !== 'false'
@@ -78,6 +138,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
   const [editName, setEditName] = useState(agent.name)
   const [editAvatar, setEditAvatar] = useState(agent.avatar)
   const [editModel, setEditModel] = useState(agent.modelName || '')
+  const [editPausedUntil, setEditPausedUntil] = useState(isoToLocalInput(agent.pausedUntil))
   const [editCliModels, setEditCliModels] = useState<string[]>([])
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
@@ -226,8 +287,14 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
           <div className="text-sm text-ive-text-muted truncate">{cli.label}{agent.modelName ? ` · ${agent.modelName}` : ''}</div>
         </div>
         <div className="flex items-center gap-1.5 shrink-0 whitespace-nowrap">
-          <div className={`w-2 h-2 rounded-full shrink-0 ${status.dot}`} />
-          <span className="text-sm text-ive-text-muted">{status.label}</span>
+          {onVacation ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold bg-ive-amber/15 text-ive-amber">
+              <i className="fa-solid fa-power-off" />{vacationLabel}
+            </span>
+          ) : (<>
+            <div className={`w-2 h-2 rounded-full shrink-0 ${status.dot}`} />
+            <span className="text-sm text-ive-text-muted">{status.label}</span>
+          </>)}
           {onRemove && (
             <button
               onClick={(e) => { e.stopPropagation(); onRemove(agent.id) }}
@@ -280,10 +347,27 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="flex items-center gap-1.5 whitespace-nowrap">
-            <div className={`w-2 h-2 rounded-full shrink-0 ${status.dot}`} />
-            <span className="text-sm text-ive-text-muted">{status.label}</span>
+        <div className="flex flex-col items-end gap-1.5 shrink-0">
+          <div className="flex items-center gap-2">
+          {!onVacation && (
+            <div className="flex items-center gap-1.5 whitespace-nowrap">
+              <div className={`w-2 h-2 rounded-full shrink-0 ${status.dot}`} />
+              <span className="text-sm text-ive-text-muted">{status.label}</span>
+            </div>
+          )}
+          {/* 사용 ↔ 휴가 토글 */}
+          <div onClick={e => e.stopPropagation()}>
+            <button
+              onClick={toggleVacation}
+              className={`w-7 h-7 rounded-lg border flex items-center justify-center transition-all ${
+                onVacation
+                  ? 'bg-ive-amber/10 border-ive-amber/30 text-ive-amber hover:bg-ive-amber/20'
+                  : 'bg-ive-bg-deep border-ive-border-dark text-ive-text-dim hover:text-ive-green hover:border-ive-green/30'
+              }`}
+              title={onVacation ? t('resumeAgent') : t('pauseAgent')}
+            >
+              <i className={`fa-solid ${onVacation ? 'fa-play' : 'fa-power-off'} text-xs`} />
+            </button>
           </div>
           {collapsed && (
             <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
@@ -307,8 +391,58 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
             </div>
           )}
           <i className={`fa-solid fa-chevron-down text-xs text-ive-text-dim transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`} />
+          </div>
+          {/* 휴가 배지 — 우측 버튼들 바로 아래, 오른쪽 정렬 */}
+          {onVacation && !vacEditing && (
+            <button
+              onClick={e => { e.stopPropagation(); openVacEditor() }}
+              className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold bg-ive-amber/15 text-ive-amber hover:bg-ive-amber/25 transition-colors"
+              title={t('editPausedUntil')}
+            >
+              <i className="fa-solid fa-power-off" />{vacationLabel}
+              <i className="fa-solid fa-pen text-[10px] opacity-70" />
+            </button>
+          )}
         </div>
       </div>
+
+      {/* 휴가 복귀시각 인라인 에디터 — 배지 클릭 시 헤더에서 바로 수정 */}
+      {vacEditing && (
+        <div className="px-3 py-2.5 border-b border-ive-border-dark bg-ive-amber/5 space-y-2" onClick={e => e.stopPropagation()}>
+          <label className="flex items-center gap-1 text-xs font-bold text-ive-amber">
+            <i className="fa-solid fa-power-off" />{t('pausedUntilLabel')}
+          </label>
+          <div className="flex gap-1.5">
+            <input
+              type="date"
+              value={vacDate}
+              onChange={e => setVacDate(e.target.value)}
+              className="flex-1 min-w-0 bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2 text-base text-ive-text focus:outline-none focus:border-ive-amber"
+            />
+            <input
+              type="time"
+              value={vacTime}
+              onChange={e => setVacTime(e.target.value)}
+              className="flex-1 min-w-0 bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2 text-base text-ive-text focus:outline-none focus:border-ive-amber"
+            />
+          </div>
+          <button
+            onClick={saveVacation}
+            className="w-full text-sm font-bold text-ive-amber border border-ive-amber/40 py-2 rounded-lg hover:bg-ive-amber/10 transition-colors"
+          >
+            <i className="fa-solid fa-check mr-1" />{tc('save')}
+          </button>
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-ive-text-dim">{vacDate ? t('vacationUntilHint') : t('vacationIndefiniteHint')}</span>
+            <button
+              onClick={resumeAgent}
+              className="text-xs font-bold text-ive-green hover:underline whitespace-nowrap"
+            >
+              <i className="fa-solid fa-play mr-1" />{t('resumeAgent')}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 동작 확인 결과 — 접힌 상태에서도 표시 */}
       {collapsed && testResult && (
@@ -350,10 +484,44 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
               </select>
             </div>
           )}
+          {/* 휴가 자동 복귀 예약 시각 (선택) — Codex 한도 리셋 시각 등 */}
+          <div>
+            <label className="block text-xs font-bold text-ive-text-muted mb-1">
+              <i className="fa-solid fa-power-off mr-1" />{t('pausedUntilLabel')}
+            </label>
+            <div className="flex gap-1.5">
+              <input
+                type="datetime-local"
+                value={editPausedUntil}
+                onChange={e => setEditPausedUntil(e.target.value)}
+                className="flex-1 min-w-0 bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2 text-base text-ive-text focus:outline-none focus:border-ive-green"
+              />
+              {editPausedUntil && (
+                <button
+                  type="button"
+                  onClick={() => setEditPausedUntil('')}
+                  className="shrink-0 px-3 rounded-lg border border-ive-border text-ive-text-dim hover:text-ive-text hover:bg-ive-bg-deep transition-colors"
+                  title={tc('clear')}
+                >
+                  <i className="fa-solid fa-xmark text-xs" />
+                </button>
+              )}
+            </div>
+            <p className="text-xs text-ive-text-dim mt-1">{t('pausedUntilHint')}</p>
+          </div>
           <div className="flex gap-2">
             <button
               onClick={async () => {
-                await updateAgent({ ...agent, name: editName.trim() || agent.name, avatar: editAvatar, modelName: editModel })
+                const pu = editPausedUntil ? new Date(editPausedUntil).toISOString() : null
+                await updateAgent({
+                  ...agent,
+                  name: editName.trim() || agent.name,
+                  avatar: editAvatar,
+                  modelName: editModel,
+                  pausedUntil: pu,
+                  // 복귀 예약을 넣으면 기간제 휴가(enabled 유지). 비우면 마스터 스위치는 그대로.
+                  enabled: pu ? true : agent.enabled,
+                })
                 setEditing(false)
               }}
               className="flex-1 text-sm font-bold text-ive-green border border-ive-green/30 py-1.5 rounded-lg hover:bg-ive-green/10 transition-colors"
@@ -505,6 +673,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
               setEditName(agent.name)
               setEditAvatar(agent.avatar)
               setEditModel(agent.modelName || '')
+              setEditPausedUntil(isoToLocalInput(agent.pausedUntil))
               if (willEdit) {
                 fetch('/api/settings/cli-models').then(r => r.json()).then(data => {
                   setEditCliModels(data[agent.cliName] || [])

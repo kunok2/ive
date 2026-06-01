@@ -107,6 +107,7 @@
   "noPreference": "자동 배정 (라운드로빈)",
   "assignedTo": "{name} 지정",
   "agentOfflineWarning": "오프라인",
+  "agentDisabled": "사용중지",
   "changeAgent": "에이전트 변경",
   "removeAssignment": "지정 해제",
   "noAssignment": "배정 안함",

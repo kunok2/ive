@@ -107,6 +107,7 @@
   "noPreference": "Auto-assign (round-robin)",
   "assignedTo": "Assigned to {name}",
   "agentOfflineWarning": "Offline",
+  "agentDisabled": "Disabled",
   "changeAgent": "Change worker",
   "removeAssignment": "Unassign",
   "noAssignment": "No assignment",

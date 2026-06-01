@@ -120,7 +120,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   // store의 10초 폴링이 reference만 바꾸어도 effect 재실행/네트워크 요청을 유발하지 않게 한다.
   const projectAgents = useMemo<ProjectAgent[]>(() => state.agents.map(a => ({
     agentId: a.id,
-    agent: { id: a.id, name: a.name, avatar: a.avatar, cliName: a.cliName, status: a.status },
+    agent: { id: a.id, name: a.name, avatar: a.avatar, cliName: a.cliName, status: a.status, enabled: a.enabled, pausedUntil: a.pausedUntil },
   })), [state.agents])
 
   const [issues, setIssues] = useState<IveIssue[]>(() => {

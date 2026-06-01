@@ -7,6 +7,7 @@ import CliLogo from '@/components/ui/CliLogo'
 import { useTranslations } from 'next-intl'
 import { CLI_CONFIG } from './types'
 import type { ProjectAgent } from './types'
+import { isAgentAvailableNow } from '@/types'
 
 interface GitMember {
   id: number
@@ -119,6 +120,7 @@ export default function AgentPickerModal({
         )}
         {filteredAgents.map(pa => {
           const cli = CLI_CONFIG[pa.agent.cliName]
+          const isDisabled = !isAgentAvailableNow(pa.agent)
           const isOffline = pa.agent.status === 'offline'
           const isPicked = effectiveMode === 'agent' && currentAgentId === pa.agentId
           return (
@@ -136,9 +138,15 @@ export default function AgentPickerModal({
               <AgentAvatar avatar={pa.agent.avatar} size="xs" />
               <span className="font-bold">{pa.agent.name}</span>
               <span className={`text-xs inline-flex items-center gap-0.5 ${cli.color}`}><CliLogo cli={pa.agent.cliName} className="w-3 h-3" />{cli.label}</span>
-              {isOffline && <span className="text-xs text-ive-red ml-auto"><i className="fa-solid fa-circle-exclamation mr-0.5" />{tIssue('agentOfflineWarning')}</span>}
-              {!isOffline && pa.agent.status === 'busy' && <span className="ml-auto w-2 h-2 rounded-full bg-ive-cyan animate-pulse" />}
-              {!isOffline && pa.agent.status === 'available' && <span className="ml-auto w-2 h-2 rounded-full bg-ive-green" />}
+              {isDisabled ? (
+                <span className="text-xs text-ive-amber ml-auto inline-flex items-center gap-0.5"><i className="fa-solid fa-power-off mr-0.5" />{tIssue('agentDisabled')}</span>
+              ) : isOffline ? (
+                <span className="text-xs text-ive-red ml-auto"><i className="fa-solid fa-circle-exclamation mr-0.5" />{tIssue('agentOfflineWarning')}</span>
+              ) : pa.agent.status === 'busy' ? (
+                <span className="ml-auto w-2 h-2 rounded-full bg-ive-cyan animate-pulse" />
+              ) : pa.agent.status === 'available' ? (
+                <span className="ml-auto w-2 h-2 rounded-full bg-ive-green" />
+              ) : null}
             </button>
           )
         })}

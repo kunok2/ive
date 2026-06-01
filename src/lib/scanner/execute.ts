@@ -19,7 +19,7 @@ import {
   createActivityLog,
   touchProjectActivity,
   upsertIssueStageSnapshot,
-  getAgentsByUser,
+  getAvailableAgentsByUser,
 } from "../db";
 import { addIssueLabels, removeIssueLabels } from "../provider";
 import { fetchGitLabIssueNotes } from "../gitlab";
@@ -319,8 +319,8 @@ export async function processConflictCheck(project: Project, decryptedToken: str
     return;
   }
 
-  // 충돌 감지는 프로젝트 단위 작업 → 프로젝트 오너의 에이전트 풀 사용
-  const ownerAgents = getAgentsByUser(project.userId);
+  // 충돌 감지는 프로젝트 단위 작업 → 프로젝트 오너의 에이전트 풀 사용 (사용중지 제외)
+  const ownerAgents = getAvailableAgentsByUser(project.userId);
   let selectedAgent: Agent | null = null;
   const agentToken = decryptedToken;
   let oldestTime = Infinity;

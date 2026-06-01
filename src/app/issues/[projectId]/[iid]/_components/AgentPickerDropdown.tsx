@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import AgentAvatar from '@/components/agent/AgentAvatar'
+import { isAgentAvailableNow } from '@/types'
 
 interface PreferredAgent {
   assignMode?: string
@@ -14,7 +15,7 @@ interface PreferredAgent {
 
 interface ProjectAgent {
   agentId: string
-  agent: { id: string; name: string; avatar: string; cliName: string; status: string }
+  agent: { id: string; name: string; avatar: string; cliName: string; status: string; enabled?: boolean; pausedUntil?: string | null }
 }
 
 interface AgentPickerDropdownProps {
@@ -82,6 +83,7 @@ export default function AgentPickerDropdown({
             <span className="font-bold">{tIssue('assigneeHandles')}</span>
           </button>
           {projectAgents.map(pa => {
+            const isDisabled = !isAgentAvailableNow(pa.agent)
             const isOffline = pa.agent.status === 'offline'
             return (
               <button
@@ -93,9 +95,15 @@ export default function AgentPickerDropdown({
               >
                 <AgentAvatar avatar={pa.agent.avatar} size="xs" />
                 <span className="font-bold">{pa.agent.name}</span>
-                {isOffline && <span className="text-ive-red ml-auto"><i className="fa-solid fa-circle-exclamation" /></span>}
-                {!isOffline && pa.agent.status === 'busy' && <span className="ml-auto w-2 h-2 rounded-full bg-ive-cyan animate-pulse" />}
-                {!isOffline && pa.agent.status === 'available' && <span className="ml-auto w-2 h-2 rounded-full bg-ive-green" />}
+                {isDisabled ? (
+                  <span className="ml-auto text-[10px] font-bold text-ive-amber inline-flex items-center gap-0.5"><i className="fa-solid fa-power-off" />{tIssue('agentDisabled')}</span>
+                ) : isOffline ? (
+                  <span className="text-ive-red ml-auto"><i className="fa-solid fa-circle-exclamation" /></span>
+                ) : pa.agent.status === 'busy' ? (
+                  <span className="ml-auto w-2 h-2 rounded-full bg-ive-cyan animate-pulse" />
+                ) : pa.agent.status === 'available' ? (
+                  <span className="ml-auto w-2 h-2 rounded-full bg-ive-green" />
+                ) : null}
               </button>
             )
           })}

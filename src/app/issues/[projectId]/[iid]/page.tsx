@@ -276,7 +276,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
     // #272: 프로젝트별 배정 폐기. 의뢰자(현재 사용자) 의 에이전트 풀 사용.
     setProjectAgents(state.agents.map(a => ({
       agentId: a.id,
-      agent: { id: a.id, name: a.name, avatar: a.avatar, cliName: a.cliName, status: a.status },
+      agent: { id: a.id, name: a.name, avatar: a.avatar, cliName: a.cliName, status: a.status, enabled: a.enabled, pausedUntil: a.pausedUntil },
     })))
     fetch(`/api/projects/${projectId}/members`)
       .then(res => res.ok ? res.json() : [])

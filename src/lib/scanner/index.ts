@@ -62,7 +62,7 @@ import {
   getGitHubPR,
   addGitHubPRNote,
 } from "../github";
-import { Project, Agent } from "@/types";
+import { Project, Agent, isAgentAvailableNow } from "@/types";
 import { resolveIssueRequesterAsync } from "../ive-author";
 import { fetchIssueLabelEvents } from "../provider";
 import { isGitBotUser } from "../git-bot";
@@ -737,12 +737,18 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
     let useRoundRobin = true;
     const preferredAgentId = assignInfo.mode === 'agent' ? assignInfo.agentId : null;
 
+    const now = Date.now();
+
     if (preferredAgentId) {
       const a = userAgents.find(a => a.id === preferredAgentId);
       if (!a) {
         // 지정 에이전트가 의뢰자 풀에 없음 → 다른 에이전트로 자동 전환 금지
         // 사용자가 직접 작업자를 지정했으므로 그 의도를 존중한다.
         slog.info(`[WAIT] Issue #${issue.iid} — 지정 작업자(${preferredAgentId})가 의뢰자(${requester.user.name}) 풀에 없음, 대기`);
+        continue;
+      } else if (!isAgentAvailableNow(a, now)) {
+        // 지정 에이전트가 휴가/사용중지 상태 → 다른 에이전트로 자동 전환 금지, 복귀까지 대기
+        slog.info(`[WAIT] Issue #${issue.iid} — 지정 작업자 '${a.name}' 휴가/사용중지(${a.enabled === false ? '무기한' : `~${a.pausedUntil}`}), 대기`);
         continue;
       } else if (busyAgentIds.has(a.id) || countActiveExecutionsByAgent(a.id) > 0) {
         // 지정 에이전트가 바쁨 → 이번 스캔 스킵, 다음 스캔에서 재시도
@@ -758,6 +764,7 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
     if (useRoundRobin && !availableAgent) {
       let oldestTime = Infinity;
       for (const a of userAgents) {
+        if (!isAgentAvailableNow(a, now)) continue; // 휴가/사용중지 에이전트는 자동 배정 제외
         if (busyAgentIds.has(a.id)) continue;
         const running = countActiveExecutionsByAgent(a.id);
         if (running === 0) {

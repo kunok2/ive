@@ -161,8 +161,28 @@ export interface Agent {
   snapshotInterval: number      // 스냅샷 수집 간격 (분)
   sparklinePoints: number       // 스파크라인 표시 건수
   statsRetention: number        // 데이터 보관 기간 (일)
+  enabled: boolean              // 사용여부 마스터 스위치. false면 무기한 휴가(수동 복귀)
+  pausedUntil?: string | null   // 자동 복귀 예약 시각(ISO). 이 시각 전까지는 기간제 휴가
   createdAt: string
   pendingCount?: number         // 지정 대기 이슈 수 (API 응답에만 포함, 정렬용)
+}
+
+/**
+ * 에이전트가 지금 작업에 사용 가능한지 판정 (휴가/사용중지 반영).
+ * - enabled=false → 무기한 휴가
+ * - pausedUntil 이 미래 → 기간제 휴가 (그 시각 지나면 자동 복귀)
+ * Codex 같은 사용량 한도 만료처럼 자동 감지가 불가능한 경우, 사용자가 수동으로 쉬게 한다.
+ */
+export function isAgentAvailableNow(
+  agent: { enabled?: boolean | null; pausedUntil?: string | null },
+  nowMs: number = Date.now(),
+): boolean {
+  if (agent.enabled === false) return false
+  if (agent.pausedUntil) {
+    const t = new Date(agent.pausedUntil).getTime()
+    if (!Number.isNaN(t) && nowMs < t) return false
+  }
+  return true
 }
 
 export type TaskStatus = 'running' | 'success' | 'failed' | 'assigned'

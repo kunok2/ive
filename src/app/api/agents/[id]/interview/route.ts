@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getAgent, getSystemSetting } from '@/lib/db'
+import { isAgentAvailableNow } from '@/types'
 import { defaultLocale } from '@/i18n/config'
 import { getCurrentUser } from '@/lib/auth'
 import { logActivity } from '@/lib/activity'
@@ -15,6 +16,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const agent = getAgent(id)
   if (!agent || agent.userId !== user.id) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
+
+  // 사용중지 상태면 인터뷰도 차단
+  if (!isAgentAvailableNow(agent)) {
+    const until = agent.enabled === false ? null : agent.pausedUntil
+    return NextResponse.json({
+      error: until
+        ? `이 에이전트는 사용 중지 상태입니다 (재개: ${until}).`
+        : '이 에이전트는 사용 중지 상태입니다.',
+    }, { status: 409 })
   }
 
   const { question } = await req.json()
@@ -42,6 +53,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const isOpenCode = agent.cliName === 'opencode'
   const isCodex = agent.cliName === 'codex'
+  const isGemini = agent.cliName === 'gemini'
 
   try {
     const cliParts = cliPath.split(' ')
@@ -64,7 +76,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         '-s', 'read-only',
         prompt,
       ]
+    } else if (isGemini) {
+      // gemini -p "prompt" — headless. Gemini CLI에는 --max-turns 플래그가 없으므로 붙이지 않는다.
+      // --skip-trust: 헤드리스 환경에서 trusted-folder 확인을 건너뛴다(없으면 실행 거부됨).
+      args = [
+        ...cliParts.slice(1),
+        '--output-format', 'text',
+        '--skip-trust',
+        '-p', prompt,
+      ]
     } else {
+      // Claude Code
       args = [
         ...cliParts.slice(1),
         '--output-format', 'text',

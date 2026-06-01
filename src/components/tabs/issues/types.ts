@@ -35,7 +35,7 @@ export interface IveIssue {
 
 export interface ProjectAgent {
   agentId: string
-  agent: { id: string; name: string; avatar: string; cliName: CliName; status: string }
+  agent: { id: string; name: string; avatar: string; cliName: CliName; status: string; enabled?: boolean; pausedUntil?: string | null }
 }
 
 export interface StageInfo {

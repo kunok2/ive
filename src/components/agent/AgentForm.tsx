@@ -93,6 +93,7 @@ export default function AgentForm({ onSuccess, onCancel }: Props) {
         snapshotInterval,
         sparklinePoints,
         statsRetention,
+        enabled: true,
       })
       onSuccess?.()
     } catch (err) {

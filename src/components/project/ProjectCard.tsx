@@ -563,6 +563,7 @@ export default function ProjectCard({ project }: Props) {
             snapshotInterval: 1,
             sparklinePoints: 60,
             statsRetention: 7,
+            enabled: true,
             createdAt: '',
           } satisfies Agent,
           execution: ex,

@@ -65,6 +65,8 @@ export function initSchema(db: Database.Database) {
       cli_version TEXT NOT NULL DEFAULT '',
       max_turns INTEGER NOT NULL DEFAULT 200,
       status TEXT NOT NULL DEFAULT 'available' CHECK(status IN ('available', 'busy', 'offline')),
+      enabled INTEGER NOT NULL DEFAULT 1,
+      paused_until TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
@@ -373,6 +375,17 @@ export function initSchema(db: Database.Database) {
       db.exec("ALTER TABLE agents ADD COLUMN stats_retention INTEGER NOT NULL DEFAULT 7")
     }
   } catch (e) { console.error("Migration failed for agents monitoring:", e) }
+
+  // 에이전트 사용여부(휴가) — enabled 마스터 스위치 + paused_until 자동복귀 예약
+  try {
+    const tableInfo = db.prepare("PRAGMA table_info(agents)").all() as any[]
+    if (!tableInfo.some((col: any) => col.name === 'enabled')) {
+      db.exec("ALTER TABLE agents ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1")
+    }
+    if (!tableInfo.some((col: any) => col.name === 'paused_until')) {
+      db.exec("ALTER TABLE agents ADD COLUMN paused_until TEXT")
+    }
+  } catch (e) { console.error("Migration failed for agents vacation:", e) }
 
   // #272: project_assignments 테이블 제거 (전역 에이전트 풀로 전환)
   try {
