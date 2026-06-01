@@ -332,7 +332,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
       >
         <div className="flex items-center gap-2.5 min-w-0 flex-1">
           <AgentAvatar avatar={agent.avatar} size="md" toolBadge={toolBadge} />
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5 min-w-0">
               <span className="text-base font-bold text-ive-text truncate">{agent.name}</span>
               <span className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold bg-ive-cyan/20 text-ive-cyan">
@@ -345,10 +345,21 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
                 {assignedProjects.map(p => p.name).join(', ')}
               </div>
             )}
+            {/* 휴가 배지 — 이름 아래 왼쪽에 배치하여 오른쪽 열 압박 제거 */}
+            {onVacation && !vacEditing && (
+              <button
+                onClick={e => { e.stopPropagation(); openVacEditor() }}
+                className="mt-0.5 inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-xs font-bold bg-ive-amber/15 text-ive-amber hover:bg-ive-amber/25 transition-colors max-w-full"
+                title={t('editPausedUntil')}
+              >
+                <i className="fa-solid fa-power-off shrink-0" />
+                <span className="truncate">{vacationLabel}</span>
+                <i className="fa-solid fa-pen text-[10px] opacity-70 shrink-0" />
+              </button>
+            )}
           </div>
         </div>
-        <div className="flex flex-col items-end gap-1.5 shrink-0">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           {!onVacation && (
             <div className="flex items-center gap-1.5">
               <div className={`w-2 h-2 rounded-full shrink-0 ${status.dot}`} />
@@ -391,18 +402,6 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
             </div>
           )}
           <i className={`fa-solid fa-chevron-down text-xs text-ive-text-dim transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`} />
-          </div>
-          {/* 휴가 배지 — 우측 버튼들 바로 아래, 오른쪽 정렬 */}
-          {onVacation && !vacEditing && (
-            <button
-              onClick={e => { e.stopPropagation(); openVacEditor() }}
-              className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold bg-ive-amber/15 text-ive-amber hover:bg-ive-amber/25 transition-colors"
-              title={t('editPausedUntil')}
-            >
-              <i className="fa-solid fa-power-off" />{vacationLabel}
-              <i className="fa-solid fa-pen text-[10px] opacity-70" />
-            </button>
-          )}
         </div>
       </div>
 
