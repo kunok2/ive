@@ -26,6 +26,10 @@ const slack    = dataUri('assets/slack.svg',             'image/svg+xml');
 const iveLogo  = dataUri('../public/slack-icon-1024.png','image/png'); // IVE 앱 아이콘 = 중앙 허브 로고
 const github   = dataUri('assets/github.svg',            'image/svg+xml');
 const gitlab   = dataUri('assets/gitlab.svg',            'image/svg+xml');
+const scrProjects = dataUri('assets/screens/projects.png','image/png');
+const scrAgents   = dataUri('assets/screens/agents.png',  'image/png');
+const scrIssues   = dataUri('assets/screens/issues.png',  'image/png');
+const scrReports  = dataUri('assets/screens/reports.png', 'image/png');
 
 // ===== brand palette =====
 const BG='#0e0e11', CARD='#1c1c20', BORDER='#2a2a31',
@@ -316,6 +320,40 @@ function slideImpact(){ return `
 </svg>`; }
 
 // ============================================================
+// SLIDE 3 — 실제 운영 화면 (증거: 폰 목업)
+// ============================================================
+const RATIO = 2300/960; // 캡처 portrait 비율
+function phone(x,y,W,img,clipId){
+  const pad=8, iw=W-2*pad, ih=Math.round(iw*RATIO), H=ih+2*pad;
+  return `
+  <rect x="${x}" y="${y}" width="${W}" height="${H}" rx="22" fill="#050507" stroke="${BORDER}" stroke-width="1.5"/>
+  <clipPath id="${clipId}"><rect x="${x+pad}" y="${y+pad}" width="${iw}" height="${ih}" rx="13"/></clipPath>
+  <image href="${img}" x="${x+pad}" y="${y+pad}" width="${iw}" height="${ih}" clip-path="url(#${clipId})"/>`;
+}
+const SCREENS=[
+  {img:scrProjects,t:'프로젝트 현황',s:'스캐너 · 단계별 처리'},
+  {img:scrAgents,  t:'에이전트 · 검증자',s:'CLI 4종 + 검토 인력'},
+  {img:scrIssues,  t:'이슈 처리 이력',s:'실제 처리 369건'},
+  {img:scrReports, t:'주간 리포트',s:'처리량 · 비용 · 가동률'},
+];
+function slideScreens(){
+  const W=210, pad=8, iw=W-2*pad, ih=Math.round(iw*RATIO), H=ih+2*pad;
+  const gap=(1152-4*W)/3, y=124;
+  return `
+<svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
+  <defs><radialGradient id="vign3" cx="50%" cy="40%" r="85%"><stop offset="0%" stop-color="#16161b"/><stop offset="100%" stop-color="${BG}"/></radialGradient></defs>
+  <rect width="1280" height="720" fill="url(#vign3)"/>
+  ${header('실제 운영 화면','운영계(ive.dazzleat.link) 실측 캡처 — 도식이 아닌, 지금 동작 중인 제품')}
+  ${SCREENS.map((sc,i)=>{const x=64+i*(W+gap);return `
+    ${phone(x,y,W,sc.img,'ph'+i)}
+    ${text(x+W/2,y+H+26,sc.t,{size:15,fill:TXT})}
+    ${text(x+W/2,y+H+46,sc.s,{size:12,fill:MUT,weight:600})}
+  `;}).join('')}
+  ${text(640,712,'실제 운영 데이터 캡처 — 가공·연출 없음',{size:11.5,fill:DIM,weight:600})}
+</svg>`;
+}
+
+// ============================================================
 // HTML wrappers
 // ============================================================
 const PAGE_CSS = `
@@ -330,8 +368,9 @@ const single = (svg) => `<!DOCTYPE html><html lang="ko"><head><meta charset="utf
  html,body{width:1280px;height:720px;overflow:hidden;}</style></head><body><div class="page">${svg}</div></body></html>`;
 const multi = (svgs) => `<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><style>${PAGE_CSS}</style></head><body>${svgs.map(s=>`<div class="page">${s}</div>`).join('')}</body></html>`;
 
-const ov = slideOverview(), im = slideImpact();
+const ov = slideOverview(), im = slideImpact(), scr = slideScreens();
 fs.writeFileSync(path.join(__dirname,'ive-overview.html'), single(ov));
 fs.writeFileSync(path.join(__dirname,'ive-impact.html'),   single(im));
-fs.writeFileSync(path.join(__dirname,'ive-brochure.html'), multi([ov, im]));
-console.log('built: ive-overview.html, ive-impact.html, ive-brochure.html');
+fs.writeFileSync(path.join(__dirname,'ive-screens.html'),  single(scr));
+fs.writeFileSync(path.join(__dirname,'ive-brochure.html'), multi([ov, scr, im]));
+console.log('built: ive-overview.html, ive-impact.html, ive-screens.html, ive-brochure.html');
