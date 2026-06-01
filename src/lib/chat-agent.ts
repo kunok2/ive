@@ -315,6 +315,8 @@ export async function runChatAgentWithCallback(
   return new Promise<void>((resolve) => {
     let stdoutBuffer = ''
 
+    let ocErrorEmitted = false  // opencode 오류 이벤트 중복 방지
+
     child.stdout?.on('data', (data: Buffer) => {
       stdoutBuffer += data.toString()
       const lines = stdoutBuffer.split('\n')
@@ -323,6 +325,14 @@ export async function runChatAgentWithCallback(
         if (!line.trim()) continue
         try {
           const event = JSON.parse(line)
+
+          // opencode: {"type":"error",...} — 종료 코드와 무관하게 오류 이벤트로 처리
+          if (cliName === 'opencode' && event.type === 'error' && !ocErrorEmitted) {
+            ocErrorEmitted = true
+            const msg = event.error?.data?.message ?? event.error?.message ?? '알 수 없는 오류'
+            onEvent({ type: 'error', content: `OpenCode 오류: ${msg}` })
+            continue
+          }
 
           // Capture CLI session ID
           if (!capturedCliSessionId && !cliSessionId) {
@@ -398,6 +408,7 @@ export async function* runChatAgent(opts: ChatAgentOptions): AsyncGenerator<{ ty
   let error: string | null = null
   let capturedCliSessionId: string | null = null
   const extractState = { sawDelta: false }
+  let ocErrorEmitted2 = false  // opencode 오류 이벤트 중복 방지
 
   const resultPromise = new Promise<void>((resolve) => {
     child.stdout?.on('data', (data: Buffer) => {
@@ -408,6 +419,16 @@ export async function* runChatAgent(opts: ChatAgentOptions): AsyncGenerator<{ ty
         if (!line.trim()) continue
         try {
           const event = JSON.parse(line)
+
+          // opencode: {"type":"error",...} — 종료 코드와 무관하게 오류로 처리
+          if (cliName === 'opencode' && event.type === 'error' && !ocErrorEmitted2) {
+            ocErrorEmitted2 = true
+            const msg = event.error?.data?.message ?? event.error?.message ?? '알 수 없는 오류'
+            error = `OpenCode 오류: ${msg}`
+            done = true
+            resolve()
+            return
+          }
 
           if (!capturedCliSessionId && !cliSessionId) {
             const sid = extractSessionId(event, cliName)

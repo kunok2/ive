@@ -55,18 +55,23 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const isCodex = agent.cliName === 'codex'
   const isGemini = agent.cliName === 'gemini'
 
+  // sh -c "exec ..." 래핑에 쓸 shell quoting (opencode 전용)
+  const shq = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`
+
   try {
     const cliParts = cliPath.split(' ')
-    const mainCmd = cliParts[0]
+    let mainCmd = cliParts[0]
     let args: string[]
+    let opencodeStdin: string | null = null
 
     if (isOpenCode) {
-      // opencode run "prompt" — 기본 포맷(텍스트) 사용
-      args = [
-        ...cliParts.slice(1),
-        'run',
-        prompt,
-      ]
+      // opencode 기본 포맷은 stdout에 아무것도 출력하지 않으므로(TUI 스타일)
+      // --format json으로 실행 후 JSON 이벤트에서 텍스트를 파싱한다.
+      // sh -c "exec ..." 래핑 + stdin 프롬프트 전달 (buildCliInvocation과 동일 패턴)
+      const ocParts = [...cliParts, 'run', '--format', 'json', '--dangerously-skip-permissions']
+      args = ['-c', `exec ${ocParts.map(shq).join(' ')}`]
+      mainCmd = 'sh'
+      opencodeStdin = prompt
     } else if (isCodex) {
       // codex exec "prompt" — JSON 없이 기본 텍스트 출력(답변만 stdout, 메타데이터는 stderr)
       args = [
@@ -100,15 +105,43 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       let stderr = ''
 
       const child = spawn(mainCmd, args, {
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: [opencodeStdin !== null ? 'pipe' : 'ignore', 'pipe', 'pipe'],
         timeout: 30000,
       })
 
-      child.stdout.on('data', (data: Buffer) => { stdout += data.toString() })
-      child.stderr.on('data', (data: Buffer) => { stderr += data.toString() })
+      // opencode는 프롬프트를 stdin으로 전달
+      if (opencodeStdin !== null && child.stdin) {
+        try { child.stdin.write(opencodeStdin); child.stdin.end() } catch { /* ignore */ }
+      }
+
+      child.stdout?.on('data', (data: Buffer) => { stdout += data.toString() })
+      child.stderr?.on('data', (data: Buffer) => { stderr += data.toString() })
 
       child.on('close', (code) => {
-        if (code === 0) {
+        if (isOpenCode) {
+          // opencode는 오류 발생 시에도 종료 코드 0으로 종료 → 항상 JSON 파싱
+          const texts: string[] = []
+          let ocError: string | null = null
+          for (const line of stdout.split('\n')) {
+            if (!line.trim()) continue
+            try {
+              const event = JSON.parse(line)
+              if (event.type === 'error') {
+                ocError = event.error?.data?.message ?? event.error?.message ?? '알 수 없는 오류'
+              } else if (event.type === 'text') {
+                const text = event.part?.text ?? event.content ?? event.text ?? ''
+                if (text) texts.push(text)
+              }
+            } catch { /* non-JSON 무시 */ }
+          }
+          if (texts.length > 0) {
+            resolve(texts.join('').trim())
+          } else if (ocError) {
+            reject(new Error(ocError))
+          } else {
+            reject(new Error('응답을 가져오지 못했습니다. OpenCode 설정(모델, API 키)을 확인해 주세요.'))
+          }
+        } else if (code === 0) {
           resolve(stdout.trim())
         } else {
           reject(new Error(stderr.trim() || `종료 코드: ${code}`))
