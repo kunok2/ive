@@ -371,10 +371,16 @@ function slideCover(){
   ${text(1216,70,'PRODUCT BRIEF · 2026',{anchor:'end',size:11,fill:DIM,weight:700,ls:1.5})}
 
   <circle cx="640" cy="196" r="118" fill="${CYAN}" opacity="0.08" filter="url(#cglow)"/>
-  <rect x="556" y="116" width="168" height="168" rx="34" fill="#101016" stroke="${CYAN}" stroke-width="2.5"/>
-  <rect x="567" y="127" width="146" height="146" rx="26" fill="none" stroke="#23232a" stroke-width="2"/>
-  ${text(640,210,'IVE',{size:62,fill:CYAN,weight:800,ls:2})}
-  <text x="640" y="248" font-size="22" font-weight="700" text-anchor="middle" font-family="system-ui"><tspan fill="${SPRING}">Spring</tspan><tspan fill="${AMBER}">ware</tspan></text>
+  <a href="https://ive.dazzleat.link" target="_blank" rel="noopener">
+    <rect x="556" y="116" width="168" height="168" rx="34" fill="#101016" stroke="${CYAN}" stroke-width="2.5"/>
+    <rect x="567" y="127" width="146" height="146" rx="26" fill="none" stroke="#23232a" stroke-width="2"/>
+    ${text(640,210,'IVE',{size:62,fill:CYAN,weight:800,ls:2})}
+    <text x="640" y="248" font-size="22" font-weight="700" text-anchor="middle" font-family="system-ui"><tspan fill="${SPRING}">Spring</tspan><tspan fill="${AMBER}">ware</tspan></text>
+  </a>
+  <a href="https://ive.dazzleat.link" target="_blank" rel="noopener">
+    <rect x="528" y="290" width="224" height="26" rx="13" fill="none" stroke="${CYAN}" stroke-width="1.2"/>
+    ${text(640,307,'ive.dazzleat.link  ↗',{size:12.5,fill:CYAN,weight:700})}
+  </a>
 
   ${text(640,358,'이슈만 올리면, AI가 개발한다',{size:46,fill:TXT,weight:800})}
   ${text(640,396,'AI CLI 에이전트가 Git 이슈를 자동 처리하고, 사람은 검토·결정만 — 처리량·비용은 자동 측정.',{size:16,fill:'#b4b4bc',weight:600})}
@@ -429,10 +435,14 @@ function slidePOC(){
   ${card(64,524,1152,150,{stroke:CYAN,fill:'#0f1f24'})}
   ${text(640,566,'회원가입 또는 GitHub·GitLab 계정 연동으로 지금 바로 테스트하세요.',{size:22,fill:TXT,weight:800})}
   ${text(640,596,'운영 중인 서비스에서 즉시 체험 → 필요하면 2주 POC로 확장합니다.',{size:13.5,fill:'#b4b4bc',weight:600})}
-  <rect x="297" y="620" width="330" height="38" rx="19" fill="${CYAN}"/>
-  ${text(462,644,'지금 가입·연동하고 체험   ive.dazzleat.link',{size:13,fill:'#06262e',weight:800})}
-  <rect x="643" y="620" width="340" height="38" rx="19" fill="${BG}" stroke="${CYAN}" stroke-width="1.4"/>
-  ${text(813,644,'POC·도입 문의   springware.koj@gmail.com',{size:13,fill:TXT,weight:700})}
+  <a href="https://ive.dazzleat.link" target="_blank" rel="noopener">
+    <rect x="297" y="620" width="330" height="38" rx="19" fill="${CYAN}"/>
+    ${text(462,644,'지금 가입·연동하고 체험   ive.dazzleat.link',{size:13,fill:'#06262e',weight:800})}
+  </a>
+  <a href="mailto:springware.koj@gmail.com">
+    <rect x="643" y="620" width="340" height="38" rx="19" fill="${BG}" stroke="${CYAN}" stroke-width="1.4"/>
+    ${text(813,644,'POC·도입 문의   springware.koj@gmail.com',{size:13,fill:TXT,weight:700})}
+  </a>
 </svg>`;
 }
 
