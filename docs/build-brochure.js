@@ -409,13 +409,13 @@ function slidePOC(){
     <marker id="pah" markerWidth="10" markerHeight="10" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="${CYAN}"/></marker>
   </defs>
   <rect width="1280" height="720" fill="url(#pv)"/>
-  ${header('POC 제안 — 2주, 리스크 0',"작게 시작해 '당신의 숫자'로 직접 확인하세요")}
+  ${header('지금 시작하기 — 바로 체험, 필요하면 POC',"운영 서비스로 즉시 테스트 → 조직 도입은 2주 POC로 확장")}
 
-  ${badge(380,120,'1','저장소 연결',150)}
-  ${badge(640,120,'2','이슈에 라벨',150)}
-  ${badge(905,120,'3','자동 처리·검토',162)}
-  <path d="M462,120 L556,120" stroke="${CYAN}" stroke-width="2" marker-end="url(#pah)"/>
-  <path d="M722,120 L818,120" stroke="${CYAN}" stroke-width="2" marker-end="url(#pah)"/>
+  ${badge(360,120,'1','가입·Git 연동',162)}
+  ${badge(640,120,'2','저장소·이슈 연결',176)}
+  ${badge(920,120,'3','자동 처리·리포트',176)}
+  <path d="M448,120 L544,120" stroke="${CYAN}" stroke-width="2" marker-end="url(#pah)"/>
+  <path d="M736,120 L826,120" stroke="${CYAN}" stroke-width="2" marker-end="url(#pah)"/>
 
   ${COLS.map((c,i)=>{const x=X[i];return `
     ${card(x,170,W,330)}
@@ -427,10 +427,12 @@ function slidePOC(){
   `;}).join('')}
 
   ${card(64,524,1152,150,{stroke:CYAN,fill:'#0f1f24'})}
-  ${text(640,572,'이번 분기, 저장소 하나만 — 2주 뒤 당신의 데이터로 보고드립니다.',{size:23,fill:TXT,weight:800})}
-  ${text(640,605,'사람이 검토하고, 데이터는 당신 안에 남고, 결과는 숫자로 증명됩니다.',{size:14,fill:'#b4b4bc',weight:600})}
-  <rect x="516" y="628" width="248" height="34" rx="17" fill="${CYAN}"/>
-  ${text(640,650,'데모·문의   ive.dazzleat.link',{size:14,fill:'#06262e',weight:800})}
+  ${text(640,566,'회원가입 또는 GitHub·GitLab 계정 연동으로 지금 바로 테스트하세요.',{size:22,fill:TXT,weight:800})}
+  ${text(640,596,'운영 중인 서비스에서 즉시 체험 → 필요하면 2주 POC로 확장합니다.',{size:13.5,fill:'#b4b4bc',weight:600})}
+  <rect x="297" y="620" width="330" height="38" rx="19" fill="${CYAN}"/>
+  ${text(462,644,'지금 가입·연동하고 체험   ive.dazzleat.link',{size:13,fill:'#06262e',weight:800})}
+  <rect x="643" y="620" width="340" height="38" rx="19" fill="${BG}" stroke="${CYAN}" stroke-width="1.4"/>
+  ${text(813,644,'POC·도입 문의   springware.koj@gmail.com',{size:13,fill:TXT,weight:700})}
 </svg>`;
 }
 
