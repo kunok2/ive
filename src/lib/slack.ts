@@ -4,7 +4,7 @@ import path from 'path'
 import {
   getProjectsByUser, getSharedProjectsForUser, getProjectAuthToken,
   getSystemSetting, getAgentsByUser,
-  getSlackThreadSession, createSlackThreadSession, updateSlackThreadCliSession, resetSlackThreadProject,
+  getSlackThreadSession, createSlackThreadSession, updateSlackThreadCliSession, resetSlackThreadProject, switchSlackThreadProject,
 } from './db'
 import { decrypt } from './crypto'
 import {
@@ -198,6 +198,36 @@ export function parseIssueNumber(text: string): number | null {
     }
   }
   return null
+}
+
+/**
+ * 스레드에 고정할 대상 프로젝트를 고른다 (순수 함수 — 회귀 테스트 대상).
+ *
+ * 핵심 불변식: 한 스레드는 한 프로젝트에 고정된다. 매 멘션마다 메시지 텍스트로 다시 고르면,
+ * 이름이 안 들어간 후속 질문("그게 뭐야?")에서 ownerProjects[0]로 되돌아가
+ * 한 스레드 안에서 프로젝트(=워크스페이스/CLI 세션)가 튀고 대화 맥락이 끊긴다.
+ *
+ * 규칙:
+ *  - 멘션에 프로젝트 이름이 명시되면 그 프로젝트(스레드 중간이면 명시적 전환 → switching=true).
+ *  - 아니면 이 스레드 세션에 이미 고정된 프로젝트를 유지.
+ *  - 세션이 없거나(첫 멘션) 고정 프로젝트가 사라졌으면(삭제됨) 소유자의 첫 프로젝트.
+ *
+ * 전제: ownerProjects.length > 0 (호출 측에서 보장).
+ */
+export function selectThreadProject<P extends { id: string; name: string }>(opts: {
+  ownerProjects: P[]
+  session: { projectId?: string | null } | null
+  cleanText: string
+}): { project: P; switching: boolean } {
+  const { ownerProjects, session, cleanText } = opts
+  const namedProject = ownerProjects.find(p => p.name && cleanText.includes(p.name)) || null
+  const pinnedProject = session?.projectId
+    ? (ownerProjects.find(p => p.id === session.projectId) || null)
+    : null
+  // 스레드 중간에 "이미 고정된 것과 다른" 프로젝트를 명시한 경우만 전환으로 본다.
+  const switching = !!(namedProject && pinnedProject && namedProject.id !== pinnedProject.id)
+  const project = namedProject || pinnedProject || ownerProjects[0]
+  return { project, switching }
 }
 
 // ── 사용자 언어(locale) + 표시 메시지 ──
@@ -404,10 +434,9 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
       await sink.post(M.noProject)
       return
     }
-    // 대상 프로젝트: 멘션에 이름이 있으면 그걸로, 없으면 소유자의 첫 프로젝트.
-    // "무엇을 할지(조회/생성/설명…)"는 규칙으로 가르지 않고 에이전트가 대화로 판단한다.
-    const namedProject = ownerProjects.find(p => p.name && cleanText.includes(p.name))
-    const project = namedProject || ownerProjects[0]
+    // 대상 프로젝트는 "스레드에 고정"한다(selectThreadProject 의 불변식). 스레드 중간에
+    // 다른 프로젝트를 명시하면 switchingProject=true 가 되고, 아래에서 세션을 갱신한다.
+    const { project, switching: switchingProject } = selectThreadProject({ ownerProjects, session, cleanText })
     // 공유 프로젝트는 accessToken이 비어있을 수 있고 OAuth 토큰 케이스도 있어
     // getProjectAuthToken으로 해석(OAuth/일반 토큰 모두 처리).
     const token = getProjectAuthToken(project.id)
@@ -428,6 +457,14 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
       session = getSlackThreadSession(workspace.id, channel, convoId)
     } else {
       issueIid = session.issueIid ?? null
+      // 스레드 중간에 사용자가 다른 프로젝트를 명시한 경우: 고정 프로젝트를 갈아끼우고,
+      // CLI 세션과 이슈 바인딩을 함께 초기화한다(프로젝트가 바뀌면 resume 불가, 옛 프로젝트의
+      // 이슈 번호도 무효 → 현재 메시지에서 다시 파싱).
+      if (switchingProject) {
+        issueIid = parseIssueNumber(cleanText)
+        switchSlackThreadProject(workspace.id, channel, convoId, project.id, issueIid)
+        session = getSlackThreadSession(workspace.id, channel, convoId)
+      }
     }
     // resume 조건 (셋 다 충족해야 이전 CLI 세션 이어가기):
     //  1) 같은 CLI (claude=UUID, opencode=ses_… 등 형식 달라 호환 안 됨)
