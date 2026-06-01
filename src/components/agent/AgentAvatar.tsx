@@ -79,7 +79,7 @@ export default function AgentAvatar({ avatar, userId, size = 'md', className = '
     return (
       <div className={`relative shrink-0 ${wh} ${className}`}>
         <div className="w-full h-full rounded-lg flex items-center justify-center bg-ive-bg-deep border border-ive-border-subtle">
-          <CliLogo cli={resolved.slice(4)} className="w-[64%] h-[64%]" />
+          <CliLogo cli={resolved.slice(4)} className="w-[80%] h-[80%]" />
         </div>
         {toolBadge && <ToolBadge category={toolBadge} size={size} />}
       </div>
@@ -142,7 +142,7 @@ export function AvatarSelector({ value, onChange, cliName }: SelectorProps) {
               : 'border border-ive-border-subtle hover:scale-105 opacity-80 hover:opacity-100'
           }`}
         >
-          <CliLogo cli={cliName!} className="w-3/5 h-3/5" />
+          <CliLogo cli={cliName!} className="w-4/5 h-4/5" />
         </button>
       )}
       {DEFAULT_AVATARS.map(av => {
