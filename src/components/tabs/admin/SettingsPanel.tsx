@@ -37,6 +37,8 @@ const SETTING_GROUPS: SettingGroup[] = [
     fields: [
       { key: 'cli.claude.path', label: 'Claude Code', type: 'text', placeholder: '/usr/local/bin/claude', defaultValue: '/usr/local/bin/claude' },
       { key: 'cli.claude.model', label: 'Claude Model', type: 'model-select', cliName: 'claude' },
+      { key: 'cli.codex.path', label: 'Codex', type: 'text', placeholder: '/usr/local/bin/codex', defaultValue: '/usr/local/bin/codex' },
+      { key: 'cli.codex.model', label: 'Codex Model', type: 'model-select', cliName: 'codex' },
       { key: 'cli.gemini.path', label: 'Gemini CLI', type: 'text', placeholder: '/usr/local/bin/gemini', defaultValue: '/usr/local/bin/gemini' },
       { key: 'cli.gemini.model', label: 'Gemini Model', type: 'model-select', cliName: 'gemini' },
       { key: 'cli.opencode.path', label: 'OpenCode', type: 'text', placeholder: '/usr/local/bin/opencode', defaultValue: '/usr/local/bin/opencode' },
@@ -143,6 +145,14 @@ const SETTING_GROUPS: SettingGroup[] = [
       },
     ],
   },
+]
+
+// CLI 경로/모델은 CLI 단위로 묶어서 렌더 (가독성). 아이콘은 단순 형태 구분용(중립색).
+const CLI_ITEMS: { cliName: string; label: string; icon: string; pathKey: string; modelKey: string; pathPlaceholder: string }[] = [
+  { cliName: 'claude', label: 'Claude Code', icon: 'fa-solid fa-robot', pathKey: 'cli.claude.path', modelKey: 'cli.claude.model', pathPlaceholder: '/usr/local/bin/claude' },
+  { cliName: 'codex', label: 'Codex', icon: 'fa-solid fa-code', pathKey: 'cli.codex.path', modelKey: 'cli.codex.model', pathPlaceholder: '/usr/local/bin/codex' },
+  { cliName: 'gemini', label: 'Gemini CLI', icon: 'fa-solid fa-gem', pathKey: 'cli.gemini.path', modelKey: 'cli.gemini.model', pathPlaceholder: '/usr/local/bin/gemini' },
+  { cliName: 'opencode', label: 'OpenCode', icon: 'fa-solid fa-cube', pathKey: 'cli.opencode.path', modelKey: 'cli.opencode.model', pathPlaceholder: '/usr/local/bin/opencode' },
 ]
 
 // ── SettingsPanel ──
@@ -274,7 +284,40 @@ export default function SettingsPanel() {
                 </div>
               )}
 
-              {group.fields.map(field => {
+              {group.key === 'cli_paths' && (
+                <p className="text-[11px] text-ive-text-dim leading-snug -mt-1">{t('cliPathDesc')}</p>
+              )}
+
+              {group.key === 'cli_paths' ? (
+                CLI_ITEMS.map(item => (
+                  <div key={item.cliName} className="bg-ive-bg-deep border border-ive-border-subtle rounded-lg px-3 py-3 space-y-2.5">
+                    <div className="flex items-center gap-2">
+                      <i className={`${item.icon} text-xs text-ive-text-dim w-4 text-center`} />
+                      <span className="text-sm font-bold text-ive-text">{item.label}</span>
+                    </div>
+                    <div className="space-y-2.5">
+                      <div>
+                        <label className="block text-[11px] font-bold text-ive-text-muted mb-1">{t('cliExecPath')}</label>
+                        <input
+                          type="text"
+                          value={settings[item.pathKey] || ''}
+                          onChange={e => updateSetting(item.pathKey, e.target.value)}
+                          placeholder={item.pathPlaceholder}
+                          className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green/50 font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-ive-text-muted mb-1">{t('cliModel')}</label>
+                        <ModelSelect
+                          models={cliModels[item.cliName] || []}
+                          value={settings[item.modelKey] || ''}
+                          onChange={v => updateSetting(item.modelKey, v)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : group.fields.map(field => {
                 // Allow `field.label` and option labels to be either literal text
                 // or an i18n key for the `admin` namespace (used by the logging group).
                 const tr = (s: string) => {

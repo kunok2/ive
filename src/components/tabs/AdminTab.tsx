@@ -5,20 +5,20 @@ import { useTranslations } from 'next-intl'
 import PullToRefresh from '@/components/ui/PullToRefresh'
 import UsersPanel from './admin/UsersPanel'
 import MailPanel from './admin/MailPanel'
-import SettingsPanel from './admin/SettingsPanel'
-import OAuthProvidersPanel from './admin/OAuthProvidersPanel'
-import SlackWorkspacesPanel from './admin/SlackWorkspacesPanel'
+import SettingsHubPanel from './admin/SettingsHubPanel'
 import LogsPanel from './admin/LogsPanel'
 
-type SubTab = 'users' | 'mail' | 'settings' | 'oauth' | 'slack' | 'logs'
+type SubTab = 'users' | 'mail' | 'settings' | 'logs'
 
 export default function AdminTab() {
   const t = useTranslations('admin')
   const [subTab, setSubTab] = useState<SubTab>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('ive-admin-subtab')
-      if (saved && ['users', 'mail', 'settings', 'oauth', 'slack', 'logs'].includes(saved)) return saved as SubTab
+      if (saved && ['users', 'mail', 'settings', 'logs'].includes(saved)) return saved as SubTab
       if (saved === 'activity' || saved === 'cli') return 'users'
+      // OAuth/Slack/터미널은 설정 하위로 이동됨 → 설정 탭으로 진입
+      if (saved === 'oauth' || saved === 'slack' || saved === 'terminal') return 'settings'
     }
     return 'users'
   })
@@ -36,8 +36,6 @@ export default function AdminTab() {
     { key: 'users', icon: 'fa-solid fa-users', label: t('users') },
     { key: 'mail', icon: 'fa-solid fa-envelope', label: t('mail') },
     { key: 'settings', icon: 'fa-solid fa-gear', label: t('settings') },
-    { key: 'oauth', icon: 'fa-solid fa-key', label: 'OAuth' },
-    { key: 'slack', icon: 'fa-brands fa-slack', label: 'Slack' },
     { key: 'logs', icon: 'fa-solid fa-file-lines', label: t('logs') },
   ]
 
@@ -66,9 +64,7 @@ export default function AdminTab() {
         <div className="pb-20 min-h-full flex flex-col">
           {subTab === 'users' && <UsersPanel key={refreshKey} />}
           {subTab === 'mail' && <MailPanel key={refreshKey} />}
-          {subTab === 'settings' && <SettingsPanel key={refreshKey} />}
-          {subTab === 'oauth' && <OAuthProvidersPanel key={refreshKey} />}
-          {subTab === 'slack' && <SlackWorkspacesPanel key={refreshKey} />}
+          {subTab === 'settings' && <SettingsHubPanel key={refreshKey} />}
           {subTab === 'logs' && <LogsPanel key={refreshKey} />}
         </div>
       </div>
