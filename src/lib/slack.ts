@@ -210,7 +210,10 @@ export function parseIssueNumber(text: string): number | null {
  * 규칙:
  *  - 멘션에 프로젝트 이름이 명시되면 그 프로젝트(스레드 중간이면 명시적 전환 → switching=true).
  *  - 아니면 이 스레드 세션에 이미 고정된 프로젝트를 유지.
- *  - 세션이 없거나(첫 멘션) 고정 프로젝트가 사라졌으면(삭제됨) 소유자의 첫 프로젝트.
+ *  - 어느 프로젝트인지 알 수 없는데 후보가 둘 이상이면(첫 멘션에 이름 없음 / 고정 프로젝트
+ *    삭제됨) needsDisambiguation=true. 이때 [0]을 단정하지 말고 사용자에게 되물어야 한다
+ *    (project 에는 폴백으로 [0]을 채워두되 호출 측은 needsDisambiguation 을 먼저 본다).
+ *  - 후보가 하나뿐이면 모호함이 없으므로 그대로 사용.
  *
  * 전제: ownerProjects.length > 0 (호출 측에서 보장).
  */
@@ -218,7 +221,7 @@ export function selectThreadProject<P extends { id: string; name: string }>(opts
   ownerProjects: P[]
   session: { projectId?: string | null } | null
   cleanText: string
-}): { project: P; switching: boolean } {
+}): { project: P; switching: boolean; needsDisambiguation: boolean } {
   const { ownerProjects, session, cleanText } = opts
   const namedProject = ownerProjects.find(p => p.name && cleanText.includes(p.name)) || null
   const pinnedProject = session?.projectId
@@ -226,8 +229,10 @@ export function selectThreadProject<P extends { id: string; name: string }>(opts
     : null
   // 스레드 중간에 "이미 고정된 것과 다른" 프로젝트를 명시한 경우만 전환으로 본다.
   const switching = !!(namedProject && pinnedProject && namedProject.id !== pinnedProject.id)
+  // 이름도 없고 고정된 것도 없는데 후보가 여럿 → 임의 선택 대신 되묻기.
+  const needsDisambiguation = !namedProject && !pinnedProject && ownerProjects.length > 1
   const project = namedProject || pinnedProject || ownerProjects[0]
-  return { project, switching }
+  return { project, switching, needsDisambiguation }
 }
 
 // ── 사용자 언어(locale) + 표시 메시지 ──
@@ -254,6 +259,7 @@ const SLACK_MSG = {
     noOwner: '이 워크스페이스에 소유자(IVE 유저)가 지정되지 않았어요. 관리자에게 문의해 주세요.',
     noAgent: '소유자에게 사용할 수 있는 에이전트가 없어요. 관리자에게 문의해 주세요.',
     noProject: '소유자에게 연결된 프로젝트가 없어요. 관리자에게 문의해 주세요.',
+    chooseProject: (names: string[]) => `어떤 프로젝트로 이야기할까요? 연결된 프로젝트가 여러 개예요.\n${names.map(n => `• ${n}`).join('\n')}\n\n예: \`@IVE ${names[0]} 에 대해 이야기하자\``,
     busy: '아직 이전 메시지를 처리 중이에요. 잠시만요…',
     issueNotFound: (p: string, iid: number) => `프로젝트 *${p}* 에서 #${iid} 을(를) 못 찾았어요. 번호를 확인해 주세요.`,
     placeholderIssue: (iid: number) => `:hourglass_flowing_sand: #${iid} 살펴보는 중…`,
@@ -267,6 +273,7 @@ const SLACK_MSG = {
     noOwner: 'This workspace has no IVE owner assigned. Please contact your admin.',
     noAgent: 'The owner has no available agent. Please contact your admin.',
     noProject: 'The owner has no connected project. Please contact your admin.',
+    chooseProject: (names: string[]) => `Which project should we work on? Several are connected.\n${names.map(n => `• ${n}`).join('\n')}\n\ne.g. \`@IVE ${names[0]} let's talk about this\``,
     busy: 'Still working on your previous message. One moment…',
     issueNotFound: (p: string, iid: number) => `Couldn't find #${iid} in project *${p}*. Please check the number.`,
     placeholderIssue: (iid: number) => `:hourglass_flowing_sand: Looking into #${iid}…`,
@@ -436,7 +443,13 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
     }
     // 대상 프로젝트는 "스레드에 고정"한다(selectThreadProject 의 불변식). 스레드 중간에
     // 다른 프로젝트를 명시하면 switchingProject=true 가 되고, 아래에서 세션을 갱신한다.
-    const { project, switching: switchingProject } = selectThreadProject({ ownerProjects, session, cleanText })
+    const { project, switching: switchingProject, needsDisambiguation } = selectThreadProject({ ownerProjects, session, cleanText })
+    // 첫 멘션에 프로젝트를 안 정했는데 후보가 여럿이면, 임의로 [0]을 잡아 단정하지 말고 되묻는다.
+    // (세션·워크스페이스·CLI 를 만들지 않고 종료 → 다음 멘션에서 이름이 들어오면 그때 고정.)
+    if (needsDisambiguation) {
+      await sink.post(M.chooseProject(ownerProjects.map(p => p.name)))
+      return
+    }
     // 공유 프로젝트는 accessToken이 비어있을 수 있고 OAuth 토큰 케이스도 있어
     // getProjectAuthToken으로 해석(OAuth/일반 토큰 모두 처리).
     const token = getProjectAuthToken(project.id)
