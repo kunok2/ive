@@ -111,7 +111,8 @@ export function pickAgentForChat(projectId: string, requesterUserId: string): { 
 interface ChatAgentOptions {
   sessionId: string
   cliSessionId: string | null  // null = first message, string = resume
-  project: Project
+  project: Project | null  // null = 프로젝트 미바인딩(일반 대화). projectless=true 와 함께 옴.
+  projectless?: boolean  // true = 어떤 레포에도 묶이지 않은 일반 대화(Slack 첫 대화 등)
   agent: Agent
   token: string
   issueIid: number
@@ -165,7 +166,7 @@ function describeCliFailure(code: number | null, stderr: string): string {
  * Shared by both the legacy SSE generator and the WebSocket callback version.
  */
 async function prepareChatSpawn(opts: ChatAgentOptions) {
-  const { cliSessionId, project, agent, token, issueIid, issueTitle, issueDescription, userMessage, workspacePath, userLocale, generalMode, availableProjects, attachedImages, imageOutbox } = opts
+  const { cliSessionId, project, projectless, agent, token, issueIid, issueTitle, issueDescription, userMessage, workspacePath, userLocale, generalMode, availableProjects, attachedImages, imageOutbox } = opts
 
   const locale = userLocale || getSystemSetting('locale') || defaultLocale
   const isKo = locale === 'ko'
@@ -177,17 +178,35 @@ async function prepareChatSpawn(opts: ChatAgentOptions) {
   const resolvedCliPath = await resolveCliPath(agent)
   const model = getSystemSetting(`cli.${agent.cliName}.model`) || null
 
-  // 이슈 관리에 쓸 CLI (provider별). 토큰은 환경변수에 설정돼 있음.
-  const issueCli = project.provider === 'github' ? 'gh' : 'glab'
+  // 이슈 관리에 쓸 CLI (provider별). 토큰은 환경변수에 설정돼 있음. (projectless 면 미사용)
+  const issueCli = project?.provider === 'github' ? 'gh' : 'glab'
 
   // Build prompt
   let prompt: string
-  if (isFirstMessage && generalMode) {
+  if (isFirstMessage && projectless) {
+    // 어떤 레포에도 묶이지 않은 일반 대화. 특정 프로젝트를 거론하면 호출 측이 그 프로젝트로 전환한다.
+    const projectsLine = availableProjects && availableProjects.length > 0
+      ? (isKo
+          ? `\n사용자가 가진 프로젝트: ${availableProjects.join(', ')}. 특정 프로젝트의 코드/이슈를 보고 싶으면 그 이름을 말하면 그 프로젝트로 전환됩니다.\n`
+          : `\nThe user's projects: ${availableProjects.join(', ')}. To look into a specific project's code/issues, name it and you'll be switched into it.\n`)
+      : ''
+    prompt = `You are a helpful general AI assistant in a chat. ${langInstruction}
+
+No specific project or repository is selected — this is a general conversation. Do NOT claim to be working in any particular repository, and do NOT invent project/code details.
+${projectsLine}
+## User Message:
+${userMessage}
+
+## Instructions:
+- Have a normal, helpful conversation. You are not bound to any codebase right now.
+- If the user asks about a specific project's code or issues, tell them to name the project and you'll switch into it. Never guess about a project you're not in.
+- IMPORTANT: ${langInstruction}`
+  } else if (isFirstMessage && generalMode) {
     // 이슈 미바인딩 — 프로젝트 레포가 작업 디렉토리에 clone 되어 있음
     const projectsLine = availableProjects && availableProjects.length > 0
       ? `\nThe user owns these IVE projects: ${availableProjects.join(', ')}. If asked which projects exist / are available, list exactly these.\n`
       : ''
-    prompt = `You are a helpful AI assistant working in the "${project.name}" project repository. ${langInstruction}
+    prompt = `You are a helpful AI assistant working in the "${project!.name}" project repository. ${langInstruction}
 
 The project's repository is checked out in your current working directory — read and explore the actual code/files to answer accurately. Do NOT describe any other project's code; only this repository.
 ${projectsLine}

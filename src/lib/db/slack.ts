@@ -198,11 +198,11 @@ export function updateSlackThreadCliSession(workspaceId: string, channelId: stri
 }
 
 /** 스레드 세션의 대상 프로젝트를 갱신하고 CLI 세션을 초기화한다(프로젝트가 바뀌면 resume 불가하므로). */
-export function resetSlackThreadProject(workspaceId: string, channelId: string, threadTs: string, projectId: string) {
+export function resetSlackThreadProject(workspaceId: string, channelId: string, threadTs: string, projectId: string | null) {
   getDb().prepare(`
     UPDATE slack_thread_session SET project_id = ?, cli_session_id = NULL, updated_at = datetime('now')
     WHERE workspace_id = ? AND channel_id = ? AND thread_ts = ?
-  `).run(projectId, workspaceId, channelId, threadTs)
+  `).run(projectId ?? null, workspaceId, channelId, threadTs)
 }
 
 /**
@@ -211,11 +211,11 @@ export function resetSlackThreadProject(workspaceId: string, channelId: string, 
  * (프로젝트가 바뀌면 cwd·세션이 달라 resume 불가하고, 옛 프로젝트의 이슈 번호도 무효이므로
  *  현재 메시지에서 다시 파싱한 issueIid 로 재바인딩한다.)
  */
-export function switchSlackThreadProject(workspaceId: string, channelId: string, threadTs: string, projectId: string, issueIid: number | null) {
+export function switchSlackThreadProject(workspaceId: string, channelId: string, threadTs: string, projectId: string | null, issueIid: number | null) {
   getDb().prepare(`
     UPDATE slack_thread_session SET project_id = ?, issue_iid = ?, cli_session_id = NULL, updated_at = datetime('now')
     WHERE workspace_id = ? AND channel_id = ? AND thread_ts = ?
-  `).run(projectId, issueIid ?? null, workspaceId, channelId, threadTs)
+  `).run(projectId ?? null, issueIid ?? null, workspaceId, channelId, threadTs)
 }
 
 // ── User mapping (Slack 유저 ↔ IVE 유저) ──

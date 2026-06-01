@@ -8,7 +8,7 @@ import {
 } from './db'
 import { decrypt } from './crypto'
 import {
-  prepareChatWorkspace, prepareProjectWorkspace,
+  prepareChatWorkspace, prepareProjectWorkspace, prepareGeneralWorkspace,
   runChatAgentWithCallback, isChatAgentRunning, maskSecrets,
 } from './chat-agent'
 import { fetchSingleIssue } from './provider'
@@ -202,38 +202,41 @@ export function parseIssueNumber(text: string): number | null {
 }
 
 /**
- * 스레드에 고정할 대상 프로젝트를 고른다 (순수 함수 — 회귀 테스트 대상).
+ * 메시지 텍스트에서 프로젝트 이름을 찾아 매칭(대소문자 무시, 단어 경계 기준). 못 찾으면 null.
+ * 단어 경계(\b)로 막아 짧은 이름의 오매칭을 피한다 — 예: "IVE" 가 "give"/"live" 안에서 잡히지 않게.
+ * (한글 음차 "스프링크"는 영문 "splink" 와 매칭되지 않음 — 알려진 한계. 영문 이름을 쓰면 됨.)
+ */
+export function matchProjectByName<P extends { name: string }>(projects: P[], text: string): P | null {
+  const t = text || ''
+  for (const p of projects) {
+    if (!p.name) continue
+    const escaped = p.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    if (new RegExp(`\\b${escaped}\\b`, 'i').test(t)) return p
+  }
+  return null
+}
+
+/**
+ * 이 멘션에서 사용할 대상 프로젝트를 고른다 (순수 함수 — 회귀 테스트 대상).
  *
- * 핵심 불변식: 한 스레드는 한 프로젝트에 고정된다. 매 멘션마다 메시지 텍스트로 다시 고르면,
- * 이름이 안 들어간 후속 질문("그게 뭐야?")에서 ownerProjects[0]로 되돌아가
- * 한 스레드 안에서 프로젝트(=워크스페이스/CLI 세션)가 튀고 대화 맥락이 끊긴다.
- *
- * 규칙:
- *  - 멘션에 프로젝트 이름이 명시되면 그 프로젝트(스레드 중간이면 명시적 전환 → switching=true).
- *  - 아니면 이 스레드 세션에 이미 고정된 프로젝트를 유지.
- *  - 어느 프로젝트인지 알 수 없는데 후보가 둘 이상이면(첫 멘션에 이름 없음 / 고정 프로젝트
- *    삭제됨) needsDisambiguation=true. 이때 [0]을 단정하지 말고 사용자에게 되물어야 한다
- *    (project 에는 폴백으로 [0]을 채워두되 호출 측은 needsDisambiguation 을 먼저 본다).
- *  - 후보가 하나뿐이면 모호함이 없으므로 그대로 사용.
- *
- * 전제: ownerProjects.length > 0 (호출 측에서 보장).
+ * 설계: 스레드는 "프로젝트 없음(일반 대화)"으로 시작한다. 임의로 [0]을 잡거나 되묻지 않는다
+ *  (예전 "되묻기"는 한글 이름 매칭 실패 시 빠져나올 수 없는 무한 루프를 만들었다).
+ *  - 이번 메시지에 프로젝트 이름이 있으면 그 프로젝트 → 거기서 자연스럽게 바인딩/전환.
+ *  - 아니면 이 스레드에 이미 고정된 프로젝트를 유지.
+ *  - 둘 다 없으면 null → 어떤 레포에도 묶이지 않은 일반 대화.
+ *  한번 프로젝트에 바인딩되면 다른 프로젝트 이름을 말하기 전까지 그 프로젝트로 유지된다.
  */
 export function selectThreadProject<P extends { id: string; name: string }>(opts: {
   ownerProjects: P[]
   session: { projectId?: string | null } | null
   cleanText: string
-}): { project: P; switching: boolean; needsDisambiguation: boolean } {
+}): P | null {
   const { ownerProjects, session, cleanText } = opts
-  const namedProject = ownerProjects.find(p => p.name && cleanText.includes(p.name)) || null
-  const pinnedProject = session?.projectId
+  const named = matchProjectByName(ownerProjects, cleanText)
+  if (named) return named
+  return session?.projectId
     ? (ownerProjects.find(p => p.id === session.projectId) || null)
     : null
-  // 스레드 중간에 "이미 고정된 것과 다른" 프로젝트를 명시한 경우만 전환으로 본다.
-  const switching = !!(namedProject && pinnedProject && namedProject.id !== pinnedProject.id)
-  // 이름도 없고 고정된 것도 없는데 후보가 여럿 → 임의 선택 대신 되묻기.
-  const needsDisambiguation = !namedProject && !pinnedProject && ownerProjects.length > 1
-  const project = namedProject || pinnedProject || ownerProjects[0]
-  return { project, switching, needsDisambiguation }
 }
 
 // ── 사용자 언어(locale) + 표시 메시지 ──
@@ -260,7 +263,6 @@ const SLACK_MSG = {
     noOwner: '이 워크스페이스에 소유자(IVE 유저)가 지정되지 않았어요. 관리자에게 문의해 주세요.',
     noAgent: '소유자에게 사용할 수 있는 에이전트가 없어요. 관리자에게 문의해 주세요.',
     noProject: '소유자에게 연결된 프로젝트가 없어요. 관리자에게 문의해 주세요.',
-    chooseProject: (names: string[]) => `어떤 프로젝트로 이야기할까요? 연결된 프로젝트가 여러 개예요.\n${names.map(n => `• ${n}`).join('\n')}\n\n예: \`@IVE ${names[0]} 에 대해 이야기하자\``,
     busy: '아직 이전 메시지를 처리 중이에요. 잠시만요…',
     issueNotFound: (p: string, iid: number) => `프로젝트 *${p}* 에서 #${iid} 을(를) 못 찾았어요. 번호를 확인해 주세요.`,
     placeholderIssue: (iid: number) => `:hourglass_flowing_sand: #${iid} 살펴보는 중…`,
@@ -275,7 +277,6 @@ const SLACK_MSG = {
     noOwner: 'This workspace has no IVE owner assigned. Please contact your admin.',
     noAgent: 'The owner has no available agent. Please contact your admin.',
     noProject: 'The owner has no connected project. Please contact your admin.',
-    chooseProject: (names: string[]) => `Which project should we work on? Several are connected.\n${names.map(n => `• ${n}`).join('\n')}\n\ne.g. \`@IVE ${names[0]} let's talk about this\``,
     busy: 'Still working on your previous message. One moment…',
     issueNotFound: (p: string, iid: number) => `Couldn't find #${iid} in project *${p}*. Please check the number.`,
     placeholderIssue: (iid: number) => `:hourglass_flowing_sand: Looking into #${iid}…`,
@@ -503,18 +504,12 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
       await sink.post(M.noProject)
       return
     }
-    // 대상 프로젝트는 "스레드에 고정"한다(selectThreadProject 의 불변식). 스레드 중간에
-    // 다른 프로젝트를 명시하면 switchingProject=true 가 되고, 아래에서 세션을 갱신한다.
-    const { project, switching: switchingProject, needsDisambiguation } = selectThreadProject({ ownerProjects, session, cleanText })
-    // 첫 멘션에 프로젝트를 안 정했는데 후보가 여럿이면, 임의로 [0]을 잡아 단정하지 말고 되묻는다.
-    // (세션·워크스페이스·CLI 를 만들지 않고 종료 → 다음 멘션에서 이름이 들어오면 그때 고정.)
-    if (needsDisambiguation) {
-      await sink.post(M.chooseProject(ownerProjects.map(p => p.name)))
-      return
-    }
-    // 공유 프로젝트는 accessToken이 비어있을 수 있고 OAuth 토큰 케이스도 있어
-    // getProjectAuthToken으로 해석(OAuth/일반 토큰 모두 처리).
-    const token = getProjectAuthToken(project.id)
+    // 대상 프로젝트 선택. 스레드는 "프로젝트 없음(일반 대화)"으로 시작하고, 사용자가 프로젝트
+    // 이름을 거론하면 그때 자연스럽게 바인딩/전환된다(selectThreadProject). 임의 단정·되묻기 없음.
+    const project = selectThreadProject({ ownerProjects, session, cleanText })
+    const projectless = project == null
+    // 공유 프로젝트는 accessToken이 비어있을 수 있고 OAuth 토큰 케이스도 있어 getProjectAuthToken으로 해석.
+    const token = project ? getProjectAuthToken(project.id) : ''
 
     // 스레드 단위 독립 대화: 세션/이슈바인딩/CLI세션을 thread_ts 기준으로 유지
     const sessionKey = `slack:${workspace.id}:${channel}:${convoId}`
@@ -523,40 +518,40 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
       return
     }
 
-    // 스레드 첫 멘션에서 이슈 번호를 바인딩, 이후 멘션은 그 바인딩 유지(번호 재입력 불필요)
-    // (session 은 위에서 이미 로드함)
+    // 세션 생성/전환. project_id 가 null 이면 "프로젝트 없음" 상태로 고정된다.
+    // 이번 멘션에서 프로젝트가 바뀌면(없음→바인딩 또는 다른 프로젝트로 전환) 이슈 바인딩과
+    // CLI 세션을 함께 초기화한다(프로젝트가 바뀌면 cwd·세션이 달라 resume 불가, 옛 이슈도 무효).
+    const newProjectId = project?.id ?? null
     let issueIid: number | null
     if (!session) {
-      issueIid = parseIssueNumber(cleanText)
-      createSlackThreadSession({ workspaceId: workspace.id, channelId: channel, threadTs: convoId, issueIid, projectId: project.id })
+      issueIid = project ? parseIssueNumber(cleanText) : null
+      createSlackThreadSession({ workspaceId: workspace.id, channelId: channel, threadTs: convoId, issueIid, projectId: newProjectId })
+      session = getSlackThreadSession(workspace.id, channel, convoId)
+    } else if (newProjectId !== (session.projectId ?? null)) {
+      issueIid = project ? parseIssueNumber(cleanText) : null
+      switchSlackThreadProject(workspace.id, channel, convoId, newProjectId, issueIid)
       session = getSlackThreadSession(workspace.id, channel, convoId)
     } else {
       issueIid = session.issueIid ?? null
-      // 스레드 중간에 사용자가 다른 프로젝트를 명시한 경우: 고정 프로젝트를 갈아끼우고,
-      // CLI 세션과 이슈 바인딩을 함께 초기화한다(프로젝트가 바뀌면 resume 불가, 옛 프로젝트의
-      // 이슈 번호도 무효 → 현재 메시지에서 다시 파싱).
-      if (switchingProject) {
-        issueIid = parseIssueNumber(cleanText)
-        switchSlackThreadProject(workspace.id, channel, convoId, project.id, issueIid)
-        session = getSlackThreadSession(workspace.id, channel, convoId)
-      }
     }
-    // resume 조건 (셋 다 충족해야 이전 CLI 세션 이어가기):
-    //  1) 같은 CLI (claude=UUID, opencode=ses_… 등 형식 달라 호환 안 됨)
-    //  2) 같은 프로젝트 — claude 세션은 워크스페이스(cwd)별로 저장되므로 프로젝트가 바뀌면
-    //     이전 세션을 못 찾아 "No conversation found" 가 난다. 다르면 새 대화로 시작.
+
+    // resume 조건: 같은 CLI + 같은 프로젝트(없음 null 포함). claude 세션은 cwd 별 저장이라
+    // 프로젝트가 바뀌면 이전 세션을 못 찾는다(전환 시 위에서 cli_session 이 초기화됨).
     let cliSessionId = (
       session?.cliSessionId &&
       session?.cliName === agent.cliName &&
-      session?.projectId === project.id
+      (session?.projectId ?? null) === newProjectId
     ) ? session.cliSessionId : null
 
-    // 이슈 모드(레포 + dev-N 브랜치) / 프로젝트 모드(레포 기본 브랜치) — 둘 다 실제 레포 clone
+    // 워크스페이스: 프로젝트 없음 → clone 없는 일반 scratch / 이슈 모드 → dev 브랜치 / 프로젝트 모드 → 기본 브랜치.
     let workspacePath: string
     let issueTitle = ''
     let issueDescription = ''
     const generalMode = issueIid == null
-    if (issueIid != null) {
+    if (!project) {
+      // 대화별로 격리된 scratch 디렉토리(동시 대화가 같은 cwd 를 안 쓰도록 convo 키로 분리).
+      workspacePath = prepareGeneralWorkspace(path.join('_general', convoId.replace(/[^A-Za-z0-9_-]/g, '_')))
+    } else if (issueIid != null) {
       if (!cliSessionId) {
         const issue = await fetchSingleIssue(project, issueIid, token).catch(() => null)
         if (!issue) {
@@ -606,6 +601,7 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
     const baseOpts = {
       sessionId: sessionKey,
       project,
+      projectless,
       agent,
       token,
       issueIid: issueIid ?? 0,
@@ -622,7 +618,7 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
     let resumeLost = false
     const onEvent = (ev: { type: string; content?: string }) => {
       if (ev.type === 'session_id' && ev.content) {
-        updateSlackThreadCliSession(workspace.id, channel, convoId, ev.content, agent.cliName, project.id)
+        updateSlackThreadCliSession(workspace.id, channel, convoId, ev.content, agent.cliName, newProjectId)
       } else if (ev.type === 'text' && ev.content) {
         full += ev.content
         void flush(false)
@@ -644,7 +640,7 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
 
     // resume 실패(세션 유실) → CLI 세션 초기화 후 새 대화로 1회 자동 재시도
     if (resumeLost && !full.trim()) {
-      resetSlackThreadProject(workspace.id, channel, convoId, project.id)
+      resetSlackThreadProject(workspace.id, channel, convoId, newProjectId)
       cliSessionId = null
       full = ''
       await runChatAgentWithCallback({ ...baseOpts, cliSessionId: null }, onEvent)
