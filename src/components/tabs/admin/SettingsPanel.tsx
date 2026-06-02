@@ -83,6 +83,7 @@ const SETTING_GROUPS: SettingGroup[] = [
         label: 'MCP Config (JSON)',
         type: 'textarea',
         rows: 8,
+        hint: 'mcpConfigHint',
         placeholder: `{\n  "github": {\n    "type": "local",\n    "command": ["npx", "-y", "@modelcontextprotocol/server-github"],\n    "environment": { "GITHUB_TOKEN": "ghp_xxx" }\n  }\n}`,
       },
     ],
@@ -165,14 +166,13 @@ export default function SettingsPanel() {
   const [settings, setSettings] = useState<Record<string, string>>({})
   const [passwordsSet, setPasswordsSet] = useState<Record<string, boolean>>({})
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
+  const [savingGroup, setSavingGroup] = useState<string | null>(null)
+  const [savedGroup, setSavedGroup] = useState<string | null>(null)
   const [testing, setTesting] = useState(false)
   const [testEmail, setTestEmail] = useState('')
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null)
   // pricing
   const [pricingItems, setPricingItems] = useState<PricingItem[]>([])
-  const [pricingSaved, setPricingSaved] = useState(false)
   // CLI 모델 목록
   const [cliModels, setCliModels] = useState<Record<string, string[]>>({})
 
@@ -202,27 +202,42 @@ export default function SettingsPanel() {
     fetch('/api/settings/cli-models').then(r => r.json()).then(setCliModels).catch(() => {})
   }, [])
 
+  // 입력 중에는 상태만 갱신(텍스트류). 저장은 blur 시 saveGroup() 으로 일어난다.
   function updateSetting(key: string, value: string) {
     setSettings(prev => ({ ...prev, [key]: value }))
-    setSaved(false)
+    setSavedGroup(g => (g ? null : g))
   }
 
-  async function handleSave() {
-    setSaving(true)
+  // 선택/토글/모델 등 단일값 컨트롤: 변경 즉시 저장 (override 로 최신값 직접 전달).
+  function commitField(group: SettingGroup, key: string, value: string) {
+    setSettings(prev => ({ ...prev, [key]: value }))
+    saveGroup(group, { [key]: value })
+  }
+
+  // 그룹(섹션) 단위 저장 — 해당 그룹의 필드만 전송. 저장 버튼 없이 blur/change 시 자동 저장.
+  async function saveGroup(group: SettingGroup, override?: Record<string, string>) {
+    const merged = override ? { ...settings, ...override } : settings
+    const subset: Record<string, string> = {}
+    for (const f of group.fields) {
+      if (merged[f.key] !== undefined) subset[f.key] = merged[f.key]
+    }
+    setSavingGroup(group.key)
     try {
       const res = await fetch('/api/admin/env', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ settings }),
+        body: JSON.stringify({ settings: subset }),
       })
       if (res.ok) {
-        setSaved(true)
-        setTimeout(() => setSaved(false), 2000)
+        setSavedGroup(group.key)
+        setTimeout(() => setSavedGroup(g => (g === group.key ? null : g)), 1500)
       } else {
         const data = await res.json()
         toast(data.error || tc('saveFailed'), 'error')
       }
-    } finally { setSaving(false) }
+    } finally {
+      setSavingGroup(g => (g === group.key ? null : g))
+    }
   }
 
   async function handleTestMail() {
@@ -269,6 +284,8 @@ export default function SettingsPanel() {
           >
             <i className={`${group.icon} text-sm text-ive-text-dim`} />
             <span className="text-sm font-bold text-ive-text flex-1">{t(group.label as any)}</span>
+            {savingGroup === group.key && <i className="fa-solid fa-circle-notch fa-spin text-xs text-ive-text-dim" />}
+            {savingGroup !== group.key && savedGroup === group.key && <i className="fa-solid fa-check text-xs text-ive-green" />}
             <span className="text-xs text-ive-text-dim">
               {group.fields.filter(f => settings[f.key] || passwordsSet[f.key]).length}/{group.fields.length}
             </span>
@@ -302,6 +319,8 @@ export default function SettingsPanel() {
                           type="text"
                           value={settings[item.pathKey] || ''}
                           onChange={e => updateSetting(item.pathKey, e.target.value)}
+                          onBlur={() => saveGroup(group)}
+                          onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
                           placeholder={item.pathPlaceholder}
                           className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green/50 font-mono"
                         />
@@ -311,7 +330,7 @@ export default function SettingsPanel() {
                         <ModelSelect
                           models={cliModels[item.cliName] || []}
                           value={settings[item.modelKey] || ''}
-                          onChange={v => updateSetting(item.modelKey, v)}
+                          onChange={v => commitField(group, item.modelKey, v)}
                         />
                       </div>
                     </div>
@@ -331,12 +350,13 @@ export default function SettingsPanel() {
                     <ModelSelect
                       models={cliModels[field.cliName || ''] || []}
                       value={settings[field.key] || ''}
-                      onChange={v => updateSetting(field.key, v)}
+                      onChange={v => commitField(group, field.key, v)}
                     />
                   ) : field.type === 'textarea' ? (
                     <textarea
                       value={settings[field.key] || ''}
                       onChange={e => updateSetting(field.key, e.target.value)}
+                      onBlur={() => saveGroup(group)}
                       placeholder={field.placeholder}
                       rows={field.rows ?? 5}
                       className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green/50 font-mono resize-y"
@@ -361,6 +381,8 @@ export default function SettingsPanel() {
                         type="password"
                         value={settings[field.key] || ''}
                         onChange={e => updateSetting(field.key, e.target.value)}
+                        onBlur={() => saveGroup(group)}
+                        onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
                         placeholder={passwordsSet[field.key] ? t('newPasswordPlaceholder') : field.placeholder}
                         autoComplete="new-password"
                         className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green/50"
@@ -369,7 +391,7 @@ export default function SettingsPanel() {
                   ) : field.type === 'select' ? (
                     <CustomSelect
                       value={settings[field.key] || field.defaultValue || ''}
-                      onChange={v => updateSetting(field.key, v)}
+                      onChange={v => commitField(group, field.key, v)}
                       options={(field.options || []).map(opt => ({ value: opt.value, label: tr(opt.label) }))}
                     />
                   ) : field.type === 'boolean' ? (
@@ -377,7 +399,7 @@ export default function SettingsPanel() {
                       <input
                         type="checkbox"
                         checked={(settings[field.key] ?? field.defaultValue ?? 'false') === 'true'}
-                        onChange={e => updateSetting(field.key, e.target.checked ? 'true' : 'false')}
+                        onChange={e => commitField(group, field.key, e.target.checked ? 'true' : 'false')}
                         className="w-4 h-4 accent-ive-green"
                       />
                       <span className="text-sm text-ive-text">
@@ -391,6 +413,8 @@ export default function SettingsPanel() {
                       type={field.type}
                       value={settings[field.key] || ''}
                       onChange={e => updateSetting(field.key, e.target.value)}
+                      onBlur={() => saveGroup(group)}
+                      onKeyDown={e => { if (field.type !== 'textarea' && e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
                       placeholder={field.placeholder}
                       className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green/50"
                     />
@@ -433,33 +457,14 @@ export default function SettingsPanel() {
         onToggle={() => setExpandedGroup(expandedGroup === 'pricing-model' ? null : 'pricing-model')}
         pricingItems={pricingItems}
         setPricingItems={setPricingItems}
-        pricingSaved={pricingSaved}
-        setPricingSaved={setPricingSaved}
       />
 
       <HumanPricingSection
         expanded={expandedGroup === 'pricing-human'}
         onToggle={() => setExpandedGroup(expandedGroup === 'pricing-human' ? null : 'pricing-human')}
-        pricingItems={pricingItems}
         setPricingItems={setPricingItems}
-        pricingSaved={pricingSaved}
-        setPricingSaved={setPricingSaved}
       />
 
-      <button
-        onClick={handleSave}
-        disabled={saving}
-        className={`w-full font-bold py-3 rounded-lg text-sm active:scale-[0.98] transition-all disabled:opacity-40 ${
-          saved ? 'bg-ive-green/20 text-ive-green' : 'bg-ive-green-dark text-white'
-        }`}
-      >
-        {saving
-          ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />{t('saving')}</>
-          : saved
-            ? <><i className="fa-solid fa-check mr-1" />{t('saved')}</>
-            : <><i className="fa-solid fa-floppy-disk mr-1" />{tc('save')}</>
-        }
-      </button>
     </main>
   )
 }

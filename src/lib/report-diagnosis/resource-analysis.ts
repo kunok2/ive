@@ -150,10 +150,10 @@ export function computeProjectFlows(
 
     const hasBacklog = pEndW >= 3 || (pEndW - pStartW) >= 2
 
+    // 재시도율 기반 'highRetry' 경고는 제거함.
+    // 재시도는 에이전트 처리 품질 문제인데도 "지시사항이 모호하다"며 작성자 탓으로 읽혀 부적절.
     let annotation: ProjectAnnotation | null = null
-    if (pRetryRate >= 30) {
-      annotation = { key: 'highRetry', params: { percent: Math.round(pRetryRate) }, severity: 'warning' }
-    } else if (pEndW >= 5) {
+    if (pEndW >= 5) {
       annotation = { key: 'backlog', params: { count: pEndW }, severity: 'warning' }
     }
 

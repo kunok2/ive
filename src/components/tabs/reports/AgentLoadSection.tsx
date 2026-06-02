@@ -45,7 +45,7 @@ export default function AgentLoadSection({ d, data, helpers }: AgentLoadSectionP
                 <span className="text-ive-text font-bold">{tr('processedInPeriod', { count: a.tasks.toLocaleString() })}</span>
                 <span className="text-ive-text-dim">{tr('dailyAvgCapacity', { count: a.dailyCapacity })}</span>
                 {a.currentWaiting > 0 && <span className={`font-bold ${a.currentWaiting >= 6 ? 'text-ive-red' : a.currentWaiting >= 3 ? 'text-ive-amber' : 'text-ive-text-muted'}`}>{tr('waitingCompact', { count: a.currentWaiting })}</span>}
-                <span className="text-ive-text-muted ml-auto">${fmtCost(a.cost)}</span>
+                <span className="text-ive-text-muted ml-auto">{fmtCost(a.cost)}</span>
               </div>
               {a.annotation && (() => {
                 const s = a.annotation.severity

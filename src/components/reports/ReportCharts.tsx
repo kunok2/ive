@@ -5,7 +5,10 @@ import {
   ComposedChart, Bar, Line, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid, AreaChart,
 } from 'recharts'
-import { useTranslations } from 'next-intl'
+import { useTranslations, useLocale } from 'next-intl'
+import { formatMoney, type ResolvedCurrency } from '@/lib/currency'
+
+const USD_CUR: ResolvedCurrency = { code: 'USD', rate: 1, source: 'usd', updatedAt: null }
 
 function useIsMobile(breakpoint = 768) {
   const [mobile, setMobile] = useState(false)
@@ -56,17 +59,16 @@ function ChartTooltip({ active, payload, label }: any) {
 
 interface DailyTrend { date: string; tasks: number | null; inflow: number | null; verified: number | null; success: number | null; failed: number | null; cost: number | null; waitAvg?: number | null; procAvg?: number | null; verifyAvg?: number | null }
 
-function fmtCostLocal(n: number): string {
-  return n.toLocaleString(undefined, { maximumFractionDigits: 0 })
-}
-
-export function DailyReportTable({ data, type, today }: {
+export function DailyReportTable({ data, type, today, cur = USD_CUR }: {
   data: DailyTrend[]
   type: string
   today: string
+  cur?: ResolvedCurrency
 }) {
   const tr = useTranslations('report')
+  const locale = useLocale()
   const dayLabels = tr.raw('dayLabels') as string[]
+  const fmtMoney = (n: number) => formatMoney(n, cur.code, cur.rate, locale)
 
   const rows = data.map((d) => {
     let label: string
@@ -123,7 +125,7 @@ export function DailyReportTable({ data, type, today }: {
               <span className="font-bold text-ive-text">{row.processed.toLocaleString()}</span>
             </div>
             <div className="text-right text-ive-text-muted">{row.tasks.toLocaleString()}</div>
-            <div className="text-right text-ive-text-dim">{row.cost > 0 ? `$${fmtCostLocal(row.cost)}` : '—'}</div>
+            <div className="text-right text-ive-text-dim">{row.cost > 0 ? fmtMoney(row.cost) : '—'}</div>
           </div>
         )
       })}
@@ -138,7 +140,7 @@ export function DailyReportTable({ data, type, today }: {
             <span className="text-ive-text">{totalProcessed.toLocaleString()}</span>
           </div>
           <div className="text-right text-ive-text">{totalTasks.toLocaleString()}</div>
-          <div className="text-right text-ive-text-muted">${fmtCostLocal(totalCost)}</div>
+          <div className="text-right text-ive-text-muted">{fmtMoney(totalCost)}</div>
         </div>
       )}
     </div>
@@ -148,10 +150,12 @@ export function DailyReportTable({ data, type, today }: {
 // ───────────── 일별 추이 차트 (건수 바 + 비용 라인 + 이전 기간) ─────────────
 interface PrevDaily { date: string; tasks: number; verified?: number; cost: number }
 
-export function DailyTrendChart({ data, prevData, type }: { data: DailyTrend[]; prevData: PrevDaily[]; type: string }) {
+export function DailyTrendChart({ data, prevData, type, cur = USD_CUR }: { data: DailyTrend[]; prevData: PrevDaily[]; type: string; cur?: ResolvedCurrency }) {
   const tr = useTranslations('report')
+  const locale = useLocale()
   const isMobile = useIsMobile()
   const dayLabels = tr.raw('dayLabels') as string[]
+  const rate = cur.rate
 
   // 현재·이전 기간 tasks/verified 최대값 → Y축 도메인 & 이전 막대 높이 계산 기준
   const yMax = Math.max(
@@ -168,10 +172,10 @@ export function DailyTrendChart({ data, prevData, type }: { data: DailyTrend[]; 
       label,
       tasks: d.tasks ?? 0,
       verified: d.verified ?? 0,
-      cost: d.cost,
+      cost: d.cost != null ? d.cost * rate : d.cost,
       prevTasks: prevData[i]?.tasks ?? 0,
       prevVerified: prevData[i]?.verified ?? 0,
-      prevCost: prevData[i]?.cost ?? 0,
+      prevCost: (prevData[i]?.cost ?? 0) * rate,
       yMax,
     }
   })
@@ -236,7 +240,7 @@ export function DailyTrendChart({ data, prevData, type }: { data: DailyTrend[]; 
           <XAxis dataKey="label" tick={{ fill: C.textMuted, fontSize: 10 }} axisLine={false} tickLine={false} />
           {/* domain을 yMax로 고정하면 현재 tasks=0인 날도 이전 기간 비율이 정확하게 렌더됨 */}
           <YAxis yAxisId="tasks" domain={[0, yMax]} tick={{ fill: C.textMuted, fontSize: 10 }} axisLine={false} tickLine={false} width={24} allowDecimals={false} />
-          <YAxis yAxisId="cost" orientation="right" tick={{ fill: C.textMuted, fontSize: 9 }} axisLine={false} tickLine={false} width={36} tickFormatter={v => `$${(v as number).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`} />
+          <YAxis yAxisId="cost" orientation="right" tick={{ fill: C.textMuted, fontSize: 9 }} axisLine={false} tickLine={false} width={cur.code === 'USD' ? 36 : 48} tickFormatter={v => formatMoney((v as number) / rate, cur.code, rate, locale)} />
           {!isMobile && <Tooltip content={<ChartTooltip />} />}
           {/* 현재 작업 막대 (background 전달 → 이전 작업 점선 마커 겹침) + 검증 막대 */}
           <Bar yAxisId="tasks" dataKey="tasks" name={tr('chartTasks')} background={{ fill: 'transparent' }} shape={<TaskBarWithPrev />} />

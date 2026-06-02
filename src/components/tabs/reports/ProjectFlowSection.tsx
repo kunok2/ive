@@ -44,7 +44,7 @@ export default function ProjectFlowSection({ d, data, helpers }: ProjectFlowSect
                 {p.currentWaiting > 0 && <span className={`font-bold ${p.currentWaiting >= 6 ? 'text-ive-red' : p.currentWaiting >= 3 ? 'text-ive-amber' : 'text-ive-text-muted'}`}>
                   {tr('waitingInProgressCount', { count: p.currentWaiting })}
                 </span>}
-                <span className="text-ive-text-muted ml-auto">${fmtCost(p.cost)}</span>
+                <span className="text-ive-text-muted ml-auto">{fmtCost(p.cost)}</span>
               </div>
               {p.annotation && (() => {
                 const sev = p.annotation.severity
@@ -63,7 +63,7 @@ export default function ProjectFlowSection({ d, data, helpers }: ProjectFlowSect
                 <div className="grid grid-cols-2 gap-1 mt-2 text-center text-xs">
                   <div>
                     <div className="text-ive-text-dim">{tr('metric.costPerTask')}</div>
-                    <div className="font-bold text-ive-text">${fmtCost(p.costPerTask)}</div>
+                    <div className="font-bold text-ive-text">{fmtCost(p.costPerTask)}</div>
                   </div>
                   <div>
                     <div className="text-ive-text-dim">{tr('metric.retryRate')}</div>

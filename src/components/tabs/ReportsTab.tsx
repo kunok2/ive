@@ -2,9 +2,11 @@
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
+import { useTranslations, useLocale } from 'next-intl'
+import { formatMoney, type ResolvedCurrency } from '@/lib/currency'
 import PullToRefresh from '@/components/ui/PullToRefresh'
 import BriefingSection from '@/components/tabs/reports/BriefingSection'
+import { ProjectCostShare, UserWorkShare } from '@/components/tabs/reports/DistributionSection'
 import UtilizationGauge from '@/components/tabs/reports/UtilizationGauge'
 import FlowPipeline from '@/components/tabs/reports/FlowPipeline'
 import AlertCards from '@/components/tabs/reports/AlertCards'
@@ -24,13 +26,26 @@ import type { ReportHelpers } from '@/components/tabs/reports/types'
 
 export type { ReportData, DiagnosisResult }
 
+const USD_CURRENCY: ResolvedCurrency = { code: 'USD', rate: 1, source: 'usd', updatedAt: null }
+
 export default function ReportsTab() {
   const router = useRouter()
   const tr = useTranslations('report')
+  const locale = useLocale()
+
+  // 표시 통화/환율 — 보고서는 캐시된 값만 즉시 읽는다(외부 fetch 없음).
+  const [cur, setCur] = useState<ResolvedCurrency>(USD_CURRENCY)
+  useEffect(() => {
+    fetch('/api/settings/currency')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d && d.code) setCur(d) })
+      .catch(() => {})
+  }, [])
 
   // ─── Helpers ───
   const helpers = useMemo<ReportHelpers>(() => ({
-    fmtCost: (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 0 }),
+    fmtCost: (n: number) => formatMoney(n, cur.code, cur.rate, locale),
+    cur,
     fmtDur: (min: number) => {
       if (min < 60) return tr('durMin', { value: Math.round(min) })
       const h = Math.floor(min / 60), m = Math.round(min % 60)
@@ -57,7 +72,7 @@ export default function ReportsTab() {
       }
       return tr(msg.key as never, params as never)
     },
-  }), [tr])
+  }), [tr, cur, locale])
 
   // ─── Period helpers ───
   const formatPeriodLabel = useCallback((rtype: 'weekly' | 'monthly' | 'yearly', start: string, end: string) => {
@@ -144,7 +159,7 @@ export default function ReportsTab() {
       }
 
       if (mainData) {
-        const diag = diagnose(mainData, type === 'weekly' ? [].filter(Boolean) : undefined, helpers.fmtDur)
+        const diag = diagnose(mainData, type === 'weekly' ? [].filter(Boolean) : undefined, helpers.fmtDur, helpers.fmtCost)
         setDiagnosis(diag)
       }
     } finally { setLoading(false) }
@@ -152,7 +167,7 @@ export default function ReportsTab() {
 
   useEffect(() => {
     if (data && type === 'weekly' && prevWeeks.length > 0) {
-      setDiagnosis(diagnose(data, prevWeeks, helpers.fmtDur))
+      setDiagnosis(diagnose(data, prevWeeks, helpers.fmtDur, helpers.fmtCost))
     }
   }, [data, prevWeeks, type, helpers])
 
@@ -248,7 +263,7 @@ export default function ReportsTab() {
                   <div className="space-y-2">
                     <div className="text-xs font-bold text-ive-text-dim uppercase tracking-wider">{tr('trendChartToggle')}</div>
                     <FlowCompareChart data={computeFlowDays()} prevData={computePrevFlowDays()} type={type} />
-                    <DailyTrendChart data={data.dailyTrend} prevData={data.prevDailyTrend} type={type} />
+                    <DailyTrendChart data={data.dailyTrend} prevData={data.prevDailyTrend} type={type} cur={cur} />
                   </div>
                 </ErrorBoundary>
               )}
@@ -281,6 +296,11 @@ export default function ReportsTab() {
                 </ErrorBoundary>
               )}
 
+              {/* ⑦-2 프로젝트별 비용 비중 */}
+              <ErrorBoundary label="프로젝트 비용 비중">
+                <ProjectCostShare data={data} helpers={helpers} />
+              </ErrorBoundary>
+
               {/* ⑧ 에이전트별 부하 */}
               {diagnosis.agents.length > 0 && (
                 <ErrorBoundary label="에이전트별 부하">
@@ -302,6 +322,11 @@ export default function ReportsTab() {
                 </ErrorBoundary>
               )}
 
+              {/* ⑨-2 작업자별 비중 (검증 완료) */}
+              <ErrorBoundary label="작업자 비중">
+                <UserWorkShare data={data} helpers={helpers} />
+              </ErrorBoundary>
+
               {/* ⑩ 일별 현황 */}
               {data.dailyTrend.length > 0 && (
                 <ErrorBoundary label="일별 현황">
@@ -309,6 +334,7 @@ export default function ReportsTab() {
                     data={data}
                     type={type}
                     today={today}
+                    cur={cur}
                   />
                 </ErrorBoundary>
               )}

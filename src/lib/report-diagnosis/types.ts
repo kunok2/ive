@@ -7,7 +7,7 @@
 export interface ReportData {
   period: { start: string; end: string; type: string }
   prevPeriod: { start: string; end: string }
-  summary: { totalTasks: number; uniqueInflow: number; verifiedCount: number; successCount: number; failedCount: number; runningCount: number; successRate: number; totalDurationMin: number; avgDurationMin: number; totalInputTokens: number; totalOutputTokens: number; totalCacheReadTokens?: number; totalCacheCreationTokens?: number; totalCost: number; totalCostAi?: number; totalCostHuman?: number; humanMinutes?: number; humanMonthlySalary?: number }
+  summary: { totalTasks: number; uniqueInflow: number; verifiedCount: number; successCount: number; failedCount: number; runningCount: number; successRate: number; totalDurationMin: number; avgDurationMin: number; totalInputTokens: number; totalOutputTokens: number; totalCacheReadTokens?: number; totalCacheCreationTokens?: number; totalCost: number; totalCostAi?: number; totalCostHuman?: number; humanMinutes?: number; humanMonthlySalary?: number; humanMonthlyMinutes?: number }
   prevSummary: { totalTasks: number; uniqueInflow: number; successCount: number; failedCount: number; successRate: number; totalDurationMin: number; avgDurationMin: number; totalCost: number }
   byProject: ProjectStat[]
   byAgent: AgentStat[]
@@ -93,6 +93,7 @@ export interface FlowMetrics {
   totalCostHuman: number    // 사람 시간 비용만
   humanMinutes: number      // 집계된 사람 작업 시간 (분)
   humanMonthlySalary: number // 적용된 월급 기준값 (USD)
+  humanMonthlyMinutes: number // 월 환산 근무 분 (분당 비용 산정 기준; 기본 9600 = 160h)
   costPerTask: number
   prevCostPerTask: number
   resolutionTimeAvg: number // 평균 해결시간 (분)
@@ -112,7 +113,6 @@ export type AnnotationSeverity = 'critical' | 'warning' | 'info'
 /** 구조화된 진단 메시지 — UI에서 i18n 키 + params로 렌더링.
  *  에이전트는 글로벌 풀로 운영되므로 프로젝트별 에이전트 수급 진단(noAgent/shortage/surplus)은 다루지 않는다. */
 export type ProjectAnnotationKey =
-  | 'highRetry'       // 재시도율 높음
   | 'backlog'         // 대기 적체
 export interface ProjectAnnotation {
   key: ProjectAnnotationKey

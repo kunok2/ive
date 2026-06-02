@@ -19,6 +19,7 @@ export function generateAlerts(
   verifier: VerifierDiagnosis | null,
   verifierLoads: VerifierLoad[],
   fmtDur: (min: number) => string,
+  formatCost: (n: number) => string = fmtCost,
 ): AlertCard[] {
   const { summary, prevSummary, lifecycle, prevLifecycle, waitingTrend, byAgent } = data
   const today = getKSTToday()
@@ -113,8 +114,8 @@ export function generateAlerts(
       detail: {
         key: 'alertCostSurgeDetail',
         params: {
-          cost: fmtCost(costPerTask),
-          prev: fmtCost(prevCostPerTask),
+          cost: formatCost(costPerTask),
+          prev: formatCost(prevCostPerTask),
           pct: Math.round((costPerTask / prevCostPerTask - 1) * 100),
         },
       },

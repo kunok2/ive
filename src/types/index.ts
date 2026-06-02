@@ -10,6 +10,8 @@ export interface User {
   allowedClis: CliName[]  // 사용 가능한 CLI 도구 목록
   locale?: string      // 사용자 지정 언어
   timezone?: string    // 사용자 지정 타임존 (예: 'Asia/Seoul')
+  currency?: string | null     // 표시 통화 코드 (ISO 4217, 예: 'KRW'). null/'USD' = 환산 안 함
+  currencyRate?: number | null // 수동 고정 환율 (USD→통화). null = 자동 글로벌 환율 사용 (있으면 자동보다 우선)
   oauthProviderId?: string | null  // OAuth 로그인 공급자 ID (oauth_providers.id)
   oauthUserId?: string | null      // 공급자 측 사용자 고유 ID (문자열화)
   oauthTokenExpiresAt?: string | null // OAuth access_token 만료 시각 (ISO)

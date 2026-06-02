@@ -132,6 +132,45 @@ export function buildOpencodeInvocation(o: OpencodeInvocationOpts): CliInvocatio
 }
 
 /**
+ * IVE mcp.config(JSON, opencode 형식) → Claude/Gemini 공통 형식으로 변환.
+ *   local  → { command, args, env }
+ *   remote → { url, headers }
+ * 잘못된/미지원 항목은 조용히 건너뛴다.
+ */
+function toStandardMcp(mcpServers: Record<string, any>): Record<string, any> {
+  const out: Record<string, any> = {}
+  for (const [name, cfg] of Object.entries(mcpServers || {})) {
+    const c = cfg as any
+    if (c.type === 'local' && Array.isArray(c.command) && c.command.length > 0) {
+      out[name] = { command: c.command[0], args: c.command.slice(1), ...(c.environment ? { env: c.environment } : {}) }
+    } else if (c.type === 'remote' && c.url) {
+      out[name] = { url: c.url, ...(c.headers ? { headers: c.headers } : {}) }
+    }
+  }
+  return out
+}
+
+/**
+ * codex 용 MCP 주입: `-c mcp_servers.<name>.*` 설정 오버라이드 인자 배열을 만든다.
+ * codex는 config.toml(=CODEX_HOME)에서 MCP를 읽지만 CODEX_HOME 을 바꾸면 로그인 인증이 깨지므로,
+ * 인증은 그대로 두고 `-c` 오버라이드로만 MCP를 더한다(값은 JSON 으로 파싱됨).
+ * 현재 codex는 stdio(local) 서버만 안정적으로 지원 → remote 는 건너뛴다.
+ */
+function buildCodexMcpArgs(mcpServers: Record<string, any>): string[] {
+  const args: string[] = []
+  for (const [name, cfg] of Object.entries(mcpServers || {})) {
+    const c = cfg as any
+    if (c.type === 'local' && Array.isArray(c.command) && c.command.length > 0) {
+      args.push('-c', `mcp_servers.${name}.command=${JSON.stringify(c.command[0])}`)
+      if (c.command.length > 1) args.push('-c', `mcp_servers.${name}.args=${JSON.stringify(c.command.slice(1))}`)
+      if (c.environment) args.push('-c', `mcp_servers.${name}.env=${JSON.stringify(c.environment)}`)
+    }
+    // remote(streamable HTTP) 는 codex 지원이 실험적이라 현재 미주입.
+  }
+  return args
+}
+
+/**
  * CLI별 spawn 명령/인자/환경을 조립한다.
  *
  * 주의(opencode): Node가 바이너리를 직접 spawn하면 (특히 macOS) 출력 없이 종료되는 문제가 있어,
@@ -164,6 +203,8 @@ export function buildCliInvocation(o: BuildCliOpts): CliInvocation {
       '--skip-git-repo-check',
       '--dangerously-bypass-approvals-and-sandbox',
       ...(model ? ['-m', model] : []),
+      // MCP: -c mcp_servers.* 오버라이드로 주입 (설정 비어있으면 빈 배열 → 동작 불변)
+      ...(mcpServers ? buildCodexMcpArgs(mcpServers) : []),
       // 첨부 이미지: codex는 -i(--image). prompt가 마지막 positional이라
       // 한 플래그에 여러 파일(variadic)을 넣으면 prompt까지 삼키므로 이미지마다 -i 반복.
       ...imagePaths.flatMap(p => ['-i', p]),
@@ -184,6 +225,18 @@ export function buildCliInvocation(o: BuildCliOpts): CliInvocation {
   }
 
   if (cliName === 'gemini') {
+    // MCP: gemini는 워크스페이스의 .gemini/settings.json 에서 mcpServers 를 읽는다.
+    // (설정 비어있으면 파일을 만들지 않으므로 동작 불변)
+    if (mcpServers) {
+      const geminiMcp = toStandardMcp(mcpServers)
+      if (Object.keys(geminiMcp).length > 0) {
+        try {
+          const dir = path.join(workspacePath, '.gemini')
+          fs.mkdirSync(dir, { recursive: true })
+          fs.writeFileSync(path.join(dir, 'settings.json'), JSON.stringify({ mcpServers: geminiMcp }, null, 2))
+        } catch { /* ignore */ }
+      }
+    }
     const args = [
       ...cliParts.slice(1),
       '--yolo',
@@ -205,16 +258,9 @@ export function buildCliInvocation(o: BuildCliOpts): CliInvocation {
     }
   }
 
-  // Claude Code
+  // Claude Code: 워크스페이스의 .mcp.json 에서 mcpServers 를 읽는다.
   if (mcpServers) {
-    const claudeMcp: Record<string, any> = {}
-    for (const [name, cfg] of Object.entries(mcpServers)) {
-      if ((cfg as any).type === 'local' && Array.isArray((cfg as any).command) && (cfg as any).command.length > 0) {
-        claudeMcp[name] = { command: (cfg as any).command[0], args: (cfg as any).command.slice(1), ...((cfg as any).environment ? { env: (cfg as any).environment } : {}) }
-      } else if ((cfg as any).type === 'remote' && (cfg as any).url) {
-        claudeMcp[name] = { url: (cfg as any).url, ...((cfg as any).headers ? { headers: (cfg as any).headers } : {}) }
-      }
-    }
+    const claudeMcp = toStandardMcp(mcpServers)
     if (Object.keys(claudeMcp).length > 0) {
       try { fs.writeFileSync(path.join(workspacePath, '.mcp.json'), JSON.stringify({ mcpServers: claudeMcp }, null, 2)) } catch { /* ignore */ }
     }

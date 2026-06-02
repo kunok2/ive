@@ -137,7 +137,7 @@ export default function IssueListSection({ data, helpers }: IssueListSectionProp
                     <i className="fa-solid fa-clock text-ive-text-dim" />
                     {fmtDur(issue.totalMin)}
                   </span>
-                  <span className="font-mono text-ive-text-muted shrink-0">${fmtCost(issue.cost)}</span>
+                  <span className="font-mono text-ive-text-muted shrink-0">{fmtCost(issue.cost)}</span>
                   {issue.attempts > 1 && (
                     <span className="text-ive-text-dim font-bold shrink-0" title={tr('attemptTooltip', { current: issue.attemptNo, total: issue.attempts })}>
                       {tr('attemptDisplay', { current: issue.attemptNo, total: issue.attempts })}

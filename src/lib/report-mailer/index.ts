@@ -1,5 +1,6 @@
 import { ReportSchedule } from '@/types'
-import { getGlobalExecutionsInRange, createReportSendLog, hasAlreadySent } from '../db'
+import { getGlobalExecutionsInRange, createReportSendLog, hasAlreadySent, getUserByEmail, mapUser } from '../db'
+import { resolveUserCurrency } from '../currency-server'
 import { createTransporter, getFromAddress } from '../mail'
 import { REPORT_TYPE_LABELS, calculateReportPeriod, calculatePreviousPeriod } from './schedule'
 import { generateReportHtml } from './templates'
@@ -27,7 +28,21 @@ export async function sendReport(
   const prevPeriod = calculatePreviousPeriod(schedule.reportType, periodStart, periodEnd)
   const prevExecutions = getGlobalExecutionsInRange(prevPeriod.start, prevPeriod.end)
 
-  const html = generateReportHtml(schedule.reportType, periodStart, periodEnd, executions, prevExecutions)
+  // 수신자 표시 통화별로 HTML 1회만 생성해 재사용 (같은 통화·환율·로케일이면 동일 본문).
+  const htmlCache = new Map<string, string>()
+  const htmlForRecipient = (email: string): string => {
+    const row = getUserByEmail(email)
+    const user = row ? mapUser(row) : null
+    const cur = resolveUserCurrency(user)
+    const locale = user?.locale ?? undefined
+    const key = `${cur.code}:${cur.rate}:${locale ?? ''}`
+    let html = htmlCache.get(key)
+    if (!html) {
+      html = generateReportHtml(schedule.reportType, periodStart, periodEnd, executions, prevExecutions, cur, locale)
+      htmlCache.set(key, html)
+    }
+    return html
+  }
 
   const label = REPORT_TYPE_LABELS[schedule.reportType]
   const periodEndDisplay = new Date(new Date(periodEnd).getTime() - 86400000).toISOString().slice(0, 10)
@@ -51,7 +66,7 @@ export async function sendReport(
         from: `"Springware IVE" <${fromAddr}>`,
         to: email,
         subject,
-        html,
+        html: htmlForRecipient(email),
       })
 
       createReportSendLog({

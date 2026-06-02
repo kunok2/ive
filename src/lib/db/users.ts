@@ -15,6 +15,8 @@ export function mapUser(r: any): User {
     allowedClis: parseAllowedClis(r.allowed_clis) as User['allowedClis'],
     locale: r.locale,
     timezone: r.timezone,
+    currency: r.currency ?? null,
+    currencyRate: r.currency_rate ?? null,
     oauthProviderId: r.oauth_provider_id ?? null,
     oauthUserId: r.oauth_user_id ?? null,
     oauthTokenExpiresAt: r.oauth_token_expires_at ?? null,
@@ -77,6 +79,15 @@ export function updateUserLocale(id: string, locale: string) {
 
 export function updateUserTimezone(id: string, timezone: string) {
   getDb().prepare('UPDATE users SET timezone = ? WHERE id = ?').run(timezone, id)
+}
+
+/**
+ * 사용자 표시 통화 + 수동 환율 갱신.
+ *  - currency: null/'USD' → 환산 안 함
+ *  - rate: null → 자동 글로벌 환율 사용, 값 있으면 수동 고정(자동보다 우선)
+ */
+export function updateUserCurrency(id: string, currency: string | null, rate: number | null) {
+  getDb().prepare('UPDATE users SET currency = ?, currency_rate = ? WHERE id = ?').run(currency, rate, id)
 }
 
 export function createUser(u: any) {

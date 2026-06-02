@@ -241,6 +241,13 @@ export function initSchema(db: Database.Database) {
     if (!tableInfo.some((col: any) => col.name === 'git_username')) {
       db.exec("ALTER TABLE users ADD COLUMN git_username TEXT")
     }
+    // 사용자별 표시 통화 (null = USD, 환산 안 함) + 수동 고정 환율 (null = 자동 글로벌 환율 사용)
+    if (!tableInfo.some((col: any) => col.name === 'currency')) {
+      db.exec("ALTER TABLE users ADD COLUMN currency TEXT")
+    }
+    if (!tableInfo.some((col: any) => col.name === 'currency_rate')) {
+      db.exec("ALTER TABLE users ADD COLUMN currency_rate REAL")
+    }
   } catch (e) { console.error("Migration failed for users:", e) }
 
   try {

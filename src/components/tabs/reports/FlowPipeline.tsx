@@ -1,7 +1,8 @@
 'use client'
 
-import { useTranslations } from 'next-intl'
+import { useTranslations, useLocale } from 'next-intl'
 import Sparkline from '@/components/ui/Sparkline'
+import { formatMoney } from '@/lib/currency'
 import type { DiagnosisResult, ReportHelpers } from './types'
 
 interface FlowPipelineProps {
@@ -14,7 +15,8 @@ interface FlowPipelineProps {
 
 export default function FlowPipeline({ d, inflowData, throughputData, waitingData, helpers }: FlowPipelineProps) {
   const tr = useTranslations('report')
-  const { fmtCost, fmtDur, diffBadge, diffColor } = helpers
+  const locale = useLocale()
+  const { fmtCost, fmtDur, diffBadge, diffColor, cur } = helpers
 
   return (
     <section className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-4">
@@ -62,7 +64,7 @@ export default function FlowPipeline({ d, inflowData, throughputData, waitingDat
             <span>
               <i className="fa-solid fa-user mr-0.5 text-ive-text-muted" />{tr('humanCostCompact', { amount: fmtCost(d.flow.totalCostHuman) })}
               {d.flow.humanMinutes > 0 && (
-                <span className="opacity-70"> {tr('humanCostDurExpr', { duration: fmtDur(d.flow.humanMinutes), perMin: Math.round(d.flow.humanMonthlySalary / 9600) })}</span>
+                <span className="opacity-70"> {tr('humanCostDurExpr', { duration: fmtDur(d.flow.humanMinutes), perMin: formatMoney(d.flow.humanMonthlySalary / d.flow.humanMonthlyMinutes, cur.code, cur.rate, locale) })}</span>
               )}
             </span>
           </div>

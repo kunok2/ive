@@ -32,6 +32,7 @@ export function diagnose(
   data: ReportData,
   prevWeeklyData?: ReportData[],
   formatDur: (min: number) => string = defaultFmtDur,
+  formatCost: (n: number) => string = fmtCost,
 ): DiagnosisResult {
   // 에이전트별 historical capacity 룩업 — data.agentHistoricalCapacity 가 API 에서 채워짐.
   const historicalCapMap = new Map<string, { dailyCap: number; samples: number }>()
@@ -93,6 +94,7 @@ export function diagnose(
     totalCostHuman: summary.totalCostHuman ?? 0,
     humanMinutes: summary.humanMinutes ?? 0,
     humanMonthlySalary: summary.humanMonthlySalary ?? 0,
+    humanMonthlyMinutes: summary.humanMonthlyMinutes ?? 9600,
     costPerTask: Math.round(costPerTask * 100) / 100,
     prevCostPerTask: Math.round(prevCostPerTask * 100) / 100,
     resolutionTimeAvg: lifecycle.totalAvg || 0,
@@ -129,11 +131,11 @@ export function diagnose(
 
   // ─── 8. 주의 카드 ───
 
-  const alerts = generateAlerts(data, flow, projectFlows, agentLoads, verifier, verifierLoads, fmtDur)
+  const alerts = generateAlerts(data, flow, projectFlows, agentLoads, verifier, verifierLoads, fmtDur, formatCost)
 
   // ─── 9. 브리핑 텍스트 ───
 
-  const briefing = generateBriefing(data, flow, resource, highRetryProject, trendForecast, fmtDur)
+  const briefing = generateBriefing(data, flow, resource, highRetryProject, trendForecast, fmtDur, formatCost)
 
   return {
     flow, resource, alerts, projects: projectFlows, agents: agentLoads, verifier,

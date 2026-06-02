@@ -1,7 +1,9 @@
 import { getAllReportSchedules } from './db'
 import { sendReport } from './report-mailer'
+import { refreshCurrencyRates } from './currency-server'
 
 let schedulerStarted = false
+let lastRateRefreshDate: string | null = null
 
 export function startReportScheduler() {
   if (schedulerStarted) return
@@ -14,9 +16,29 @@ export function startReportScheduler() {
     } catch (e) {
       console.warn('[ReportScheduler] Error:', (e as Error).message)
     }
+    try {
+      maybeRefreshCurrencyRates()
+    } catch (e) {
+      console.warn('[ReportScheduler] Currency refresh error:', (e as Error).message)
+    }
   }, 60 * 1000) // 1분마다 체크
 
   console.log('[ReportScheduler] Started')
+}
+
+/**
+ * 환율 자동 갱신 — KST 기준 하루 1회.
+ * 서버 기동 직후 첫 틱에서 1회, 이후 날짜가 바뀔 때마다 1회 갱신한다.
+ * fetch 실패 시 currency.ts 가 기존 캐시(마지막 값)를 그대로 유지한다.
+ */
+function maybeRefreshCurrencyRates() {
+  const kstNow = new Date(Date.now() + 9 * 60 * 60 * 1000)
+  const kstDate = kstNow.toISOString().slice(0, 10) // YYYY-MM-DD (KST)
+  if (kstDate === lastRateRefreshDate) return
+  lastRateRefreshDate = kstDate
+  refreshCurrencyRates().catch(err => {
+    console.warn('[Currency] 자동 갱신 실패:', (err as Error).message)
+  })
 }
 
 function checkAndSendReports() {

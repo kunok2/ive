@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { getExecutionsInRange, getDailyWaitingTrend, getDailyWaitingTrendByAgent, getAgent, getVerifierBacklogForReport, getIssuesCompletedInRange, getIssuesStartedInRange, getAgentHistoricalDailyCapacity } from '@/lib/db'
-import { resolveExecutionCost, resolveExecutionCostBreakdown, getHumanMonthlySalary } from '@/lib/token-pricing'
+import { resolveExecutionCost, resolveExecutionCostBreakdown, getHumanRate } from '@/lib/token-pricing'
 import { getKSTTodayString, utcISOToKSTDate, utcISOToKSTMonth, kstDateToUTCISO } from '@/lib/date-utils'
 import { isBotName } from '@/lib/git-bot'
 
@@ -88,7 +88,7 @@ export async function GET(req: NextRequest) {
 
   const execs = getExecutionsInRange(user.id, range.start, range.end)
   const prevExecs = getExecutionsInRange(user.id, prevRange.start, prevRange.end)
-  const humanSalary = getHumanMonthlySalary()
+  const humanRate = getHumanRate()
 
   // 에이전트는 글로벌 풀로 운영되므로 보고서에서는 프로젝트별 에이전트 수/주된 활동지를 더 이상 집계하지 않는다.
   // 에이전트의 현재 상태(online/offline 등)만 보조로 노출한다.
@@ -160,7 +160,7 @@ export async function GET(req: NextRequest) {
   // 비용 breakdown: AI 토큰 비용과 사람 시간 비용을 분리 집계
   const costBreakdown = execs.reduce(
     (acc, e) => {
-      const b = resolveExecutionCostBreakdown(e, humanSalary)
+      const b = resolveExecutionCostBreakdown(e, humanRate)
       acc.ai += b.ai; acc.human += b.human
       return acc
     },
@@ -184,7 +184,7 @@ export async function GET(req: NextRequest) {
   const prevFailedCount = prevExecs.filter(e => e.status === 'failed').length
   const prevTotalDurationMin = prevExecs.reduce((s, e) => s + durationMin(e.startedAt, e.endedAt), 0)
   const prevFinished = prevSuccessCount + prevFailedCount
-  const prevTotalCost = prevExecs.reduce((s, e) => s + resolveExecutionCost(e, humanSalary), 0)
+  const prevTotalCost = prevExecs.reduce((s, e) => s + resolveExecutionCost(e, humanRate), 0)
   const prevSuccessRate = prevTotalTasks > 0 ? (prevSuccessCount / (prevFinished || 1)) * 100 : 0
 
   // 이전 기간 프로젝트별
@@ -196,7 +196,7 @@ export async function GET(req: NextRequest) {
   const prevByProject = Array.from(prevProjectMap.entries()).map(([pid, pExecs]) => ({
     projectId: pid, projectName: pExecs[0].projectName,
     tasks: pExecs.length,
-    cost: Math.round(pExecs.reduce((s, e) => s + resolveExecutionCost(e, humanSalary), 0) * 100) / 100,
+    cost: Math.round(pExecs.reduce((s, e) => s + resolveExecutionCost(e, humanRate), 0) * 100) / 100,
   }))
 
   // 이전 기간 작업자별
@@ -208,7 +208,7 @@ export async function GET(req: NextRequest) {
   const prevByAgent = Array.from(prevAgentMap.entries()).map(([aid, aExecs]) => ({
     agentId: aid, agentName: aExecs[0].agentName,
     tasks: aExecs.length,
-    cost: Math.round(aExecs.reduce((s, e) => s + resolveExecutionCost(e, humanSalary), 0) * 100) / 100,
+    cost: Math.round(aExecs.reduce((s, e) => s + resolveExecutionCost(e, humanRate), 0) * 100) / 100,
   }))
 
   // 이전 기간 사용자별 (담당자/검증자 — assigneeType='user'만, 현재 기간 byUser와 동일하게 userName으로 키)
@@ -250,7 +250,7 @@ export async function GET(req: NextRequest) {
     if (!prevDayMap.has(key)) prevDayMap.set(key, mkPrevBucket())
     const d = prevDayMap.get(key)!
     d.tasks++
-    d.cost += resolveExecutionCost(e, humanSalary)
+    d.cost += resolveExecutionCost(e, humanRate)
     if (e.status === 'success' || e.status === 'failed') {
       const effEnd = e.endedAt || e.startedAt
       const proc = durationMin(e.startedAt, effEnd)
@@ -298,7 +298,7 @@ export async function GET(req: NextRequest) {
     const pFinished = pSuccess + pFailed
     const pCostBreakdown = pExecs.reduce(
       (acc, e) => {
-        const b = resolveExecutionCostBreakdown(e, humanSalary)
+        const b = resolveExecutionCostBreakdown(e, humanRate)
         acc.ai += b.ai; acc.human += b.human
         return acc
       },
@@ -317,7 +317,7 @@ export async function GET(req: NextRequest) {
       const aFailed = aExecs.filter(e => e.status === 'failed').length
       const aDur = aExecs.reduce((s, e) => s + durationMin(e.startedAt, e.endedAt), 0)
       const aFinished = aSuccess + aFailed
-      const aCost = aExecs.reduce((s, e) => s + resolveExecutionCost(e, humanSalary), 0)
+      const aCost = aExecs.reduce((s, e) => s + resolveExecutionCost(e, humanRate), 0)
       return {
         agentId: aid, agentName: aExecs[0].agentName, agentAvatar: aExecs[0].agentAvatar, agentDeleted: aExecs[0].agentDeleted, cliName: aExecs[0].cliName,
         tasks: aExecs.length, success: aSuccess, failed: aFailed,
@@ -364,7 +364,7 @@ export async function GET(req: NextRequest) {
     const aFailed = aExecs.filter(e => e.status === 'failed').length
     const aDur = aExecs.reduce((s, e) => s + durationMin(e.startedAt, e.endedAt), 0)
     const aFinished = aSuccess + aFailed
-    const aCost = aExecs.reduce((s, e) => s + resolveExecutionCost(e, humanSalary), 0)
+    const aCost = aExecs.reduce((s, e) => s + resolveExecutionCost(e, humanRate), 0)
     return {
       agentId: aid, agentName: aExecs[0].agentName, agentAvatar: aExecs[0].agentAvatar, agentDeleted: aExecs[0].agentDeleted, cliName: aExecs[0].cliName,
       tasks: aExecs.length, success: aSuccess, failed: aFailed,
@@ -545,7 +545,7 @@ export async function GET(req: NextRequest) {
     d.tasks++
     if (e.status === 'success') d.success++
     if (e.status === 'failed') d.failed++
-    d.cost += resolveExecutionCost(e, humanSalary)
+    d.cost += resolveExecutionCost(e, humanRate)
     if (e.status === 'success' || e.status === 'failed') {
       const effEnd = e.endedAt || e.startedAt
       const proc = durationMin(e.startedAt, effEnd)
@@ -609,7 +609,7 @@ export async function GET(req: NextRequest) {
     if (!pMap.has(key)) pMap.set(key, { tasks: 0, cost: 0 })
     const d = pMap.get(key)!
     d.tasks++
-    d.cost += resolveExecutionCost(e, humanSalary)
+    d.cost += resolveExecutionCost(e, humanRate)
   }
   const projectTrend = Array.from(projectDayMap.entries()).map(([pid, pMap]) => {
     const pInfo = execs.find(e => e.projectId === pid)!
@@ -638,7 +638,7 @@ export async function GET(req: NextRequest) {
     if (!aMap.has(key)) aMap.set(key, { tasks: 0, cost: 0 })
     const d = aMap.get(key)!
     d.tasks++
-    d.cost += resolveExecutionCost(e, humanSalary)
+    d.cost += resolveExecutionCost(e, humanRate)
   }
   const agentTrend = Array.from(agentDayMap.entries()).map(([aid, aMap]) => {
     const aInfo = execs.find(e => e.agentId === aid)!
@@ -674,7 +674,7 @@ export async function GET(req: NextRequest) {
     if (!uMap.has(key)) uMap.set(key, { tasks: 0, cost: 0, verified: 0 })
     const d = uMap.get(key)!
     d.tasks++
-    d.cost += resolveExecutionCost(e, humanSalary)
+    d.cost += resolveExecutionCost(e, humanRate)
   }
   // 검증 완료 건수: verifierName이 담당자 키(userName)와 동일한 경우 해당 사용자에 가산
   for (const e of execs) {
@@ -767,7 +767,7 @@ export async function GET(req: NextRequest) {
             const end = e.confirmedAt || e.verifiedAt || e.rejectedAt || e.endedAt || e.startedAt
             return Math.round(durationMin(start, end) * 10) / 10
           })(),
-          cost: Math.round(resolveExecutionCost(e, humanSalary) * 100) / 100,
+          cost: Math.round(resolveExecutionCost(e, humanRate) * 100) / 100,
           waitMin: (() => {
             const ws = e.issueCreatedAt
             return ws ? Math.round(durationMin(ws, e.startedAt) * 10) / 10 : null
@@ -1096,7 +1096,8 @@ export async function GET(req: NextRequest) {
       totalCostAi: Math.round(totalCostAi * 100) / 100,
       totalCostHuman: Math.round(totalCostHuman * 100) / 100,
       humanMinutes: Math.round(humanMinutes * 10) / 10,
-      humanMonthlySalary: humanSalary,
+      humanMonthlySalary: humanRate.monthlySalary,
+      humanMonthlyMinutes: humanRate.monthlyMinutes,
     },
     prevSummary: {
       totalTasks: prevTotalTasks,

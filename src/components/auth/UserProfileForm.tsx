@@ -5,8 +5,10 @@ import { useTranslations, useLocale } from 'next-intl'
 import { useRouter } from 'next/navigation'
 import { DEFAULT_AVATARS } from '@/types'
 import { locales, localeNames, Locale } from '@/i18n/config'
+import { SUPPORTED_CURRENCIES } from '@/lib/currency'
 import AvatarCropEditor from './AvatarCropEditor'
 import { useDialog } from '@/components/ui/ConfirmDialog'
+import CustomSelect from '@/components/ui/CustomSelect'
 
 const TIMEZONE_OPTIONS = [
   { value: 'Asia/Seoul', label: '🇰🇷 서울 (KST, UTC+9)' },
@@ -34,6 +36,8 @@ interface Props {
   avatar: string
   locale?: string
   timezone?: string
+  currency?: string | null
+  currencyRate?: number | null
   onSuccess?: () => void
   onCancel?: () => void
   onEmailChanged?: () => void
@@ -51,7 +55,7 @@ type SlackWorkspaceRow = {
   enabled: boolean
 }
 
-export default function UserProfileForm({ userId, email, name, avatar, locale: userLocale, timezone: userTimezone, onSuccess, onCancel, onEmailChanged, onAvatarChanged, onSettingsChanged }: Props) {
+export default function UserProfileForm({ userId, email, name, avatar, locale: userLocale, timezone: userTimezone, currency: userCurrency, currencyRate: userCurrencyRate, onSuccess, onCancel, onEmailChanged, onAvatarChanged, onSettingsChanged }: Props) {
   const t = useTranslations('auth')
   const tc = useTranslations('common')
   const currentLocale = useLocale()
@@ -61,6 +65,10 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
   const [activeSection, setActiveSection] = useState<ActiveSection>('none')
   const [selectedLocale, setSelectedLocale] = useState<Locale>((userLocale || currentLocale) as Locale)
   const [selectedTimezone, setSelectedTimezone] = useState(userTimezone || 'Asia/Seoul')
+  const [selectedCurrency, setSelectedCurrency] = useState(userCurrency || 'USD')
+  const [manualRate, setManualRate] = useState<string>(userCurrencyRate != null ? String(userCurrencyRate) : '')
+  const [autoRate, setAutoRate] = useState<{ rate: number; updatedAt: string | null } | null>(null)
+  const [currencySaving, setCurrencySaving] = useState(false)
   const [prefsSaving, setPrefsSaving] = useState(false)
   const [prefsSaved, setPrefsSaved] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -143,6 +151,54 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
       setPrefsSaving(false)
     }
   }
+
+  // 표시 통화 설정 저장 (USD = 환산 안 함, rate 비우면 자동 환율 사용)
+  async function saveCurrency(code: string, rate: string) {
+    setCurrencySaving(true)
+    setPrefsSaved(false)
+    try {
+      const res = await fetch('/api/settings/currency', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currency: code === 'USD' ? null : code, rate: rate.trim() ? parseFloat(rate) : null }),
+      })
+      if (res.ok) {
+        const d = await res.json()
+        if (d.source === 'auto') setAutoRate({ rate: d.rate, updatedAt: d.updatedAt })
+        onSettingsChanged?.()
+        setPrefsSaved(true)
+        setTimeout(() => setPrefsSaved(false), 2000)
+      }
+    } catch { /* ignore */ } finally {
+      setCurrencySaving(false)
+    }
+  }
+
+  // 자동 환율 즉시 갱신 ("지금 갱신")
+  async function refreshAutoRate(code: string) {
+    if (code === 'USD') return
+    setCurrencySaving(true)
+    try {
+      const res = await fetch('/api/settings/currency', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currency: code }),
+      })
+      const d = await res.json().catch(() => null)
+      if (res.ok && d?.ok) setAutoRate({ rate: d.rate, updatedAt: d.updatedAt })
+      else if (d?.cached) setAutoRate(d.cached)
+    } catch { /* ignore */ } finally {
+      setCurrencySaving(false)
+    }
+  }
+
+  // 마운트 시 현재 적용 중인 자동 환율 표시용으로 1회 로드
+  useEffect(() => {
+    fetch('/api/settings/currency')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d && d.source === 'auto') setAutoRate({ rate: d.rate, updatedAt: d.updatedAt }) })
+      .catch(() => {})
+  }, [])
 
   // 이메일 변경
   const [newEmail, setNewEmail] = useState('')
@@ -606,22 +662,72 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
               <label className="block text-sm font-bold text-ive-text-muted mb-1">
                 <i className="fa-solid fa-clock mr-1 text-xs" />{t('timezone')}
               </label>
-              <select
+              <CustomSelect
                 value={selectedTimezone}
                 disabled={prefsSaving}
-                onChange={(e) => {
-                  const tz = e.target.value
+                onChange={(tz) => {
                   setSelectedTimezone(tz)
                   savePreferences(selectedLocale, tz)
                 }}
-                className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2.5 text-sm text-ive-text focus:outline-none focus:border-ive-green"
-              >
-                {TIMEZONE_OPTIONS.map((tz) => (
-                  <option key={tz.value} value={tz.value}>{tz.label}</option>
-                ))}
-              </select>
+                options={TIMEZONE_OPTIONS.map((tz) => ({ value: tz.value, label: tz.label }))}
+              />
               <p className="text-xs text-ive-text-dim mt-1">{t('timezoneDescription')}</p>
             </div>
+            {/* 표시 통화 선택 */}
+            <div>
+              <label className="block text-sm font-bold text-ive-text-muted mb-1">
+                <i className="fa-solid fa-coins mr-1 text-xs" />{t('currency')}
+              </label>
+              <CustomSelect
+                value={selectedCurrency}
+                disabled={currencySaving}
+                onChange={(code) => {
+                  setSelectedCurrency(code)
+                  if (code === 'USD') setManualRate('')
+                  saveCurrency(code, code === 'USD' ? '' : manualRate)
+                }}
+                options={SUPPORTED_CURRENCIES.map((c) => ({ value: c.code, label: `${c.symbol} ${c.code} — ${c.label}` }))}
+              />
+              <p className="text-xs text-ive-text-dim mt-1">{t('currencyDescription')}</p>
+            </div>
+            {/* 수동 환율 입력 (USD가 아닐 때만) */}
+            {selectedCurrency !== 'USD' && (
+              <div>
+                <label className="block text-sm font-bold text-ive-text-muted mb-1">
+                  <i className="fa-solid fa-money-bill-transfer mr-1 text-xs" />{t('exchangeRate')}
+                </label>
+                <div className="flex gap-2 items-center">
+                  <span className="text-xs text-ive-text-dim shrink-0">1 USD =</span>
+                  <input
+                    type="number" step="0.01" min="0"
+                    value={manualRate}
+                    disabled={currencySaving}
+                    placeholder={autoRate ? String(autoRate.rate) : t('exchangeRateAuto')}
+                    onChange={(e) => setManualRate(e.target.value)}
+                    onBlur={() => saveCurrency(selectedCurrency, manualRate)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                    className="flex-1 min-w-0 bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text text-right focus:outline-none focus:border-ive-green"
+                  />
+                  <span className="text-xs text-ive-text-dim shrink-0">{selectedCurrency}</span>
+                  <button
+                    type="button"
+                    onClick={() => refreshAutoRate(selectedCurrency)}
+                    disabled={currencySaving}
+                    title={t('refreshRate')}
+                    className="shrink-0 px-2.5 py-2 rounded-lg text-xs font-bold bg-ive-bg-deep border border-ive-border-subtle text-ive-cyan disabled:opacity-40"
+                  >
+                    <i className={`fa-solid fa-rotate ${currencySaving ? 'fa-spin' : ''}`} />
+                  </button>
+                </div>
+                <p className="text-xs text-ive-text-dim mt-1">
+                  {manualRate.trim()
+                    ? t('exchangeRateManualHint')
+                    : autoRate
+                      ? t('exchangeRateAutoHint', { rate: autoRate.rate.toLocaleString(), at: autoRate.updatedAt ? new Date(autoRate.updatedAt).toLocaleDateString() : '—' })
+                      : t('exchangeRateNoneHint')}
+                </p>
+              </div>
+            )}
             {/* 자동 저장 피드백 */}
             {prefsSaving && (
               <div className="text-center text-sm text-ive-text-muted py-1">

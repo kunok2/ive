@@ -24,13 +24,13 @@ export default function BriefingSection({ d, type, monthData, yearData, helpers,
         {type !== 'monthly' && monthData && (
           <div className="flex items-center justify-between text-xs">
             <span className="text-ive-text-dim">{tr('thisMonth')}</span>
-            <span className="text-ive-text font-bold">{tr('countCases', { count: monthData.summary.totalTasks })} · ${fmtCost(monthData.summary.totalCost)}</span>
+            <span className="text-ive-text font-bold">{tr('countCases', { count: monthData.summary.totalTasks })} · {fmtCost(monthData.summary.totalCost)}</span>
           </div>
         )}
         {type !== 'yearly' && yearData && (
           <div className="flex items-center justify-between text-xs">
             <span className="text-ive-text-dim">{tr('thisYear')}</span>
-            <span className="text-ive-text font-bold">{tr('countCases', { count: yearData.summary.totalTasks.toLocaleString() })} · ${fmtCost(yearData.summary.totalCost)}</span>
+            <span className="text-ive-text font-bold">{tr('countCases', { count: yearData.summary.totalTasks.toLocaleString() })} · {fmtCost(yearData.summary.totalCost)}</span>
           </div>
         )}
       </div>
