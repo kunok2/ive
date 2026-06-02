@@ -270,7 +270,8 @@
     "openSite": "페이지 열기",
     "orderStep4Slack": "Slack: {url} 에서 앱 생성 → Basic Information → App Credentials (Client ID·Secret)",
     "appNameHint": "앱 이름은 자유(예: IVE). 아이콘은 아래 IVE 아이콘을 올리면 됩니다.",
-    "downloadIcon": "IVE 아이콘 다운로드"
+    "downloadIcon": "IVE 아이콘 다운로드",
+    "slackPublicDist": "여러 사용자가 각자 워크스페이스에 설치하려면 Slack 앱에서 Public Distribution(공개 배포)을 활성화하세요."
   },
   "scheduleWeekly": "매주 월요일 {hour}:00",
   "scheduleMonthly": "매월 1일 {hour}:00",

@@ -100,6 +100,7 @@ export default function OAuthProvidersPanel() {
     : 'https://api.slack.com/apps'
   // 앱 등록 시 올릴 IVE 아이콘 (slack은 권장 1024px 버전)
   const providerIcon = form.type === 'slack' ? '/slack-icon-1024.png' : '/icon-512.png'
+  const editingHasSigningSecret = !!editing?.hasSigningSecret
 
   // slack은 id/baseUrl이 고정. type별 기본값 헬퍼.
   function defaultsFor(type: ProviderType) {
@@ -161,6 +162,7 @@ export default function OAuthProvidersPanel() {
           enabled: form.enabled,
         }
         if (form.clientSecret) patch.clientSecret = form.clientSecret
+        if (form.type === 'slack' && form.signingSecret) patch.signingSecret = form.signingSecret
         res = await fetch(`/api/admin/oauth-providers/${editing.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -312,6 +314,13 @@ export default function OAuthProvidersPanel() {
               <div className="mt-2 text-xs text-ive-text-dim font-mono break-all">
                 {t('callbackLabel')}: {origin}/api/auth/oauth/{p.id}/callback
               </div>
+              {/* 봇(앱 추가)이 설정된 Slack이면(=Signing Secret 등록) 봇 콜백도 함께 표시 */}
+              {p.type === 'slack' && p.hasSigningSecret && (
+                <div className="mt-1 text-xs text-ive-text-dim font-mono break-all">
+                  {t('slackUrlEvents')}: {origin}/api/slack/events<br />
+                  {t('slackUrlInstall')}: {origin}/api/slack/install/callback
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -503,8 +512,55 @@ export default function OAuthProvidersPanel() {
                 </div>
               )}
 
-              {/* Slack 봇 설치·운용(Signing Secret, 이벤트/설치 URL, 워크스페이스)은
-                  로그인과 분리해 아래 Slack 전용 영역(SlackWorkspacesPanel)에서 관리한다. */}
+              {/* Slack 전용 · 봇 연동 — 로그인과 분리(기본 접힘). 봇(멘션 응답·워크스페이스 설치) 쓸 때만 설정 */}
+              {form.type === 'slack' && (
+                <details className="bg-ive-bg-deep border border-ive-cyan/20 rounded-lg text-xs">
+                  <summary className="cursor-pointer px-2.5 py-2 font-bold text-ive-cyan">
+                    <i className="fa-brands fa-slack mr-1" />{t('slackBotSectionTitle')}
+                  </summary>
+                  <div className="px-2.5 pb-2.5 pt-1 flex flex-col gap-2.5">
+                    <div className="text-ive-text-dim">{t('slackBotSectionHint')}</div>
+                    <div>
+                      <label className="block text-ive-text-muted font-bold mb-1">
+                        {t('signingSecretLabel')} {editing ? t('onlyIfChanging') : ''}
+                        {editing && editingHasSigningSecret && <span className="text-ive-green ml-1">✓</span>}
+                      </label>
+                      <input
+                        type="password"
+                        value={form.signingSecret}
+                        onChange={e => setForm(f => ({ ...f, signingSecret: e.target.value }))}
+                        placeholder={editing && editingHasSigningSecret ? t('ifBlankNoChange') : ''}
+                        className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text font-mono"
+                      />
+                    </div>
+                    {[
+                      { key: 'events', label: t('slackUrlEvents'), url: `${origin}/api/slack/events` },
+                      { key: 'install', label: t('slackUrlInstall'), url: `${origin}/api/slack/install/callback` },
+                    ].map(({ key, label, url }) => (
+                      <div key={key}>
+                        <div className="flex items-center justify-between mb-0.5">
+                          <span className="text-ive-text-muted font-bold">{label}</span>
+                          <button
+                            type="button"
+                            onClick={() => copyText(key, url)}
+                            className={`font-bold px-2 py-0.5 rounded transition-colors active:scale-95 ${copiedKey === key ? 'text-ive-green bg-ive-green/15' : 'text-ive-cyan bg-ive-cyan/10 hover:bg-ive-cyan/20'}`}
+                          >
+                            <i className={`fa-solid ${copiedKey === key ? 'fa-check' : 'fa-copy'} mr-1`} />{copiedKey === key ? t('copiedBtn') : t('copyBtn')}
+                          </button>
+                        </div>
+                        <div className="font-mono text-ive-text break-all">{url}</div>
+                      </div>
+                    ))}
+                    <div className="text-ive-amber">
+                      <i className="fa-solid fa-triangle-exclamation mr-1" />{t('slackPublicDist')}{' '}
+                      <a href={providerSiteUrl} target="_blank" rel="noreferrer" className="text-ive-cyan font-bold hover:underline whitespace-nowrap">
+                        {t('openSite')}<i className="fa-solid fa-arrow-up-right-from-square ml-0.5 text-[9px]" />
+                      </a>
+                    </div>
+                  </div>
+                </details>
+              )}
+
               <div className="flex gap-2 mt-2">
                 <button
                   onClick={() => setShowForm(false)}

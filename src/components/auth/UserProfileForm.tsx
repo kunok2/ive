@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useTranslations, useLocale } from 'next-intl'
 import { useRouter } from 'next/navigation'
 import { DEFAULT_AVATARS } from '@/types'
@@ -40,7 +40,15 @@ interface Props {
   onSettingsChanged?: () => void
 }
 
-type ActiveSection = 'none' | 'avatar' | 'email' | 'password' | 'preferences'
+type ActiveSection = 'none' | 'avatar' | 'email' | 'password' | 'preferences' | 'slack'
+
+type SlackWorkspaceRow = {
+  id: string
+  teamId: string
+  name: string
+  teamUrl: string
+  enabled: boolean
+}
 
 export default function UserProfileForm({ userId, email, name, avatar, locale: userLocale, timezone: userTimezone, onSuccess, onCancel, onEmailChanged, onAvatarChanged, onSettingsChanged }: Props) {
   const t = useTranslations('auth')
@@ -56,6 +64,44 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [photoTs, setPhotoTs] = useState(() => Date.now())
   const [cropFile, setCropFile] = useState<File | null>(null)
+
+  // Slack 워크스페이스 — Slack으로 로그인한 사용자에게만 노출(eligible). 원클릭 설치/제거.
+  const [slackEligible, setSlackEligible] = useState(false)
+  const [slackWorkspaces, setSlackWorkspaces] = useState<SlackWorkspaceRow[]>([])
+  const [slackMsg, setSlackMsg] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
+
+  const loadSlack = useCallback(async () => {
+    try {
+      const res = await fetch('/api/slack/my-workspaces')
+      if (res.ok) {
+        const d = await res.json()
+        setSlackEligible(!!d.eligible)
+        setSlackWorkspaces(Array.isArray(d.workspaces) ? d.workspaces : [])
+      }
+    } catch { /* ignore */ }
+  }, [])
+
+  useEffect(() => { loadSlack() }, [loadSlack])
+
+  // Add to Slack 설치 결과 (콜백이 ?slack_install_ok / ?slack_install_error 로 복귀)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const p = new URLSearchParams(window.location.search)
+    const ok = p.get('slack_install_ok')
+    const err = p.get('slack_install_error')
+    if (!ok && !err) return
+    setActiveSection('slack')
+    if (ok) { setSlackMsg({ kind: 'ok', text: t('slackInstalled') }); loadSlack() }
+    else setSlackMsg({ kind: 'error', text: `${t('slackInstallFailed')}: ${err}` })
+    p.delete('slack_install_ok'); p.delete('slack_install_error')
+    const qs = p.toString()
+    window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''))
+  }, [loadSlack, t])
+
+  async function removeSlackWorkspace(id: string) {
+    const res = await fetch(`/api/slack/my-workspaces/${id}`, { method: 'DELETE' })
+    if (res.ok) loadSlack()
+  }
 
   // 환경 설정 자동 저장
   async function savePreferences(locale: Locale, timezone: string) {
@@ -584,6 +630,71 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
           </div>
         )}
       </div>
+
+      {/* Slack 워크스페이스 — Slack 로그인 사용자만. 원클릭 'Add to Slack' (입력 없음, Slack 동의가 확인) */}
+      {slackEligible && (
+        <div className="border border-ive-border rounded-lg overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setActiveSection(activeSection === 'slack' ? 'none' : 'slack')}
+            className="w-full flex items-center justify-between px-4 py-3 bg-ive-bg-card hover:bg-ive-bg-input transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <i className="fa-brands fa-slack text-sm text-ive-cyan" />
+              <span className="text-sm font-bold text-ive-text">{t('slackWorkspaces')}</span>
+              {slackWorkspaces.length > 0 && (
+                <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-ive-green/15 text-ive-green">{slackWorkspaces.length}</span>
+              )}
+            </div>
+            <i className={`fa-solid fa-chevron-${activeSection === 'slack' ? 'up' : 'down'} text-xs text-ive-text-dim`} />
+          </button>
+          {activeSection === 'slack' && (
+            <div className="px-4 pb-4 pt-2 flex flex-col gap-3 border-t border-ive-border">
+              {slackMsg && (
+                <div className={`text-sm rounded-lg px-3 py-2 ${slackMsg.kind === 'ok' ? 'text-ive-green bg-ive-green/10' : 'text-ive-red bg-ive-red/10'}`}>
+                  <i className={`fa-solid ${slackMsg.kind === 'ok' ? 'fa-circle-check' : 'fa-circle-exclamation'} mr-1`} />{slackMsg.text}
+                </div>
+              )}
+              <p className="text-xs text-ive-text-dim leading-relaxed">{t('slackOwnerHint')}</p>
+
+              {slackWorkspaces.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  {slackWorkspaces.map(w => {
+                    const urlText = w.teamUrl ? w.teamUrl.replace(/^https?:\/\//, '').replace(/\/$/, '') : ''
+                    return (
+                      <div key={w.id} className="flex items-center gap-2 bg-ive-bg-deep border border-ive-border-subtle rounded-lg px-3 py-2">
+                        <i className="fa-brands fa-slack text-ive-cyan shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-bold text-ive-text truncate">{w.name}</div>
+                          {urlText && <div className="text-xs text-ive-text-dim truncate">{urlText}</div>}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => { if (window.confirm(t('slackRemoveConfirm'))) removeSlackWorkspace(w.id) }}
+                          className="text-ive-red text-xs font-bold px-2 py-1 shrink-0"
+                        >
+                          <i className="fa-solid fa-trash mr-1" />{t('slackRemove')}
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {slackWorkspaces.length === 0 && (
+                <p className="text-xs text-ive-text-dim">{t('slackNoWorkspaces')}</p>
+              )}
+              {/* 원클릭: 클릭 → Slack 동의 화면(확인) → 설치 완료. 사용자 입력 0 */}
+              <a
+                href="/api/slack/install/start?from=profile"
+                className="w-full inline-flex items-center justify-center gap-2 bg-ive-green-dark text-white font-bold py-2.5 rounded-lg text-sm active:bg-ive-green/80 transition-colors"
+              >
+                <i className="fa-brands fa-slack" />{t('slackAddWorkspace')}
+              </a>
+            </div>
+          )}
+        </div>
+      )}
 
       {onCancel && (
         <button type="button" onClick={onCancel} className="w-full py-2.5 rounded-lg text-sm font-bold text-ive-text-dim bg-ive-bg-card border border-ive-border-subtle">

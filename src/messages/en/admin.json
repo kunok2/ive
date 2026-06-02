@@ -270,7 +270,8 @@
     "openSite": "Open page",
     "orderStep4Slack": "Slack: create an app at {url}, then Basic Information → App Credentials (Client ID/Secret)",
     "appNameHint": "Name the app freely (e.g., IVE). Use the IVE icon below as the app icon.",
-    "downloadIcon": "Download IVE icon"
+    "downloadIcon": "Download IVE icon",
+    "slackPublicDist": "To let multiple users install to their own workspaces, enable Public Distribution in the Slack app."
   },
   "scheduleWeekly": "Every Monday {hour}:00",
   "scheduleMonthly": "1st of every month {hour}:00",
