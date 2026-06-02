@@ -1,4 +1,4 @@
-import { OAuthProvider, User } from '@/types'
+import { OAuthProvider, OAuthProviderType, User } from '@/types'
 import { getDb } from './connection'
 import { mapUser } from './users'
 
@@ -9,6 +9,7 @@ function mapOAuthProvider(r: any): OAuthProvider {
     name: r.name,
     baseUrl: r.base_url,
     clientId: r.client_id,
+    hasSigningSecret: !!r.signing_secret,
     enabled: r.enabled === 1,
     createdAt: r.created_at,
   }
@@ -29,22 +30,28 @@ export function getOAuthProviderById(id: string): OAuthProvider | null {
   return r ? mapOAuthProvider(r) : null
 }
 
-export function getOAuthProviderRaw(id: string): { id: string; type: 'github' | 'gitlab'; name: string; base_url: string; client_id: string; client_secret: string; enabled: number } | null {
+export function getOAuthProviderRaw(id: string): { id: string; type: OAuthProviderType; name: string; base_url: string; client_id: string; client_secret: string; signing_secret: string | null; enabled: number } | null {
   return getDb().prepare('SELECT * FROM oauth_providers WHERE id = ?').get(id) as any ?? null
 }
 
+/** type='slack' provider 행(raw). Slack 앱 자격증명·서명검증의 단일 진실원천. */
+export function getSlackProviderRaw(): { id: string; client_id: string; client_secret: string; signing_secret: string | null; enabled: number } | null {
+  return getDb().prepare("SELECT * FROM oauth_providers WHERE type = 'slack' LIMIT 1").get() as any ?? null
+}
+
 export function createOAuthProvider(p: {
-  id: string; type: 'github' | 'gitlab'; name: string; baseUrl: string;
-  clientId: string; clientSecretEncrypted: string; enabled?: boolean
+  id: string; type: OAuthProviderType; name: string; baseUrl: string;
+  clientId: string; clientSecretEncrypted: string; signingSecretEncrypted?: string | null; enabled?: boolean
 }) {
-  getDb().prepare(`INSERT INTO oauth_providers (id, type, name, base_url, client_id, client_secret, enabled)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)`).run(
-    p.id, p.type, p.name, p.baseUrl, p.clientId, p.clientSecretEncrypted, p.enabled === false ? 0 : 1
+  getDb().prepare(`INSERT INTO oauth_providers (id, type, name, base_url, client_id, client_secret, signing_secret, enabled)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    p.id, p.type, p.name, p.baseUrl, p.clientId, p.clientSecretEncrypted,
+    p.signingSecretEncrypted ?? null, p.enabled === false ? 0 : 1
   )
 }
 
 export function updateOAuthProvider(id: string, patch: {
-  name?: string; baseUrl?: string; clientId?: string; clientSecretEncrypted?: string; enabled?: boolean
+  name?: string; baseUrl?: string; clientId?: string; clientSecretEncrypted?: string; signingSecretEncrypted?: string; enabled?: boolean
 }) {
   const fields: string[] = []
   const values: any[] = []
@@ -52,6 +59,7 @@ export function updateOAuthProvider(id: string, patch: {
   if (patch.baseUrl !== undefined) { fields.push('base_url = ?'); values.push(patch.baseUrl) }
   if (patch.clientId !== undefined) { fields.push('client_id = ?'); values.push(patch.clientId) }
   if (patch.clientSecretEncrypted !== undefined) { fields.push('client_secret = ?'); values.push(patch.clientSecretEncrypted) }
+  if (patch.signingSecretEncrypted !== undefined) { fields.push('signing_secret = ?'); values.push(patch.signingSecretEncrypted) }
   if (patch.enabled !== undefined) { fields.push('enabled = ?'); values.push(patch.enabled ? 1 : 0) }
   if (fields.length === 0) return
   values.push(id)

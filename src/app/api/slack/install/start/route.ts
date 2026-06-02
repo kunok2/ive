@@ -8,11 +8,11 @@ export const runtime = 'nodejs'
 const STATE_COOKIE = 'ive-slack-install-state'
 const STATE_MAX_AGE = 60 * 10
 
-/** Add to Slack 시작: 관리자만. state 쿠키 발급 후 Slack authorize로 302 */
+/** Add to Slack 시작: 로그인 사용자 누구나(본인 워크스페이스에 설치). state 쿠키 발급 후 Slack authorize로 302 */
 export async function GET(req: Request) {
   const user = await getCurrentUser()
-  if (!user?.isAdmin) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   const { clientId } = getSlackAppConfig()
@@ -26,7 +26,9 @@ export async function GET(req: Request) {
   const state = generateState()
   const authorizeUrl = buildInstallUrl(clientId, redirectUri, state)
 
-  const payload = Buffer.from(JSON.stringify({ state, redirectUri, installerUserId: user.id })).toString('base64url')
+  // from: 'profile'면 설치 후 홈으로(사용자 설정), 그 외엔 관리자 탭으로 복귀.
+  const from = new URL(req.url).searchParams.get('from') === 'profile' ? 'profile' : 'admin'
+  const payload = Buffer.from(JSON.stringify({ state, redirectUri, installerUserId: user.id, from })).toString('base64url')
   const response = NextResponse.redirect(authorizeUrl)
   response.cookies.set(STATE_COOKIE, payload, {
     httpOnly: true,

@@ -23,6 +23,12 @@ export function getAllSlackWorkspaces(): SlackWorkspace[] {
   return rows.map(mapWorkspace)
 }
 
+/** 특정 사용자가 소유(default_user_id)한 워크스페이스 목록 — 사용자 설정의 셀프서비스용 */
+export function getSlackWorkspacesByUser(userId: string): SlackWorkspace[] {
+  const rows = getDb().prepare('SELECT * FROM slack_workspaces WHERE default_user_id = ? ORDER BY created_at ASC').all(userId) as any[]
+  return rows.map(mapWorkspace)
+}
+
 export function getSlackWorkspace(id: string): SlackWorkspace | null {
   const r = getDb().prepare('SELECT * FROM slack_workspaces WHERE id = ?').get(id) as any
   return r ? mapWorkspace(r) : null

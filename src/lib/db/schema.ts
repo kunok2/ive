@@ -789,19 +789,71 @@ export function initSchema(db: Database.Database) {
     }
   } catch (e) { console.error('[DB] token_pricing migration failed:', e) }
 
-  // OAuth: oauth_providers 테이블
+  // OAuth: oauth_providers 테이블 (github/gitlab 로그인 + slack 통합)
   db.exec(`
     CREATE TABLE IF NOT EXISTS oauth_providers (
       id TEXT PRIMARY KEY,
-      type TEXT NOT NULL CHECK(type IN ('github', 'gitlab')),
+      type TEXT NOT NULL CHECK(type IN ('github', 'gitlab', 'slack')),
       name TEXT NOT NULL,
       base_url TEXT NOT NULL,
       client_id TEXT NOT NULL,
       client_secret TEXT NOT NULL,
+      signing_secret TEXT,
       enabled INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `)
+
+  // 기존 oauth_providers를 Slack 통합 스키마로 보강:
+  //  - CHECK 제약에 'slack' 추가 (SQLite는 CHECK 변경 불가 → 테이블 재빌드)
+  //  - signing_secret 컬럼 추가 (Slack 이벤트 서명 검증용, github/gitlab은 NULL)
+  try {
+    const sqlRow = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='oauth_providers'").get() as any
+    if (sqlRow?.sql && !/'slack'/.test(sqlRow.sql)) {
+      console.log('[DB] Rebuilding oauth_providers (slack type + signing_secret)')
+      db.exec(`
+        CREATE TABLE oauth_providers_new (
+          id TEXT PRIMARY KEY,
+          type TEXT NOT NULL CHECK(type IN ('github', 'gitlab', 'slack')),
+          name TEXT NOT NULL,
+          base_url TEXT NOT NULL,
+          client_id TEXT NOT NULL,
+          client_secret TEXT NOT NULL,
+          signing_secret TEXT,
+          enabled INTEGER NOT NULL DEFAULT 1,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+      `)
+      db.exec(`
+        INSERT INTO oauth_providers_new (id, type, name, base_url, client_id, client_secret, enabled, created_at)
+        SELECT id, type, name, base_url, client_id, client_secret, enabled, created_at FROM oauth_providers
+      `)
+      db.exec('DROP TABLE oauth_providers')
+      db.exec('ALTER TABLE oauth_providers_new RENAME TO oauth_providers')
+      console.log('[DB] oauth_providers rebuild complete')
+    } else {
+      const cols = (db.prepare("PRAGMA table_info(oauth_providers)").all() as any[]).map((c: any) => c.name)
+      if (!cols.includes('signing_secret')) {
+        db.exec("ALTER TABLE oauth_providers ADD COLUMN signing_secret TEXT")
+        console.log('[DB] oauth_providers: added signing_secret column')
+      }
+    }
+  } catch (e) { console.error('[DB] oauth_providers slack migration failed:', e) }
+
+  // system_settings에 있던 Slack 앱 자격증명을 oauth_providers 'slack' 행으로 1회 이관.
+  // (값은 이미 encrypt()로 저장돼 있어 그대로 복사 — oauth_providers도 동일하게 암호화 저장)
+  try {
+    const hasSlack = db.prepare("SELECT 1 FROM oauth_providers WHERE type='slack' LIMIT 1").get()
+    const ss = (k: string) => (db.prepare("SELECT value FROM system_settings WHERE key = ?").get(k) as any)?.value || null
+    const clientId = ss('slack.client_id')
+    if (!hasSlack && clientId) {
+      db.prepare(`
+        INSERT INTO oauth_providers (id, type, name, base_url, client_id, client_secret, signing_secret, enabled)
+        VALUES ('slack', 'slack', 'Slack', 'https://slack.com', ?, ?, ?, ?)
+      `).run(clientId, ss('slack.client_secret') || '', ss('slack.signing_secret'), ss('slack.login_enabled') === '1' ? 1 : 0)
+      console.log('[DB] migrated system_settings slack.* → oauth_providers row')
+    }
+  } catch (e) { console.error('[DB] slack settings→provider migration failed:', e) }
 
   // users: OAuth 관련 컬럼 추가
   try {
@@ -818,6 +870,17 @@ export function initSchema(db: Database.Database) {
              ON users(oauth_provider_id, oauth_user_id)
              WHERE oauth_provider_id IS NOT NULL`)
   } catch (e) { console.error('[DB] users OAuth columns migration failed:', e) }
+
+  // users.avatar_source: 아바타 출처 구분 ('upload'=직접 지정 보호 / 'oauth'=provider서 가져옴, 로그인 시 갱신)
+  // 기존 사진(photo)은 사용자 것일 수 있으므로 안전하게 'upload'로 보존(자동 갱신 대상에서 제외).
+  try {
+    const userCols = (db.prepare("PRAGMA table_info(users)").all() as any[]).map((c: any) => c.name)
+    if (!userCols.includes('avatar_source')) {
+      db.exec("ALTER TABLE users ADD COLUMN avatar_source TEXT")
+      db.exec("UPDATE users SET avatar_source = 'upload' WHERE avatar = 'photo' AND avatar_source IS NULL")
+      console.log('[DB] users: added avatar_source column (existing photos kept as upload)')
+    }
+  } catch (e) { console.error('[DB] users avatar_source migration failed:', e) }
 
   // users.password NOT NULL → NULL 허용
   try {

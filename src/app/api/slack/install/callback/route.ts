@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { getPublicOrigin } from '@/lib/oauth'
 import { getSlackAppConfig, exchangeInstallCode, slackAuthTest } from '@/lib/slack'
-import { upsertSlackWorkspaceFromOAuth } from '@/lib/db'
+import { upsertSlackWorkspaceFromOAuth, getSlackWorkspaceByTeamId } from '@/lib/db'
 import { encrypt } from '@/lib/crypto'
 import { logActivity } from '@/lib/activity'
 
@@ -10,9 +10,10 @@ export const runtime = 'nodejs'
 
 const STATE_COOKIE = 'ive-slack-install-state'
 
-function redirectToAdmin(req: Request, params: Record<string, string>) {
+/** 설치 결과 리다이렉트. from='profile'면 홈(사용자 설정), 그 외엔 관리자 탭으로. */
+function redirectBack(req: Request, from: string, params: Record<string, string>) {
   const url = new URL('/', getPublicOrigin(req))
-  url.searchParams.set('tab', 'admin')
+  if (from !== 'profile') url.searchParams.set('tab', 'admin')
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v)
   return NextResponse.redirect(url)
 }
@@ -24,32 +25,40 @@ export async function GET(req: Request) {
   const returnedState = url.searchParams.get('state')
   const errorParam = url.searchParams.get('error')
 
-  if (errorParam) return redirectToAdmin(req, { slack_install_error: errorParam })
-  if (!code || !returnedState) return redirectToAdmin(req, { slack_install_error: 'missing_code_or_state' })
+  // state에서 from을 먼저 파싱하려면 쿠키를 읽어야 하므로, 초기 오류는 admin 기본으로 둔다.
+  if (errorParam) return redirectBack(req, 'admin', { slack_install_error: errorParam })
+  if (!code || !returnedState) return redirectBack(req, 'admin', { slack_install_error: 'missing_code_or_state' })
 
   const cookieStore = await cookies()
   const stateCookie = cookieStore.get(STATE_COOKIE)?.value
   cookieStore.delete(STATE_COOKIE)
-  if (!stateCookie) return redirectToAdmin(req, { slack_install_error: 'state_cookie_missing' })
+  if (!stateCookie) return redirectBack(req, 'admin', { slack_install_error: 'state_cookie_missing' })
 
-  let stateData: { state: string; redirectUri: string; installerUserId: string }
+  let stateData: { state: string; redirectUri: string; installerUserId: string; from?: string }
   try {
     stateData = JSON.parse(Buffer.from(stateCookie, 'base64url').toString('utf8'))
   } catch {
-    return redirectToAdmin(req, { slack_install_error: 'state_malformed' })
+    return redirectBack(req, 'admin', { slack_install_error: 'state_malformed' })
   }
+  const from = stateData.from === 'profile' ? 'profile' : 'admin'
   if (stateData.state !== returnedState) {
-    return redirectToAdmin(req, { slack_install_error: 'state_mismatch' })
+    return redirectBack(req, from, { slack_install_error: 'state_mismatch' })
   }
 
   const { clientId, clientSecret } = getSlackAppConfig()
   if (!clientId || !clientSecret) {
-    return redirectToAdmin(req, { slack_install_error: 'app_credentials_missing' })
+    return redirectBack(req, from, { slack_install_error: 'app_credentials_missing' })
   }
 
   const result = await exchangeInstallCode(clientId, clientSecret, code, stateData.redirectUri)
   if (!result.ok || !result.botToken || !result.teamId || !result.botUserId) {
-    return redirectToAdmin(req, { slack_install_error: result.error || 'oauth_exchange_failed' })
+    return redirectBack(req, from, { slack_install_error: result.error || 'oauth_exchange_failed' })
+  }
+
+  // 소유권 가드(멀티테넌트): 이미 다른 사용자가 소유한 워크스페이스면 가로채기 금지.
+  const existing = getSlackWorkspaceByTeamId(result.teamId)
+  if (existing && existing.defaultUserId && existing.defaultUserId !== stateData.installerUserId) {
+    return redirectBack(req, from, { slack_install_error: 'already_claimed' })
   }
 
   // 워크스페이스 URL은 auth.test로 조회 (oauth.v2.access에는 없음)
@@ -74,5 +83,5 @@ export async function GET(req: Request) {
     })
   } catch { /* ignore */ }
 
-  return redirectToAdmin(req, { slack_install_ok: result.teamName || result.teamId })
+  return redirectBack(req, from, { slack_install_ok: result.teamName || result.teamId })
 }

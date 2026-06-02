@@ -2,7 +2,8 @@ export interface User {
   id: string
   email: string
   name: string
-  avatar: string       // 아바타 ID ('av-01'~'av-20') 또는 'photo' (업로드 사진)
+  avatar: string       // 아바타 ID ('av-01'~'av-20') 또는 'photo' (사진)
+  avatarSource?: string | null // 'upload'(사용자가 직접 지정 — 보호) | 'oauth'(provider에서 가져옴 — 로그인 시 갱신) | null
   isAdmin: boolean
   maxAgents: number    // 최대 생성 가능 에이전트 수 (0 = 무제한)
   maxTurns: number     // 에이전트 최대 턴 수 상한 (0 = 무제한)
@@ -18,13 +19,17 @@ export interface User {
 export type Provider = 'github' | 'gitlab'
 
 /** OAuth 공급자(애플리케이션) — GitLab/GitHub 인스턴스별로 다중 등록 가능 */
+/** OAuth provider 타입 — 코드 로그인(github/gitlab) + Slack(OIDC 로그인 + 봇 앱 자격증명) */
+export type OAuthProviderType = Provider | 'slack'
+
 export interface OAuthProvider {
   id: string
-  type: Provider            // 'github' | 'gitlab'
-  name: string              // 표시명 ("gitlab.com", "회사 GitLab")
-  baseUrl: string           // https://gitlab.com, https://github.com, https://gitlab.example.com
+  type: OAuthProviderType   // 'github' | 'gitlab' | 'slack'
+  name: string              // 표시명 ("gitlab.com", "회사 GitLab", "Slack")
+  baseUrl: string           // https://gitlab.com, https://github.com, https://slack.com
   clientId: string
   clientSecret?: string     // 응답 시에는 마스킹 — DB에서 encrypt 저장
+  hasSigningSecret?: boolean // slack 전용 — signing_secret 설정 여부 (값은 노출 안 함)
   enabled: boolean
   createdAt: string
 }

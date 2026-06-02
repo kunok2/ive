@@ -87,7 +87,7 @@ async function downloadAndSaveAvatar(userId: string, avatarUrl: string): Promise
     }
 
     fs.writeFileSync(path.join(avatarDir, `${userId}.${ext}`), buf)
-    updateUserAvatar(userId, 'photo')
+    updateUserAvatar(userId, 'photo', 'oauth') // provider에서 가져옴 → 다음 로그인 때 갱신 대상
     return true
   } catch (e) {
     console.warn('[OAuth callback] avatar download failed:', e)
@@ -179,7 +179,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     })
     userId = byOAuth.id
     action = 'login'
-    // 재로그인 시에는 사용자가 직접 올린 사진이 있을 수 있으니 건드리지 않음
+    // 직접 지정(upload)한 아바타는 보호. 그 외(oauth/기본)는 현재 provider 사진으로 갱신.
+    if (profile.avatarUrl && byOAuth.avatarSource !== 'upload') {
+      await downloadAndSaveAvatar(byOAuth.id, profile.avatarUrl)
+    }
   } else {
     // 3b. 이메일이 기존 계정에 있는지 확인 → 자동 링크 (A안)
     const byEmail = getUserByEmail(profile.email)
@@ -194,8 +197,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       userId = byEmail.id
       action = 'link'
 
-      // 기본 아바타(av-*)인 경우에만 OAuth 아바타로 덮어씀. 사용자가 직접 업로드한 'photo'는 보존.
-      if (profile.avatarUrl && byEmail.avatar !== 'photo') {
+      // 직접 지정(upload)한 아바타만 보존. 그 외(oauth/기본)는 현재 provider 사진으로 갱신.
+      if (profile.avatarUrl && byEmail.avatar_source !== 'upload') {
         await downloadAndSaveAvatar(byEmail.id, profile.avatarUrl)
       }
     } else {

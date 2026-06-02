@@ -38,6 +38,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (typeof body.clientSecret === 'string' && body.clientSecret.length > 0) {
     patch.clientSecretEncrypted = encrypt(body.clientSecret)
   }
+  // signingSecret: slack 전용. 빈 문자열이 오면 변경 없음(기존 유지).
+  if (typeof body.signingSecret === 'string' && body.signingSecret.length > 0) {
+    patch.signingSecretEncrypted = encrypt(body.signingSecret)
+  }
   if (typeof body.enabled === 'boolean') patch.enabled = body.enabled
 
   updateOAuthProvider(id, patch)

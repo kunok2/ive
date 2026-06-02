@@ -10,7 +10,7 @@ import LanguageSwitcher from '@/components/ui/LanguageSwitcher'
 
 type PublicOAuthProvider = {
   id: string
-  type: 'github' | 'gitlab'
+  type: 'github' | 'gitlab' | 'slack'
   name: string
   baseUrl: string
 }
@@ -181,7 +181,7 @@ export default function LoginPage() {
                   {redirecting ? (
                     <><i className="fa-solid fa-spinner fa-spin" /><span>이동 중...</span></>
                   ) : (
-                    <><i className={`fa-brands ${p.type === 'github' ? 'fa-github' : 'fa-gitlab'}`} /><span>{p.name}</span></>
+                    <><i className={`fa-brands ${p.type === 'github' ? 'fa-github' : p.type === 'slack' ? 'fa-slack' : 'fa-gitlab'}`} /><span>{p.name}</span></>
                   )}
                 </a>
               )

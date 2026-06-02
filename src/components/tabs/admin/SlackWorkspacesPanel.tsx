@@ -36,39 +36,53 @@ export default function SlackWorkspacesPanel() {
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [form, setForm] = useState({ name: '', defaultUserId: '', enabled: true })
 
-  // 앱 자격증명 (OAuth 설치/로그인 공통)
-  const [appCfg, setAppCfg] = useState<{ clientId: string; hasClientSecret: boolean; hasSigningSecret: boolean }>({ clientId: '', hasClientSecret: false, hasSigningSecret: false })
-  const [appForm, setAppForm] = useState({ clientId: '', clientSecret: '', signingSecret: '' })
-  const [appSaving, setAppSaving] = useState(false)
+  // 로그인용 앱 자격증명(Client ID/Secret)은 OAuth 탭(oauth_providers의 slack 행)에서 관리한다.
+  // 여기(설치·운용 영역)에서는 봇 전용인 Signing Secret만 다루고, 설치 가능 여부를 확인한다.
+  const [slackConfigured, setSlackConfigured] = useState(false)
+  const [hasSigningSecret, setHasSigningSecret] = useState(false)
+  const [signingSecret, setSigningSecret] = useState('')
+  const [signingSaving, setSigningSaving] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [wsRes, uRes] = await Promise.all([
+      const [wsRes, uRes, pRes] = await Promise.all([
         fetch('/api/admin/slack/workspaces'),
         fetch('/api/admin/users'),
+        fetch('/api/admin/oauth-providers'),
       ])
       if (wsRes.ok) setWorkspaces(await wsRes.json())
       if (uRes.ok) setUsers(await uRes.json())
+      if (pRes.ok) {
+        const providers = await pRes.json()
+        const slack = Array.isArray(providers) ? providers.find((p: any) => p.type === 'slack') : null
+        setSlackConfigured(!!slack?.clientId)
+        setHasSigningSecret(!!slack?.hasSigningSecret)
+      }
     } finally {
       setLoading(false)
     }
   }, [])
 
-  useEffect(() => { load() }, [load])
-
-  // 앱 자격증명 로드
-  const loadApp = useCallback(async () => {
+  // Signing Secret 저장 — slack provider 행에 PATCH (봇 이벤트 서명 검증용)
+  async function saveSigningSecret() {
+    if (!signingSecret) return
+    setSigningSaving(true)
     try {
-      const res = await fetch('/api/admin/slack/app')
-      if (res.ok) {
-        const d = await res.json()
-        setAppCfg(d)
-        setAppForm({ clientId: d.clientId || '', clientSecret: '', signingSecret: '' })
-      }
-    } catch { /* ignore */ }
-  }, [])
-  useEffect(() => { loadApp() }, [loadApp])
+      const res = await fetch('/api/admin/oauth-providers/slack', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ signingSecret }),
+      })
+      if (!res.ok) { toast(t('saveFailed'), 'error'); return }
+      setSigningSecret('')
+      await load()
+      toast(t('appSaved'), 'success')
+    } finally {
+      setSigningSaving(false)
+    }
+  }
+
+  useEffect(() => { load() }, [load])
 
   // Add to Slack 설치 결과 토스트 (콜백이 ?slack_install_ok / ?slack_install_error 로 리다이렉트)
   useEffect(() => {
@@ -84,21 +98,6 @@ export default function SlackWorkspacesPanel() {
       window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''))
     }
   }, [toast, load])
-
-  async function saveApp() {
-    setAppSaving(true)
-    try {
-      const res = await fetch('/api/admin/slack/app', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(appForm),
-      })
-      if (!res.ok) { toast(t('saveFailed'), 'error'); return }
-      await loadApp()
-      toast(t('appSaved'), 'success')
-    } finally {
-      setAppSaving(false)
-    }
-  }
 
   // Request URL origin (oauth.redirect_base 재사용, 없으면 브라우저 origin)
   const [redirectBase, setRedirectBase] = useState('')
@@ -119,6 +118,7 @@ export default function SlackWorkspacesPanel() {
 
   // Slack 앱에 등록할 주소 — 어느 메뉴에 넣는지까지 한 박스에 정리
   const slackUrls = [
+    { key: 'oidc', menu: 'OpenID Connect · Redirect URL', url: `${origin}/api/auth/oauth/slack/callback` },
     { key: 'events', menu: t('urlMenuEvents'), url: `${origin}/api/slack/events` },
     { key: 'install', menu: t('urlMenuInstall'), url: `${origin}/api/slack/install/callback` },
   ]
@@ -169,65 +169,19 @@ export default function SlackWorkspacesPanel() {
         </h2>
         <a
           href="/api/slack/install/start"
-          className={`text-sm font-bold px-3 py-1.5 rounded-lg ${appCfg.clientId ? 'bg-ive-green-dark text-white' : 'bg-ive-bg-input border border-ive-border text-ive-text-dim pointer-events-none opacity-50'}`}
+          className={`text-sm font-bold px-3 py-1.5 rounded-lg ${slackConfigured ? 'bg-ive-green-dark text-white' : 'bg-ive-bg-input border border-ive-border text-ive-text-dim pointer-events-none opacity-50'}`}
         >
           <i className="fa-solid fa-plus mr-1" />{t('addNew')}
         </a>
       </div>
 
-      {/* 앱 자격증명 + Add to Slack (OAuth 설치) */}
-      <div className="bg-ive-bg-card border border-ive-green/20 rounded-lg p-3 mb-3">
-        <div className="text-sm font-bold text-ive-green mb-1">
-          <i className="fa-solid fa-rocket mr-1.5" />{t('appTitle')}
+      {/* 자격증명 안내 — 실제 입력은 OAuth 탭(Slack provider)에서 */}
+      {!slackConfigured && (
+        <div className="bg-ive-bg-card border border-ive-amber/30 rounded-lg p-3 mb-3 text-xs text-ive-text-dim leading-relaxed">
+          <i className="fa-solid fa-triangle-exclamation mr-1 text-ive-amber" />
+          {t('credInOAuthTab')}
         </div>
-        <div className="text-xs text-ive-text-dim mb-2 leading-relaxed">{t('appDesc')}</div>
-        <div className="text-xs text-ive-text-muted mb-2 leading-relaxed">
-          <i className="fa-solid fa-circle-info mr-1 text-ive-cyan" />
-          {t.rich('appCreateHint', {
-            link: (chunks) => (
-              <a href="https://api.slack.com/apps" target="_blank" rel="noreferrer" className="text-ive-cyan font-bold hover:underline">
-                {chunks}<i className="fa-solid fa-arrow-up-right-from-square ml-0.5 text-[9px]" />
-              </a>
-            ),
-          })}
-        </div>
-        <div className="flex flex-col gap-2">
-          <div>
-            <label className="block text-xs font-bold text-ive-text-muted mb-1">Client ID</label>
-            <input
-              type="text" value={appForm.clientId}
-              onChange={e => setAppForm(f => ({ ...f, clientId: e.target.value }))}
-              placeholder="1234567890.1234567890"
-              className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text font-mono"
-            />
-          </div>
-          <div className="flex gap-2">
-            <div className="flex-1">
-              <label className="block text-xs font-bold text-ive-text-muted mb-1">Client Secret {appCfg.hasClientSecret && <span className="text-ive-green">✓</span>}</label>
-              <input
-                type="password" value={appForm.clientSecret}
-                onChange={e => setAppForm(f => ({ ...f, clientSecret: e.target.value }))}
-                placeholder={appCfg.hasClientSecret ? t('ifBlankNoChange') : ''}
-                className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text font-mono"
-              />
-            </div>
-            <div className="flex-1">
-              <label className="block text-xs font-bold text-ive-text-muted mb-1">Signing Secret {appCfg.hasSigningSecret && <span className="text-ive-green">✓</span>}</label>
-              <input
-                type="password" value={appForm.signingSecret}
-                onChange={e => setAppForm(f => ({ ...f, signingSecret: e.target.value }))}
-                placeholder={appCfg.hasSigningSecret ? t('ifBlankNoChange') : ''}
-                className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text font-mono"
-              />
-            </div>
-          </div>
-          <div className="flex items-center justify-end">
-            <button onClick={saveApp} disabled={appSaving} className="bg-ive-bg-input border border-ive-border text-ive-text text-sm font-bold px-3 py-1.5 rounded-lg disabled:opacity-50">
-              {appSaving ? <><i className="fa-solid fa-spinner fa-spin mr-1" />{t('saving')}</> : t('appSave')}
-            </button>
-          </div>
-        </div>
-      </div>
+      )}
 
       {/* Slack에 등록할 주소 — 어느 메뉴에 넣는지까지 한 박스에 */}
       <div className="bg-ive-bg-card border border-ive-cyan/20 rounded-lg p-3 mb-3">
