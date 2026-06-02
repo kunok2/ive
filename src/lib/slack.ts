@@ -544,10 +544,8 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
     const shared = getSharedProjectsForUser(ownerUserId)
     const seen = new Set(owned.map(p => p.id))
     const ownerProjects = [...owned, ...shared.filter(p => !seen.has(p.id))]
-    if (ownerProjects.length === 0) {
-      await sink.post(M.noProject)
-      return
-    }
+    // 프로젝트가 없어도 막지 않는다 — 아래 projectless(일반 대화) 모드로 응답한다.
+    // (프로젝트가 있으면 이름 매칭 시 바인딩, 없으면 그냥 일반 대화로 진행)
     // 대상 프로젝트 선택. 스레드는 "프로젝트 없음(일반 대화)"으로 시작하고, 사용자가 프로젝트
     // 이름을 거론하면 그때 자연스럽게 바인딩/전환된다(selectThreadProject). 임의 단정·되묻기 없음.
     const project = selectThreadProject({ ownerProjects, session, cleanText })
