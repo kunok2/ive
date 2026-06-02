@@ -143,7 +143,8 @@ export async function GET(req: Request) {
   }
 
   const provider = getOAuthProviderById(user.oauthProviderId)
-  if (!provider) {
+  // 검증 큐는 git(GitLab/GitHub) 사용자 기준. slack 로그인 등 git이 아닌 provider면 큐 없음.
+  if (!provider || (provider.type !== 'github' && provider.type !== 'gitlab')) {
     return countsOnly
       ? NextResponse.json({ verifyWaiting: 0, verifying: 0, total: 0, matched: false })
       : NextResponse.json({ issues: [], matched: false })

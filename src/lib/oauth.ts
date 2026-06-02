@@ -10,26 +10,35 @@
  */
 import crypto from 'crypto'
 import { decrypt } from './crypto'
-import { getOAuthProviderRaw, getOAuthProviderById, getSystemSetting } from './db'
+import { getOAuthProviderRaw, getOAuthProviderById, getSlackProviderRaw, getSystemSetting } from './db'
 import type { OAuthProvider } from '@/types'
 
 /** system_settings에 저장되는 서버 공개 origin의 key (Admin → 시스템 설정에서 관리) */
 export const OAUTH_REDIRECT_BASE_KEY = 'oauth.redirect_base'
 
-// 프로젝트 토큰으로도 재사용하기 위한 scope (api/repo 권한 포함)
+/**
+ * Slack provider 행의 정규 id. github/gitlab과 동일하게 oauth_providers 테이블에 1행으로 저장된다.
+ * 같은 Slack 앱이 "Sign in with Slack"(OIDC 로그인)과 "Add to Slack"(봇 설치) 양쪽에 쓰인다.
+ */
+export const SLACK_PROVIDER_ID = 'slack'
+
+type ProviderType = 'github' | 'gitlab' | 'slack'
+
+// 프로젝트 토큰으로도 재사용하기 위한 scope (api/repo 권한 포함). slack은 OIDC scope.
 const SCOPES = {
   github: ['read:user', 'user:email', 'repo'],
   gitlab: ['read_user', 'api'],
+  slack: ['openid', 'email', 'profile'],
 } as const
 
-/** GitHub는 scope를 공백 구분, GitLab은 공백 구분(+URL encoded) */
-function joinScopes(type: 'github' | 'gitlab'): string {
+/** scope 문자열 조립 (모든 provider 공백 구분) */
+function joinScopes(type: ProviderType): string {
   return SCOPES[type].join(' ')
 }
 
 export interface ResolvedProvider {
   id: string
-  type: 'github' | 'gitlab'
+  type: ProviderType
   name: string
   baseUrl: string          // 끝에 슬래시 없음
   clientId: string
@@ -37,7 +46,13 @@ export interface ResolvedProvider {
   enabled: boolean
 }
 
-/** DB에서 provider 레코드를 가져와 client_secret까지 복호화 */
+/** "Sign in with Slack" 버튼을 노출할지 — slack provider 행이 있고 enabled일 때 */
+export function isSlackLoginEnabled(): boolean {
+  const raw = getSlackProviderRaw()
+  return !!raw && raw.enabled === 1
+}
+
+/** DB에서 provider 레코드를 가져와 client_secret까지 복호화 (github/gitlab/slack 공통) */
 export function loadProvider(id: string): ResolvedProvider | null {
   const raw = getOAuthProviderRaw(id)
   if (!raw) return null
@@ -110,6 +125,11 @@ export function buildAuthorizeUrl(p: ResolvedProvider, state: string, redirectUr
     scope: joinScopes(p.type),
     state,
   })
+  if (p.type === 'slack') {
+    // Sign in with Slack (OpenID Connect). nonce는 OIDC 권장 — state를 재사용.
+    params.set('nonce', state)
+    return `https://slack.com/openid/connect/authorize?${params.toString()}`
+  }
   if (p.type === 'github') {
     // GitHub는 query에 allow_signup도 지정 가능 (기본 true)
     return `${p.baseUrl}/login/oauth/authorize?${params.toString()}`
@@ -125,7 +145,9 @@ export async function exchangeCodeForToken(p: ResolvedProvider, code: string, re
   expiresIn: number | null    // 초 단위
   tokenType: string | null
 }> {
-  const tokenUrl = p.type === 'github'
+  const tokenUrl = p.type === 'slack'
+    ? 'https://slack.com/api/openid.connect.token'
+    : p.type === 'github'
     ? `${p.baseUrl}/login/oauth/access_token`
     : `${p.baseUrl}/oauth/token`
 
@@ -152,6 +174,10 @@ export async function exchangeCodeForToken(p: ResolvedProvider, code: string, re
   }
 
   const data = await res.json() as any
+  // Slack은 HTTP 200 + {ok:false, error}로 실패를 알린다.
+  if (p.type === 'slack' && data.ok === false) {
+    throw new Error(`Slack token error: ${data.error || 'unknown'}`)
+  }
   if (data.error) {
     throw new Error(`OAuth token error: ${data.error_description || data.error}`)
   }
@@ -178,10 +204,40 @@ export interface OAuthUserProfile {
 
 /** access_token으로 사용자 프로필 조회. verified 이메일 확보가 책임. */
 export async function fetchUserProfile(p: ResolvedProvider, accessToken: string): Promise<OAuthUserProfile> {
+  if (p.type === 'slack') {
+    return fetchSlackProfile(accessToken)
+  }
   if (p.type === 'github') {
     return fetchGitHubProfile(p, accessToken)
   }
   return fetchGitLabProfile(p, accessToken)
+}
+
+/**
+ * Sign in with Slack — OpenID Connect userInfo로 프로필 조회.
+ * Slack 워크스페이스 이메일은 가입 시 확인된 것으로 간주(email_verified가 명시적으로 false면 거부).
+ */
+async function fetchSlackProfile(accessToken: string): Promise<OAuthUserProfile> {
+  const res = await fetch('https://slack.com/api/openid.connect.userInfo', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  const u = await res.json().catch(() => ({ ok: false })) as any
+  if (!u.ok) throw new Error(`Slack userInfo 실패: ${u.error || res.status}`)
+  const email: string | null = u.email || null
+  if (!email) throw new Error('Slack 계정 이메일을 가져오지 못했습니다 (email scope 확인 필요)')
+  if (u.email_verified === false) {
+    throw new Error('Slack 이메일이 확인되지 않았습니다')
+  }
+  // user_id는 워크스페이스 내 고유. 같은 사람이 여러 워크스페이스에 있어도 sub로 동일 식별.
+  const providerUserId = String(u.sub || u['https://slack.com/user_id'] || email)
+  return {
+    providerUserId,
+    email,
+    emailVerified: true,
+    name: u.name || email,
+    username: u.name || email,
+    avatarUrl: u.picture || u['https://slack.com/user_image_192'] || null,
+  }
 }
 
 async function fetchGitHubProfile(p: ResolvedProvider, accessToken: string): Promise<OAuthUserProfile> {

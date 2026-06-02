@@ -4,7 +4,7 @@ import path from 'path'
 import sharp from 'sharp' // next 의 의존성으로 항상 설치됨(SVG→PNG 변환용). 별도 선언 불필요.
 import {
   getProjectsByUser, getSharedProjectsForUser, getProjectAuthToken,
-  getSystemSetting, getAvailableAgentsByUser,
+  getSlackProviderRaw, getAvailableAgentsByUser,
   getSlackThreadSession, createSlackThreadSession, updateSlackThreadCliSession, resetSlackThreadProject, switchSlackThreadProject,
 } from './db'
 import { decrypt } from './crypto'
@@ -31,12 +31,14 @@ export interface SlackAppConfig {
   signingSecret: string
 }
 
-/** system_settings에 저장된 Slack 앱 자격증명을 복호화해 반환 */
+/** oauth_providers의 type='slack' 행에서 Slack 앱 자격증명을 복호화해 반환 */
 export function getSlackAppConfig(): SlackAppConfig {
+  const raw = getSlackProviderRaw()
+  if (!raw) return { clientId: '', clientSecret: '', signingSecret: '' }
   return {
-    clientId: getSystemSetting('slack.client_id') || '',
-    clientSecret: decrypt(getSystemSetting('slack.client_secret') || ''),
-    signingSecret: decrypt(getSystemSetting('slack.signing_secret') || ''),
+    clientId: raw.client_id || '',
+    clientSecret: decrypt(raw.client_secret || ''),
+    signingSecret: decrypt(raw.signing_secret || ''),
   }
 }
 

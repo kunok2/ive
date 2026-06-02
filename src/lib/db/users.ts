@@ -9,6 +9,7 @@ function parseAllowedClis(raw: string | null | undefined): string[] {
 export function mapUser(r: any): User {
   return {
     id: r.id, email: r.email, name: r.name, avatar: r.avatar || 'av-01',
+    avatarSource: r.avatar_source ?? null,
     isAdmin: !!r.is_admin, maxAgents: r.max_agents ?? 0, maxTurns: r.max_turns ?? 0,
     allowedClis: parseAllowedClis(r.allowed_clis) as User['allowedClis'],
     locale: r.locale,
@@ -53,8 +54,17 @@ export function deleteUser(id: string) {
   getDb().prepare('DELETE FROM users WHERE id = ?').run(id)
 }
 
-export function updateUserAvatar(id: string, avatar: string) {
-  getDb().prepare('UPDATE users SET avatar = ? WHERE id = ?').run(avatar, id)
+/**
+ * 아바타 변경. source를 주면 출처도 같이 기록한다.
+ *  - 'upload': 사용자가 직접 업로드/선택 → OAuth 로그인이 덮어쓰지 않음(보호)
+ *  - 'oauth' : provider에서 가져옴 → 다음 OAuth 로그인 때 현재 provider 것으로 갱신 가능
+ */
+export function updateUserAvatar(id: string, avatar: string, source?: 'upload' | 'oauth') {
+  if (source) {
+    getDb().prepare('UPDATE users SET avatar = ?, avatar_source = ? WHERE id = ?').run(avatar, source, id)
+  } else {
+    getDb().prepare('UPDATE users SET avatar = ? WHERE id = ?').run(avatar, id)
+  }
 }
 
 export function updateUserLocale(id: string, locale: string) {

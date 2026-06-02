@@ -46,8 +46,8 @@ export async function POST(req: NextRequest) {
   const filePath = path.join(avatarDir, `${user.id}.${ext}`)
   fs.writeFileSync(filePath, buf)
 
-  // avatar 필드를 'photo' 로 변경
-  updateUserAvatar(user.id, 'photo')
+  // avatar 필드를 'photo' 로 변경 (사용자가 직접 올림 → 보호)
+  updateUserAvatar(user.id, 'photo', 'upload')
 
   logActivity({ userId: user.id, category: 'settings', action: 'upload_avatar', detail: `아바타 사진 업로드 (${ext}, ${(file.size / 1024).toFixed(1)}KB)`, req })
 

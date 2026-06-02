@@ -13,7 +13,7 @@ export async function PUT(req: NextRequest) {
   }
 
   try {
-    updateUserAvatar(user.id, avatar)
+    updateUserAvatar(user.id, avatar, 'upload') // 사용자가 직접 선택 → 보호(OAuth가 안 덮어씀)
   } catch (e) {
     console.error('아바타 업데이트 오류:', e)
     return NextResponse.json({ error: '아바타 저장에 실패했습니다.' }, { status: 500 })

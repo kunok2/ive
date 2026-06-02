@@ -244,7 +244,33 @@
     "save": "저장",
     "validationRequired": "필수 필드를 모두 입력해주세요",
     "validationSecret": "신규 등록 시 Client Secret은 필수입니다",
-    "saveFailed": "저장 실패"
+    "saveFailed": "저장 실패",
+    "slackType": "Slack",
+    "alreadySlack": "Slack은 이미 등록됨",
+    "signingSecretLabel": "Signing Secret",
+    "slackEnabledCheckbox": "Sign in with Slack 활성화 (로그인 버튼 표시)",
+    "slackUrlsTitle": "Slack 앱에 등록할 URL",
+    "slackUrlOidc": "로그인 Redirect URL (OpenID Connect · Sign in with Slack)",
+    "slackUrlEvents": "Event Subscriptions · Request URL",
+    "slackUrlInstall": "OAuth & Permissions · Redirect URL (봇 설치)",
+    "slackUrlsHint": "Slack 앱 설정의 각 메뉴에 위 URL을 등록하세요. 여러 워크스페이스가 설치하려면 Public Distribution 활성화가 필요합니다.",
+    "slackCreateHint": "먼저 {link} 에서 Slack 앱을 만들고 자격증명을 발급하세요.",
+    "allRegistered": "GitHub·GitLab·Slack 모두 등록됨",
+    "slackUrlLoginNeeded": "로그인용 · 지금 필요",
+    "slackUrlBotLater": "봇 연동용 · 워크스페이스 추가 단계에서 사용 (지금은 무시)",
+    "loginRedirectUrl": "로그인 Redirect URL (앱에 등록)",
+    "slackBotSectionTitle": "Slack 전용 · 봇 연동 (워크스페이스 추가 단계)",
+    "slackBotSectionHint": "로그인만 쓸 거면 아래는 건너뛰어도 됩니다. 봇(멘션 응답·워크스페이스 설치)을 쓸 때 등록하세요.",
+    "helpCredGitlab": "GitLab → 프로필 → Edit profile → Applications(또는 Admin Area → Applications)에서 앱을 만들면 Application ID(=Client ID)와 Secret이 발급됩니다.",
+    "helpCredGithub": "GitHub → Settings → Developer settings → OAuth Apps → New OAuth App에서 Client ID·Secret을 발급합니다.",
+    "helpCredSlack": "api.slack.com/apps → 앱 선택 → Basic Information → App Credentials에서 Client ID·Secret을 복사합니다.",
+    "helpRedirectGitlab": "↑ GitLab 앱의 Redirect URI에 이 URL을 등록 (Scopes: read_user, api).",
+    "helpRedirectGithub": "↑ OAuth App의 'Authorization callback URL'에 이 URL을 등록.",
+    "helpRedirectSlack": "↑ Slack 앱 OAuth & Permissions → Redirect URLs에 추가하고, OpenID Connect(Sign in with Slack) 활성화 (scopes: openid, email, profile).",
+    "openSite": "페이지 열기",
+    "orderStep4Slack": "Slack: {url} 에서 앱 생성 → Basic Information → App Credentials (Client ID·Secret)",
+    "appNameHint": "앱 이름은 자유(예: IVE). 아이콘은 아래 IVE 아이콘을 올리면 됩니다.",
+    "downloadIcon": "IVE 아이콘 다운로드"
   },
   "scheduleWeekly": "매주 월요일 {hour}:00",
   "scheduleMonthly": "매월 1일 {hour}:00",
@@ -309,6 +335,7 @@
     "ownerNone": "선택 안 함",
     "ownerDesc": "이 워크스페이스의 소유자. 멘션은 이 유저의 에이전트·프로젝트로 처리됩니다 (남의 것 접근 불가).",
     "maxInstancesLabel": "동시 인스턴스 상한",
-    "maxInstancesDesc": "이 워크스페이스가 동시에 띄울 수 있는 에이전트 프로세스 수. 초과 시 잠시 후 다시 시도 안내."
+    "maxInstancesDesc": "이 워크스페이스가 동시에 띄울 수 있는 에이전트 프로세스 수. 초과 시 잠시 후 다시 시도 안내.",
+    "credInOAuthTab": "Slack 앱 자격증명(Client ID/Secret, Signing Secret)은 OAuth 탭에서 Slack provider로 등록하세요. 등록 후 여기서 워크스페이스를 설치·관리할 수 있습니다."
   }
 }

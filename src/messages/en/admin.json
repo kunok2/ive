@@ -244,7 +244,33 @@
     "save": "Save",
     "validationRequired": "Please fill in all required fields",
     "validationSecret": "Client Secret is required when registering a new provider",
-    "saveFailed": "Failed to save"
+    "saveFailed": "Failed to save",
+    "slackType": "Slack",
+    "alreadySlack": "Slack already registered",
+    "signingSecretLabel": "Signing Secret",
+    "slackEnabledCheckbox": "Enable Sign in with Slack (show login button)",
+    "slackUrlsTitle": "URLs to register in your Slack app",
+    "slackUrlOidc": "Login Redirect URL (OpenID Connect · Sign in with Slack)",
+    "slackUrlEvents": "Event Subscriptions · Request URL",
+    "slackUrlInstall": "OAuth & Permissions · Redirect URL (bot install)",
+    "slackUrlsHint": "Register each URL in the matching section of your Slack app settings. Multi-workspace install requires Public Distribution.",
+    "slackCreateHint": "First create a Slack app at {link} and issue its credentials.",
+    "allRegistered": "GitHub, GitLab, and Slack are all registered",
+    "slackUrlLoginNeeded": "For login · needed now",
+    "slackUrlBotLater": "For the bot · used in the workspace step (ignore for now)",
+    "loginRedirectUrl": "Login Redirect URL (register in the app)",
+    "slackBotSectionTitle": "Slack only · bot integration (workspace step)",
+    "slackBotSectionHint": "If you only need login, you can skip the items below. Register them when using the bot (mention replies / workspace install).",
+    "helpCredGitlab": "GitLab → profile → Edit profile → Applications (or Admin Area → Applications). Creating an app issues an Application ID (= Client ID) and Secret.",
+    "helpCredGithub": "GitHub → Settings → Developer settings → OAuth Apps → New OAuth App issues the Client ID and Secret.",
+    "helpCredSlack": "api.slack.com/apps → pick your app → Basic Information → App Credentials. Copy the Client ID and Secret.",
+    "helpRedirectGitlab": "↑ Register this URL as the GitLab app’s Redirect URI (scopes: read_user, api).",
+    "helpRedirectGithub": "↑ Register this URL as the OAuth App's 'Authorization callback URL'.",
+    "helpRedirectSlack": "↑ Add this URL under the Slack app’s OAuth & Permissions → Redirect URLs, and enable OpenID Connect (Sign in with Slack) with scopes openid, email, profile.",
+    "openSite": "Open page",
+    "orderStep4Slack": "Slack: create an app at {url}, then Basic Information → App Credentials (Client ID/Secret)",
+    "appNameHint": "Name the app freely (e.g., IVE). Use the IVE icon below as the app icon.",
+    "downloadIcon": "Download IVE icon"
   },
   "scheduleWeekly": "Every Monday {hour}:00",
   "scheduleMonthly": "1st of every month {hour}:00",
@@ -309,6 +335,7 @@
     "ownerNone": "None",
     "ownerDesc": "The owner of this workspace. Mentions are handled with this user's agents and projects (no access to others').",
     "maxInstancesLabel": "Max concurrent instances",
-    "maxInstancesDesc": "Max agent processes this workspace can run at once. Beyond this, users are asked to retry shortly."
+    "maxInstancesDesc": "Max agent processes this workspace can run at once. Beyond this, users are asked to retry shortly.",
+    "credInOAuthTab": "Register the Slack app credentials (Client ID/Secret, Signing Secret) as a Slack provider on the OAuth tab. Once registered, install and manage workspaces here."
   }
 }
