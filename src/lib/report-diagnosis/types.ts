@@ -66,7 +66,7 @@ export interface AgentStat {
   currentStatus: string
 }
 
-export interface UserStat { userId: string; userName: string; userAvatar: string | null; avatarUserId?: string | null; tasks: number; success: number; failed: number; issueCount: number; avgDurationMin: number; cost: number; avgWaitMin: number; verifyTasks: number; avgVerifyMin: number; verifyAvgWaitMin: number; verifyWaiting: number; verifyApproved: number; verifyRejected: number; annotation?: UserAnnotation | null }
+export interface UserStat { userId: string; userName: string; userAvatar: string | null; avatarUserId?: string | null; tasks: number; success: number; failed: number; issueCount: number; totalDurationMin: number; avgDurationMin: number; cost: number; avgWaitMin: number; verifyTasks: number; avgVerifyMin: number; verifyAvgWaitMin: number; verifyWaiting: number; verifyApproved: number; verifyRejected: number; annotation?: UserAnnotation | null }
 export interface VerifierStat { verifierName: string; verifierAvatar: string; tasks: number; avgVerifyMin: number; avgWaitMin?: number; rejected: number }
 export interface DailyTrend { date: string; tasks: number | null; inflow: number | null; verified: number | null; success: number | null; failed: number | null; cost: number | null; waitAvg: number | null; procAvg: number | null; verifyAvg: number | null; confirmAvg: number | null }
 export interface WaitingDay { date: string; total: number; totalWaiting: number; totalVerifyWaiting: number; byProject: { projectId: string; projectName: string; projectColor: string; waiting: number; verifyWaiting: number }[] }

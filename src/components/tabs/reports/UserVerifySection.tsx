@@ -18,6 +18,9 @@ export default function UserVerifySection({ data, helpers }: UserVerifySectionPr
 
   if (!data.byUser || data.byUser.length === 0) return null
 
+  const totalDuration = data.byUser.reduce((s, u) => s + (u.totalDurationMin ?? 0), 0)
+  const showShare = data.byUser.length >= 2 && totalDuration > 0
+
   return (
     <section>
       <div className="text-xs font-bold text-ive-text-dim mb-2 uppercase tracking-wider">{tr('userVerifyTitle')}</div>
@@ -65,6 +68,19 @@ export default function UserVerifySection({ data, helpers }: UserVerifySectionPr
                   return (
                     <div className={`text-xs mt-1.5 leading-relaxed ${color}`}>
                       <i className={`fa-solid ${icon} mr-1`} />{msg}
+                    </div>
+                  )
+                })()}
+                {showShare && (() => {
+                  const dur = u.totalDurationMin ?? 0
+                  const pct = Math.round((dur / totalDuration) * 100)
+                  const barW = Math.max((dur / totalDuration) * 100, 1)
+                  return (
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <div className="flex-1 h-1 rounded-full bg-ive-bg-deep overflow-hidden">
+                        <div className="h-full rounded-full bg-ive-cyan/60" style={{ width: `${barW}%` }} />
+                      </div>
+                      <span className="text-[10px] text-ive-text-dim shrink-0 w-7 text-right">{pct}%</span>
                     </div>
                   )
                 })()}

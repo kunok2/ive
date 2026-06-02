@@ -6,7 +6,6 @@ import { useTranslations, useLocale } from 'next-intl'
 import { formatMoney, type ResolvedCurrency } from '@/lib/currency'
 import PullToRefresh from '@/components/ui/PullToRefresh'
 import BriefingSection from '@/components/tabs/reports/BriefingSection'
-import { ProjectCostShare, UserWorkShare } from '@/components/tabs/reports/DistributionSection'
 import UtilizationGauge from '@/components/tabs/reports/UtilizationGauge'
 import FlowPipeline from '@/components/tabs/reports/FlowPipeline'
 import AlertCards from '@/components/tabs/reports/AlertCards'
@@ -296,11 +295,6 @@ export default function ReportsTab() {
                 </ErrorBoundary>
               )}
 
-              {/* ⑦-2 프로젝트별 비용 비중 */}
-              <ErrorBoundary label="프로젝트 비용 비중">
-                <ProjectCostShare data={data} helpers={helpers} />
-              </ErrorBoundary>
-
               {/* ⑧ 에이전트별 부하 */}
               {diagnosis.agents.length > 0 && (
                 <ErrorBoundary label="에이전트별 부하">
@@ -321,11 +315,6 @@ export default function ReportsTab() {
                   <UserVerifySection data={data} helpers={helpers} />
                 </ErrorBoundary>
               )}
-
-              {/* ⑨-2 작업자별 비중 (검증 완료) */}
-              <ErrorBoundary label="작업자 비중">
-                <UserWorkShare data={data} helpers={helpers} />
-              </ErrorBoundary>
 
               {/* ⑩ 일별 현황 */}
               {data.dailyTrend.length > 0 && (
