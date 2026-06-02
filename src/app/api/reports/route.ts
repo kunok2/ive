@@ -480,6 +480,7 @@ export async function GET(req: NextRequest) {
       userId: uid, userName, userAvatar, avatarUserId,
       tasks: uExecs.length, success: uSuccess, failed: uFailed,
       issueCount: uniqueIssues.size,
+      totalDurationMin: Math.round(uDur * 10) / 10,
       avgDurationMin: uFinished > 0 ? Math.round((uDur / uFinished) * 10) / 10 : 0,
       avgWaitMin: waitTimes.length > 0 ? Math.round(waitTimes.reduce((s, t) => s + t, 0) / waitTimes.length * 10) / 10 : 0,
       verifyTasks: vInfo.tasks,
