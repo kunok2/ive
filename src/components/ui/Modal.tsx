@@ -48,7 +48,7 @@ export default function Modal({ open, onClose, title, children, size = 'md', clo
             <i className="fa-solid fa-xmark" />
           </button>
         </div>
-        <div className={`flex-1 overflow-y-auto ${size === 'sm' ? '' : 'px-4 py-4'}`}>
+        <div className={`flex-1 min-h-0 overflow-y-auto overscroll-contain ${size === 'sm' ? '' : 'px-4 py-4'}`}>
           {children}
         </div>
       </div>
