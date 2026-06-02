@@ -56,9 +56,11 @@ export default function CostBreakdown({ d, data, helpers }: CostBreakdownProps) 
           </div>
           {d.flow.humanMinutes > 0 && d.flow.humanMonthlySalary > 0 && (
             <div className="text-[10px] text-ive-text-dim pt-1 border-t border-ive-border-dark/50 mt-1">
-              {tr('salaryBasis', { salary: fmtCost(d.flow.humanMonthlySalary), hours: Math.round(d.flow.humanMonthlyMinutes / 60), perMin: formatMoney(d.flow.humanMonthlySalary / d.flow.humanMonthlyMinutes, cur.code, cur.rate, locale) })}
+              {tr('salaryBasis', { salary: fmtCost(d.flow.humanMonthlySalary), hours: Math.round(d.flow.humanMonthlyMinutes / 60), perMin: formatMoney(d.flow.humanMonthlySalary / d.flow.humanMonthlyMinutes, cur.code, cur.rate, locale, 1) })}
               <br />
-              {tr('salaryCalc', { duration: fmtDur(d.flow.humanMinutes), perMin: formatMoney(d.flow.humanMonthlySalary / d.flow.humanMonthlyMinutes, cur.code, cur.rate, locale), total: fmtCost(d.flow.totalCostHuman) })}
+              {tr('salaryCalc', { duration: fmtDur(d.flow.humanMinutes), perMin: formatMoney(d.flow.humanMonthlySalary / d.flow.humanMonthlyMinutes, cur.code, cur.rate, locale, 1), total: fmtCost(d.flow.totalCostHuman) })}
+              <br />
+              <span className="opacity-70">{tr('humanCostNote')}</span>
             </div>
           )}
           {d.flow.humanMonthlySalary === 0 && (

@@ -1,6 +1,6 @@
 import { ReportType } from '@/types'
 import { ReportExecution, getDailyWaitingTrend, getGlobalIssuesStartedInRange, getGlobalIssuesCompletedInRange } from '../db'
-import { getHumanRate, resolveExecutionCostBreakdown } from '../token-pricing'
+import { getHumanRate, resolveExecutionCostBreakdown, humanWorkMinutes } from '../token-pricing'
 import { formatMoney, type ResolvedCurrency } from '../currency'
 import { REPORT_TYPE_LABELS, PREV_PERIOD_LABELS, calculatePreviousPeriod } from './schedule'
 
@@ -256,12 +256,8 @@ export function generateReportHtml(
   const totalCost = totalCostAi + totalCostHuman
   const costPerTask = total > 0 ? totalCost / total : 0
 
-  // 사람 총 작업시간 (user 타입 exec 합산)
-  const totalHumanMin = executions.filter(e => e.assigneeType === 'user')
-    .reduce((s, e) => {
-      const effEnd = e.endedAt || e.startedAt
-      return s + Math.max(0, (new Date(effEnd).getTime() - new Date(e.startedAt).getTime()) / 60000)
-    }, 0)
+  // 사람 총 작업시간(분): 검증·확인=근무시간 구간, 툴 직접개발=ive-meta(started→ended). exec별 합산.
+  const totalHumanMin = executions.reduce((s, e) => s + humanWorkMinutes(e), 0)
 
   // ─── 유입/유출 흐름 계산 ───
   // 유입: 이슈가 처음 시작된 시각이 기간 내인 이슈 (이슈 단위 1회).

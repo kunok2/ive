@@ -248,6 +248,11 @@ export function initSchema(db: Database.Database) {
     if (!tableInfo.some((col: any) => col.name === 'currency_rate')) {
       db.exec("ALTER TABLE users ADD COLUMN currency_rate REAL")
     }
+    // 사용자별 사람단가 배수 (기본 1.0). 최종 사람 비용 = 작업시간 × (기본단가 × 배수).
+    // 능력/보수 차이를 반영해 1.8처럼 소수로 지정. 검증자 탭에서 관리자가 편집.
+    if (!tableInfo.some((col: any) => col.name === 'rate_multiplier')) {
+      db.exec("ALTER TABLE users ADD COLUMN rate_multiplier REAL NOT NULL DEFAULT 1.0")
+    }
   } catch (e) { console.error("Migration failed for users:", e) }
 
   try {
@@ -354,6 +359,27 @@ export function initSchema(db: Database.Database) {
       console.log('[DB] Added cache_read_input_tokens, cache_creation_input_tokens to task_executions')
     }
   } catch (e) { console.error("Migration failed for cache token columns:", e) }
+
+  // 툴 직접개발 작업의 확정 작업시간(초). 산정 우선순위: ive-meta(ended-started) > GitLab /spend > 0.
+  // 보고서가 DB만 읽어 산정하도록 스캐너가 채운다(이슈 열린 기간 created→등록 으로 부풀리지 않기 위함).
+  try {
+    const tableInfo = db.prepare("PRAGMA table_info(task_executions)").all() as any[]
+    if (!tableInfo.some((col: any) => col.name === 'work_sec')) {
+      db.exec("ALTER TABLE task_executions ADD COLUMN work_sec INTEGER NOT NULL DEFAULT 0")
+      // 백필(1회): ive-meta가 있는 과거 툴개발 exec은 started!=issue_created_at 이므로 (ended-started)로 채운다.
+      // ive-meta 없는 건(started==created)은 0으로 남고, GitLab /spend 백필은 별도 잡이 채운다.
+      db.exec(`
+        UPDATE task_executions
+           SET work_sec = CAST((julianday(ended_at) - julianday(started_at)) * 86400 AS INTEGER)
+         WHERE assignee_type = 'user'
+           AND id NOT LIKE 'ex-verify%' AND id NOT LIKE 'ex-confirm%'
+           AND ended_at IS NOT NULL
+           AND started_at <> issue_created_at
+           AND (julianday(ended_at) - julianday(started_at)) * 86400 > 0
+      `)
+      console.log('[DB] Added work_sec + backfilled ive-meta tool-dev durations')
+    }
+  } catch (e) { console.error("Migration failed for work_sec column:", e) }
 
   // 프로젝트 모니터링 설정
   try {
@@ -522,6 +548,10 @@ export function initSchema(db: Database.Database) {
   try { db.exec(`ALTER TABLE issue_stages ADD COLUMN preset_confirmer_username TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
   try { db.exec(`CREATE INDEX IF NOT EXISTS idx_issue_stages_assignee ON issue_stages(assignee_username, cached_stage)`) } catch { /* ignore */ }
   try { db.exec(`CREATE INDEX IF NOT EXISTS idx_issue_stages_assignee_id ON issue_stages(assignee_git_user_id)`) } catch { /* ignore */ }
+  // 보고서 범위 조회(getExecutionsInRange)는 started_at 범위 필터 + project_id 조인을 쓴다.
+  // 데이터가 커질수록 풀스캔이 느려지므로 인덱스로 보강(보고서 성능).
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_te_started_at ON task_executions(started_at)`) } catch { /* ignore */ }
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_te_project_issue ON task_executions(project_id, issue_iid)`) } catch { /* ignore */ }
 
   // 보고서 스케줄 테이블
   db.exec(`

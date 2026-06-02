@@ -17,6 +17,7 @@ export function mapUser(r: any): User {
     timezone: r.timezone,
     currency: r.currency ?? null,
     currencyRate: r.currency_rate ?? null,
+    rateMultiplier: r.rate_multiplier ?? 1,
     oauthProviderId: r.oauth_provider_id ?? null,
     oauthUserId: r.oauth_user_id ?? null,
     oauthTokenExpiresAt: r.oauth_token_expires_at ?? null,

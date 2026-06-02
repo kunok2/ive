@@ -12,6 +12,7 @@ export {
   fetchGitLabIssueNotes,
   deleteGitLabIssueNote,
   addGitLabSpentTime,
+  fetchGitLabIssueTimeSpentSec,
   fetchAllIveIssues,
   fetchAllProjectIssues,
   fetchClosedProjectIssues,

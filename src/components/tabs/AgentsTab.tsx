@@ -19,6 +19,9 @@ export default function AgentsTab({ onAdd }: { onAdd?: () => void }) {
   })
   const [verifiers, setVerifiers] = useState<VerifierSummary[]>([])
   const [verifiersLoaded, setVerifiersLoaded] = useState(false)
+  // IVE 사용자별 사람단가 배수 (userId → 배수). 관리자만 로드/편집 가능.
+  const [multipliers, setMultipliers] = useState<Record<string, number>>({})
+  const isAdmin = !!state.user?.isAdmin
   const t = useTranslations('agent')
   const tCommon = useTranslations('common')
 
@@ -46,8 +49,40 @@ export default function AgentsTab({ onAdd }: { onAdd?: () => void }) {
     return () => { cancelled = true; clearInterval(timer); document.removeEventListener('visibilitychange', onVisible) }
   }, [fetchVerifiers])
 
+  // 관리자: 사용자별 단가 배수 맵 로드 (검증자 카드에서 편집)
+  const fetchMultipliers = useCallback(async () => {
+    if (!isAdmin) return
+    try {
+      const res = await fetch('/api/admin/users')
+      if (res.ok) {
+        const users: { id: string; rateMultiplier?: number }[] = await res.json()
+        const map: Record<string, number> = {}
+        for (const u of users) map[u.id] = u.rateMultiplier ?? 1
+        setMultipliers(map)
+      }
+    } catch { /* ignore */ }
+  }, [isAdmin])
+
+  useEffect(() => { void fetchMultipliers() }, [fetchMultipliers])
+
+  // 배수 저장 (낙관적 갱신 후 PATCH). 실패 시 이전 값 복구.
+  const saveMultiplier = useCallback(async (userId: string, value: number) => {
+    const prev = multipliers[userId] ?? 1
+    setMultipliers(m => ({ ...m, [userId]: value }))
+    try {
+      const res = await fetch('/api/admin/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, rateMultiplier: value }),
+      })
+      if (!res.ok) throw new Error('save failed')
+    } catch {
+      setMultipliers(m => ({ ...m, [userId]: prev }))
+    }
+  }, [multipliers])
+
   const onRefresh = async () => {
-    await Promise.all([refreshAgents(), fetchVerifiers()])
+    await Promise.all([refreshAgents(), fetchVerifiers(), fetchMultipliers()])
   }
 
   // #272: 프로젝트별 배정 폐기. 에이전트는 사용자 풀에 속하므로 특정 프로젝트와의 1:1 관계가 없다.
@@ -155,7 +190,13 @@ export default function AgentsTab({ onAdd }: { onAdd?: () => void }) {
                       assignedProjects={getAssignedProjects(item.agent.id)}
                     />
                   ) : (
-                    <VerifierCard key={`v-${item.verifier.provider}-${item.verifier.username}`} verifier={item.verifier} />
+                    <VerifierCard
+                      key={`v-${item.verifier.provider}-${item.verifier.username}`}
+                      verifier={item.verifier}
+                      canEditMultiplier={isAdmin && !!item.verifier.iveUser}
+                      multiplier={item.verifier.iveUser ? (multipliers[item.verifier.iveUser.id] ?? 1) : 1}
+                      onSaveMultiplier={item.verifier.iveUser ? (v) => saveMultiplier(item.verifier.iveUser!.id, v) : undefined}
+                    />
                   ))}
                   {showVerifiers && verifiersLoaded && verifiers.length === 0 && filter !== 'all' && (
                     <div className="text-center py-8 text-sm font-bold text-ive-text-dim">

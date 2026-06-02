@@ -12,6 +12,7 @@ export interface User {
   timezone?: string    // 사용자 지정 타임존 (예: 'Asia/Seoul')
   currency?: string | null     // 표시 통화 코드 (ISO 4217, 예: 'KRW'). null/'USD' = 환산 안 함
   currencyRate?: number | null // 수동 고정 환율 (USD→통화). null = 자동 글로벌 환율 사용 (있으면 자동보다 우선)
+  rateMultiplier: number  // 사람단가 배수 (기본 1.0). 사람 비용 = 작업시간 × (기본단가 × 배수)
   oauthProviderId?: string | null  // OAuth 로그인 공급자 ID (oauth_providers.id)
   oauthUserId?: string | null      // 공급자 측 사용자 고유 ID (문자열화)
   oauthTokenExpiresAt?: string | null // OAuth access_token 만료 시각 (ISO)
@@ -223,6 +224,7 @@ export interface TaskExecution {
   userAvatar?: string | null
   verifiedAt?: string | null
   rejectedAt?: string | null
+  workSec?: number | null  // 툴 직접개발 확정 작업시간(초): ive-meta>/spend>0
 }
 
 export interface StatSnapshot {

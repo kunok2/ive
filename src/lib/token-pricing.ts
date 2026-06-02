@@ -52,58 +52,92 @@ export function calcCostFromDb(inputTokens: number, outputTokens: number, modelN
   return (inputTokens * pricing.inputPrice + outputTokens * pricing.outputPrice) / 1_000_000
 }
 
+// ─── 근무시간(KST 평일 09:00–18:00) 내 경과(분) ───
+const WORK_START_H = 9
+const WORK_END_H = 18
+const KST_OFFSET_MS = 9 * 60 * 60 * 1000
+const DAY_MS = 86_400_000
+
 /**
- * 실행 기록의 최종 비용을 결정합니다.
- *
- * CLI 비용:
- *   - costUsd > 0 이면 CLI가 직접 계산한 실제 비용 사용
- *   - 그 외 DB 단가 기반 계산 (calcCostFromDb)
- *
- * 사람 비용 (추가):
- *   - 사람이 직접 개발한 시간 (assigneeType === 'user')
- *   - 검증에 소요된 시간 (verifyStartedAt → verifiedAt/rejectedAt)
+ * [start, end] 구간 중 "근무시간(KST 평일 09–18)"에 해당하는 분만 합산.
+ * 검증/확인을 열어두고 퇴근하면 밤·주말이 빠지고 실제 근무 중 방치한 만큼만 남는다(상한 없음).
  */
+export function businessMinutesKST(startISO?: string | null, endISO?: string | null): number {
+  if (!startISO || !endISO) return 0
+  const s0 = new Date(startISO).getTime()
+  const e0 = new Date(endISO).getTime()
+  if (!isFinite(s0) || !isFinite(e0) || e0 <= s0) return 0
+  // KST 시계로 환산해 UTC 메서드로 다룬다.
+  const s = s0 + KST_OFFSET_MS
+  let e = e0 + KST_OFFSET_MS
+  // 폭주 방지(루프 상한, 값 자체의 상한은 아님): 비정상적으로 긴 구간만 보호.
+  if (e - s > 366 * DAY_MS) e = s + 366 * DAY_MS
+  let total = 0
+  for (let d = Math.floor(s / DAY_MS) * DAY_MS; d < e; d += DAY_MS) {
+    const dow = new Date(d).getUTCDay() // 0=일 .. 6=토 (KST 시계)
+    if (dow === 0 || dow === 6) continue
+    const winStart = d + WORK_START_H * 3_600_000
+    const winEnd = d + WORK_END_H * 3_600_000
+    const ov = Math.min(e, winEnd) - Math.max(s, winStart)
+    if (ov > 0) total += ov
+  }
+  return total / 60_000
+}
+
+interface CostExec {
+  id?: string
+  costUsd: number; inputTokens: number; outputTokens: number;
+  modelName?: string | null; assigneeType?: string;
+  startedAt?: string; endedAt?: string | null;
+  verifyStartedAt?: string | null; verifiedAt?: string | null; rejectedAt?: string | null;
+  workSec?: number | null;  // 툴 직접개발 확정 작업시간(초): ive-meta>/spend>0 (스캐너 산정)
+  rateMultiplier?: number | null;  // 사람단가 배수 (기본 1). 사람 비용 = 작업시간 × 기본단가 × 배수.
+}
+
+/**
+ * exec 1건의 "사람 작업시간(분)"을 산정한다. (원가 = 낮을수록 좋음)
+ *   - IVE 처리(에이전트 exec): 0 — 처리는 AI 비용(토큰)으로 계산.
+ *   - 검증/확인(ex-verify, ex-confirm): 근무시간 내 (검증시작→검증완료) 경과. 상한 없음(방치 시 증가).
+ *   - 툴 직접개발(그 외 user exec): work_sec(확정 작업시간). 스캐너가 ive-meta>/spend>0 으로 산정해 저장.
+ *     (이슈 열린 기간 created→등록 으로 부풀리지 않음.)
+ */
+export function humanWorkMinutes(e: CostExec): number {
+  if (e.assigneeType === 'agent') return 0
+  const id = e.id || ''
+  if (id.startsWith('ex-verify') || id.startsWith('ex-confirm')) {
+    return businessMinutesKST(e.verifyStartedAt || e.startedAt, e.verifiedAt || e.rejectedAt || e.endedAt)
+  }
+  // 툴 직접개발: 확정 작업시간(work_sec)만 사용.
+  return (e.workSec || 0) / 60
+}
+
 export interface ExecutionCostBreakdown {
-  ai: number      // AI 모델 토큰 비용 (costUsd 또는 토큰×단가)
-  human: number   // 사람 작업 시간 비용 (user exec 의 duration × 분당 월급)
+  ai: number      // AI 모델 토큰 비용 (costUsd 또는 토큰×단가) — IVE 처리분
+  human: number   // 사람 작업 시간 비용 (검증·확인 근무시간 + 툴개발 ive-meta 구간) × 분당단가
   total: number
 }
 
 /** 단일 execution의 비용을 AI/사람으로 나누어 계산 */
-export function resolveExecutionCostBreakdown(
-  e: {
-    costUsd: number; inputTokens: number; outputTokens: number;
-    modelName?: string | null; assigneeType?: string;
-    startedAt?: string; endedAt?: string | null;
-    verifyStartedAt?: string | null; verifiedAt?: string | null; rejectedAt?: string | null;
-  },
-  humanRate: HumanRate,
-): ExecutionCostBreakdown {
+export function resolveExecutionCostBreakdown(e: CostExec, humanRate: HumanRate): ExecutionCostBreakdown {
+  // AI 비용: IVE 처리(에이전트 exec)의 토큰 비용. 실제 청구액 우선, 없으면 토큰×단가.
   let ai = 0
-
-  // AI CLI 비용: 실제 청구액이 있으면 우선 사용, 없으면 토큰 단가로 계산
   if (e.assigneeType !== 'user') {
     ai = e.costUsd > 0 ? e.costUsd : calcCostFromDb(e.inputTokens, e.outputTokens, e.modelName ?? undefined)
   }
-
-  // 사람 비용: assigneeType='user' exec의 (ended - started) 구간만 계산
-  // 중복 집계 방지: 과거에는 모든 agent exec에도 검증 시간을 더했으나,
-  // markIssueVerified가 mass-update로 같은 verified_at을 여러 exec에 찍어
-  // 같은 구간이 exec 개수만큼 곱해졌다. user exec 하나에만 계산한다.
+  // 사람 비용: 작업시간(분) × 분당단가 × 사용자별 단가 배수(능력/보수 차이 반영, 기본 1)
   let human = 0
-  if (humanRate.monthlySalary > 0 && e.assigneeType === 'user' && e.startedAt && e.endedAt) {
-    const ms = new Date(e.endedAt).getTime() - new Date(e.startedAt).getTime()
-    if (ms > 0) human = (ms / 60000) * humanRate.costPerMin
+  if (humanRate.costPerMin > 0) {
+    const m = humanWorkMinutes(e)
+    if (m > 0) {
+      const mult = e.rateMultiplier != null && e.rateMultiplier > 0 ? e.rateMultiplier : 1
+      human = m * humanRate.costPerMin * mult
+    }
   }
-
   return { ai, human, total: ai + human }
 }
 
 /** 하위 호환: 총 비용만 반환 */
-export function resolveExecutionCost(
-  e: Parameters<typeof resolveExecutionCostBreakdown>[0],
-  humanRate: HumanRate,
-): number {
+export function resolveExecutionCost(e: CostExec, humanRate: HumanRate): number {
   return resolveExecutionCostBreakdown(e, humanRate).total
 }
 

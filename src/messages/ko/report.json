@@ -199,6 +199,7 @@
   "humanCostDurExpr": "({duration} × {perMin}/분)",
   "aiTokenCost": "AI 모델 (토큰 사용)",
   "humanTimeCost": "사람 시간 (개발/검증)",
+  "humanCostNote": "AI·사람 비용 모두 원가입니다(낮을수록 좋음). 사람 비용 = 작업시간 × 기본 단가 × 사람별 배수(검증자·확인자·개발자 각자 지정). 검증/확인은 근무시간(평일 09–18시)만 계산하며, 오래 방치하면 증가합니다. 툴 직접개발은 이슈에 기록한 작업시간(시작~종료, GitHub 포함) 기준.",
   "salaryBasis": "산정 기준: 월급 {salary} / 월 {hours}시간 = {perMin}/분",
   "salaryCalc": "사람 작업 시간 합계 {duration} × {perMin}/분 = {total}",
   "noHumanSalary": "사람 단가(관리자 월급)가 설정되지 않아 사람 시간은 0으로 계산됩니다. 설정에서 조정 가능합니다.",

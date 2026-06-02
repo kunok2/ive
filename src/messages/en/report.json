@@ -198,6 +198,7 @@
   "humanCostDurExpr": "({duration} × {perMin}/min)",
   "aiTokenCost": "AI model (token usage)",
   "humanTimeCost": "Human time (dev/verify)",
+  "humanCostNote": "Both AI and human costs are cost figures (lower is better). Human cost = work time × base rate × each person's multiplier (verifier/confirmer/developer). Verify/confirm counts business hours only (weekdays 09–18); leaving items open long increases it. Direct tool dev uses recorded work time (start-end in issue metadata, incl. GitHub).",
   "salaryBasis": "Basis: Monthly salary {salary} / {hours}h per month = {perMin}/min",
   "salaryCalc": "Total human work time {duration} × {perMin}/min = {total}",
   "noHumanSalary": "Human rate (admin monthly salary) is not set, so human time is calculated as 0. You can adjust it in settings.",

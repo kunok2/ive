@@ -108,6 +108,24 @@ export async function deleteGitLabIssueNote(project: Project, issueIid: number, 
 }
 
 /**
+ * 이슈의 GitLab 기록 작업시간(/spend = time_stats.total_time_spent, 초)을 조회합니다.
+ * ⚠️ 1회 백필 전용(ive-meta 없는 과거 GitLab 이슈의 작업시간 복구). 보고서 런타임에서는 호출 금지.
+ */
+export async function fetchGitLabIssueTimeSpentSec(project: Project, issueIid: number, decryptedToken: string): Promise<number> {
+  if (!getProjectPath(project.repoUrl)) return 0;
+  const headers = getAuthHeaders(project, decryptedToken);
+  try {
+    const res = await fetch(apiUrl(project, `/issues/${issueIid}`), { headers });
+    if (!res.ok) return 0;
+    const issue = await res.json();
+    const sec = issue?.time_stats?.total_time_spent;
+    return typeof sec === 'number' && sec > 0 ? sec : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
  * 이슈에 소요 시간을 등록합니다.
  */
 export async function addGitLabSpentTime(project: Project, issueIid: number, decryptedToken: string, duration: string, options?: { isOAuth?: boolean }) {

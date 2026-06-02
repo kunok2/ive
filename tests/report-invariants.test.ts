@@ -191,6 +191,7 @@ function getTestExecutions(db: Database.Database, userId: string, startISO: stri
     verifierAvatar: r.verifier_avatar ?? null, verifierUsername: r.verifier_username ?? null,
     verifierUserId: r.verifier_user_id_resolved ?? null, assigneeType: r.assignee_type ?? 'agent',
     confirmStartedAt: null, confirmedAt: null, confirmerName: null, confirmerAvatar: null, confirmerUserId: null,
+    workSec: r.work_sec ?? 0, rateMultiplier: 1,
   }))
 }
 

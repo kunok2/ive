@@ -9,6 +9,7 @@ import {
   createExecution,
   updateExecutionStatus,
   updateExecutionTokens,
+  updateExecutionWorkSec,
   resetStuckExecutions,
   hasActiveExecution,
   hasAnyExecution,
@@ -471,6 +472,12 @@ async function scanProject(project: Project, force: boolean = false) {
             updateExecutionTokens(executionId, meta.inputTokens, meta.outputTokens, meta.costUsd, meta.turns, meta.model || undefined, 0, 0);
           }
 
+          // 툴개발 확정 작업시간(초): ive-meta(started→ended) > GitLab /spend > 0. (이슈 열린기간으로 부풀리지 않음)
+          const workSec = (meta.startedAt && meta.endedAt)
+            ? Math.max(0, Math.round((new Date(meta.endedAt).getTime() - new Date(meta.startedAt).getTime()) / 1000))
+            : (typeof (issue as any).time_stats?.total_time_spent === 'number' && (issue as any).time_stats.total_time_spent > 0 ? Math.round((issue as any).time_stats.total_time_spent) : 0);
+          if (workSec > 0) updateExecutionWorkSec(executionId, workSec);
+
           touchProjectActivity(project.id);
           try {
             createActivityLog({
@@ -832,14 +839,14 @@ export async function reconcileExternalIssue(
   let closed = false;
 
   const extExec = getDb().prepare(
-    `SELECT id, started_at, ended_at, input_tokens, output_tokens, cost_usd, turns, model_name
+    `SELECT id, started_at, ended_at, input_tokens, output_tokens, cost_usd, turns, model_name, work_sec
        FROM task_executions
       WHERE project_id = ? AND issue_iid = ? AND assignee_type = 'user'
         AND (agent_id IS NULL OR agent_id = '') AND user_id IS NULL
       ORDER BY started_at DESC LIMIT 1`
   ).get(project.id, iid) as {
     id: string; started_at: string; ended_at: string | null;
-    input_tokens: number; output_tokens: number; cost_usd: number; turns: number; model_name: string | null;
+    input_tokens: number; output_tokens: number; cost_usd: number; turns: number; model_name: string | null; work_sec: number;
   } | undefined;
 
   if (!extExec) return { resynced, closed };
@@ -863,7 +870,15 @@ export async function reconcileExternalIssue(
     getDb().prepare('UPDATE task_executions SET started_at = COALESCE(?, started_at), ended_at = COALESCE(?, ended_at) WHERE id = ?')
       .run(newStart, newEnd, extExec.id);
   }
-  if (tokensChanged || newStart || newEnd) {
+  // 확정 작업시간(work_sec) 재산정: ive-meta(started→ended) > GitLab /spend > 0. 사후 수정도 반영.
+  const effStart = newStart || extExec.started_at;
+  const effEnd = newEnd || extExec.ended_at;
+  const newWorkSec = (meta.startedAt && meta.endedAt && effStart && effEnd)
+    ? Math.max(0, Math.round((new Date(effEnd).getTime() - new Date(effStart).getTime()) / 1000))
+    : (typeof (issue as any).time_stats?.total_time_spent === 'number' && (issue as any).time_stats.total_time_spent > 0 ? Math.round((issue as any).time_stats.total_time_spent) : 0);
+  const workChanged = newWorkSec > 0 && newWorkSec !== extExec.work_sec;
+  if (workChanged) updateExecutionWorkSec(extExec.id, newWorkSec);
+  if (tokensChanged || newStart || newEnd || workChanged) {
     resynced = true;
     slog.info(`[RESYNC] Project: ${project.name}, Issue: #${iid}, Exec: ${extExec.id} — ive-meta 재동기화 (tokens=${tokensChanged}, times=${!!(newStart || newEnd)})`);
     try {

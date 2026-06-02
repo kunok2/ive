@@ -195,6 +195,16 @@ export function fetchIssuesByLabel(project: Project, token: string, label: strin
     : gitlab.fetchGitLabIssues(project, token, label);
 }
 
+/**
+ * 이슈의 기록 작업시간(GitLab /spend, 초) 조회. GitHub은 native 시간추적이 없어 0.
+ * ⚠️ work_sec 1회 백필 전용. 보고서 런타임에서 호출 금지(이슈마다 호출 = 느림).
+ */
+export function fetchIssueTimeSpentSec(project: Project, token: string, issueIid: number): Promise<number> {
+  return project.provider === 'github'
+    ? Promise.resolve(0)
+    : gitlab.fetchGitLabIssueTimeSpentSec(project, issueIid, token);
+}
+
 // Branch
 export function createBranch(project: Project, token: string, branchName: string, ref: string) {
   return project.provider === 'github'

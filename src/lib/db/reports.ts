@@ -47,6 +47,19 @@ export interface ReportExecution {
   verifierUsername: string | null
   verifierUserId: string | null
   assigneeType: string
+  workSec: number         // 툴 직접개발 확정 작업시간(초): ive-meta>/spend>0
+  rateMultiplier: number  // 이 exec의 사람 비용에 적용할 단가 배수 (검증=검증자, 확인=확인자, 툴개발=개발자, 기본1)
+}
+
+/**
+ * exec 1건의 사람 비용에 적용할 단가 배수를 해결한다.
+ * 사람 작업(검증/확인/툴개발)의 비용 귀속자는 모두 te.user_id 다 —
+ * ex-verify/ex-confirm placeholder 행도 작업자(검증자/확인자)를 user_id 에 저장한다.
+ * 따라서 te.user_id 의 IVE 사용자 배수(human_multiplier)를 그대로 쓴다.
+ * 에이전트 exec은 user_id 가 없어 NULL → 1 (사람 비용 0이라 무의미).
+ */
+function resolveRowRateMultiplier(r: any): number {
+  return r.human_multiplier ?? 1
 }
 
 function mapReportExecution(r: any): ReportExecution {
@@ -81,6 +94,8 @@ function mapReportExecution(r: any): ReportExecution {
     verifierUsername: r.verifier_username ?? null,
     verifierUserId: r.verifier_user_id_resolved ?? null,
     assigneeType: r.assignee_type ?? 'agent',
+    workSec: r.work_sec ?? 0,
+    rateMultiplier: resolveRowRateMultiplier(r),
   }
 }
 
@@ -90,18 +105,20 @@ const REPORT_EXEC_QUERY = `
          u.name as developer_name, a.user_id as developer_user_id,
          te.issue_iid, te.issue_title, te.status,
          te.started_at, te.ended_at, te.input_tokens, te.output_tokens, te.cache_read_input_tokens, te.cache_creation_input_tokens, te.cost_usd, te.turns,
-         te.issue_created_at, te.model_name, te.verified_at, te.verify_started_at, te.rejected_at,
+         te.issue_created_at, te.model_name, te.verified_at, te.verify_started_at, te.rejected_at, te.work_sec,
          ist.confirm_started_at, ist.confirmed_at, ist.confirmer_name, ist.confirmer_avatar, ist.confirmer_user_id,
          te.assignee_type, te.user_id as te_user_id, te.user_name as te_user_name, te.user_avatar as te_user_avatar,
          te.verifier_name, te.verifier_avatar, te.verifier_username,
          COALESCE(te.verifier_user_id, vu.id) as verifier_user_id_resolved,
-         vu.avatar as verifier_user_avatar
+         vu.avatar as verifier_user_avatar,
+         hu.rate_multiplier as human_multiplier
   FROM task_executions te
   JOIN projects p ON p.id = te.project_id
   LEFT JOIN agents a ON a.id = te.agent_id
   LEFT JOIN users u ON u.id = a.user_id
   LEFT JOIN issue_stages ist ON ist.project_id = te.project_id AND ist.issue_iid = te.issue_iid
   LEFT JOIN users vu ON vu.id = COALESCE(te.verifier_user_id, (SELECT u2.id FROM users u2 WHERE u2.name = te.verifier_name LIMIT 1))
+  LEFT JOIN users hu ON hu.id = te.user_id
 `
 
 export function getExecutionsInRange(userId: string, start: string, end: string): ReportExecution[] {

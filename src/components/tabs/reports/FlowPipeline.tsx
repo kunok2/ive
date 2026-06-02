@@ -64,7 +64,7 @@ export default function FlowPipeline({ d, inflowData, throughputData, waitingDat
             <span>
               <i className="fa-solid fa-user mr-0.5 text-ive-text-muted" />{tr('humanCostCompact', { amount: fmtCost(d.flow.totalCostHuman) })}
               {d.flow.humanMinutes > 0 && (
-                <span className="opacity-70"> {tr('humanCostDurExpr', { duration: fmtDur(d.flow.humanMinutes), perMin: formatMoney(d.flow.humanMonthlySalary / d.flow.humanMonthlyMinutes, cur.code, cur.rate, locale) })}</span>
+                <span className="opacity-70"> {tr('humanCostDurExpr', { duration: fmtDur(d.flow.humanMinutes), perMin: formatMoney(d.flow.humanMonthlySalary / d.flow.humanMonthlyMinutes, cur.code, cur.rate, locale, 1) })}</span>
               )}
             </span>
           </div>

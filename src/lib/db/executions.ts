@@ -43,7 +43,13 @@ function mapExecution(r: any): TaskExecution {
     userAvatar: r.user_avatar ?? null,
     verifiedAt: r.verified_at ?? null,
     rejectedAt: r.rejected_at ?? null,
+    workSec: r.work_sec ?? 0,
   }
+}
+
+/** 툴 직접개발 작업의 확정 작업시간(초) 저장 — ive-meta > /spend > 0 으로 스캐너가 산정. */
+export function updateExecutionWorkSec(id: string, sec: number) {
+  getDb().prepare('UPDATE task_executions SET work_sec = ? WHERE id = ?').run(Math.max(0, Math.round(sec)), id)
 }
 
 export function createExecution(ex: TaskExecution) {

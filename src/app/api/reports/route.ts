@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { getExecutionsInRange, getDailyWaitingTrend, getDailyWaitingTrendByAgent, getAgent, getVerifierBacklogForReport, getIssuesCompletedInRange, getIssuesStartedInRange, getAgentHistoricalDailyCapacity } from '@/lib/db'
-import { resolveExecutionCost, resolveExecutionCostBreakdown, getHumanRate } from '@/lib/token-pricing'
+import { resolveExecutionCost, resolveExecutionCostBreakdown, getHumanRate, humanWorkMinutes } from '@/lib/token-pricing'
 import { getKSTTodayString, utcISOToKSTDate, utcISOToKSTMonth, kstDateToUTCISO } from '@/lib/date-utils'
 import { isBotName } from '@/lib/git-bot'
 
@@ -108,6 +108,13 @@ export async function GET(req: NextRequest) {
     return Math.max(0, (b - a) / 60000)
   }
 
+  // 작업(개발)시간(분): 에이전트 처리=실행갭(started→ended), 툴 직접개발=확정 work_sec.
+  // 툴개발은 이슈 열린 기간(created→등록)이 아니라 기록된 작업시간(work_sec)을 쓴다.
+  function workMin(e: { assigneeType?: string; startedAt?: string; endedAt?: string | null; workSec?: number }): number {
+    if (e.assigneeType === 'user') return (e.workSec || 0) / 60
+    return durationMin(e.startedAt, e.endedAt)
+  }
+
   // 생애주기 시작점: 이슈가 작업 종료 후 등록된 경우(사후 등록)에도 작업시간이 누락되지
   // 않도록 issue_created_at 과 started_at 중 더 이른 값을 사용한다.
   function lifecycleStart(issueCreatedAt: string | null | undefined, startedAt: string | null | undefined): string | null {
@@ -169,13 +176,8 @@ export async function GET(req: NextRequest) {
   const totalCost = costBreakdown.ai + costBreakdown.human
   const totalCostAi = costBreakdown.ai
   const totalCostHuman = costBreakdown.human
-  // 사람 비용 계산 메타 (왜 이 금액이 나왔는지 설명용)
-  const humanMinutes = execs.reduce((s, e) => {
-    if (e.assigneeType !== 'user' || !e.startedAt) return s
-    const effEnd = e.endedAt || e.startedAt
-    const ms = new Date(effEnd).getTime() - new Date(e.startedAt).getTime()
-    return ms > 0 ? s + ms / 60000 : s
-  }, 0)
+  // 사람 작업 시간 합계(분): 검증·확인=근무시간 구간, 툴 직접개발=ive-meta(started→ended). exec별 합산.
+  const humanMinutes = execs.reduce((s, e) => s + humanWorkMinutes(e), 0)
   const successRate = totalTasks > 0 ? (successCount / (successCount + failedCount || 1)) * 100 : 0
 
   // 이전 기간 요약
@@ -253,7 +255,7 @@ export async function GET(req: NextRequest) {
     d.cost += resolveExecutionCost(e, humanRate)
     if (e.status === 'success' || e.status === 'failed') {
       const effEnd = e.endedAt || e.startedAt
-      const proc = durationMin(e.startedAt, effEnd)
+      const proc = workMin(e)
       if (proc > 0) d.procTimes.push(proc)
       const ws = e.issueCreatedAt
       if (ws) {
@@ -549,7 +551,7 @@ export async function GET(req: NextRequest) {
     d.cost += resolveExecutionCost(e, humanRate)
     if (e.status === 'success' || e.status === 'failed') {
       const effEnd = e.endedAt || e.startedAt
-      const proc = durationMin(e.startedAt, effEnd)
+      const proc = workMin(e)
       if (proc > 0) d.procTimes.push(proc)
       const ws = e.issueCreatedAt
       if (ws) {
@@ -747,8 +749,8 @@ export async function GET(req: NextRequest) {
           // 처리 완료 시각 (확인 끝났으면 그 시점, 아니면 검증 종료 시점)
           // 각 후보 컬럼을 safeISO 로 정제 — DB 에 garbage 가 남아 있어도 클라이언트에선 안전.
           resolvedAt: safeISO(e.confirmedAt) || safeISO(e.verifiedAt) || safeISO(e.rejectedAt) || safeISO(e.endedAt) || safeISO(e.startedAt) || new Date().toISOString(),
-          // 작업 시간 (에이전트가 코드를 만든 시간): startedAt → endedAt
-          durationMin: Math.round(durationMin(e.startedAt, e.endedAt) * 10) / 10,
+          // 작업 시간: 에이전트=실행갭, 툴 직접개발=확정 work_sec (이슈 열린기간 아님)
+          durationMin: Math.round(workMin(e) * 10) / 10,
           // 검증 시간 (사람이 검증한 시간): verifyStartedAt → verifiedAt | rejectedAt
           verifyMin: (() => {
             const verifyEnd = e.verifiedAt || e.rejectedAt
@@ -803,10 +805,9 @@ export async function GET(req: NextRequest) {
       return wait
     })
     .filter(v => v >= 0)
-  // 작업시간: started_at → ended_at (ended_at 없으면 0)
+  // 작업(개발)시간: 에이전트=실행갭, 툴 직접개발=확정 work_sec (이슈 열린기간으로 부풀리지 않음)
   const procTimes = finishedExecs
-    .filter(e => e.endedAt)
-    .map(e => durationMin(e.startedAt, e.endedAt!))
+    .map(e => workMin(e))
     .filter(v => v > 0)
   // 검증시간: verify_started_at → verified_at/rejected_at (승인/반려 모두 포함)
   const verifyTimes = finishedExecs

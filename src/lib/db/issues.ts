@@ -1,6 +1,7 @@
 import { Project } from '@/types'
 import { getDb } from './connection'
 import { getKSTTodayStartISO } from '../date-utils'
+import { isBotName } from '../git-bot'
 
 // ── Issue Stage (레이블 기반 상태 판정) ──
 
@@ -580,7 +581,9 @@ export function getVerifiersList(userId: string): VerifierSummary[] {
   }
 
   const now = Date.now()
-  return Array.from(metaMap.entries()).map(([key, meta]) => {
+  return Array.from(metaMap.entries())
+    .filter(([, meta]) => !isBotName(meta.username) && !isBotName(meta.name))
+    .map(([key, meta]) => {
     const curr = currentMap.get(key)
     const exec = execMap.get(key)
     const oldestWaitMs = curr?.oldest_wait_at ? now - new Date(curr.oldest_wait_at + 'Z').getTime() : 0

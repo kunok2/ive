@@ -35,6 +35,12 @@ interface QueueItem {
 
 interface Props {
   verifier: VerifierSummary
+  /** 관리자 + IVE 사용자 연결된 검증자만 단가 배수 편집 가능 */
+  canEditMultiplier?: boolean
+  /** 현재 사람단가 배수 (기본 1) */
+  multiplier?: number
+  /** 배수 저장 콜백 (blur 자동저장) */
+  onSaveMultiplier?: (value: number) => void
 }
 
 function fmtDur(min: number): string {
@@ -45,8 +51,18 @@ function fmtDur(min: number): string {
   return m > 0 ? `${h}시간 ${m}분` : `${h}시간`
 }
 
-export default function VerifierCard({ verifier }: Props) {
+export default function VerifierCard({ verifier, canEditMultiplier = false, multiplier = 1, onSaveMultiplier }: Props) {
   const t = useTranslations('agent')
+  // 사람단가 배수 입력 (blur 자동저장). prop 변경 시 동기화.
+  const [multInput, setMultInput] = useState(String(multiplier))
+  useEffect(() => { setMultInput(String(multiplier)) }, [multiplier])
+  const commitMultiplier = () => {
+    const v = parseFloat(multInput)
+    if (!Number.isFinite(v) || v <= 0) { setMultInput(String(multiplier)); return }
+    const rounded = Math.round(v * 100) / 100
+    if (rounded !== multiplier) onSaveMultiplier?.(rounded)
+    setMultInput(String(rounded))
+  }
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window === 'undefined') return true
     return sessionStorage.getItem(`vc-collapsed-${verifier.provider}-${verifier.username}`) !== 'false'
@@ -146,12 +162,13 @@ export default function VerifierCard({ verifier }: Props) {
             </div>
             <div className="text-sm font-bold text-ive-text-muted truncate">
               <i className={`fa-brands ${providerIcon} mr-1`} />@{verifier.username}
+              {verifier.iveUser?.email && (
+                <span className="text-ive-text-dim"> · {verifier.iveUser.email}</span>
+              )}
+              {collapsed && verifier.assignedProjects.length > 0 && (
+                <span className="text-ive-text-dim"> · {verifier.assignedProjects.map(p => p.name).join(', ')}</span>
+              )}
             </div>
-            {collapsed && verifier.assignedProjects.length > 0 && (
-              <div className="text-xs font-bold text-ive-text-dim mt-0.5 truncate">
-                {verifier.assignedProjects.map(p => p.name).join(', ')}
-              </div>
-            )}
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -204,6 +221,28 @@ export default function VerifierCard({ verifier }: Props) {
               </div>
             )}
           </div>
+
+          {/* 사람단가 배수 — 관리자 + IVE 사용자 연결 검증자만. blur 자동저장. */}
+          {canEditMultiplier && (
+            <div className="flex items-center gap-2 text-sm font-bold">
+              <span className="text-ive-text-muted shrink-0"><i className="fa-solid fa-coins w-4 text-center" /> {t('rateMultiplier')}</span>
+              <div className="inline-flex items-center gap-1">
+                <span className="text-ive-text-dim">×</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min="0.1"
+                  step="0.1"
+                  value={multInput}
+                  onChange={e => setMultInput(e.target.value)}
+                  onBlur={commitMultiplier}
+                  onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                  className="w-16 px-2 py-0.5 rounded-lg bg-ive-bg-deep border border-ive-border-dark text-ive-text font-bold text-sm text-right focus:outline-none focus:border-ive-cyan/50"
+                />
+              </div>
+              <span className="text-xs font-bold text-ive-text-dim">{t('rateMultiplierHint')}</span>
+            </div>
+          )}
         </div>
 
         {/* 대시보드 통계 바 — 검증중/승인/반려/대기/통계 */}

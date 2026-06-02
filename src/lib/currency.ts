@@ -29,19 +29,22 @@ export interface ResolvedCurrency {
   updatedAt: string | null  // 자동 환율 갱신 시각 (ISO). manual/usd 면 null
 }
 
-/** USD 금액을 표시 통화로 환산해 통화기호 포함 문자열로 포맷. */
-export function formatMoney(usd: number, code: string, rate: number, locale?: string): string {
+/**
+ * USD 금액을 표시 통화로 환산해 통화기호 포함 문자열로 포맷.
+ * @param maxFractionDigits 소수 자릿수 상한. 기본 0(정수, 보고서 합계용).
+ *   분당 비용처럼 1달러 미만 값은 정수로 반올림하면 의미가 사라지므로 2~4 를 넘긴다.
+ */
+export function formatMoney(usd: number, code: string, rate: number, locale?: string, maxFractionDigits = 0): string {
   const amount = usd * (rate || 1)
   const loc = locale === 'ko' ? 'ko-KR' : locale === 'en' ? 'en-US' : undefined
   try {
     return new Intl.NumberFormat(loc, {
       style: 'currency',
       currency: code,
-      // 보고서 가독성을 위해 정수로 표시(기존 동작과 동일)
-      maximumFractionDigits: 0,
+      maximumFractionDigits: maxFractionDigits,
     }).format(amount)
   } catch {
     // 알 수 없는 통화코드 폴백
-    return `$${Math.round(amount).toLocaleString()}`
+    return `$${amount.toLocaleString(undefined, { maximumFractionDigits: maxFractionDigits })}`
   }
 }
