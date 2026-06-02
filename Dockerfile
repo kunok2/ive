@@ -29,6 +29,7 @@ RUN apt-get update && apt-get install -y \
     ripgrep fd-find tree \
     procps psmisc \
     netcat-openbsd dnsutils \
+    gosu \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -83,7 +84,13 @@ RUN useradd -m -s /bin/bash ive \
 EXPOSE 443
 
 ENV NODE_ENV=production
+# gosu로 ive에 강등해 실행하므로 HOME을 명시한다(gosu는 HOME을 바꾸지 않음).
+# CLI들이 ~/.claude, ~/.local/share/opencode 등을 찾으려면 HOME=/home/ive가 필요.
+ENV HOME=/home/ive
 
-USER ive
+# entrypoint를 root로 실행해 bind-mount된 디렉토리 소유권을 ive에 맞춘 뒤 ive로 강등한다.
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["npm", "start"]
