@@ -251,7 +251,6 @@ export default function OAuthProvidersPanel() {
                 <div className="mt-1 ml-4 text-ive-text-dim">
                   • {t('orderStep4Gitlab', { url: '<base-url>/-/user_settings/applications' })}<br/>
                   • {t('orderStep4Github', { url: 'https://github.com/settings/developers' })}<br/>
-                  • {t('orderStep4Slack', { url: 'https://api.slack.com/apps' })}<br/>
                   • {t('orderStep4Paste')}<br/>
                   • {t('orderStep4Scopes')}<br/>
                   • {t('orderStep4Save')}
@@ -260,6 +259,26 @@ export default function OAuthProvidersPanel() {
               <li>{t('orderStep5')}</li>
               <li>{t('orderStep6')}</li>
             </ol>
+          </div>
+
+          {/* Slack 전용 설정 가이드 — 순서 + 스코프별 용도(이미지 읽기/그려보여주기 포함) */}
+          <div className="bg-ive-bg-deep border border-ive-cyan/20 rounded-lg p-2.5 text-xs">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-ive-cyan font-bold">
+                <i className="fa-brands fa-slack mr-1" />{t('slackSetupTitle')}
+              </span>
+              <a
+                href="https://api.slack.com/apps"
+                target="_blank"
+                rel="noreferrer"
+                className="font-bold text-ive-cyan bg-ive-cyan/10 hover:bg-ive-cyan/20 px-2 py-0.5 rounded whitespace-nowrap"
+              >
+                api.slack.com/apps<i className="fa-solid fa-arrow-up-right-from-square ml-1 text-[9px]" />
+              </a>
+            </div>
+            <div className="text-ive-text-dim whitespace-pre-line leading-relaxed">{t('slackSetupSteps')}</div>
+            <div className="mt-2 text-ive-text font-bold">{t('slackScopePurposeTitle')}</div>
+            <div className="text-ive-text-dim whitespace-pre-line leading-relaxed font-mono">{t('slackScopePurposes')}</div>
           </div>
 
           <div className="bg-ive-bg-deep border border-ive-amber/20 rounded-lg p-2.5 text-xs">
@@ -520,6 +539,22 @@ export default function OAuthProvidersPanel() {
                   </summary>
                   <div className="px-2.5 pb-2.5 pt-1 flex flex-col gap-2.5">
                     <div className="text-ive-text-dim">{t('slackBotSectionHint')}</div>
+                    {/* 부여해야 하는 스코프 — 나중에 헤매지 않도록 정확히 명시 (코드의 SLACK_BOT_SCOPES와 일치) */}
+                    <div>
+                      <div className="flex items-center justify-between mb-0.5">
+                        <span className="text-ive-text-muted font-bold">{t('slackBotScopes')}</span>
+                        <button
+                          type="button"
+                          onClick={() => copyText('botscopes', 'app_mentions:read,chat:write,channels:history,groups:history,channels:read,groups:read,files:read,files:write,users:read')}
+                          className={`font-bold px-2 py-0.5 rounded transition-colors active:scale-95 ${copiedKey === 'botscopes' ? 'text-ive-green bg-ive-green/15' : 'text-ive-cyan bg-ive-cyan/10 hover:bg-ive-cyan/20'}`}
+                        >
+                          <i className={`fa-solid ${copiedKey === 'botscopes' ? 'fa-check' : 'fa-copy'} mr-1`} />{copiedKey === 'botscopes' ? t('copiedBtn') : t('copyBtn')}
+                        </button>
+                      </div>
+                      <div className="font-mono text-ive-text break-all">app_mentions:read, chat:write, channels:history, groups:history, channels:read, groups:read, files:read, files:write, users:read</div>
+                    </div>
+                    <div className="text-ive-text-dim"><i className="fa-solid fa-bolt mr-1 text-ive-amber" />{t('slackBotEvent')}</div>
+                    <div className="text-ive-text-dim"><i className="fa-solid fa-right-to-bracket mr-1 text-ive-cyan" />{t('slackLoginScopes')}</div>
                     <div>
                       <label className="block text-ive-text-muted font-bold mb-1">
                         {t('signingSecretLabel')} {editing ? t('onlyIfChanging') : ''}
