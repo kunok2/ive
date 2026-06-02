@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { DEFAULT_AVATARS } from '@/types'
 import { locales, localeNames, Locale } from '@/i18n/config'
 import AvatarCropEditor from './AvatarCropEditor'
+import { useDialog } from '@/components/ui/ConfirmDialog'
 
 const TIMEZONE_OPTIONS = [
   { value: 'Asia/Seoul', label: '🇰🇷 서울 (KST, UTC+9)' },
@@ -55,6 +56,8 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
   const tc = useTranslations('common')
   const currentLocale = useLocale()
   const router = useRouter()
+  const { alert: dialogAlert } = useDialog()
+  const popup = (message: string) => { void dialogAlert({ message }) }
   const [activeSection, setActiveSection] = useState<ActiveSection>('none')
   const [selectedLocale, setSelectedLocale] = useState<Locale>((userLocale || currentLocale) as Locale)
   const [selectedTimezone, setSelectedTimezone] = useState(userTimezone || 'Asia/Seoul')
@@ -147,7 +150,6 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
   const [emailCodeSent, setEmailCodeSent] = useState(false)
   const [emailSendingCode, setEmailSendingCode] = useState(false)
   const [emailPassword, setEmailPassword] = useState('')
-  const [emailError, setEmailError] = useState('')
   const [emailLoading, setEmailLoading] = useState(false)
   const [emailSuccess, setEmailSuccess] = useState(false)
 
@@ -158,7 +160,6 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [newPasswordConfirm, setNewPasswordConfirm] = useState('')
-  const [pwError, setPwError] = useState('')
   const [pwLoading, setPwLoading] = useState(false)
   const [pwSuccess, setPwSuccess] = useState(false)
 
@@ -183,10 +184,10 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
           if (res.status === 413) errorMsg = t('fileTooLarge')
           else errorMsg = `${t('uploadFailed')} (${res.status})`
         }
-        alert(errorMsg)
+        popup(errorMsg)
       }
     } catch {
-      alert(t('networkError'))
+      popup(t('networkError'))
     } finally {
       setUploading(false)
     }
@@ -194,8 +195,7 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
 
   // 이메일 인증 코드 전송
   async function handleEmailSendCode() {
-    if (!newEmail) { setEmailError(t('newEmailRequired')); return }
-    setEmailError('')
+    if (!newEmail) { popup(t('newEmailRequired')); return }
     setEmailSendingCode(true)
     try {
       const res = await fetch('/api/auth/send-code', {
@@ -204,7 +204,7 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
         body: JSON.stringify({ email: newEmail, purpose: 'change-email' }),
       })
       const data = await res.json()
-      if (!res.ok) { setEmailError(data.error); return }
+      if (!res.ok) { popup(data.error); return }
       setEmailCodeSent(true)
     } finally {
       setEmailSendingCode(false)
@@ -214,9 +214,7 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
   // 이메일 변경 제출
   async function handleEmailSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setEmailError('')
-    if (!emailCode.trim()) { setEmailError(t('verificationCodeRequired')); return }
-    if (!emailPassword) { setEmailError(t('emailRequired')); return }
+    if (!emailCodeSent || emailCode.length < 6) { popup(t('verifyRequiredNotice')); return }
     setEmailLoading(true)
     try {
       const res = await fetch('/api/auth/change-email', {
@@ -225,7 +223,7 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
         body: JSON.stringify({ newEmail, currentPassword: emailPassword, code: emailCode.trim() }),
       })
       const data = await res.json()
-      if (!res.ok) { setEmailError(data.error); return }
+      if (!res.ok) { popup(data.error); return }
       setEmailSuccess(true)
       onEmailChanged?.()
       setTimeout(() => onSuccess?.(), 1500)
@@ -236,7 +234,6 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
 
   // 비밀번호 인증 코드 전송
   async function handlePwSendCode() {
-    setPwError('')
     setPwSendingCode(true)
     try {
       const res = await fetch('/api/auth/send-code', {
@@ -245,7 +242,7 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
         body: JSON.stringify({ email, purpose: 'change-password' }),
       })
       const data = await res.json()
-      if (!res.ok) { setPwError(data.error); return }
+      if (!res.ok) { popup(data.error); return }
       setPwCodeSent(true)
     } finally {
       setPwSendingCode(false)
@@ -255,9 +252,9 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
   // 비밀번호 변경 제출
   async function handlePwSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setPwError('')
-    if (newPassword !== newPasswordConfirm) { setPwError(t('newPasswordMismatch')); return }
-    if (!pwCode.trim()) { setPwError(t('verificationCodeRequired')); return }
+    // 검증 실패는 모두 팝업으로 (인라인 메시지 안 씀)
+    if (newPassword !== newPasswordConfirm) { popup(t('newPasswordMismatch')); return }
+    if (!pwCodeSent || pwCode.length < 6) { popup(t('verifyRequiredNotice')); return }
     setPwLoading(true)
     try {
       const res = await fetch('/api/auth/change-password', {
@@ -266,7 +263,7 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
         body: JSON.stringify({ email, currentPassword, newPassword, code: pwCode.trim() }),
       })
       const data = await res.json()
-      if (!res.ok) { setPwError(data.error); return }
+      if (!res.ok) { popup(data.error); return }
       setPwSuccess(true)
       setTimeout(() => onSuccess?.(), 1500)
     } finally {
@@ -351,7 +348,7 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
                   if (!file) return
                   if (file.size > 5 * 1024 * 1024) {
                     const sizeMB = (file.size / (1024 * 1024)).toFixed(1)
-                    alert(t('fileSizeWarning', { size: sizeMB }))
+                    popup(t('fileSizeWarning', { size: sizeMB }))
                     if (fileInputRef.current) fileInputRef.current.value = ''
                     return
                   }
@@ -384,7 +381,7 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
                       setActiveSection('none')
                     } else {
                       const data = await res.json().catch(() => ({}))
-                      alert(data.error || t('avatarSaveFailed'))
+                      popup(data.error || t('avatarSaveFailed'))
                     }
                   }}
                   className={`w-full aspect-square rounded-lg flex items-center justify-center transition-all ${
@@ -463,8 +460,7 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
                 className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2.5 text-sm text-ive-text focus:outline-none focus:border-ive-green"
               />
             </div>
-            {emailError && <div className="text-sm text-ive-red bg-ive-red/10 rounded-lg px-3 py-2"><i className="fa-solid fa-circle-exclamation mr-1" />{emailError}</div>}
-            <button type="submit" disabled={emailLoading || !emailCodeSent || emailCode.length < 6} className="w-full py-2.5 rounded-lg text-sm font-bold bg-ive-cyan/80 text-white disabled:opacity-50">
+            <button type="submit" disabled={emailLoading || !newEmail || !emailPassword} className="w-full py-2.5 rounded-lg text-sm font-bold bg-ive-cyan/80 text-white disabled:opacity-50">
               {emailLoading ? t('changingPassword') : t('changeEmail')}
             </button>
           </form>
@@ -556,12 +552,8 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
                   newPasswordConfirm && newPassword !== newPasswordConfirm ? 'border-ive-red' : 'border-ive-border focus:border-ive-green'
                 }`}
               />
-              {newPasswordConfirm && newPassword !== newPasswordConfirm && (
-                <p className="text-xs text-ive-red mt-1">{t('passwordMismatch')}</p>
-              )}
             </div>
-            {pwError && <div className="text-sm text-ive-red bg-ive-red/10 rounded-lg px-3 py-2"><i className="fa-solid fa-circle-exclamation mr-1" />{pwError}</div>}
-            <button type="submit" disabled={pwLoading || !pwCodeSent || pwCode.length < 6} className="w-full py-2.5 rounded-lg text-sm font-bold bg-ive-green-dark text-white disabled:opacity-50">
+            <button type="submit" disabled={pwLoading || !currentPassword || !newPassword || !newPasswordConfirm} className="w-full py-2.5 rounded-lg text-sm font-bold bg-ive-green-dark text-white disabled:opacity-50">
               {pwLoading ? t('changingPassword') : t('changePassword')}
             </button>
           </form>
