@@ -1,5 +1,6 @@
 import { User } from '@/types'
 import { getDb } from './connection'
+import { deleteSlackWorkspace } from './slack'
 
 function parseAllowedClis(raw: string | null | undefined): string[] {
   if (!raw) return ['opencode']
@@ -51,6 +52,9 @@ export function getAllUsers(): User[] {
 }
 
 export function deleteUser(id: string) {
+  // 소유한 Slack 워크스페이스를 함께 정리(고아 방지 — 고아가 되면 아무도 재설치 못 함)
+  const wsIds = (getDb().prepare('SELECT id FROM slack_workspaces WHERE default_user_id = ?').all(id) as any[]).map(r => r.id)
+  for (const wid of wsIds) deleteSlackWorkspace(wid)
   getDb().prepare('DELETE FROM users WHERE id = ?').run(id)
 }
 
