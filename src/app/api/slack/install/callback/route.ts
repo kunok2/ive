@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { getPublicOrigin } from '@/lib/oauth'
 import { getSlackAppConfig, exchangeInstallCode, slackAuthTest } from '@/lib/slack'
-import { upsertSlackWorkspaceFromOAuth, getSlackWorkspaceByTeamId } from '@/lib/db'
+import { upsertSlackWorkspaceFromOAuth, getSlackWorkspaceByTeamId, getUserById } from '@/lib/db'
 import { encrypt } from '@/lib/crypto'
 import { logActivity } from '@/lib/activity'
 
@@ -55,10 +55,15 @@ export async function GET(req: Request) {
     return redirectBack(req, from, { slack_install_error: result.error || 'oauth_exchange_failed' })
   }
 
-  // 소유권 가드(멀티테넌트): 이미 다른 사용자가 소유한 워크스페이스면 가로채기 금지.
+  // 소유권 가드(멀티테넌트): 이미 '존재하는' 다른 사용자가 소유한 워크스페이스면 가로채기 금지.
+  // 단, 기존 소유자가 삭제된 고아 상태면 새 설치자가 가져갈 수 있게 허용(self-healing).
   const existing = getSlackWorkspaceByTeamId(result.teamId)
   if (existing && existing.defaultUserId && existing.defaultUserId !== stateData.installerUserId) {
-    return redirectBack(req, from, { slack_install_error: 'already_claimed' })
+    const ownerStillExists = !!getUserById(existing.defaultUserId)
+    if (ownerStillExists) {
+      return redirectBack(req, from, { slack_install_error: 'already_claimed' })
+    }
+    // 고아(소유자 삭제됨) → 그대로 진행하면 아래 upsert가 default_user_id를 새 설치자로 갱신(reclaim)
   }
 
   // 워크스페이스 URL은 auth.test로 조회 (oauth.v2.access에는 없음)

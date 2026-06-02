@@ -83,6 +83,20 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
 
   useEffect(() => { loadSlack() }, [loadSlack])
 
+  // 설치 실패 코드 → 사람이 읽고 행동할 수 있는 메시지 (raw 코드 노출 금지)
+  function friendlySlackError(code: string): string {
+    switch (code) {
+      case 'already_claimed': return t('slackErrAlreadyClaimed')
+      case 'access_denied': return t('slackErrCancelled')
+      case 'app_credentials_missing': return t('slackErrAppCfg')
+      case 'missing_code_or_state':
+      case 'state_cookie_missing':
+      case 'state_malformed':
+      case 'state_mismatch': return t('slackErrExpired')
+      default: return `${t('slackErrGeneric')} (${code})`
+    }
+  }
+
   // Add to Slack 설치 결과 (콜백이 ?slack_install_ok / ?slack_install_error 로 복귀)
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -92,7 +106,7 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
     if (!ok && !err) return
     setActiveSection('slack')
     if (ok) { setSlackMsg({ kind: 'ok', text: t('slackInstalled') }); loadSlack() }
-    else setSlackMsg({ kind: 'error', text: `${t('slackInstallFailed')}: ${err}` })
+    else setSlackMsg({ kind: 'error', text: friendlySlackError(err!) })
     p.delete('slack_install_ok'); p.delete('slack_install_error')
     const qs = p.toString()
     window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''))
