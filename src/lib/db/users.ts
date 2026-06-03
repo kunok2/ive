@@ -18,6 +18,8 @@ export function mapUser(r: any): User {
     currency: r.currency ?? null,
     currencyRate: r.currency_rate ?? null,
     rateMultiplier: r.rate_multiplier ?? 1,
+    slackUserId: r.slack_user_id ?? '',
+    slackNotify: r.slack_notify == null ? true : r.slack_notify === 1,
     oauthProviderId: r.oauth_provider_id ?? null,
     oauthUserId: r.oauth_user_id ?? null,
     oauthTokenExpiresAt: r.oauth_token_expires_at ?? null,
@@ -89,6 +91,16 @@ export function updateUserTimezone(id: string, timezone: string) {
  */
 export function updateUserCurrency(id: string, currency: string | null, rate: number | null) {
   getDb().prepare('UPDATE users SET currency = ?, currency_rate = ? WHERE id = ?').run(currency, rate, id)
+}
+
+/**
+ * 본인 Slack 연결(member ID) + 작업완료 알림 수신 여부 갱신.
+ *  - slackUserId: 'U...' member ID. 빈 값이면 DM·멘션 대상 해제.
+ *  - slackNotify: false면 라벨이 붙은 이슈여도 알림을 받지 않음(본인 veto).
+ */
+export function updateUserSlack(id: string, slackUserId: string, slackNotify: boolean) {
+  getDb().prepare('UPDATE users SET slack_user_id = ?, slack_notify = ? WHERE id = ?')
+    .run(slackUserId.trim(), slackNotify ? 1 : 0, id)
 }
 
 export function createUser(u: any) {

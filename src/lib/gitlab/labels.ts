@@ -20,6 +20,7 @@ export async function ensureGitLabLabels(project: Project, decryptedToken: strin
     { name: project.labelConfirmWait || 'IVE-P', color: '#f59e0b', description: '확인대기. 머지가 완료되어 확인자의 실환경 확인을 기다리고 있습니다.' },
     { name: project.labelConfirm || 'IVE-C', color: '#f59e0b', description: '확인 중. 확인자가 실환경에서 동작을 직접 확인하고 있습니다.' },
     { name: project.labelEnd || 'IVE-E', color: '#4ade80', description: '처리 완료. 확인까지 마친 최종 완료 상태입니다.' },
+    { name: project.labelNotify || 'IVE-N', color: '#64748b', description: '완료 알림 대상. 이 레이블이 붙은 이슈는 처리 완료/실패 시 담당자에게 Slack 알림(DM·채널)을 보냅니다.' },
   ];
 
   try {
@@ -122,7 +123,7 @@ export async function checkGitLabLabelsExist(project: Project, decryptedToken: s
     project.labelSchedule || 'IVE-S', project.labelDev || 'IVE-D',
     project.labelVerifyWait || 'IVE-W', project.labelVerify || 'IVE-V',
     project.labelConfirmWait || 'IVE-P', project.labelConfirm || 'IVE-C',
-    project.labelEnd || 'IVE-E',
+    project.labelEnd || 'IVE-E', project.labelNotify || 'IVE-N',
   ];
   try {
     const res = await fetch(apiUrl(project, '/labels?per_page=100'), { headers });

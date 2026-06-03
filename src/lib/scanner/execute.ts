@@ -22,6 +22,7 @@ import {
   getAvailableAgentsByUser,
 } from "../db";
 import { addIssueLabels, removeIssueLabels } from "../provider";
+import { notifyIssueDone } from "../slack-notify";
 import { fetchGitLabIssueNotes } from "../gitlab";
 import { fetchGitHubIssueNotes } from "../github";
 import { Project, Agent } from "@/types";
@@ -280,6 +281,9 @@ export async function executeTask(
       await postErrorNote(project, agent, iid, token, err.message, isGitHub);
     }
     updateExecutionStatus(executionId, 'failed', new Date().toISOString());
+    if (!isConflictTask) {
+      await notifyIssueDone({ project, iid, token, status: 'failed', agentName: agent.name });
+    }
   } finally {
     updateAgentStatus(agent.id, 'available');
     touchProjectActivity(project.id);

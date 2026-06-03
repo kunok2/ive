@@ -13,6 +13,8 @@ export function initSchema(db: Database.Database) {
       is_admin INTEGER NOT NULL DEFAULT 0,
       max_agents INTEGER NOT NULL DEFAULT 1,
       max_turns INTEGER NOT NULL DEFAULT 20,
+      slack_user_id TEXT NOT NULL DEFAULT '',
+      slack_notify INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -53,6 +55,9 @@ export function initSchema(db: Database.Database) {
       stats_retention INTEGER NOT NULL DEFAULT 7,
       conflict_count INTEGER NOT NULL DEFAULT 0,
       last_activity_at TEXT,
+      slack_notify_channel TEXT NOT NULL DEFAULT '',
+      slack_workspace_id TEXT NOT NULL DEFAULT '',
+      label_notify TEXT NOT NULL DEFAULT 'IVE-N',
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
@@ -254,6 +259,13 @@ export function initSchema(db: Database.Database) {
     if (!tableInfo.some((col: any) => col.name === 'rate_multiplier')) {
       db.exec("ALTER TABLE users ADD COLUMN rate_multiplier REAL NOT NULL DEFAULT 1.0")
     }
+    // Slack 작업완료 알림 — 본인 Slack member ID(DM·멘션 공용) + 수신 on/off(기본 on, 본인이 최종 veto)
+    if (!tableInfo.some((col: any) => col.name === 'slack_user_id')) {
+      db.exec("ALTER TABLE users ADD COLUMN slack_user_id TEXT NOT NULL DEFAULT ''")
+    }
+    if (!tableInfo.some((col: any) => col.name === 'slack_notify')) {
+      db.exec("ALTER TABLE users ADD COLUMN slack_notify INTEGER NOT NULL DEFAULT 1")
+    }
   } catch (e) { console.error("Migration failed for users:", e) }
 
   try {
@@ -399,6 +411,20 @@ export function initSchema(db: Database.Database) {
       db.exec("ALTER TABLE projects ADD COLUMN conflict_count INTEGER NOT NULL DEFAULT 0")
     }
   } catch (e) { console.error("Migration failed for projects conflict_count:", e) }
+
+  // Slack 작업완료 알림 — 알림 채널 ID + 사용할 워크스페이스 + 알림 트리거 레이블(IVE-N)
+  try {
+    const tableInfo = db.prepare("PRAGMA table_info(projects)").all() as any[]
+    if (!tableInfo.some((col: any) => col.name === 'slack_notify_channel')) {
+      db.exec("ALTER TABLE projects ADD COLUMN slack_notify_channel TEXT NOT NULL DEFAULT ''")
+    }
+    if (!tableInfo.some((col: any) => col.name === 'slack_workspace_id')) {
+      db.exec("ALTER TABLE projects ADD COLUMN slack_workspace_id TEXT NOT NULL DEFAULT ''")
+    }
+    if (!tableInfo.some((col: any) => col.name === 'label_notify')) {
+      db.exec("ALTER TABLE projects ADD COLUMN label_notify TEXT NOT NULL DEFAULT 'IVE-N'")
+    }
+  } catch (e) { console.error("Migration failed for projects slack notify:", e) }
 
   // 에이전트 모니터링 설정
   try {

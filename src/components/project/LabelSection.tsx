@@ -13,6 +13,7 @@ export interface LabelValues {
   labelConfirmWait: string
   labelConfirm: string
   labelEnd: string
+  labelNotify: string
 }
 
 export interface LabelSectionProps {
@@ -163,6 +164,15 @@ export default function LabelSection({ existing, values, onChange }: LabelSectio
           value={values.labelEnd}
           placeholder="IVE-E"
           onChange={v => onChange('labelEnd', v)}
+        />
+
+        <LabelInput
+          colorClass="bg-ive-text-dim"
+          title={t('labelNotify')}
+          desc={t('labelNotifyDesc')}
+          value={values.labelNotify}
+          placeholder="IVE-N"
+          onChange={v => onChange('labelNotify', v)}
         />
       </div>
 

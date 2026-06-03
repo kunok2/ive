@@ -170,6 +170,7 @@
   "clearDueDate": "Clear due date",
   "dueDateTomorrow": "Tomorrow",
   "dueDateNextWeek": "Next week",
+  "notifyOnDone": "Slack alert when done",
   "elapsed": "Elapsed",
   "left": "left",
   "overdueBy": "{remain} overdue",

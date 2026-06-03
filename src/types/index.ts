@@ -13,6 +13,8 @@ export interface User {
   currency?: string | null     // 표시 통화 코드 (ISO 4217, 예: 'KRW'). null/'USD' = 환산 안 함
   currencyRate?: number | null // 수동 고정 환율 (USD→통화). null = 자동 글로벌 환율 사용 (있으면 자동보다 우선)
   rateMultiplier: number  // 사람단가 배수 (기본 1.0). 사람 비용 = 작업시간 × (기본단가 × 배수)
+  slackUserId?: string     // 본인 Slack member ID (U...). 작업완료 DM·채널멘션 대상. 빈 값이면 DM 불가
+  slackNotify: boolean     // 작업완료 Slack 알림 수신 여부 (기본 true). false면 라벨이 있어도 안 받음(본인 veto)
   oauthProviderId?: string | null  // OAuth 로그인 공급자 ID (oauth_providers.id)
   oauthUserId?: string | null      // 공급자 측 사용자 고유 ID (문자열화)
   oauthTokenExpiresAt?: string | null // OAuth access_token 만료 시각 (ISO)
@@ -83,6 +85,7 @@ export interface Project {
   labelConfirmWait: string // 확인 대기 (예: IVE-P) — 머지 완료 후 부착 (확인자 시작 전)
   labelConfirm: string     // 확인 중 (예: IVE-C) — 확인자가 확인시작 클릭 후 부착
   labelEnd: string         // 처리 완료 (예: IVE-E) — 확인 완료 후 부착
+  labelNotify: string      // 알림 트리거 (예: IVE-N) — 이 레이블이 붙은 이슈만 완료 시 Slack 알림 발송
   baseBranch: string       // 베이스 브랜치 (빈 값이면 origin/HEAD 자동 감지 → main fallback)
   confirmBaseBranch: string // 확인 단계 승격 베이스 브랜치 (빈 값이면 승격 MR 미생성, accept 시 단순 close)
   testSiteUrl: string      // 테스트 사이트 URL (프로젝트 카드에서 새 탭으로 열기)
@@ -103,6 +106,8 @@ export interface Project {
   conflictCount: number          // 충돌 MR/PR 수 (ConflictWorker가 갱신, 서버 전용)
   lastActivityAt: string | null  // 최종 활동 시각 (이슈 등록, 실행 등)
   reportSecret: string | null    // 신고 페이지 접근 시크릿 토큰 (null = 미사용)
+  slackNotifyChannel: string     // 작업완료 알림 Slack 채널 ID (빈 값이면 채널 알림 안 함, DM은 별개)
+  slackWorkspaceId: string       // 알림 발송에 사용할 Slack 워크스페이스 ID (빈 값이면 활성 워크스페이스 자동 사용)
   createdAt: string
 }
 

@@ -25,10 +25,13 @@ export type ProjectRow = {
   label_confirm_wait: string;
   label_confirm: string;
   label_end: string;
+  label_notify: string;
   base_branch: string;
   confirm_base_branch: string;
   test_site_url: string;
   report_secret: string | null;
+  slack_notify_channel: string;
+  slack_workspace_id: string;
 }
 
 export function mapProject(r: ProjectRow): Project {
@@ -46,6 +49,7 @@ export function mapProject(r: ProjectRow): Project {
     labelConfirmWait: r.label_confirm_wait || 'IVE-P',
     labelConfirm: r.label_confirm || 'IVE-C',
     labelEnd: r.label_end || 'IVE-E',
+    labelNotify: r.label_notify || 'IVE-N',
     baseBranch: r.base_branch || '',
     confirmBaseBranch: r.confirm_base_branch || '',
     testSiteUrl: r.test_site_url || '',
@@ -66,6 +70,8 @@ export function mapProject(r: ProjectRow): Project {
     conflictCount: r.conflict_count ?? 0,
     lastActivityAt: r.last_activity_at ?? null,
     reportSecret: r.report_secret ?? null,
+    slackNotifyChannel: r.slack_notify_channel || '',
+    slackWorkspaceId: r.slack_workspace_id || '',
   }
 }
 
@@ -115,20 +121,20 @@ export function createProject(p: Project) {
   getDb().prepare(
     `INSERT INTO projects (
       id, user_id, name, provider, repo_url, auth_type, git_username, access_token, color,
-      label_target, label_schedule, label_dev, label_verify_wait, label_verify, label_confirm_wait, label_confirm, label_end, base_branch, confirm_base_branch, test_site_url, show_tool_usage,
+      label_target, label_schedule, label_dev, label_verify_wait, label_verify, label_confirm_wait, label_confirm, label_end, label_notify, base_branch, confirm_base_branch, test_site_url, show_tool_usage,
       check_interval, last_checked_at, last_scanned_issue_count, last_verify_waiting_count, scanner_active, uses_oauth_token, sort_order,
-      avatar_url, snapshot_interval, sparkline_points, stats_retention, last_error, last_error_at, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      avatar_url, snapshot_interval, sparkline_points, stats_retention, last_error, last_error_at, slack_notify_channel, slack_workspace_id, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     p.id, p.userId, p.name, p.provider, p.repoUrl, p.authType || 'token', p.gitUsername || '',
     p.accessToken, p.color || '#4ade80',
     p.labelTarget, p.labelSchedule || 'IVE-S', p.labelDev || 'IVE-D',
     p.labelVerifyWait || 'IVE-W', p.labelVerify || 'IVE-V',
     p.labelConfirmWait || 'IVE-P', p.labelConfirm || 'IVE-C',
-    p.labelEnd || 'IVE-E', p.baseBranch || '', p.confirmBaseBranch || '', p.testSiteUrl || '', p.showToolUsage ? 1 : 0,
+    p.labelEnd || 'IVE-E', p.labelNotify || 'IVE-N', p.baseBranch || '', p.confirmBaseBranch || '', p.testSiteUrl || '', p.showToolUsage ? 1 : 0,
     p.checkInterval, p.lastCheckedAt, p.lastScannedIssueCount, p.lastVerifyWaitingCount, p.scannerActive ? 1 : 0, p.usesOAuthToken ? 1 : 0, sortOrder,
     p.avatarUrl || '', p.snapshotInterval ?? 1, p.sparklinePoints ?? 60, p.statsRetention ?? 7,
-    p.lastError || null, p.lastErrorAt || null, p.createdAt
+    p.lastError || null, p.lastErrorAt || null, p.slackNotifyChannel || '', p.slackWorkspaceId || '', p.createdAt
   )
 }
 
@@ -139,10 +145,11 @@ export function updateProject(p: Project) {
       auth_type = ?, git_username = ?,
       label_target = ?, label_schedule = ?, label_dev = ?,
       label_verify_wait = ?, label_verify = ?, label_confirm_wait = ?, label_confirm = ?,
-      label_end = ?, base_branch = ?, confirm_base_branch = ?, test_site_url = ?, show_tool_usage = ?,
+      label_end = ?, label_notify = ?, base_branch = ?, confirm_base_branch = ?, test_site_url = ?, show_tool_usage = ?,
       check_interval = ?, last_checked_at = ?, last_scanned_issue_count = ?,
       scanner_active = ?, uses_oauth_token = ?, sort_order = ?, avatar_url = ?,
-      snapshot_interval = ?, sparkline_points = ?, stats_retention = ?
+      snapshot_interval = ?, sparkline_points = ?, stats_retention = ?,
+      slack_notify_channel = ?, slack_workspace_id = ?
       WHERE id = ? AND user_id = ?`
   ).run(
     p.name, p.repoUrl, p.accessToken, p.color || '#4ade80',
@@ -150,10 +157,11 @@ export function updateProject(p: Project) {
     p.labelTarget, p.labelSchedule || 'IVE-S', p.labelDev || 'IVE-D',
     p.labelVerifyWait || 'IVE-W', p.labelVerify || 'IVE-V',
     p.labelConfirmWait || 'IVE-P', p.labelConfirm || 'IVE-C',
-    p.labelEnd || 'IVE-E', p.baseBranch || '', p.confirmBaseBranch || '', p.testSiteUrl || '', p.showToolUsage ? 1 : 0,
+    p.labelEnd || 'IVE-E', p.labelNotify || 'IVE-N', p.baseBranch || '', p.confirmBaseBranch || '', p.testSiteUrl || '', p.showToolUsage ? 1 : 0,
     p.checkInterval, p.lastCheckedAt, p.lastScannedIssueCount,
     p.scannerActive ? 1 : 0, p.usesOAuthToken ? 1 : 0, p.sortOrder ?? 0, p.avatarUrl || '',
     p.snapshotInterval ?? 1, p.sparklinePoints ?? 60, p.statsRetention ?? 7,
+    p.slackNotifyChannel || '', p.slackWorkspaceId || '',
     p.id, p.userId
   )
 }

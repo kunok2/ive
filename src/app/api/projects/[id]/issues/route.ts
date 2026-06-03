@@ -191,7 +191,7 @@ export async function POST(
     return NextResponse.json({ error: '작업 생성 권한이 없습니다.' }, { status: 403 });
   }
 
-  const { title, description, asDev, preferredAgentId, assignMode: reqAssignMode, assigneeIds, assigneeUsernames, assigneeAuto, verifierMode, verifierUserId, verifierUsername, confirmerMode, confirmerUserId, confirmerUsername, dueDate } = await req.json();
+  const { title, description, asDev, preferredAgentId, assignMode: reqAssignMode, assigneeIds, assigneeUsernames, assigneeAuto, verifierMode, verifierUserId, verifierUsername, confirmerMode, confirmerUserId, confirmerUsername, dueDate, notify } = await req.json();
   if (!title?.trim()) return NextResponse.json({ error: '제목을 입력하세요.' }, { status: 400 });
   // dueDate 검증 (선택). YYYY-MM-DD 외 값은 무시.
   const dueDateNormalized: string | null = (typeof dueDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dueDate)) ? dueDate : null;
@@ -217,6 +217,8 @@ export async function POST(
     const labels = asDev
       ? [project.labelTarget, project.labelSchedule || 'IVE-S']
       : [project.labelTarget];
+    // 완료 알림 선택 시 알림 트리거 레이블(IVE-N) 부착 → 완료/실패 시 담당자에게 Slack 알림
+    if (notify) labels.push(project.labelNotify || 'IVE-N');
     // assignee 결정 — 모델: "처리전에는 생성자, 처리때는 처리자 또는 생성자"
     //   1) 자동배정 모드: 비움 (스캐너가 처리 마무리 시 가장 한가한 멤버 선택)
     //   2) 명시적 지정: 그대로 사용

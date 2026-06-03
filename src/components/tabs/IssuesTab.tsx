@@ -177,6 +177,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   const [confirmerUsername, setConfirmerUsername] = useState<string | null>(null)
   // 마감일 (YYYY-MM-DD). 빈 문자열이면 미설정.
   const [newDueDate, setNewDueDate] = useState<string>('')
+  const [notifyOnDone, setNotifyOnDone] = useState(false)
   const [assigneeModalIids, setAssigneeModalIids] = useState<number[]>([])
   const [assigneeModalSearch, setAssigneeModalSearch] = useState('')
   const [assigneeModalPick, setAssigneeModalPick] = useState<{ id: number; username: string; name: string; avatarUrl: string } | null>(null)
@@ -520,6 +521,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
           confirmerUserId: confirmerMode === 'specific' ? confirmerUserId : null,
           confirmerUsername: confirmerMode === 'specific' ? confirmerUsername : null,
           dueDate: newDueDate || undefined,
+          notify: notifyOnDone || undefined,
         }),
       })
       if (res.ok) {
@@ -527,7 +529,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
         handleBodyChange(''); setShowAddForm(false); setPreferredAgentId(null); setSelectedAssignees([]); setAutoAssign(false)
         setVerifierMode('creator'); setVerifierUserId(null); setVerifierUsername(null)
         setConfirmerMode('creator'); setConfirmerUserId(null); setConfirmerUsername(null)
-        setNewDueDate('')
+        setNewDueDate(''); setNotifyOnDone(false)
         const selectedAgent = preferredAgentId ? projectAgents.find(a => a.agentId === preferredAgentId) : null
         const newIssue: IveIssue = {
           iid: created.iid, title: created.title, state: created.state || 'opened',
@@ -768,6 +770,8 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
               }}
               dueDate={newDueDate}
               onDueDateChange={setNewDueDate}
+              notify={notifyOnDone}
+              onNotifyChange={setNotifyOnDone}
             />
           ) : null}
           onToggleSelect={toggleSelect}

@@ -47,6 +47,8 @@ interface IssueAddFormProps {
   // 마감일 (선택). 'YYYY-MM-DD' 또는 빈 문자열.
   dueDate: string
   onDueDateChange: (v: string) => void
+  notify: boolean
+  onNotifyChange: (v: boolean) => void
 }
 
 interface RoleTriggerProps {
@@ -235,6 +237,8 @@ export default function IssueAddForm({
   onConfirmerChange,
   dueDate,
   onDueDateChange,
+  notify,
+  onNotifyChange,
 }: IssueAddFormProps) {
   const tIssue = useTranslations('issue')
   const tCommon = useTranslations('common')
@@ -341,6 +345,19 @@ export default function IssueAddForm({
           {tIssue('dueDateNextWeek')}
         </button>
       </div>
+      {/* 완료 알림 (선택) — 켜면 IVE-N 라벨이 부착되어 완료/실패 시 담당자에게 Slack 알림 */}
+      <button
+        type="button"
+        onClick={() => onNotifyChange(!notify)}
+        className={`w-full mb-2 px-3 py-2 rounded-lg border flex items-center justify-between gap-2 text-xs font-bold transition-colors ${notify ? 'bg-ive-green/10 border-ive-green/40 text-ive-green' : 'bg-ive-bg-card border-ive-border-dark text-ive-text-dim hover:border-ive-green/50'}`}
+      >
+        <span>
+          <i className={`fa-solid ${notify ? 'fa-bell' : 'fa-bell-slash'} mr-1.5`} />
+          {tIssue('notifyOnDone')}
+          <span className="ml-1 text-[10px] font-normal text-ive-text-muted">({tIssue('assignmentOptional')})</span>
+        </span>
+        <i className={`fa-solid ${notify ? 'fa-toggle-on' : 'fa-toggle-off'} text-sm`} />
+      </button>
       {/* 담당자 지정 영역 — 접혀있을 때는 dashed placeholder 카드로 "+추가" 패턴 */}
       {!assigneesExpanded ? (
         <button

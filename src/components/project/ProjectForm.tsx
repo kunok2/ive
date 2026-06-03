@@ -10,6 +10,7 @@ import ColorPickerSection from './ColorPickerSection'
 import OAuthImportSection, { type OAuthInfo } from './OAuthImportSection'
 import ConnectionSection from './ConnectionSection'
 import LabelSection, { type LabelValues } from './LabelSection'
+import SlackNotifySection from './SlackNotifySection'
 import AiGuideSection from './AiGuideSection'
 import ScannerSettingsSection, { type ScannerSettingsValues } from './ScannerSettingsSection'
 import SharingSection from './SharingSection'
@@ -48,7 +49,11 @@ export default function ProjectForm({ existing, onSuccess, onCancel }: Props) {
   const [labelConfirmWait, setLabelConfirmWait] = useState(existing?.labelConfirmWait ?? 'IVE-P')
   const [labelConfirm, setLabelConfirm] = useState(existing?.labelConfirm ?? 'IVE-C')
   const [labelEnd, setLabelEnd] = useState(existing?.labelEnd ?? 'IVE-E')
+  const [labelNotify, setLabelNotify] = useState(existing?.labelNotify ?? 'IVE-N')
   const [confirmBaseBranch, setConfirmBaseBranch] = useState(existing?.confirmBaseBranch ?? '')
+
+  // Slack 작업완료 알림 채널
+  const [slackNotifyChannel, setSlackNotifyChannel] = useState(existing?.slackNotifyChannel ?? '')
 
   // Scanner / monitoring settings
   const [checkInterval, setCheckInterval] = useState(existing?.checkInterval ?? 1)
@@ -71,7 +76,7 @@ export default function ProjectForm({ existing, onSuccess, onCancel }: Props) {
   }, [])
 
   // --- Derived values ---
-  const labelValues: LabelValues = { labelTarget, labelSchedule, labelDev, labelVerifyWait, labelVerify, labelConfirmWait, labelConfirm, labelEnd }
+  const labelValues: LabelValues = { labelTarget, labelSchedule, labelDev, labelVerifyWait, labelVerify, labelConfirmWait, labelConfirm, labelEnd, labelNotify }
   const scannerValues: ScannerSettingsValues = { checkInterval, showToolUsage, snapshotInterval, sparklinePoints, statsRetention }
 
   function handleLabelChange(field: keyof LabelValues, value: string) {
@@ -80,6 +85,7 @@ export default function ProjectForm({ existing, onSuccess, onCancel }: Props) {
       labelDev: setLabelDev, labelVerifyWait: setLabelVerifyWait,
       labelVerify: setLabelVerify, labelConfirmWait: setLabelConfirmWait,
       labelConfirm: setLabelConfirm, labelEnd: setLabelEnd,
+      labelNotify: setLabelNotify,
     }
     setters[field](value)
   }
@@ -122,9 +128,12 @@ export default function ProjectForm({ existing, onSuccess, onCancel }: Props) {
       labelConfirmWait: labelConfirmWait.trim() || 'IVE-P',
       labelConfirm: labelConfirm.trim() || 'IVE-C',
       labelEnd: labelEnd.trim() || 'IVE-E',
+      labelNotify: labelNotify.trim() || 'IVE-N',
       baseBranch: baseBranch.trim(),
       confirmBaseBranch: confirmBaseBranch.trim(),
       testSiteUrl: testSiteUrl.trim(),
+      slackNotifyChannel: slackNotifyChannel.trim(),
+      slackWorkspaceId: existing?.slackWorkspaceId ?? '',
       showToolUsage,
       checkInterval: Number(checkInterval) || 1,
       lastCheckedAt: existing?.lastCheckedAt ?? null,
@@ -183,6 +192,8 @@ export default function ProjectForm({ existing, onSuccess, onCancel }: Props) {
       <ScannerSettingsSection values={scannerValues} onChange={handleScannerChange} />
 
       <LabelSection existing={existing} values={labelValues} onChange={handleLabelChange} />
+
+      <SlackNotifySection channel={slackNotifyChannel} onChannelChange={setSlackNotifyChannel} />
 
       {existing && <AiGuideSection existing={existing} />}
 

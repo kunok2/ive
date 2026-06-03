@@ -26,7 +26,7 @@ const project: Project = {
   labelSchedule: 'IVE-S', labelDev: 'IVE-D',
   labelVerifyWait: 'IVE-W', labelVerify: 'IVE-V',
   labelConfirmWait: 'IVE-P', labelConfirm: 'IVE-C',
-  labelEnd: 'IVE-E',
+  labelEnd: 'IVE-E', labelNotify: 'IVE-N',
   baseBranch: '', confirmBaseBranch: '', testSiteUrl: '',
   showToolUsage: false, checkInterval: 1, lastCheckedAt: null,
   lastScannedIssueCount: null, lastVerifyWaitingCount: null,
@@ -35,6 +35,7 @@ const project: Project = {
   sortOrder: 0, avatarUrl: '',
   snapshotInterval: 1, sparklinePoints: 60, statsRetention: 7,
   conflictCount: 0, lastActivityAt: null,
+  reportSecret: null, slackNotifyChannel: '', slackWorkspaceId: '',
   createdAt: '2026-01-01T00:00:00Z',
 }
 

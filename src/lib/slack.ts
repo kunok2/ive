@@ -6,6 +6,7 @@ import {
   getProjectsByUser, getSharedProjectsForUser, getProjectAuthToken,
   getSlackProviderRaw, getAvailableAgentsByUser,
   getSlackThreadSession, createSlackThreadSession, updateSlackThreadCliSession, resetSlackThreadProject, switchSlackThreadProject,
+  getSlackWorkspaceRawById, getAllSlackWorkspaces,
 } from './db'
 import { decrypt } from './crypto'
 import {
@@ -23,7 +24,8 @@ const SLACK_API = 'https://slack.com/api'
 // files:read  — 멘션 첨부 이미지(url_private) 다운로드.
 // files:write — 에이전트가 만든 이미지(차트/도식)를 채널에 업로드(files.completeUploadExternal).
 // users:read  — 멘션한 사용자의 언어 설정(locale)을 읽어 응답 언어를 맞추기 위해 필요.
-export const SLACK_BOT_SCOPES = 'app_mentions:read,chat:write,channels:history,groups:history,channels:read,groups:read,files:read,files:write,users:read'
+// im:write    — 작업완료 알림을 담당자에게 DM으로 보내기 위해 1:1 대화(conversations.open)를 연다. 없으면 DM 알림 불가(채널 알림만 동작).
+export const SLACK_BOT_SCOPES = 'app_mentions:read,chat:write,channels:history,groups:history,channels:read,groups:read,files:read,files:write,users:read,im:write'
 
 export interface SlackAppConfig {
   clientId: string
@@ -724,4 +726,44 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
       await sink.post(M.processingError(detail))
     } catch { /* ignore */ }
   }
+}
+
+// ── 아웃바운드 알림 (작업완료 → DM / 채널 멘션) ────────────────────────────
+
+/**
+ * 워크스페이스 id로 복호화된 봇 토큰을 얻는다.
+ * id가 비었거나 못 찾으면, 활성 워크스페이스가 정확히 하나일 때 그것으로 폴백한다.
+ */
+function resolveBotToken(workspaceId?: string): string | null {
+  let raw = workspaceId ? getSlackWorkspaceRawById(workspaceId) : null
+  if (!raw || raw.enabled !== 1) {
+    const enabled = getAllSlackWorkspaces().filter(w => w.enabled)
+    if (enabled.length === 1) raw = getSlackWorkspaceRawById(enabled[0].id)
+  }
+  if (!raw || !raw.bot_token) return null
+  try { return decrypt(raw.bot_token) || null } catch { return null }
+}
+
+/** 담당자 Slack member ID로 1:1 DM 발송 (conversations.open → chat.postMessage). im:write 필요. */
+export async function sendSlackDM(workspaceId: string, slackUserId: string, text: string): Promise<boolean> {
+  const botToken = resolveBotToken(workspaceId)
+  if (!botToken || !slackUserId) return false
+  const open = await slackApi(botToken, 'conversations.open', { users: slackUserId })
+  const dmChannel = open?.ok ? open.channel?.id : null
+  if (!dmChannel) return false
+  return !!(await postMessage(botToken, dmChannel, text))
+}
+
+/** 채널에 메시지 발송 (멘션 `<@U…>` 포함 가능). 봇이 그 채널 멤버여야 함. */
+export async function sendSlackChannelMessage(workspaceId: string, channelId: string, text: string): Promise<boolean> {
+  const botToken = resolveBotToken(workspaceId)
+  // 저장값이 채널 링크여도 동작하도록 ID만 추출 (UI에서 정규화하지만 방어적으로 한 번 더)
+  const ch = (channelId.match(/[CGD][A-Z0-9]{6,}/)?.[0]) || channelId.trim()
+  if (!botToken || !ch) return false
+  return !!(await postMessage(botToken, ch, text))
+}
+
+/** 알림 발송이 가능한 활성 워크스페이스가 하나라도 있는지 (UI/판단용). */
+export function hasEnabledSlackWorkspace(): boolean {
+  return getAllSlackWorkspaces().some(w => w.enabled)
 }

@@ -39,6 +39,8 @@ interface Props {
   timezone?: string
   currency?: string | null
   currencyRate?: number | null
+  slackUserId?: string
+  slackNotify?: boolean
   onSuccess?: () => void
   onCancel?: () => void
   onEmailChanged?: () => void
@@ -56,7 +58,7 @@ type SlackWorkspaceRow = {
   enabled: boolean
 }
 
-export default function UserProfileForm({ userId, email, name, avatar, locale: userLocale, timezone: userTimezone, currency: userCurrency, currencyRate: userCurrencyRate, onSuccess, onCancel, onEmailChanged, onAvatarChanged, onSettingsChanged }: Props) {
+export default function UserProfileForm({ userId, email, name, avatar, locale: userLocale, timezone: userTimezone, currency: userCurrency, currencyRate: userCurrencyRate, slackUserId: userSlackUserId, slackNotify: userSlackNotify, onSuccess, onCancel, onEmailChanged, onAvatarChanged, onSettingsChanged }: Props) {
   const t = useTranslations('auth')
   const tc = useTranslations('common')
   const currentLocale = useLocale()
@@ -83,6 +85,28 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
   const [slackEligible, setSlackEligible] = useState(false)
   const [slackWorkspaces, setSlackWorkspaces] = useState<SlackWorkspaceRow[]>([])
   const [slackMsg, setSlackMsg] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
+
+  // 작업완료 Slack 알림 — 본인 member ID 연결 + 수신 on/off (blur 자동저장)
+  const [slackMemberId, setSlackMemberId] = useState(userSlackUserId ?? '')
+  const [slackNotifyOn, setSlackNotifyOn] = useState(userSlackNotify ?? true)
+  const [slackAcctSaved, setSlackAcctSaved] = useState(false)
+  const [slackAcctErr, setSlackAcctErr] = useState(false)
+
+  const saveSlackAccount = useCallback(async (memberId: string, notify: boolean) => {
+    setSlackAcctSaved(false)
+    setSlackAcctErr(false)
+    try {
+      const res = await fetch('/api/settings/slack-account', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slackUserId: memberId.trim(), slackNotify: notify }),
+      })
+      if (!res.ok) { setSlackAcctErr(true); return }
+      onSettingsChanged?.()
+      setSlackAcctSaved(true)
+      setTimeout(() => setSlackAcctSaved(false), 2000)
+    } catch { setSlackAcctErr(true) }
+  }, [onSettingsChanged])
 
   const loadSlack = useCallback(async () => {
     try {
@@ -733,6 +757,41 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
                 </p>
               </div>
             )}
+
+            {/* 작업완료 Slack 알림 — 본인 member ID 연결 + 수신 on/off */}
+            <div className="border-t border-ive-border-dark pt-3">
+              <label className="block text-xs font-bold text-ive-text-muted mb-1.5 uppercase">
+                <i className="fa-brands fa-slack mr-1.5" />{t('slackNotifyLabel')}
+              </label>
+              <p className="text-xs text-ive-text-dim mb-2 leading-relaxed">{t('slackNotifyDesc')}</p>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={slackMemberId}
+                  onChange={e => setSlackMemberId(e.target.value)}
+                  onBlur={() => saveSlackAccount(slackMemberId, slackNotifyOn)}
+                  placeholder="U01ABCDEF"
+                  className="flex-1 min-w-0 bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text font-mono focus:outline-none focus:border-ive-green"
+                />
+                <button
+                  type="button"
+                  onClick={() => { const next = !slackNotifyOn; setSlackNotifyOn(next); saveSlackAccount(slackMemberId, next) }}
+                  title={t('slackNotifyToggle')}
+                  className={`shrink-0 px-3 py-2 rounded-lg text-xs font-bold border transition-all ${slackNotifyOn ? 'bg-ive-green/15 border-ive-green/40 text-ive-green' : 'bg-ive-bg-deep border-ive-border-subtle text-ive-text-dim'}`}
+                >
+                  <i className={`fa-solid ${slackNotifyOn ? 'fa-bell' : 'fa-bell-slash'} mr-1`} />
+                  {slackNotifyOn ? t('slackNotifyReceiveOn') : t('slackNotifyReceiveOff')}
+                </button>
+              </div>
+              <p className="text-[10px] text-ive-text-dim/70 mt-1.5 leading-relaxed">{t('slackMemberIdHint')}</p>
+              {slackAcctSaved && (
+                <p className="text-xs text-ive-green mt-1"><i className="fa-solid fa-circle-check mr-1" />{t('settingsSaved')}</p>
+              )}
+              {slackAcctErr && (
+                <p className="text-xs text-ive-red mt-1"><i className="fa-solid fa-triangle-exclamation mr-1" />{t('slackMemberIdInvalid')}</p>
+              )}
+            </div>
+
             {/* 자동 저장 피드백 */}
             {prefsSaving && (
               <div className="text-center text-sm text-ive-text-muted py-1">
