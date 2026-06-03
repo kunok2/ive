@@ -100,6 +100,12 @@ npm run start        # 프로덕션 서버
 npm run deploy       # Docker 빌드 + 푸시 (수동 시에만, CI/CD가 자동 배포)
 ```
 
+## 버전 & 변경 이력
+- 버전 단일 출처: `package.json`의 `version` (UI는 `next.config.mjs`의 `APP_VERSION`으로 표시).
+- 굵직한 변경은 [CHANGELOG.md](CHANGELOG.md)에 기록한다. 형식은 Keep a Changelog, 버전은 SemVer.
+- 작업 중에는 `## [Unreleased]` 섹션에 항목을 누적하고, 릴리스 시 버전·날짜 섹션으로 승격한다.
+- 버전 올리는 기준: 새 통합/주요 기능 = minor(예: Slack 추가 → 1.5.0), 호환 깨짐 = major, 버그픽스 = patch.
+
 <!-- ive:begin -->
 ## IVE 작업 등록
 
