@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 import Sparkline from '@/components/ui/Sparkline'
+import ShareStack from './ShareStack'
 import type { ReportData, ReportHelpers } from './types'
 
 interface UserVerifySectionProps {
@@ -13,19 +14,23 @@ interface UserVerifySectionProps {
 
 export default function UserVerifySection({ data, helpers }: UserVerifySectionProps) {
   const tr = useTranslations('report')
-  const { fmtDur, diffBadge, diffColor } = helpers
+  const { fmtDur, fmtCost, diffBadge, diffColor } = helpers
   const [expandedUsers, setExpandedUsers] = useState<Set<string>>(new Set())
 
   if (!data.byUser || data.byUser.length === 0) return null
 
-  const totalDuration = data.byUser.reduce((s, u) => s + (u.totalDurationMin ?? 0), 0)
-  const showShare = data.byUser.length >= 2 && totalDuration > 0
+  // 전체에서 비중이 큰 순(=작업시간 점유율, 누적 분배 막대와 동일 기준)으로 정렬.
+  // 동률이면 검증 대기 → 검증 건수 → 처리 건수 순.
+  const sortedUsers = [...data.byUser].sort((a, b) =>
+    ((b.totalDurationMin ?? 0) - (a.totalDurationMin ?? 0)) ||
+    (b.verifyWaiting - a.verifyWaiting) || (b.verifyTasks - a.verifyTasks) || (b.tasks - a.tasks))
 
   return (
     <section>
       <div className="text-xs font-bold text-ive-text-dim mb-2 uppercase tracking-wider">{tr('userVerifyTitle')}</div>
+      <ShareStack title={tr('shareByDuration')} data={data.byUser.map(u => ({ id: u.userId, name: u.userName, value: u.totalDurationMin ?? 0 }))} />
       <div className="space-y-2">
-        {data.byUser.sort((a, b) => (b.verifyWaiting - a.verifyWaiting) || (b.verifyTasks - a.verifyTasks) || (b.tasks - a.tasks)).map(u => {
+        {sortedUsers.map(u => {
           const hasVerify = u.verifyTasks > 0 || u.verifyWaiting > 0
           const prev = data.prevByUser?.find(p => p.userId === u.userId)
           const approvalRate = u.verifyApproved + u.verifyRejected > 0 ? Math.round(u.verifyApproved / (u.verifyApproved + u.verifyRejected) * 100) : null
@@ -59,6 +64,7 @@ export default function UserVerifySection({ data, helpers }: UserVerifySectionPr
                     <span className="font-bold text-ive-text">{tr('processedInPeriod', { count: u.tasks })}</span>
                     {u.avgDurationMin > 0 && <span>{tr('avgProcessInline', { duration: fmtDur(u.avgDurationMin) })}</span>}
                   </>)}
+                  <span className="text-ive-text-muted ml-auto">{fmtCost(u.cost)}</span>
                 </div>
                 {u.annotation && (() => {
                   const s = u.annotation.severity
@@ -68,19 +74,6 @@ export default function UserVerifySection({ data, helpers }: UserVerifySectionPr
                   return (
                     <div className={`text-xs mt-1.5 leading-relaxed ${color}`}>
                       <i className={`fa-solid ${icon} mr-1`} />{msg}
-                    </div>
-                  )
-                })()}
-                {showShare && (() => {
-                  const dur = u.totalDurationMin ?? 0
-                  const pct = Math.round((dur / totalDuration) * 100)
-                  const barW = Math.max((dur / totalDuration) * 100, 1)
-                  return (
-                    <div className="flex items-center gap-2 mt-1.5">
-                      <div className="flex-1 h-1 rounded-full bg-ive-bg-deep overflow-hidden">
-                        <div className="h-full rounded-full bg-ive-cyan/60" style={{ width: `${barW}%` }} />
-                      </div>
-                      <span className="text-[10px] text-ive-text-dim shrink-0 w-7 text-right">{pct}%</span>
                     </div>
                   )
                 })()}

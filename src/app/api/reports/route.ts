@@ -447,6 +447,8 @@ export async function GET(req: NextRequest) {
     const uSuccess = uExecs.filter(e => e.status === 'success').length
     const uFailed = uExecs.filter(e => e.status === 'failed').length
     const uDur = uExecs.reduce((s, e) => s + durationMin(e.startedAt, e.endedAt), 0)
+    // 사람 비용: 이 사람의 검증/확인/툴개발 작업시간 × 단가 × 배수 합 (assigneeType='user'라 AI분=0).
+    const uCost = uExecs.reduce((s, e) => s + resolveExecutionCostBreakdown(e, humanRate).human, 0)
     const uFinished = uSuccess + uFailed
     const uniqueIssues = new Set(uExecs.map(e => `${e.projectId}:${e.issueIid}`))
     // 배정 → 시작까지의 대기 시간
@@ -482,6 +484,7 @@ export async function GET(req: NextRequest) {
       userId: uid, userName, userAvatar, avatarUserId,
       tasks: uExecs.length, success: uSuccess, failed: uFailed,
       issueCount: uniqueIssues.size,
+      cost: Math.round(uCost * 100) / 100,
       totalDurationMin: Math.round(uDur * 10) / 10,
       avgDurationMin: uFinished > 0 ? Math.round((uDur / uFinished) * 10) / 10 : 0,
       avgWaitMin: waitTimes.length > 0 ? Math.round(waitTimes.reduce((s, t) => s + t, 0) / waitTimes.length * 10) / 10 : 0,

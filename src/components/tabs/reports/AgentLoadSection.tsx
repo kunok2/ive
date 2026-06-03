@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 import Sparkline from '@/components/ui/Sparkline'
+import ShareStack from './ShareStack'
 import type { ReportData, DiagnosisResult, ReportHelpers } from './types'
 
 interface AgentLoadSectionProps {
@@ -22,6 +23,7 @@ export default function AgentLoadSection({ d, data, helpers }: AgentLoadSectionP
   return (
     <section>
       <div className="text-xs font-bold text-ive-text-dim mb-2 uppercase tracking-wider">{tr('agentLoadTitle')}</div>
+      <ShareStack title={tr('shareByCost')} data={d.agents.map(a => ({ id: a.agentId, name: a.agentDeleted ? tr('deletedAgent') : a.agentName, value: a.cost }))} />
       <div className="space-y-2">
         {d.agents.sort((a, b) => b.tasks - a.tasks).map(a => {
           const sev = a.annotation?.severity
