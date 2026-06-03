@@ -63,7 +63,7 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
   const tc = useTranslations('common')
   const currentLocale = useLocale()
   const router = useRouter()
-  const { alert: dialogAlert } = useDialog()
+  const { alert: dialogAlert, confirm: dialogConfirm } = useDialog()
   const popup = (message: string) => { void dialogAlert({ message }) }
   // 기본 사용자(admin@ive.local)는 메일 인증 없이 비밀번호 변경 가능
   const skipPwVerification = email === DEFAULT_ADMIN_EMAIL
@@ -846,7 +846,7 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
                         </div>
                         <button
                           type="button"
-                          onClick={() => { if (window.confirm(t('slackRemoveConfirm'))) removeSlackWorkspace(w.id) }}
+                          onClick={async () => { if (await dialogConfirm({ title: t('slackRemove'), message: t('slackRemoveConfirm'), variant: 'danger', confirmText: t('slackRemove') })) removeSlackWorkspace(w.id) }}
                           className="text-ive-red text-xs font-bold px-2 py-1 shrink-0"
                         >
                           <i className="fa-solid fa-trash mr-1" />{t('slackRemove')}

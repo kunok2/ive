@@ -200,6 +200,7 @@ export interface OAuthUserProfile {
   name: string
   username: string              // github login / gitlab username
   avatarUrl: string | null
+  slackUserId?: string          // Slack 로그인 시 멤버 ID(U…) — 작업완료 알림 DM 대상 자동 연결용
 }
 
 /** access_token으로 사용자 프로필 조회. verified 이메일 확보가 책임. */
@@ -230,6 +231,9 @@ async function fetchSlackProfile(accessToken: string): Promise<OAuthUserProfile>
   }
   // user_id는 워크스페이스 내 고유. 같은 사람이 여러 워크스페이스에 있어도 sub로 동일 식별.
   const providerUserId = String(u.sub || u['https://slack.com/user_id'] || email)
+  // 작업완료 알림 DM 대상으로 쓸 멤버 ID(U…/W…). 명시적 user_id 클레임 우선(sub는 동일하지만 형식 보장 위해).
+  const memberId = String(u['https://slack.com/user_id'] || u.sub || '')
+  const slackUserId = /^[UW][A-Z0-9]{6,}$/.test(memberId) ? memberId : undefined
   return {
     providerUserId,
     email,
@@ -237,6 +241,7 @@ async function fetchSlackProfile(accessToken: string): Promise<OAuthUserProfile>
     name: u.name || email,
     username: u.name || email,
     avatarUrl: u.picture || u['https://slack.com/user_image_192'] || null,
+    slackUserId,
   }
 }
 

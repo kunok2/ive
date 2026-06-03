@@ -8,7 +8,7 @@ import {
 } from '@/lib/oauth'
 import {
   getUserByEmail, getUserByOAuth, createOAuthUser, linkUserOAuth,
-  updateUserOAuthTokens, updateUserAvatar,
+  updateUserOAuthTokens, updateUserAvatar, getUserById, updateUserSlack,
 } from '@/lib/db'
 import { encrypt } from '@/lib/crypto'
 import { setAuthCookie } from '@/lib/auth'
@@ -221,6 +221,15 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       if (profile.avatarUrl) {
         await downloadAndSaveAvatar(newId, profile.avatarUrl)
       }
+    }
+  }
+
+  // Slack 로그인이면 멤버 ID(U…)를 작업완료 알림 DM 대상(slack_user_id)으로 자동 연결.
+  // 단, 사용자가 직접 설정한 값은 덮어쓰지 않는다(비어 있을 때만).
+  if (profile.slackUserId) {
+    const cur = getUserById(userId)
+    if (cur && !cur.slackUserId) {
+      updateUserSlack(userId, profile.slackUserId, cur.slackNotify)
     }
   }
 
