@@ -58,6 +58,8 @@ export function normalizeIssue(ghIssue: any): any {
     due_date: dueMatch ? dueMatch[1] : null,
     web_url: ghIssue.html_url,
     author: ghIssue.user ? { id: ghIssue.user.id, name: ghIssue.user.login, username: ghIssue.user.login, avatar_url: ghIssue.user.avatar_url } : undefined,
+    // 담당자(검증자/확인자 알림 수신자 해석용) — GitLab assignees 형태로 normalize.
+    assignees: (ghIssue.assignees || []).map((a: any) => ({ id: a.id, name: a.login, username: a.login, avatar_url: a.avatar_url })),
   };
 }
 

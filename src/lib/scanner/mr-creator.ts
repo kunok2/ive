@@ -8,7 +8,7 @@ import { promisify } from "util";
 import { Project, Agent } from "@/types";
 import { updateExecutionStatus, updateAgentStatus, getAssigneeAuto, getPresetRoles } from "../db";
 import { addIssueLabels, removeIssueLabels } from "../provider";
-import { notifyIssueDone } from "../slack-notify";
+import { notifyStageTransition } from "../slack-notify";
 import { runAutoAssign } from "./auto-assign";
 import { applyRoleAssignee } from "../role-assignee";
 import {
@@ -150,8 +150,9 @@ export async function commitPushAndCreateMR(params: {
     } catch (e) { slog.warn({ err: e }, `Label switch failed:`); }
     log("작업 완료 → 검증대기 (IVE-W). 검증자가 검증시작을 클릭하면 검증이 시작됩니다.", 'system');
     updateExecutionStatus(executionId, 'success', new Date().toISOString());
-    await notifyIssueDone({ project, iid, token, status: 'success', agentName: agent.name, durationStr, mrUrl, issueTitle });
     await maybeAutoAssign(project, iid, token, log);
+    // 검증대기 진입 → 배정된 검증자(사람)에게 DM (maybeAutoAssign 으로 검증자 배정된 뒤)
+    await notifyStageTransition(project, iid, token, 'verify');
   } else {
     // 코드 변경사항 없음
     const attemptedEdits = agentAttemptedEdits(conversationParts);
@@ -183,8 +184,9 @@ export async function commitPushAndCreateMR(params: {
       await addIssueLabels(project, iid, token, [project.labelVerifyWait || 'IVE-W']);
     } catch (e) { slog.warn({ err: e }, `Label switch failed:`); }
     updateExecutionStatus(executionId, 'success', new Date().toISOString());
-    await notifyIssueDone({ project, iid, token, status: 'success', agentName: agent.name, durationStr, issueTitle });
     await maybeAutoAssign(project, iid, token, log);
+    // 검증대기 진입 → 배정된 검증자(사람)에게 DM
+    await notifyStageTransition(project, iid, token, 'verify');
   }
 }
 
@@ -277,7 +279,6 @@ async function handlePushFailure(
     }
   } catch (e) { slog.warn({ err: e }, `Remote comment failed:`); }
   updateExecutionStatus(executionId, 'failed', new Date().toISOString());
-  await notifyIssueDone({ project, iid, token, status: 'failed', agentName: agent.name, durationStr });
   updateAgentStatus(agent.id, 'available');
   logStream.end();
   try { if (fs.existsSync(workspacePath)) fs.rmSync(workspacePath, { recursive: true, force: true }); } catch {}

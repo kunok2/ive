@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb, getProject, getProjectAuthToken, getProjectAccess, hasActiveExecution, stageFromLabels, markIssueVerifyStarted, markIssueVerified, markIssueVerifyRejected, markIssueConfirmed, markIssueConfirmStarted, resetIssueScheduledAt, recordIssueScheduledAt, touchProjectActivity, assignIssueAtomically, getAssignModeMap, getIssueScheduledAt, isIssueAssignee, isIssueAuthor, upsertIssueStageSnapshot, updateExecutionStatus, getVerifyWaitingCount, updateProjectLastChecked, getPresetRoles } from '@/lib/db';
 import { triggerScan } from '@/lib/scanner';
 import { applyRoleAssignee } from '@/lib/role-assignee';
+import { notifyStageTransition } from '@/lib/slack-notify';
 import type { TaskExecution } from '@/types';
 import { getCurrentUser } from '@/lib/auth';
 import { reopenIssue, closeIssue, fetchSingleIssue, addIssueLabels, removeIssueLabels, addIssueComment, createBranch, getDefaultBranch } from '@/lib/provider';
@@ -233,6 +234,8 @@ export async function POST(
         const preset = getPresetRoles(projectId, Number(iid)).verifier;
         await applyRoleAssignee(project, Number(iid), token, '검증자', preset, { currentUser: user });
       } catch (e) { console.warn(`[Stage] Verifier preset apply failed for #${iid}:`, e); }
+      // 검증대기 진입 → 배정된 검증자(사람)에게 DM (fire-and-forget — 응답 지연 방지)
+      void notifyStageTransition(project, Number(iid), token, 'verify');
     }
 
     // verifying → confirm_waiting (approve/complete) 전이 시 확인자 preset 기반 assignee 교체
@@ -241,6 +244,8 @@ export async function POST(
         const preset = getPresetRoles(projectId, Number(iid)).confirmer;
         await applyRoleAssignee(project, Number(iid), token, '확인자', preset, { currentUser: user });
       } catch (e) { console.warn(`[Stage] Confirmer preset apply failed for #${iid}:`, e); }
+      // 확인대기 진입 → 배정된 확인자(사람)에게 DM (fire-and-forget)
+      void notifyStageTransition(project, Number(iid), token, 'confirm');
     }
 
     // 검증 반려 시 rejected_at 기록
@@ -298,6 +303,8 @@ export async function POST(
     // 확인 완료(accept): confirmer 정보 기록만 (이슈 close 는 별도 닫기 버튼으로만 수행)
     if (action === 'accept' && stage === 'confirming') {
       markIssueConfirmed(projectId, Number(iid), { name: user.name, avatar: user.avatar, userId: user.id });
+      // 완료 진입 → 이슈 생성자(사람)에게 DM (fire-and-forget)
+      void notifyStageTransition(project, Number(iid), token, 'done');
     }
 
     // confirming 단계 종료 시 확인자 execution 닫기 (verify 종료 패턴과 동일)
