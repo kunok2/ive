@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
+import { DEFAULT_ADMIN_EMAIL } from '@/lib/constants'
 
 interface Props {
   email?: string
@@ -24,6 +25,8 @@ export default function ChangePasswordForm({ email, onSuccess, onCancel }: Props
   const [loading, setLoading] = useState(false)
 
   const targetEmail = email || inputEmail
+  // 기본 사용자(admin@ive.local)는 메일 인증 없이 변경 가능
+  const skipVerification = targetEmail === DEFAULT_ADMIN_EMAIL
 
   async function handleSendCode() {
     if (!targetEmail) { setError(t('emailRequired')); return }
@@ -50,7 +53,7 @@ export default function ChangePasswordForm({ email, onSuccess, onCancel }: Props
       setError(t('newPasswordMismatch'))
       return
     }
-    if (!code.trim()) {
+    if (!skipVerification && !code.trim()) {
       setError(t('verificationCodeRequired'))
       return
     }
@@ -93,21 +96,23 @@ export default function ChangePasswordForm({ email, onSuccess, onCancel }: Props
             required
             className={`flex-1 min-w-0 bg-ive-bg-input border border-ive-border rounded-lg px-4 py-3 text-base text-ive-text focus:outline-none focus:border-ive-green ${email ? 'opacity-60' : ''}`}
           />
-          <button
-            type="button"
-            onClick={handleSendCode}
-            disabled={sendingCode || !targetEmail}
-            className={`w-20 shrink-0 py-3 rounded-lg text-base font-bold transition-all disabled:opacity-40 ${
-              codeSent ? 'bg-ive-green/15 text-ive-green' : 'bg-ive-cyan/15 text-ive-cyan'
-            }`}
-          >
-            {sendingCode ? <i className="fa-solid fa-circle-notch fa-spin" /> : codeSent ? t('resend') : t('verify')}
-          </button>
+          {!skipVerification && (
+            <button
+              type="button"
+              onClick={handleSendCode}
+              disabled={sendingCode || !targetEmail}
+              className={`w-20 shrink-0 py-3 rounded-lg text-base font-bold transition-all disabled:opacity-40 ${
+                codeSent ? 'bg-ive-green/15 text-ive-green' : 'bg-ive-cyan/15 text-ive-cyan'
+              }`}
+            >
+              {sendingCode ? <i className="fa-solid fa-circle-notch fa-spin" /> : codeSent ? t('resend') : t('verify')}
+            </button>
+          )}
         </div>
       </div>
 
       {/* 인증 코드 입력 */}
-      {codeSent && (
+      {!skipVerification && codeSent && (
         <div>
           <label className="block text-base font-bold text-ive-text-muted mb-1.5">{t('verificationCode')}</label>
           <input
@@ -168,7 +173,7 @@ export default function ChangePasswordForm({ email, onSuccess, onCancel }: Props
             {tc('cancel')}
           </button>
         )}
-        <button type="submit" disabled={loading || !codeSent || code.length < 6} className="flex-1 py-3 rounded-lg text-base font-bold bg-ive-green-dark text-white disabled:opacity-50">
+        <button type="submit" disabled={loading || (!skipVerification && (!codeSent || code.length < 6))} className="flex-1 py-3 rounded-lg text-base font-bold bg-ive-green-dark text-white disabled:opacity-50">
           {loading ? t('changingPassword') : t('changePassword')}
         </button>
       </div>

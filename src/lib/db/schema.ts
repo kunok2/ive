@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3'
 import bcrypt from 'bcryptjs'
+import { DEFAULT_ADMIN_EMAIL } from '@/lib/constants'
 
 export function initSchema(db: Database.Database) {
   db.exec(`
@@ -1082,16 +1083,16 @@ function seedTokenPricing(db: Database.Database) {
 }
 
 function seedAdmin(db: Database.Database) {
-  const exists = db.prepare('SELECT id FROM users WHERE email = ?').get('admin@ive.local')
+  const exists = db.prepare('SELECT id FROM users WHERE email = ?').get(DEFAULT_ADMIN_EMAIL)
   if (!exists) {
     db.prepare('INSERT INTO users (id, email, password, name, is_admin, max_agents, max_turns, allowed_clis) VALUES (?, ?, ?, ?, 1, 0, 0, ?)').run(
       'user-admin',
-      'admin@ive.local',
+      DEFAULT_ADMIN_EMAIL,
       bcrypt.hashSync('admin', 10),
       '관리자',
       'claude,opencode'
     )
   } else {
-    db.prepare('UPDATE users SET is_admin = 1, max_agents = 0, max_turns = 0, allowed_clis = ? WHERE email = ?').run('claude,opencode', 'admin@ive.local')
+    db.prepare('UPDATE users SET is_admin = 1, max_agents = 0, max_turns = 0, allowed_clis = ? WHERE email = ?').run('claude,opencode', DEFAULT_ADMIN_EMAIL)
   }
 }

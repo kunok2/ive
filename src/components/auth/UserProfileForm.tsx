@@ -9,6 +9,7 @@ import { SUPPORTED_CURRENCIES } from '@/lib/currency'
 import AvatarCropEditor from './AvatarCropEditor'
 import { useDialog } from '@/components/ui/ConfirmDialog'
 import CustomSelect from '@/components/ui/CustomSelect'
+import { DEFAULT_ADMIN_EMAIL } from '@/lib/constants'
 
 const TIMEZONE_OPTIONS = [
   { value: 'Asia/Seoul', label: '🇰🇷 서울 (KST, UTC+9)' },
@@ -62,6 +63,8 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
   const router = useRouter()
   const { alert: dialogAlert } = useDialog()
   const popup = (message: string) => { void dialogAlert({ message }) }
+  // 기본 사용자(admin@ive.local)는 메일 인증 없이 비밀번호 변경 가능
+  const skipPwVerification = email === DEFAULT_ADMIN_EMAIL
   const [activeSection, setActiveSection] = useState<ActiveSection>('none')
   const [selectedLocale, setSelectedLocale] = useState<Locale>((userLocale || currentLocale) as Locale)
   const [selectedTimezone, setSelectedTimezone] = useState(userTimezone || 'Asia/Seoul')
@@ -310,7 +313,7 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
     e.preventDefault()
     // 검증 실패는 모두 팝업으로 (인라인 메시지 안 씀)
     if (newPassword !== newPasswordConfirm) { popup(t('newPasswordMismatch')); return }
-    if (!pwCodeSent || pwCode.length < 6) { popup(t('verifyRequiredNotice')); return }
+    if (!skipPwVerification && (!pwCodeSent || pwCode.length < 6)) { popup(t('verifyRequiredNotice')); return }
     setPwLoading(true)
     try {
       const res = await fetch('/api/auth/change-password', {
@@ -538,28 +541,30 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
         </button>
         {activeSection === 'password' && (
           <form onSubmit={handlePwSubmit} className="px-4 pb-4 pt-2 flex flex-col gap-3 border-t border-ive-border">
-            <div>
-              <label className="block text-sm font-bold text-ive-text-muted mb-1">{t('emailVerification')}</label>
-              <div className="flex gap-2">
-                <input
-                  type="email"
-                  value={email}
-                  readOnly
-                  className="flex-1 min-w-0 bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2.5 text-sm text-ive-text opacity-60"
-                />
-                <button
-                  type="button"
-                  onClick={handlePwSendCode}
-                  disabled={pwSendingCode}
-                  className={`w-20 shrink-0 py-2.5 rounded-lg text-sm font-bold transition-all disabled:opacity-40 ${
-                    pwCodeSent ? 'bg-ive-green/15 text-ive-green' : 'bg-ive-cyan/15 text-ive-cyan'
-                  }`}
-                >
-                  {pwSendingCode ? <i className="fa-solid fa-circle-notch fa-spin" /> : pwCodeSent ? t('resend') : t('verify')}
-                </button>
+            {!skipPwVerification && (
+              <div>
+                <label className="block text-sm font-bold text-ive-text-muted mb-1">{t('emailVerification')}</label>
+                <div className="flex gap-2">
+                  <input
+                    type="email"
+                    value={email}
+                    readOnly
+                    className="flex-1 min-w-0 bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2.5 text-sm text-ive-text opacity-60"
+                  />
+                  <button
+                    type="button"
+                    onClick={handlePwSendCode}
+                    disabled={pwSendingCode}
+                    className={`w-20 shrink-0 py-2.5 rounded-lg text-sm font-bold transition-all disabled:opacity-40 ${
+                      pwCodeSent ? 'bg-ive-green/15 text-ive-green' : 'bg-ive-cyan/15 text-ive-cyan'
+                    }`}
+                  >
+                    {pwSendingCode ? <i className="fa-solid fa-circle-notch fa-spin" /> : pwCodeSent ? t('resend') : t('verify')}
+                  </button>
+                </div>
               </div>
-            </div>
-            {pwCodeSent && (
+            )}
+            {!skipPwVerification && pwCodeSent && (
               <div>
                 <label className="block text-sm font-bold text-ive-text-muted mb-1">{t('verificationCode')}</label>
                 <input

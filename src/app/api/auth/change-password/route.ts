@@ -3,16 +3,13 @@ import { getCurrentUser, hashPassword, verifyPassword } from '@/lib/auth'
 import { getUserByEmail, getDb } from '@/lib/db'
 import { getVerificationCode, clearVerificationCode } from '@/app/api/auth/send-code/route'
 import { logActivity } from '@/lib/activity'
+import { DEFAULT_ADMIN_EMAIL } from '@/lib/constants'
 
 export async function POST(req: Request) {
   const { email, currentPassword, newPassword, code } = await req.json()
 
   if (!newPassword || newPassword.length < 6) {
     return NextResponse.json({ error: '새 비밀번호는 6자 이상이어야 합니다' }, { status: 400 })
-  }
-
-  if (!code) {
-    return NextResponse.json({ error: '이메일 인증 코드를 입력해주세요' }, { status: 400 })
   }
 
   // 로그인 상태: currentPassword로 확인
@@ -27,15 +24,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: '이메일과 현재 비밀번호를 입력해주세요' }, { status: 400 })
   }
 
-  // 이메일 인증 코드 검증
-  const storedCode = getVerificationCode(targetEmail)
-  if (!storedCode || storedCode !== code) {
-    return NextResponse.json({ error: '인증 코드가 올바르지 않거나 만료되었습니다' }, { status: 400 })
-  }
-
   const user = getUserByEmail(targetEmail)
   if (!user) {
     return NextResponse.json({ error: '사용자를 찾을 수 없습니다' }, { status: 404 })
+  }
+
+  // 기본 사용자(admin@ive.local)는 받을 수 없는 자리표시자 이메일이므로 메일 인증을 건너뛴다.
+  const requiresVerification = user.email !== DEFAULT_ADMIN_EMAIL
+
+  if (requiresVerification) {
+    if (!code) {
+      return NextResponse.json({ error: '이메일 인증 코드를 입력해주세요' }, { status: 400 })
+    }
+    // 이메일 인증 코드 검증
+    const storedCode = getVerificationCode(targetEmail)
+    if (!storedCode || storedCode !== code) {
+      return NextResponse.json({ error: '인증 코드가 올바르지 않거나 만료되었습니다' }, { status: 400 })
+    }
   }
 
   const valid = await verifyPassword(currentPassword, user.password)
@@ -45,7 +50,7 @@ export async function POST(req: Request) {
 
   const newHash = await hashPassword(newPassword)
   getDb().prepare('UPDATE users SET password = ? WHERE id = ?').run(newHash, user.id)
-  clearVerificationCode(targetEmail)
+  if (requiresVerification) clearVerificationCode(targetEmail)
   logActivity({ userId: user.id, category: 'auth', action: 'change_password', detail: '비밀번호 변경', req })
 
   return NextResponse.json({ success: true })
