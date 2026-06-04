@@ -67,12 +67,23 @@ function loadActivityFilter(): {
       const userIds: string[] = Array.isArray(parsed.userIds)
         ? parsed.userIds
         : (parsed.userId ? [parsed.userId] : [])
+      const preset = parsed.preset !== undefined ? parsed.preset : 30
+      // 프리셋이 숫자(상대 기간: Today/7/30/90)면 저장된 날짜 대신 오늘 기준으로 재계산
+      // 프리셋이 null(All)이거나 -1(커스텀)이면 저장된 날짜 그대로 사용
+      let startDate: string, endDate: string
+      if (typeof preset === 'number' && preset >= 0) {
+        startDate = getDateStr(preset)
+        endDate = getDateStr(0)
+      } else {
+        startDate = parsed.startDate ?? getDateStr(30)
+        endDate = parsed.endDate ?? getDateStr(0)
+      }
       return {
         categories,
         userIds,
-        startDate: parsed.startDate ?? getDateStr(30),
-        endDate: parsed.endDate ?? getDateStr(0),
-        preset: parsed.preset !== undefined ? parsed.preset : 30,
+        startDate,
+        endDate,
+        preset,
       }
     }
   } catch {}
