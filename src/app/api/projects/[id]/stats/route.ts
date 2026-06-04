@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { getProject, getProjectAccess, getDb } from '@/lib/db'
+import { countTodayStageTransitions } from '@/lib/db/issues'
 import { getKSTTodayStartISO } from '@/lib/date-utils'
 
 export async function GET(
@@ -40,18 +41,10 @@ export async function GET(
   // 오늘 완료/반려된 이슈 수 — 권위적 소스(issue_stages.cached_stage)에서 집계.
   // task_execution 기반은 (a) 수동 라벨 전환을 놓치고 (b) ex-verify/ex-confirm 등
   // 실행 종류별 필터링이 끼어들어 "오늘 완료 N건"이 실제 done 이슈 수와 어긋남.
-  // updated_at >= todayStart 조건은 오늘 done/rejected로 전이된 이슈만 잡는다.
-  const completedRow = db.prepare(`
-    SELECT COUNT(*) as count FROM issue_stages
-    WHERE project_id = ? AND cached_stage = 'done' AND updated_at >= ?
-  `).get(id, todayStartISO) as any
-  const completed = completedRow?.count ?? 0
-
-  const failedRow = db.prepare(`
-    SELECT COUNT(*) as count FROM issue_stages
-    WHERE project_id = ? AND cached_stage = 'rejected' AND updated_at >= ?
-  `).get(id, todayStartISO) as any
-  const failed = failedRow?.count ?? 0
+  // countTodayStageTransitions 는 updated_at/todayStartISO 포맷 불일치를 datetime()
+  // 정규화로 흡수한다(#448 — 단순 문자열 비교 시 KST 오전 완료 건이 0으로 누락됐음).
+  const completed = countTodayStageTransitions(id, 'done', todayStartISO)
+  const failed = countTodayStageTransitions(id, 'rejected', todayStartISO)
 
   // 대기 중인 issue 수 (waiting 단계)
   const waitingCount = db.prepare(`

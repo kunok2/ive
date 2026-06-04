@@ -57,6 +57,25 @@ export function getCachedStage(projectId: string, issueIid: number): string | nu
   return r?.cached_stage || null
 }
 
+/**
+ * 오늘(KST 자정 이후) 특정 cached_stage 로 전이된 이슈 수.
+ * 프로젝트 카드의 "완료(done)"/"반려(rejected)" 카운트 집계에 사용.
+ *
+ * ⚠️ datetime()로 양변을 정규화하는 것이 핵심이다. issue_stages.updated_at 은
+ * datetime('now') 포맷('YYYY-MM-DD HH:MM:SS', 공백 구분)이고 todayStartISO 는
+ * toISOString() 포맷('YYYY-MM-DDTHH:MM:SS.sssZ', 'T' 구분)이라, 날짜가 같은 행을
+ * 단순 문자열 비교(updated_at >= todayStartISO)하면 공백(0x20) < 'T'(0x54) 때문에
+ * 항상 false 가 된다. 그 결과 KST 자정~오전 09시(=UTC 같은 날짜) 사이 완료 건이
+ * "오늘 완료"에서 누락되어 0 으로 표시되는 버그가 있었다(#448).
+ */
+export function countTodayStageTransitions(projectId: string, stage: string, todayStartISO: string): number {
+  const r = getDb().prepare(`
+    SELECT COUNT(*) as count FROM issue_stages
+    WHERE project_id = ? AND cached_stage = ? AND datetime(updated_at) >= datetime(?)
+  `).get(projectId, stage, todayStartISO) as any
+  return r?.count ?? 0
+}
+
 export function recordIssueScheduledAt(projectId: string, issueIid: number, scheduledAt: string) {
   getDb().prepare(`
     INSERT INTO issue_stages (project_id, issue_iid, stage, scheduled_at, updated_at)

@@ -8,6 +8,9 @@ Springware IVE의 굵직한 변경 이력입니다.
 
 ## [Unreleased]
 
+### Fixed
+- 프로젝트 카드 "완료(오늘)" 카운트가 KST 자정~오전 9시에 완료된 건을 누락해 0으로 표시되던 문제 수정 (#448). `issue_stages.updated_at`(`datetime('now')` 공백 포맷)과 오늘 시작 기준값(ISO `T`/`Z` 포맷)을 단순 문자열 비교하던 것을 `datetime()` 정규화 비교로 교체.
+
 ## [1.5.0] - 2026-06-03
 
 Slack 통합과 비용 원가 모델을 도입한 릴리스.
