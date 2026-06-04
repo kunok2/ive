@@ -19,6 +19,13 @@ const tabSections = [
   { key: 'admin', icon: 'fa-solid fa-gear', steps: 4 },
 ] as const
 
+// Slack 연동은 특정 탭이 아니라 '내 정보'(워크스페이스 추가)와 '프로젝트 공유'에 걸쳐 있어
+// 별도 섹션으로 안내한다. 가이드 투어가 없으므로 흐름별 단계만 보여준다.
+const slackFlows = [
+  { key: 'slackUser', icon: 'fa-solid fa-user', steps: 6 },
+  { key: 'slackShare', icon: 'fa-solid fa-share-nodes', steps: 4 },
+] as const
+
 export default function HelpModal({ open, onClose, onShowIntro, onStartTour }: HelpModalProps) {
   const t = useTranslations('help')
   const tt = useTranslations('tour')
@@ -121,6 +128,70 @@ export default function HelpModal({ open, onClose, onShowIntro, onStartTour }: H
                 </div>
               )
             })}
+
+            {/* Slack 연동 (탭 아님 — 흐름별 안내, 투어 없음) */}
+            {(() => {
+              const isExpanded = expandedKey === 'slack'
+              return (
+                <div
+                  className={`rounded-lg transition-colors ${
+                    isExpanded
+                      ? 'bg-ive-cyan/5 border border-ive-cyan/20'
+                      : 'bg-ive-bg/50 border border-ive-border-dark'
+                  }`}
+                >
+                  <button
+                    onClick={() => setExpandedKey(isExpanded ? '' : 'slack')}
+                    className="w-full flex items-center justify-between p-3"
+                  >
+                    <h3 className={`text-sm font-bold ${isExpanded ? 'text-ive-cyan' : 'text-ive-text'}`}>
+                      <i className="fa-brands fa-slack mr-1.5" />
+                      {t('slack')}
+                    </h3>
+                    <i className={`fa-solid fa-chevron-down text-xs text-ive-text-dim transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {isExpanded && (
+                    <div className="px-3 pb-3">
+                      {/* Description */}
+                      <p className="text-xs font-bold text-ive-text-secondary mb-3">
+                        {t('slackDesc')}
+                      </p>
+
+                      {/* 흐름별 단계 (2가지 시나리오) */}
+                      {slackFlows.map(({ key, icon, steps }) => (
+                        <div key={key} className="mb-3 last:mb-0">
+                          <h4 className="text-xs font-bold text-ive-cyan mb-2 flex items-center gap-1.5">
+                            <i className={icon} />
+                            {t(`${key}Title` as keyof IntlMessages['help'])}
+                          </h4>
+                          <ol className="flex flex-col gap-2">
+                            {Array.from({ length: steps }, (_, i) => (
+                              <li key={i} className="flex items-start gap-2 text-xs font-bold text-ive-text-muted">
+                                <span className="shrink-0 w-5 h-5 rounded-lg bg-ive-cyan/15 text-ive-cyan flex items-center justify-center text-xs">
+                                  {i + 1}
+                                </span>
+                                <span className="pt-0.5 leading-relaxed">
+                                  {t(`${key}Step${i + 1}` as keyof IntlMessages['help'])}
+                                </span>
+                              </li>
+                            ))}
+                          </ol>
+                        </div>
+                      ))}
+
+                      {/* Tip */}
+                      <div className="flex items-start gap-1.5 text-xs font-bold text-ive-text-dim bg-ive-bg-deep/50 rounded-lg px-2.5 py-2">
+                        <i className="fa-solid fa-lightbulb text-ive-amber shrink-0 mt-0.5" />
+                        <span className="leading-relaxed">
+                          {t('slackTip')}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
           </div>
         </div>
 

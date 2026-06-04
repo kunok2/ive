@@ -47,5 +47,24 @@
   "adminStep2": "Settings: Enter CLI executable paths (Claude Code, OpenCode). Agents use these paths to run AI tools.",
   "adminStep3": "Mail: Enter SMTP server info to enable automatic report delivery and notifications. Use the 'Test' button to verify.",
   "adminStep4": "OAuth: Register GitHub/GitLab OAuth apps so users can import all repositories in one click.",
-  "adminTip": "Agents won't work if CLI paths are wrong. Always verify after configuration."
+  "adminTip": "Agents won't work if CLI paths are wrong. Always verify after configuration.",
+
+  "slack": "Slack Integration",
+  "slackDesc": "Mention the IVE bot in Slack to chat with your agent, hand off tasks, and get results. There are two ways to use it, depending on the type of account you log in with.",
+
+  "slackUserTitle": "Logged in with a Slack account",
+  "slackUserStep1": "On the login screen, choose 'Sign in with Slack' to access IVE with your Slack account. (This button only appears after an admin registers a Slack app under Admin > OAuth.)",
+  "slackUserStep2": "Tap your avatar at the top right to open 'My Info' and expand the 'Slack Workspaces' section. (This section only shows when you logged in with a Slack account.)",
+  "slackUserStep3": "Click 'Add Workspace' to open Slack's consent screen. Approve the permissions and the IVE bot is installed into your workspace — no extra input, done in one click.",
+  "slackUserStep4": "Go to Slack and invite the IVE bot to a channel (search for the bot's name to add it) or open a 1:1 DM with it.",
+  "slackUserStep5": "@mention the bot to talk to it and your agent replies. Ask plainly for a general chat, include an issue number like '#20' for that task, or add a project name to scope the answer to that project.",
+  "slackUserStep6": "You can attach images to your question, and receive charts/diagrams the bot generates right in the channel. The reply language follows the language setting of the mentioning Slack account.",
+
+  "slackShareTitle": "Git account user → share with a Slack user",
+  "slackShareStep1": "Log in to IVE with your GitHub/GitLab account and register a repository from the Projects tab.",
+  "slackShareStep2": "Tap the project card to open its settings and expand 'Share Project'.",
+  "slackShareStep3": "Pick the Slack user to collaborate with (someone who has joined IVE and added a workspace) and share with Viewer or Editor role.",
+  "slackShareStep4": "When that Slack user mentions the bot in their workspace, they can use this shared project alongside their own. (Include the project name in the message to switch to it.)",
+
+  "slackTip": "The bot always acts with the permissions of 'the person who added the workspace'. Only projects they own or were shared can be accessed via Slack, so repositories outside their permissions are never exposed. That person also needs at least one developer (agent) for the bot to respond."
 }
