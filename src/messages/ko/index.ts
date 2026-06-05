@@ -22,6 +22,7 @@ import errors from './errors.json'
 import help from './help.json'
 import tour from './tour.json'
 import verifyQueue from './verifyQueue.json'
+import legal from './legal.json'
 
 const messages = {
   common,
@@ -48,6 +49,7 @@ const messages = {
   help,
   tour,
   verifyQueue,
+  legal,
 }
 
 export default messages

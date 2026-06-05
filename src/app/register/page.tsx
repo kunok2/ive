@@ -19,8 +19,10 @@ export default function RegisterPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [sendingCode, setSendingCode] = useState(false)
+  const [legalEnabled, setLegalEnabled] = useState(true)
   const tAuth = useTranslations('auth')
   const tc = useTranslations('common')
+  const tLegal = useTranslations('legal')
 
   // 재발송 쿨다운 타이머
   useEffect(() => {
@@ -28,6 +30,14 @@ export default function RegisterPage() {
     const t = setTimeout(() => setCooldown(c => c - 1), 1000)
     return () => clearTimeout(t)
   }, [cooldown])
+
+  // 약관·개인정보 표시 여부(사내 전용 설치 시 관리자가 끌 수 있음)
+  useEffect(() => {
+    fetch('/api/public/legal-config')
+      .then(r => r.ok ? r.json() : null)
+      .then(cfg => { if (cfg) setLegalEnabled(cfg.enabled !== false) })
+      .catch(() => {})
+  }, [])
 
   async function handleSendCode() {
     if (!email) { setError(tAuth('emailRequired')); return }
@@ -182,6 +192,15 @@ export default function RegisterPage() {
 
           {error && (
             <div className="text-base text-ive-red bg-ive-red/10 rounded-lg px-3 py-2">{error}</div>
+          )}
+
+          {legalEnabled && (
+            <p className="text-xs text-ive-text-dim text-center leading-relaxed">
+              {tLegal.rich('ui.registerConsent', {
+                terms: (c) => <Link href="/legal/terms" className="text-ive-text-muted hover:text-ive-green underline">{c}</Link>,
+                privacy: (c) => <Link href="/legal/privacy" className="text-ive-text-muted hover:text-ive-green underline">{c}</Link>,
+              })}
+            </p>
           )}
 
           <button

@@ -103,11 +103,13 @@ export function createOAuthUser(u: {
   refreshTokenEncrypted: string | null;
   tokenExpiresAt: string | null;
 }) {
+  // 소셜 로그인을 통한 신규 가입도 그 시점에 약관·처리방침에 동의한 것으로 보고 terms_agreed_at을 기록한다.
   getDb().prepare(`INSERT INTO users (
     id, email, password, name, avatar,
     oauth_provider_id, oauth_user_id,
-    oauth_access_token, oauth_refresh_token, oauth_token_expires_at
-  ) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)`).run(
+    oauth_access_token, oauth_refresh_token, oauth_token_expires_at,
+    terms_agreed_at
+  ) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`).run(
     u.id, u.email, u.name, u.avatar ?? 'av-01',
     u.providerId, u.oauthUserId,
     u.accessTokenEncrypted, u.refreshTokenEncrypted, u.tokenExpiresAt

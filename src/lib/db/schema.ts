@@ -15,6 +15,7 @@ export function initSchema(db: Database.Database) {
       max_turns INTEGER NOT NULL DEFAULT 20,
       slack_user_id TEXT NOT NULL DEFAULT '',
       slack_notify INTEGER NOT NULL DEFAULT 1,
+      terms_agreed_at TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -265,6 +266,10 @@ export function initSchema(db: Database.Database) {
     }
     if (!tableInfo.some((col: any) => col.name === 'slack_notify')) {
       db.exec("ALTER TABLE users ADD COLUMN slack_notify INTEGER NOT NULL DEFAULT 1")
+    }
+    // 회원가입/소셜 로그인 시점의 이용약관·개인정보처리방침 동의 시각(ISO). 기존 가입자는 NULL.
+    if (!tableInfo.some((col: any) => col.name === 'terms_agreed_at')) {
+      db.exec("ALTER TABLE users ADD COLUMN terms_agreed_at TEXT")
     }
   } catch (e) { console.error("Migration failed for users:", e) }
 

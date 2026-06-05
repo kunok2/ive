@@ -165,6 +165,18 @@
   "mcpServer": "MCP 서버",
   "mcpConfigHint": "MCP(Model Context Protocol): 에이전트가 이슈 처리 시 사용할 외부 도구 서버를 등록합니다(예: GitHub, 파일시스템). 비워 두면 각 CLI의 기본 도구만 사용합니다. Claude·OpenCode·Codex·Gemini 모두에 적용되며 로컬(npx 등) 서버를 지원합니다. 원격(remote) 서버는 Claude·OpenCode·Gemini만 지원(Codex 제외).",
   "oauthSettings": "OAuth 콜백",
+  "legalSettings": "약관·개인정보",
+  "legal": {
+    "intro": "약관·개인정보처리방침 문서와 로그인 화면에 표시되는 운영주체·담당자 정보입니다. 문서 본문(조항)은 다국어로 제공되며, 아래 값이 회사별로 주입됩니다.",
+    "enabledLabel": "로그인·회원가입 화면에 약관·개인정보처리방침 표시",
+    "enabledHint": "사내 전용 설치 등 외부 가입이 없는 경우 꺼서 동의 문구와 약관 링크를 숨길 수 있습니다.",
+    "companyName": "회사명(운영주체)",
+    "companyAddress": "주소",
+    "officerName": "개인정보 보호책임자",
+    "officerEmail": "보호책임자 이메일",
+    "serviceUrl": "서비스 URL",
+    "effectiveDate": "시행일"
+  },
   "logging": "로깅",
   "logs": "로그",
   "terminal": "터미널",

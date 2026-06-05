@@ -1,0 +1,200 @@
+{
+  "ui": {
+    "back": "Back to login",
+    "effectiveLabel": "Effective date",
+    "privacyLink": "Privacy Policy",
+    "termsLink": "Terms of Service",
+    "licensesLink": "Open Source Licenses",
+    "consentNotice": "By continuing with your account, you are deemed to agree to the <terms>Terms of Service</terms> and <privacy>Privacy Policy</privacy>.",
+    "registerConsent": "By signing up, you are deemed to agree to the <terms>Terms of Service</terms> and <privacy>Privacy Policy</privacy>."
+  },
+  "licenses": {
+    "title": "Open Source Licenses",
+    "intro": "Springware IVE uses the open source software listed below. Each component is governed by its respective license.",
+    "total": "{count} packages in total",
+    "summaryTitle": "Summary by license",
+    "viewFull": "View full license texts",
+    "searchPlaceholder": "Search package or license…",
+    "platformNote": "Platform-specific native binaries may vary by runtime OS, but their license families are identical.",
+    "noResults": "No matching packages."
+  },
+  "privacy": {
+    "title": "Privacy Policy",
+    "intro": "{companyName} (the \"Company\") complies with applicable data protection laws including the Personal Information Protection Act of Korea, and establishes and discloses this Privacy Policy to protect the personal information of data subjects and to handle related concerns promptly. This policy applies to the Springware IVE service (the \"Service\") provided by the Company.",
+    "sections": [
+      {
+        "heading": "1. Personal Information Collected and Methods of Collection",
+        "body": "The Company collects the following personal information during sign-up, service provision, and external repository integration.",
+        "items": [
+          "Email sign-up: email address, name, password (stored as a non-reversible hash)",
+          "Social login (GitHub, GitLab, Slack): email address, name, profile image, social account identifier (provider user ID), Slack member ID, OAuth access/refresh tokens",
+          "External repository integration: GitHub/GitLab access tokens (stored encrypted)",
+          "Information generated automatically during use: IP address, browser information (User-Agent), cookies, usage records (activity logs, task execution records), and access timestamps",
+          "Optional information: preference settings such as language, time zone, and display currency"
+        ]
+      },
+      {
+        "heading": "2. Purpose of Collection and Use",
+        "items": [
+          "Member identification, authentication, and maintaining login sessions",
+          "Service provision — automated issue processing, AI agent execution, and integration with external repositories (GitHub/GitLab) including issue and merge/pull request handling",
+          "Sending email verification codes, notifications, and report emails",
+          "Sending task notifications via Slack (DM/mention)",
+          "Generating usage statistics and cost/work reports",
+          "Security, prevention of misuse, ensuring service stability, and dispute resolution"
+        ]
+      },
+      {
+        "heading": "3. Retention and Use Period",
+        "body": "In principle, the Company destroys personal information without delay once the purpose of collection and use has been achieved. However, the following information is retained for the periods stated.",
+        "items": [
+          "Member information: until account deletion (withdrawal). Upon withdrawal, the member's account and associated data (projects, agents, task execution records, etc.) are deleted immediately.",
+          "Usage records (activity logs): 90 days from collection",
+          "Task execution records: per the retention period configured for each project",
+          "Email verification codes: 10 minutes after issuance (deleted upon verification or expiry)",
+          "Where applicable laws require retention for a certain period, for the period prescribed by such laws"
+        ]
+      },
+      {
+        "heading": "4. Provision to Third Parties and Entrustment",
+        "body": "The Company does not use personal information beyond the purposes disclosed herein, nor does it sell it externally. However, data is exchanged with the following external services to provide the Service.",
+        "items": [
+          "GitHub / GitLab: For repositories the user has integrated, task data such as issues, comments, and merge/pull requests is exchanged. Processing is limited to the scope of the access token (or OAuth authorization) provided by the user.",
+          "Slack: Member ID and message content are sent to the Slack API to deliver task notifications (DM, channel mentions).",
+          "Email (SMTP) delivery: Verification codes, notifications, and report emails are sent to recipient email addresses.",
+          "These external services are not operated by the Company; each provider's own privacy practices apply to their processing."
+        ]
+      },
+      {
+        "heading": "5. Destruction Procedure and Method",
+        "items": [
+          "Procedure: Personal information whose retention period has elapsed or whose purpose has been achieved is destroyed without delay in accordance with internal policy.",
+          "Method: Information in electronic file form is permanently deleted using a method that prevents recovery or restoration."
+        ]
+      },
+      {
+        "heading": "6. Rights of Data Subjects and How to Exercise Them",
+        "body": "Data subjects may exercise the following rights regarding their personal information at any time.",
+        "items": [
+          "Request access to, correction/deletion of, or suspension of processing of personal information",
+          "Within the Service, you can directly edit certain information such as your name, avatar, and email on the 'My Info' screen.",
+          "You may request account deletion (withdrawal); upon processing, the account and associated data are deleted.",
+          "Requests may be made in writing or by email to the Data Protection Officer below, and the Company will act without delay."
+        ]
+      },
+      {
+        "heading": "7. Security Measures",
+        "items": [
+          "Passwords are stored as a one-way, non-reversible hash (bcrypt).",
+          "Sensitive information such as OAuth tokens and external repository access tokens is stored encrypted with AES-256-GCM.",
+          "Transport encryption (HTTPS) is applied, and authentication sessions are managed via HttpOnly cookies.",
+          "Access to systems processing personal information is limited to a minimal number of personnel."
+        ]
+      },
+      {
+        "heading": "8. Use of Cookies",
+        "body": "The Company uses cookies to maintain login sessions and for security.",
+        "items": [
+          "Authentication session cookie (ive-token): used to maintain login state, valid for 7 days after issuance (HttpOnly).",
+          "OAuth state cookie (ive-oauth-state): used temporarily to secure the social login process (CSRF protection) and deleted immediately upon completion.",
+          "You may refuse cookie storage through your browser settings, but doing so may restrict certain services such as login."
+        ]
+      },
+      {
+        "heading": "9. Data Protection Officer",
+        "body": "For inquiries, complaints, or remedies regarding the processing of personal information, please contact the officer below.",
+        "items": [
+          "Data Protection Officer: {officerName}",
+          "Email: {officerEmail}",
+          "Address: {companyAddress}"
+        ]
+      },
+      {
+        "heading": "10. Duty to Notify",
+        "body": "If this Privacy Policy is amended, added to, or deleted, the changes will be announced within the Service before they take effect."
+      }
+    ]
+  },
+  "terms": {
+    "title": "Terms of Service",
+    "intro": "These Terms govern the rights, obligations, and responsibilities between {companyName} (the \"Company\") and users (\"Members\") in relation to the use of the Springware IVE service (the \"Service\") provided by the Company.",
+    "sections": [
+      {
+        "heading": "Article 1 (Purpose)",
+        "body": "These Terms aim to define the conditions and procedures for using the Service provided by the Company, as well as the rights, obligations, and responsibilities between the Company and Members."
+      },
+      {
+        "heading": "Article 2 (Definitions)",
+        "items": [
+          "\"Service\" means the Springware IVE web dashboard and all related features provided by the Company.",
+          "\"Member\" means a person who agrees to these Terms and registers for and uses the Service.",
+          "\"Social login\" means authentication/registration using an external account such as GitHub, GitLab, or Slack."
+        ]
+      },
+      {
+        "heading": "Article 3 (Effect and Amendment of Terms)",
+        "items": [
+          "These Terms take effect by being posted on the Service screen.",
+          "The Company may amend these Terms within the bounds of applicable law and will announce the effective date and content of changes within the Service.",
+          "If a Member does not agree to the amended Terms, the Member may discontinue use and withdraw."
+        ]
+      },
+      {
+        "heading": "Article 4 (Sign-up and Accounts)",
+        "items": [
+          "Sign-up is performed via email verification or social login (GitHub/GitLab/Slack).",
+          "Members must provide accurate information at sign-up and update it if it changes.",
+          "Members are responsible for managing their own accounts; the Member bears responsibility for any misuse or unauthorized use of account information."
+        ]
+      },
+      {
+        "heading": "Article 5 (Social Login and External Repository Integration)",
+        "items": [
+          "Members may log in with a GitHub/GitLab/Slack account, in which case minimal information such as email, name, and profile image is provided by that service.",
+          "When a Member integrates an external repository, the Company performs tasks such as handling issues and merge requests within the scope of the permissions (access token or OAuth authorization) granted by the Member.",
+          "Members may revoke external service integration at any time."
+        ]
+      },
+      {
+        "heading": "Article 6 (Provision and Change of Service)",
+        "items": [
+          "The Company strives to provide a stable service, but the Service may be temporarily suspended due to system maintenance, faults, force majeure, etc.",
+          "The Company may change or discontinue the content of the Service and will give prior notice of material changes."
+        ]
+      },
+      {
+        "heading": "Article 7 (Obligations of Members)",
+        "body": "Members must not engage in the following acts.",
+        "items": [
+          "Stealing or fraudulently using another person's account or information",
+          "Interfering with the normal operation of the Service",
+          "Using the Service for purposes contrary to law or public order and morals",
+          "Infringing the rights of the Company or third parties"
+        ]
+      },
+      {
+        "heading": "Article 8 (Responsibility for AI-Automated Results)",
+        "items": [
+          "The Service uses AI agents to automatically analyze and process issues and to generate code changes (MR/PR) and similar outputs.",
+          "AI-generated outputs may be inaccurate or contain errors, and Members are responsible for reviewing and verifying them before use.",
+          "The Company does not warrant the accuracy, completeness, or suitability of AI-automated outputs and is not liable for damages arising from a Member's use without review."
+        ]
+      },
+      {
+        "heading": "Article 9 (Restriction of Use)",
+        "body": "If a Member violates these Terms or interferes with the normal operation of the Service, the Company may, after prior notice (or subsequent notice in urgent cases), restrict use or suspend/delete the account."
+      },
+      {
+        "heading": "Article 10 (Disclaimer)",
+        "items": [
+          "The Company is not liable for damages arising from causes beyond its control, such as force majeure, the Member's fault, or faults in external services (GitHub/GitLab/Slack, etc.).",
+          "Unless otherwise specifically provided by applicable law, the Company is not liable in connection with the use of services provided free of charge."
+        ]
+      },
+      {
+        "heading": "Article 11 (Governing Law and Jurisdiction)",
+        "body": "These Terms are interpreted in accordance with the laws of the Republic of Korea. Any dispute arising in connection with use of the Service shall be subject to the court having jurisdiction under the Civil Procedure Act."
+      }
+    ]
+  }
+}

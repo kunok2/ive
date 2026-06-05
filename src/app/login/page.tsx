@@ -26,6 +26,7 @@ export default function LoginPage() {
   const [showIntro, setShowIntro] = useState(false)
   const [sessionExpired, setSessionExpired] = useState(false)
   const [oauthProviders, setOauthProviders] = useState<PublicOAuthProvider[]>([])
+  const [legalEnabled, setLegalEnabled] = useState(true)
   const [oauthError, setOauthError] = useState<string | null>(null)
   const [oauthRedirecting, setOauthRedirecting] = useState<string | null>(null)
   const [installPrompt, setInstallPrompt] = useState<any>(null)
@@ -37,6 +38,7 @@ export default function LoginPage() {
   const [isSafari, setIsSafari] = useState(false)
   const [isAndroid, setIsAndroid] = useState(false)
   const tAuth = useTranslations('auth')
+  const tLegal = useTranslations('legal')
 
   useEffect(() => {
     // PWA 설치 프롬프트
@@ -68,6 +70,11 @@ export default function LoginPage() {
       .then(r => r.ok ? r.json() : [])
       .then((data: PublicOAuthProvider[]) => setOauthProviders(Array.isArray(data) ? data : []))
       .catch(() => setOauthProviders([]))
+    // 약관·개인정보 표시 여부(사내 전용 설치 시 관리자가 끌 수 있음)
+    fetch('/api/public/legal-config')
+      .then(r => r.ok ? r.json() : null)
+      .then(cfg => { if (cfg) setLegalEnabled(cfg.enabled !== false) })
+      .catch(() => {})
     return () => window.removeEventListener('beforeinstallprompt', handler)
   }, [searchParams])
 
@@ -186,6 +193,14 @@ export default function LoginPage() {
                 </a>
               )
             })}
+            {legalEnabled && (
+              <p className="text-xs text-ive-text-dim text-center leading-relaxed mt-1">
+                {tLegal.rich('ui.consentNotice', {
+                  terms: (c) => <Link href="/legal/terms" className="text-ive-text-muted hover:text-ive-green underline">{c}</Link>,
+                  privacy: (c) => <Link href="/legal/privacy" className="text-ive-text-muted hover:text-ive-green underline">{c}</Link>,
+                })}
+              </p>
+            )}
           </div>
         )}
 
@@ -236,6 +251,14 @@ export default function LoginPage() {
                 }
               </p>
             )}
+          </div>
+        )}
+
+        {legalEnabled && (
+          <div className="mt-6 flex justify-center gap-4 text-xs font-bold text-ive-text-dim">
+            <Link href="/legal/terms" className="hover:text-ive-green transition-colors">{tLegal('ui.termsLink')}</Link>
+            <Link href="/legal/privacy" className="hover:text-ive-green transition-colors">{tLegal('ui.privacyLink')}</Link>
+            <Link href="/legal/licenses" className="hover:text-ive-green transition-colors">{tLegal('ui.licensesLink')}</Link>
           </div>
         )}
 

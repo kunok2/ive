@@ -8,6 +8,12 @@ Springware IVE의 굵직한 변경 이력입니다.
 
 ## [Unreleased]
 
+### Added
+- **이용약관·개인정보처리방침 도입**: `/legal/terms`, `/legal/privacy` 페이지(ko/en) 추가. 외부 공개 서비스 + OAuth 가입에 대응해 개인정보처리방침을 수립·공개(개인정보보호법 제30조). 로그인 화면 OAuth 버튼 아래·하단에 동의 고지문과 약관 링크, 회원가입 화면 가입 버튼 위에 동의 고지문 노출.
+- **약관 동의 시점 기록**: `users.terms_agreed_at` 컬럼 추가. 이메일/소셜 가입 시점을 동의 시각으로 저장.
+- **약관 설정 관리자화**: 관리자 설정에 "약관·개인정보" 그룹 추가. 로그인 화면 표시 on/off 토글(사내 전용 설치 시 끄기) + 운영주체 정보(회사명·주소·보호책임자·이메일·서비스 URL·시행일)를 설정에서 지정. 약관 본문(조항)은 i18n 템플릿으로 두고 회사별 값만 주입(`getLegalConfig`, 공개 엔드포인트 `/api/public/legal-config`).
+- **오픈소스 라이선스 고지**: 납품(배포) 시 attribution 의무 대응. 프로덕션 의존성 라이선스·저작권 전문을 수집하는 `scripts/generate-third-party-notices.mjs`(npm `licenses`/`prebuild`로 빌드 시 자동 갱신) → `public/third-party-notices.txt`(동봉용 전문) + `src/data/third-party-licenses.json`(페이지용 메타). `/legal/licenses` 페이지(ko/en, 검색·라이선스별 집계·전문 링크) 추가, 약관·로그인 푸터에 링크 연결. (GPL/AGPL 0건 — 자사 소스 공개 의무 없음.)
+
 ### Fixed
 - 프로젝트 카드 "완료(오늘)" 카운트가 KST 자정~오전 9시에 완료된 건을 누락해 0으로 표시되던 문제 수정 (#448). `issue_stages.updated_at`(`datetime('now')` 공백 포맷)과 오늘 시작 기준값(ISO `T`/`Z` 포맷)을 단순 문자열 비교하던 것을 `datetime()` 정규화 비교로 교체.
 

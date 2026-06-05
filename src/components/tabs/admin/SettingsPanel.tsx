@@ -76,6 +76,18 @@ const SETTING_GROUPS: SettingGroup[] = [
     ],
   },
   {
+    key: 'legal', label: 'legalSettings', icon: 'fa-solid fa-file-contract',
+    fields: [
+      { key: 'legal.enabled', label: 'legal.enabledLabel', type: 'boolean', defaultValue: 'true', hint: 'legal.enabledHint' },
+      { key: 'legal.company_name', label: 'legal.companyName', type: 'text', placeholder: '(주) 스프링웨어' },
+      { key: 'legal.company_address', label: 'legal.companyAddress', type: 'text', placeholder: '서울특별시 관악구 …' },
+      { key: 'legal.officer_name', label: 'legal.officerName', type: 'text', placeholder: '홍길동' },
+      { key: 'legal.officer_email', label: 'legal.officerEmail', type: 'text', placeholder: 'privacy@example.com' },
+      { key: 'legal.service_url', label: 'legal.serviceUrl', type: 'text', placeholder: 'https://ive.example.com' },
+      { key: 'legal.effective_date', label: 'legal.effectiveDate', type: 'text', placeholder: '2026-06-05' },
+    ],
+  },
+  {
     key: 'mcp', label: 'mcpServer', icon: 'fa-solid fa-plug',
     fields: [
       {
@@ -305,6 +317,10 @@ export default function SettingsPanel() {
                 <p className="text-[11px] text-ive-text-dim leading-snug -mt-1">{t('cliPathDesc')}</p>
               )}
 
+              {group.key === 'legal' && (
+                <p className="text-[11px] text-ive-text-dim leading-snug -mt-1">{t('legal.intro')}</p>
+              )}
+
               {group.key === 'cli_paths' ? (
                 CLI_ITEMS.map(item => (
                   <div key={item.cliName} className="bg-ive-bg-deep border border-ive-border-subtle rounded-lg px-3 py-3 space-y-2.5">
@@ -395,19 +411,21 @@ export default function SettingsPanel() {
                       options={(field.options || []).map(opt => ({ value: opt.value, label: tr(opt.label) }))}
                     />
                   ) : field.type === 'boolean' ? (
-                    <label className="inline-flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={(settings[field.key] ?? field.defaultValue ?? 'false') === 'true'}
-                        onChange={e => commitField(group, field.key, e.target.checked ? 'true' : 'false')}
-                        className="w-4 h-4 accent-ive-green"
-                      />
-                      <span className="text-sm text-ive-text">
-                        {(settings[field.key] ?? field.defaultValue ?? 'false') === 'true'
-                          ? t('log.fileEnabledOn')
-                          : t('log.fileEnabledOff')}
-                      </span>
-                    </label>
+                    (() => {
+                      const on = (settings[field.key] ?? field.defaultValue ?? 'false') === 'true'
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => commitField(group, field.key, on ? 'false' : 'true')}
+                          className="flex items-center gap-2 text-sm text-ive-text"
+                        >
+                          <span className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${on ? 'bg-ive-green' : 'bg-ive-border'}`}>
+                            <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${on ? 'translate-x-4' : ''}`} />
+                          </span>
+                          {on ? t('log.fileEnabledOn') : t('log.fileEnabledOff')}
+                        </button>
+                      )
+                    })()
                   ) : (
                     <input
                       type={field.type}

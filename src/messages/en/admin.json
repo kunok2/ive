@@ -165,6 +165,18 @@
   "mcpServer": "MCP Server",
   "mcpConfigHint": "MCP (Model Context Protocol): register external tool servers agents can use while processing issues (e.g. GitHub, filesystem). Leave empty to use each CLI's built-in tools only. Applies to Claude, OpenCode, Codex, and Gemini; local (e.g. npx) servers are supported. Remote servers work on Claude, OpenCode, and Gemini (not Codex).",
   "oauthSettings": "OAuth Callback",
+  "legalSettings": "Legal & Privacy",
+  "legal": {
+    "intro": "Operator and officer details shown in the Terms / Privacy Policy documents and on the login screen. The document body (clauses) is provided in multiple languages; the values below are injected per company.",
+    "enabledLabel": "Show Terms & Privacy Policy on login/sign-up screens",
+    "enabledHint": "For internal-only installations with no external sign-ups, turn this off to hide the consent notice and legal links.",
+    "companyName": "Company name (operator)",
+    "companyAddress": "Address",
+    "officerName": "Data Protection Officer",
+    "officerEmail": "Officer email",
+    "serviceUrl": "Service URL",
+    "effectiveDate": "Effective date"
+  },
   "logging": "Logging",
   "logs": "Logs",
   "terminal": "Terminal",

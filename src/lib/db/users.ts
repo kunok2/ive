@@ -104,5 +104,6 @@ export function updateUserSlack(id: string, slackUserId: string, slackNotify: bo
 }
 
 export function createUser(u: any) {
-  getDb().prepare('INSERT INTO users (id, email, password, name) VALUES (?, ?, ?, ?)').run(u.id, u.email, u.password, u.name)
+  // 회원가입 자체가 약관·처리방침 동의 시점이므로 terms_agreed_at을 함께 기록한다.
+  getDb().prepare("INSERT INTO users (id, email, password, name, terms_agreed_at) VALUES (?, ?, ?, ?, datetime('now'))").run(u.id, u.email, u.password, u.name)
 }
