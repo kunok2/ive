@@ -186,6 +186,72 @@ export function stripBotMention(text: string, botUserId: string): string {
 }
 
 /**
+ * 표준 Markdown(에이전트 출력) → Slack mrkdwn 변환.
+ *
+ * 왜 필요한가: CLI 에이전트(claude/gemini 등)는 GitHub-flavored Markdown을 뱉지만,
+ * Slack 의 text 필드는 그 방언이 아니라 mrkdwn 만 이해한다. 그대로 보내면
+ * `**굵게**`·`### 헤더`·`[t](u)`·`~~취소선~~`·표가 문자 그대로 찍힌다.
+ * 전송 직전 이 함수를 한 번 태워서 mrkdwn 으로 바꾼다.
+ *
+ * 보호: 코드펜스(``` ```)와 인라인 코드(` `) 내부는 절대 변형하지 않는다
+ * (코드 예시 안의 `*`·`#` 까지 바뀌면 안 됨). placeholder 로 빼뒀다가 마지막에 복원.
+ *
+ * 스트리밍 안전: 닫히지 않은 `**bold`(아직 도착 중) 같은 토막은 매칭되지 않아
+ * 그대로 남고, 다음 flush·최종 전송에서 완성되면 정상 변환된다.
+ */
+export function markdownToMrkdwn(md: string): string {
+  if (!md) return md
+
+  // 1) 코드 영역 보호 — 펜스 먼저, 그다음 인라인. placeholder  <idx>  로 치환.
+  const guards: string[] = []
+  const stash = (s: string): string => { guards.push(s); return ` ${guards.length - 1} ` }
+  let t = md
+    .replace(/```[\s\S]*?```/g, m => stash(m))
+    .replace(/`[^`\n]+`/g, m => stash(m))
+
+  // 2) 라인/블록 단위 변환 — 표·헤더·불릿. (Slack 은 표가 없어 표는 코드블록으로 정렬 보존)
+  const isTableSep = (s: string): boolean => s.includes('|') && /-/.test(s) && /^[\s|:-]+$/.test(s)
+  const fmtRow = (s: string): string =>
+    s.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim()).join(' | ')
+  const lines = t.split('\n')
+  const out: string[] = []
+  for (let i = 0; i < lines.length; i++) {
+    const cur = lines[i]
+    // 표: 헤더행 + 구분행(|---|) 패턴이면 연속 행을 모아 코드블록으로. (생성한 블록도 stash 해 인라인 변환에서 보호)
+    if (cur.includes('|') && isTableSep(lines[i + 1] ?? '')) {
+      const rows = [fmtRow(cur)]
+      i += 2
+      while (i < lines.length && lines[i].includes('|')) { rows.push(fmtRow(lines[i])); i++ }
+      i--
+      out.push(stash('```\n' + rows.join('\n') + '\n```'))
+      continue
+    }
+    // 헤더(#~######) → *굵게*. 굵게 sentinel()로 감싸 아래 기울임 변환에 안 먹히게 한다.
+    const h = cur.match(/^\s{0,3}#{1,6}\s+(.*?)\s*#*\s*$/)
+    if (h) { out.push(`${h[1]}`); continue }
+    // 불릿(-, *, +) → •  (들여쓰기 보존)
+    out.push(cur.replace(/^(\s*)[-*+]\s+/, '$1• '))
+  }
+  t = out.join('\n')
+
+  // 3) 인라인 변환 — 코드는 이미 빠져 있어 안전.
+  // 링크/이미지: [text](url) / ![alt](url) → <url|text>
+  t = t.replace(/!?\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (_m, text: string, url: string) =>
+    text ? `<${url}|${text}>` : `<${url}>`)
+  // 굵게: **x** / __x__ → sentinel(). 먼저 빼야 아래 기울임(*x*)과 충돌 안 함.
+  t = t.replace(/\*\*([^*]+?)\*\*/g, '$1').replace(/__([^_]+?)__/g, '$1')
+  // 기울임: *x* → _x_
+  t = t.replace(/\*([^*\n]+?)\*/g, '_$1_')
+  // sentinel → 슬랙 굵게(*)
+  t = t.replace(//g, '*')
+  // 취소선: ~~x~~ → ~x~
+  t = t.replace(/~~([^~]+?)~~/g, '~$1~')
+
+  // 4) 보호했던 코드/표 블록 복원
+  return t.replace(/ (\d+) /g, (_m, n: string) => guards[Number(n)] ?? '')
+}
+
+/**
  * 메시지에서 첫 이슈 번호를 추출. 못 찾으면 null.
  * `#20`, `이슈 20`, `20번 작업`, GitLab/GitHub URL `/issues/20`
  */
@@ -638,7 +704,7 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
       if (!force && now - lastUpdate < 1500) return
       lastUpdate = now
       const text = full.trim()
-      if (text) await sink.update(msgTs, text.slice(0, 38000))
+      if (text) await sink.update(msgTs, markdownToMrkdwn(text).slice(0, 38000))
     }
 
     const baseOpts = {
@@ -716,8 +782,9 @@ export async function handleAppMention(workspace: DecryptedWorkspace, event: App
         : M.emptyResponse
       await sink.update(msgTs, note)
     } else if (msgTs) {
+      // 에이전트 응답(full)만 mrkdwn 변환. suffix(M.imageUploadFailed)는 이미 mrkdwn 이라 그대로.
       const suffix = uploadAllFailed ? `\n\n${M.imageUploadFailed}` : ''
-      await sink.update(msgTs, (full.trim() + suffix).slice(0, 38000))
+      await sink.update(msgTs, (markdownToMrkdwn(full.trim()) + suffix).slice(0, 38000))
     }
   } catch (err) {
     console.error('[Slack] handleAppMention error:', err)
