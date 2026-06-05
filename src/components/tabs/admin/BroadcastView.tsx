@@ -23,6 +23,8 @@ export default function BroadcastView({ loadDraftId, onDraftConsumed }: { loadDr
   const { toast } = useToast()
   const [users, setUsers] = useState<User[]>([])
   const [selectedIds, setSelectedIds] = useState<string[]>([])
+  // 전체 발송은 이 체크박스를 명시적으로 켰을 때만. 끄고 수신자도 안 고르면 발송 차단.
+  const [sendToAll, setSendToAll] = useState(false)
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
   const [sending, setSending] = useState(false)
@@ -55,6 +57,7 @@ export default function BroadcastView({ loadDraftId, onDraftConsumed }: { loadDr
     setSubject(draft.subject)
     setBody(draft.body)
     setSelectedIds(draft.targetUserIds || [])
+    setSendToAll(false) // 임시저장은 수신자만 보관 — 전체 발송 플래그는 항상 꺼진 상태로 복원(실수 방지)
     setEditingDraftId(draft.id)
     setResult(null)
     setShowDrafts(false)
@@ -96,7 +99,7 @@ export default function BroadcastView({ loadDraftId, onDraftConsumed }: { loadDr
 
   function startNew() {
     setEditingDraftId(null)
-    setSubject(''); setBody(''); setSelectedIds([]); setResult(null)
+    setSubject(''); setBody(''); setSelectedIds([]); setSendToAll(false); setResult(null)
   }
 
   // 사용자 옵션: 어디서나 동일한 `아바타 + 이름(이메일)` 형태. 수신거부자는 표시로 구분.
@@ -105,11 +108,11 @@ export default function BroadcastView({ loadDraftId, onDraftConsumed }: { loadDr
     return u.mailUnsubscribed ? { ...o, hint: `${o.hint} · ${t('unsubscribedTag')}` } : o
   }), [users, t])
 
-  // 실제 발송 대상(선택 없음=전체) 중 수신거부로 제외될 인원 수.
+  // 실제 발송 대상 중 수신거부로 제외될 인원 수. (전체 발송이면 전원, 아니면 선택자만)
   const excludedCount = useMemo(() => {
-    const effective = selectedIds.length > 0 ? users.filter(u => selectedIds.includes(u.id)) : users
+    const effective = sendToAll ? users : users.filter(u => selectedIds.includes(u.id))
     return effective.filter(u => u.mailUnsubscribed).length
-  }, [users, selectedIds])
+  }, [users, selectedIds, sendToAll])
 
   /** 본문 textarea 커서 위치에 개인화 태그 삽입 */
   function insertTag(tag: string) {
@@ -132,12 +135,16 @@ export default function BroadcastView({ loadDraftId, onDraftConsumed }: { loadDr
       toast(t('subjectContentRequired'), 'info')
       return
     }
-    const targets = selectedIds.length > 0 ? selectedIds : undefined
-    const isAll = !targets
-    const recipientCount = isAll ? users.length : targets!.length
+    // 전체 발송을 명시하지 않았는데 수신자도 없으면 발송 안 함(실수로 전원 발송 방지).
+    if (!sendToAll && selectedIds.length === 0) {
+      toast(t('noRecipientSelected'), 'info')
+      return
+    }
+    const targets = sendToAll ? undefined : selectedIds
+    const recipientCount = sendToAll ? users.length : selectedIds.length
     const ok = await confirm({
-      title: isAll ? t('sendToAll') : t('sendConfirmTitle'),
-      message: isAll
+      title: sendToAll ? t('sendToAll') : t('sendConfirmTitle'),
+      message: sendToAll
         ? t('sendToAllConfirm')
         : t('sendConfirmMessage', { count: recipientCount }),
       confirmText: t('send'),
@@ -150,7 +157,7 @@ export default function BroadcastView({ loadDraftId, onDraftConsumed }: { loadDr
       const res = await fetch('/api/admin/mail', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subject: subject.trim(), body: body.trim(), userIds: targets }),
+        body: JSON.stringify({ subject: subject.trim(), body: body.trim(), userIds: targets, sendToAll }),
       })
       const data = await res.json()
       if (res.ok) {
@@ -225,16 +232,33 @@ export default function BroadcastView({ loadDraftId, onDraftConsumed }: { loadDr
 
       {/* 수신자 선택 */}
       <div className="mb-4 shrink-0">
-        <label className="block text-sm font-bold text-ive-text-muted mb-2">{t('recipients')}</label>
-        <MultiSelectPicker
-          values={selectedIds}
-          onChange={setSelectedIds}
-          options={userOptions}
-          allLabel={t('noSelectionAllSend')}
-          searchable
-        />
-        <p className="text-xs text-ive-text-dim mt-1">
-          {selectedIds.length === 0 ? t('noSelectionAllSend') : t('selectedCount', { count: selectedIds.length })}
+        <div className="flex items-center justify-between mb-2">
+          <label className="block text-sm font-bold text-ive-text-muted">{t('recipients')}</label>
+          <label className="flex items-center gap-1.5 text-xs font-bold text-ive-text-muted cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={sendToAll}
+              onChange={e => setSendToAll(e.target.checked)}
+              className="accent-ive-green w-4 h-4"
+            />
+            {t('sendToAllLabel')}
+          </label>
+        </div>
+        <div className={sendToAll ? 'opacity-40 pointer-events-none' : ''}>
+          <MultiSelectPicker
+            values={selectedIds}
+            onChange={setSelectedIds}
+            options={userOptions}
+            allLabel={t('selectRecipients')}
+            searchable
+          />
+        </div>
+        <p className="text-xs mt-1">
+          {sendToAll
+            ? <span className="text-ive-amber font-bold">{t('sendToAllCount', { count: users.length })}</span>
+            : selectedIds.length === 0
+              ? <span className="text-ive-text-dim">{t('noRecipientSelected')}</span>
+              : <span className="text-ive-text-dim">{t('selectedCount', { count: selectedIds.length })}</span>}
           {excludedCount > 0 && <span className="text-ive-amber"> · {t('unsubscribedExcluded', { count: excludedCount })}</span>}
         </p>
       </div>
@@ -310,7 +334,7 @@ export default function BroadcastView({ loadDraftId, onDraftConsumed }: { loadDr
         </button>
         <button
           onClick={handleSend}
-          disabled={sending || !subject.trim() || !body.trim()}
+          disabled={sending || !subject.trim() || !body.trim() || (!sendToAll && selectedIds.length === 0)}
           className="flex-1 bg-ive-green-dark text-white font-bold py-3 rounded-lg text-sm active:scale-[0.98] transition-all disabled:opacity-40"
         >
           {sending ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />{t('sending')}</> : <><i className="fa-solid fa-paper-plane mr-1" />{t('mailSend')}</>}

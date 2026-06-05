@@ -11,15 +11,21 @@ export async function POST(req: Request) {
   const user = await getCurrentUser()
   if (!user?.isAdmin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const { subject, body, userIds } = await req.json()
+  const { subject, body, userIds, sendToAll } = await req.json()
   if (!subject || !body) {
     return NextResponse.json({ error: '제목과 내용을 입력해주세요' }, { status: 400 })
   }
 
   const allUsers = getAllUsers()
-  const selected = userIds?.length
-    ? allUsers.filter(u => userIds.includes(u.id))
-    : allUsers
+  // 안전장치: 수신자를 선택하지 않으면 '대상 없음'(전체 발송 아님). 전체 발송은 sendToAll=true 를
+  // 명시했을 때만 한다. 과거엔 userIds 가 비면 전체로 폴백해 실수로 전원 발송될 위험이 있었다.
+  const selected = sendToAll
+    ? allUsers
+    : (Array.isArray(userIds) && userIds.length ? allUsers.filter(u => userIds.includes(u.id)) : [])
+
+  if (selected.length === 0) {
+    return NextResponse.json({ error: '수신자를 선택해주세요' }, { status: 400 })
+  }
 
   // 수신거부한 사용자는 명시적으로 선택했더라도 항상 제외한다.
   const targets = selected.filter(u => !u.mailUnsubscribed)

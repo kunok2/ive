@@ -20,6 +20,7 @@ Springware IVE의 굵직한 변경 이력입니다.
 - **오픈소스 라이선스 고지**: 납품(배포) 시 attribution 의무 대응. 프로덕션 의존성 라이선스·저작권 전문을 수집하는 `scripts/generate-third-party-notices.mjs`(npm `licenses`/`prebuild`로 빌드 시 자동 갱신) → `public/third-party-notices.txt`(동봉용 전문) + `src/data/third-party-licenses.json`(페이지용 메타). `/legal/licenses` 페이지(ko/en, 검색·라이선스별 집계·전문 링크) 추가, 약관·로그인 푸터에 링크 연결. (GPL/AGPL 0건 — 자사 소스 공개 의무 없음.)
 
 ### Fixed
+- **메일 전체발송 안전장치**: 관리자 메일 발송에서 **수신자를 선택하지 않으면 전원 발송되던** 위험한 폴백 제거. 이제 미선택 시 발송이 차단되고, 전체 발송은 **'모두에게 발송' 체크박스**를 명시적으로 켰을 때만 가능. API도 `sendToAll=true` 없이 빈 수신자면 400 반환(구형 클라이언트 안전). 발송 버튼은 미선택+미체크 시 비활성.
 - **Slack 에이전트 응답 마크다운 깨짐**: AI 에이전트가 표준 Markdown(`**굵게**`·`### 헤더`·`[t](u)`·`~~취소선~~`·표)을 그대로 보내 Slack 대화창에 태그가 문자 그대로 찍히던 문제 수정. 전송 직전 Slack `mrkdwn`으로 변환(`markdownToMrkdwn`) — 굵게 `*`, 기울임 `_`, 헤더는 굵게 줄, 링크 `<url|text>`, 불릿 `•`, 표는 정렬되게 코드블록으로. 코드펜스/인라인 코드 내부는 변형하지 않음. IVE 시스템 알림(단계 전이 DM)은 이미 mrkdwn 이라 영향 없음.
 - 프로젝트 카드 "완료(오늘)" 카운트가 KST 자정~오전 9시에 완료된 건을 누락해 0으로 표시되던 문제 수정 (#448). `issue_stages.updated_at`(`datetime('now')` 공백 포맷)과 오늘 시작 기준값(ISO `T`/`Z` 포맷)을 단순 문자열 비교하던 것을 `datetime()` 정규화 비교로 교체.
 
