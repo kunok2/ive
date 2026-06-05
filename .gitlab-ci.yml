@@ -27,6 +27,9 @@ deploy:
   stage: deploy
   tags:
     - deploy
+  # 배포 직렬화 — 같은 이미지를 동시에 빌드/재시작하면 buildkit 경합으로 행(hang)이 발생한다.
+  # resource_group으로 deploy 잡이 절대 동시에 실행되지 않게 한다(앞 배포가 끝나야 다음 배포 시작).
+  resource_group: deploy
   script:
     - echo "=== 1. Docker 이미지 빌드 ==="
     - DOCKER_BUILDKIT=1 docker build --provenance=false -t $IMAGE_NAME:latest .
