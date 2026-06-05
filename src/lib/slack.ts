@@ -211,18 +211,56 @@ export function markdownToMrkdwn(md: string): string {
 
   // 2) 라인/블록 단위 변환 — 표·헤더·불릿. (Slack 은 표가 없어 표는 코드블록으로 정렬 보존)
   const isTableSep = (s: string): boolean => s.includes('|') && /-/.test(s) && /^[\s|:-]+$/.test(s)
-  const fmtRow = (s: string): string =>
-    s.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim()).join(' | ')
+  // 표는 코드블록(모노스페이스)으로 감싸 정렬을 살리는데, 코드블록 안은 Slack 이 서식을 렌더하지
+  // 않으므로 셀 안의 마크다운(**굵게**·`코드`·[링크](url) 등)은 글자 그대로 노출된다. 미리 벗겨낸다.
+  const stripCellMd = (c: string): string => c
+    // 셀 안 인라인코드는 step1 에서 placeholder 로 빠져 있다. 표는 코드블록(모노스페이스)이라 백틱이
+    // 글자로 보이므로, placeholder 를 원문으로 되살리되 감싼 백틱은 떼어 텍스트만 남긴다.
+    .replace(/ (\d+) /g, (_m, n: string) => (guards[Number(n)] || '').replace(/^`+|`+$/g, ''))
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1') // [t](u) → t
+    .replace(/\*\*([^*]+?)\*\*/g, '$1').replace(/__([^_]+?)__/g, '$1') // **x**/__x__ → x
+    .replace(/(^|[^*])\*([^*\n]+?)\*(?!\*)/g, '$1$2') // *x* → x
+    .replace(/~~([^~]+?)~~/g, '$1') // ~~x~~ → x
+    .replace(/`([^`]+?)`/g, '$1') // `x` → x
+  const cellsOf = (s: string): string[] =>
+    s.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => stripCellMd(c.trim()))
+  // 모노스페이스 표 정렬용 표시폭(한글·CJK·이모지·전각 = 2칸, ZWJ·variation selector = 0).
+  // Slack 글꼴의 실제 폭과 100% 일치하진 않지만 한글 표가 거의 격자처럼 맞는다.
+  const dispWidth = (s: string): number => {
+    let w = 0
+    for (const ch of s) {
+      const cp = ch.codePointAt(0) || 0
+      if (cp === 0x200D || (cp >= 0xFE00 && cp <= 0xFE0F)) continue
+      const wide = cp >= 0x1100 && (
+        cp <= 0x115F || (cp >= 0x2600 && cp <= 0x27BF) || (cp >= 0x2E80 && cp <= 0xA4CF) ||
+        (cp >= 0xAC00 && cp <= 0xD7A3) || (cp >= 0xF900 && cp <= 0xFAFF) ||
+        (cp >= 0xFE30 && cp <= 0xFE4F) || (cp >= 0xFF00 && cp <= 0xFF60) ||
+        (cp >= 0xFFE0 && cp <= 0xFFE6) || (cp >= 0x1F300 && cp <= 0x1FAFF)
+      )
+      w += wide ? 2 : 1
+    }
+    return w
+  }
   const lines = t.split('\n')
   const out: string[] = []
   for (let i = 0; i < lines.length; i++) {
     const cur = lines[i]
-    // 표: 헤더행 + 구분행(|---|) 패턴이면 연속 행을 모아 코드블록으로. (생성한 블록도 stash 해 인라인 변환에서 보호)
+    // 표: 헤더행 + 구분행(|---|) 패턴이면 연속 행을 모아 열 너비 맞춘 코드블록으로.
+    // (생성한 블록도 stash 해 인라인 변환에서 보호. 헤더 밑엔 -+- 구분선을 넣어 격자처럼.)
     if (cur.includes('|') && isTableSep(lines[i + 1] ?? '')) {
-      const rows = [fmtRow(cur)]
+      const body: string[][] = [cellsOf(cur)]
       i += 2
-      while (i < lines.length && lines[i].includes('|')) { rows.push(fmtRow(lines[i])); i++ }
+      while (i < lines.length && lines[i].includes('|')) { body.push(cellsOf(lines[i])); i++ }
       i--
+      const ncol = Math.max(...body.map(r => r.length))
+      const widths = Array.from({ length: ncol }, (_, c) => Math.max(...body.map(r => dispWidth(r[c] || ''))))
+      // 마지막 열은 뒤 공백이 의미 없어 패딩 생략(trailing space 방지).
+      const fmt = (r: string[]): string => Array.from({ length: ncol }, (_, c) => {
+        const cell = r[c] || ''
+        return c === ncol - 1 ? cell : cell + ' '.repeat(Math.max(0, widths[c] - dispWidth(cell)))
+      }).join(' | ')
+      const sep = widths.map(w => '-'.repeat(w)).join('-+-')
+      const rows = [fmt(body[0]), sep, ...body.slice(1).map(fmt)]
       out.push(stash('```\n' + rows.join('\n') + '\n```'))
       continue
     }
@@ -247,8 +285,10 @@ export function markdownToMrkdwn(md: string): string {
   // 취소선: ~~x~~ → ~x~
   t = t.replace(/~~([^~]+?)~~/g, '~$1~')
 
-  // 4) 보호했던 코드/표 블록 복원
-  return t.replace(/ (\d+) /g, (_m, n: string) => guards[Number(n)] ?? '')
+  // 4) 보호했던 코드/표 블록 복원 — 표 블록 안에 인라인 코드 placeholder 가 중첩될 수 있어 안 풀릴 때까지 반복.
+  let prev = ''
+  while (prev !== t) { prev = t; t = t.replace(/ (\d+) /g, (_m, n: string) => guards[Number(n)] ?? '') }
+  return t
 }
 
 /**
