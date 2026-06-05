@@ -254,7 +254,7 @@ export default function ActivityContent() {
       {filtersExpanded && (
         <div className="border-l-2 border-ive-border-subtle pl-2 mb-2 space-y-2">
           {/* 다중 선택 드롭다운 */}
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <MultiSelectPicker
               size="sm"
               className="flex-1"
@@ -265,7 +265,7 @@ export default function ActivityContent() {
             />
             <MultiSelectPicker
               size="sm"
-              className="flex-1"
+              className="flex-[1.6]"
               values={filterUserIds}
               onChange={setFilterUserIds}
               allLabel={t('allUsers')}
