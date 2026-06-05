@@ -1,17 +1,24 @@
 'use client'
 
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 import { User } from '@/types'
+import { useStore } from '@/lib/store'
+import { formatDateFull } from '@/lib/format-date'
 import { useDialog } from '@/components/ui/ConfirmDialog'
 import { useToast } from '@/components/ui/Toast'
 import Modal from '@/components/ui/Modal'
 import MultiSelectPicker from '@/components/ui/MultiSelectPicker'
 import { userToOption } from '@/lib/user-display'
 
-export default function BroadcastView() {
+interface DraftSummary { id: string; subject: string; bodyLength: number; targetCount: number; updatedAt: string }
+
+export default function BroadcastView({ loadDraftId, onDraftConsumed }: { loadDraftId?: string | null; onDraftConsumed?: () => void } = {}) {
   const t = useTranslations('admin')
   const tc = useTranslations('common')
+  const { state } = useStore()
+  const userLocale = state.user?.locale
+  const userTz = state.user?.timezone
   const { confirm, alert } = useDialog()
   const { toast } = useToast()
   const [users, setUsers] = useState<User[]>([])
@@ -23,9 +30,74 @@ export default function BroadcastView() {
   const [previewOpen, setPreviewOpen] = useState(false)
   const bodyRef = useRef<HTMLTextAreaElement>(null)
 
+  // 임시저장(draft)
+  const [drafts, setDrafts] = useState<DraftSummary[]>([])
+  const [showDrafts, setShowDrafts] = useState(false)
+  const [editingDraftId, setEditingDraftId] = useState<string | null>(null)
+  const [savingDraft, setSavingDraft] = useState(false)
+
   useEffect(() => {
     fetch('/api/admin/users').then(r => r.json()).then(setUsers).catch(() => {})
   }, [])
+
+  const fetchDrafts = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/mail/drafts')
+      if (res.ok) setDrafts((await res.json()).drafts)
+    } catch { /* ignore */ }
+  }, [])
+  useEffect(() => { fetchDrafts() }, [fetchDrafts])
+
+  const loadDraft = useCallback(async (id: string) => {
+    const res = await fetch(`/api/admin/mail/drafts/${id}`)
+    if (!res.ok) { toast(t('detailLoadFailed'), 'error'); return }
+    const { draft } = await res.json()
+    setSubject(draft.subject)
+    setBody(draft.body)
+    setSelectedIds(draft.targetUserIds || [])
+    setEditingDraftId(draft.id)
+    setResult(null)
+    setShowDrafts(false)
+  }, [t, toast])
+
+  // 발송 이력 복제 등으로 들어온 draft 자동 로드
+  useEffect(() => {
+    if (loadDraftId) {
+      loadDraft(loadDraftId).finally(() => onDraftConsumed?.())
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadDraftId])
+
+  async function handleSaveDraft() {
+    if (!subject.trim() && !body.trim()) { toast(t('draftEmpty'), 'info'); return }
+    setSavingDraft(true)
+    try {
+      const payload = { subject, body, targetUserIds: selectedIds }
+      const res = editingDraftId
+        ? await fetch(`/api/admin/mail/drafts/${editingDraftId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+        : await fetch('/api/admin/mail/drafts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      if (res.ok) {
+        if (!editingDraftId) { const d = await res.json(); setEditingDraftId(d.draft.id) }
+        await fetchDrafts()
+        toast(t('draftSaved'), 'success')
+      } else {
+        toast(tc('saveFailed'), 'error')
+      }
+    } finally { setSavingDraft(false) }
+  }
+
+  async function deleteDraft(id: string) {
+    const res = await fetch(`/api/admin/mail/drafts/${id}`, { method: 'DELETE' })
+    if (res.ok) {
+      if (editingDraftId === id) setEditingDraftId(null)
+      fetchDrafts()
+    }
+  }
+
+  function startNew() {
+    setEditingDraftId(null)
+    setSubject(''); setBody(''); setSelectedIds([]); setResult(null)
+  }
 
   // 사용자 옵션: 어디서나 동일한 `아바타 + 이름(이메일)` 형태. 수신거부자는 표시로 구분.
   const userOptions = useMemo(() => users.map(u => {
@@ -83,6 +155,10 @@ export default function BroadcastView() {
       const data = await res.json()
       if (res.ok) {
         setResult({ sent: data.sent, failed: data.failed, skipped: data.skipped })
+        // 임시저장에서 불러와 발송한 경우, 발송 완료된 draft는 정리한다.
+        if (editingDraftId) {
+          fetch(`/api/admin/mail/drafts/${editingDraftId}`, { method: 'DELETE' }).then(() => { setEditingDraftId(null); fetchDrafts() }).catch(() => {})
+        }
         if (data.failed > 0) {
           toast(t('sendComplete', { sent: data.sent, failed: data.failed }), 'error')
         } else {
@@ -109,6 +185,44 @@ export default function BroadcastView() {
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
+      {/* 임시저장함 */}
+      <div className="mb-3 shrink-0">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowDrafts(s => !s)}
+            className="text-xs font-bold text-ive-text-dim flex items-center gap-1"
+          >
+            <i className={`fa-solid fa-chevron-${showDrafts ? 'down' : 'right'} text-[10px]`} />
+            <i className="fa-solid fa-box-archive" />{t('draftBox', { count: drafts.length })}
+          </button>
+          {editingDraftId && (
+            <span className="ml-auto inline-flex items-center gap-1 text-[11px] text-ive-cyan font-bold">
+              <i className="fa-solid fa-pen" />{t('draftEditing')}
+              <button onClick={startNew} className="ml-1 text-ive-text-dim underline">{t('draftNew')}</button>
+            </span>
+          )}
+        </div>
+        {showDrafts && (
+          drafts.length === 0 ? (
+            <p className="text-[11px] text-ive-text-dim mt-2 px-1">{t('draftEmptyList')}</p>
+          ) : (
+            <div className="mt-2 space-y-1">
+              {drafts.map(d => (
+                <div key={d.id} className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 border ${editingDraftId === d.id ? 'bg-ive-cyan/10 border-ive-cyan/30' : 'bg-ive-bg-card border-ive-border-subtle'}`}>
+                  <button onClick={() => loadDraft(d.id)} className="flex-1 min-w-0 text-left">
+                    <div className="text-xs font-bold text-ive-text truncate">{d.subject || t('draftNoSubject')}</div>
+                    <div className="text-[10px] text-ive-text-dim">{t('draftTargetCount', { count: d.targetCount })} · {formatDateFull(d.updatedAt, userLocale, userTz)}</div>
+                  </button>
+                  <button onClick={() => deleteDraft(d.id)} title={tc('delete')} className="shrink-0 w-7 h-7 rounded-md bg-ive-red/10 text-ive-red flex items-center justify-center">
+                    <i className="fa-solid fa-trash text-[11px]" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )
+        )}
+      </div>
+
       {/* 수신자 선택 */}
       <div className="mb-4 shrink-0">
         <label className="block text-sm font-bold text-ive-text-muted mb-2">{t('recipients')}</label>
@@ -186,13 +300,22 @@ export default function BroadcastView() {
         </div>
       )}
 
-      <button
-        onClick={handleSend}
-        disabled={sending || !subject.trim() || !body.trim()}
-        className="w-full bg-ive-green-dark text-white font-bold py-3 rounded-lg text-sm active:scale-[0.98] transition-all disabled:opacity-40 shrink-0"
-      >
-        {sending ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />{t('sending')}</> : <><i className="fa-solid fa-paper-plane mr-1" />{t('mailSend')}</>}
-      </button>
+      <div className="flex gap-2 shrink-0">
+        <button
+          onClick={handleSaveDraft}
+          disabled={savingDraft || (!subject.trim() && !body.trim())}
+          className="px-4 py-3 rounded-lg text-sm font-bold bg-ive-bg-card text-ive-text border border-ive-border-subtle active:scale-[0.98] transition-all disabled:opacity-40"
+        >
+          {savingDraft ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-floppy-disk mr-1" />{t('draftSave')}</>}
+        </button>
+        <button
+          onClick={handleSend}
+          disabled={sending || !subject.trim() || !body.trim()}
+          className="flex-1 bg-ive-green-dark text-white font-bold py-3 rounded-lg text-sm active:scale-[0.98] transition-all disabled:opacity-40"
+        >
+          {sending ? <><i className="fa-solid fa-circle-notch fa-spin mr-1" />{t('sending')}</> : <><i className="fa-solid fa-paper-plane mr-1" />{t('mailSend')}</>}
+        </button>
+      </div>
 
       <Modal open={previewOpen} onClose={() => setPreviewOpen(false)} title={t('previewTitle')}>
         <div className="space-y-3">

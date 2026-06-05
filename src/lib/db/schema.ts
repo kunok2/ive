@@ -637,6 +637,20 @@ export function initSchema(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_mail_broadcast_logs_sent_at ON mail_broadcast_logs(sent_at);
   `)
 
+  // 메일 임시저장(draft) — 작성 후 발송하지 않고 보관. 발송 시 삭제하거나 그대로 둘 수 있다.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS mail_drafts (
+      id TEXT PRIMARY KEY,
+      subject TEXT NOT NULL DEFAULT '',
+      body TEXT NOT NULL DEFAULT '',
+      target_user_ids TEXT NOT NULL DEFAULT '[]',
+      created_by_user_id TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_mail_drafts_updated ON mail_drafts(updated_at);
+  `)
+
   // 브로드캐스트 메일의 IVE 접속 링크 클릭(접속) 기록.
   // 누가(user_id) 언제(clicked_at) 어떤 발송(broadcast_log_id)으로 접속했는지 추적한다.
   db.exec(`

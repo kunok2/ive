@@ -48,7 +48,7 @@ interface ClickStat {
 
 type LogKind = 'mail' | 'report'
 
-export default function SendLogView() {
+export default function SendLogView({ onDuplicate }: { onDuplicate?: (draftId: string) => void } = {}) {
   const { state } = useStore()
   const userLocale = state.user?.locale
   const userTz = state.user?.timezone
@@ -128,6 +128,22 @@ export default function SendLogView() {
       }
     } finally {
       setDetailLoading(false)
+    }
+  }
+
+  async function handleDuplicate(d: MailLogDetail) {
+    // 이미 발송한 메일을 복제 → 임시저장으로 만들어 '메일 발송'에서 다른 수신자로 재발송.
+    const res = await fetch('/api/admin/mail/drafts', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subject: d.subject, body: d.body, targetUserIds: [] }),
+    })
+    if (res.ok) {
+      const { draft } = await res.json()
+      setDetail(null)
+      toast(t('duplicatedToDraft'), 'success')
+      onDuplicate?.(draft.id)
+    } else {
+      toast(t('duplicateFailed'), 'error')
     }
   }
 
@@ -363,6 +379,12 @@ export default function SendLogView() {
               </div>
             </div>
 
+            <button
+              onClick={() => handleDuplicate(detail)}
+              className="w-full py-2 rounded-lg bg-ive-green/10 text-ive-green border border-ive-green/30 text-xs font-bold active:scale-[0.98] mb-2"
+            >
+              <i className="fa-solid fa-copy mr-1" />{t('duplicateToNewMail')}
+            </button>
             <div className="flex gap-2 pt-1">
               <button
                 onClick={() => { const d = detail; setDetail(null); openClickStats({ id: d.id, subject: d.subject }) }}

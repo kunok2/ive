@@ -21,6 +21,8 @@ export default function MailPanel() {
     return 'broadcast'
   })
 
+  const [loadDraftId, setLoadDraftId] = useState<string | null>(null)
+
   const handleSetView = (v: MailSubView) => {
     setView(v)
     localStorage.setItem('admin-mail-subview', v)
@@ -55,10 +57,10 @@ export default function MailPanel() {
         </div>
       </div>
 
-      {view === 'broadcast' && <BroadcastView />}
+      {view === 'broadcast' && <BroadcastView loadDraftId={loadDraftId} onDraftConsumed={() => setLoadDraftId(null)} />}
       {view === 'social' && <SocialView />}
       {view === 'performance' && <PerformanceView />}
-      {view === 'logs' && <SendLogView />}
+      {view === 'logs' && <SendLogView onDuplicate={(id) => { setLoadDraftId(id); handleSetView('broadcast') }} />}
     </main>
   )
 }
