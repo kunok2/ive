@@ -9,12 +9,6 @@ import AgentAvatar from '@/components/agent/AgentAvatar'
 import { useDialog } from '@/components/ui/ConfirmDialog'
 import { useToast } from '@/components/ui/Toast'
 
-interface ReportLogEntry {
-  id: string; scheduleId: string; reportType: string
-  periodStart: string; periodEnd: string; recipientEmail: string
-  status: string; errorMessage?: string | null; sentAt: string
-}
-
 interface MailLogSummary {
   id: string
   senderUserId: string | null
@@ -46,33 +40,18 @@ interface ClickStat {
   lastAt: string
 }
 
-type LogKind = 'mail' | 'report'
-
 export default function SendLogView({ onDuplicate }: { onDuplicate?: (draftId: string) => void } = {}) {
   const { state } = useStore()
   const userLocale = state.user?.locale
   const userTz = state.user?.timezone
   const t = useTranslations('admin')
   const tc = useTranslations('common')
-  const tr = useTranslations('report')
   const { confirm } = useDialog()
   const { toast } = useToast()
-
-  const [kind, setKind] = useState<LogKind>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('admin-mail-log-kind')
-      if (saved === 'mail' || saved === 'report') return saved
-    }
-    return 'mail'
-  })
 
   const [page, setPage] = useState(0)
   const PAGE_SIZE = 20
 
-  // 보고서
-  const [reportLogs, setReportLogs] = useState<ReportLogEntry[]>([])
-  const [reportTotal, setReportTotal] = useState(0)
-  // 메일
   const [mailLogs, setMailLogs] = useState<MailLogSummary[]>([])
   const [mailTotal, setMailTotal] = useState(0)
 
@@ -80,40 +59,24 @@ export default function SendLogView({ onDuplicate }: { onDuplicate?: (draftId: s
   const [detail, setDetail] = useState<MailLogDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [showHtml, setShowHtml] = useState(true)
-  // IVE 접속(클릭) 사용자별 통계 모달
   const [clickStats, setClickStats] = useState<{ subject: string; stats: ClickStat[]; totalClicks: number; userCount: number } | null>(null)
   const [clickLoading, setClickLoading] = useState(false)
-
-  function handleSetKind(k: LogKind) {
-    setKind(k)
-    setPage(0)
-    localStorage.setItem('admin-mail-log-kind', k)
-  }
 
   async function fetchLogs(p: number = 0) {
     setLoading(true)
     try {
-      if (kind === 'report') {
-        const res = await fetch(`/api/admin/reports/logs?limit=${PAGE_SIZE}&offset=${p * PAGE_SIZE}`)
-        if (res.ok) {
-          const data = await res.json()
-          setReportLogs(data.logs)
-          setReportTotal(data.total)
-        }
-      } else {
-        const res = await fetch(`/api/admin/mail/logs?limit=${PAGE_SIZE}&offset=${p * PAGE_SIZE}`)
-        if (res.ok) {
-          const data = await res.json()
-          setMailLogs(data.logs)
-          setMailTotal(data.total)
-        }
+      const res = await fetch(`/api/admin/mail/logs?limit=${PAGE_SIZE}&offset=${p * PAGE_SIZE}`)
+      if (res.ok) {
+        const data = await res.json()
+        setMailLogs(data.logs)
+        setMailTotal(data.total)
       }
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => { fetchLogs(page) }, [page, kind])
+  useEffect(() => { fetchLogs(page) }, [page])
 
   async function openDetail(id: string) {
     setDetailLoading(true)
@@ -180,108 +143,58 @@ export default function SendLogView({ onDuplicate }: { onDuplicate?: (draftId: s
     }
   }
 
-  const total = kind === 'report' ? reportTotal : mailTotal
-  const totalPages = Math.ceil(total / PAGE_SIZE)
-  const typeLabel = (type: string) => tr(type as any)
+  const totalPages = Math.ceil(mailTotal / PAGE_SIZE)
 
   return (
     <div>
-      {/* Kind 토글 */}
-      <div className="flex gap-1.5 mb-3">
-        <button
-          onClick={() => handleSetKind('mail')}
-          className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${
-            kind === 'mail'
-              ? 'bg-ive-green/15 text-ive-green border border-ive-green/30'
-              : 'bg-ive-bg-card text-ive-text-dim border border-ive-border-subtle'
-          }`}
-        >
-          <i className="fa-solid fa-paper-plane mr-1" />{t('mailSendLogs')}
-        </button>
-        <button
-          onClick={() => handleSetKind('report')}
-          className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${
-            kind === 'report'
-              ? 'bg-ive-green/15 text-ive-green border border-ive-green/30'
-              : 'bg-ive-bg-card text-ive-text-dim border border-ive-border-subtle'
-          }`}
-        >
-          <i className="fa-solid fa-file-lines mr-1" />{t('reportSendLogs')}
-        </button>
-      </div>
-
-      {loading && total === 0 ? (
+      {loading && mailTotal === 0 ? (
         <div className="text-center py-10 text-ive-text-dim">{tc('loading')}</div>
-      ) : total === 0 ? (
+      ) : mailTotal === 0 ? (
         <div className="text-center py-10">
           <i className="fa-solid fa-inbox text-3xl text-ive-text-dim mb-3 block" />
           <p className="text-sm text-ive-text-dim">{t('noSendHistory')}</p>
         </div>
       ) : (
         <>
-          <div className="text-xs text-ive-text-dim mb-3">{t('totalSendLogs', { count: total })}</div>
+          <div className="text-xs text-ive-text-dim mb-3">{t('totalSendLogs', { count: mailTotal })}</div>
 
           <div className="space-y-1.5">
-            {kind === 'report' ? (
-              reportLogs.map(log => (
-                <div key={log.id} className="bg-ive-bg-card border border-ive-border-subtle rounded-lg px-3 py-2.5">
+            {mailLogs.map(log => {
+              const allOk = log.failedCount === 0
+              return (
+                <button
+                  key={log.id}
+                  onClick={() => openDetail(log.id)}
+                  className="w-full text-left bg-ive-bg-card border border-ive-border-subtle rounded-lg px-3 py-2.5 active:scale-[0.99] transition-transform hover:border-ive-border"
+                >
                   <div className="flex items-center gap-2">
-                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${log.status === 'success' ? 'bg-ive-green' : 'bg-ive-red'}`} />
-                    <span className="text-xs font-bold text-ive-text">{typeLabel(log.reportType)}</span>
-                    <span className="text-xs text-ive-text-dim flex-1 truncate">{log.recipientEmail}</span>
-                    <span className={`text-xs font-bold ${log.status === 'success' ? 'text-ive-green' : 'text-ive-red'}`}>
-                      {log.status === 'success' ? t('statusSuccess') : t('statusFailed')}
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${allOk ? 'bg-ive-green' : 'bg-ive-amber'}`} />
+                    <span className="text-xs font-bold text-ive-text flex-1 truncate">{log.subject}</span>
+                    <span className={`text-xs font-bold ${allOk ? 'text-ive-green' : 'text-ive-amber'}`}>
+                      {log.sentCount}/{log.totalCount}
                     </span>
                   </div>
                   <div className="flex items-center gap-2 mt-1 text-xs text-ive-text-dim">
-                    <span>{log.periodStart} ~ {new Date(new Date(log.periodEnd).getTime() - 86400000).toISOString().slice(0, 10)}</span>
-                    <span className="ml-auto">{formatDateFull(log.sentAt, userLocale, userTz)}</span>
+                    <span className="truncate flex-1">{log.senderName || log.senderEmail || '-'}</span>
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      onClick={e => { e.stopPropagation(); openClickStats(log) }}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); openClickStats(log) } }}
+                      title={t('viewAccessStats')}
+                      className={`shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border font-bold transition-colors ${
+                        log.clickCount > 0
+                          ? 'bg-ive-cyan/10 text-ive-cyan border-ive-cyan/30 hover:bg-ive-cyan/20'
+                          : 'bg-ive-bg-deep text-ive-text-dim border-ive-border-subtle hover:border-ive-border'
+                      }`}
+                    >
+                      <i className="fa-solid fa-arrow-pointer" />{t('accessCount', { count: log.clickCount })}
+                    </span>
+                    <span className="shrink-0">{formatDateFull(log.sentAt, userLocale, userTz)}</span>
                   </div>
-                  {log.errorMessage && (
-                    <div className="mt-1 text-xs text-ive-red bg-ive-red/5 rounded px-2 py-1 break-all">
-                      {log.errorMessage}
-                    </div>
-                  )}
-                </div>
-              ))
-            ) : (
-              mailLogs.map(log => {
-                const allOk = log.failedCount === 0
-                return (
-                  <button
-                    key={log.id}
-                    onClick={() => openDetail(log.id)}
-                    className="w-full text-left bg-ive-bg-card border border-ive-border-subtle rounded-lg px-3 py-2.5 active:scale-[0.99] transition-transform hover:border-ive-border"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${allOk ? 'bg-ive-green' : 'bg-ive-amber'}`} />
-                      <span className="text-xs font-bold text-ive-text flex-1 truncate">{log.subject}</span>
-                      <span className={`text-xs font-bold ${allOk ? 'text-ive-green' : 'text-ive-amber'}`}>
-                        {log.sentCount}/{log.totalCount}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 mt-1 text-xs text-ive-text-dim">
-                      <span className="truncate flex-1">{log.senderName || log.senderEmail || '-'}</span>
-                      <span
-                        role="button"
-                        tabIndex={0}
-                        onClick={e => { e.stopPropagation(); openClickStats(log) }}
-                        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); openClickStats(log) } }}
-                        title={t('viewAccessStats')}
-                        className={`shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border font-bold transition-colors ${
-                          log.clickCount > 0
-                            ? 'bg-ive-cyan/10 text-ive-cyan border-ive-cyan/30 hover:bg-ive-cyan/20'
-                            : 'bg-ive-bg-deep text-ive-text-dim border-ive-border-subtle hover:border-ive-border'
-                        }`}
-                      >
-                        <i className="fa-solid fa-arrow-pointer" />{t('accessCount', { count: log.clickCount })}
-                      </span>
-                      <span className="shrink-0">{formatDateFull(log.sentAt, userLocale, userTz)}</span>
-                    </div>
-                  </button>
-                )
-              })
-            )}
+                </button>
+              )
+            })}
           </div>
 
           {totalPages > 1 && (
