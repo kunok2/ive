@@ -278,7 +278,7 @@ export default function SlackWorkspacesPanel() {
               placeholder={t('ownerNone')}
               options={[
                 { value: '', label: t('ownerNone') },
-                ...users.map(u => ({ value: u.id, label: u.name, hint: u.email })),
+                ...users.map(u => ({ value: u.id, label: u.name, hint: u.email, avatar: u.avatar, avatarUserId: u.id })),
               ]}
             />
             <div className="text-xs text-ive-text-dim mt-1">{t('ownerDesc')}</div>

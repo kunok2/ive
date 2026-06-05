@@ -6,6 +6,7 @@ import { User } from '@/types'
 import { useDialog } from '@/components/ui/ConfirmDialog'
 import { useToast } from '@/components/ui/Toast'
 import CustomSelect from '@/components/ui/CustomSelect'
+import AgentAvatar from '@/components/agent/AgentAvatar'
 
 interface ReportScheduleState {
   id: string; reportType: string; enabled: boolean
@@ -241,12 +242,14 @@ export default function ReportScheduleView() {
                       <button
                         key={u.id}
                         onClick={() => toggleRecipient(u.email)}
-                        className={`text-xs px-2 py-1 rounded-lg font-bold transition-all ${
+                        title={u.email}
+                        className={`text-xs pl-1 pr-2 py-1 rounded-lg font-bold transition-all flex items-center gap-1.5 ${
                           (form.recipients || []).includes(u.email)
                             ? 'bg-ive-green/20 text-ive-green border border-ive-green/30'
                             : 'bg-ive-bg-deep text-ive-text-dim border border-ive-border-subtle'
                         }`}
                       >
+                        <AgentAvatar avatar={u.avatar} userId={u.id} size="xs" />
                         {u.name}
                       </button>
                     ))}

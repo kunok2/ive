@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import { createPortal } from 'react-dom'
+import AgentAvatar from '@/components/agent/AgentAvatar'
 
 export interface CustomSelectOption {
   value: string
@@ -11,6 +12,10 @@ export interface CustomSelectOption {
   icon?: string
   /** 아이콘에 적용할 색상 클래스 (예: 'text-ive-amber') */
   iconClass?: string
+  /** 옵션 앞에 표시할 아바타 ID ('av-01' | 'photo' | URL). 사용자 옵션 통일용. */
+  avatar?: string
+  /** avatar==='photo' 일 때 사진 URL 생성을 위한 사용자 ID */
+  avatarUserId?: string | null
 }
 
 interface CustomSelectProps {
@@ -132,6 +137,7 @@ export default function CustomSelect({
       >
         <span className={`truncate flex items-center gap-1.5 ${isPlaceholder ? 'text-ive-text-dim' : 'text-ive-text'}`}>
           {selected?.icon && <i className={`${selected.icon} ${selected.iconClass ?? ''} shrink-0`} />}
+          {selected?.avatar && <AgentAvatar avatar={selected.avatar} userId={selected.avatarUserId} size="xs" />}
           <span className="truncate">{displayLabel}</span>
         </span>
         <i className={`fa-solid fa-chevron-${open ? 'up' : 'down'} text-xs text-ive-text-dim ml-2 shrink-0`} />
@@ -157,6 +163,7 @@ export default function CustomSelect({
               >
                 <i className={`fa-solid fa-check text-xs shrink-0 ${isSel ? '' : 'invisible'}`} />
                 {o.icon && <i className={`${o.icon} ${o.iconClass ?? ''} shrink-0 w-4 text-center`} />}
+                {o.avatar && <AgentAvatar avatar={o.avatar} userId={o.avatarUserId} size="xs" />}
                 <span className="flex-1 truncate">{o.label}</span>
                 {o.hint && <span className="text-[11px] text-ive-text-dim shrink-0">{o.hint}</span>}
               </button>

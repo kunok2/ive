@@ -2,7 +2,7 @@
 // 기존 import { ... } from '@/lib/db' 경로를 변경 없이 유지합니다.
 
 export { getDb } from './connection'
-export { mapUser, getUserByEmail, getUserById, getUserByOAuthId, getAllUsers, deleteUser, updateUserAvatar, updateUserLocale, updateUserTimezone, updateUserCurrency, updateUserSlack, createUser } from './users'
+export { mapUser, getUserByEmail, getUserById, getUserByOAuthId, getAllUsers, deleteUser, updateUserAvatar, updateUserLocale, updateUserTimezone, updateUserCurrency, updateUserSlack, setUserMailUnsubscribed, createUser } from './users'
 export { getAllOAuthProviders, getEnabledOAuthProviders, getOAuthProviderById, getOAuthProviderRaw, getSlackProviderRaw, createOAuthProvider, updateOAuthProvider, deleteOAuthProvider, getUserByOAuth, linkUserOAuth, createOAuthUser, updateUserOAuthTokens, getUserOAuthTokenRaw, getUserOAuthFullRaw, getProjectWithUserOAuth } from './oauth'
 export { type ProjectRow, mapProject, getAllProjects, getProjectsByUser, touchProjectActivity, getProject, getProjectAuthToken, createProject, updateProject, updateProjectSortOrders, getVerifyWaitingCount, updateProjectLastChecked, updateProjectError, updateProjectConflictCount, clearProjectError, deleteProject, updateProjectReportSecret } from './projects'
 export { getAgentsByUser, getAvailableAgentsByUser, getAgent, getAllAgents, createAgent, updateAgent, deleteAgent, updateAgentStatus } from './agents'

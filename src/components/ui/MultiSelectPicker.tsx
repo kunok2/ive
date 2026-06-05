@@ -2,10 +2,17 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
+import AgentAvatar from '@/components/agent/AgentAvatar'
 
 export interface MultiSelectOption {
   value: string
   label: string
+  /** 옵션 앞에 표시할 아바타 ID ('av-01' | 'photo' | URL 등). 지정 시 아바타 렌더. */
+  avatar?: string
+  /** avatar==='photo' 일 때 사진 URL 생성을 위한 사용자 ID */
+  avatarUserId?: string | null
+  /** 라벨 뒤에 흐리게 표시할 보조 텍스트 (예: 이메일/아이디). 검색 대상에도 포함된다. */
+  hint?: string
 }
 
 interface MultiSelectPickerProps {
@@ -100,7 +107,11 @@ export default function MultiSelectPicker({
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return options
-    return options.filter(o => o.label.toLowerCase().includes(q) || o.value.toLowerCase().includes(q))
+    return options.filter(o =>
+      o.label.toLowerCase().includes(q) ||
+      o.value.toLowerCase().includes(q) ||
+      (o.hint?.toLowerCase().includes(q) ?? false)
+    )
   }, [options, query])
 
   const triggerLabel = useMemo(() => {
@@ -208,7 +219,9 @@ export default function MultiSelectPicker({
                   }`}
                 >
                   <i className={`fa-${isSel ? 'solid fa-square-check' : 'regular fa-square'} text-xs shrink-0`} />
-                  <span className="flex-1 truncate">{o.label}</span>
+                  {o.avatar && <AgentAvatar avatar={o.avatar} userId={o.avatarUserId} size="xs" />}
+                  <span className="truncate">{o.label}</span>
+                  {o.hint && <span className="text-ive-text-dim font-normal truncate ml-auto pl-2">{o.hint}</span>}
                 </button>
               )
             })}

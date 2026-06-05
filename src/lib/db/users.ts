@@ -20,6 +20,7 @@ export function mapUser(r: any): User {
     rateMultiplier: r.rate_multiplier ?? 1,
     slackUserId: r.slack_user_id ?? '',
     slackNotify: r.slack_notify == null ? true : r.slack_notify === 1,
+    mailUnsubscribed: r.mail_unsubscribed === 1,
     oauthProviderId: r.oauth_provider_id ?? null,
     oauthUserId: r.oauth_user_id ?? null,
     oauthTokenExpiresAt: r.oauth_token_expires_at ?? null,
@@ -101,6 +102,14 @@ export function updateUserCurrency(id: string, currency: string | null, rate: nu
 export function updateUserSlack(id: string, slackUserId: string, slackNotify: boolean) {
   getDb().prepare('UPDATE users SET slack_user_id = ?, slack_notify = ? WHERE id = ?')
     .run(slackUserId.trim(), slackNotify ? 1 : 0, id)
+}
+
+/**
+ * 브로드캐스트(관리자 일괄) 메일 수신거부 여부 설정.
+ * 메일 하단의 수신거부 링크(서명 토큰)로 비로그인 상태에서 호출된다.
+ */
+export function setUserMailUnsubscribed(id: string, unsubscribed: boolean) {
+  getDb().prepare('UPDATE users SET mail_unsubscribed = ? WHERE id = ?').run(unsubscribed ? 1 : 0, id)
 }
 
 export function createUser(u: any) {

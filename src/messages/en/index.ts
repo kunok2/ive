@@ -23,6 +23,7 @@ import help from './help.json'
 import tour from './tour.json'
 import verifyQueue from './verifyQueue.json'
 import legal from './legal.json'
+import unsubscribe from './unsubscribe.json'
 
 const messages = {
   common,
@@ -50,6 +51,7 @@ const messages = {
   tour,
   verifyQueue,
   legal,
+  unsubscribe,
 }
 
 export default messages

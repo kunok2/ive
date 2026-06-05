@@ -1,0 +1,9 @@
+{
+  "loading": "Checking...",
+  "invalid": "This link is invalid or has expired.",
+  "confirmDesc": "Do you want to unsubscribe from Springware IVE news and updates? System notifications (such as verification) are not affected.",
+  "unsubscribe": "Unsubscribe",
+  "doneTitle": "You have been unsubscribed.",
+  "doneDesc": "We will no longer send you news and update emails. You can resubscribe below if you change your mind.",
+  "resubscribe": "Resubscribe"
+}

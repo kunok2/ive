@@ -41,6 +41,7 @@ interface Props {
   currencyRate?: number | null
   slackUserId?: string
   slackNotify?: boolean
+  mailUnsubscribed?: boolean
   onSuccess?: () => void
   onCancel?: () => void
   onEmailChanged?: () => void
@@ -58,7 +59,7 @@ type SlackWorkspaceRow = {
   enabled: boolean
 }
 
-export default function UserProfileForm({ userId, email, name, avatar, locale: userLocale, timezone: userTimezone, currency: userCurrency, currencyRate: userCurrencyRate, slackUserId: userSlackUserId, slackNotify: userSlackNotify, onSuccess, onCancel, onEmailChanged, onAvatarChanged, onSettingsChanged }: Props) {
+export default function UserProfileForm({ userId, email, name, avatar, locale: userLocale, timezone: userTimezone, currency: userCurrency, currencyRate: userCurrencyRate, slackUserId: userSlackUserId, slackNotify: userSlackNotify, mailUnsubscribed: userMailUnsubscribed, onSuccess, onCancel, onEmailChanged, onAvatarChanged, onSettingsChanged }: Props) {
   const t = useTranslations('auth')
   const tc = useTranslations('common')
   const currentLocale = useLocale()
@@ -106,6 +107,27 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
       setSlackAcctSaved(true)
       setTimeout(() => setSlackAcctSaved(false), 2000)
     } catch { setSlackAcctErr(true) }
+  }, [onSettingsChanged])
+
+  // 안내·소식 메일 수신 여부(본인). on = 수신(mail_unsubscribed=false). 본인만 변경 가능.
+  const [mailSubscribedOn, setMailSubscribedOn] = useState(!(userMailUnsubscribed ?? false))
+  const [mailPrefSaved, setMailPrefSaved] = useState(false)
+  const [mailPrefErr, setMailPrefErr] = useState(false)
+
+  const saveMailPref = useCallback(async (subscribed: boolean) => {
+    setMailPrefSaved(false)
+    setMailPrefErr(false)
+    try {
+      const res = await fetch('/api/settings/broadcast-mail', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subscribed }),
+      })
+      if (!res.ok) { setMailPrefErr(true); return }
+      onSettingsChanged?.()
+      setMailPrefSaved(true)
+      setTimeout(() => setMailPrefSaved(false), 2000)
+    } catch { setMailPrefErr(true) }
   }, [onSettingsChanged])
 
   const loadSlack = useCallback(async () => {
@@ -789,6 +811,28 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
               )}
               {slackAcctErr && (
                 <p className="text-xs text-ive-red mt-1"><i className="fa-solid fa-triangle-exclamation mr-1" />{t('slackMemberIdInvalid')}</p>
+              )}
+            </div>
+
+            {/* 안내·소식 메일 수신 — 본인이 직접 켜고 끔 */}
+            <div className="border-t border-ive-border-dark pt-3">
+              <label className="block text-xs font-bold text-ive-text-muted mb-1.5 uppercase">
+                <i className="fa-solid fa-envelope mr-1.5" />{t('broadcastMailLabel')}
+              </label>
+              <p className="text-xs text-ive-text-dim mb-2 leading-relaxed">{t('broadcastMailDesc')}</p>
+              <button
+                type="button"
+                onClick={() => { const next = !mailSubscribedOn; setMailSubscribedOn(next); saveMailPref(next) }}
+                className={`px-3 py-2 rounded-lg text-xs font-bold border transition-all ${mailSubscribedOn ? 'bg-ive-green/15 border-ive-green/40 text-ive-green' : 'bg-ive-bg-deep border-ive-border-subtle text-ive-text-dim'}`}
+              >
+                <i className={`fa-solid ${mailSubscribedOn ? 'fa-envelope' : 'fa-envelope-circle-check'} mr-1`} />
+                {mailSubscribedOn ? t('broadcastMailReceiveOn') : t('broadcastMailReceiveOff')}
+              </button>
+              {mailPrefSaved && (
+                <p className="text-xs text-ive-green mt-1"><i className="fa-solid fa-circle-check mr-1" />{t('settingsSaved')}</p>
+              )}
+              {mailPrefErr && (
+                <p className="text-xs text-ive-red mt-1"><i className="fa-solid fa-triangle-exclamation mr-1" />{tc('saveFailed')}</p>
               )}
             </div>
 

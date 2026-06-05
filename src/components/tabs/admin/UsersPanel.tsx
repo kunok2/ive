@@ -202,6 +202,11 @@ export default function UsersPanel() {
                   {u.isAdmin && (
                     <span className="text-xs font-bold bg-ive-green/15 text-ive-green px-1.5 py-0.5 rounded-lg shrink-0">{t('adminBadge')}</span>
                   )}
+                  {u.mailUnsubscribed && (
+                    <span className="text-xs font-bold bg-ive-amber/15 text-ive-amber px-1.5 py-0.5 rounded-lg shrink-0">
+                      <i className="fa-solid fa-envelope mr-1" />{t('unsubscribedTag')}
+                    </span>
+                  )}
                 </div>
                 <div className="text-xs text-ive-text-dim break-all">{u.email}</div>
                 <div className="text-xs text-ive-text-dim">{new Date(u.createdAt).toLocaleDateString('ko-KR')} {t('joined')}</div>

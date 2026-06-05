@@ -1,11 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 import { User } from '@/types'
 import { useDialog } from '@/components/ui/ConfirmDialog'
 import { useToast } from '@/components/ui/Toast'
 import Modal from '@/components/ui/Modal'
+import MultiSelectPicker from '@/components/ui/MultiSelectPicker'
+import { userToOption } from '@/lib/user-display'
 
 export default function BroadcastView() {
   const t = useTranslations('admin')
@@ -13,31 +15,44 @@ export default function BroadcastView() {
   const { confirm, alert } = useDialog()
   const { toast } = useToast()
   const [users, setUsers] = useState<User[]>([])
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
   const [sending, setSending] = useState(false)
-  const [result, setResult] = useState<{ sent: number; failed: number } | null>(null)
+  const [result, setResult] = useState<{ sent: number; failed: number; skipped?: number } | null>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
+  const bodyRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     fetch('/api/admin/users').then(r => r.json()).then(setUsers).catch(() => {})
   }, [])
 
-  function toggleUser(id: string) {
-    setSelectedIds(prev => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      return next
-    })
-  }
+  // 사용자 옵션: 어디서나 동일한 `아바타 + 이름(이메일)` 형태. 수신거부자는 표시로 구분.
+  const userOptions = useMemo(() => users.map(u => {
+    const o = userToOption(u)
+    return u.mailUnsubscribed ? { ...o, hint: `${o.hint} · ${t('unsubscribedTag')}` } : o
+  }), [users, t])
 
-  function toggleAll() {
-    if (selectedIds.size === users.length) {
-      setSelectedIds(new Set())
-    } else {
-      setSelectedIds(new Set(users.map(u => u.id)))
-    }
+  // 실제 발송 대상(선택 없음=전체) 중 수신거부로 제외될 인원 수.
+  const excludedCount = useMemo(() => {
+    const effective = selectedIds.length > 0 ? users.filter(u => selectedIds.includes(u.id)) : users
+    return effective.filter(u => u.mailUnsubscribed).length
+  }, [users, selectedIds])
+
+  /** 본문 textarea 커서 위치에 개인화 태그 삽입 */
+  function insertTag(tag: string) {
+    const el = bodyRef.current
+    const token = `{{${tag}}}`
+    if (!el) { setBody(b => b + token); return }
+    const start = el.selectionStart ?? body.length
+    const end = el.selectionEnd ?? body.length
+    const next = body.slice(0, start) + token + body.slice(end)
+    setBody(next)
+    requestAnimationFrame(() => {
+      el.focus()
+      const pos = start + token.length
+      el.setSelectionRange(pos, pos)
+    })
   }
 
   async function handleSend() {
@@ -45,7 +60,7 @@ export default function BroadcastView() {
       toast(t('subjectContentRequired'), 'info')
       return
     }
-    const targets = selectedIds.size > 0 ? Array.from(selectedIds) : undefined
+    const targets = selectedIds.length > 0 ? selectedIds : undefined
     const isAll = !targets
     const recipientCount = isAll ? users.length : targets!.length
     const ok = await confirm({
@@ -67,7 +82,7 @@ export default function BroadcastView() {
       })
       const data = await res.json()
       if (res.ok) {
-        setResult({ sent: data.sent, failed: data.failed })
+        setResult({ sent: data.sent, failed: data.failed, skipped: data.skipped })
         if (data.failed > 0) {
           toast(t('sendComplete', { sent: data.sent, failed: data.failed }), 'error')
         } else {
@@ -96,29 +111,17 @@ export default function BroadcastView() {
     <div className="flex-1 flex flex-col min-h-0">
       {/* 수신자 선택 */}
       <div className="mb-4 shrink-0">
-        <div className="flex items-center justify-between mb-2">
-          <label className="text-sm font-bold text-ive-text-muted">{t('recipients')}</label>
-          <button onClick={toggleAll} className="text-xs text-ive-cyan font-bold">
-            {selectedIds.size === users.length ? t('unselectAll') : t('selectAll')}
-          </button>
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          {users.map(u => (
-            <button
-              key={u.id}
-              onClick={() => toggleUser(u.id)}
-              className={`text-xs px-2.5 py-1.5 rounded-lg font-bold transition-all ${
-                selectedIds.has(u.id)
-                  ? 'bg-ive-green/20 text-ive-green border border-ive-green/30'
-                  : 'bg-ive-bg-card text-ive-text-dim border border-ive-border-subtle'
-              }`}
-            >
-              {u.name}
-            </button>
-          ))}
-        </div>
+        <label className="block text-sm font-bold text-ive-text-muted mb-2">{t('recipients')}</label>
+        <MultiSelectPicker
+          values={selectedIds}
+          onChange={setSelectedIds}
+          options={userOptions}
+          allLabel={t('noSelectionAllSend')}
+          searchable
+        />
         <p className="text-xs text-ive-text-dim mt-1">
-          {selectedIds.size === 0 ? t('noSelectionAllSend') : t('selectedCount', { count: selectedIds.size })}
+          {selectedIds.length === 0 ? t('noSelectionAllSend') : t('selectedCount', { count: selectedIds.length })}
+          {excludedCount > 0 && <span className="text-ive-amber"> · {t('unsubscribedExcluded', { count: excludedCount })}</span>}
         </p>
       </div>
 
@@ -136,7 +139,18 @@ export default function BroadcastView() {
       {/* 본문 */}
       <div className="mb-4 flex-1 min-h-0 flex flex-col">
         <div className="flex items-center justify-between mb-1 shrink-0">
-          <label className="text-sm font-bold text-ive-text-muted">{t('contentHtml')}</label>
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-bold text-ive-text-muted">{t('contentHtml')}</label>
+            <div className="flex items-center gap-1">
+              <span className="text-[11px] text-ive-text-dim font-bold">{t('insertTag')}</span>
+              <button type="button" onClick={() => insertTag('name')} className="text-[11px] px-1.5 py-0.5 rounded-md bg-ive-bg-card text-ive-cyan border border-ive-border-subtle font-bold">
+                {'{{name}}'}
+              </button>
+              <button type="button" onClick={() => insertTag('email')} className="text-[11px] px-1.5 py-0.5 rounded-md bg-ive-bg-card text-ive-cyan border border-ive-border-subtle font-bold">
+                {'{{email}}'}
+              </button>
+            </div>
+          </div>
           <div className="flex items-center gap-1.5">
             <button
               type="button"
@@ -157,16 +171,18 @@ export default function BroadcastView() {
           </div>
         </div>
         <textarea
+          ref={bodyRef}
           value={body}
           onChange={e => setBody(e.target.value)}
           placeholder={t('contentPlaceholder')}
           className="w-full flex-1 min-h-[8rem] bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2.5 text-sm text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green resize-none"
         />
+        <p className="text-[11px] text-ive-text-dim mt-1 shrink-0">{t('tagHint')}</p>
       </div>
 
       {result && (
         <div className={`mb-3 text-sm rounded-lg px-3 py-2 shrink-0 ${result.failed ? 'bg-ive-amber/10 text-ive-amber' : 'bg-ive-green/10 text-ive-green'}`}>
-          {t('sendComplete', { sent: result.sent })}{result.failed > 0 && t('sendCompleteFailed', { failed: result.failed })}
+          {t('sendComplete', { sent: result.sent })}{result.failed > 0 && t('sendCompleteFailed', { failed: result.failed })}{result.skipped ? t('sendCompleteSkipped', { count: result.skipped }) : ''}
         </div>
       )}
 

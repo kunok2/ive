@@ -7,6 +7,7 @@ import { useStore } from '@/lib/store'
 import { formatDateWithSeconds } from '@/lib/format-date'
 import MultiSelectPicker from '@/components/ui/MultiSelectPicker'
 import CustomSelect from '@/components/ui/CustomSelect'
+import { userToOption } from '@/lib/user-display'
 
 // 카테고리는 아이콘으로 구분, 색은 의미가 있을 때만 (위험 admin / 정보 auth)
 const CATEGORY_META: Record<string, { labelKey: string; icon: string; color: string }> = {
@@ -268,7 +269,7 @@ export default function ActivityContent() {
               values={filterUserIds}
               onChange={setFilterUserIds}
               allLabel={t('allUsers')}
-              options={users.map(u => ({ value: u.id, label: u.name }))}
+              options={users.map(userToOption)}
             />
           </div>
 

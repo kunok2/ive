@@ -15,6 +15,7 @@ export function initSchema(db: Database.Database) {
       max_turns INTEGER NOT NULL DEFAULT 20,
       slack_user_id TEXT NOT NULL DEFAULT '',
       slack_notify INTEGER NOT NULL DEFAULT 1,
+      mail_unsubscribed INTEGER NOT NULL DEFAULT 0,
       terms_agreed_at TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -950,6 +951,16 @@ export function initSchema(db: Database.Database) {
       console.log('[DB] users: added avatar_source column (existing photos kept as upload)')
     }
   } catch (e) { console.error('[DB] users avatar_source migration failed:', e) }
+
+  // users.mail_unsubscribed: 브로드캐스트(관리자 발송) 메일 수신거부 플래그.
+  // 1 = 수신거부(브로드캐스트 제외). 인증코드 등 시스템 트랜잭션 메일에는 영향 없음.
+  try {
+    const userCols = (db.prepare("PRAGMA table_info(users)").all() as any[]).map((c: any) => c.name)
+    if (!userCols.includes('mail_unsubscribed')) {
+      db.exec("ALTER TABLE users ADD COLUMN mail_unsubscribed INTEGER NOT NULL DEFAULT 0")
+      console.log('[DB] users: added mail_unsubscribed column')
+    }
+  } catch (e) { console.error('[DB] users mail_unsubscribed migration failed:', e) }
 
   // users.password NOT NULL → NULL 허용
   try {

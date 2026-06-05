@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { createMailBroadcastLog, getAllUsers } from '@/lib/db'
 import { createTransporter, getFromAddress } from '@/lib/mail'
+import { renderMailTemplate, makeUnsubscribeToken, unsubscribeFooterHtml } from '@/lib/mail-broadcast'
+import { resolveRedirectBase } from '@/lib/oauth'
 import { logActivity } from '@/lib/activity'
 
 export async function POST(req: Request) {
@@ -14,16 +16,21 @@ export async function POST(req: Request) {
   }
 
   const allUsers = getAllUsers()
-  const targets = userIds?.length
+  const selected = userIds?.length
     ? allUsers.filter(u => userIds.includes(u.id))
     : allUsers
 
+  // 수신거부한 사용자는 명시적으로 선택했더라도 항상 제외한다.
+  const targets = selected.filter(u => !u.mailUnsubscribed)
+  const skipped = selected.length - targets.length
+
   if (targets.length === 0) {
-    return NextResponse.json({ error: '발송 대상이 없습니다' }, { status: 400 })
+    return NextResponse.json({ error: '발송 대상이 없습니다', skipped }, { status: 400 })
   }
 
   const transporter = createTransporter()
   const fromAddr = getFromAddress()
+  const baseUrl = resolveRedirectBase(req)
 
   let sent = 0
   let failed = 0
@@ -32,11 +39,16 @@ export async function POST(req: Request) {
 
   for (const target of targets) {
     try {
+      // 개인화 태그 치환 + 수신자별 수신거부 링크 푸터.
+      const vars = { name: target.name, email: target.email }
+      const renderedSubject = renderMailTemplate(subject, vars)
+      const unsubUrl = `${baseUrl}/unsubscribe?token=${encodeURIComponent(makeUnsubscribeToken(target.id))}`
+      const renderedBody = renderMailTemplate(body, vars) + unsubscribeFooterHtml(unsubUrl, target.locale)
       await transporter.sendMail({
         from: `"Springware IVE" <${fromAddr}>`,
         to: target.email,
-        subject,
-        html: body,
+        subject: renderedSubject,
+        html: renderedBody,
       })
       sent++
     } catch (err) {
@@ -69,11 +81,11 @@ export async function POST(req: Request) {
     userId: user.id,
     category: 'admin',
     action: 'send_mail',
-    detail: `메일 발송: "${subject}" — 대상 ${targets.length}명, 성공 ${sent}건${failed > 0 ? `, 실패 ${failed}건` : ''}`,
+    detail: `메일 발송: "${subject}" — 대상 ${targets.length}명, 성공 ${sent}건${failed > 0 ? `, 실패 ${failed}건` : ''}${skipped > 0 ? `, 수신거부 제외 ${skipped}명` : ''}`,
     targetType: 'mail_broadcast',
     targetId: savedLogId,
     req,
   })
 
-  return NextResponse.json({ sent, failed, total: targets.length })
+  return NextResponse.json({ sent, failed, total: targets.length, skipped })
 }

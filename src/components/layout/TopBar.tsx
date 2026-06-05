@@ -205,6 +205,7 @@ export default function TopBar() {
           currencyRate={state.user.currencyRate}
           slackUserId={state.user.slackUserId}
           slackNotify={state.user.slackNotify}
+          mailUnsubscribed={state.user.mailUnsubscribed}
           onSuccess={() => setShowChangePassword(false)}
           onCancel={() => setShowChangePassword(false)}
           onEmailChanged={() => refreshUser()}
