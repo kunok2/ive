@@ -34,7 +34,7 @@ export default function AdminTab() {
 
   const subTabs: { key: SubTab; icon: string; label: string }[] = [
     { key: 'users', icon: 'fa-solid fa-users', label: t('users') },
-    { key: 'mail', icon: 'fa-solid fa-envelope', label: t('mail') },
+    { key: 'mail', icon: 'fa-solid fa-bullhorn', label: t('promotion') },
     { key: 'settings', icon: 'fa-solid fa-gear', label: t('settings') },
     { key: 'logs', icon: 'fa-solid fa-file-lines', label: t('logs') },
   ]

@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { createMailBroadcastLog, getAllUsers } from '@/lib/db'
 import { createTransporter, getFromAddress } from '@/lib/mail'
-import { renderMailTemplate, makeUnsubscribeToken, unsubscribeFooterHtml } from '@/lib/mail-broadcast'
+import { renderMailTemplate, makeUnsubscribeToken, unsubscribeFooterHtml, makeClickToken, accessButtonHtml } from '@/lib/mail-broadcast'
+import crypto from 'crypto'
 import { resolveRedirectBase } from '@/lib/oauth'
 import { logActivity } from '@/lib/activity'
 
@@ -31,6 +32,8 @@ export async function POST(req: Request) {
   const transporter = createTransporter()
   const fromAddr = getFromAddress()
   const baseUrl = resolveRedirectBase(req)
+  // 발송이력 id를 미리 만들어 추적 링크에 심는다(접속 클릭이 이 발송에 귀속되도록).
+  const logId = crypto.randomUUID ? crypto.randomUUID() : `mbl-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
   let sent = 0
   let failed = 0
@@ -39,11 +42,14 @@ export async function POST(req: Request) {
 
   for (const target of targets) {
     try {
-      // 개인화 태그 치환 + 수신자별 수신거부 링크 푸터.
-      const vars = { name: target.name, email: target.email }
+      // 추적 가능한 IVE 접속 링크 + 개인화 태그 치환 + 수신거부 링크 푸터.
+      const accessUrl = `${baseUrl}/api/mail/click?t=${encodeURIComponent(makeClickToken(logId, target.id))}`
+      const vars = { name: target.name, email: target.email, link: accessUrl }
       const renderedSubject = renderMailTemplate(subject, vars)
       const unsubUrl = `${baseUrl}/unsubscribe?token=${encodeURIComponent(makeUnsubscribeToken(target.id))}`
-      const renderedBody = renderMailTemplate(body, vars) + unsubscribeFooterHtml(unsubUrl, target.locale)
+      const renderedBody = renderMailTemplate(body, vars)
+        + accessButtonHtml(accessUrl, target.locale)
+        + unsubscribeFooterHtml(unsubUrl, target.locale)
       await transporter.sendMail({
         from: `"Springware IVE" <${fromAddr}>`,
         to: target.email,
@@ -61,6 +67,7 @@ export async function POST(req: Request) {
   let savedLogId: string | undefined
   try {
     const saved = createMailBroadcastLog({
+      id: logId,
       senderUserId: user.id,
       senderName: user.name,
       senderEmail: user.email,

@@ -3,6 +3,7 @@ import { getUserByEmail } from '@/lib/db'
 import { verifyPassword, setAuthCookie } from '@/lib/auth'
 import { logActivity } from '@/lib/activity'
 import { isRateLimited, getClientIp } from '@/lib/rate-limit'
+import { attributeConversionFromCookie } from '@/lib/social-tracking'
 
 export async function POST(req: Request) {
   // IP당 5분에 10회 제한
@@ -33,6 +34,7 @@ export async function POST(req: Request) {
   }
 
   await setAuthCookie(user.id)
+  await attributeConversionFromCookie(user.id, 'login')
   logActivity({ userId: user.id, category: 'auth', action: 'login', detail: `로그인 (${email})`, req })
 
   return NextResponse.json({ id: user.id, email: user.email, name: user.name })

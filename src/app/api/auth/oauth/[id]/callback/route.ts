@@ -13,6 +13,7 @@ import {
 import { encrypt } from '@/lib/crypto'
 import { setAuthCookie } from '@/lib/auth'
 import { logActivity } from '@/lib/activity'
+import { attributeConversionFromCookie } from '@/lib/social-tracking'
 
 const STATE_COOKIE = 'ive-oauth-state'
 
@@ -244,6 +245,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
   // JWT 쿠키를 response에 직접 발급
   await setAuthCookie(userId, htmlResponse)
+
+  // SNS 홍보 클릭 → 가입/로그인 전환 귀속 (계정 연결(link)은 제외)
+  if (action === 'register' || action === 'login') {
+    await attributeConversionFromCookie(userId, action === 'register' ? 'register' : 'login')
+  }
 
   // 5. 활동 로그
   try {

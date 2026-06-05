@@ -3,18 +3,20 @@
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import BroadcastView from './BroadcastView'
-import ReportScheduleView from './ReportScheduleView'
+import SocialView from './SocialView'
+import PerformanceView from './PerformanceView'
 import SendLogView from './SendLogView'
 
-// ── Mail Panel ──
-type MailSubView = 'broadcast' | 'reports' | 'logs'
+// ── 홍보(Promotion) Panel ── 메일 발송 / SNS 글 / 성과 / 발송 이력
+type MailSubView = 'broadcast' | 'social' | 'performance' | 'logs'
+const SUB_VIEWS: MailSubView[] = ['broadcast', 'social', 'performance', 'logs']
 
 export default function MailPanel() {
   const t = useTranslations('admin')
   const [view, setView] = useState<MailSubView>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('admin-mail-subview')
-      if (saved === 'broadcast' || saved === 'reports' || saved === 'logs') return saved
+      if (saved && (SUB_VIEWS as string[]).includes(saved)) return saved as MailSubView
     }
     return 'broadcast'
   })
@@ -26,7 +28,8 @@ export default function MailPanel() {
 
   const views: { key: MailSubView; label: string; icon: string }[] = [
     { key: 'broadcast', label: t('mailSend'), icon: 'fa-solid fa-paper-plane' },
-    { key: 'reports', label: t('reportLabel'), icon: 'fa-solid fa-file-lines' },
+    { key: 'social', label: t('socialPosts'), icon: 'fa-solid fa-share-nodes' },
+    { key: 'performance', label: t('performance'), icon: 'fa-solid fa-chart-simple' },
     { key: 'logs', label: t('sendHistory'), icon: 'fa-solid fa-clock-rotate-left' },
   ]
 
@@ -39,20 +42,22 @@ export default function MailPanel() {
             <button
               key={v.key}
               onClick={() => handleSetView(v.key)}
-              className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
+              title={v.label}
+              className={`flex-1 min-w-0 py-2 rounded-lg text-[11px] font-bold transition-all flex items-center justify-center gap-1 ${
                 view === v.key
                   ? 'bg-ive-green text-ive-bg-deep'
                   : 'bg-ive-bg-card text-ive-text-dim'
               }`}
             >
-              <i className={`${v.icon} mr-1`} />{v.label}
+              <i className={`${v.icon} shrink-0`} /><span className="truncate">{v.label}</span>
             </button>
           ))}
         </div>
       </div>
 
       {view === 'broadcast' && <BroadcastView />}
-      {view === 'reports' && <ReportScheduleView />}
+      {view === 'social' && <SocialView />}
+      {view === 'performance' && <PerformanceView />}
       {view === 'logs' && <SendLogView />}
     </main>
   )

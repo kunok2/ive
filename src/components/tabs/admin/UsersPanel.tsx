@@ -7,8 +7,9 @@ import { useDialog } from '@/components/ui/ConfirmDialog'
 import { useToast } from '@/components/ui/Toast'
 import CliLogo from '@/components/ui/CliLogo'
 import ActivityContent from './ActivityContent'
+import ReportScheduleView from './ReportScheduleView'
 
-type UsersSubView = 'users' | 'activity'
+type UsersSubView = 'users' | 'activity' | 'reports'
 
 export default function UsersPanel() {
   const t = useTranslations('admin')
@@ -19,7 +20,7 @@ export default function UsersPanel() {
   const [view, setView] = useState<UsersSubView>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('ive-admin-users-subview')
-      if (saved === 'activity') return 'activity'
+      if (saved === 'activity' || saved === 'reports') return saved
     }
     return 'users'
   })
@@ -36,7 +37,28 @@ export default function UsersPanel() {
   const views: { key: UsersSubView; label: string; icon: string }[] = [
     { key: 'users', label: t('users'), icon: 'fa-solid fa-users' },
     { key: 'activity', label: t('activity'), icon: 'fa-solid fa-clock-rotate-left' },
+    { key: 'reports', label: t('reportLabel'), icon: 'fa-solid fa-file-lines' },
   ]
+
+  const tabBar = (
+    <div className="pb-2">
+      <div className="flex gap-1.5">
+        {views.map(v => (
+          <button
+            key={v.key}
+            onClick={() => setView(v.key)}
+            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
+              view === v.key
+                ? 'bg-ive-green text-ive-bg-deep'
+                : 'bg-ive-bg-card text-ive-text-dim active:scale-[0.96]'
+            }`}
+          >
+            <i className={`${v.icon} mr-1`} />{v.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
 
   async function fetchUsers() {
     const res = await fetch('/api/admin/users')
@@ -134,47 +156,24 @@ export default function UsersPanel() {
   if (view === 'activity') {
     return (
       <main>
-        <div className="pb-2">
-          <div className="flex gap-1.5">
-            {views.map(v => (
-              <button
-                key={v.key}
-                onClick={() => setView(v.key)}
-                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
-                  view === v.key
-                    ? 'bg-ive-green text-ive-bg-deep'
-                    : 'bg-ive-bg-card text-ive-text-dim active:scale-[0.96]'
-                }`}
-              >
-                <i className={`${v.icon} mr-1`} />{v.label}
-              </button>
-            ))}
-          </div>
-        </div>
+        {tabBar}
         <ActivityContent />
+      </main>
+    )
+  }
+
+  if (view === 'reports') {
+    return (
+      <main>
+        {tabBar}
+        <ReportScheduleView />
       </main>
     )
   }
 
   return (
     <main>
-      <div className="pb-2">
-        <div className="flex gap-1.5">
-          {views.map(v => (
-            <button
-              key={v.key}
-              onClick={() => setView(v.key)}
-              className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
-                view === v.key
-                  ? 'bg-ive-green text-ive-bg-deep'
-                  : 'bg-ive-bg-card text-ive-text-dim active:scale-[0.96]'
-              }`}
-            >
-              <i className={`${v.icon} mr-1`} />{v.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      {tabBar}
       <div className="text-xs text-ive-text-dim mb-3">{t('totalUsersCount', { count: users.length })}</div>
       <div className="space-y-2">
         {users.map(u => (

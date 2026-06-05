@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import { useStore } from '@/lib/store'
 import { formatDateFull } from '@/lib/format-date'
 import Modal from '@/components/ui/Modal'
+import AgentAvatar from '@/components/agent/AgentAvatar'
 import { useDialog } from '@/components/ui/ConfirmDialog'
 import { useToast } from '@/components/ui/Toast'
 
@@ -27,10 +28,22 @@ interface MailLogSummary {
   failedCount: number
   failedRecipients: { email: string; error?: string }[]
   sentAt: string
+  clickCount: number
+  clickUserCount: number
 }
 
-interface MailLogDetail extends Omit<MailLogSummary, 'bodyLength'> {
+interface MailLogDetail extends Omit<MailLogSummary, 'bodyLength' | 'clickCount' | 'clickUserCount'> {
   body: string
+}
+
+interface ClickStat {
+  userId: string | null
+  email: string | null
+  name: string | null
+  avatar: string | null
+  count: number
+  firstAt: string
+  lastAt: string
 }
 
 type LogKind = 'mail' | 'report'
@@ -67,6 +80,9 @@ export default function SendLogView() {
   const [detail, setDetail] = useState<MailLogDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [showHtml, setShowHtml] = useState(true)
+  // IVE 접속(클릭) 사용자별 통계 모달
+  const [clickStats, setClickStats] = useState<{ subject: string; stats: ClickStat[]; totalClicks: number; userCount: number } | null>(null)
+  const [clickLoading, setClickLoading] = useState(false)
 
   function handleSetKind(k: LogKind) {
     setKind(k)
@@ -112,6 +128,21 @@ export default function SendLogView() {
       }
     } finally {
       setDetailLoading(false)
+    }
+  }
+
+  async function openClickStats(log: { id: string; subject: string }) {
+    setClickLoading(true)
+    try {
+      const res = await fetch(`/api/admin/mail/logs/${log.id}/clicks`)
+      if (res.ok) {
+        const data = await res.json()
+        setClickStats({ subject: log.subject, stats: data.stats, totalClicks: data.totalClicks, userCount: data.userCount })
+      } else {
+        toast(t('detailLoadFailed'), 'error')
+      }
+    } finally {
+      setClickLoading(false)
     }
   }
 
@@ -214,8 +245,22 @@ export default function SendLogView() {
                       </span>
                     </div>
                     <div className="flex items-center gap-2 mt-1 text-xs text-ive-text-dim">
-                      <span className="truncate">{log.senderName || log.senderEmail || '-'}</span>
-                      <span className="ml-auto shrink-0">{formatDateFull(log.sentAt, userLocale, userTz)}</span>
+                      <span className="truncate flex-1">{log.senderName || log.senderEmail || '-'}</span>
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={e => { e.stopPropagation(); openClickStats(log) }}
+                        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); openClickStats(log) } }}
+                        title={t('viewAccessStats')}
+                        className={`shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border font-bold transition-colors ${
+                          log.clickCount > 0
+                            ? 'bg-ive-cyan/10 text-ive-cyan border-ive-cyan/30 hover:bg-ive-cyan/20'
+                            : 'bg-ive-bg-deep text-ive-text-dim border-ive-border-subtle hover:border-ive-border'
+                        }`}
+                      >
+                        <i className="fa-solid fa-arrow-pointer" />{t('accessCount', { count: log.clickCount })}
+                      </span>
+                      <span className="shrink-0">{formatDateFull(log.sentAt, userLocale, userTz)}</span>
                     </div>
                   </button>
                 )
@@ -320,6 +365,12 @@ export default function SendLogView() {
 
             <div className="flex gap-2 pt-1">
               <button
+                onClick={() => { const d = detail; setDetail(null); openClickStats({ id: d.id, subject: d.subject }) }}
+                className="flex-1 py-2 rounded-lg bg-ive-cyan/10 text-ive-cyan border border-ive-cyan/30 text-xs font-bold active:scale-[0.98]"
+              >
+                <i className="fa-solid fa-arrow-pointer mr-1" />{t('accessStatsTitle')}
+              </button>
+              <button
                 onClick={() => handleDelete(detail.id)}
                 className="flex-1 py-2 rounded-lg bg-ive-red/10 text-ive-red border border-ive-red/30 text-xs font-bold active:scale-[0.98]"
               >
@@ -332,6 +383,57 @@ export default function SendLogView() {
                 {tc('close')}
               </button>
             </div>
+          </div>
+        )}
+      </Modal>
+
+      {clickLoading && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 pointer-events-none">
+          <i className="fa-solid fa-circle-notch fa-spin text-2xl text-white" />
+        </div>
+      )}
+
+      <Modal open={!!clickStats} onClose={() => setClickStats(null)} title={t('accessStatsTitle')}>
+        {clickStats && (
+          <div className="space-y-3">
+            <div className="text-sm text-ive-text font-bold break-words bg-ive-bg-deep rounded-lg px-3 py-2">{clickStats.subject}</div>
+            <div className="flex items-center gap-2 text-xs">
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-ive-cyan/10 text-ive-cyan border border-ive-cyan/30 font-bold">
+                <i className="fa-solid fa-arrow-pointer" />{t('accessTotalClicks', { count: clickStats.totalClicks })}
+              </span>
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-ive-bg-deep text-ive-text-dim border border-ive-border-subtle font-bold">
+                <i className="fa-solid fa-user" />{t('accessUserCount', { count: clickStats.userCount })}
+              </span>
+            </div>
+
+            {clickStats.stats.length === 0 ? (
+              <div className="text-center py-8 text-ive-text-dim text-sm">
+                <i className="fa-solid fa-arrow-pointer text-2xl mb-2 block opacity-50" />{t('noAccessYet')}
+              </div>
+            ) : (
+              <div className="space-y-1.5 max-h-80 overflow-y-auto">
+                {clickStats.stats.map((s, i) => (
+                  <div key={s.userId || s.email || i} className="flex items-center gap-2 bg-ive-bg-deep rounded-lg px-2.5 py-2">
+                    <AgentAvatar avatar={s.avatar || 'av-01'} userId={s.userId} size="sm" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-bold text-ive-text truncate">{s.name || s.email || '-'}</div>
+                      {s.name && s.email && <div className="text-[11px] text-ive-text-dim truncate">{s.email}</div>}
+                      <div className="text-[11px] text-ive-text-dim">{t('accessLastAt')}: {formatDateFull(s.lastAt, userLocale, userTz)}</div>
+                    </div>
+                    <span className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-ive-cyan/10 text-ive-cyan border border-ive-cyan/30 text-xs font-bold">
+                      {t('accessTimesCount', { count: s.count })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <button
+              onClick={() => setClickStats(null)}
+              className="w-full py-2 rounded-lg bg-ive-bg-deep text-ive-text-dim border border-ive-border-subtle text-xs font-bold active:scale-[0.98]"
+            >
+              {tc('close')}
+            </button>
           </div>
         )}
       </Modal>

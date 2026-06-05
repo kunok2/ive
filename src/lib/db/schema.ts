@@ -637,6 +637,62 @@ export function initSchema(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_mail_broadcast_logs_sent_at ON mail_broadcast_logs(sent_at);
   `)
 
+  // 브로드캐스트 메일의 IVE 접속 링크 클릭(접속) 기록.
+  // 누가(user_id) 언제(clicked_at) 어떤 발송(broadcast_log_id)으로 접속했는지 추적한다.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS mail_broadcast_clicks (
+      id TEXT PRIMARY KEY,
+      broadcast_log_id TEXT NOT NULL,
+      user_id TEXT,
+      email TEXT,
+      ip_address TEXT,
+      user_agent TEXT,
+      clicked_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_mail_clicks_log ON mail_broadcast_clicks(broadcast_log_id);
+    CREATE INDEX IF NOT EXISTS idx_mail_clicks_log_user ON mail_broadcast_clicks(broadcast_log_id, user_id);
+  `)
+
+  // SNS 홍보 게시글(자산). 한 글을 여러 채널에 수기 게시하며 채널별 추적 링크로 유입/전환을 측정한다.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS social_posts (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL DEFAULT '',
+      body TEXT NOT NULL DEFAULT '',
+      created_by_user_id TEXT,
+      status TEXT NOT NULL DEFAULT 'draft',
+      note TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS social_post_links (
+      id TEXT PRIMARY KEY,
+      post_id TEXT NOT NULL,
+      channel TEXT NOT NULL,
+      posted_url TEXT,
+      posted_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_social_links_post ON social_post_links(post_id);
+    CREATE TABLE IF NOT EXISTS social_clicks (
+      id TEXT PRIMARY KEY,
+      post_id TEXT NOT NULL,
+      link_id TEXT NOT NULL,
+      channel TEXT NOT NULL,
+      visitor_id TEXT,
+      ip_address TEXT,
+      user_agent TEXT,
+      referrer TEXT,
+      converted_user_id TEXT,
+      conversion_type TEXT,
+      converted_at TEXT,
+      clicked_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_social_clicks_post ON social_clicks(post_id);
+    CREATE INDEX IF NOT EXISTS idx_social_clicks_link ON social_clicks(link_id);
+    CREATE INDEX IF NOT EXISTS idx_social_clicks_visitor ON social_clicks(visitor_id);
+    CREATE INDEX IF NOT EXISTS idx_social_clicks_conv ON social_clicks(converted_user_id);
+  `)
+
   // project_members 테이블
   db.exec(`
     CREATE TABLE IF NOT EXISTS project_members (
