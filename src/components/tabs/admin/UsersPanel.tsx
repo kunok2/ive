@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { User, DEFAULT_AVATARS } from '@/types'
+import { useStore } from '@/lib/store'
+import { formatDateFull } from '@/lib/format-date'
 import { useDialog } from '@/components/ui/ConfirmDialog'
 import { useToast } from '@/components/ui/Toast'
 import CliLogo from '@/components/ui/CliLogo'
@@ -11,10 +13,17 @@ import ReportScheduleView from './ReportScheduleView'
 
 type UsersSubView = 'users' | 'activity' | 'reports'
 
+interface ReportLogEntry {
+  id: string; reportType: string; recipientEmail: string
+  status: string; errorMessage?: string | null; sentAt: string
+}
+
 export default function UsersPanel() {
   const t = useTranslations('admin')
   const tc = useTranslations('common')
   const ta = useTranslations('agent')
+  const tr = useTranslations('report')
+  const { state } = useStore()
   const { confirm, alert } = useDialog()
   const { toast } = useToast()
   const [view, setView] = useState<UsersSubView>(() => {
@@ -29,6 +38,12 @@ export default function UsersPanel() {
   const [deleting, setDeleting] = useState<string | null>(null)
   const [editingLimits, setEditingLimits] = useState<string | null>(null)
   const [limitValues, setLimitValues] = useState<{ maxAgents: number; maxTurns: number; allowedClis: string[] }>({ maxAgents: 0, maxTurns: 0, allowedClis: ['opencode'] })
+  const [reportLogs, setReportLogs] = useState<ReportLogEntry[]>([])
+  const [reportLogTotal, setReportLogTotal] = useState(0)
+  const [reportLogPage, setReportLogPage] = useState(0)
+  const [reportLogLoading, setReportLogLoading] = useState(false)
+  const [reportLogOpen, setReportLogOpen] = useState(false)
+  const REPORT_LOG_PAGE_SIZE = 15
 
   useEffect(() => {
     localStorage.setItem('ive-admin-users-subview', view)
@@ -151,6 +166,22 @@ export default function UsersPanel() {
     }
   }
 
+  async function fetchReportLogs(p: number = 0) {
+    setReportLogLoading(true)
+    try {
+      const res = await fetch(`/api/admin/reports/logs?limit=${REPORT_LOG_PAGE_SIZE}&offset=${p * REPORT_LOG_PAGE_SIZE}`)
+      if (res.ok) {
+        const data = await res.json()
+        setReportLogs(data.logs)
+        setReportLogTotal(data.total)
+      }
+    } finally {
+      setReportLogLoading(false)
+    }
+  }
+
+  const reportLogTotalPages = Math.ceil(reportLogTotal / REPORT_LOG_PAGE_SIZE)
+
   if (loading) return <div className="text-center py-10 text-ive-text-dim">{tc('loading')}</div>
 
   if (view === 'activity') {
@@ -167,6 +198,65 @@ export default function UsersPanel() {
       <main>
         {tabBar}
         <ReportScheduleView />
+        <div className="mt-5">
+          <button
+            onClick={() => { setReportLogOpen(v => !v); if (!reportLogOpen && reportLogs.length === 0) fetchReportLogs(0) }}
+            className="flex items-center gap-2 text-xs font-bold text-ive-text-dim w-full"
+          >
+            <i className={`fa-solid fa-chevron-${reportLogOpen ? 'down' : 'right'} text-[10px]`} />
+            <i className="fa-solid fa-clock-rotate-left" />{t('sendHistory')}
+            {reportLogTotal > 0 && <span className="text-ive-text-dim font-normal">({reportLogTotal})</span>}
+          </button>
+          {reportLogOpen && (
+            <div className="mt-2 space-y-1.5">
+              {reportLogLoading && reportLogs.length === 0 ? (
+                <div className="text-center py-6 text-ive-text-dim text-xs">{tc('loading')}</div>
+              ) : reportLogs.length === 0 ? (
+                <div className="text-center py-6 text-ive-text-dim text-xs">{t('noSendHistory')}</div>
+              ) : (
+                <>
+                  {reportLogs.map(log => (
+                    <div key={log.id} className="bg-ive-bg-card border border-ive-border-subtle rounded-lg px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${log.status === 'success' ? 'bg-ive-green' : 'bg-ive-red'}`} />
+                        <span className="text-xs font-bold text-ive-text">{tr(log.reportType as any)}</span>
+                        <span className="text-xs text-ive-text-dim flex-1 truncate">{log.recipientEmail}</span>
+                        <span className={`text-xs font-bold ${log.status === 'success' ? 'text-ive-green' : 'text-ive-red'}`}>
+                          {log.status === 'success' ? t('statusSuccess') : t('statusFailed')}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-1 text-xs text-ive-text-dim">
+                        <span className="ml-auto">{formatDateFull(log.sentAt, state.user?.locale, state.user?.timezone)}</span>
+                      </div>
+                      {log.errorMessage && (
+                        <div className="mt-1 text-xs text-ive-red bg-ive-red/5 rounded px-2 py-1 break-all">{log.errorMessage}</div>
+                      )}
+                    </div>
+                  ))}
+                  {reportLogTotalPages > 1 && (
+                    <div className="flex items-center justify-center gap-2 mt-2">
+                      <button onClick={() => {
+                        const next = Math.max(0, reportLogPage - 1)
+                        setReportLogPage(next); fetchReportLogs(next)
+                      }} disabled={reportLogPage === 0}
+                        className="w-7 h-7 rounded-lg bg-ive-bg-deep text-ive-text-dim text-xs disabled:opacity-30">
+                        <i className="fa-solid fa-chevron-left" />
+                      </button>
+                      <span className="text-xs text-ive-text-dim">{reportLogPage + 1} / {reportLogTotalPages}</span>
+                      <button onClick={() => {
+                        const next = Math.min(reportLogTotalPages - 1, reportLogPage + 1)
+                        setReportLogPage(next); fetchReportLogs(next)
+                      }} disabled={reportLogPage >= reportLogTotalPages - 1}
+                        className="w-7 h-7 rounded-lg bg-ive-bg-deep text-ive-text-dim text-xs disabled:opacity-30">
+                        <i className="fa-solid fa-chevron-right" />
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </div>
       </main>
     )
   }
