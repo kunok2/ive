@@ -262,7 +262,19 @@ export default function LoginPage() {
           </div>
         )}
 
-        <div className="mt-4 flex justify-center">
+        <div className="mt-6 flex justify-center">
+          <iframe
+            title="Springware IVE on Disquiet"
+            frameBorder="0"
+            scrolling="no"
+            src="https://badge.disquiet.io/vote-badge?productUrlSlug=springware-ive&mode=dark"
+            width="200"
+            height="74"
+            className="overflow-hidden"
+          />
+        </div>
+
+        <div className="mt-3 flex justify-center">
           <a href="https://www.producthunt.com/products/spring-ive?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-spring-ive" target="_blank" rel="noopener noreferrer">
             <img alt="Springware IVE on Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1107541&theme=dark&t=1774503857741" />
           </a>
