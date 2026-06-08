@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0e0e11"/>
+      <stop offset="1" stop-color="#15151b"/>
+    </linearGradient>
+    <linearGradient id="cyan" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#22d3ee"/>
+      <stop offset="1" stop-color="#0ea5b7"/>
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bg)"/>
+
+  <!-- subtle grid -->
+  <g stroke="#1c1c22" stroke-width="1">
+    <line x1="0" y1="225" x2="1600" y2="225"/>
+    <line x1="0" y1="450" x2="1600" y2="450"/>
+    <line x1="0" y1="675" x2="1600" y2="675"/>
+    <line x1="400" y1="0" x2="400" y2="900"/>
+    <line x1="800" y1="0" x2="800" y2="900"/>
+    <line x1="1200" y1="0" x2="1200" y2="900"/>
+  </g>
+
+  <!-- logo mark -->
+  <g transform="translate(140,300)">
+    <rect width="300" height="300" rx="56" fill="#0b0b0e" stroke="#22d3ee" stroke-width="2"/>
+    <text x="150" y="172" text-anchor="middle" font-family="system-ui,-apple-system,sans-serif" font-weight="800" font-size="120" fill="#22d3ee">IVE</text>
+    <text x="150" y="232" text-anchor="middle" font-family="system-ui,-apple-system,sans-serif" font-weight="600" font-size="30"><tspan fill="#22c55e">Spring</tspan><tspan fill="#f59e0b">ware</tspan></text>
+  </g>
+
+  <!-- copy -->
+  <g font-family="system-ui,-apple-system,'Apple SD Gothic Neo',sans-serif">
+    <text x="520" y="360" font-weight="800" font-size="86" fill="#f5f5f7">AI가 개발하고,</text>
+    <text x="520" y="462" font-weight="800" font-size="86" fill="url(#cyan)">사람은 가치를 관리한다</text>
+    <text x="522" y="548" font-weight="500" font-size="36" fill="#a1a1aa">GitLab · GitHub 이슈를 AI CLI 에이전트가 자동 처리하고,</text>
+    <text x="522" y="596" font-weight="500" font-size="36" fill="#a1a1aa">Slack에서 멘션으로 지시하고 알림받는 개발 자동화 대시보드</text>
+  </g>
+
+  <!-- chips -->
+  <g font-family="system-ui,-apple-system,sans-serif" font-weight="700" font-size="26">
+    <g transform="translate(522,650)">
+      <rect width="150" height="54" rx="12" fill="#16161c" stroke="#2a2a32"/>
+      <text x="75" y="36" text-anchor="middle" fill="#22d3ee">Claude</text>
+    </g>
+    <g transform="translate(686,650)">
+      <rect width="146" height="54" rx="12" fill="#16161c" stroke="#2a2a32"/>
+      <text x="73" y="36" text-anchor="middle" fill="#22c55e">Gemini</text>
+    </g>
+    <g transform="translate(846,650)">
+      <rect width="130" height="54" rx="12" fill="#16161c" stroke="#2a2a32"/>
+      <text x="65" y="36" text-anchor="middle" fill="#f59e0b">Codex</text>
+    </g>
+    <g transform="translate(990,650)">
+      <rect width="172" height="54" rx="12" fill="#16161c" stroke="#2a2a32"/>
+      <text x="86" y="36" text-anchor="middle" fill="#a78bfa">OpenCode</text>
+    </g>
+    <!-- Slack integration chip (highlighted) -->
+    <g transform="translate(1176,650)">
+      <rect width="180" height="54" rx="12" fill="#2a1c2e" stroke="#7c3aed"/>
+      <circle cx="32" cy="27" r="9" fill="#36c5f0"/>
+      <circle cx="32" cy="27" r="5" fill="#2eb67d"/>
+      <text x="100" y="36" text-anchor="middle" fill="#e9d5ff">Slack 연동</text>
+    </g>
+  </g>
+</svg>
