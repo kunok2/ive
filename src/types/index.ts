@@ -241,6 +241,7 @@ export interface StatSnapshot {
   running: number
   waiting: number          // 처리 대기 (에이전트 배정 기다림)
   verifyWaiting: number    // 검증 대기 (사람 검증 기다림)
+  confirmWaiting: number   // 확인 대기 (사람 확인 기다림)
   completed: number
   failed: number
   totalTokens: number

@@ -102,6 +102,7 @@ export function initSchema(db: Database.Database) {
       running INTEGER NOT NULL DEFAULT 0,
       waiting INTEGER NOT NULL DEFAULT 0,
       verify_waiting INTEGER NOT NULL DEFAULT 0,
+      confirm_waiting INTEGER NOT NULL DEFAULT 0,
       completed INTEGER NOT NULL DEFAULT 0,
       failed INTEGER NOT NULL DEFAULT 0,
       total_tokens INTEGER NOT NULL DEFAULT 0,
@@ -117,6 +118,7 @@ export function initSchema(db: Database.Database) {
       avg_running REAL NOT NULL DEFAULT 0,
       avg_waiting REAL NOT NULL DEFAULT 0,
       avg_verify_waiting REAL NOT NULL DEFAULT 0,
+      avg_confirm_waiting REAL NOT NULL DEFAULT 0,
       avg_completed REAL NOT NULL DEFAULT 0,
       avg_failed REAL NOT NULL DEFAULT 0,
       avg_total_tokens REAL NOT NULL DEFAULT 0,
@@ -768,17 +770,25 @@ export function initSchema(db: Database.Database) {
     }
   } catch (e) { console.warn('[DB] Activity logs migration skipped:', e) }
 
-  // stat_snapshots: verify_waiting 컬럼 추가
+  // stat_snapshots: verify_waiting / confirm_waiting 컬럼 추가
   try {
     const snapCols = db.prepare("PRAGMA table_info(stat_snapshots)").all() as any[]
     if (!snapCols.some((c: any) => c.name === 'verify_waiting')) {
       db.exec("ALTER TABLE stat_snapshots ADD COLUMN verify_waiting INTEGER NOT NULL DEFAULT 0")
       console.log('[DB] stat_snapshots: added verify_waiting column')
     }
+    if (!snapCols.some((c: any) => c.name === 'confirm_waiting')) {
+      db.exec("ALTER TABLE stat_snapshots ADD COLUMN confirm_waiting INTEGER NOT NULL DEFAULT 0")
+      console.log('[DB] stat_snapshots: added confirm_waiting column')
+    }
     const summaryCols = db.prepare("PRAGMA table_info(stat_daily_summaries)").all() as any[]
     if (!summaryCols.some((c: any) => c.name === 'avg_verify_waiting')) {
       db.exec("ALTER TABLE stat_daily_summaries ADD COLUMN avg_verify_waiting REAL NOT NULL DEFAULT 0")
       console.log('[DB] stat_daily_summaries: added avg_verify_waiting column')
+    }
+    if (!summaryCols.some((c: any) => c.name === 'avg_confirm_waiting')) {
+      db.exec("ALTER TABLE stat_daily_summaries ADD COLUMN avg_confirm_waiting REAL NOT NULL DEFAULT 0")
+      console.log('[DB] stat_daily_summaries: added avg_confirm_waiting column')
     }
   } catch (e) { console.warn('[DB] stat_snapshots migration skipped:', e) }
 
@@ -795,12 +805,13 @@ export function initSchema(db: Database.Database) {
         running INTEGER NOT NULL DEFAULT 0,
         waiting INTEGER NOT NULL DEFAULT 0,
         verify_waiting INTEGER NOT NULL DEFAULT 0,
+        confirm_waiting INTEGER NOT NULL DEFAULT 0,
         completed INTEGER NOT NULL DEFAULT 0,
         failed INTEGER NOT NULL DEFAULT 0,
         total_tokens INTEGER NOT NULL DEFAULT 0,
         cost_usd REAL NOT NULL DEFAULT 0
       )`)
-      db.exec(`INSERT INTO stat_snapshots_new SELECT id, entity_type, entity_id, timestamp, running, waiting, verify_waiting, completed, failed, total_tokens, cost_usd FROM stat_snapshots`)
+      db.exec(`INSERT INTO stat_snapshots_new SELECT id, entity_type, entity_id, timestamp, running, waiting, verify_waiting, confirm_waiting, completed, failed, total_tokens, cost_usd FROM stat_snapshots`)
       db.exec(`DROP TABLE stat_snapshots`)
       db.exec(`ALTER TABLE stat_snapshots_new RENAME TO stat_snapshots`)
       db.exec(`CREATE INDEX IF NOT EXISTS idx_stat_snapshots_entity ON stat_snapshots(entity_type, entity_id, timestamp)`)
@@ -818,6 +829,7 @@ export function initSchema(db: Database.Database) {
         avg_running REAL NOT NULL DEFAULT 0,
         avg_waiting REAL NOT NULL DEFAULT 0,
         avg_verify_waiting REAL NOT NULL DEFAULT 0,
+        avg_confirm_waiting REAL NOT NULL DEFAULT 0,
         avg_completed REAL NOT NULL DEFAULT 0,
         avg_failed REAL NOT NULL DEFAULT 0,
         avg_total_tokens REAL NOT NULL DEFAULT 0,
@@ -825,7 +837,7 @@ export function initSchema(db: Database.Database) {
         sample_count INTEGER NOT NULL DEFAULT 0,
         UNIQUE(entity_type, entity_id, date)
       )`)
-      db.exec(`INSERT INTO stat_daily_summaries_new SELECT id, entity_type, entity_id, date, avg_running, avg_waiting, avg_verify_waiting, avg_completed, avg_failed, avg_total_tokens, avg_cost_usd, sample_count FROM stat_daily_summaries`)
+      db.exec(`INSERT INTO stat_daily_summaries_new SELECT id, entity_type, entity_id, date, avg_running, avg_waiting, avg_verify_waiting, avg_confirm_waiting, avg_completed, avg_failed, avg_total_tokens, avg_cost_usd, sample_count FROM stat_daily_summaries`)
       db.exec(`DROP TABLE stat_daily_summaries`)
       db.exec(`ALTER TABLE stat_daily_summaries_new RENAME TO stat_daily_summaries`)
       db.exec(`CREATE INDEX IF NOT EXISTS idx_stat_daily_summaries_lookup ON stat_daily_summaries(entity_type, entity_id, date)`)
