@@ -60,6 +60,12 @@ function collectSnapshots() {
     const waiting = project.lastScannedIssueCount ?? 0
     const verifyWaiting = project.lastVerifyWaitingCount ?? 0
 
+    // 확인대기 수 (confirm_waiting 단계) — issue_stages 권위 소스에서 직접 집계.
+    // 처리/검증대기와 달리 projects 캐시 컬럼이 없어 별도 조회한다.
+    const confirmWaiting = (db.prepare(
+      "SELECT COUNT(*) as cnt FROM issue_stages WHERE project_id = ? AND cached_stage = 'confirm_waiting'"
+    ).get(project.id) as { cnt: number }).cnt
+
     // 금일 완료/실패 수, 토큰, 비용
     const todayStats = db.prepare(`
       SELECT
@@ -79,6 +85,7 @@ function collectSnapshots() {
       running,
       waiting,
       verifyWaiting,
+      confirmWaiting,
       completed: todayStats.completed,
       failed: todayStats.failed,
       totalTokens: todayStats.total_tokens,
@@ -121,6 +128,7 @@ function collectSnapshots() {
         running,
         waiting,
         verifyWaiting: 0, // 에이전트 단위에서는 검증대기 의미 없음
+        confirmWaiting: 0, // 에이전트 단위에서는 확인대기 의미 없음
         completed: todayStats.completed,
         failed: todayStats.failed,
         totalTokens: todayStats.total_tokens,
@@ -172,6 +180,7 @@ function collectSnapshots() {
         running: Number(agg?.verifying || 0),       // running → 검증중
         waiting: Number(agg?.verify_waiting || 0),  // waiting → 검증대기
         verifyWaiting: 0,
+        confirmWaiting: 0,
         completed: todayAgg.completed,              // 오늘 승인
         failed: todayAgg.failed,                    // 오늘 반려
         totalTokens: 0,

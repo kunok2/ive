@@ -128,10 +128,12 @@ export function computeProjectFlows(
     const pastDays = waitingTrend.filter(d => d.date <= today)
     const pProcTrend = pastDays.map(d => d.byProject.find(bp => bp.projectId === p.projectId)?.waiting ?? 0)
     const pVerifyTrend = pastDays.map(d => d.byProject.find(bp => bp.projectId === p.projectId)?.verifyWaiting ?? 0)
+    const pConfirmTrend = pastDays.map(d => d.byProject.find(bp => bp.projectId === p.projectId)?.confirmWaiting ?? 0)
     const pStartProcW = pProcTrend.length > 0 ? pProcTrend[0] : 0
     const pEndProcW = pProcTrend.length > 0 ? pProcTrend[pProcTrend.length - 1] : 0
-    const pStartW = pStartProcW + (pVerifyTrend.length > 0 ? pVerifyTrend[0] : 0)
-    const pEndW = pEndProcW + (pVerifyTrend.length > 0 ? pVerifyTrend[pVerifyTrend.length - 1] : 0)
+    // 대기 총량 = 처리대기 + 검증대기 + 확인대기 (전 단계의 사람 대기 합산)
+    const pStartW = pStartProcW + (pVerifyTrend.length > 0 ? pVerifyTrend[0] : 0) + (pConfirmTrend.length > 0 ? pConfirmTrend[0] : 0)
+    const pEndW = pEndProcW + (pVerifyTrend.length > 0 ? pVerifyTrend[pVerifyTrend.length - 1] : 0) + (pConfirmTrend.length > 0 ? pConfirmTrend[pConfirmTrend.length - 1] : 0)
     const pInflow = p.uniqueIssues + (pEndProcW - pStartProcW)
     const prevP = data.prevByProject?.find(pp => pp.projectId === p.projectId)
     const pPrevCPT = prevP && prevP.tasks > 0 ? prevP.cost / prevP.tasks : 0
