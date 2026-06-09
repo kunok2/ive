@@ -203,9 +203,15 @@ export function markIssueConfirmStarted(projectId: string, issueIid: number) {
 
 export function markIssueVerifyStarted(projectId: string, issueIid: number) {
   const now = new Date().toISOString()
-  getDb().prepare(
-    "UPDATE task_executions SET verify_started_at = ? WHERE project_id = ? AND issue_iid = ? AND status IN ('success', 'failed') AND ended_at IS NOT NULL AND verify_started_at IS NULL AND id NOT LIKE 'ex-verify-%'"
-  ).run(now, projectId, issueIid)
+  getDb().prepare(`
+    UPDATE task_executions SET verify_started_at = ?
+    WHERE id = (
+      SELECT id FROM task_executions
+      WHERE project_id = ? AND issue_iid = ? AND status IN ('success', 'failed') AND ended_at IS NOT NULL
+      ORDER BY ended_at DESC LIMIT 1
+    )
+    AND verify_started_at IS NULL AND id NOT LIKE 'ex-verify-%'
+  `).run(now, projectId, issueIid)
 }
 
 export function markIssueVerified(projectId: string, issueIid: number, verifier?: { name: string; avatar?: string; username?: string | null; userId?: string | null }) {
@@ -222,9 +228,15 @@ export function markIssueVerified(projectId: string, issueIid: number, verifier?
       if (!avatar) avatar = cached.avatar || null
     }
   }
-  getDb().prepare(
-    "UPDATE task_executions SET verified_at = ?, verifier_name = ?, verifier_avatar = ?, verifier_username = ?, verifier_user_id = ? WHERE project_id = ? AND issue_iid = ? AND status IN ('success', 'failed') AND ended_at IS NOT NULL AND verify_started_at IS NOT NULL AND verified_at IS NULL AND rejected_at IS NULL AND id NOT LIKE 'ex-verify-%'"
-  ).run(now, name, avatar, username, userId, projectId, issueIid)
+  getDb().prepare(`
+    UPDATE task_executions SET verified_at = ?, verifier_name = ?, verifier_avatar = ?, verifier_username = ?, verifier_user_id = ?
+    WHERE id = (
+      SELECT id FROM task_executions
+      WHERE project_id = ? AND issue_iid = ? AND status IN ('success', 'failed') AND ended_at IS NOT NULL
+      ORDER BY ended_at DESC LIMIT 1
+    )
+    AND verify_started_at IS NOT NULL AND verified_at IS NULL AND rejected_at IS NULL AND id NOT LIKE 'ex-verify-%'
+  `).run(now, name, avatar, username, userId, projectId, issueIid)
 }
 
 /**
@@ -260,9 +272,15 @@ export function markIssueVerifyRejected(projectId: string, issueIid: number, ver
       if (!avatar) avatar = cached.avatar || null
     }
   }
-  getDb().prepare(
-    "UPDATE task_executions SET rejected_at = ?, verifier_name = COALESCE(verifier_name, ?), verifier_avatar = COALESCE(verifier_avatar, ?), verifier_username = COALESCE(verifier_username, ?), verifier_user_id = COALESCE(verifier_user_id, ?) WHERE project_id = ? AND issue_iid = ? AND status IN ('success', 'failed') AND ended_at IS NOT NULL AND verify_started_at IS NOT NULL AND verified_at IS NULL AND rejected_at IS NULL AND id NOT LIKE 'ex-verify-%'"
-  ).run(now, name, avatar, username, userId, projectId, issueIid)
+  getDb().prepare(`
+    UPDATE task_executions SET rejected_at = ?, verifier_name = COALESCE(verifier_name, ?), verifier_avatar = COALESCE(verifier_avatar, ?), verifier_username = COALESCE(verifier_username, ?), verifier_user_id = COALESCE(verifier_user_id, ?)
+    WHERE id = (
+      SELECT id FROM task_executions
+      WHERE project_id = ? AND issue_iid = ? AND status IN ('success', 'failed') AND ended_at IS NOT NULL
+      ORDER BY ended_at DESC LIMIT 1
+    )
+    AND verify_started_at IS NOT NULL AND verified_at IS NULL AND rejected_at IS NULL AND id NOT LIKE 'ex-verify-%'
+  `).run(now, name, avatar, username, userId, projectId, issueIid)
 }
 
 export function resetIssueScheduledAt(projectId: string, issueIid: number) {

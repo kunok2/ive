@@ -320,7 +320,9 @@ export function generateReportHtml(
   // 확인 시간: confirmStartedAt → confirmedAt
   const confirmTimes: number[] = []
   for (const e of executions) {
-    if (e.confirmStartedAt && e.confirmedAt) {
+    // 확인 시간은 해당 실행건이 성공적으로 검증(verified)된 경우에만 집계 (#461)
+    const isVerifiedSuccess = e.status === 'success' && e.verifiedAt && !e.rejectedAt
+    if (isVerifiedSuccess && e.confirmStartedAt && e.confirmedAt) {
       const c = (new Date(e.confirmedAt).getTime() - new Date(e.confirmStartedAt).getTime()) / 60000
       if (c >= 0 && c < 10080) confirmTimes.push(c) // 최대 7일
     }
