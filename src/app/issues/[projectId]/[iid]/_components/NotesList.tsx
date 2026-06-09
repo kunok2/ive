@@ -135,8 +135,9 @@ export default function NotesList({
                 <div className="text-center py-10 text-ive-text-dim text-sm">{tIssue('noActivity')}</div>
               ) : (
                 [...notes].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()).map(note => {
-                const isIveUser = !!note.iveAuthorAvatar
-                const isBot = !note.system && !isIveUser && (note.body.includes('<!-- ive-bot -->') || note.body.includes('IVE(봇)'))
+                const hasBotMarker = !note.system && (note.body.includes('<!-- ive-bot -->') || note.body.includes('IVE(봇)'))
+                const isIveUser = !hasBotMarker && !!note.iveAuthorAvatar
+                const isBot = hasBotMarker
                 return (
                   <div key={note.id} className={`rounded-lg px-3 py-2 ${
                     note.system
@@ -152,7 +153,11 @@ export default function NotesList({
                         {note.system ? (
                           <><i className="fa-solid fa-gear mr-0.5" />{tIssue('system')}</>
                         ) : isBot ? (
-                          <><i className="fa-solid fa-robot mr-0.5" />{tIssue('iveBot')}</>
+                          note.iveAuthorAvatar ? (
+                            <><AgentAvatar avatar={note.iveAuthorAvatar} size="xs" /><span className="text-ive-cyan">{note.author}</span></>
+                          ) : (
+                            <><i className="fa-solid fa-robot mr-0.5" />{tIssue('iveBot')}</>
+                          )
                         ) : (
                           <>
                             {isIveUser && note.iveAuthorAvatar ? (

@@ -217,6 +217,11 @@ export async function executeTask(
       }
 
       log(`반복 횟수: ${iterationCount}차, 봇 완료 노트: ${botCompletions.length}건, 사용자 피드백: ${latestFeedback ? '있음' : '없음'}`, 'system');
+      if (latestFeedback) {
+        log('=== 사용자 피드백 ===', 'system');
+        log(latestFeedback, 'info');
+        log('=== 피드백 끝 ===', 'system');
+      }
     }
 
     // 4. 프롬프트 구성
