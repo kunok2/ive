@@ -577,7 +577,9 @@ export async function GET(req: NextRequest) {
         if (vt >= 0) d.verifyTimes.push(vt)
       }
       // 확인 시간: confirmStartedAt → confirmedAt
-      if (e.confirmedAt && e.confirmStartedAt) {
+      // 성공적으로 검증된 실행건에 대해서만 확인 시간 집계 (#461)
+      const isVerifiedSuccess = e.status === 'success' && e.verifiedAt && !e.rejectedAt
+      if (isVerifiedSuccess && e.confirmedAt && e.confirmStartedAt) {
         const ct = durationMin(e.confirmStartedAt, e.confirmedAt)
         if (ct >= 0) d.confirmTimes.push(ct)
       }
@@ -751,7 +753,13 @@ export async function GET(req: NextRequest) {
           startedAt: safeISO(e.startedAt) ?? new Date().toISOString(),
           // 처리 완료 시각 (확인 끝났으면 그 시점, 아니면 검증 종료 시점)
           // 각 후보 컬럼을 safeISO 로 정제 — DB 에 garbage 가 남아 있어도 클라이언트에선 안전.
-          resolvedAt: safeISO(e.confirmedAt) || safeISO(e.verifiedAt) || safeISO(e.rejectedAt) || safeISO(e.endedAt) || safeISO(e.startedAt) || new Date().toISOString(),
+          // 확인 시각(confirmedAt)은 해당 실행건이 성공적으로 검증(verified)된 경우에만 의미가 있음.
+          // 실패했거나 반려된 건이 나중에 다른 시도로 완료된 확인 시각을 "빌려오는" 버그 방지 (#461)
+          resolvedAt: (() => {
+            const isVerifiedSuccess = e.status === 'success' && e.verifiedAt && !e.rejectedAt
+            if (isVerifiedSuccess && e.confirmedAt) return safeISO(e.confirmedAt)
+            return safeISO(e.verifiedAt) || safeISO(e.rejectedAt) || safeISO(e.endedAt) || safeISO(e.startedAt) || new Date().toISOString()
+          })(),
           // 작업 시간: 에이전트=실행갭, 툴 직접개발=확정 work_sec (이슈 열린기간 아님)
           durationMin: Math.round(workMin(e) * 10) / 10,
           // 검증 시간 (사람이 검증한 시간): verifyStartedAt → verifiedAt | rejectedAt
@@ -763,14 +771,16 @@ export async function GET(req: NextRequest) {
           // 확인 시간 (사람이 확인한 시간): verifiedAt/rejectedAt → confirmedAt
           confirmMin: (() => {
             const verifyEnd = e.verifiedAt || e.rejectedAt
-            if (!e.confirmedAt || !verifyEnd) return null
+            const isVerifiedSuccess = e.status === 'success' && e.verifiedAt && !e.rejectedAt
+            if (!isVerifiedSuccess || !e.confirmedAt || !verifyEnd) return null
             return Math.round(durationMin(verifyEnd, e.confirmedAt) * 10) / 10
           })(),
           // 총 소요 시간: 생애주기 시작 → 최종 종료
           // 시작점은 issue_created_at 과 started_at 중 이른 값(사후 등록 케이스 보정).
           totalMin: (() => {
             const start = lifecycleStart(e.issueCreatedAt, e.startedAt) || e.startedAt
-            const end = e.confirmedAt || e.verifiedAt || e.rejectedAt || e.endedAt || e.startedAt
+            const isVerifiedSuccess = e.status === 'success' && e.verifiedAt && !e.rejectedAt
+            const end = (isVerifiedSuccess && e.confirmedAt) || e.verifiedAt || e.rejectedAt || e.endedAt || e.startedAt
             return Math.round(durationMin(start, end) * 10) / 10
           })(),
           cost: Math.round(resolveExecutionCost(e, humanRate) * 100) / 100,
@@ -823,7 +833,7 @@ export async function GET(req: NextRequest) {
     .filter(v => v >= 0)
   // 확인시간: confirmStartedAt → confirmedAt
   const confirmTimes = finishedExecs
-    .filter(e => e.confirmedAt && e.confirmStartedAt)
+    .filter(e => e.status === 'success' && e.verifiedAt && !e.rejectedAt && e.confirmedAt && e.confirmStartedAt)
     .map(e => durationMin(e.confirmStartedAt!, e.confirmedAt!))
     .filter(v => v >= 0)
   // 총시간: execution별 자체 생애주기 (대기 + 개발 + 검증대기 + 검증 + 확인대기 + 확인)
@@ -833,7 +843,8 @@ export async function GET(req: NextRequest) {
     .filter(e => e.issueCreatedAt)
     .map(e => {
       const startPoint = lifecycleStart(e.issueCreatedAt, e.startedAt) || e.startedAt
-      const endPoint = e.confirmedAt || e.verifiedAt || e.rejectedAt || e.endedAt || e.startedAt
+      const isVerifiedSuccess = e.status === 'success' && e.verifiedAt && !e.rejectedAt
+      const endPoint = (isVerifiedSuccess && e.confirmedAt) || e.verifiedAt || e.rejectedAt || e.endedAt || e.startedAt
       return durationMin(startPoint, endPoint)
     })
     .filter(v => v >= 0)
@@ -905,14 +916,15 @@ export async function GET(req: NextRequest) {
     .filter(v => v >= 0)
   // 이전 기간 확인시간: confirmStartedAt → confirmedAt
   const prevConfirmTimes = prevFinishedExecs
-    .filter(e => e.confirmedAt && e.confirmStartedAt)
+    .filter(e => e.status === 'success' && e.verifiedAt && !e.rejectedAt && e.confirmedAt && e.confirmStartedAt)
     .map(e => durationMin(e.confirmStartedAt!, e.confirmedAt!))
     .filter(v => v >= 0)
   const prevTotalTimes = prevFinishedExecs
     .filter(e => e.issueCreatedAt)
     .map(e => {
       const startPoint = lifecycleStart(e.issueCreatedAt, e.startedAt) || e.startedAt
-      const endPoint = e.confirmedAt || e.verifiedAt || e.rejectedAt || e.endedAt || e.startedAt
+      const isVerifiedSuccess = e.status === 'success' && e.verifiedAt && !e.rejectedAt
+      const endPoint = (isVerifiedSuccess && e.confirmedAt) || e.verifiedAt || e.rejectedAt || e.endedAt || e.startedAt
       return durationMin(startPoint, endPoint)
     })
     .filter(v => v >= 0)
