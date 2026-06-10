@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // 런타임/에이전트 생성물 — 린트 대상 아님 (에이전트 클론·opencode 임시 디렉토리)
+    "workspaces/**",
+    ".octmp/**",
   ]),
 ]);
 
