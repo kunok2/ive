@@ -44,6 +44,9 @@ yarn-error.log*
 /data
 /workspaces
 
+# opencode 임시 디렉토리 (에이전트 실행 중 생성되는 런타임 찌꺼기)
+.octmp/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

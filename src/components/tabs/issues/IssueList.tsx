@@ -4,7 +4,6 @@ import type { ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
 import IssueCard from './IssueCard'
 import type { IveIssue, ProjectAgent, StageInfo } from './types'
-import { CLI_CONFIG } from './types'
 
 interface GitMember {
   id: number
@@ -63,7 +62,6 @@ export default function IssueList({
   currentUserId,
   currentUserGitId,
   closing,
-  projectAgents,
   gitMembers,
   locale,
   timezone,

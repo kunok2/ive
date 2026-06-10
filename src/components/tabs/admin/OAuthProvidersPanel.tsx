@@ -21,7 +21,7 @@ type OAuthProviderRow = {
 
 export default function OAuthProvidersPanel() {
   const t = useTranslations('admin.oauth')
-  const { alert, confirm } = useDialog()
+  const { confirm } = useDialog()
   const { toast } = useToast()
   const [providers, setProviders] = useState<OAuthProviderRow[]>([])
   const [loading, setLoading] = useState(true)

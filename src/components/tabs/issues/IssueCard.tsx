@@ -54,7 +54,6 @@ export default function IssueCard({
   timezone,
   onToggleSelect,
   onNavigate,
-  onOpenAssigneeModal,
   onOpenAgentPicker,
   onCloseIssue,
   onPresetVerifierChange,

@@ -1,5 +1,5 @@
 import { Project } from "@/types";
-import { getOwnerRepo, getGitHubAuthHeaders, apiUrl } from "./common";
+import { getGitHubAuthHeaders, apiUrl } from "./common";
 
 /**
  * GitHub 저장소에 브랜치를 생성합니다.

@@ -50,7 +50,7 @@ export default function ProjectForm({ existing, onSuccess, onCancel }: Props) {
   const [labelConfirm, setLabelConfirm] = useState(existing?.labelConfirm ?? 'IVE-C')
   const [labelEnd, setLabelEnd] = useState(existing?.labelEnd ?? 'IVE-E')
   const [labelNotify, setLabelNotify] = useState(existing?.labelNotify ?? 'IVE-N')
-  const [confirmBaseBranch, setConfirmBaseBranch] = useState(existing?.confirmBaseBranch ?? '')
+  const [confirmBaseBranch] = useState(existing?.confirmBaseBranch ?? '')
 
   // Slack 작업완료 알림 채널
   const [slackNotifyChannel, setSlackNotifyChannel] = useState(existing?.slackNotifyChannel ?? '')

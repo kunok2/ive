@@ -1,7 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import { WebSocket } from 'ws'
-import { getProject, getProjectAccess, getChatSession, saveChatMessage, getAgent, updateChatSessionActivity } from './db'
+import { getProject, getChatSession, saveChatMessage, getAgent, updateChatSessionActivity } from './db'
 import { decrypt } from './crypto'
 import { runChatAgentWithCallback, isChatAgentRunning } from './chat-agent'
 import { fetchSingleIssue, downloadProjectUpload } from './provider'

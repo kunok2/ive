@@ -267,7 +267,7 @@ export function DailyTrendChart({ data, prevData, type, cur = USD_CUR }: { data:
 interface FlowDay { label: string; inflow: number | null; throughput: number | null }
 interface PrevFlowDay { label: string; prevInflow: number; prevThroughput: number }
 
-export function FlowCompareChart({ data, prevData, type }: { data: FlowDay[]; prevData?: PrevFlowDay[]; type: string }) {
+export function FlowCompareChart({ data, prevData }: { data: FlowDay[]; prevData?: PrevFlowDay[]; type: string }) {
   const tr = useTranslations('report')
   const isMobile = useIsMobile()
 

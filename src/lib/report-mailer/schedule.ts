@@ -63,8 +63,6 @@ export function calculatePreviousPeriod(reportType: ReportType, currentStart: st
   const [ey, em, ed] = currentEnd.split('-').map(Number)
   const startDate = new Date(sy, sm - 1, sd)
   const endDate = new Date(ey, em - 1, ed)
-  const diffMs = endDate.getTime() - startDate.getTime()
-  const diffDays = Math.round(diffMs / 86400000)
 
   switch (reportType) {
     case 'weekly': {

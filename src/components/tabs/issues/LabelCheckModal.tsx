@@ -23,7 +23,6 @@ export default function LabelCheckModal({
   onAutoCreate,
 }: LabelCheckModalProps) {
   const tIssue = useTranslations('issue')
-  const tProject = useTranslations('project')
   const tCommon = useTranslations('common')
 
   return (

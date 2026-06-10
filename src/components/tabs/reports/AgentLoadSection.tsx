@@ -15,7 +15,7 @@ interface AgentLoadSectionProps {
 
 export default function AgentLoadSection({ d, data, helpers }: AgentLoadSectionProps) {
   const tr = useTranslations('report')
-  const { fmtCost, fmtDur } = helpers
+  const { fmtCost } = helpers
   const [expandedAgents, setExpandedAgents] = useState<Set<string>>(new Set())
 
   if (d.agents.length === 0) return null

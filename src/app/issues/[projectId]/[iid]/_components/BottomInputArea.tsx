@@ -2,7 +2,6 @@
 
 import { useRef, useEffect, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
-import AgentAvatar from '@/components/agent/AgentAvatar'
 import { createImagePasteHandlers } from '@/lib/paste-upload'
 import AgentPickerDropdown from './AgentPickerDropdown'
 
@@ -85,8 +84,6 @@ export default function BottomInputArea({
   onPostComment, onCommentAndRetry, onCommentAndDone, onCommentAndNextStage, onCommentAndInflow,
   onStartChat, onEndChat, onSendChatMessage, onChangePreferredAgent, onToast,
 }: BottomInputAreaProps) {
-  const tIssue = useTranslations('issue')
-
   // Image paste handler for comment textarea
   const commentRef = useRef(comment)
   useEffect(() => { commentRef.current = comment }, [comment])

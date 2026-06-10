@@ -21,10 +21,9 @@ interface ReportLogEntry {
 export default function UsersPanel() {
   const t = useTranslations('admin')
   const tc = useTranslations('common')
-  const ta = useTranslations('agent')
   const tr = useTranslations('report')
   const { state } = useStore()
-  const { confirm, alert } = useDialog()
+  const { confirm } = useDialog()
   const { toast } = useToast()
   const [view, setView] = useState<UsersSubView>(() => {
     if (typeof window !== 'undefined') {

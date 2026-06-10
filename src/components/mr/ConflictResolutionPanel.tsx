@@ -19,7 +19,7 @@ interface Props {
   onClose: () => void
 }
 
-export default function ConflictResolutionPanel({ projectId, projectColor, onClose }: Props) {
+export default function ConflictResolutionPanel({ projectId, projectColor }: Props) {
   const t = useTranslations('conflict')
   const router = useRouter()
   const [mrs, setMrs] = useState<MRItem[]>([])

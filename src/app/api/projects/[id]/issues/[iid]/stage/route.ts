@@ -5,7 +5,7 @@ import { applyRoleAssignee } from '@/lib/role-assignee';
 import { notifyStageTransition } from '@/lib/slack-notify';
 import type { TaskExecution } from '@/types';
 import { getCurrentUser } from '@/lib/auth';
-import { reopenIssue, closeIssue, fetchSingleIssue, addIssueLabels, removeIssueLabels, addIssueComment, createBranch, getDefaultBranch } from '@/lib/provider';
+import { reopenIssue, fetchSingleIssue, addIssueLabels, removeIssueLabels, addIssueComment, createBranch, getDefaultBranch } from '@/lib/provider';
 import { logActivity } from '@/lib/activity';
 import { TRANSITIONS, staleStageLabelsToRemove } from '@/lib/stage-transitions';
 import fs from 'fs';

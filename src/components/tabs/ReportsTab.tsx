@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
 import { useTranslations, useLocale } from 'next-intl'
 import { formatMoney, type ResolvedCurrency } from '@/lib/currency'
 import PullToRefresh from '@/components/ui/PullToRefresh'
@@ -28,7 +27,6 @@ export type { ReportData, DiagnosisResult }
 const USD_CURRENCY: ResolvedCurrency = { code: 'USD', rate: 1, source: 'usd', updatedAt: null }
 
 export default function ReportsTab() {
-  const router = useRouter()
   const tr = useTranslations('report')
   const locale = useLocale()
 
@@ -103,7 +101,6 @@ export default function ReportsTab() {
   const [prevWeeks, setPrevWeeks] = useState<ReportData[]>([])
   const [loading, setLoading] = useState(false)
   const [diagnosis, setDiagnosis] = useState<DiagnosisResult | null>(null)
-  const [showTrend, setShowTrend] = useState(true)
 
   // ─── Flow data ───
   const today = getKSTTodayString()

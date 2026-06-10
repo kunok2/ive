@@ -131,7 +131,6 @@ export default function LiveTracePanel({ agents, projectId, onKill, onAllComplet
   const [tick, setTick] = useState(0)
   const [activities, setActivities] = useState<Record<string, ToolActivity>>({})
   const { state } = useStore()
-  const userLocale = state.user?.locale
   const userTz = state.user?.timezone
   const prevRunningRef = useRef<number>(0)
 
