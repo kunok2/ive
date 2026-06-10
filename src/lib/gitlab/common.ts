@@ -40,18 +40,6 @@ export async function refreshGitLabToken(repoUrl: string, clientId: string, clie
   return await res.json(); // { access_token, refresh_token, expires_in, ... }
 }
 
-/**
- * 프로젝트 ID를 추출합니다.
- */
-function getProjectId(repoUrl: string): string {
-  try {
-    const url = new URL(repoUrl.replace(/\.git$/, ''));
-    const parts = url.pathname.split('/').filter(p => p);
-    return parts[parts.length - 1] || "";
-  } catch (e) {
-    return "";
-  }
-}
 
 /**
  * 저장소 URL에서 GitLab API 베이스 URL을 추출합니다.

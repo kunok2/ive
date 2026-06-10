@@ -11,7 +11,7 @@ interface ProfileEmailSectionProps {
   onSuccess?: () => void
 }
 
-export default function ProfileEmailSection({ email, expanded, onToggle, onEmailChanged, onSuccess }: ProfileEmailSectionProps) {
+export default function ProfileEmailSection({ expanded, onToggle, onEmailChanged, onSuccess }: ProfileEmailSectionProps) {
   const t = useTranslations('auth')
 
   const [newEmail, setNewEmail] = useState('')

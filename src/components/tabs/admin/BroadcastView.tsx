@@ -19,7 +19,7 @@ export default function BroadcastView({ loadDraftId, onDraftConsumed }: { loadDr
   const { state } = useStore()
   const userLocale = state.user?.locale
   const userTz = state.user?.timezone
-  const { confirm, alert } = useDialog()
+  const { confirm } = useDialog()
   const { toast } = useToast()
   const [users, setUsers] = useState<User[]>([])
   const [selectedIds, setSelectedIds] = useState<string[]>([])

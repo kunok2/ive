@@ -368,7 +368,6 @@ export function generateReportHtml(
   const prevVerifiedCount = hasPrev
     ? getGlobalIssuesCompletedInRange(prevPeriod.start, prevPeriod.end).size
     : 0
-  const prevCurrentWaiting = 0
 
   // ─── 프로젝트별 집계 ───
   const byProject = new Map<string, { name: string; color: string; total: number; success: number; failed: number; cost: number; tokens: number; uniqueIssues: number }>()

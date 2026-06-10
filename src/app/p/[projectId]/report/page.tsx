@@ -60,16 +60,6 @@ const translations: Record<string, Record<string, string>> = {
 
 type Locale = 'ko' | 'en'
 
-function useLocale(): Locale {
-  const searchParams = useSearchParams()
-  const lang = searchParams.get('lang')
-  if (lang === 'en' || lang === 'ko') return lang
-
-  // Default to 'ko' during SSR to avoid hydration mismatch
-  // Client-side detection happens after mount
-  return 'ko'
-}
-
 function useClientLocale(): Locale {
   const searchParams = useSearchParams()
   const lang = searchParams.get('lang')

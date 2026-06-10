@@ -24,7 +24,6 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
   const [killing, setKilling] = useState<string | null>(null)
   const [tick, setTick] = useState(0)
   const { state } = useStore()
-  const userLocale = state.user?.locale
   const userTz = state.user?.timezone
 
   useEffect(() => {

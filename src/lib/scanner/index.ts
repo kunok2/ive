@@ -613,7 +613,7 @@ async function scanProject(project: Project, force: boolean = false) {
       // 먼저 생성된 이슈부터 배정 (created_at 오름차순)
       waitingIssues.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
       slog.info(`Found ${waitingIssues.length} waiting issues for ${project.name}`);
-      const { assigned, waiting } = await processIssues(project, waitingIssues, decryptedToken);
+      const { waiting } = await processIssues(project, waitingIssues, decryptedToken);
       issueCount += waiting;
     }
 

@@ -35,7 +35,6 @@ export default function ConnectionSection({
   usesOAuthToken,
   onUsesOAuthTokenChange,
   oauthInfo,
-  avatarUrl,
   onAvatarUrlChange,
   baseBranch,
   onBaseBranchChange,

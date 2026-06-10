@@ -24,7 +24,6 @@ export default function ProjectHeader({
   isHistoryTab,
   loading,
   closedLoading,
-  showAddForm,
   onToggleAddForm,
   onEnterBulkMode,
   onRefresh,

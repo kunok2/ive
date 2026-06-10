@@ -41,7 +41,6 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
   const tc = useTranslations('common')
   const te = useTranslations('execution')
   const { state } = useStore()
-  const userLocale = state.user?.locale
   const userTz = state.user?.timezone
   useEffect(() => {
     const timer = setInterval(() => setTick(t => t + 1), 1000)

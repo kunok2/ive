@@ -21,7 +21,7 @@ export function generateAlerts(
   fmtDur: (min: number) => string,
   formatCost: (n: number) => string = fmtCost,
 ): AlertCard[] {
-  const { summary, prevSummary, lifecycle, prevLifecycle, waitingTrend, byAgent } = data
+  const { prevSummary, lifecycle, prevLifecycle, waitingTrend, byAgent } = data
   const today = getKSTToday()
   const { costPerTask, prevCostPerTask } = flow
   const totalInflow = flow.inflow

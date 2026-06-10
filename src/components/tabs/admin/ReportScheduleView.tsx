@@ -23,7 +23,7 @@ export default function ReportScheduleView() {
   const t = useTranslations('admin')
   const tc = useTranslations('common')
   const tr = useTranslations('report')
-  const { confirm, alert } = useDialog()
+  const { confirm } = useDialog()
   const { toast } = useToast()
   const [schedules, setSchedules] = useState<ReportScheduleState[]>([])
   const [users, setUsers] = useState<User[]>([])

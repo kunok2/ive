@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
-import { useDialog } from '@/components/ui/ConfirmDialog'
 import { useToast } from '@/components/ui/Toast'
 import ModelSelect from './ModelSelect'
 import ModelPricingSection from './ModelPricingSection'
@@ -173,7 +172,6 @@ const CLI_ITEMS: { cliName: string; label: string; icon: string; pathKey: string
 export default function SettingsPanel() {
   const t = useTranslations('admin')
   const tc = useTranslations('common')
-  const { alert } = useDialog()
   const { toast } = useToast()
   const [settings, setSettings] = useState<Record<string, string>>({})
   const [passwordsSet, setPasswordsSet] = useState<Record<string, boolean>>({})

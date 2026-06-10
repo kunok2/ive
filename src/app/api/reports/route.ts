@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { getExecutionsInRange, getDailyWaitingTrend, getDailyWaitingTrendByAgent, getAgent, getVerifierBacklogForReport, getIssuesCompletedInRange, getIssuesStartedInRange, getAgentHistoricalDailyCapacity } from '@/lib/db'
 import { resolveExecutionCost, resolveExecutionCostBreakdown, getHumanRate, humanWorkMinutes } from '@/lib/token-pricing'
-import { getKSTTodayString, utcISOToKSTDate, utcISOToKSTMonth, kstDateToUTCISO } from '@/lib/date-utils'
+import { getKSTTodayString, utcISOToKSTDate, utcISOToKSTMonth } from '@/lib/date-utils'
 import { isBotName } from '@/lib/git-bot'
 
 function getWeekRange(date: Date): { start: string; end: string } {
@@ -140,8 +140,6 @@ export async function GET(req: NextRequest) {
 
   // Summary
   const totalTasks = execs.length
-  const rangeStartISO = kstDateToUTCISO(range.start)
-  const rangeEndISO = kstDateToUTCISO(range.end)
 
   // 유입 = 이슈가 처음 시작된 시각이 기간 내인 이슈 (기간 내 exec 유무와 무관).
   // 주 경계: W1에 시작 → W2 retry된 이슈는 W1 유입에만 잡힘.

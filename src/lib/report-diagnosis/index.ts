@@ -17,7 +17,7 @@ export type {
 
 import type { ReportData, DiagnosisResult, FlowMetrics } from './types'
 import {
-  getPeriodDays, getKSTToday, getElapsedDays, healthFromUtil,
+  getKSTToday, getElapsedDays, healthFromUtil,
   defaultFmtDur, fmtCost,
   computeAgentCapacities, computeProjectFlows,
   computeResourceDiagnosis, computeAgentLoads,
@@ -42,16 +42,14 @@ export function diagnose(
   const historicalCapFn = (agentId: string) => historicalCapMap.get(agentId) ?? { dailyCap: 0, samples: 0 }
 
   const fmtDur = formatDur
-  const { period, summary, prevSummary, byAgent, byVerifier, lifecycle, prevLifecycle, waitingTrend } = data
+  const { period, summary, prevSummary, byVerifier, lifecycle, prevLifecycle, waitingTrend } = data
 
-  const periodDays = getPeriodDays(period.start, period.end, period.type)
   const elapsedDays = getElapsedDays(period.start, period.type)
   const today = getKSTToday()
 
   // ─── 1. 흐름 지표 ───
 
   const pastWaiting = waitingTrend.filter(d => d.date <= today)
-  const startWaiting = pastWaiting.length > 0 ? pastWaiting[0].total : 0
   const endWaiting = pastWaiting.length > 0 ? pastWaiting[pastWaiting.length - 1].total : 0
   const startProcWaiting = pastWaiting.length > 0 ? pastWaiting[0].totalWaiting : 0
   const endProcWaiting = pastWaiting.length > 0 ? pastWaiting[pastWaiting.length - 1].totalWaiting : 0

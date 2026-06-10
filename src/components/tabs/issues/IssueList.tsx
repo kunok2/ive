@@ -62,7 +62,6 @@ export default function IssueList({
   currentUserId,
   currentUserGitId,
   closing,
-  projectAgents,
   gitMembers,
   locale,
   timezone,
