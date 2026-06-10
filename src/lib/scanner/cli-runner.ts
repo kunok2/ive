@@ -19,33 +19,10 @@ import {
   formatStreamEventMarkdown,
   formatToolInput,
 } from "./formatters";
+import { stripBenignOpencodeStderr, stripBenignGeminiStderr, detectRateLimit } from "./cli-noise";
 
 // resolveCliPath는 cli-invocation으로 이동. 기존 import 경로(execute.ts) 호환을 위해 re-export.
 export { resolveCliPath };
-
-/**
- * opencode가 stderr로 내보내는 양성(benign) 잡음 줄을 걸러낸다.
- * opencode는 자기 내부 DB(~/.local/share/opencode/opencode.db)를 처음 만들 때
- * "Performing one time database migration..." 류 배너를 stderr에 찍는다. IVE DB와 무관하며,
- * 이걸 끄는 opencode 플래그가 없으므로(실측 확인) 우리 쪽에서 거른다.
- * 진짜 오류(인증 실패, 모델 미지원 등)는 통과시켜야 하므로 알려진 줄만 제거한다.
- */
-const OPENCODE_BENIGN_STDERR = [
-  /performing one time database migration/i,
-  /^sqlite-migration:/i,
-  /database migration complete/i,
-  /service=db\b.*\b(opening database|applying migrations)/i,
-];
-function stripBenignOpencodeStderr(raw: string): string {
-  return raw
-    .split('\n')
-    .filter((line) => {
-      const t = line.trim();
-      if (!t) return true; // 빈 줄은 join에서 정리됨
-      return !OPENCODE_BENIGN_STDERR.some((re) => re.test(t));
-    })
-    .join('\n');
-}
 
 export interface CliRunResult {
   durationSeconds: number;
@@ -146,6 +123,8 @@ export async function runCliProcess(
     let detectedModel = '';
     // opencode 오류 이벤트 메시지(있으면 종료 시 표면화)
     let ocErrorMsg = '';
+    // 사용량 한도(rate limit/quota) 의심 줄. 실패 종료 시 원인으로 표면화한다.
+    let rateLimitHint = '';
     // Gemini: assistant 메시지가 delta로 여러 번 쪼개져 오므로, 연속된 assistant 구간을 1턴으로 묶기 위한 플래그
     let prevGeminiAssistant = false;
 
@@ -196,7 +175,10 @@ export async function runCliProcess(
         // (opencode는 오류 시에도 exit 0으로 끝나 성공으로 오인될 수 있음)
         if (event.type === 'error' || event.type === 'session.error') {
           const emsg = event.error?.data?.message ?? event.error?.message ?? event.error ?? event.message ?? '알 수 없는 오류';
-          if (!ocErrorMsg) ocErrorMsg = typeof emsg === 'string' ? emsg : JSON.stringify(emsg);
+          const emsgStr = typeof emsg === 'string' ? emsg : JSON.stringify(emsg);
+          if (!ocErrorMsg) ocErrorMsg = emsgStr;
+          const rl = detectRateLimit(emsgStr);
+          if (rl) rateLimitHint = rl;
         }
       } else if (isCodex) {
         // Codex exec --json 이벤트 처리
@@ -252,8 +234,18 @@ export async function runCliProcess(
         } else if (event.type === 'tool_result' || (event.type === 'message' && event.role === 'user')) {
           prevGeminiAssistant = false;
         }
+        // 한도 초과 감지: error 이벤트 또는 비정상 종료(result.status!=success)
+        if (event.type === 'error') {
+          const emsg = event.error?.message ?? event.error ?? event.message ?? '';
+          const rl = detectRateLimit(typeof emsg === 'string' ? emsg : JSON.stringify(emsg));
+          if (rl) rateLimitHint = rl;
+        }
         // 토큰 누적 (result.stats; 비용 필드 없음 → DB 단가로 환산)
         if (event.type === 'result') {
+          if (event.status && event.status !== 'success') {
+            const rl = detectRateLimit(`${event.status} ${JSON.stringify(event.error ?? '')}`);
+            if (rl) rateLimitHint = rl;
+          }
           const s = event.stats ?? {};
           // input_tokens는 캐시 포함 총 입력, cached는 캐시 읽기분(claude 패턴과 동일하게 총입력에 포함)
           totalInputTokens += Number(s.input_tokens ?? 0);
@@ -317,12 +309,20 @@ export async function runCliProcess(
     child.stderr?.on('data', (data: Buffer) => {
       resetIdleTimer();
       const raw = data.toString();
-      // opencode 양성 마이그레이션 배너는 경고 로그/실패진단 양쪽에서 제외한다.
-      const cleaned = isOpenCode ? stripBenignOpencodeStderr(raw) : raw;
+      // CLI별 양성 배너는 경고 로그/실패진단 양쪽에서 제외한다.
+      // (opencode: DB 마이그레이션 / gemini: 256-color·YOLO·ripgrep 배너)
+      const cleaned = isOpenCode
+        ? stripBenignOpencodeStderr(raw)
+        : isGemini
+          ? stripBenignGeminiStderr(raw)
+          : raw;
       stderrBuffer += cleaned;
       if (stderrBuffer.length > STDERR_BUFFER_MAX) {
         stderrBuffer = stderrBuffer.slice(-STDERR_BUFFER_MAX);
       }
+      // 한도 초과 의심 줄을 기억(가장 최근 것). 실패 시 원인으로 표면화한다.
+      const rl = detectRateLimit(cleaned);
+      if (rl) rateLimitHint = rl;
       const text = cleaned.trim();
       if (text) log(text, 'warn');
     });
@@ -361,6 +361,13 @@ export async function runCliProcess(
         return;
       }
       const detail: string[] = [];
+      // 사용량 한도(rate limit/quota)로 추정되면 원인을 최상단에 명시한다.
+      // (CLI 종료코드만으로는 "왜 실패했는지" 알기 어려워 사용자 혼란 → #463 후속)
+      if (rateLimitHint) {
+        const rlMsg = `🚦 사용량/속도 제한(rate limit·quota) 도달로 추정됩니다 — ${agent.cliName}: ${rateLimitHint}`;
+        log(rlMsg, 'error');
+        detail.push(rlMsg);
+      }
       if (ocErrorMsg) {
         detail.push(`OpenCode 오류: ${ocErrorMsg}`);
       }
