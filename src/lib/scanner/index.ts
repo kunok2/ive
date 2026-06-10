@@ -34,10 +34,11 @@ import {
   getProjectWithUserOAuth,
   updateUserOAuthTokens,
   getOAuthProviderRaw,
+  completeMergedIssue,
 } from "../db";
 import { fetchProjectMembers } from "../provider";
 import { decrypt, encrypt } from "../crypto";
-import { removeIssueLabels, addIssueComment, createBranch, getDefaultBranch, closeIssue } from "../provider";
+import { removeIssueLabels, addIssueComment, createBranch, getDefaultBranch, closeIssue, fetchSingleIssue, fetchMRByBranch } from "../provider";
 import {
   fetchGitLabIssues,
   refreshGitLabToken,
@@ -625,9 +626,25 @@ async function scanProject(project: Project, force: boolean = false) {
 
     for (const row of staleRows) {
       if (!processedIids.has(row.issue_iid)) {
-        // 이번 스캔 결과(Open 이슈)에 없음 -> Closed 되었거나 IVE 레이블이 제거됨
-        slog.info(`Cleaning stale issue #${row.issue_iid} in project ${project.name} (last stage: ${row.cached_stage})`)
-        upsertIssueStageSnapshot(project.id, row.issue_iid, {
+        const iid = row.issue_iid
+        // 이번 스캔 결과(Open 이슈)에 없음 -> Closed 되었거나 IVE 레이블이 제거됨.
+        // 단순 실패로 마감하기 전에 "메인 브랜치 머지로 닫힌 완료 작업"인지 먼저 판정한다. (#467)
+        let mergeComplete = false
+        try {
+          const r = await reconcileClosedIssue(project, iid, {
+            fetchIssue: () => fetchSingleIssue(project, iid, decryptedToken),
+            fetchDevMR: () => fetchMRByBranch(project, decryptedToken, `dev-${iid}`),
+          })
+          mergeComplete = r.outcome === 'merged_complete'
+          if (mergeComplete) {
+            slog.info(`[MERGE-COMPLETE] Issue #${iid} — 메인 브랜치 머지로 닫힘, 완료 처리 (잔류 exec ${r.closedExecs}건 success, mergedAt: ${r.mergedAt ?? 'now'})`)
+          }
+        } catch (e) {
+          slog.warn(`reconcileClosedIssue failed (#${iid}):`, (e as Error).message)
+        }
+
+        slog.info(`Cleaning stale issue #${iid} in project ${project.name} (last stage: ${row.cached_stage}, ${mergeComplete ? 'merged-complete' : 'abandoned'})`)
+        upsertIssueStageSnapshot(project.id, iid, {
           cachedStage: 'done',
           assigneeUsername: null,
           assigneeName: null,
@@ -636,15 +653,27 @@ async function scanProject(project: Project, force: boolean = false) {
           assigneeGitUserId: null,
           issueTitle: null,
         })
-        // 잔류 활성 execution 정리 (검증자 execution 포함)
-        const lingeringExecs = getDb().prepare(
-          "SELECT id FROM task_executions WHERE project_id = ? AND issue_iid = ? AND status IN ('running', 'assigned')"
-        ).all(project.id, row.issue_iid) as { id: string }[]
-        for (const ex of lingeringExecs) {
-          updateExecutionStatus(ex.id, 'failed', new Date().toISOString())
-        }
-        if (lingeringExecs.length > 0) {
-          slog.info(`Cleaned ${lingeringExecs.length} lingering execution(s) for stale issue #${row.issue_iid}`)
+
+        if (mergeComplete) {
+          // completeMergedIssue 가 이미 잔류 활성 execution 을 success 로 마감함.
+          try {
+            createActivityLog({
+              userId: project.userId, category: 'task', action: 'detect_merge_complete',
+              detail: `메인 브랜치 머지로 완료 처리: #${iid} (${project.name}, 이전 단계: ${row.cached_stage})`,
+              targetType: 'issue', targetId: `${project.id}-${iid}`,
+            })
+          } catch (e) { slog.error({ err: e }, 'Failed to log merge-complete activity:') }
+        } else {
+          // 머지 흔적 없음(수동 닫기/라벨 제거) -> 잔류 활성 execution 을 failed 로 마감 (기존 동작)
+          const lingeringExecs = getDb().prepare(
+            "SELECT id FROM task_executions WHERE project_id = ? AND issue_iid = ? AND status IN ('running', 'assigned')"
+          ).all(project.id, iid) as { id: string }[]
+          for (const ex of lingeringExecs) {
+            updateExecutionStatus(ex.id, 'failed', new Date().toISOString())
+          }
+          if (lingeringExecs.length > 0) {
+            slog.info(`Cleaned ${lingeringExecs.length} lingering execution(s) for stale issue #${iid}`)
+          }
         }
       }
     }
@@ -882,4 +911,60 @@ export async function reconcileExternalIssue(
   }
 
   return { resynced, closed };
+}
+
+/**
+ * 스캔에서 사라진(stale) 이슈가 "메인 브랜치 머지로 닫힌 완료 작업"인지 판정한다. (#467)
+ *
+ * 검증/확인 단계의 작업이 MR/PR 머지로 자동 닫히면(Closes #iid + source branch 삭제)
+ * 이슈가 IVE-E(완료) 단계를 거치지 않고 스캔에서 빠진다. 이 경우 단순 좀비(실패)로
+ * 마감하면 안 되고, "완료(success)"로 처리해야 한다.
+ *
+ * 판정 기준:
+ *   - 이슈가 closed 상태이고
+ *   - 작업 브랜치(dev-{iid})의 MR/PR 이 merged 이면 → 머지 완료('merged_complete')
+ *   그 외(여전히 열림=라벨만 제거, 수동 닫기로 머지 없음 등)는 'abandoned'.
+ *
+ * merged_complete 면 completeMergedIssue 로 잔류 활성 execution 을 success 로 마감하고
+ * (검증 진행 중이었으면 verified_at 기록), 'abandoned' 면 호출측이 기존 실패 처리를 한다.
+ *
+ * 네트워크 호출(fetchIssue/fetchDevMR)은 주입받아 테스트 가능하게 한다.
+ * 조회 실패 시 보수적으로 'abandoned' 로 떨어진다 (잘못된 완료 처리 방지).
+ */
+export async function reconcileClosedIssue(
+  project: Project,
+  iid: number,
+  deps: {
+    fetchIssue: () => Promise<{ state?: string } | null>,
+    fetchDevMR: () => Promise<{ state?: string; merged_at?: string | null } | null>,
+  },
+): Promise<{ outcome: 'merged_complete' | 'abandoned'; mergedAt: string | null; closedExecs: number }> {
+  let issue: { state?: string } | null = null;
+  try {
+    issue = await deps.fetchIssue();
+  } catch (e) {
+    slog.warn(`reconcileClosedIssue: fetchIssue failed (#${iid}):`, (e as Error).message);
+    return { outcome: 'abandoned', mergedAt: null, closedExecs: 0 };
+  }
+
+  // 이슈가 여전히 열려 있으면(IVE 라벨만 제거 등) 머지 완료가 아니다.
+  if (!issue || issue.state !== 'closed') {
+    return { outcome: 'abandoned', mergedAt: null, closedExecs: 0 };
+  }
+
+  let mr: { state?: string; merged_at?: string | null } | null = null;
+  try {
+    mr = await deps.fetchDevMR();
+  } catch (e) {
+    slog.warn(`reconcileClosedIssue: fetchDevMR failed (#${iid}):`, (e as Error).message);
+  }
+
+  // GitLab은 state='merged', GitHub은 normalizePR 이 merged_at 있으면 state='merged' 로 정규화.
+  if (mr && mr.state === 'merged') {
+    const mergedAt = mr.merged_at || null;
+    const closedExecs = completeMergedIssue(project.id, iid, mergedAt);
+    return { outcome: 'merged_complete', mergedAt, closedExecs };
+  }
+
+  return { outcome: 'abandoned', mergedAt: null, closedExecs: 0 };
 }

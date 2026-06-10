@@ -214,8 +214,8 @@ export function markIssueVerifyStarted(projectId: string, issueIid: number) {
   `).run(now, projectId, issueIid)
 }
 
-export function markIssueVerified(projectId: string, issueIid: number, verifier?: { name: string; avatar?: string; username?: string | null; userId?: string | null }) {
-  const now = new Date().toISOString()
+export function markIssueVerified(projectId: string, issueIid: number, verifier?: { name: string; avatar?: string; username?: string | null; userId?: string | null }, at?: string) {
+  const now = sanitizeTimestamp(at) || new Date().toISOString()
   let username = verifier?.username ?? null
   let name = verifier?.name ?? null
   let avatar = verifier?.avatar ?? null
@@ -281,6 +281,37 @@ export function markIssueVerifyRejected(projectId: string, issueIid: number, ver
     )
     AND verify_started_at IS NOT NULL AND verified_at IS NULL AND rejected_at IS NULL AND id NOT LIKE 'ex-verify-%'
   `).run(now, name, avatar, username, userId, projectId, issueIid)
+}
+
+/**
+ * 메인 브랜치 머지로 닫힌 작업을 "완료(success)"로 마감한다. (#467)
+ *
+ * 검증/확인 단계의 작업이 MR/PR 머지로 자동 닫히면(Closes #iid + source branch 삭제)
+ * 이슈가 IVE-E(완료) 단계를 거치지 않고 스캔에서 사라진다. 스캐너의 stale(좀비) 정리는
+ * 이를 단순 좀비로 보고 잔류 execution 을 'failed' 로 닫아, 실제로 머지·완료된 작업이
+ * 보고서에서 "실패"로 집계되던 문제를 바로잡는다.
+ *
+ * 수행:
+ *   1) 잔류 활성 execution(running/assigned — 검증/확인 placeholder 포함)을
+ *      'success'(ended_at = mergedAt)로 마감.
+ *   2) 검증이 진행 중이었다면(verify_started_at 존재, verified_at/rejected_at 없음)
+ *      verified_at 을 mergedAt 으로 기록 — 머지는 검증 통과를 의미. verifier 는 이슈
+ *      담당자로 fallback. (검증 미시작 시 타임스탬프를 임의 생성하지 않아 통계 왜곡 방지)
+ *
+ * @param mergedAt 머지 시각(ISO). 없거나 파싱 불가하면 현재 시각.
+ * @returns success 로 마감한 활성 execution 수
+ */
+export function completeMergedIssue(projectId: string, issueIid: number, mergedAt?: string | null): number {
+  const endedAt = sanitizeTimestamp(mergedAt) || new Date().toISOString()
+  const active = getDb().prepare(
+    "SELECT id FROM task_executions WHERE project_id = ? AND issue_iid = ? AND status IN ('running', 'assigned')"
+  ).all(projectId, issueIid) as { id: string }[]
+  for (const ex of active) {
+    updateExecutionStatus(ex.id, 'success', endedAt)
+  }
+  // 검증이 진행 중이었다면 머지 시각으로 검증 완료 기록 (no-op safe: 미시작/이미 종결 시 무시)
+  markIssueVerified(projectId, issueIid, undefined, endedAt)
+  return active.length
 }
 
 export function resetIssueScheduledAt(projectId: string, issueIid: number) {
