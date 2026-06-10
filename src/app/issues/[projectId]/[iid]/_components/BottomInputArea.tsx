@@ -2,7 +2,6 @@
 
 import { useRef, useEffect, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
-import AgentAvatar from '@/components/agent/AgentAvatar'
 import { createImagePasteHandlers } from '@/lib/paste-upload'
 import AgentPickerDropdown from './AgentPickerDropdown'
 

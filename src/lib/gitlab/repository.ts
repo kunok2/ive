@@ -1,5 +1,5 @@
 import { Project } from "@/types";
-import { getProjectPath, getAuthHeaders, apiUrl } from "./common";
+import { getAuthHeaders, apiUrl } from "./common";
 
 /**
  * GitLab 저장소에 브랜치를 생성합니다.

@@ -3,7 +3,7 @@
 import { useTranslations } from 'next-intl'
 import { useStore } from '@/lib/store'
 import { formatDateMedium } from '@/lib/format-date'
-import StageActionButtons, { type StageAction } from './StageActions'
+import { type StageAction } from './StageActions'
 import StageProgress from './StageProgress'
 import DeadlineProgress from './DeadlineProgress'
 import { type PresetRole } from '@/components/issue/RoleAvatarBar'
@@ -106,17 +106,16 @@ interface IssueHeaderProps {
 }
 
 export default function IssueHeader({
-  issue, stageInfo, actions, stageChanging, iterationCount,
-  canProgressStage, canEditAssignees, isClosing, editMode, editTitle, editDesc, saving, showDesc,
+  issue, iterationCount,
+  canEditAssignees, isClosing, editMode, editTitle, editDesc, saving, showDesc,
   projectId, gitMembers, preferredAgent,
-  onBack, onStageAction, onCloseIssue, onStartEdit, onSaveEdit, onCancelEdit,
+  onBack, onCloseIssue, onStartEdit, onSaveEdit, onCancelEdit,
   onSetEditTitle, onSetEditDesc, onSetShowDesc, onOpenAssigneePicker, onOpenAgentPicker,
   onPresetVerifierChange, onPresetConfirmerChange, onDueDateChange, isCreator, onToast,
 }: IssueHeaderProps) {
   const { state } = useStore()
   const tc = useTranslations('common')
   const tIssue = useTranslations('issue')
-  const tAuth = useTranslations('auth')
 
   // 완료된 작업(닫힘 또는 done 단계)은 담당자/검증자/확인자/마감일 모두 수정 불가.
   // 이미 종결된 흐름을 사후 변경하면 통계와 보고서가 어그러진다.

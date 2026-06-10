@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getAgent, getSystemSetting } from '@/lib/db'
 import { isAgentAvailableNow } from '@/types'
-import { defaultLocale } from '@/i18n/config'
 import { getCurrentUser } from '@/lib/auth'
 import { logActivity } from '@/lib/activity'
 import { existsSync } from 'fs'

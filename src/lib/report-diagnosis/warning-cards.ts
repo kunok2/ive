@@ -4,7 +4,7 @@
 
 import type {
   ReportData, AlertCard, ProjectFlow, AgentLoad,
-  VerifierLoad, VerifierDiagnosis, FlowMetrics, I18nMessage,
+  VerifierLoad, VerifierDiagnosis, FlowMetrics,
   TrendForecast,
 } from './types'
 import { fmtCost, getKSTToday } from './resource-analysis'

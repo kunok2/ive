@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getProject, getProjectAuthToken, getProjectAccess, isIssueAssignee } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
-import { fetchMRByBranch, fetchMRChanges, fetchSingleIssue } from '@/lib/provider'
+import { fetchMRByBranch, fetchMRChanges } from '@/lib/provider'
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string; iid: string }> }) {
   const user = await getCurrentUser()
