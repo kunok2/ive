@@ -12,7 +12,7 @@
 // im:write 권한 필요(없으면 Slack API 실패 → 조용히 무시).
 import { Project, User } from '@/types'
 import { fetchSingleIssue } from './provider'
-import { getUserByOAuthId, getSystemSetting } from './db'
+import { getUserByOAuthId, getUserByGitUsername, getSystemSetting } from './db'
 import { sendSlackDM } from './slack'
 
 /** IVE 공개 베이스 URL. system_settings['oauth.redirect_base'] → env → 빈 값(스킵). 백그라운드(스캐너)에서도 동작. */
@@ -34,14 +34,22 @@ function extractLabels(issue: any): string[] {
   return raw.map((l: any) => (typeof l === 'string' ? l : l?.name)).filter(Boolean)
 }
 
-/** 이슈 JSON에서 담당자 provider 측 user id 배열 추출 (GitLab/GitHub 공통) */
-function extractAssigneeIds(issue: any): string[] {
+/** provider 측 사용자 식별자(숫자 id + username). 둘 다 보존해 id→username 순으로 매칭한다. */
+interface GitIdentity { id: string | null; username: string | null }
+
+/** 이슈 JSON에서 단계별 대상자(검증/확인=담당자, 완료=작성자)의 id+username 추출 (GitLab/GitHub 공통) */
+function extractGitIdentities(issue: any, kind: StageNotifyKind): GitIdentity[] {
+  const pick = (a: any): GitIdentity => ({
+    id: a?.id != null ? String(a.id) : null,
+    username: a?.username || a?.login || null,
+  })
+  if (kind === 'done') {
+    return issue?.author ? [pick(issue.author)] : []
+  }
   const arr = Array.isArray(issue?.assignees)
     ? issue.assignees
     : issue?.assignee ? [issue.assignee] : []
-  return arr
-    .map((a: any) => (a?.id != null ? String(a.id) : ''))
-    .filter((id: string) => !!id)
+  return arr.map(pick).filter((g: GitIdentity) => g.id || g.username)
 }
 
 /** 수신자(IVE 사용자)의 언어. locale 미지정이면 ko. */
@@ -62,18 +70,23 @@ export interface StageRecipient {
  *  - Git id → IVE 유저 매핑 후, Slack 연결 + 수신 허용(slack_notify) 인 사람만. id 중복 제거.
  */
 export function resolveStageRecipients(project: Project, issue: any, kind: StageNotifyKind): StageRecipient[] {
-  const gitUserIds = kind === 'done'
-    ? (issue?.author?.id != null ? [String(issue.author.id)] : [])
-    : extractAssigneeIds(issue)
-  if (gitUserIds.length === 0) return []
+  const idents = extractGitIdentities(issue, kind)
+  if (idents.length === 0) return []
 
   const seen = new Set<string>()
-  return gitUserIds
-    .map(id => getUserByOAuthId(project.provider, id))
-    .filter((u): u is NonNullable<typeof u> => !!u)
-    .filter(u => u.slackNotify && !!u.slackUserId)
-    .filter(u => (seen.has(u.id) ? false : (seen.add(u.id), true)))
-    .map(u => ({ iveUserId: u.id, slackUserId: u.slackUserId as string, locale: pickLocale(u) }))
+  const out: StageRecipient[] = []
+  for (const { id, username } of idents) {
+    // 1차: 숫자 id 로 매칭(해당 provider 로 로그인한 계정). 실패 시 2차: username 으로 매칭
+    // (Slack 등 다른 provider 로 로그인해 git oauth id 가 없어도 gitlab_username 만 있으면 연결).
+    let u = id ? getUserByOAuthId(project.provider, id) : null
+    if (!u && username) u = getUserByGitUsername(project.provider, username)
+    if (!u) continue
+    if (!u.slackNotify || !u.slackUserId) continue // 본인 veto / Slack 미연결
+    if (seen.has(u.id)) continue
+    seen.add(u.id)
+    out.push({ iveUserId: u.id, slackUserId: u.slackUserId, locale: pickLocale(u) })
+  }
+  return out
 }
 
 /** 이슈에서 메시지 링크 블록 구성 요소(IVE 링크 우선, 그 다음 provider 링크)를 만든다. */

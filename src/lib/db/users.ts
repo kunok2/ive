@@ -18,6 +18,8 @@ export function mapUser(r: any): User {
     currency: r.currency ?? null,
     currencyRate: r.currency_rate ?? null,
     rateMultiplier: r.rate_multiplier ?? 1,
+    gitlabUsername: r.gitlab_username ?? null,
+    githubUsername: r.github_username ?? null,
     slackUserId: r.slack_user_id ?? '',
     slackNotify: r.slack_notify == null ? true : r.slack_notify === 1,
     mailUnsubscribed: r.mail_unsubscribed === 1,
@@ -49,6 +51,32 @@ export function getUserByOAuthId(providerType: 'github' | 'gitlab', oauthUserId:
     WHERE op.type = ? AND u.oauth_user_id = ?
     LIMIT 1
   `).get(providerType, oauthUserId) as any
+  return row ? mapUser(row) : null
+}
+
+/**
+ * Git 사용자명(username/login)으로 IVE 사용자 lookup.
+ * getUserByOAuthId(숫자 id 매칭) 가 실패할 때의 fallback —
+ * Slack 등 다른 provider 로 로그인해 GitLab/GitHub oauth_user_id 가 없는 계정이라도,
+ * 본인의 gitlab_username/github_username 만 채워져 있으면 담당자/확인자로 식별된다.
+ * (Git 이슈의 assignee 는 항상 username 을 가지므로 이 경로로 연결 가능.)
+ * 대소문자 무시 매칭.
+ */
+/**
+ * 본인 git username 저장. provider 별로 컬럼 분리(gitlab_username/github_username).
+ * 빈 문자열이면 연결 해제. OAuth 로그인 시 자동 + 프로필에서 직접 입력 둘 다 사용.
+ */
+export function updateUserGitUsername(id: string, providerType: 'github' | 'gitlab', username: string) {
+  const col = providerType === 'github' ? 'github_username' : 'gitlab_username'
+  getDb().prepare(`UPDATE users SET ${col} = ? WHERE id = ?`).run(username.trim() || null, id)
+}
+
+export function getUserByGitUsername(providerType: 'github' | 'gitlab', username: string): User | null {
+  if (!username) return null
+  const col = providerType === 'github' ? 'github_username' : 'gitlab_username'
+  const row = getDb().prepare(
+    `SELECT * FROM users WHERE ${col} IS NOT NULL AND ${col} <> '' AND ${col} = ? COLLATE NOCASE LIMIT 1`
+  ).get(username) as any
   return row ? mapUser(row) : null
 }
 
