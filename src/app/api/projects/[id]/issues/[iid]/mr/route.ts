@@ -4,6 +4,22 @@ import { getCurrentUser } from '@/lib/auth'
 import { logActivity } from '@/lib/activity'
 import { fetchMRByBranch, mergeMR, closeMR } from '@/lib/provider'
 import { getProjectTokenCtx, withGitToken, friendlyGitError, type GitTokenCtx } from '@/lib/git-token'
+import { watchMergePipeline } from '@/lib/merge-watcher'
+
+/** 머지 후 CI 완료 시 머지한 본인+확인자에게 Slack DM. notify 체크 + 본인 Slack 연결 시에만. */
+function startMergeNotifyWatch(
+  project: Awaited<ReturnType<typeof getProject>>,
+  projectToken: string,
+  iid: number,
+  user: Awaited<ReturnType<typeof getCurrentUser>>,
+) {
+  if (!project || !user?.slackUserId) return
+  watchMergePipeline(project, projectToken, iid, {
+    slackWorkspaceId: project.slackWorkspaceId || '',
+    slackUserId: user.slackUserId,
+    locale: user.locale === 'en' ? 'en' : 'ko',
+  })
+}
 
 // 머지는 단순히 MR 을 머지하는 행위만 수행한다.
 // 검증 종료(IVE-V → IVE-P 전이, verified_at 기록, 검증자 execution 종결, 확인자 preset 적용)는
@@ -101,6 +117,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     // 이미 머지된 상태라면 그냥 성공으로 응답 (사용자가 Git 에서 직접 머지한 경우 대응)
     if (mr.state === 'merged') {
+      if (body.notify) startMergeNotifyWatch(project, projectCtx.token, Number(iid), user)
       return NextResponse.json({ success: true, mr, alreadyMerged: true })
     }
 
@@ -119,6 +136,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         targetId: `${id}:${mr.iid}`,
         req,
       })
+      // 머지 후 CI 완료 시 Slack DM (서버측 감시, 탭이 닫혀도 동작). fire-and-forget.
+      if (body.notify) startMergeNotifyWatch(project, projectCtx.token, Number(iid), user)
       return NextResponse.json({ success: true, mr: result })
     } catch (err) {
       return NextResponse.json({ error: friendlyGitError(err, '머지') }, { status: 400 })

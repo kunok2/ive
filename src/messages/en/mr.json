@@ -9,5 +9,7 @@
   "merging": "Merging...",
   "cannotMerge": "Cannot Merge",
   "merge": "Merge",
-  "closeMR": "Discard"
+  "closeMR": "Discard",
+  "notifyWhenDone": "Notify me on Slack when merge & CI finish (phone)",
+  "slackNotConnected": "Slack not connected — connect it in settings to get notified when done"
 }
