@@ -85,6 +85,44 @@ export function getAllUsers(): User[] {
   return rows.map(mapUser)
 }
 
+/** 확인자 picker 후보 1명 (Git member 와 동일한 형태). id = provider 측 숫자 사용자 id. */
+export interface IveConfirmerCandidate {
+  id: number
+  username: string
+  name: string
+  avatarUrl: string
+}
+
+/**
+ * 확인자(확인 단계) 후보 목록 — "프로젝트 멤버" 가 아니라 "해당 provider 로 식별 가능한 모든 IVE 사용자".
+ *
+ * 확인자는 검증자와 달리 프로젝트 멤버일 필요가 없고 IVE 사용자이기만 하면 된다.
+ * 단, 확인 단계 알림/배정이 git 숫자 id 로 매핑되므로(getUserByOAuthId, assignee),
+ * 그 provider 로 로그인해 oauth_user_id(=git 숫자 id) 가 있는 사용자만 후보가 된다.
+ *  - id:       oauth_user_id (provider 측 숫자 id) → preset_confirmer_user_id 로 저장
+ *  - username: 본인 gitlab/github username (없으면 빈 문자열 — 매핑/배정은 id 로 가능)
+ *  - avatarUrl: 'photo' 인 경우만 IVE 이미지 API URL, 프리셋(av-XX)은 빈 값(아이콘 표시)
+ */
+export function getIveConfirmerCandidates(providerType: 'github' | 'gitlab'): IveConfirmerCandidate[] {
+  const rows = getDb().prepare(`
+    SELECT u.id AS ive_id, u.oauth_user_id, u.name, u.avatar,
+           u.gitlab_username, u.github_username
+    FROM users u
+    JOIN oauth_providers op ON op.id = u.oauth_provider_id
+    WHERE op.type = ? AND u.oauth_user_id IS NOT NULL AND u.oauth_user_id <> ''
+    ORDER BY u.name COLLATE NOCASE ASC
+  `).all(providerType) as any[]
+  const out: IveConfirmerCandidate[] = []
+  for (const r of rows) {
+    const id = Number(r.oauth_user_id)
+    if (!Number.isFinite(id)) continue
+    const username = (providerType === 'github' ? r.github_username : r.gitlab_username) || ''
+    const avatarUrl = r.avatar === 'photo' ? `/api/auth/avatar/image?id=${r.ive_id}` : ''
+    out.push({ id, username, name: r.name || username || String(id), avatarUrl })
+  }
+  return out
+}
+
 export function deleteUser(id: string) {
   // 소유한 Slack 워크스페이스를 함께 정리(고아 방지 — 고아가 되면 아무도 재설치 못 함)
   const wsIds = (getDb().prepare('SELECT id FROM slack_workspaces WHERE default_user_id = ?').all(id) as any[]).map(r => r.id)

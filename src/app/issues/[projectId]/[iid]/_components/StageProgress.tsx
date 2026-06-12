@@ -87,6 +87,8 @@ interface StageProgressProps {
     actualVerifier?: ActualPerson | null
     actualConfirmer?: ActualPerson | null
     gitMembers: GitMember[]
+    /** 확인자 후보 — 검증자(프로젝트 멤버)와 달리 provider 로 식별되는 모든 IVE 사용자. 미지정 시 gitMembers fallback. */
+    confirmerMembers?: GitMember[]
     canEdit: boolean
     onProcessorClick?: () => void
     onVerifierChange?: (preset: PresetRole) => Promise<void> | void
@@ -225,10 +227,12 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
     return () => ro.disconnect()
   }, [arrows.length])
 
-  function initialPickFor(preset: PresetRole | undefined): GitMember | null {
+  // 확인자 picker/표시 목록 — IVE 사용자 후보(미지정 시 프로젝트 멤버 fallback). 검증자는 항상 gitMembers.
+  const confirmerList = roles?.confirmerMembers ?? roles?.gitMembers ?? []
+  function initialPickFor(preset: PresetRole | undefined, members?: GitMember[]): GitMember | null {
     if (!roles || !preset) return null
     if (preset.mode === 'specific' && preset.userId) {
-      return roles.gitMembers.find(m => String(m.id) === preset.userId) || null
+      return (members ?? roles.gitMembers).find(m => String(m.id) === preset.userId) || null
     }
     return null
   }
@@ -307,10 +311,10 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
       return {
         node: roles.actualConfirmer?.userId
           ? renderAvatar(roles.actualConfirmer.avatar, roles.actualConfirmer.name, dim)
-          : renderPresetContent(roles.confirmer, roles.gitMembers, roles.creator, dim, iconSize),
+          : renderPresetContent(roles.confirmer, confirmerList, roles.creator, dim, iconSize),
         title: roles.actualConfirmer?.userId
           ? tIssue('roleTooltipFormat', { role: tIssue('confirmer'), value: roles.actualConfirmer.name || '-' })
-          : presetTooltip(tIssue('confirmer'), roles.confirmer, roles.gitMembers, roles.creator, tIssue),
+          : presetTooltip(tIssue('confirmer'), roles.confirmer, confirmerList, roles.creator, tIssue),
         clickable: stageEditable,
         onClick: () => setConfirmerModalOpen(true),
         ringCls: 'ring-orange-400/50',
@@ -522,8 +526,8 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
           <AssigneePickerModal
             open={confirmerModalOpen}
             onClose={() => setConfirmerModalOpen(false)}
-            gitMembers={roles.gitMembers}
-            initialPick={initialPickFor(roles.confirmer)}
+            gitMembers={confirmerList}
+            initialPick={initialPickFor(roles.confirmer, confirmerList)}
             initialAuto={roles.confirmer.mode === 'auto'}
             withAuto
             onConfirm={confirmConfirmer}

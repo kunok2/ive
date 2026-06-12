@@ -67,6 +67,8 @@ export interface RoleAvatarBarProps {
   actualVerifier?: ActualPerson | null
   actualConfirmer?: ActualPerson | null
   gitMembers: GitMember[]
+  /** 확인자 후보 — 검증자(프로젝트 멤버)와 달리 provider 로 식별되는 모든 IVE 사용자. 미지정 시 gitMembers fallback. */
+  confirmerMembers?: GitMember[]
   /** 편집 권한 */
   canEdit: boolean
   /** 처리자(Git assignee) 변경 — 기존 onOpenAssigneePicker 핸들러 위임 */
@@ -87,12 +89,14 @@ export interface RoleAvatarBarProps {
 export default function RoleAvatarBar({
   creator, processor, verifier, confirmer,
   actualProcessor, actualVerifier, actualConfirmer,
-  gitMembers, canEdit,
+  gitMembers, confirmerMembers, canEdit,
   onProcessorClick, onVerifierChange, onConfirmerChange,
   size = 'md',
   currentMacro = 0,
 }: RoleAvatarBarProps) {
   const tIssue = useTranslations('issue')
+  // 확인자 picker/표시 목록 — IVE 사용자 후보(미지정 시 프로젝트 멤버 fallback). 검증자는 항상 gitMembers.
+  const confirmerList = confirmerMembers ?? gitMembers
 
   // 단계별 게이팅: 이미 지나간 단계(macro idx < currentMacro)는 편집 불가
   // currentMacro=0 (정보 없음) → 모든 슬롯 편집 가능 (canEdit 만 따름)
@@ -129,7 +133,7 @@ export default function RoleAvatarBar({
     if (!canEdit) return
     setConfirmerAuto(confirmer.mode === 'auto')
     setConfirmerPick(confirmer.mode === 'specific' && confirmer.userId
-      ? (gitMembers.find(m => String(m.id) === confirmer.userId) || null)
+      ? (confirmerList.find(m => String(m.id) === confirmer.userId) || null)
       : null)
     setConfirmerSearch('')
     setConfirmerModalOpen(true)
@@ -212,12 +216,12 @@ export default function RoleAvatarBar({
           isCurrent={currentMacro === 4}
           title={actualConfirmer?.userId
             ? tIssue('roleTooltipFormat', { role: tIssue('confirmer'), value: actualConfirmer.name || '-' })
-            : presetTooltip(tIssue('confirmer'), confirmer, gitMembers, creator, tIssue)}
+            : presetTooltip(tIssue('confirmer'), confirmer, confirmerList, creator, tIssue)}
           interactive={stageEditableFor(4)}
           onClick={openConfirmer}
           content={actualConfirmer?.userId
             ? renderAvatar(actualConfirmer.avatar, actualConfirmer.name, dim)
-            : renderPresetContent(confirmer, gitMembers, creator, dim, iconSize)}
+            : renderPresetContent(confirmer, confirmerList, creator, dim, iconSize)}
         />
       </div>
 
@@ -241,7 +245,7 @@ export default function RoleAvatarBar({
         open={confirmerModalOpen}
         onClose={() => setConfirmerModalOpen(false)}
         iids={[-1]}
-        gitMembers={gitMembers}
+        gitMembers={confirmerList}
         search={confirmerSearch}
         onSearchChange={setConfirmerSearch}
         pick={confirmerPick}

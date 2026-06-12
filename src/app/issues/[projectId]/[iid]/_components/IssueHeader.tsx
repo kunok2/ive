@@ -77,6 +77,8 @@ interface IssueHeaderProps {
   showDesc: boolean
   projectId: string
   gitMembers: IssueAssignee[]
+  /** 확인자 후보 — 검증자/담당자(프로젝트 멤버)와 달리 provider 로 식별되는 모든 IVE 사용자. */
+  confirmerMembers?: IssueAssignee[]
   preferredAgent: {
     assignMode?: string
     preferredAgentId: string | null
@@ -108,7 +110,7 @@ interface IssueHeaderProps {
 export default function IssueHeader({
   issue, iterationCount,
   canEditAssignees, isClosing, editMode, editTitle, editDesc, saving, showDesc,
-  projectId, gitMembers, preferredAgent,
+  projectId, gitMembers, confirmerMembers, preferredAgent,
   onBack, onCloseIssue, onStartEdit, onSaveEdit, onCancelEdit,
   onSetEditTitle, onSetEditDesc, onSetShowDesc, onOpenAssigneePicker, onOpenAgentPicker,
   onPresetVerifierChange, onPresetConfirmerChange, onDueDateChange, isCreator, onToast,
@@ -268,6 +270,7 @@ export default function IssueHeader({
               actualVerifier: issue.actualVerifier ?? null,
               actualConfirmer: issue.actualConfirmer ?? null,
               gitMembers,
+              confirmerMembers,
               canEdit: effectiveCanEditAssignees,
               // 처리자 아바타 클릭 — 에이전트 picker 가 있으면 그쪽, 없으면 기존 git 담당자 picker.
               onProcessorClick: onOpenAgentPicker ?? onOpenAssigneePicker,

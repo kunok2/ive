@@ -166,6 +166,8 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   const [closing, setClosing] = useState<number | null>(null)
   const [preferredAgentId, setPreferredAgentId] = useState<string | null>(null)
   const [gitMembers, setGitMembers] = useState<{ id: number; username: string; name: string; avatarUrl: string }[]>([])
+  // 확인자 후보 — 검증자/담당자(프로젝트 멤버)와 달리, provider 로 식별되는 모든 IVE 사용자.
+  const [confirmerMembers, setConfirmerMembers] = useState<{ id: number; username: string; name: string; avatarUrl: string }[]>([])
   const [selectedAssignees, setSelectedAssignees] = useState<{ id: number; username: string; name: string; avatarUrl: string }[]>([])
   const [autoAssign, setAutoAssign] = useState(false)
   // 검증자/확인자 사전 배정 — 'creator' | 'auto' | 'specific'
@@ -240,8 +242,9 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   }, [selectedProjectId])
 
   const fetchGitMembers = useCallback(() => {
-    if (!selectedProjectId) { setGitMembers([]); return }
+    if (!selectedProjectId) { setGitMembers([]); setConfirmerMembers([]); return }
     fetch(`/api/projects/${selectedProjectId}/members`).then(res => res.ok ? res.json() : []).then(setGitMembers).catch(() => setGitMembers([]))
+    fetch(`/api/projects/${selectedProjectId}/confirmer-candidates`).then(res => res.ok ? res.json() : []).then(setConfirmerMembers).catch(() => setConfirmerMembers([]))
   }, [selectedProjectId])
 
   const fetchClosedIssues = useCallback(() => {
@@ -300,6 +303,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     } else {
       setNewBody('')
       setGitMembers([])
+      setConfirmerMembers([])
     }
     setPreferredAgentId(null)
     setSelectedAssignees([])
@@ -734,6 +738,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
           closing={closing}
           projectAgents={projectAgents}
           gitMembers={gitMembers}
+          confirmerMembers={confirmerMembers}
           locale={state.user?.locale}
           timezone={state.user?.timezone}
           headerSlot={showAddForm ? (
@@ -749,6 +754,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
               onPreferredAgentIdChange={setPreferredAgentId}
               projectAgents={projectAgents}
               gitMembers={gitMembers}
+              confirmerMembers={confirmerMembers}
               selectedAssignees={selectedAssignees}
               autoAssign={autoAssign}
               onOpenAssigneeModal={openAssigneeModal}

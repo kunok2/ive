@@ -27,6 +27,8 @@ interface IssueCardProps {
   isHistoryTab: boolean
   closing: number | null
   gitMembers: GitMember[]
+  /** 확인자 후보 — IVE 사용자(미지정 시 gitMembers fallback). */
+  confirmerMembers?: GitMember[]
   locale?: string
   timezone?: string
   onToggleSelect: (iid: number) => void
@@ -50,6 +52,7 @@ export default function IssueCard({
   isHistoryTab,
   closing,
   gitMembers,
+  confirmerMembers,
   locale,
   timezone,
   onToggleSelect,
@@ -135,6 +138,7 @@ export default function IssueCard({
             canEdit={canEditAssignees && !bulkMode && gitMembers.length > 0}
             currentMacro={macroIndexFromStage(issue.stage)}
             gitMembers={gitMembers}
+            confirmerMembers={confirmerMembers}
             creator={{
               name: issue.author?.name ?? null,
               avatar: issue.author?.avatar ?? null,

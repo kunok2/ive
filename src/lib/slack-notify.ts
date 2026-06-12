@@ -12,7 +12,7 @@
 // im:write 권한 필요(없으면 Slack API 실패 → 조용히 무시).
 import { Project, User } from '@/types'
 import { fetchSingleIssue } from './provider'
-import { getUserByOAuthId, getUserByGitUsername, getSystemSetting } from './db'
+import { getUserByOAuthId, getUserByGitUsername, getSystemSetting, getPresetRoles } from './db'
 import { sendSlackDM } from './slack'
 
 /** IVE 공개 베이스 URL. system_settings['oauth.redirect_base'] → env → 빈 값(스킵). 백그라운드(스캐너)에서도 동작. */
@@ -89,6 +89,32 @@ export function resolveStageRecipients(project: Project, issue: any, kind: Stage
   return out
 }
 
+/** 1명의 git 식별자(id/username) → IVE 사용자 → Slack 수신자. veto/미연결이면 null. */
+function recipientFromGitIdentity(project: Project, id: string | null, username: string | null): StageRecipient | null {
+  let u = id ? getUserByOAuthId(project.provider, id) : null
+  if (!u && username) u = getUserByGitUsername(project.provider, username)
+  if (!u || !u.slackNotify || !u.slackUserId) return null
+  return { iveUserId: u.id, slackUserId: u.slackUserId, locale: pickLocale(u) }
+}
+
+/**
+ * 확인 단계(확인대기 진입) DM 수신자 해석.
+ *
+ * 확인자는 프로젝트 멤버가 아닐 수 있어(비멤버는 git assignee 로 박히지 않는다) 이슈의 실제
+ * assignee 만으로는 알림이 새지 않는다. 따라서:
+ *  - 사전 지정된 확인자(preset.mode === 'specific') 가 있으면 그 사람(IVE 사용자) 에게 직접 보낸다.
+ *    (assignee 여부와 무관 — 멤버면 assignee 로도 박혀 있고, 비멤버면 여기서만 잡힌다.)
+ *  - 지정 확인자가 없으면(creator/auto) 기존처럼 현재 assignee 기준으로 해석한다.
+ */
+export function resolveConfirmRecipients(project: Project, issue: any, iid: number): StageRecipient[] {
+  const preset = getPresetRoles(project.id, iid).confirmer
+  if (preset.mode === 'specific' && (preset.userId || preset.username)) {
+    const r = recipientFromGitIdentity(project, preset.userId, preset.username)
+    return r ? [r] : []
+  }
+  return resolveStageRecipients(project, issue, 'confirm')
+}
+
 /** 이슈에서 메시지 링크 블록 구성 요소(IVE 링크 우선, 그 다음 provider 링크)를 만든다. */
 function buildLinkOpts(project: Project, issue: any, iid: number) {
   const base = getIveBaseUrl()
@@ -146,7 +172,9 @@ export async function notifyStageTransition(project: Project, iid: number, token
     const notifyLabel = project.labelNotify || 'IVE-N'
     if (!extractLabels(issue).includes(notifyLabel)) return
 
-    const recipients = resolveStageRecipients(project, issue, kind)
+    const recipients = kind === 'confirm'
+      ? resolveConfirmRecipients(project, issue, iid)
+      : resolveStageRecipients(project, issue, kind)
     if (recipients.length === 0) return
 
     const title = issue.title || `#${iid}`
@@ -234,7 +262,7 @@ export async function notifyMergeOutcome(
       const notifyLabel = project.labelNotify || 'IVE-N'
       const confirmWaitLabel = project.labelConfirmWait || 'IVE-P'
       if (labels.includes(notifyLabel) && labels.includes(confirmWaitLabel)) {
-        confirmers = resolveStageRecipients(project, issue, 'confirm')
+        confirmers = resolveConfirmRecipients(project, issue, iid)
       }
     }
     const confirmerSlackIds = new Set(confirmers.map(c => c.slackUserId))

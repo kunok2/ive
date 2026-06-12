@@ -33,6 +33,8 @@ interface IssueListProps {
   closing: number | null
   projectAgents: ProjectAgent[]
   gitMembers: GitMember[]
+  /** 확인자 후보 — IVE 사용자(미지정 시 gitMembers fallback). */
+  confirmerMembers?: GitMember[]
   locale?: string
   timezone?: string
   /** 스크롤 영역 맨 위에 함께 렌더할 노드(예: IssueAddForm). 폼이 커져도 본문 스크롤로 모두 접근 가능하게 한다. */
@@ -63,6 +65,7 @@ export default function IssueList({
   currentUserGitId,
   closing,
   gitMembers,
+  confirmerMembers,
   locale,
   timezone,
   onToggleSelect,
@@ -110,6 +113,7 @@ export default function IssueList({
                 isHistoryTab={isHistoryTab}
                 closing={closing}
                 gitMembers={gitMembers}
+                confirmerMembers={confirmerMembers}
                 locale={locale}
                 timezone={timezone}
                 onToggleSelect={onToggleSelect}
