@@ -256,6 +256,9 @@ export function getIssuesCompletedInRange(
     JOIN projects p ON p.id = te.project_id
     LEFT JOIN issue_stages ist ON ist.project_id = te.project_id AND ist.issue_iid = te.issue_iid
     WHERE (p.user_id = ? OR EXISTS (SELECT 1 FROM project_shares ps WHERE ps.project_id = p.id AND ps.user_id = ?))
+      -- 완료시각 >= started_at 이므로 started_at >= endISO 인 행은 완료시각도 endISO 이상 → HAVING 에서 제외됨.
+      -- 미리 쳐내도 결과 불변이며 idx_te_started_at 로 미래 기간 이슈를 프루닝한다.
+      AND te.started_at < ?
       AND (ist.cached_stage IS NULL OR ist.cached_stage = '' OR ist.cached_stage = 'done')
       AND NOT EXISTS (
         SELECT 1 FROM task_executions te2
@@ -266,7 +269,7 @@ export function getIssuesCompletedInRange(
     HAVING completion_time IS NOT NULL
        AND completion_time >= ?
        AND completion_time < ?
-  `).all(userId, userId, startISO, endISO) as any[]
+  `).all(userId, userId, endISO, startISO, endISO) as any[]
   for (const r of rows) {
     map.set(`${r.project_id}:${r.issue_iid}`, r.completion_time as string)
   }
@@ -292,9 +295,12 @@ export function getIssuesStartedInRange(
     FROM task_executions te
     JOIN projects p ON p.id = te.project_id
     WHERE (p.user_id = ? OR EXISTS (SELECT 1 FROM project_shares ps WHERE ps.project_id = p.id AND ps.user_id = ?))
+      -- first_start(=MIN) 이 endISO 미만인 이슈는 started_at>=endISO 행을 빼도 MIN 불변,
+      -- 모든 행이 endISO 이상이면 HAVING 에서 어차피 제외 → 결과 불변. idx_te_started_at 프루닝.
+      AND te.started_at < ?
     GROUP BY te.project_id, te.issue_iid
     HAVING first_start >= ? AND first_start < ?
-  `).all(userId, userId, startISO, endISO) as any[]
+  `).all(userId, userId, endISO, startISO, endISO) as any[]
   for (const r of rows) {
     map.set(`${r.project_id}:${r.issue_iid}`, r.first_start as string)
   }

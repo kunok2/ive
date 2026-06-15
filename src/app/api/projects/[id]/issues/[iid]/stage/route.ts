@@ -3,6 +3,7 @@ import { getDb, getProject, getProjectAuthToken, getProjectAccess, hasActiveExec
 import { triggerScan } from '@/lib/scanner';
 import { applyRoleAssignee } from '@/lib/role-assignee';
 import { notifyStageTransition } from '@/lib/slack-notify';
+import { notifyConfirmerOnApprove } from '@/lib/merge-watcher';
 import type { TaskExecution } from '@/types';
 import { getCurrentUser } from '@/lib/auth';
 import { reopenIssue, fetchSingleIssue, addIssueLabels, removeIssueLabels, addIssueComment, createBranch, getDefaultBranch } from '@/lib/provider';
@@ -244,8 +245,10 @@ export async function POST(
         const preset = getPresetRoles(projectId, Number(iid)).confirmer;
         await applyRoleAssignee(project, Number(iid), token, '확인자', preset, { currentUser: user });
       } catch (e) { console.warn(`[Stage] Confirmer preset apply failed for #${iid}:`, e); }
-      // 확인대기 진입 → 배정된 확인자(사람)에게 DM (fire-and-forget)
-      void notifyStageTransition(project, Number(iid), token, 'confirm');
+      // 확인대기 진입 → 확인자에게 "이제 확인하세요" DM.
+      // 단, 머지+CI 가 끝나 실제로 확인 가능한 시점에만 보낸다(merge-watcher 와 조율).
+      // 머지 감시 중이면 CI 완료 때 감시자가, 이미 머지됐고 감시가 없으면 여기서 발송. (fire-and-forget)
+      void notifyConfirmerOnApprove(project, Number(iid), token);
     }
 
     // 검증 반려 시 rejected_at 기록

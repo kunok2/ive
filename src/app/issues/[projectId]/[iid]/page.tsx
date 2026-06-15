@@ -117,6 +117,8 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   const [preferredAgent, setPreferredAgent] = useState<{ assignMode?: string; preferredAgentId: string | null; preferredAgentName: string | null; preferredAgentAvatar: string | null; preferredAgentCliName: string | null } | null>(null)
   const [projectAgents, setProjectAgents] = useState<ProjectAgent[]>([])
   const [gitMembers, setGitMembers] = useState<IssueAssignee[]>([])
+  // 확인자 후보 — 검증자/담당자(프로젝트 멤버)와 달리 provider 로 식별되는 모든 IVE 사용자.
+  const [confirmerMembers, setConfirmerMembers] = useState<IssueAssignee[]>([])
   const [assigneePickerOpen, setAssigneePickerOpen] = useState(false)
   const [agentPickerOpen, setAgentPickerOpen] = useState(false)
   const [agentPickerSaving, setAgentPickerSaving] = useState(false)
@@ -282,6 +284,10 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
       .then(res => res.ok ? res.json() : [])
       .then(setGitMembers)
       .catch(() => setGitMembers([]))
+    fetch(`/api/projects/${projectId}/confirmer-candidates`)
+      .then(res => res.ok ? res.json() : [])
+      .then(setConfirmerMembers)
+      .catch(() => setConfirmerMembers([]))
   }, [fetchIssue, fetchNotes, fetchPreferredAgent, projectId, state.agents])
 
   // 백그라운드 폴링 — 에이전트 실행/스캐너 등 외부 상태 변화를 자동 반영.
@@ -969,6 +975,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
         showDesc={showDesc}
         projectId={projectId}
         gitMembers={gitMembers}
+        confirmerMembers={confirmerMembers}
         preferredAgent={preferredAgent}
         onBack={() => router.back()}
         onStageAction={handleStageAction}

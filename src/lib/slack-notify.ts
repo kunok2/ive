@@ -12,7 +12,7 @@
 // im:write 권한 필요(없으면 Slack API 실패 → 조용히 무시).
 import { Project, User } from '@/types'
 import { fetchSingleIssue } from './provider'
-import { getUserByOAuthId, getSystemSetting } from './db'
+import { getUserByOAuthId, getUserByGitUsername, getSystemSetting, getPresetRoles } from './db'
 import { sendSlackDM } from './slack'
 
 /** IVE 공개 베이스 URL. system_settings['oauth.redirect_base'] → env → 빈 값(스킵). 백그라운드(스캐너)에서도 동작. */
@@ -34,19 +34,95 @@ function extractLabels(issue: any): string[] {
   return raw.map((l: any) => (typeof l === 'string' ? l : l?.name)).filter(Boolean)
 }
 
-/** 이슈 JSON에서 담당자 provider 측 user id 배열 추출 (GitLab/GitHub 공통) */
-function extractAssigneeIds(issue: any): string[] {
+/** provider 측 사용자 식별자(숫자 id + username). 둘 다 보존해 id→username 순으로 매칭한다. */
+interface GitIdentity { id: string | null; username: string | null }
+
+/** 이슈 JSON에서 단계별 대상자(검증/확인=담당자, 완료=작성자)의 id+username 추출 (GitLab/GitHub 공통) */
+function extractGitIdentities(issue: any, kind: StageNotifyKind): GitIdentity[] {
+  const pick = (a: any): GitIdentity => ({
+    id: a?.id != null ? String(a.id) : null,
+    username: a?.username || a?.login || null,
+  })
+  if (kind === 'done') {
+    return issue?.author ? [pick(issue.author)] : []
+  }
   const arr = Array.isArray(issue?.assignees)
     ? issue.assignees
     : issue?.assignee ? [issue.assignee] : []
-  return arr
-    .map((a: any) => (a?.id != null ? String(a.id) : ''))
-    .filter((id: string) => !!id)
+  return arr.map(pick).filter((g: GitIdentity) => g.id || g.username)
 }
 
 /** 수신자(IVE 사용자)의 언어. locale 미지정이면 ko. */
 function pickLocale(u: User): 'ko' | 'en' {
   return u.locale === 'en' ? 'en' : 'ko'
+}
+
+/** DM 발송이 확정된 수신자 1명. */
+export interface StageRecipient {
+  iveUserId: string
+  slackUserId: string
+  locale: 'ko' | 'en'
+}
+
+/**
+ * 단계 종류에 따라 이슈 JSON 에서 DM 수신자(IVE 사용자) 목록을 해석한다.
+ *  - verify/confirm = 현재 담당자(assignee), done = 이슈 생성자(author)
+ *  - Git id → IVE 유저 매핑 후, Slack 연결 + 수신 허용(slack_notify) 인 사람만. id 중복 제거.
+ */
+export function resolveStageRecipients(project: Project, issue: any, kind: StageNotifyKind): StageRecipient[] {
+  const idents = extractGitIdentities(issue, kind)
+  if (idents.length === 0) return []
+
+  const seen = new Set<string>()
+  const out: StageRecipient[] = []
+  for (const { id, username } of idents) {
+    // 1차: 숫자 id 로 매칭(해당 provider 로 로그인한 계정). 실패 시 2차: username 으로 매칭
+    // (Slack 등 다른 provider 로 로그인해 git oauth id 가 없어도 gitlab_username 만 있으면 연결).
+    let u = id ? getUserByOAuthId(project.provider, id) : null
+    if (!u && username) u = getUserByGitUsername(project.provider, username)
+    if (!u) continue
+    if (!u.slackNotify || !u.slackUserId) continue // 본인 veto / Slack 미연결
+    if (seen.has(u.id)) continue
+    seen.add(u.id)
+    out.push({ iveUserId: u.id, slackUserId: u.slackUserId, locale: pickLocale(u) })
+  }
+  return out
+}
+
+/** 1명의 git 식별자(id/username) → IVE 사용자 → Slack 수신자. veto/미연결이면 null. */
+function recipientFromGitIdentity(project: Project, id: string | null, username: string | null): StageRecipient | null {
+  let u = id ? getUserByOAuthId(project.provider, id) : null
+  if (!u && username) u = getUserByGitUsername(project.provider, username)
+  if (!u || !u.slackNotify || !u.slackUserId) return null
+  return { iveUserId: u.id, slackUserId: u.slackUserId, locale: pickLocale(u) }
+}
+
+/**
+ * 확인 단계(확인대기 진입) DM 수신자 해석.
+ *
+ * 확인자는 프로젝트 멤버가 아닐 수 있어(비멤버는 git assignee 로 박히지 않는다) 이슈의 실제
+ * assignee 만으로는 알림이 새지 않는다. 따라서:
+ *  - 사전 지정된 확인자(preset.mode === 'specific') 가 있으면 그 사람(IVE 사용자) 에게 직접 보낸다.
+ *    (assignee 여부와 무관 — 멤버면 assignee 로도 박혀 있고, 비멤버면 여기서만 잡힌다.)
+ *  - 지정 확인자가 없으면(creator/auto) 기존처럼 현재 assignee 기준으로 해석한다.
+ */
+export function resolveConfirmRecipients(project: Project, issue: any, iid: number): StageRecipient[] {
+  const preset = getPresetRoles(project.id, iid).confirmer
+  if (preset.mode === 'specific' && (preset.userId || preset.username)) {
+    const r = recipientFromGitIdentity(project, preset.userId, preset.username)
+    return r ? [r] : []
+  }
+  return resolveStageRecipients(project, issue, 'confirm')
+}
+
+/** 이슈에서 메시지 링크 블록 구성 요소(IVE 링크 우선, 그 다음 provider 링크)를 만든다. */
+function buildLinkOpts(project: Project, issue: any, iid: number) {
+  const base = getIveBaseUrl()
+  return {
+    iveUrl: base ? `${base}/issues/${project.id}/${iid}` : '',
+    webUrl: issue?.web_url || issue?.html_url || '',
+    providerLabel: (project.provider === 'github' ? 'GitHub' : 'GitLab') as 'GitHub' | 'GitLab',
+  }
 }
 
 /** 단계별 DM 본문 (수신자 언어 + 링크). IVE(우리 시스템) 링크를 먼저, 그 다음 provider 링크. */
@@ -96,35 +172,112 @@ export async function notifyStageTransition(project: Project, iid: number, token
     const notifyLabel = project.labelNotify || 'IVE-N'
     if (!extractLabels(issue).includes(notifyLabel)) return
 
-    // 수신자 Git user id: 검증/확인 = 현재 담당자, 완료 = 이슈 생성자
-    const gitUserIds = kind === 'done'
-      ? (issue?.author?.id != null ? [String(issue.author.id)] : [])
-      : extractAssigneeIds(issue)
-    if (gitUserIds.length === 0) return
-
-    // Git id → IVE 사용자 매핑 후, Slack 연결 + 수신 켜진 사람만 (본인 veto 존중). id 중복 제거.
-    const seen = new Set<string>()
-    const recipients = gitUserIds
-      .map(id => getUserByOAuthId(project.provider, id))
-      .filter((u): u is NonNullable<typeof u> => !!u)
-      .filter(u => u.slackNotify && !!u.slackUserId)
-      .filter(u => (seen.has(u.id) ? false : (seen.add(u.id), true)))
+    const recipients = kind === 'confirm'
+      ? resolveConfirmRecipients(project, issue, iid)
+      : resolveStageRecipients(project, issue, kind)
     if (recipients.length === 0) return
 
     const title = issue.title || `#${iid}`
-    const webUrl = issue.web_url || issue.html_url || ''
-    const providerLabel = project.provider === 'github' ? 'GitHub' : 'GitLab'
-    const base = getIveBaseUrl()
-    const iveUrl = base ? `${base}/issues/${project.id}/${iid}` : ''
+    const linkOpts = buildLinkOpts(project, issue, iid)
     const workspaceId = project.slackWorkspaceId || ''
 
     await Promise.all(
       recipients.map(u =>
-        sendSlackDM(workspaceId, u.slackUserId as string, buildStageMessage(kind, pickLocale(u), { iid, title, iveUrl, webUrl, providerLabel }))
+        sendSlackDM(workspaceId, u.slackUserId, buildStageMessage(kind, u.locale, { iid, title, ...linkOpts }))
           .catch(() => false),
       ),
     )
   } catch (e) {
     console.warn('[slack-notify] notifyStageTransition failed:', (e as Error)?.message || e)
+  }
+}
+
+// ── 머지/배포 완료 알림 ──────────────────────────────────────────────
+// 머지를 누른 본인에게는 배포 성공/실패를 알리고, 머지+CI 가 끝나 확인이 가능해진
+// 시점에 확인자에게 "이제 확인하세요" 를 알린다. (검증자 알림과 같은 취지 — 들어와 처리하게)
+
+/** 머지/배포 결과 메시지 종류. */
+export type MergeNotifyStatus = 'success' | 'failed' | 'merged'
+
+interface MergeMessageOpts { iid: number; title: string; iveUrl: string; webUrl: string; providerLabel: 'GitLab' | 'GitHub' }
+
+/** 머지를 누른 본인에게 보내는 배포 결과 메시지. */
+function buildInitiatorMergeMessage(status: MergeNotifyStatus, locale: 'ko' | 'en', opts: MergeMessageOpts): string {
+  const { iid, title, iveUrl, webUrl, providerLabel } = opts
+  const head = `#${iid} "${title}"`
+  const links = [iveUrl ? `• IVE: ${iveUrl}` : '', webUrl ? `• ${providerLabel}: ${webUrl}` : ''].filter(Boolean).join('\n')
+  const linkBlock = links ? `\n${links}` : ''
+  const MSG = {
+    ko: {
+      success: `🚀 *배포 완료* — ${head}\n머지 후 파이프라인이 성공했습니다.${linkBlock}`,
+      merged: `✅ *머지 완료* — ${head}\n머지가 완료됐습니다.${linkBlock}`,
+      failed: `⚠️ *배포 실패* — ${head}\n머지 후 파이프라인이 실패했습니다. 확인이 필요합니다.${linkBlock}`,
+    },
+    en: {
+      success: `🚀 *Deploy complete* — ${head}\nThe post-merge pipeline succeeded.${linkBlock}`,
+      merged: `✅ *Merged* — ${head}\nThe merge is complete.${linkBlock}`,
+      failed: `⚠️ *Deploy failed* — ${head}\nThe post-merge pipeline failed. Please check.${linkBlock}`,
+    },
+  } as const
+  return MSG[locale][status]
+}
+
+/** 머지+CI 가 끝나 확인이 가능해진 시점에 확인자에게 보내는 메시지. */
+function buildConfirmReadyMessage(locale: 'ko' | 'en', opts: MergeMessageOpts): string {
+  const { iid, title, iveUrl, webUrl, providerLabel } = opts
+  const head = `#${iid} "${title}"`
+  const links = [iveUrl ? `• IVE: ${iveUrl}` : '', webUrl ? `• ${providerLabel}: ${webUrl}` : ''].filter(Boolean).join('\n')
+  const linkBlock = links ? `\n${links}` : ''
+  return locale === 'en'
+    ? `☑️ *Confirmation needed* — ${head}\nThe merge and deployment are complete. Please review the result now.${linkBlock}`
+    : `☑️ *확인 요청* — ${head}\n머지와 배포가 완료됐습니다. 이제 결과를 확인해 주세요.${linkBlock}`
+}
+
+/**
+ * 머지/배포가 끝난 시점에 발송한다. (merge-watcher 가 CI 완료 시 호출)
+ *  - initiator(머지 누른 본인): 배포 성공/실패 DM. (체크박스로 명시 동의 — IVE-N 라벨과 무관)
+ *  - 확인자: status 가 ready(성공/머지)이고 이슈가 확인대기(IVE-P)이며 IVE-N 라벨이 있을 때만 "이제 확인하세요".
+ *  - initiator 와 확인자가 같은 사람이면 중복 발송하지 않는다(확인 메시지를 우선).
+ * 모든 오류를 내부에서 삼킨다.
+ */
+export async function notifyMergeOutcome(
+  project: Project,
+  token: string,
+  iid: number,
+  initiator: { slackWorkspaceId: string; slackUserId: string; locale: 'ko' | 'en' },
+  status: MergeNotifyStatus,
+): Promise<void> {
+  try {
+    const issue = await fetchSingleIssue(project, iid, token).catch(() => null)
+    const title = issue?.title || `#${iid}`
+    const linkOpts = issue ? buildLinkOpts(project, issue, iid) : { iveUrl: getIveBaseUrl() ? `${getIveBaseUrl()}/issues/${project.id}/${iid}` : '', webUrl: '', providerLabel: (project.provider === 'github' ? 'GitHub' : 'GitLab') as 'GitHub' | 'GitLab' }
+    const msgOpts: MergeMessageOpts = { iid, title, ...linkOpts }
+    const workspaceId = project.slackWorkspaceId || ''
+    const ready = status === 'success' || status === 'merged'
+
+    // 확인자 수신자 해석 — ready + 확인대기(IVE-P) + 알림 라벨(IVE-N) 일 때만
+    let confirmers: StageRecipient[] = []
+    if (ready && issue) {
+      const labels = extractLabels(issue)
+      const notifyLabel = project.labelNotify || 'IVE-N'
+      const confirmWaitLabel = project.labelConfirmWait || 'IVE-P'
+      if (labels.includes(notifyLabel) && labels.includes(confirmWaitLabel)) {
+        confirmers = resolveConfirmRecipients(project, issue, iid)
+      }
+    }
+    const confirmerSlackIds = new Set(confirmers.map(c => c.slackUserId))
+
+    const jobs: Promise<unknown>[] = []
+    // 확인자에게 "이제 확인하세요"
+    for (const c of confirmers) {
+      jobs.push(sendSlackDM(workspaceId, c.slackUserId, buildConfirmReadyMessage(c.locale, msgOpts)).catch(() => false))
+    }
+    // 머지 누른 본인에게 배포 결과 — 단, 본인이 확인자(이미 확인 메시지 받음)면 생략
+    if (initiator.slackUserId && !(ready && confirmerSlackIds.has(initiator.slackUserId))) {
+      jobs.push(sendSlackDM(initiator.slackWorkspaceId || workspaceId, initiator.slackUserId, buildInitiatorMergeMessage(status, initiator.locale, msgOpts)).catch(() => false))
+    }
+    await Promise.all(jobs)
+  } catch (e) {
+    console.warn('[slack-notify] notifyMergeOutcome failed:', (e as Error)?.message || e)
   }
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { ReactNode, useEffect, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 
 interface Props {
@@ -12,11 +12,13 @@ interface Props {
   confirmLabel?: string
   cancelLabel?: string
   danger?: boolean
+  /** 메시지 아래·버튼 위에 들어갈 추가 콘텐츠(예: 옵션 체크박스) */
+  extra?: ReactNode
 }
 
 export default function ConfirmModal({
   open, onClose, onConfirm, title, message,
-  confirmLabel, cancelLabel, danger = false,
+  confirmLabel, cancelLabel, danger = false, extra,
 }: Props) {
   const tc = useTranslations('common')
   const confirmText = confirmLabel ?? tc('confirm')
@@ -48,6 +50,7 @@ export default function ConfirmModal({
           </div>
           <h3 className="text-base font-bold text-ive-green-pale mb-1">{title}</h3>
           <p className="text-base text-ive-text-muted">{message}</p>
+          {extra && <div className="mt-4 text-left">{extra}</div>}
         </div>
         <div className="flex border-t border-ive-border-dark">
           <button

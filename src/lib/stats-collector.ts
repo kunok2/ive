@@ -35,6 +35,21 @@ export function startStatsCollector() {
       // stat_daily_summaries는 영구 보관 (적재량 적음, 연도별 히스토리 조회용)
       cleanOldExecutions(execDays)
       cleanOldActivityLogs(90)
+      // 스냅샷을 1분마다 insert/7일후 delete 하는 churn 으로 free page 가 누적됨.
+      // WAL 을 TRUNCATE 로 비우고, free page 가 전체의 25% 를 넘으면 VACUUM 으로 회수한다.
+      // (VACUUM 은 잠깐 락이 걸리므로 임계치 미달 시 건너뜀.)
+      try {
+        const db = getDb()
+        db.pragma('wal_checkpoint(TRUNCATE)')
+        const freelist = Number((db.pragma('freelist_count', { simple: true })) ?? 0)
+        const pageCount = Number((db.pragma('page_count', { simple: true })) ?? 0)
+        if (pageCount > 0 && freelist > 1000 && freelist > pageCount * 0.25) {
+          db.exec('VACUUM')
+          console.log(`[StatsCollector] VACUUM done (freed ~${freelist} pages)`)
+        }
+      } catch (e) {
+        console.warn('[StatsCollector] VACUUM/checkpoint error:', (e as Error).message)
+      }
     } catch (e) {
       console.warn('[StatsCollector] Cleanup error:', (e as Error).message)
     }

@@ -13,6 +13,8 @@ export interface User {
   currency?: string | null     // 표시 통화 코드 (ISO 4217, 예: 'KRW'). null/'USD' = 환산 안 함
   currencyRate?: number | null // 수동 고정 환율 (USD→통화). null = 자동 글로벌 환율 사용 (있으면 자동보다 우선)
   rateMultiplier: number  // 사람단가 배수 (기본 1.0). 사람 비용 = 작업시간 × (기본단가 × 배수)
+  gitlabUsername?: string | null  // 본인 GitLab username. 확인자/담당자→IVE 계정 매핑 fallback(oauth id 매칭 실패 시). 로그인 시 자동 저장 + 직접 입력
+  githubUsername?: string | null  // 본인 GitHub username. 위와 동일(GitHub 프로젝트용)
   slackUserId?: string     // 본인 Slack member ID (U...). 작업완료 DM·채널멘션 대상. 빈 값이면 DM 불가
   slackNotify: boolean     // 작업완료 Slack 알림 수신 여부 (기본 true). false면 라벨이 있어도 안 받음(본인 veto)
   mailUnsubscribed: boolean // 브로드캐스트(관리자 발송) 메일 수신거부 여부 (기본 false). true면 일괄 발송 대상에서 제외

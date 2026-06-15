@@ -2,10 +2,12 @@
 
 import { use, useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import DiffViewer from '@/components/mr/DiffViewer'
 import ConfirmModal from '@/components/ui/ConfirmModal'
 import MobileTabBar from '@/components/layout/MobileTabBar'
 import { useToast } from '@/components/ui/Toast'
+import { useStore } from '@/lib/store'
 
 interface MRInfo {
   iid: number
@@ -29,6 +31,10 @@ interface FileChange {
 export default function MRDiffPage({ params }: { params: Promise<{ projectId: string; iid: string }> }) {
   const { projectId, iid } = use(params)
   const router = useRouter()
+  const t = useTranslations('mr')
+  const { state } = useStore()
+  const slackConnected = !!state.user?.slackUserId
+  const [notifyOnComplete, setNotifyOnComplete] = useState(true)
   const [mr, setMr] = useState<MRInfo | null>(null)
   const [changes, setChanges] = useState<FileChange[]>([])
   const [loading, setLoading] = useState(true)
@@ -63,7 +69,7 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
       const res = await fetch(`/api/projects/${projectId}/issues/${iid}/mr`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'merge' }),
+        body: JSON.stringify({ action: 'merge', notify: slackConnected && notifyOnComplete }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -219,6 +225,25 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
         title="MR 머지 확인"
         message={`!${mr?.iid} ${mr?.source_branch} → ${mr?.target_branch}\n\n이 MR을 머지할까요?`}
         confirmLabel="머지"
+        extra={
+          slackConnected ? (
+            <label className="flex items-start gap-2.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={notifyOnComplete}
+                onChange={e => setNotifyOnComplete(e.target.checked)}
+                className="mt-0.5 w-4 h-4 shrink-0 rounded accent-ive-cyan cursor-pointer"
+              />
+              <span className="text-sm font-bold text-ive-text-muted leading-snug">
+                {t('notifyWhenDone')}
+              </span>
+            </label>
+          ) : (
+            <p className="text-xs text-ive-text-dim leading-snug">
+              <i className="fa-brands fa-slack mr-1.5" />{t('slackNotConnected')}
+            </p>
+          )
+        }
       />
       <ConfirmModal
         open={showCloseConfirm}

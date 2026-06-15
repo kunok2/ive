@@ -9,6 +9,7 @@ import {
 import {
   getUserByEmail, getUserByOAuth, createOAuthUser, linkUserOAuth,
   updateUserOAuthTokens, updateUserAvatar, getUserById, updateUserSlack,
+  updateUserGitUsername,
 } from '@/lib/db'
 import { encrypt } from '@/lib/crypto'
 import { setAuthCookie } from '@/lib/auth'
@@ -223,6 +224,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         await downloadAndSaveAvatar(newId, profile.avatarUrl)
       }
     }
+  }
+
+  // GitLab/GitHub 로그인이면 git username 을 저장 — 확인자/담당자(git 멤버)를 IVE 계정에
+  // 잇는 매핑 fallback 으로 사용(oauth id 매칭이 안 될 때 username 으로 매칭). 항상 최신값으로 갱신.
+  if ((provider.type === 'gitlab' || provider.type === 'github') && profile.username) {
+    updateUserGitUsername(userId, provider.type, profile.username)
   }
 
   // Slack 로그인이면 멤버 ID(U…)를 작업완료 알림 DM 대상(slack_user_id)으로 자동 연결.

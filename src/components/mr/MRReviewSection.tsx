@@ -46,7 +46,9 @@ export default function MRReviewSection({ projectId, issueIid, onLayoutChange }:
   const [closing, setClosing] = useState(false)
   const [showMergeConfirm, setShowMergeConfirm] = useState(false)
   const [showCloseConfirm, setShowCloseConfirm] = useState(false)
+  const [notifyOnComplete, setNotifyOnComplete] = useState(true)
   const [error, setError] = useState('')
+  const slackConnected = !!state.user?.slackUserId
 
   const fetchMR = useCallback(async () => {
     try {
@@ -74,7 +76,7 @@ export default function MRReviewSection({ projectId, issueIid, onLayoutChange }:
       const res = await fetch(`/api/projects/${projectId}/issues/${issueIid}/mr`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'merge' }),
+        body: JSON.stringify({ action: 'merge', notify: slackConnected && notifyOnComplete }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -243,6 +245,25 @@ export default function MRReviewSection({ projectId, issueIid, onLayoutChange }:
         title={td('mrMergeTitle')}
         message={td('mrMergeConfirm', { iid: mr?.iid ?? 0, source: mr?.source_branch ?? '', target: mr?.target_branch ?? '' })}
         confirmLabel={t('merge')}
+        extra={
+          slackConnected ? (
+            <label className="flex items-start gap-2.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={notifyOnComplete}
+                onChange={e => setNotifyOnComplete(e.target.checked)}
+                className="mt-0.5 w-4 h-4 shrink-0 rounded accent-ive-cyan cursor-pointer"
+              />
+              <span className="text-sm font-bold text-ive-text-muted leading-snug">
+                {t('notifyWhenDone')}
+              </span>
+            </label>
+          ) : (
+            <p className="text-xs text-ive-text-dim leading-snug">
+              <i className="fa-brands fa-slack mr-1.5" />{t('slackNotConnected')}
+            </p>
+          )
+        }
       />
       <ConfirmModal
         open={showCloseConfirm}

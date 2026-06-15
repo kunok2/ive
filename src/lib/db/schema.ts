@@ -109,6 +109,8 @@ export function initSchema(db: Database.Database) {
       cost_usd REAL NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS idx_stat_snapshots_entity ON stat_snapshots(entity_type, entity_id, timestamp);
+    -- 보고서 대기추이: entity_type 고정 + timestamp 레인지 조회용 (entity_id 무관 전체 스캔 방지)
+    CREATE INDEX IF NOT EXISTS idx_stat_snapshots_type_ts ON stat_snapshots(entity_type, timestamp);
 
     CREATE TABLE IF NOT EXISTS stat_daily_summaries (
       id TEXT PRIMARY KEY,

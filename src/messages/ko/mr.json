@@ -9,5 +9,7 @@
   "merging": "머지 중...",
   "cannotMerge": "머지 불가",
   "merge": "머지",
-  "closeMR": "버림"
+  "closeMR": "버림",
+  "notifyWhenDone": "머지·CI가 끝나면 Slack으로 알림 받기 (폰)",
+  "slackNotConnected": "Slack 미연결 — 설정에서 연결하면 완료 시 알림을 받을 수 있어요"
 }

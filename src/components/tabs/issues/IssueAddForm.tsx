@@ -32,6 +32,8 @@ interface IssueAddFormProps {
   onPreferredAgentIdChange: (id: string | null) => void
   projectAgents: ProjectAgent[]
   gitMembers: GitMember[]
+  // 확인자 후보 — 검증자(프로젝트 멤버)와 달리 provider 로 식별되는 모든 IVE 사용자. 미지정 시 gitMembers fallback.
+  confirmerMembers?: GitMember[]
   selectedAssignees: GitMember[]
   autoAssign: boolean
   onOpenAssigneeModal: (iids: number[]) => void
@@ -224,6 +226,7 @@ export default function IssueAddForm({
   onPreferredAgentIdChange,
   projectAgents,
   gitMembers,
+  confirmerMembers,
   verifierMode,
   verifierUserId,
   verifierUsername,
@@ -251,6 +254,8 @@ export default function IssueAddForm({
   const [openPicker, setOpenPicker] = useState<null | 'verifier' | 'confirmer'>(null)
   const [verifierSearch, setVerifierSearch] = useState('')
   const [confirmerSearch, setConfirmerSearch] = useState('')
+  // 확인자 picker 목록 — IVE 사용자 후보(미지정 시 프로젝트 멤버로 fallback). 검증자는 항상 gitMembers.
+  const confirmerList = confirmerMembers ?? gitMembers
 
   const openVerifierPicker = () => {
     setVerifierSearch('')
@@ -502,7 +507,7 @@ export default function IssueAddForm({
         mode={confirmerMode}
         userId={confirmerUserId}
         username={confirmerUsername}
-        members={gitMembers}
+        members={confirmerList}
         onClick={openConfirmerPicker}
         isOpen={openPicker === 'confirmer'}
       />
@@ -510,7 +515,7 @@ export default function IssueAddForm({
         <InlineRolePicker
           mode={confirmerMode}
           userId={confirmerUserId}
-          gitMembers={gitMembers}
+          gitMembers={confirmerList}
           search={confirmerSearch}
           onSearchChange={setConfirmerSearch}
           onPick={(mode, userId, username) => {
