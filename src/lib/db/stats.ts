@@ -1,6 +1,7 @@
 import fs from 'fs'
 import { StatSnapshot } from '@/types'
 import { getDb } from './connection'
+import { kstDateToUTCISO } from '../date-utils'
 
 export function createSnapshot(s: StatSnapshot) {
   getDb().prepare(
@@ -153,27 +154,33 @@ export function getDailyWaitingTrend(userId: string | null, startDate: string, e
   `).all(startDate, endDate, ...userArgs) as { day: string; project_id: string; avg_waiting: number; avg_verify_waiting: number; avg_confirm_waiting: number }[]
 
   const kstToday = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  // KST 날짜 경계를 UTC instant 로 미리 변환 → WHERE 에서 timestamp 컬럼을 함수로 감싸지 않고
+  // 레인지 비교만 하므로 idx_stat_snapshots_type_ts (entity_type, timestamp) 인덱스를 탄다.
+  // KST 변환(DATE(...,'+9 hours'))은 필터된 소수 행에 대해 SELECT/GROUP BY 에서만 수행.
+  const startUTC = kstDateToUTCISO(startDate)
+  const endUTC = kstDateToUTCISO(endDate)
+  const todayUTC = kstDateToUTCISO(kstToday)
   const snapshotRows = db.prepare(`
     SELECT DATE(s.timestamp, '+9 hours') as day, s.entity_id as project_id,
       ROUND(AVG(s.waiting)) as avg_waiting, ROUND(AVG(s.verify_waiting)) as avg_verify_waiting, ROUND(AVG(s.confirm_waiting)) as avg_confirm_waiting
     FROM stat_snapshots s JOIN projects p ON p.id = s.entity_id
     WHERE s.entity_type = 'project'
-      AND DATE(s.timestamp, '+9 hours') >= ? AND DATE(s.timestamp, '+9 hours') < ? AND DATE(s.timestamp, '+9 hours') < ?
+      AND s.timestamp >= ? AND s.timestamp < ? AND s.timestamp < ?
       AND ${userScope}
     GROUP BY DATE(s.timestamp, '+9 hours'), s.entity_id
     ORDER BY day ASC
-  `).all(startDate, endDate, kstToday, ...userArgs) as { day: string; project_id: string; avg_waiting: number; avg_verify_waiting: number; avg_confirm_waiting: number }[]
+  `).all(startUTC, endUTC, todayUTC, ...userArgs) as { day: string; project_id: string; avg_waiting: number; avg_verify_waiting: number; avg_confirm_waiting: number }[]
 
   const latestTodayRows = db.prepare(`
     SELECT s.entity_id as project_id, s.waiting, s.verify_waiting, s.confirm_waiting
     FROM stat_snapshots s
     INNER JOIN (
       SELECT entity_id, MAX(timestamp) as max_ts FROM stat_snapshots
-      WHERE entity_type = 'project' AND DATE(timestamp, '+9 hours') = ? GROUP BY entity_id
+      WHERE entity_type = 'project' AND timestamp >= ? GROUP BY entity_id
     ) latest ON s.entity_id = latest.entity_id AND s.timestamp = latest.max_ts
     JOIN projects p ON p.id = s.entity_id
     WHERE s.entity_type = 'project' AND ${userScope}
-  `).all(kstToday, ...userArgs) as { project_id: string; waiting: number; verify_waiting: number; confirm_waiting: number }[]
+  `).all(todayUTC, ...userArgs) as { project_id: string; waiting: number; verify_waiting: number; confirm_waiting: number }[]
 
   const dayMap = new Map<string, Map<string, { waiting: number; verifyWaiting: number; confirmWaiting: number }>>()
   for (const r of summaryRows) {
@@ -232,25 +239,29 @@ export function getDailyWaitingTrendByAgent(userId: string | null, startDate: st
   `).all(startDate, endDate, ...ownerArgs) as { day: string; agent_id: string; avg_waiting: number }[]
 
   const kstToday = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  // KST 날짜 경계를 UTC instant 로 미리 변환 (getDailyWaitingTrend 와 동일 — 인덱스 레인지 시크용)
+  const startUTC = kstDateToUTCISO(startDate)
+  const endUTC = kstDateToUTCISO(endDate)
+  const todayUTC = kstDateToUTCISO(kstToday)
   const snapshotRows = db.prepare(`
     SELECT DATE(s.timestamp, '+9 hours') as day, s.entity_id as agent_id, ROUND(AVG(s.waiting)) as avg_waiting
     FROM stat_snapshots s JOIN agents a ON a.id = s.entity_id
     WHERE s.entity_type = 'agent'
-      AND DATE(s.timestamp, '+9 hours') >= ? AND DATE(s.timestamp, '+9 hours') < ? AND DATE(s.timestamp, '+9 hours') < ?
+      AND s.timestamp >= ? AND s.timestamp < ? AND s.timestamp < ?
       AND ${ownerScope}
     GROUP BY DATE(s.timestamp, '+9 hours'), s.entity_id ORDER BY day ASC
-  `).all(startDate, endDate, kstToday, ...ownerArgs) as { day: string; agent_id: string; avg_waiting: number }[]
+  `).all(startUTC, endUTC, todayUTC, ...ownerArgs) as { day: string; agent_id: string; avg_waiting: number }[]
 
   const latestTodayRows = db.prepare(`
     SELECT s.entity_id as agent_id, s.waiting
     FROM stat_snapshots s
     INNER JOIN (
       SELECT entity_id, MAX(timestamp) as max_ts FROM stat_snapshots
-      WHERE entity_type = 'agent' AND DATE(timestamp, '+9 hours') = ? GROUP BY entity_id
+      WHERE entity_type = 'agent' AND timestamp >= ? GROUP BY entity_id
     ) latest ON s.entity_id = latest.entity_id AND s.timestamp = latest.max_ts
     JOIN agents a ON a.id = s.entity_id
     WHERE s.entity_type = 'agent' AND ${ownerScope}
-  `).all(kstToday, ...ownerArgs) as { agent_id: string; waiting: number }[]
+  `).all(todayUTC, ...ownerArgs) as { agent_id: string; waiting: number }[]
 
   const dayMap = new Map<string, Map<string, number>>()
   for (const r of summaryRows) {
