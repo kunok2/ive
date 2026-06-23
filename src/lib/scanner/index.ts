@@ -55,13 +55,14 @@ import { startReportScheduler } from "../report-scheduler";
 import { startChatSessionReaper } from "../chat-agent";
 import fs from "fs";
 import path from "path";
-import { parseIveMeta } from "./formatters";
+import { parseIveMetaSessions } from "./formatters";
 import { executeTask } from "./execute";
 
 // Re-export for external consumers
 export { executeTask } from "./execute";
 export {
   parseIveMeta,
+  parseIveMetaSessions,
   formatOpenCodeEvent,
   formatOpenCodeEventMarkdown,
   extractMeta,
@@ -425,52 +426,22 @@ async function scanProject(project: Project, force: boolean = false) {
         const assignModeMap = getAssignModeMap(project.id);
         const assignInfo = assignModeMap.get(iid);
         if (assignInfo?.mode !== 'assignee' && !isGitBotUser(issue.author)) {
-          const meta = parseIveMeta(issue.description || '');
-          const executionId = `ex-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-          const author = issue.author || {};
+          // ive-meta 세션(블록)마다 execution 행을 생성한다. 다일 작업이면 세션이 여러 개라
+          // 날짜(주)별로 행이 쪼개져 보고서가 각 주에 그 주의 수행분을 집계한다.
           const isComplete = stage === 'done' || stage === 'verify_waiting';
-          const nowIso = new Date().toISOString();
+          const { created } = syncExternalToolSessions(project, issue as ExternalIssueLike, stage);
 
-          const execution: Parameters<typeof createExecution>[0] = {
-            id: executionId,
-            projectId: project.id,
-            agentId: '',
-            issueIid: iid,
-            issueTitle: issue.title,
-            status: isComplete ? 'success' : 'running',
-            startedAt: meta.startedAt || issue.created_at || nowIso,
-            endedAt: isComplete ? (meta.endedAt || nowIso) : undefined,
-            logPath: '',
-            inputTokens: 0, outputTokens: 0, costUsd: 0, turns: 0,
-            issueCreatedAt: issue.created_at || nowIso,
-            assigneeType: 'user',
-            userId: null,
-            userName: author.name || author.username || author.login || null,
-            userAvatar: author.avatar_url || null,
-          };
-          createExecution(execution);
-
-          // 토큰/비용 반영 (ive-meta에서 추출된 값이 있으면)
-          if (meta.inputTokens || meta.outputTokens || meta.costUsd || meta.turns || meta.model) {
-            updateExecutionTokens(executionId, meta.inputTokens, meta.outputTokens, meta.costUsd, meta.turns, meta.model || undefined, 0, 0);
+          if (created > 0) {
+            touchProjectActivity(project.id);
+            try {
+              createActivityLog({
+                userId: project.userId, category: 'task', action: 'detect_external_task',
+                detail: `외부 도구 작업 인식: #${iid} "${issue.title}" (${project.name}, ${isComplete ? '완료' : '진행중'}, 세션 ${created})`,
+                targetType: 'execution', targetId: `${project.id}:${iid}`,
+              });
+            } catch (e) { slog.error({ err: e }, 'Failed to log external task activity:'); }
+            slog.info(`[EXTERNAL] Project: ${project.name}, Issue: #${iid}, Status: ${isComplete ? 'success' : 'running'}, Sessions: ${created}`);
           }
-
-          // 툴개발 확정 작업시간(초): ive-meta(started→ended) > GitLab /spend > 0. (이슈 열린기간으로 부풀리지 않음)
-          const workSec = (meta.startedAt && meta.endedAt)
-            ? Math.max(0, Math.round((new Date(meta.endedAt).getTime() - new Date(meta.startedAt).getTime()) / 1000))
-            : (typeof (issue as any).time_stats?.total_time_spent === 'number' && (issue as any).time_stats.total_time_spent > 0 ? Math.round((issue as any).time_stats.total_time_spent) : 0);
-          if (workSec > 0) updateExecutionWorkSec(executionId, workSec);
-
-          touchProjectActivity(project.id);
-          try {
-            createActivityLog({
-              userId: project.userId, category: 'task', action: 'detect_external_task',
-              detail: `외부 도구 작업 인식: #${iid} "${issue.title}" (${project.name}, ${isComplete ? '완료' : '진행중'})`,
-              targetType: 'execution', targetId: executionId,
-            });
-          } catch (e) { slog.error({ err: e }, 'Failed to log external task activity:'); }
-
-          slog.info(`[EXTERNAL] Project: ${project.name}, Issue: #${iid}, Status: ${isComplete ? 'success' : 'running'}, Author: ${execution.userName}, Tokens: ${meta.inputTokens}/${meta.outputTokens}`);
 
           // 완료된 외부 도구 이슈의 닫기는 아래 "재조정 블록"이 담당한다.
           // (닫기를 한 곳으로 일원화해, API 실패로 열린 채 남은 이슈를 다음 스캔에 재시도 닫기)
@@ -823,25 +794,156 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
   return { assigned: assignedCount, waiting: waitingCount };
 }
 
+/** 외부 도구 execution 행(에이전트/담당자 모드 아님) 식별 조건. */
+const EXTERNAL_EXEC_WHERE =
+  "assignee_type = 'user' AND (agent_id IS NULL OR agent_id = '') AND user_id IS NULL";
+
+type ExternalIssueLike = {
+  iid: number;
+  description?: string | null;
+  title?: string | null;
+  created_at?: string;
+  author?: { name?: string; username?: string; login?: string; avatar_url?: string } | null;
+  time_stats?: { total_time_spent?: number } | null;
+};
+
+/**
+ * 외부 도구 이슈의 ive-meta 세션(블록)들을 task_executions 행 집합으로 멱등 동기화한다.
+ *
+ * 한 이슈를 여러 날에 걸쳐 처리하면 본문에 <!-- ive-meta --> 블록이 작업 세션마다 하나씩
+ * 쌓인다. 각 세션 = execution 행 1개(그 세션의 start/end·토큰/비용·work_sec). 보고서는 행의
+ * started_at 으로 날짜(주)별 통계를 분배하므로, 주 경계를 넘는 작업이 각 주 보고서에 그 주의
+ * 수행분만큼 집계된다. (단일 블록 본문은 길이 1 → 기존과 동일 동작, 하위호환)
+ *
+ * 멱등성: 세션 매칭 키 = effStart(= started_at, 없으면 issue.created_at). 본문을 몇 번 읽어도
+ * 같은 세션 집합 → 신규만 INSERT, 변경분만 UPDATE, 중복집계 없음. 기존 단일행 이슈는 그 행의
+ * started_at 이 세션[0] 과 일치하므로 새 행을 만들지 않고 제자리 갱신된다.
+ *
+ * 대상 행: 외부 도구 execution(EXTERNAL_EXEC_WHERE) 한정. 에이전트/담당자 실행은 건드리지 않는다.
+ */
+function syncExternalToolSessions(
+  project: Project,
+  issue: ExternalIssueLike,
+  stage: string | null,
+): { created: number; updated: number } {
+  const iid = issue.iid;
+  const sessions = parseIveMetaSessions(issue.description || '');
+  // 토큰/모델/시각이 전혀 없는 빈 세션은 무시 → 기존 값을 지우지 않는다.
+  const meaningful = sessions.filter(s =>
+    s.inputTokens || s.outputTokens || s.costUsd || s.turns || s.model || s.startedAt || s.endedAt
+  );
+  if (meaningful.length === 0) return { created: 0, updated: 0 };
+
+  const isComplete = stage === 'done' || stage === 'verify_waiting';
+  const nowIso = new Date().toISOString();
+  const createdAt = issue.created_at || nowIso;
+  const author = issue.author || {};
+  const timeStatsSec = (typeof issue.time_stats?.total_time_spent === 'number' && issue.time_stats.total_time_spent > 0)
+    ? Math.round(issue.time_stats.total_time_spent) : 0;
+
+  const existing = getDb().prepare(
+    `SELECT id, started_at, ended_at, input_tokens, output_tokens, cost_usd, turns, model_name, work_sec, status
+       FROM task_executions
+      WHERE project_id = ? AND issue_iid = ? AND ${EXTERNAL_EXEC_WHERE}`
+  ).all(project.id, iid) as Array<{
+    id: string; started_at: string; ended_at: string | null;
+    input_tokens: number; output_tokens: number; cost_usd: number; turns: number;
+    model_name: string | null; work_sec: number; status: string;
+  }>;
+  // 세션↔행 매칭: 타임스탬프 있는 세션은 started_at 정확매칭(같은 날 작업의 제자리 갱신),
+  // 타임스탬프 없는(레거시 단일블록 등) 세션은 남은 행에 순서대로 폴백 매칭한다.
+  // 이로써 ① 기존 단일행 이슈는 새 행을 만들지 않고 갱신되고 ② 새 날 세션은 새 행으로 INSERT.
+  const usedRowIds = new Set<string>();
+  const takeExactRow = (startISO: string) => {
+    const r = existing.find(x => !usedRowIds.has(x.id) && x.started_at === startISO);
+    if (r) usedRowIds.add(r.id);
+    return r || null;
+  };
+  const takeNextFreeRow = () => {
+    const r = existing.find(x => !usedRowIds.has(x.id));
+    if (r) usedRowIds.add(r.id);
+    return r || null;
+  };
+
+  let created = 0, updated = 0;
+  const applySession = (s: (typeof meaningful)[number], i: number, row: (typeof existing)[number] | null) => {
+    // work_sec(세션 작업시간): ive-meta(started→ended). 단일 세션에 한해 GitLab /spend fallback 허용
+    // (다세션이면 total_time_spent 는 이슈 전체라 세션별로 쪼갤 수 없어 중복집계 방지차 미적용).
+    const workSec = (s.startedAt && s.endedAt)
+      ? Math.max(0, Math.round((new Date(s.endedAt).getTime() - new Date(s.startedAt).getTime()) / 1000))
+      : (meaningful.length === 1 && timeStatsSec > 0 ? timeStatsSec : 0);
+    const hasTokens = !!(s.inputTokens || s.outputTokens || s.costUsd || s.turns || s.model);
+
+    if (!row) {
+      const effStart = s.startedAt || createdAt;
+      const execId = `ex-ext-${project.id}-${iid}-${i}-${effStart}`;
+      createExecution({
+        id: execId,
+        projectId: project.id,
+        agentId: '',
+        issueIid: iid,
+        issueTitle: issue.title ?? null,
+        status: isComplete ? 'success' : 'running',
+        startedAt: effStart,
+        endedAt: isComplete ? (s.endedAt || nowIso) : (s.endedAt || undefined),
+        logPath: '',
+        inputTokens: 0, outputTokens: 0, costUsd: 0, turns: 0,
+        issueCreatedAt: createdAt,
+        assigneeType: 'user',
+        userId: null,
+        userName: author.name || author.username || author.login || null,
+        userAvatar: author.avatar_url || null,
+      } as Parameters<typeof createExecution>[0]);
+      if (hasTokens) updateExecutionTokens(execId, s.inputTokens, s.outputTokens, s.costUsd, s.turns, s.model || undefined, 0, 0);
+      if (workSec > 0) updateExecutionWorkSec(execId, workSec);
+      created++;
+      return;
+    }
+    // 기존 세션 행 — 변경분만 제자리 갱신 (started_at 은 보존: 타임리스 세션이 날짜를 옮기지 않게)
+    const tokensChanged = hasTokens && (
+      s.inputTokens !== row.input_tokens || s.outputTokens !== row.output_tokens ||
+      s.costUsd !== row.cost_usd || s.turns !== row.turns || (s.model || null) !== (row.model_name || null)
+    );
+    if (tokensChanged) updateExecutionTokens(row.id, s.inputTokens, s.outputTokens, s.costUsd, s.turns, s.model || undefined, 0, 0);
+    const newStart = s.startedAt && s.startedAt !== row.started_at ? s.startedAt : null;
+    const newEnd = s.endedAt && s.endedAt !== row.ended_at ? s.endedAt : null;
+    if (newStart || newEnd) {
+      getDb().prepare('UPDATE task_executions SET started_at = COALESCE(?, started_at), ended_at = COALESCE(?, ended_at) WHERE id = ?')
+        .run(newStart, newEnd, row.id);
+    }
+    const workChanged = workSec > 0 && workSec !== row.work_sec;
+    if (workChanged) updateExecutionWorkSec(row.id, workSec);
+    if (tokensChanged || newStart || newEnd || workChanged) updated++;
+  };
+
+  // 1) 타임스탬프 세션: started_at 정확매칭 우선
+  meaningful.forEach((s, i) => { if (s.startedAt) applySession(s, i, takeExactRow(s.startedAt)); });
+  // 2) 타임리스 세션: 남은 행에 순서대로 폴백 (레거시 단일블록 호환)
+  meaningful.forEach((s, i) => { if (!s.startedAt) applySession(s, i, takeNextFreeRow()); });
+
+  return { created, updated };
+}
+
 /**
  * 외부 도구 이슈 재조정.
  *
  * "외부 도구 이슈 인식" 블록은 !hasAnyExecution 조건이라 이슈당 한 번만 동작한다.
  * 그 이후에 발생하는 두 가지 후속 상황을 이 함수가 멱등하게 처리한다:
- *   (a) 본문 ive-meta 가 (사후 수정/추가 작업으로) 바뀜
- *       → DB 값을 본문 값으로 "덮어쓴다"(set, 누적 아님). 몇 번을 읽어도 결과가 같아 중복집계 위험 없음.
- *       빈 ive-meta(토큰/모델 전부 0·빈값)는 무시 → 기존 값을 지우지 않는다.
+ *   (a) 본문 ive-meta 세션(블록)이 바뀜 — 사후 수정 또는 다른 날 작업 세션 블록 추가
+ *       → syncExternalToolSessions 로 세션 집합을 행 집합에 멱등 동기화한다. 새 세션(=새 날
+ *         작업)은 새 행으로 INSERT 되어 그 날짜(주) 보고서에 집계되고, 기존 세션의 값 변경은
+ *         제자리 UPDATE. 몇 번을 읽어도 같은 집합 → 중복집계 없음. 빈 세션은 무시.
  *   (b) IVE-E/IVE-W(완료)인데 닫기 API 실패로 이슈가 열린 채 남음
  *       → closeFn 으로 닫기를 재시도한다. 닫히면 다음 스캔부터 조회 대상에서 빠지므로 자동으로 멈춘다.
  *
- * 대상은 "외부 도구 execution"(agent_id 빈값 + assignee_type='user' + user_id NULL) 한정.
+ * 대상은 "외부 도구 execution"(EXTERNAL_EXEC_WHERE) 한정.
  *   에이전트 실행(agent_id 존재)·담당자 모드 실행(user_id 존재)은 실제 실행 기록이므로 절대 건드리지 않는다.
  *
  * @returns 무엇을 했는지 (테스트/관측용). resynced=DB 갱신 발생, closed=닫기 시도 성공.
  */
 export async function reconcileExternalIssue(
   project: Project,
-  issue: { iid: number; description?: string | null; title?: string | null },
+  issue: ExternalIssueLike,
   stage: string | null,
   closeFn: (project: Project, iid: number) => Promise<unknown>,
 ): Promise<{ resynced: boolean; closed: boolean }> {
@@ -849,54 +951,22 @@ export async function reconcileExternalIssue(
   let resynced = false;
   let closed = false;
 
-  const extExec = getDb().prepare(
-    `SELECT id, started_at, ended_at, input_tokens, output_tokens, cost_usd, turns, model_name, work_sec
-       FROM task_executions
-      WHERE project_id = ? AND issue_iid = ? AND assignee_type = 'user'
-        AND (agent_id IS NULL OR agent_id = '') AND user_id IS NULL
-      ORDER BY started_at DESC LIMIT 1`
-  ).get(project.id, iid) as {
-    id: string; started_at: string; ended_at: string | null;
-    input_tokens: number; output_tokens: number; cost_usd: number; turns: number; model_name: string | null; work_sec: number;
-  } | undefined;
+  // 이미 인식된 외부 도구 이슈만 재조정한다 (행이 하나도 없으면 인식 블록 담당).
+  const hasExternalRow = getDb().prepare(
+    `SELECT 1 FROM task_executions WHERE project_id = ? AND issue_iid = ? AND ${EXTERNAL_EXEC_WHERE} LIMIT 1`
+  ).get(project.id, iid);
+  if (!hasExternalRow) return { resynced, closed };
 
-  if (!extExec) return { resynced, closed };
-
-  // (a) ive-meta 재동기화 — 본문 값과 다르면 덮어쓰기
-  const meta = parseIveMeta(issue.description || '');
-  const hasTokenMeta = !!(meta.inputTokens || meta.outputTokens || meta.costUsd || meta.turns || meta.model);
-  const tokensChanged = hasTokenMeta && (
-    meta.inputTokens !== extExec.input_tokens ||
-    meta.outputTokens !== extExec.output_tokens ||
-    meta.costUsd !== extExec.cost_usd ||
-    meta.turns !== extExec.turns ||
-    (meta.model || null) !== (extExec.model_name || null)
-  );
-  const newStart = meta.startedAt && meta.startedAt !== extExec.started_at ? meta.startedAt : null;
-  const newEnd = meta.endedAt && meta.endedAt !== extExec.ended_at ? meta.endedAt : null;
-  if (tokensChanged) {
-    updateExecutionTokens(extExec.id, meta.inputTokens, meta.outputTokens, meta.costUsd, meta.turns, meta.model || undefined, 0, 0);
-  }
-  if (newStart || newEnd) {
-    getDb().prepare('UPDATE task_executions SET started_at = COALESCE(?, started_at), ended_at = COALESCE(?, ended_at) WHERE id = ?')
-      .run(newStart, newEnd, extExec.id);
-  }
-  // 확정 작업시간(work_sec) 재산정: ive-meta(started→ended) > GitLab /spend > 0. 사후 수정도 반영.
-  const effStart = newStart || extExec.started_at;
-  const effEnd = newEnd || extExec.ended_at;
-  const newWorkSec = (meta.startedAt && meta.endedAt && effStart && effEnd)
-    ? Math.max(0, Math.round((new Date(effEnd).getTime() - new Date(effStart).getTime()) / 1000))
-    : (typeof (issue as any).time_stats?.total_time_spent === 'number' && (issue as any).time_stats.total_time_spent > 0 ? Math.round((issue as any).time_stats.total_time_spent) : 0);
-  const workChanged = newWorkSec > 0 && newWorkSec !== extExec.work_sec;
-  if (workChanged) updateExecutionWorkSec(extExec.id, newWorkSec);
-  if (tokensChanged || newStart || newEnd || workChanged) {
+  // (a) ive-meta 세션 재동기화 — 세션마다 행을 멱등 upsert (신규 세션=새 날 작업은 새 행)
+  const { created, updated } = syncExternalToolSessions(project, issue, stage);
+  if (created > 0 || updated > 0) {
     resynced = true;
-    slog.info(`[RESYNC] Project: ${project.name}, Issue: #${iid}, Exec: ${extExec.id} — ive-meta 재동기화 (tokens=${tokensChanged}, times=${!!(newStart || newEnd)})`);
+    slog.info(`[RESYNC] Project: ${project.name}, Issue: #${iid} — ive-meta 세션 재동기화 (created=${created}, updated=${updated})`);
     try {
       createActivityLog({
         userId: project.userId, category: 'task', action: 'resync_ive_meta',
-        detail: `ive-meta 재동기화: #${iid} "${issue.title}" (${project.name})`,
-        targetType: 'execution', targetId: extExec.id,
+        detail: `ive-meta 재동기화: #${iid} "${issue.title}" (${project.name}, +${created}/${updated})`,
+        targetType: 'execution', targetId: `${project.id}:${iid}`,
       });
     } catch (e) { slog.error({ err: e }, 'Failed to log resync activity:'); }
   }

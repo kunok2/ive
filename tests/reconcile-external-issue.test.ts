@@ -152,4 +152,74 @@ describe('reconcileExternalIssue', () => {
     const r = await reconcileExternalIssue(project, { iid: 10, description: '', title: 'X' }, 'done', close)
     expect(r.closed).toBe(false) // 실패 → 다음 스캔에 재시도
   })
+
+  // ── 다세션(다일 작업): ive-meta 블록을 세션마다 쌓으면 행도 세션마다 생성 ──
+  function rowsOf(iid: number) {
+    return db.prepare(
+      `SELECT id, started_at, ended_at, input_tokens, output_tokens, cost_usd, work_sec
+         FROM task_executions WHERE issue_iid = ? AND assignee_type = 'user'
+           AND (agent_id IS NULL OR agent_id = '') AND user_id IS NULL
+         ORDER BY started_at ASC`
+    ).all(iid) as any[]
+  }
+  function twoSessionBody() {
+    return `작업
+<!-- ive-meta
+model: claude-opus-4-8
+input_tokens: 8000000
+output_tokens: 200000
+cost_usd: 48
+turns: 120
+started_at: 2026-06-17T09:17:00+09:00
+ended_at: 2026-06-18T03:11:00+09:00
+-->
+추가 작업 (다음 주)
+<!-- ive-meta
+model: claude-opus-4-8
+input_tokens: 2000000
+output_tokens: 50000
+cost_usd: 12
+turns: 40
+started_at: 2026-06-22T11:00:00+09:00
+ended_at: 2026-06-22T16:00:00+09:00
+-->`
+  }
+
+  it('R-6: 기존 단일행 이슈에 새 세션 블록이 추가되면 새 행이 INSERT 된다 (주 경계 분배)', async () => {
+    // 첫 세션(6/17~6/18)만 가진 기존 외부 행. started_at 을 첫 세션 시각으로 시드.
+    seedExecution(db, {
+      id: 'ex1', projectId: 'p1', agentId: null, issueIid: 10, status: 'success',
+      startedAt: '2026-06-17T00:17:00.000Z', endedAt: '2026-06-17T18:11:00.000Z',
+      assigneeType: 'user', userId: null,
+      inputTokens: 8000000, outputTokens: 200000, costUsd: 48, turns: 120, modelName: 'claude-opus-4-8',
+    })
+    const close = vi.fn().mockResolvedValue(undefined)
+    const r = await reconcileExternalIssue(project, { iid: 10, description: twoSessionBody(), title: 'X' }, 'done', close)
+    expect(r.resynced).toBe(true)
+    const rows = rowsOf(10)
+    expect(rows).toHaveLength(2) // 기존 6/17 행 + 신규 6/22 행
+    // 첫 행은 제자리 유지(6/17), 둘째 행은 다른 주(6/22) → 각 주에 집계됨
+    expect(rows[0].started_at).toBe('2026-06-17T00:17:00.000Z')
+    expect(rows[0].input_tokens).toBe(8000000)
+    expect(rows[1].started_at).toBe('2026-06-22T02:00:00.000Z')
+    expect(rows[1].input_tokens).toBe(2000000)
+    expect(rows[1].cost_usd).toBeCloseTo(12)
+    // 각 세션 work_sec 은 그 세션 구간만 (6/22 세션 = 5시간 = 18000초)
+    expect(rows[1].work_sec).toBe(5 * 3600)
+  })
+
+  it('R-7: 같은 다세션 본문을 두 번 호출해도 행은 2개 그대로 (멱등)', async () => {
+    seedExternalExec('ex1', 10, { i: 8000000, o: 200000, c: 48, t: 120 }, 'claude-opus-4-8')
+    // 시드 행의 started_at 을 첫 세션에 맞춤
+    db.prepare("UPDATE task_executions SET started_at = '2026-06-17T00:17:00.000Z' WHERE id = 'ex1'").run()
+    const close = vi.fn().mockResolvedValue(undefined)
+    const body = twoSessionBody()
+    await reconcileExternalIssue(project, { iid: 10, description: body, title: 'X' }, 'done', close)
+    const second = await reconcileExternalIssue(project, { iid: 10, description: body, title: 'X' }, 'done', close)
+    expect(second.resynced).toBe(false) // 2번째는 변화 없음
+    const rows = rowsOf(10)
+    expect(rows).toHaveLength(2) // 중복 INSERT 없음
+    const totalCost = rows.reduce((s, r) => s + r.cost_usd, 0)
+    expect(totalCost).toBeCloseTo(60) // 48 + 12, 누적 중복 아님
+  })
 })

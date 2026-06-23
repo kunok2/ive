@@ -3,12 +3,7 @@
  * - 이벤트 포맷팅, 메타데이터 파싱
  */
 
-/**
- * 이슈 본문에서 <!-- ive-meta ... --> 블록을 파싱한다.
- * 외부 도구(Claude Code 등)가 이슈 생성 시 삽입한 YAML 형식의 메타데이터.
- * HTML 주석이므로 GitLab/GitHub UI에서는 보이지 않는다.
- */
-export function parseIveMeta(body: string): {
+export type IveMetaSession = {
   model: string | null
   inputTokens: number
   outputTokens: number
@@ -16,29 +11,58 @@ export function parseIveMeta(body: string): {
   turns: number
   startedAt: string | null
   endedAt: string | null
-} {
-  const defaults = { model: null as string | null, inputTokens: 0, outputTokens: 0, costUsd: 0, turns: 0, startedAt: null as string | null, endedAt: null as string | null };
-  if (!body) return defaults;
-  const match = body.match(/<!--\s*ive-meta\s([\s\S]*?)-->/);
-  if (!match) return defaults;
-  const lines = match[1].split('\n');
+}
+
+/**
+ * ive-meta 블록 하나(<!-- ive-meta ... -->)의 본문을 IveMetaSession 으로 파싱한다.
+ */
+function parseIveMetaBlock(inner: string): IveMetaSession {
+  const session: IveMetaSession = { model: null, inputTokens: 0, outputTokens: 0, costUsd: 0, turns: 0, startedAt: null, endedAt: null };
+  const lines = inner.split('\n');
   for (const line of lines) {
     const kv = line.match(/^\s*(\w+)\s*:\s*(.+)\s*$/);
     if (!kv) continue;
     const [, key, val] = kv;
     switch (key) {
-      case 'model': defaults.model = val.trim(); break;
-      case 'input_tokens': defaults.inputTokens = Number(val) || 0; break;
-      case 'output_tokens': defaults.outputTokens = Number(val) || 0; break;
-      case 'cost_usd': defaults.costUsd = Number(val) || 0; break;
-      case 'turns': defaults.turns = Number(val) || 0; break;
+      case 'model': session.model = val.trim(); break;
+      case 'input_tokens': session.inputTokens = Number(val) || 0; break;
+      case 'output_tokens': session.outputTokens = Number(val) || 0; break;
+      case 'cost_usd': session.costUsd = Number(val) || 0; break;
+      case 'turns': session.turns = Number(val) || 0; break;
       // invalid 한 timestamp 는 null 로 (placeholder 'REPLACE_END' 같은 raw 문자열이 DB 에 저장되어
       // 보고서 쿼리의 MAX(ended_at) 등으로 흘러 들어가 RangeError 를 일으키는 사고 회귀 방지).
-      case 'started_at': { const d = new Date(val.trim()); defaults.startedAt = isNaN(d.getTime()) ? null : d.toISOString(); break; }
-      case 'ended_at':   { const d = new Date(val.trim()); defaults.endedAt   = isNaN(d.getTime()) ? null : d.toISOString(); break; }
+      case 'started_at': { const d = new Date(val.trim()); session.startedAt = isNaN(d.getTime()) ? null : d.toISOString(); break; }
+      case 'ended_at':   { const d = new Date(val.trim()); session.endedAt   = isNaN(d.getTime()) ? null : d.toISOString(); break; }
     }
   }
-  return defaults;
+  return session;
+}
+
+/**
+ * 이슈 본문에서 모든 <!-- ive-meta ... --> 블록을 파싱한다 (작업 세션마다 1블록).
+ *
+ * 다일(多日) 작업: 한 이슈를 여러 날에 걸쳐 처리하면 작업 세션마다 ive-meta 블록을
+ * 하나씩 append 한다. 각 블록 = 그 세션의 실제 start/end·그 세션분(누적 아닌 델타) 토큰/비용.
+ * 스캐너가 세션마다 execution 행을 만들어 보고서가 날짜(주)별로 통계를 분배한다.
+ *
+ * 블록이 1개뿐인(기존) 본문은 길이 1 배열로 그대로 동작 → 하위호환.
+ */
+export function parseIveMetaSessions(body: string): IveMetaSession[] {
+  if (!body) return [];
+  const sessions: IveMetaSession[] = [];
+  for (const match of body.matchAll(/<!--\s*ive-meta\s([\s\S]*?)-->/g)) {
+    sessions.push(parseIveMetaBlock(match[1]));
+  }
+  return sessions;
+}
+
+/**
+ * 이슈 본문에서 첫 <!-- ive-meta ... --> 블록을 파싱한다 (하위호환 단일 진입점).
+ * 다세션 처리는 parseIveMetaSessions 를 사용한다.
+ */
+export function parseIveMeta(body: string): IveMetaSession {
+  const sessions = parseIveMetaSessions(body);
+  return sessions[0] ?? { model: null, inputTokens: 0, outputTokens: 0, costUsd: 0, turns: 0, startedAt: null, endedAt: null };
 }
 
 /**
