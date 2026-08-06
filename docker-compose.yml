@@ -13,10 +13,17 @@ services:
       - JWT_SECRET=${JWT_SECRET:-springware-ive-secret-change-me}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY:-springware-ive-encryption-key-change-me}
       - SHELL=/bin/bash
+      # claude-config를 다른 컨테이너(product-factory-ai)와 공유하면 그쪽 settings.json의
+      # "model": "sonnet" 을 물려받아 조용히 Opus->Sonnet 으로 바뀐다.
+      # IVE는 --model 을 넘기지 않으므로(cli.claude.model 미설정) 여기서 못박아 격리한다.
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-opus}
     volumes:
       - ./data:/app/data
       - ./workspaces:/app/workspaces
-      - ./claude-config:/home/ive/.claude
+      # OAuth 자격증명 저장소. 같은 계정을 쓰는 다른 컨테이너와 사본을 각자 들고 있으면
+      # 토큰 갱신 시 refresh token 이 로테이션되어 늦게 갱신한 쪽이 revoke 된다(2026-08 장애).
+      # 사본이 아니라 같은 디렉터리를 보도록 CLAUDE_CONFIG_HOST_DIR 로 공유 경로를 주입한다.
+      - ${CLAUDE_CONFIG_HOST_DIR:-./claude-config}:/home/ive/.claude
       - ./codex-config:/home/ive/.codex
       - ./gemini-config:/home/ive/.gemini
       - ./opencode-config:/home/ive/.local/share/opencode
