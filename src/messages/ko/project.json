@@ -176,5 +176,15 @@
   "reportPageLanguage": "언어",
   "reportPageLangAuto": "자동",
   "reportPageLangKo": "한국어",
-  "reportPageLangEn": "English"
+  "reportPageLangEn": "English",
+  "reportPageEmbedTitle": "화면 붙이기",
+  "reportPageEmbedDesc": "이 주소를 그대로 열어(링크·버튼·새 창) 접수 화면을 쓰는 방식입니다. 주소에 든 토큰은 한 번만 쓸 수 있고 7일 뒤 만료되므로, 접수할 때마다 이 화면에서 새로 복사해 전달하세요.",
+  "reportPageApiTitle": "API 연동",
+  "reportPageApiDesc": "다른 서비스의 문의 화면에서 받은 내용을 API 로 보내 접수하는 방식입니다. 아래 세 값을 그 서비스의 설정에 복사해 넣으세요. 부르는 쪽이 시크릿으로 접수마다 토큰을 새로 서명하므로 만료·1회용 제약이 없습니다.",
+  "reportPageApiUrl": "접수 주소",
+  "reportPageApiProjectId": "프로젝트 ID",
+  "reportPageApiSecret": "접수 시크릿",
+  "reportPageApiSecretShow": "시크릿 보기",
+  "reportPageApiSecretHide": "시크릿 가리기",
+  "reportPageApiSecretHint": "시크릿은 접수 권한 그 자체입니다. 새어 나갔다면 아래 [재생성]으로 바꾸세요 — 기존 주소와 연동은 모두 끊깁니다."
 }

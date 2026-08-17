@@ -26,6 +26,8 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [reportExpires, setReportExpires] = useState<number>(0)
   const [generatingSecret, setGeneratingSecret] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [copiedField, setCopiedField] = useState<string | null>(null)
+  const [secretVisible, setSecretVisible] = useState(false)
   const [gitMembers, setGitMembers] = useState<{ id: number; username: string; name: string; avatarUrl: string }[]>([])
   const [gitMembersLoading, setGitMembersLoading] = useState(false)
   const [urlTheme, setUrlTheme] = useState<'dark' | 'light' | 'auto'>('auto')
@@ -104,6 +106,19 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       setTimeout(() => setCopied(false), 2000)
     } catch { /* ignore */ }
   }
+
+  /** API 로 붙이는 쪽에서 쓰는 값들(접수 주소·프로젝트 ID·시크릿) 복사 */
+  const copyField = async (key: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopiedField(key)
+      setTimeout(() => setCopiedField(null), 2000)
+    } catch { /* ignore */ }
+  }
+
+  // API 로 붙일 때 쓰는 접수 주소 — 토큰은 붙이지 않는다.
+  // 토큰은 1회용이고 7일이면 만료돼 저장해 두면 못 쓴다. 부르는 쪽이 시크릿으로 매번 서명한다.
+  const apiReportUrl = typeof window !== 'undefined' ? `${window.location.origin}/p/${id}/report` : ''
 
   const fetchGitMembers = useCallback(async () => {
     setGitMembersLoading(true)
@@ -334,6 +349,14 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                 </div>
               ) : (
                 <div className="space-y-3">
+                  {/* ① 화면 붙이기 — 접수 페이지를 그대로 열어 쓰는 방식 */}
+                  <div>
+                    <div className="text-xs font-bold text-ive-text uppercase tracking-wider">
+                      <i className="fa-solid fa-window-maximize mr-1 text-ive-cyan" />{tp('reportPageEmbedTitle')}
+                    </div>
+                    <p className="mt-1 text-xs text-ive-text-dim">{tp('reportPageEmbedDesc')}</p>
+                  </div>
+
                   {/* URL */}
                   <div className="flex items-center gap-2">
                     <input
@@ -408,6 +431,51 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                         <span>{tp('reportPageStep3')}</span>
                       </li>
                     </ol>
+                  </div>
+
+                  {/* ② API 연동 — 남의 화면에서 만든 내용을 API 로 보내는 방식.
+                       여기 값 세 개(주소·프로젝트 ID·시크릿)를 그쪽 설정에 복사해 넣는다.
+                       URL 에 붙는 토큰은 주지 않는다 — 1회용이라 저장해 두면 두 번째부터 실패한다. */}
+                  <div className="border-t border-ive-border-dark pt-3">
+                    <div className="text-xs font-bold text-ive-text uppercase tracking-wider">
+                      <i className="fa-solid fa-plug mr-1 text-ive-amber" />{tp('reportPageApiTitle')}
+                    </div>
+                    <p className="mt-1 mb-2 text-xs text-ive-text-dim">{tp('reportPageApiDesc')}</p>
+                    <div className="space-y-1.5">
+                      {[
+                        { key: 'url', label: tp('reportPageApiUrl'), value: apiReportUrl, secret: false },
+                        { key: 'pid', label: tp('reportPageApiProjectId'), value: id, secret: false },
+                        { key: 'secret', label: tp('reportPageApiSecret'), value: reportSecret ?? '', secret: true },
+                      ].map(row => (
+                        <div key={row.key} className="flex items-center gap-2">
+                          <span className="shrink-0 w-24 text-xs font-bold text-ive-text-muted">{row.label}</span>
+                          <input
+                            type={row.secret && !secretVisible ? 'password' : 'text'}
+                            readOnly
+                            value={row.value}
+                            className="flex-1 min-w-0 bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2 text-xs text-ive-text font-mono focus:outline-none"
+                          />
+                          {row.secret && (
+                            <button
+                              onClick={() => setSecretVisible(v => !v)}
+                              className="shrink-0 text-xs font-bold text-ive-text-muted hover:text-ive-green px-2 py-2 rounded-lg hover:bg-white/5"
+                              title={tp(secretVisible ? 'reportPageApiSecretHide' : 'reportPageApiSecretShow')}
+                            >
+                              <i className={secretVisible ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye'} />
+                            </button>
+                          )}
+                          <button
+                            onClick={() => copyField(row.key, row.value)}
+                            className={`shrink-0 font-bold text-xs px-3 py-2 rounded-lg border transition-all ${copiedField === row.key ? 'bg-ive-green/20 text-ive-green border-ive-green/30' : 'bg-ive-bg-deep text-ive-text-muted border-ive-border-subtle hover:text-ive-green hover:border-ive-green/30'}`}
+                          >
+                            {copiedField === row.key ? <i className="fa-solid fa-check" /> : <i className="fa-regular fa-copy" />}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="mt-2 text-xs text-ive-text-dim">
+                      <i className="fa-solid fa-triangle-exclamation mr-1 text-ive-amber" />{tp('reportPageApiSecretHint')}
+                    </p>
                   </div>
 
                   {/* 고급 옵션 */}

@@ -176,5 +176,15 @@
   "reportPageLanguage": "Language",
   "reportPageLangAuto": "Auto",
   "reportPageLangKo": "한국어",
-  "reportPageLangEn": "English"
+  "reportPageLangEn": "English",
+  "reportPageEmbedTitle": "Embed the page",
+  "reportPageEmbedDesc": "Open this URL as-is (link, button, new window) to use the intake page. The token in the URL is single-use and expires in 7 days, so copy a fresh URL from here each time you share it.",
+  "reportPageApiTitle": "API integration",
+  "reportPageApiDesc": "Send content collected on another service's own form through the API. Copy the three values below into that service's settings. The caller signs a fresh token per submission with the secret, so there is no expiry or single-use limit.",
+  "reportPageApiUrl": "Intake URL",
+  "reportPageApiProjectId": "Project ID",
+  "reportPageApiSecret": "Intake secret",
+  "reportPageApiSecretShow": "Show secret",
+  "reportPageApiSecretHide": "Hide secret",
+  "reportPageApiSecretHint": "The secret is the intake permission itself. If it leaks, use [Regenerate] below — every existing URL and integration stops working."
 }
