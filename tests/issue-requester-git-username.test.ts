@@ -96,3 +96,34 @@ describe('의뢰자 판정 — git username fallback', () => {
     expect(r?.source).toBe('owner-fallback')
   })
 })
+
+/**
+ * 접수(작업 접수) 이슈의 의뢰자.
+ *
+ * 접수 이슈는 IVE 의 프로젝트 토큰으로 만들어져 Git 작성자가 항상 봇이다.
+ * 그래서 로그인한 채로 접수한 경우 API 가 본문에 ive-author 마커를 남기고,
+ * 판정 1단계가 그것을 집는다. 마커가 없으면(비로그인·외부 연동) 종전대로
+ * 프로젝트 오너 fallback.
+ */
+describe('접수 이슈의 의뢰자', () => {
+  const BOT = 'project_74214165_bot_b5066f483c4346bcba740aead988c22b'
+  const intakeBody = (marker?: string) =>
+    `${marker ?? ''}아무것도 하지 마세요.\n\n---\n\n## 접수 환경\n🖥 브라우저: Firefox`
+
+  it('Q-6: 로그인 상태로 접수하면(마커 있음) 그 사용자가 의뢰자다 — 봇이 작성자여도', async () => {
+    const issue = {
+      author: { id: 37330289, username: BOT },
+      description: intakeBody('<!-- ive-author:u-name -->\n'),
+    }
+    const r = await resolveIssueRequesterAsync(project, issue, labelEvents('37330289', BOT))
+    expect(r?.user.id).toBe('u-name')
+    expect(r?.source).toBe('marker')
+  })
+
+  it('Q-7: 비로그인 접수(마커 없음)는 프로젝트 오너가 의뢰자다', async () => {
+    const issue = { author: { id: 37330289, username: BOT }, description: intakeBody() }
+    const r = await resolveIssueRequesterAsync(project, issue, labelEvents('37330289', BOT))
+    expect(r?.user.id).toBe('owner')
+    expect(r?.source).toBe('owner-fallback')
+  })
+})

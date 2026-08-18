@@ -718,7 +718,19 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
       waitingCount++;
       continue;
     }
-    const userAgents = getAgentsByUser(requester.user.id);
+    // 의뢰자가 에이전트를 **하나도 보유하지 않으면** 그 이슈는 영원히 배정되지 못하고
+    // 매 스캔마다 [SKIP] 으로 대기만 한다. 프로젝트를 공유받아 쓰지만 자기 에이전트를
+    // 만들지 않은 사용자가 이슈를 의뢰(또는 로그인 상태로 접수)하면 바로 이 상황이 된다.
+    // 처리가 멈추지 않도록 "보유 0개" 일 때만 프로젝트 오너 풀로 되돌린다.
+    // (보유하고 있는데 바쁨/휴가라서 못 쓰는 경우는 종전대로 대기 — 사용자의 의도를 존중.)
+    let userAgents = getAgentsByUser(requester.user.id);
+    if (userAgents.length === 0 && requester.user.id !== project.userId) {
+      const ownerAgents = getAgentsByUser(project.userId);
+      if (ownerAgents.length > 0) {
+        slog.info(`[POOL] Issue #${issue.iid} — 의뢰자(${requester.user.name}) 보유 에이전트 0개 → 프로젝트 오너 풀로 처리`);
+        userAgents = ownerAgents;
+      }
+    }
 
     // ── 에이전트 선택: 지정 에이전트 우선, 없으면 라운드로빈 ──
     let availableAgent: Agent | null = null;

@@ -3,6 +3,8 @@ import { getProject, getProjectAuthToken, touchProjectActivity } from '@/lib/db'
 import { createIssue, checkLabelsExist } from '@/lib/provider'
 import { friendlyGitError } from '@/lib/git-token'
 import { verifyReportToken } from '@/lib/report-token'
+import { getCurrentUser } from '@/lib/auth'
+import { prependIveAuthorMarker } from '@/lib/ive-author'
 
 // Rate limiting store (in-memory, single-instance)
 const rateLimitStore = new Map<string, number[]>()
@@ -111,9 +113,24 @@ export async function POST(req: NextRequest) {
     `🕐 접수 시간: ${browserInfo?.timestamp ?? new Date().toISOString()}`,
   ].filter(Boolean).join('\n')
 
-  const description = bodyRest
+  const baseDescription = bodyRest
     ? `${bodyRest}\n\n---\n\n## 접수 환경\n${browserBlock}`
     : `## 접수 환경\n${browserBlock}`
+
+  // ── 의뢰자 기록 ──────────────────────────────────────────────────────────────
+  // 접수 이슈는 IVE 의 프로젝트 토큰으로 생성되므로 Git 상의 작성자는 항상 봇이다.
+  // 그대로 두면 스캐너의 의뢰자 판정이 "프로젝트 오너 fallback" 으로 떨어지고,
+  // 오너의 에이전트 풀에서 작업자가 배정된다 — 공유받아 쓰는 사용자가 접수해도
+  // 오너(관리자) 계정의 에이전트가 도는 문제.
+  //
+  // 이 엔드포인트는 비로그인 외부 사용자도 쓰는 공개 접수 창구라 인증을 요구하지
+  // 않는다. 다만 IVE 에 로그인한 채로 접수했다면 그 사람이 곧 의뢰자이므로
+  // ive-author 마커로 남긴다(판정 1단계에서 잡힘). 로그인 정보가 없으면 마커를
+  // 넣지 않고, 종전대로 프로젝트 오너 fallback 이 적용된다.
+  const requester = await getCurrentUser().catch(() => null)
+  const description = requester
+    ? prependIveAuthorMarker(requester.id, baseDescription)
+    : baseDescription
 
   const authToken = getProjectAuthToken(projectId)
   if (!authToken) return NextResponse.json({ error: '프로젝트 토큰이 설정되지 않았습니다.' }, { status: 500 })
