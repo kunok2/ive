@@ -14,8 +14,34 @@
  *   - 이슈 본문(description)
  *   - 이슈 코멘트(note body)
  */
-import { getUserById, getUserByOAuthId, getAgent } from '@/lib/db'
+import { getUserById, getUserByOAuthId, getUserByGitUsername, getAgent } from '@/lib/db'
 import type { User, Agent, Project } from '@/types'
+
+/**
+ * Git 쪽 행위자(레이블 부착자 / 이슈 작성자)를 IVE 사용자로 식별한다.
+ *
+ * oauth_user_id(숫자 id) 매칭만 쓰면 **그 provider 로 IVE 에 로그인한 사용자만** 잡힌다.
+ * GitHub·Slack·이메일 등 다른 방식으로 가입한 사람은 GitLab 이슈에 IVE-S 를 붙여도
+ * 식별되지 않아 의뢰자 판정이 '프로젝트 오너 fallback' 으로 떨어지고, 결과적으로
+ * **오너의 에이전트 풀**에서 작업자가 배정된다(본인이 관리하지 않는 에이전트가
+ * 자기 이슈를 처리하는 것처럼 보인다). 알림 수신자 매핑에서 이미 같은 문제를
+ * git username fallback 으로 해결했으므로 의뢰자 판정도 같은 기준을 쓴다.
+ */
+function matchGitUser(
+  provider: 'github' | 'gitlab',
+  userId: string | number | null | undefined,
+  username: string | null | undefined,
+): User | null {
+  if (userId != null && String(userId) !== '') {
+    const byId = getUserByOAuthId(provider, String(userId))
+    if (byId) return byId
+  }
+  if (username) {
+    const byName = getUserByGitUsername(provider, username)
+    if (byName) return byName
+  }
+  return null
+}
 
 export const IVE_AUTHOR_MARKER_RE = /<!--\s*ive-author:([a-zA-Z0-9_-]+)\s*-->/
 export const IVE_AGENT_MARKER_RE = /<!--\s*ive-agent:([a-zA-Z0-9_-]+)\s*-->/
@@ -148,10 +174,8 @@ export function resolveIssueRequester(project: Project, issue: any): IssueReques
   }
 
   // 2) Git author → IVE 사용자 매칭
-  if (issue.author?.id != null) {
-    const u = getUserByOAuthId(project.provider, String(issue.author.id))
-    if (u) return { user: u, source: 'author' }
-  }
+  const author = matchGitUser(project.provider, issue.author?.id, issue.author?.username)
+  if (author) return { user: author, source: 'author' }
 
   // 3) 프로젝트 오너 fallback
   const owner = getUserById(project.userId)
@@ -175,7 +199,9 @@ export function resolveIssueRequester(project: Project, issue: any): IssueReques
 export async function resolveIssueRequesterAsync(
   project: Project,
   issue: any,
-  fetchLabelEvents: () => Promise<Array<{ action: 'add' | 'remove'; label: string; userId: string | null; createdAt: string }>>,
+  fetchLabelEvents: () => Promise<Array<{
+    action: 'add' | 'remove'; label: string; userId: string | null; username?: string | null; createdAt: string
+  }>>,
 ): Promise<IssueRequesterResult | null> {
   // 1) 본문 ive-author 마커
   const markerId = extractIveAuthorId(issue.description || '')
@@ -191,8 +217,7 @@ export async function resolveIssueRequesterAsync(
     const sorted = [...events].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
     for (const ev of sorted) {
       if (ev.action !== 'add' || ev.label !== scheduleLabel) continue
-      if (!ev.userId) continue
-      const u = getUserByOAuthId(project.provider, ev.userId)
+      const u = matchGitUser(project.provider, ev.userId, ev.username)
       if (u) return { user: u, source: 'label-actor' }
     }
   } catch {
@@ -200,10 +225,8 @@ export async function resolveIssueRequesterAsync(
   }
 
   // 3) Git author → IVE 사용자 매칭
-  if (issue.author?.id != null) {
-    const u = getUserByOAuthId(project.provider, String(issue.author.id))
-    if (u) return { user: u, source: 'author' }
-  }
+  const author = matchGitUser(project.provider, issue.author?.id, issue.author?.username)
+  if (author) return { user: author, source: 'author' }
 
   // 4) 프로젝트 오너 fallback
   const owner = getUserById(project.userId)

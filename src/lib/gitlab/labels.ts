@@ -86,6 +86,12 @@ export interface IssueLabelEvent {
   label: string
   /** Provider 측 사용자 ID (string 화). 익명/시스템 이벤트면 null. */
   userId: string | null
+  /**
+   * Provider 측 사용자명. userId(숫자 id) 매칭이 실패할 때의 fallback 식별자 —
+   * 다른 provider 로 IVE 에 로그인한 사용자는 oauth_user_id 가 안 맞지만
+   * gitlab_username/github_username 은 채워져 있을 수 있다.
+   */
+  username: string | null
   createdAt: string
 }
 
@@ -109,6 +115,7 @@ export async function fetchGitLabIssueLabelEvents(
         action: e.action === 'add' ? 'add' : 'remove',
         label: e.label.name,
         userId: e.user?.id != null ? String(e.user.id) : null,
+        username: e.user?.username ?? null,
         createdAt: e.created_at,
       } as IssueLabelEvent));
   } catch {

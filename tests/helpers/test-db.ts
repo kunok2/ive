@@ -26,6 +26,8 @@ export function setupTestDb(): Database.Database {
       oauth_access_token TEXT,
       oauth_refresh_token TEXT,
       oauth_token_expires_at TEXT,
+      gitlab_username TEXT,
+      github_username TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -245,12 +247,16 @@ export function seedUser(db: Database.Database, id: string, name: string, opts?:
   oauthProviderId?: string | null
   oauthUserId?: string | null
   oauthAccessToken?: string | null
+  gitlabUsername?: string | null
+  githubUsername?: string | null
 }) {
   db.prepare(`INSERT INTO users
-    (id, email, password, name, avatar, is_admin, oauth_provider_id, oauth_user_id, oauth_access_token)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    (id, email, password, name, avatar, is_admin, oauth_provider_id, oauth_user_id, oauth_access_token,
+     gitlab_username, github_username)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
     id, `${id}@test.com`, 'hash', name, opts?.avatar ?? 'av-01', opts?.isAdmin ? 1 : 0,
     opts?.oauthProviderId ?? null, opts?.oauthUserId ?? null, opts?.oauthAccessToken ?? null,
+    opts?.gitlabUsername ?? null, opts?.githubUsername ?? null,
   )
 }
 
