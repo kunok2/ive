@@ -1,4 +1,5 @@
 import { getAllTokenPricing, findTokenPricingForModel, upsertTokenPricing, getSystemSetting } from './db'
+import { resolveExecCli, type AiCostPolicy } from './ai-subscription'
 import { TokenPricing } from '@/types'
 
 // ─── 사람(관리자/검증자) 단가 기준 ───
@@ -87,7 +88,7 @@ export function businessMinutesKST(startISO?: string | null, endISO?: string | n
 interface CostExec {
   id?: string
   costUsd: number; inputTokens: number; outputTokens: number;
-  modelName?: string | null; assigneeType?: string;
+  modelName?: string | null; assigneeType?: string; cliName?: string;
   startedAt?: string; endedAt?: string | null;
   verifyStartedAt?: string | null; verifiedAt?: string | null; rejectedAt?: string | null;
   workSec?: number | null;  // 툴 직접개발 확정 작업시간(초): ive-meta>/spend>0 (스캐너 산정)
@@ -112,19 +113,32 @@ export function humanWorkMinutes(e: CostExec): number {
 }
 
 export interface ExecutionCostBreakdown {
-  ai: number      // AI 모델 토큰 비용 (costUsd 또는 토큰×단가) — IVE 처리분
-  human: number   // 사람 작업 시간 비용 (검증·확인 근무시간 + 툴개발 ive-meta 구간) × 분당단가
-  total: number
+  ai: number         // AI 실지출 — 총원가에 들어간다. 구독이면 배부액, 종량제면 청구액.
+  aiNotional: number // "종량제 API 였다면 얼마" — 효율 지표 전용. 총원가에 더하지 않는다.
+  human: number      // 사람 작업 시간 비용 (검증·확인 근무시간 + 툴개발 ive-meta 구간) × 분당단가
+  total: number      // ai + human
 }
 
-/** 단일 execution의 비용을 AI/사람으로 나누어 계산 */
-export function resolveExecutionCostBreakdown(e: CostExec, humanRate: HumanRate): ExecutionCostBreakdown {
-  // AI 비용: 그 실행이 실제로 소비한 AI 비용. 실제 청구액 우선, 없으면 토큰×단가.
+/**
+ * 단일 execution의 비용을 AI/사람으로 나누어 계산.
+ *
+ * @param policy 구독(정액) 과금 정책. 생략하면 종량제로 간주해 명목가를 그대로 실지출로 쓴다
+ *               (구독료를 설정하지 않은 기존 사용자는 동작이 바뀌지 않는다).
+ */
+export function resolveExecutionCostBreakdown(e: CostExec, humanRate: HumanRate, policy?: AiCostPolicy): ExecutionCostBreakdown {
+  // 명목가: 그 실행이 소비한 토큰의 종량제 환산액. 실제 청구액 우선, 없으면 토큰×단가.
   //   - IVE 처리(에이전트 exec): 스캐너가 실측한 토큰/청구액.
   //   - 툴 직접개발(user exec): 이슈 본문 ive-meta 의 cost_usd / 토큰 (스캐너가 동기화해 저장).
   //     assigneeType 으로 걸러내면 토큰은 합산되는데 비용만 0 이 되어 리포트가 자기모순에 빠진다.
   //   - 검증/확인 exec(ex-verify, ex-confirm): 토큰·청구액이 없으므로 자연히 0.
-  const ai = e.costUsd > 0 ? e.costUsd : calcCostFromDb(e.inputTokens, e.outputTokens, e.modelName ?? undefined)
+  const aiNotional = e.costUsd > 0 ? e.costUsd : calcCostFromDb(e.inputTokens, e.outputTokens, e.modelName ?? undefined)
+
+  // 실지출: 구독료가 설정된 CLI 면 배부액(사용량과 무관한 정액을 토큰 비례로 나눈 값),
+  // 아니면 종량제로 보고 명목가를 그대로 쓴다.
+  const cli = policy ? resolveExecCli(e) : null
+  const ai = (cli && policy!.subscribedClis.has(cli))
+    ? (policy!.actualById.get(e.id || '') ?? 0)
+    : aiNotional
   // 사람 비용: 작업시간(분) × 분당단가 × 사용자별 단가 배수(능력/보수 차이 반영, 기본 1)
   let human = 0
   if (humanRate.costPerMin > 0) {
@@ -134,12 +148,12 @@ export function resolveExecutionCostBreakdown(e: CostExec, humanRate: HumanRate)
       human = m * humanRate.costPerMin * mult
     }
   }
-  return { ai, human, total: ai + human }
+  return { ai, aiNotional, human, total: ai + human }
 }
 
-/** 하위 호환: 총 비용만 반환 */
-export function resolveExecutionCost(e: CostExec, humanRate: HumanRate): number {
-  return resolveExecutionCostBreakdown(e, humanRate).total
+/** 총 비용(실지출 기준)만 반환 */
+export function resolveExecutionCost(e: CostExec, humanRate: HumanRate, policy?: AiCostPolicy): number {
+  return resolveExecutionCostBreakdown(e, humanRate, policy).total
 }
 
 /** DB에서 human 단가의 월급(inputPrice)을 조회 */

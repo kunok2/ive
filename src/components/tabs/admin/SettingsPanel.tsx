@@ -6,6 +6,7 @@ import { useToast } from '@/components/ui/Toast'
 import ModelSelect from './ModelSelect'
 import ModelPricingSection from './ModelPricingSection'
 import HumanPricingSection from './HumanPricingSection'
+import AiSubscriptionSection from './AiSubscriptionSection'
 import CustomSelect from '@/components/ui/CustomSelect'
 
 // ── Types ──
@@ -473,6 +474,11 @@ export default function SettingsPanel() {
         onToggle={() => setExpandedGroup(expandedGroup === 'pricing-model' ? null : 'pricing-model')}
         pricingItems={pricingItems}
         setPricingItems={setPricingItems}
+      />
+
+      <AiSubscriptionSection
+        expanded={expandedGroup === 'pricing-ai-sub'}
+        onToggle={() => setExpandedGroup(expandedGroup === 'pricing-ai-sub' ? null : 'pricing-ai-sub')}
       />
 
       <HumanPricingSection

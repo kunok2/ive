@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { getExecutionsInRange, getDailyWaitingTrend, getDailyWaitingTrendByAgent, getAgent, getVerifierBacklogForReport, getIssuesCompletedInRange, getIssuesStartedInRange, getAgentHistoricalDailyCapacity } from '@/lib/db'
 import { resolveExecutionCost, resolveExecutionCostBreakdown, getHumanRate, humanWorkMinutes } from '@/lib/token-pricing'
+import { buildAiCostPolicy } from '@/lib/ai-subscription'
 import { getKSTTodayString, utcISOToKSTDate, utcISOToKSTMonth } from '@/lib/date-utils'
 import { isBotName } from '@/lib/git-bot'
 
@@ -90,6 +91,16 @@ export async function GET(req: NextRequest) {
   const prevExecs = getExecutionsInRange(user.id, prevRange.start, prevRange.end)
   const humanRate = getHumanRate()
 
+  // AI 실지출 정책: 구독료가 설정된 CLI 는 정액을 기간·토큰 비례로 배부하고,
+  // 미설정 CLI 는 종량제로 보고 exec 의 청구액을 그대로 쓴다.
+  // ⚠️ 배부는 기간 전체 exec 으로 계산해야 한다 — 프로젝트로 거른 뒤 배부하면
+  //    그 프로젝트가 구독료 전액을 뒤집어쓴다.
+  const aiPolicy = buildAiCostPolicy(execs, range.start, range.end)
+  // 전기 배부액을 같은 맵에 합쳐 호출부를 단일 정책으로 단순화한다.
+  // 두 기간은 겹치지 않으므로(주/월/연 단위 이전 구간) exec id 충돌은 없다.
+  const prevAiPolicy = buildAiCostPolicy(prevExecs, prevRange.start, prevRange.end)
+  for (const [id, usd] of prevAiPolicy.actualById) aiPolicy.actualById.set(id, usd)
+
   // 에이전트는 글로벌 풀로 운영되므로 보고서에서는 프로젝트별 에이전트 수/주된 활동지를 더 이상 집계하지 않는다.
   // 에이전트의 현재 상태(online/offline 등)만 보조로 노출한다.
   const agentCurrentStatus: Record<string, string> = {}
@@ -165,7 +176,7 @@ export async function GET(req: NextRequest) {
   // 비용 breakdown: AI 토큰 비용과 사람 시간 비용을 분리 집계
   const costBreakdown = execs.reduce(
     (acc, e) => {
-      const b = resolveExecutionCostBreakdown(e, humanRate)
+      const b = resolveExecutionCostBreakdown(e, humanRate, aiPolicy)
       acc.ai += b.ai; acc.human += b.human
       return acc
     },
@@ -184,7 +195,7 @@ export async function GET(req: NextRequest) {
   const prevFailedCount = prevExecs.filter(e => e.status === 'failed').length
   const prevTotalDurationMin = prevExecs.reduce((s, e) => s + durationMin(e.startedAt, e.endedAt), 0)
   const prevFinished = prevSuccessCount + prevFailedCount
-  const prevTotalCost = prevExecs.reduce((s, e) => s + resolveExecutionCost(e, humanRate), 0)
+  const prevTotalCost = prevExecs.reduce((s, e) => s + resolveExecutionCost(e, humanRate, aiPolicy), 0)
   const prevSuccessRate = prevTotalTasks > 0 ? (prevSuccessCount / (prevFinished || 1)) * 100 : 0
 
   // 이전 기간 프로젝트별
@@ -196,7 +207,7 @@ export async function GET(req: NextRequest) {
   const prevByProject = Array.from(prevProjectMap.entries()).map(([pid, pExecs]) => ({
     projectId: pid, projectName: pExecs[0].projectName,
     tasks: pExecs.length,
-    cost: Math.round(pExecs.reduce((s, e) => s + resolveExecutionCost(e, humanRate), 0) * 100) / 100,
+    cost: Math.round(pExecs.reduce((s, e) => s + resolveExecutionCost(e, humanRate, aiPolicy), 0) * 100) / 100,
   }))
 
   // 이전 기간 작업자별
@@ -208,7 +219,7 @@ export async function GET(req: NextRequest) {
   const prevByAgent = Array.from(prevAgentMap.entries()).map(([aid, aExecs]) => ({
     agentId: aid, agentName: aExecs[0].agentName,
     tasks: aExecs.length,
-    cost: Math.round(aExecs.reduce((s, e) => s + resolveExecutionCost(e, humanRate), 0) * 100) / 100,
+    cost: Math.round(aExecs.reduce((s, e) => s + resolveExecutionCost(e, humanRate, aiPolicy), 0) * 100) / 100,
   }))
 
   // 이전 기간 사용자별 (담당자/검증자 — assigneeType='user'만, 현재 기간 byUser와 동일하게 userName으로 키)
@@ -250,7 +261,7 @@ export async function GET(req: NextRequest) {
     if (!prevDayMap.has(key)) prevDayMap.set(key, mkPrevBucket())
     const d = prevDayMap.get(key)!
     d.tasks++
-    d.cost += resolveExecutionCost(e, humanRate)
+    d.cost += resolveExecutionCost(e, humanRate, aiPolicy)
     if (e.status === 'success' || e.status === 'failed') {
       const effEnd = e.endedAt || e.startedAt
       const proc = workMin(e)
@@ -298,7 +309,7 @@ export async function GET(req: NextRequest) {
     const pFinished = pSuccess + pFailed
     const pCostBreakdown = pExecs.reduce(
       (acc, e) => {
-        const b = resolveExecutionCostBreakdown(e, humanRate)
+        const b = resolveExecutionCostBreakdown(e, humanRate, aiPolicy)
         acc.ai += b.ai; acc.human += b.human
         return acc
       },
@@ -317,7 +328,7 @@ export async function GET(req: NextRequest) {
       const aFailed = aExecs.filter(e => e.status === 'failed').length
       const aDur = aExecs.reduce((s, e) => s + durationMin(e.startedAt, e.endedAt), 0)
       const aFinished = aSuccess + aFailed
-      const aCost = aExecs.reduce((s, e) => s + resolveExecutionCost(e, humanRate), 0)
+      const aCost = aExecs.reduce((s, e) => s + resolveExecutionCost(e, humanRate, aiPolicy), 0)
       return {
         agentId: aid, agentName: aExecs[0].agentName, agentAvatar: aExecs[0].agentAvatar, agentDeleted: aExecs[0].agentDeleted, cliName: aExecs[0].cliName,
         tasks: aExecs.length, success: aSuccess, failed: aFailed,
@@ -364,7 +375,7 @@ export async function GET(req: NextRequest) {
     const aFailed = aExecs.filter(e => e.status === 'failed').length
     const aDur = aExecs.reduce((s, e) => s + durationMin(e.startedAt, e.endedAt), 0)
     const aFinished = aSuccess + aFailed
-    const aCost = aExecs.reduce((s, e) => s + resolveExecutionCost(e, humanRate), 0)
+    const aCost = aExecs.reduce((s, e) => s + resolveExecutionCost(e, humanRate, aiPolicy), 0)
     return {
       agentId: aid, agentName: aExecs[0].agentName, agentAvatar: aExecs[0].agentAvatar, agentDeleted: aExecs[0].agentDeleted, cliName: aExecs[0].cliName,
       tasks: aExecs.length, success: aSuccess, failed: aFailed,
@@ -447,7 +458,7 @@ export async function GET(req: NextRequest) {
     const uDur = uExecs.reduce((s, e) => s + durationMin(e.startedAt, e.endedAt), 0)
     // 사람 비용: 이 사람의 검증/확인/툴개발 작업시간 × 단가 × 배수 합.
     // .human 만 취한다 — 툴개발 exec 은 ive-meta 의 AI 비용(.ai)도 갖지만 여기선 사람 몫만 본다.
-    const uCost = uExecs.reduce((s, e) => s + resolveExecutionCostBreakdown(e, humanRate).human, 0)
+    const uCost = uExecs.reduce((s, e) => s + resolveExecutionCostBreakdown(e, humanRate, aiPolicy).human, 0)
     const uFinished = uSuccess + uFailed
     const uniqueIssues = new Set(uExecs.map(e => `${e.projectId}:${e.issueIid}`))
     // 배정 → 시작까지의 대기 시간
@@ -550,7 +561,7 @@ export async function GET(req: NextRequest) {
     d.tasks++
     if (e.status === 'success') d.success++
     if (e.status === 'failed') d.failed++
-    d.cost += resolveExecutionCost(e, humanRate)
+    d.cost += resolveExecutionCost(e, humanRate, aiPolicy)
     if (e.status === 'success' || e.status === 'failed') {
       const effEnd = e.endedAt || e.startedAt
       const proc = workMin(e)
@@ -616,7 +627,7 @@ export async function GET(req: NextRequest) {
     if (!pMap.has(key)) pMap.set(key, { tasks: 0, cost: 0 })
     const d = pMap.get(key)!
     d.tasks++
-    d.cost += resolveExecutionCost(e, humanRate)
+    d.cost += resolveExecutionCost(e, humanRate, aiPolicy)
   }
   const projectTrend = Array.from(projectDayMap.entries()).map(([pid, pMap]) => {
     const pInfo = execs.find(e => e.projectId === pid)!
@@ -645,7 +656,7 @@ export async function GET(req: NextRequest) {
     if (!aMap.has(key)) aMap.set(key, { tasks: 0, cost: 0 })
     const d = aMap.get(key)!
     d.tasks++
-    d.cost += resolveExecutionCost(e, humanRate)
+    d.cost += resolveExecutionCost(e, humanRate, aiPolicy)
   }
   const agentTrend = Array.from(agentDayMap.entries()).map(([aid, aMap]) => {
     const aInfo = execs.find(e => e.agentId === aid)!
@@ -681,7 +692,7 @@ export async function GET(req: NextRequest) {
     if (!uMap.has(key)) uMap.set(key, { tasks: 0, cost: 0, verified: 0 })
     const d = uMap.get(key)!
     d.tasks++
-    d.cost += resolveExecutionCost(e, humanRate)
+    d.cost += resolveExecutionCost(e, humanRate, aiPolicy)
   }
   // 검증 완료 건수: verifierName이 담당자 키(userName)와 동일한 경우 해당 사용자에 가산
   for (const e of execs) {
@@ -782,7 +793,7 @@ export async function GET(req: NextRequest) {
             const end = (isVerifiedSuccess && e.confirmedAt) || e.verifiedAt || e.rejectedAt || e.endedAt || e.startedAt
             return Math.round(durationMin(start, end) * 10) / 10
           })(),
-          cost: Math.round(resolveExecutionCost(e, humanRate) * 100) / 100,
+          cost: Math.round(resolveExecutionCost(e, humanRate, aiPolicy) * 100) / 100,
           waitMin: (() => {
             const ws = e.issueCreatedAt
             return ws ? Math.round(durationMin(ws, e.startedAt) * 10) / 10 : null

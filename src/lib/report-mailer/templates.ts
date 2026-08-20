@@ -1,6 +1,7 @@
 import { ReportType } from '@/types'
 import { ReportExecution, getDailyWaitingTrend, getGlobalIssuesStartedInRange, getGlobalIssuesCompletedInRange } from '../db'
 import { getHumanRate, resolveExecutionCostBreakdown, humanWorkMinutes } from '../token-pricing'
+import { buildAiCostPolicy } from '../ai-subscription'
 import { formatMoney, type ResolvedCurrency } from '../currency'
 import { REPORT_TYPE_LABELS, PREV_PERIOD_LABELS, calculatePreviousPeriod } from './schedule'
 
@@ -238,6 +239,15 @@ export function generateReportHtml(
     (new Date(periodEnd).getTime() - new Date(periodStart).getTime()) / 86400000
   ))
 
+  // AI 실지출 정책 (구독=정액 배부 / 미설정=종량제). 전기 배부액을 같은 맵에 합쳐
+  // 호출부를 단일 정책으로 단순화한다 — 두 기간은 겹치지 않아 exec id 충돌이 없다.
+  const aiPolicy = buildAiCostPolicy(executions, periodStart, periodEnd)
+  if (prevExecutions && prevExecutions.length > 0) {
+    const pp = calculatePreviousPeriod(reportType, periodStart, periodEnd)
+    const pv = buildAiCostPolicy(prevExecutions, pp.start, pp.end)
+    for (const [id, usd] of pv.actualById) aiPolicy.actualById.set(id, usd)
+  }
+
   // ─── 기본 통계 집계 ───
   const total = executions.length
   const success = executions.filter(e => e.status === 'success').length
@@ -247,11 +257,12 @@ export function generateReportHtml(
   const totalCacheReadTokens = executions.reduce((s, e) => s + (e.cacheReadInputTokens ?? 0), 0)
 
   // ─── AI/사람 비용 분리 ───
-  let totalCostAi = 0, totalCostHuman = 0
+  let totalCostAi = 0, totalCostHuman = 0, totalCostAiNotional = 0
   for (const e of executions) {
-    const bd = resolveExecutionCostBreakdown(e, humanRate)
+    const bd = resolveExecutionCostBreakdown(e, humanRate, aiPolicy)
     totalCostAi += bd.ai
     totalCostHuman += bd.human
+    totalCostAiNotional += bd.aiNotional
   }
   const totalCost = totalCostAi + totalCostHuman
   const costPerTask = total > 0 ? totalCost / total : 0
@@ -343,7 +354,7 @@ export function generateReportHtml(
   const prevTotalTokens = prev.reduce((s, e) => s + e.inputTokens + e.outputTokens, 0)
   let prevTotalCost = 0
   for (const e of prev) {
-    const bd = resolveExecutionCostBreakdown(e, humanRate)
+    const bd = resolveExecutionCostBreakdown(e, humanRate, aiPolicy)
     prevTotalCost += bd.ai + bd.human
   }
   const prevCostPerTask = prevTotal > 0 ? prevTotalCost / prevTotal : 0
@@ -376,7 +387,7 @@ export function generateReportHtml(
     p.total++
     if (e.status === 'success') p.success++
     if (e.status === 'failed') p.failed++
-    const bd = resolveExecutionCostBreakdown(e, humanRate)
+    const bd = resolveExecutionCostBreakdown(e, humanRate, aiPolicy)
     p.cost += bd.ai + bd.human
     p.tokens += e.inputTokens + e.outputTokens
     byProject.set(e.projectId, p)
@@ -394,7 +405,7 @@ export function generateReportHtml(
     p.total++
     if (e.status === 'success') p.success++
     if (e.status === 'failed') p.failed++
-    const bd = resolveExecutionCostBreakdown(e, humanRate)
+    const bd = resolveExecutionCostBreakdown(e, humanRate, aiPolicy)
     p.cost += bd.ai + bd.human
     prevByProject.set(e.projectId, p)
   }
@@ -407,7 +418,7 @@ export function generateReportHtml(
     a.total++
     if (e.status === 'success') a.success++
     if (e.status === 'failed') a.failed++
-    const bd = resolveExecutionCostBreakdown(e, humanRate)
+    const bd = resolveExecutionCostBreakdown(e, humanRate, aiPolicy)
     a.cost += bd.ai + bd.human
     const effEnd = e.endedAt || e.startedAt
     const dur = (new Date(effEnd).getTime() - new Date(e.startedAt).getTime()) / 60000
@@ -426,7 +437,7 @@ export function generateReportHtml(
     a.total++
     if (e.status === 'success') a.success++
     if (e.status === 'failed') a.failed++
-    const bd = resolveExecutionCostBreakdown(e, humanRate)
+    const bd = resolveExecutionCostBreakdown(e, humanRate, aiPolicy)
     a.cost += bd.ai + bd.human
     prevByAgent.set(e.agentId, a)
   }
@@ -471,7 +482,7 @@ export function generateReportHtml(
     u.total++
     if (e.status === 'success') u.success++
     if (e.status === 'failed') u.failed++
-    const bd = resolveExecutionCostBreakdown(e, humanRate)
+    const bd = resolveExecutionCostBreakdown(e, humanRate, aiPolicy)
     u.cost += bd.ai + bd.human
     byUser.set(uid, u)
   }
@@ -488,7 +499,7 @@ export function generateReportHtml(
     if (!uid) continue
     const u = prevByUser.get(uid) || { total: 0, cost: 0, issueCount: 0 }
     u.total++
-    const bd = resolveExecutionCostBreakdown(e, humanRate)
+    const bd = resolveExecutionCostBreakdown(e, humanRate, aiPolicy)
     u.cost += bd.ai + bd.human
     prevByUser.set(uid, u)
   }
@@ -520,7 +531,7 @@ export function generateReportHtml(
     const key = `${e.projectId}:${e.issueIid}`
     const existing = resolvedIssueMap.get(key)
     const dur = e.endedAt ? (new Date(e.endedAt).getTime() - new Date(e.startedAt).getTime()) / 60000 : 0
-    const bd = resolveExecutionCostBreakdown(e, humanRate)
+    const bd = resolveExecutionCostBreakdown(e, humanRate, aiPolicy)
     const c = bd.ai + bd.human
     if (!existing || c > existing.cost) {
       resolvedIssueMap.set(key, { issueIid: e.issueIid, issueTitle: e.issueTitle || `#${e.issueIid}`, projectName: e.projectName, projectColor: e.projectColor, agentName: e.agentName, cost: c, durationMin: dur, status: e.status })
@@ -611,6 +622,9 @@ export function generateReportHtml(
             <td style="text-align:center;padding:4px 8px;">
               <div style="font-size:14px;font-weight:700;color:#4ade80;">${money(totalCostAi)}</div>
               <div style="font-size:10px;color:#6b7280;">AI 비용</div>
+              ${/* 구독(정액)이면 실지출과 명목 환산액이 크게 벌어진다. 종량제면 둘이 같아 표시되지 않는다. */ ''}
+              ${totalCostAi > 0 && totalCostAiNotional > totalCostAi * 1.5 ? `
+              <div style="font-size:9px;color:#6b7280;margin-top:2px;">API 환산 ${money(totalCostAiNotional)} · ${Math.round(totalCostAiNotional / totalCostAi).toLocaleString()}배</div>` : ''}
             </td>
             <td style="text-align:center;padding:4px 8px;">
               <div style="font-size:14px;font-weight:700;color:#93c5fd;">${money(totalCostHuman)}</div>

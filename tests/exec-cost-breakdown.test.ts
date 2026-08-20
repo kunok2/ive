@@ -52,3 +52,51 @@ describe('resolveExecutionCostBreakdown', () => {
     expect(b.ai).toBe(0)
   })
 })
+
+describe('구독(정액) 과금 — 실지출 vs 명목가', () => {
+  // 운영 2026-08-10~16 실측 축소판: 명목가는 크지만 실지출은 구독료 배부액이어야 한다.
+  const policy = {
+    subscribedClis: new Set(['claude']),
+    actualById: new Map([['ex-a', 30], ['ex-b', 15.16]]),  // 주간 $45.16 을 토큰 비례로 배부
+    periodSubscriptionUsd: 45.16,
+  }
+
+  it('구독 CLI: 실지출은 배부액, 명목가는 별도로 보존된다', () => {
+    const b = resolveExecutionCostBreakdown(
+      { ...base, id: 'ex-a', assigneeType: 'user', costUsd: 1308.62, modelName: 'claude-opus-5', workSec: 3600 },
+      rate, policy)
+    expect(b.ai).toBeCloseTo(30)            // 총원가에 들어가는 값
+    expect(b.aiNotional).toBeCloseTo(1308.62) // "종량제였다면" — 효율 지표용
+    expect(b.total).toBeCloseTo(30 + 60)    // 명목가는 총원가에 더해지지 않는다
+  })
+
+  it('구독 CLI인데 배부 대상이 아니면 실지출 0 (명목가는 그대로)', () => {
+    const b = resolveExecutionCostBreakdown(
+      { ...base, id: 'ex-없음', assigneeType: 'user', costUsd: 500, modelName: 'claude-opus-5' },
+      rate, policy)
+    expect(b.ai).toBe(0)
+    expect(b.aiNotional).toBeCloseTo(500)
+  })
+
+  it('구독 미설정 CLI는 종량제 — 청구액이 그대로 실지출', () => {
+    const b = resolveExecutionCostBreakdown(
+      { ...base, id: 'ex-c', assigneeType: 'user', costUsd: 12.5, modelName: 'gemini-2.5-pro' },
+      rate, policy)
+    expect(b.ai).toBeCloseTo(12.5)
+    expect(b.aiNotional).toBeCloseTo(12.5)
+  })
+
+  it('policy 미전달이면 종전대로 동작한다 (구독 미설정 사용자 영향 없음)', () => {
+    const b = resolveExecutionCostBreakdown(
+      { ...base, id: 'ex-a', assigneeType: 'user', costUsd: 1308.62, modelName: 'claude-opus-5' }, rate)
+    expect(b.ai).toBeCloseTo(1308.62)
+    expect(b.aiNotional).toBeCloseTo(1308.62)
+  })
+
+  it('에이전트 exec 도 구독 배부 대상이다 (cliName 으로 판별)', () => {
+    const b = resolveExecutionCostBreakdown(
+      { ...base, id: 'ex-b', assigneeType: 'agent', cliName: 'claude', costUsd: 900 }, rate, policy)
+    expect(b.ai).toBeCloseTo(15.16)
+    expect(b.human).toBe(0)
+  })
+})
