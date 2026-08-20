@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useTranslations, useLocale } from 'next-intl'
 import { formatMoney, type ResolvedCurrency } from '@/lib/currency'
 import { formatDateMedium } from '@/lib/format-date'
+import { useDialog } from '@/components/ui/ConfirmDialog'
 import PullToRefresh from '@/components/ui/PullToRefresh'
 import BriefingSection from '@/components/tabs/reports/BriefingSection'
 import UtilizationGauge from '@/components/tabs/reports/UtilizationGauge'
@@ -29,6 +30,7 @@ const USD_CURRENCY: ResolvedCurrency = { code: 'USD', rate: 1, source: 'usd', up
 
 export default function ReportsTab() {
   const tr = useTranslations('report')
+  const { confirm } = useDialog()
   const locale = useLocale()
 
   // 표시 통화/환율 — 보고서는 캐시된 값만 즉시 읽는다(외부 fetch 없음).
@@ -101,6 +103,7 @@ export default function ReportsTab() {
   const [yearData, setYearData] = useState<ReportData | null>(null)
   const [prevWeeks, setPrevWeeks] = useState<ReportData[]>([])
   const [loading, setLoading] = useState(false)
+  const [regenerating, setRegenerating] = useState(false)
   const [diagnosis, setDiagnosis] = useState<DiagnosisResult | null>(null)
 
   // ─── Flow data ───
@@ -162,6 +165,32 @@ export default function ReportsTab() {
     } finally { setLoading(false) }
   }, [type, date, helpers])
 
+  // ─── 확정 재생성 ───
+  // 단가(월급·구독료·모델단가·배수)를 바꿔도 이미 확정된 보고서는 그대로 남는다.
+  // 의도적으로 새 단가를 반영하려면 저장본을 지워야 하고, 다음 조회에서 다시 확정된다.
+  // 화면이 주간/월간/연간을 함께 불러오므로 셋 다 지워야 표시가 일관된다.
+  const regenerateSnapshot = useCallback(async () => {
+    const ok = await confirm({
+      title: tr('regenerateTitle'),
+      message: tr('regenerateMessage'),
+      confirmText: tr('regenerateConfirm'),
+      variant: 'warning',
+    })
+    if (!ok) return
+    setRegenerating(true)
+    try {
+      await Promise.all(
+        (['weekly', 'monthly', 'yearly'] as const).map(rt =>
+          fetch(`/api/reports?type=${rt}&date=${date}`, { method: 'DELETE' }).catch(() => null)
+        )
+      )
+      await fetchReport()
+    } finally {
+      setRegenerating(false)
+    }
+  }, [confirm, tr, date, fetchReport])
+
+
   useEffect(() => {
     if (data && type === 'weekly' && prevWeeks.length > 0) {
       setDiagnosis(diagnose(data, prevWeeks, helpers.fmtDur, helpers.fmtCost))
@@ -217,6 +246,17 @@ export default function ReportsTab() {
                 >
                   <i className="fa-solid fa-lock text-[10px] mr-1 opacity-70" />{tr('snapshotBadge')}
                 </span>
+              )}
+              {data?.snapshot && (
+                <button
+                  onClick={regenerateSnapshot}
+                  disabled={regenerating}
+                  title={tr('regenerateTitle')}
+                  aria-label={tr('regenerateTitle')}
+                  className="w-6 h-6 flex items-center justify-center rounded-lg text-ive-text-dim hover:text-ive-text hover:bg-white/[0.05] disabled:opacity-50"
+                >
+                  <i className={`fa-solid fa-rotate text-[11px] ${regenerating ? 'fa-spin' : ''}`} />
+                </button>
               )}
             </div>
             <button onClick={() => navigate(1)} className="w-8 h-8 flex items-center justify-center text-ive-text-dim hover:text-ive-text"><i className="fa-solid fa-chevron-right" /></button>
