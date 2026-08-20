@@ -3,6 +3,8 @@ import { getCurrentUser } from '@/lib/auth'
 import { getExecutionsInRange, getDailyWaitingTrend, getDailyWaitingTrendByAgent, getAgent, getVerifierBacklogForReport, getIssuesCompletedInRange, getIssuesStartedInRange, getAgentHistoricalDailyCapacity } from '@/lib/db'
 import { resolveExecutionCost, resolveExecutionCostBreakdown, getHumanRate, humanWorkMinutes } from '@/lib/token-pricing'
 import { buildAiCostPolicy } from '@/lib/ai-subscription'
+import { getReportSnapshot, putReportSnapshot, deleteReportSnapshot } from '@/lib/db'
+import { logActivity } from '@/lib/activity'
 import { getKSTTodayString, utcISOToKSTDate, utcISOToKSTMonth } from '@/lib/date-utils'
 import { isBotName } from '@/lib/git-bot'
 
@@ -70,6 +72,20 @@ export async function GET(req: NextRequest) {
   if (type === 'monthly') range = getMonthRange(date)
   else if (type === 'yearly') range = getYearRange(date)
   else range = getWeekRange(date)
+
+  // 확정 저장본: 기간이 닫혔으면(끝 시각이 지났으면) 그때 계산한 값을 그대로 보여준다.
+  // 단가를 나중에 바꿔도 과거 보고서가 소급 변경되지 않고, 메일로 보낸 수치와 화면이 일치한다.
+  // 진행 중인 기간은 아직 확정이 아니므로 매번 실시간 계산한다.
+  const periodClosed = new Date(range.end).getTime() <= Date.now()
+  if (periodClosed) {
+    const snap = getReportSnapshot(user.id, type, range.start, range.end)
+    if (snap) {
+      return NextResponse.json({
+        ...(snap.payload as Record<string, unknown>),
+        snapshot: { generatedAt: snap.generatedAt },
+      })
+    }
+  }
 
   // 이전 기간 계산
   let prevRange: { start: string; end: string }
@@ -1101,7 +1117,7 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({
+  const payload = {
     period: { start: range.start, end: range.end, type },
     prevPeriod: { start: prevRange.start, end: prevRange.end },
     summary: {
@@ -1163,5 +1179,40 @@ export async function GET(req: NextRequest) {
       const h = getAgentHistoricalDailyCapacity(a.agentId, 30)
       return { agentId: a.agentId, dailyCap: h.dailyCap, samples: h.samples }
     }),
+  }
+
+  // 닫힌 기간이면 이 계산을 확정으로 저장한다. 다음 조회부터는 위에서 저장본이 반환된다.
+  // (동시 요청으로 두 번 계산돼도 먼저 쓴 쪽만 남는다 — putReportSnapshot 은 DO NOTHING)
+  if (periodClosed) {
+    const generatedAt = putReportSnapshot(user.id, type, range.start, range.end, payload)
+    return NextResponse.json({ ...payload, snapshot: { generatedAt } })
+  }
+  return NextResponse.json(payload)
+}
+
+/**
+ * 확정 저장본 재생성 — 저장본을 지우면 다음 조회에서 현재 로직·현재 단가로 다시 확정된다.
+ *
+ * 계산 로직의 버그를 고쳤을 때만 쓴다. 평소에 쓰면 과거 보고서가 소급 변경되어
+ * 스냅샷을 두는 이유가 없어진다. 자기 보고서만 지울 수 있다.
+ */
+export async function DELETE(req: NextRequest) {
+  const user = await getCurrentUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const url = req.nextUrl
+  const type = url.searchParams.get('type') || 'weekly'
+  const dateStr = url.searchParams.get('date') || getKSTTodayString()
+  const date = new Date(dateStr)
+
+  const range = type === 'monthly' ? getMonthRange(date)
+    : type === 'yearly' ? getYearRange(date)
+    : getWeekRange(date)
+
+  deleteReportSnapshot(user.id, type, range.start, range.end)
+  logActivity({
+    userId: user.id, category: 'settings', action: 'regenerate_report_snapshot',
+    detail: `보고서 확정 재생성: ${type} ${range.start}~${range.end}`, req,
   })
+  return NextResponse.json({ ok: true })
 }

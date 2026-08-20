@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useTranslations, useLocale } from 'next-intl'
 import { formatMoney, type ResolvedCurrency } from '@/lib/currency'
+import { formatDateMedium } from '@/lib/format-date'
 import PullToRefresh from '@/components/ui/PullToRefresh'
 import BriefingSection from '@/components/tabs/reports/BriefingSection'
 import UtilizationGauge from '@/components/tabs/reports/UtilizationGauge'
@@ -206,6 +207,16 @@ export default function ReportsTab() {
               <span className="text-sm font-bold text-ive-text">{data ? formatPeriodLabel(type, data.period.start, data.period.end) : '...'}</span>
               {!isCurrentPeriod() && (
                 <button onClick={() => setDate(getKSTTodayString())} className="px-2 py-0.5 text-xs font-bold rounded-lg bg-ive-cyan/20 text-ive-cyan hover:bg-ive-cyan/30 transition-colors">{tr('today')}</button>
+              )}
+              {/* 확정 저장본 표시 — 이 화면 숫자가 그때 낸 값 그대로임을 알린다.
+                  단가를 나중에 바꿔도 이 값은 변하지 않는다. */}
+              {data?.snapshot && (
+                <span
+                  title={tr('snapshotHint', { at: formatDateMedium(data.snapshot.generatedAt, locale) })}
+                  className="px-2 py-0.5 text-xs font-bold rounded-lg bg-ive-bg-card text-ive-text-dim border border-ive-border-subtle"
+                >
+                  <i className="fa-solid fa-lock text-[10px] mr-1 opacity-70" />{tr('snapshotBadge')}
+                </span>
               )}
             </div>
             <button onClick={() => navigate(1)} className="w-8 h-8 flex items-center justify-center text-ive-text-dim hover:text-ive-text"><i className="fa-solid fa-chevron-right" /></button>

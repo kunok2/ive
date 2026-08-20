@@ -638,6 +638,24 @@ export function initSchema(db: Database.Database) {
     );
     CREATE INDEX IF NOT EXISTS idx_report_send_logs_schedule ON report_send_logs(schedule_id, period_start, period_end);
     CREATE INDEX IF NOT EXISTS idx_report_send_logs_sent_at ON report_send_logs(sent_at);
+
+    -- 확정된 보고서 스냅샷.
+    -- 기간이 닫히면(period_end <= now) 그때 계산한 응답을 통째로 저장하고, 이후 조회는
+    -- 저장본을 그대로 보여준다. 단가(월급·구독료·모델단가·배수)를 나중에 바꿔도 과거
+    -- 보고서 숫자가 소급 변경되지 않는다. 메일로 보낸 수치와 화면이 어긋나지도 않는다.
+    -- ⚠️ 보고서는 사용자별로 데이터가 다르므로(getExecutionsInRange(user.id, ...))
+    --    반드시 user_id 를 키에 포함해야 한다.
+    CREATE TABLE IF NOT EXISTS report_snapshots (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      report_type TEXT NOT NULL,
+      period_start TEXT NOT NULL,
+      period_end TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      generated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(user_id, report_type, period_start, period_end)
+    );
+    CREATE INDEX IF NOT EXISTS idx_report_snapshots_lookup ON report_snapshots(user_id, report_type, period_start, period_end);
   `)
 
   // 메일 브로드캐스트(관리자 메일발송) 이력 테이블

@@ -6,6 +6,8 @@
 
 export interface ReportData {
   period: { start: string; end: string; type: string }
+  /** 확정 저장본으로 응답한 경우의 확정 시각. 진행 중인 기간은 없음(실시간 계산). */
+  snapshot?: { generatedAt: string }
   prevPeriod: { start: string; end: string }
   summary: { totalTasks: number; uniqueInflow: number; verifiedCount: number; successCount: number; failedCount: number; runningCount: number; successRate: number; totalDurationMin: number; avgDurationMin: number; totalInputTokens: number; totalOutputTokens: number; totalCacheReadTokens?: number; totalCacheCreationTokens?: number; totalCost: number; totalCostAi?: number; totalCostHuman?: number; humanMinutes?: number; humanMonthlySalary?: number; humanMonthlyMinutes?: number }
   prevSummary: { totalTasks: number; uniqueInflow: number; successCount: number; failedCount: number; successRate: number; totalDurationMin: number; avgDurationMin: number; totalCost: number }
