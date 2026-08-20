@@ -239,21 +239,22 @@ function bullet(x,y,s,color,tcolor){
   return `<circle cx="${x+4}" cy="${y-4}" r="3.4" fill="${color}"/>${text(x+18,y,s,{size:13,fill:tcolor,weight:700,anchor:'start'})}`;
 }
 function roleIcon(type){
+  if(type==='req') return `<path d="M14,3 L14,19 M7,12 L14,19 L21,12"/><path d="M3,23 L3,29 L25,29 L25,23"/>`;
   if(type==='dev') return `<path d="M12,5 L4,15 L12,25" /><path d="M28,5 L36,15 L28,25"/><path d="M24,3 L16,27"/>`;
   if(type==='qa')  return `<circle cx="15" cy="15" r="12"/><path d="M9,15 L13,19 L22,9" stroke-linecap="round" stroke-linejoin="round"/>`;
   if(type==='mgr') return `<circle cx="20" cy="11" r="8"/><path d="M6,30 C6,18 34,18 34,30"/>`;
   return '';
 }
 const COLS = [
+  { name:'요청자 · 현업', role:'작업 요청 · 진행 확인', icon:'req',
+    before:['개발자를 붙잡아야 요청할 수 있음','언제 되는지 알 수 없음','요청이 어디까지 갔는지 모름'],
+    after:['수집 링크로 직접 요청','진행 단계가 그대로 보임','완료되면 알림 수신'] },
   { name:'검증자 · 개발자', role:'코드 리뷰 · 핵심 설계', icon:'dev',
-    before:['단순·반복 이슈까지 직접 코딩','코드 리뷰는 늘 뒷순위','잦은 컨텍스트 스위칭으로 소모'],
-    after:['반복 작업은 AI 에이전트가 수행','코드 리뷰·핵심 설계에 집중','리뷰 게이트로 품질을 책임'] },
+    before:['AI로 빨라졌지만 기록이 안 남음','AI가 만든 MR은 쌓이는데 리뷰 체계가 없음','잦은 컨텍스트 스위칭으로 소모'],
+    after:['작업마다 이력이 남음','리뷰 게이트로 품질을 책임','코드 리뷰·핵심 설계에 집중'] },
   { name:'확인자 · QA', role:'결과물 검수 · 최종 승인', icon:'qa',
-    before:['완성될 때까지 마냥 대기','진행 상황 수동 추적·재촉','산출물 품질이 들쭉날쭉'],
-    after:['Slack에서 진행 상황 실시간 확인','완성된 결과물만 검수·승인','필요한 작업은 IVE 수집 링크로 요청'] },
-  { name:'관리자 · C-Level', role:'보고서 수신 · 의사결정', icon:'mgr',
-    before:['생산성·비용 파악이 어려움','수기 취합 보고, 늘 지연','감(感)에 의존한 의사결정'],
-    after:['처리량·토큰·비용 자동 집계','정기 리포트·메일 자동 수신','데이터 기반 의사결정'] },
+    before:['진행 상황을 수동으로 추적·재촉','완성될 때까지 마냥 대기','반려해도 후속 추적이 안 됨'],
+    after:['Slack에서 진행 상황 실시간 확인','완성된 결과물만 검수·승인','반려하면 자동으로 재작업 단계로'] },
 ];
 const COLW=372, COLX=[64,454,844];
 function column(x0,col){
@@ -284,13 +285,14 @@ function impactIcon(type){
   if(type==='eye')   return `<path d="M2,14 C8,5 20,5 26,14 C20,23 8,23 2,14 Z"/><circle cx="14" cy="14" r="4"/>`;
   if(type==='check') return `<path d="M3,14 L8,19 L17,8"/><path d="M13,18 L18,23 L27,10"/>`;
   if(type==='chart') return `<path d="M3,25 L25,25"/><rect x="5" y="16" width="5" height="9"/><rect x="13" y="10" width="5" height="15"/><rect x="21" y="4" width="5" height="21"/>`;
+  if(type==='flow')  return `<circle cx="4" cy="14" r="3"/><circle cx="14" cy="14" r="3"/><path d="M7,14 L11,14"/><path d="M17,14 L25,14"/><path d="M21,10 L25,14 L21,18"/>`;
   return '';
 }
 const IMPACTS=[
   {icon:'loop', t1:'반복 업무 자동화', t2:'사람은 핵심 업무에 집중'},
-  {icon:'eye',  t1:'전 과정 이력·비용', t2:'100% 가시화'},
+  {icon:'flow', t1:'요청 → 배포 한 흐름', t2:'사람 손이 끊기지 않음'},
   {icon:'check',t1:'검증·확인 2단계', t2:'품질을 보장'},
-  {icon:'chart',t1:'AI 개발 생산성', t2:'정량 측정·관리'},
+  {icon:'eye',  t1:'진행 상황 실시간', t2:'묻지 않아도 보임'},
 ];
 const IMPW=262, IMPX=[88,368,648,928];
 function slideImpact(){ return `
@@ -301,7 +303,7 @@ function slideImpact(){ return `
     </radialGradient>
   </defs>
   <rect width="1280" height="720" fill="url(#vign2)"/>
-  ${header('IVE 도입, 이렇게 달라집니다','역할별 Before → After, 그리고 조직의 변화')}
+  ${header('IVE 도입, 이렇게 달라집니다','역할별 Before → After, 그리고 현장의 변화')}
 
   ${COLS.map((c,i)=>column(COLX[i],c)).join('')}
 
@@ -333,8 +335,8 @@ function phone(x,y,W,img,clipId){
 const SCREENS=[
   {img:scrProjects,t:'프로젝트 현황',s:'스캐너 · 단계별 처리'},
   {img:scrAgents,  t:'에이전트 · 검증자',s:'CLI 4종 + 검토 인력'},
-  {img:scrIssues,  t:'이슈 처리 이력',s:'실제 처리 369건'},
-  {img:scrReports, t:'주간 리포트',s:'처리량 · 비용 · 가동률'},
+  {img:scrIssues,  t:'이슈 처리 이력',s:'주 93건 · 성공률 100%'},
+  {img:scrReports, t:'주간 리포트',s:'유입 93 → 대기 0 → 마무리 93'},
 ];
 function slideScreens(){
   const W=210, pad=8, iw=W-2*pad, ih=Math.round(iw*RATIO), H=ih+2*pad;
@@ -343,7 +345,7 @@ function slideScreens(){
 <svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
   <defs><radialGradient id="vign3" cx="50%" cy="40%" r="85%"><stop offset="0%" stop-color="#16161b"/><stop offset="100%" stop-color="${BG}"/></radialGradient></defs>
   <rect width="1280" height="720" fill="url(#vign3)"/>
-  ${header('실제 운영 화면','운영계(ive.dazzleat.link) 실측 캡처 — 도식이 아닌, 지금 동작 중인 제품')}
+  ${header('실제 운영 화면','운영계(ive.dazzleat.link) 실측 캡처 — 2026-08-10~16 주간 기준, 도식이 아닌 지금 동작 중인 제품')}
   ${SCREENS.map((sc,i)=>{const x=64+i*(W+gap);return `
     ${phone(x,y,W,sc.img,'ph'+i)}
     ${text(x+W/2,y+H+26,sc.t,{size:15,fill:TXT})}
@@ -382,8 +384,8 @@ function slideCover(){
     ${text(640,307,'ive.dazzleat.link  ↗',{size:12.5,fill:CYAN,weight:700})}
   </a>
 
-  ${text(640,358,'이슈만 올리면, AI가 개발한다',{size:46,fill:TXT,weight:800})}
-  ${text(640,396,'AI CLI 에이전트가 Git 이슈를 자동 처리하고, 사람은 검토·결정만 — 처리량·비용은 자동 측정.',{size:16,fill:'#b4b4bc',weight:600})}
+  ${text(640,368,'이슈에서 배포까지, 그리고 원가까지',{size:44,fill:TXT,weight:800})}
+  ${text(640,404,'AI CLI 에이전트가 이슈를 처리하고, 사람이 검증하고, 전 과정의 이력·원가가 남습니다.',{size:16,fill:'#b4b4bc',weight:600})}
 
   ${CH.map(([l,w,cx])=>`<rect x="${cx-w/2}" y="440" width="${w}" height="32" rx="16" fill="${BG}" stroke="${CYAN}" stroke-width="1.3"/>${text(cx,461,l,{size:13.5,fill:TXT,weight:700})}`).join('')}
 
@@ -401,7 +403,7 @@ function slideCover(){
 function slidePOC(){
   const COLS=[
     {t:'스코프 — 작게 시작',ic:'scope',b:['저장소 1개 · 2주','이슈에 라벨만 부착','온프레미스 · Docker','기존 AI 구독 그대로']},
-    {t:'성공 기준 — 사전 합의',ic:'chart',b:['이슈 자동 처리율','리드타임 단축 %','검토 통과율','주간 집계 리포트 산출']},
+    {t:'성공 기준 — 사전 합의',ic:'chart',b:['이슈 자동 처리율','건당 원가(AI+사람)','리드타임 단축 %','주간 원가 리포트 수신']},
     {t:'리스크 제거 — 안전',ic:'shield',b:['사람의 최종 검토 게이트','데이터 온프레미스 보관','벤더 락인 없음','즉시 롤백 가능']},
   ];
   const X=[64,454,844],W=372;
@@ -446,6 +448,144 @@ function slidePOC(){
 </svg>`;
 }
 
+
+// ============================================================
+// SLIDE R — 남는 것 vs 남지 않는 것 (기록의 차이)
+// ============================================================
+function slideRecord(){
+  // 좌/우 같은 y에 "질문 ↔ 답" 을 마주 놓아 대비를 만든다.
+  const QA = [
+    ['지난달 무슨 일을 했는가',      '처리 이력 · 건수 · 소요시간'],
+    ['이 기능에 얼마가 들었는가',    '토큰비 + 검토시간 = 건당 원가'],
+    ['몇 번 실패하고 다시 했는가',   '재시도 · 실패율 집계'],
+    ['누가 검토하고 승인했는가',     '단계별 담당자 · 시각 기록'],
+  ];
+  const ROWY = [392, 444, 496, 548];
+  return `
+<svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="vignR" cx="50%" cy="38%" r="85%">
+      <stop offset="0%" stop-color="#16161b"/><stop offset="100%" stop-color="${BG}"/>
+    </radialGradient>
+  </defs>
+  <rect width="1280" height="720" fill="url(#vignR)"/>
+  ${header('AI로 개발했습니다. 무엇이 남았습니까?','같은 CLI · 같은 작업 — 남는 기록의 차이')}
+
+  <!-- ===================== LEFT : AI CLI 단독 ===================== -->
+  ${card(64,96,548,496,{stroke:RED+'55'})}
+  <circle cx="104" cy="140" r="24" fill="${BG}" stroke="${RED}" stroke-width="1.6"/>
+  <g transform="translate(90,127)" stroke="${RED}" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="1" y="1" width="26" height="20" rx="3"/><path d="M7,8 L12,11.5 L7,15"/><path d="M15,15 L21,15"/>
+  </g>
+  ${text(142,136,'AI CLI 단독',{anchor:'start',size:20,fill:TXT})}
+  ${text(142,158,'터미널에서 바로 개발',{anchor:'start',size:12.5,fill:MUT,weight:600})}
+  <line x1="88" y1="182" x2="588" y2="182" stroke="${BORDER}" stroke-width="1"/>
+
+  ${text(88,212,'남는 것',{anchor:'start',size:13,fill:RED,weight:700})}
+  ${card(88,226,500,92,{fill:BEFORE_FILL,stroke:RED+'55',r:12})}
+  <circle cx="114" cy="252" r="3.4" fill="${RED}"/>
+  ${text(130,257,'git log — 무엇을 바꿨는지만',{anchor:'start',size:14,fill:MUT,weight:700})}
+  <circle cx="114" cy="288" r="3.4" fill="${RED}"/>
+  ${text(130,293,'대화 로그 — 어딘가의 세션 파일',{anchor:'start',size:14,fill:MUT,weight:700})}
+
+  ${text(88,354,'답할 수 없는 것',{anchor:'start',size:13,fill:RED,weight:700})}
+  ${QA.map(([q],i)=>{const y=ROWY[i];return `
+    <line x1="88" y1="${y+14}" x2="588" y2="${y+14}" stroke="${BORDER}" stroke-width="1"/>
+    ${text(92,y,q,{anchor:'start',size:14.5,fill:MUT,weight:700})}
+    <text x="584" y="${y+3}" font-size="24" font-weight="800" fill="${RED}" text-anchor="end" font-family="system-ui">?</text>`;}).join('')}
+
+  <!-- ===================== RIGHT : IVE ===================== -->
+  ${card(668,96,548,496,{stroke:CYAN})}
+  <rect x="684" y="118" width="44" height="44" rx="11" fill="#101016" stroke="${CYAN}" stroke-width="1.8"/>
+  ${text(706,147,'IVE',{size:16,fill:CYAN,weight:800,ls:0.5})}
+  ${text(744,136,'IVE',{anchor:'start',size:20,fill:TXT})}
+  ${text(744,158,'같은 CLI · 같은 작업',{anchor:'start',size:12.5,fill:MUT,weight:600})}
+  <line x1="692" y1="182" x2="1192" y2="182" stroke="${BORDER}" stroke-width="1"/>
+
+  ${text(692,212,'남는 것 — 작업 1건의 이력',{anchor:'start',size:13,fill:CYAN,weight:700})}
+  ${card(692,226,500,92,{fill:AFTER_FILL,stroke:CYAN,r:12})}
+  ${text(714,254,'이슈 #412 · claude · 38턴 · 09:12 → 10:47',{anchor:'start',size:13.5,fill:TXT,weight:700})}
+  ${text(714,278,'1.2M / 24K 토큰 · $2.14 · 검증 12분',{anchor:'start',size:13.5,fill:TXT,weight:700})}
+  ${text(714,302,'확인 통과 → MR !88 머지 → CI 성공',{anchor:'start',size:13.5,fill:CYAN,weight:700})}
+
+  ${text(692,354,'답할 수 있는 것',{anchor:'start',size:13,fill:CYAN,weight:700})}
+  ${QA.map(([,a],i)=>{const y=ROWY[i];return `
+    <line x1="692" y1="${y+14}" x2="1192" y2="${y+14}" stroke="${BORDER}" stroke-width="1"/>
+    <circle cx="700" cy="${y-4}" r="3.4" fill="${CYAN}"/>
+    ${text(714,y,a,{anchor:'start',size:14.5,fill:TXT,weight:700})}`;}).join('')}
+
+  <!-- ===================== BOTTOM BAND ===================== -->
+  ${card(64,612,1152,72,{stroke:CYAND})}
+  ${text(90,644,'터미널에서 직접 한 작업도, 이슈에 기록만 남기면 IVE가 이력으로 흡수합니다.',{anchor:'start',size:15,fill:TXT})}
+  ${text(90,666,'이슈 본문의 ive-meta 블록을 파싱해 실행 이력으로 자동 편입 — IVE를 거치지 않은 개발도 통계에 들어옵니다.',{anchor:'start',size:11.5,fill:MUT,weight:600})}
+  ${pill(1112,648,'2026년 3월부터 운영 중',176,CYAN)}
+
+  ${text(640,710,'AI는 코드를 남기고, IVE는 이력을 남깁니다.',{size:11.5,fill:DIM,weight:600})}
+</svg>`; }
+
+
+// ============================================================
+// SLIDE W — 왜 지금 IVE인가 (도입 명분 · POC 유도)
+// ============================================================
+function slideWhy(){
+  const NOW = ['개발팀이 요약해 올린 것','주·월 단위로 뒤늦게','근거를 되짚을 수 없음'];
+  const IVE = ['시스템이 집계한 원본','지정한 요일·시각에 자동 수신','이슈 1건까지 되짚기'];
+  const PROOF = [
+    {ic:'split', t:'AI + 사람, 나눠서', s:'토큰비와 검토 인건비를 분리 집계', f:'리포트 본문에 문장으로 자동 서술'},
+    {ic:'box',   t:'제품별로',          s:'저장소 = 제품 단위 원가 · 처리량', f:'저장소를 추가하면 자동으로 늘어남'},
+    {ic:'trend', t:'지난달과 비교',      s:'전기 대비 증감률 자동 산출', f:'악화되면 경고 카드로 함께 알림'},
+  ];
+  const PX=[64,457,850], PW=366;
+  const picon = t => t==='split' ? `<path d="M14,3 L14,25"/><path d="M4,9 L10,14 L4,19"/><path d="M24,9 L18,14 L24,19"/>`
+    : t==='box' ? `<rect x="3" y="8" width="22" height="16" rx="2"/><path d="M3,13 L25,13"/><path d="M11,8 L11,4 L17,4 L17,8"/>`
+    : `<path d="M3,22 L11,13 L16,18 L25,7"/><path d="M19,7 L25,7 L25,13"/>`;
+  return `
+<svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="vignW" cx="50%" cy="30%" r="88%">
+      <stop offset="0%" stop-color="#12202a"/><stop offset="60%" stop-color="#12121a"/><stop offset="100%" stop-color="${BG}"/>
+    </radialGradient>
+    <marker id="wah" markerWidth="11" markerHeight="11" refX="8" refY="4" orient="auto"><path d="M0,0 L9,4 L0,8 Z" fill="${CYAN}"/></marker>
+  </defs>
+  <rect width="1280" height="720" fill="url(#vignW)"/>
+  ${header('왜 IVE를 도입하는가','보고받는 숫자에서, 실측되는 숫자로')}
+
+  ${text(640,150,'매출은 아십니다. 원가는 아십니까?',{size:40,fill:TXT,weight:800})}
+  ${text(640,184,'제품별 개발·유지 원가를 — 보고가 아니라 실측으로 확인합니다.',{size:15,fill:'#b4b4bc',weight:600})}
+
+  <!-- 지금 -->
+  ${card(64,212,530,208,{fill:BEFORE_FILL,stroke:RED+'55'})}
+  ${text(94,252,'지금 — 보고받는 숫자',{anchor:'start',size:17,fill:RED})}
+  <line x1="94" y1="270" x2="564" y2="270" stroke="${BORDER}" stroke-width="1"/>
+  ${NOW.map((b,i)=>bullet(94,308+i*36,b,RED,MUT)).join('')}
+
+  <path d="M608,316 L672,316" fill="none" stroke="${CYAN}" stroke-width="2.5" marker-end="url(#wah)"/>
+
+  <!-- IVE -->
+  ${card(686,212,530,208,{fill:AFTER_FILL,stroke:CYAN})}
+  ${text(716,252,'IVE — 실측되는 숫자',{anchor:'start',size:17,fill:CYAN})}
+  <line x1="716" y1="270" x2="1186" y2="270" stroke="${BORDER}" stroke-width="1"/>
+  ${IVE.map((b,i)=>bullet(716,308+i*36,b,CYAN,TXT)).join('')}
+
+  <!-- 근거 3 -->
+  ${PROOF.map((m,i)=>{const x=PX[i];return `
+    ${card(x,444,PW,150)}
+    <circle cx="${x+46}" cy="492" r="23" fill="${BG}" stroke="${CYAN}" stroke-width="1.5"/>
+    <g transform="translate(${x+32},478)" stroke="${CYAN}" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round">${picon(m.ic)}</g>
+    ${text(x+84,486,m.t,{anchor:'start',size:16,fill:TXT})}
+    ${text(x+84,508,m.s,{anchor:'start',size:12.5,fill:MUT,weight:600})}
+    <line x1="${x+24}" y1="532" x2="${x+PW-24}" y2="532" stroke="${BORDER}" stroke-width="1"/>
+    ${text(x+PW/2,562,m.f,{size:12,fill:DIM,weight:600})}
+  `;}).join('')}
+
+  <!-- POC 유도 -->
+  ${card(64,616,1152,68,{stroke:CYAN,fill:'#0f1f24'})}
+  ${text(640,648,'먼저, 당신 회사의 숫자부터 보십시오.',{size:20,fill:TXT,weight:800})}
+  ${text(640,672,'2주 POC — 저장소 1개 · 라벨 하나 · 기존 AI 구독 그대로. 끝나면 그 회사의 원가 리포트가 남습니다.',{size:12.5,fill:'#b4b4bc',weight:600})}
+
+  ${text(640,710,'IVE — 보고가 아니라, 실측으로',{size:11.5,fill:DIM,weight:600})}
+</svg>`; }
+
 // ============================================================
 // HTML wrappers
 // ============================================================
@@ -461,11 +601,14 @@ const single = (svg) => `<!DOCTYPE html><html lang="ko"><head><meta charset="utf
  html,body{width:1280px;height:720px;overflow:hidden;}</style></head><body><div class="page">${svg}</div></body></html>`;
 const multi = (svgs) => `<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><style>${PAGE_CSS}</style></head><body>${svgs.map(s=>`<div class="page">${s}</div>`).join('')}</body></html>`;
 
-const cover = slideCover(), ov = slideOverview(), scr = slideScreens(), im = slideImpact(), poc = slidePOC();
+const cover = slideCover(), rec = slideRecord(), why = slideWhy(), ov = slideOverview(), scr = slideScreens(), im = slideImpact(), poc = slidePOC();
 fs.writeFileSync(path.join(__dirname,'ive-cover.html'),    single(cover));
+fs.writeFileSync(path.join(__dirname,'ive-record.html'),   single(rec));
+fs.writeFileSync(path.join(__dirname,'ive-why.html'),      single(why));
 fs.writeFileSync(path.join(__dirname,'ive-overview.html'), single(ov));
 fs.writeFileSync(path.join(__dirname,'ive-screens.html'),  single(scr));
 fs.writeFileSync(path.join(__dirname,'ive-impact.html'),   single(im));
 fs.writeFileSync(path.join(__dirname,'ive-poc.html'),      single(poc));
-fs.writeFileSync(path.join(__dirname,'ive-brochure.html'), multi([cover, ov, scr, im, poc]));
-console.log('built: cover, overview, screens, impact, poc, brochure(5p)');
+// 흐름: 표지 → 구조 → 실제화면 → 기록의 차이 → 역할별 변화 → 도입 명분 → POC
+fs.writeFileSync(path.join(__dirname,'ive-brochure.html'), multi([cover, ov, scr, rec, im, why, poc]));
+console.log('built: cover, overview, screens, record, impact, why, poc, brochure(7p)');
