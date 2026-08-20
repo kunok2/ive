@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
-import { getAllTokenPricing, upsertTokenPricing, getSystemSetting, setSystemSetting } from '@/lib/db'
+import { getAllTokenPricing, upsertTokenPricing, getSystemSetting, setSystemSetting, appendRate } from '@/lib/db'
 import { getHumanRate, computeHumanRate, DEFAULT_DAYS_PER_WEEK, DEFAULT_HOURS_PER_DAY } from '@/lib/token-pricing'
 import { isSupportedCurrency } from '@/lib/currency'
 import { getSupportedRates } from '@/lib/currency-server'
@@ -87,6 +87,8 @@ export async function PUT(req: NextRequest) {
   setSystemSetting(SETTING_DAYS, String(days))
   setSystemSetting(SETTING_HOURS, String(hours))
   setSystemSetting(SETTING_INPUT_CURRENCY, currency)
+  // 단가 이력: 과거 보고서가 이 변경으로 소급 변경되지 않도록 "지금부터 유효"로 남긴다.
+  appendRate({ kind: 'human', key: '', inputPrice: salaryUsd, outputPrice: 0, meta: { daysPerWeek: days, hoursPerDay: hours }, effectiveFrom: new Date().toISOString() })
 
   logActivity({ userId: user.id, category: 'settings', action: 'update_human_rate', detail: `사람 단가: ${salaryUsd} USD (입력 ${rawSalary} ${currency}), 주 ${days}일 × ${hours}h`, req })
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
-import { getAllTokenPricing, upsertTokenPricing, getSystemSetting, setSystemSetting } from '@/lib/db'
+import { getAllTokenPricing, upsertTokenPricing, getSystemSetting, setSystemSetting, appendRate } from '@/lib/db'
 import { subscriptionModelName, SUBSCRIPTION_PREFIX, getAiSubscriptions } from '@/lib/ai-subscription'
 import { isSupportedCurrency } from '@/lib/currency'
 import { getSupportedRates } from '@/lib/currency-server'
@@ -76,6 +76,8 @@ export async function PUT(req: NextRequest) {
     updatedAt: new Date().toISOString(),
   })
   setSystemSetting(SETTING_INPUT_CURRENCY, currency)
+  // 단가 이력: 요금제를 바꿔도 과거 보고서는 그때 요금으로 계산되게 한다.
+  appendRate({ kind: 'ai_subscription', key: cliName, inputPrice: monthlyUsd, outputPrice: 0, meta: null, effectiveFrom: new Date().toISOString() })
 
   logActivity({
     userId: user.id, category: 'settings', action: 'update_ai_subscription',

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
-import { getAllTokenPricing, upsertTokenPricing, deleteTokenPricing } from '@/lib/db'
+import { getAllTokenPricing, upsertTokenPricing, deleteTokenPricing, appendRate } from '@/lib/db'
 import { applyLatestPricing } from '@/lib/token-pricing'
 import { logActivity } from '@/lib/activity'
 
@@ -28,6 +28,8 @@ export async function PUT(req: NextRequest) {
       outputPrice: item.outputPrice,
       updatedAt: now,
     })
+    // 단가 이력: 지금부터 유효. 과거 exec 은 그 시점 단가로 계속 계산된다.
+    appendRate({ kind: 'model', key: item.modelName, inputPrice: item.inputPrice, outputPrice: item.outputPrice, meta: null, effectiveFrom: now })
   }
   logActivity({ userId: user.id, category: 'settings', action: 'update_pricing', detail: `토큰 단가 갱신 (${items.length}개 항목)`, req })
   return NextResponse.json(getAllTokenPricing())

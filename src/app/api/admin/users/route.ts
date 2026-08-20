@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
-import { getAllUsers, deleteUser, getDb, getUserById } from '@/lib/db'
+import { getAllUsers, deleteUser, getDb, getUserById, appendRate } from '@/lib/db'
 import { logActivity } from '@/lib/activity'
 
 export async function GET() {
@@ -51,6 +51,8 @@ export async function PATCH(req: Request) {
     // 사람단가 배수. 소수 허용(예: 1.8). 0/음수/NaN은 거부, 과도한 값은 상한.
     const m = Math.min(Math.round(rateMultiplier * 100) / 100, 100)
     getDb().prepare('UPDATE users SET rate_multiplier = ? WHERE id = ?').run(m, userId)
+    // 단가 이력: 배수를 바꿔도 과거 보고서의 인건비는 그때 배수로 계산되게 한다.
+    appendRate({ kind: 'multiplier', key: userId, inputPrice: m, outputPrice: 0, meta: null, effectiveFrom: new Date().toISOString() })
   }
   const changes: string[] = []
   if (typeof isAdmin === 'boolean') changes.push(`관리자=${isAdmin ? '지정' : '해제'}`)

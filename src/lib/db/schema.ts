@@ -161,6 +161,24 @@ export function initSchema(db: Database.Database) {
       max_agents INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+    -- 단가 이력 (유효일자). 보고서는 "지금 단가"가 아니라 "그 실행이 일어난 시점의 단가"로
+    -- 계산해야 한다. 단가를 바꾸면 과거 보고서가 소급 변경되던 문제를 막는다.
+    --   kind='human'           key=''          input_price=월급(USD),      meta={daysPerWeek,hoursPerDay}
+    --   kind='ai_subscription' key=cliName     input_price=월 구독료(USD)
+    --   kind='model'           key=modelName   input_price/output_price=$/1M tokens
+    --   kind='multiplier'      key=userId      input_price=사람단가 배수
+    CREATE TABLE IF NOT EXISTS rate_history (
+      id TEXT PRIMARY KEY,
+      kind TEXT NOT NULL,
+      key TEXT NOT NULL DEFAULT '',
+      input_price REAL NOT NULL,
+      output_price REAL NOT NULL DEFAULT 0,
+      meta TEXT,
+      effective_from TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_rate_history_lookup ON rate_history(kind, key, effective_from);
+
     CREATE TABLE IF NOT EXISTS role_assignments (
       id TEXT PRIMARY KEY,
       role_id TEXT NOT NULL,
@@ -1118,6 +1136,46 @@ export function initSchema(db: Database.Database) {
       console.log('[DB] Added report_secret to projects')
     }
   } catch (e) { console.error("Migration failed for projects report_secret:", e) }
+
+  // ── 단가 이력 백필 ──
+  try {
+    // rate_history 백필: 이력 도입 이전의 현재 단가들을 EPOCH 유효로 한 번만 심는다.
+    // 이게 없으면 과거 exec 이 "그 시점 단가 없음" 으로 0원 처리된다.
+    const rhCount = db.prepare('SELECT COUNT(*) c FROM rate_history').get() as { c: number }
+    if (rhCount.c === 0) {
+      const EPOCH0 = '1970-01-01T00:00:00.000Z'
+      const ins = db.prepare(`
+        INSERT OR IGNORE INTO rate_history (id, kind, key, input_price, output_price, meta, effective_from)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `)
+      type PricingRow = { cli_name: string; model_name: string; input_price: number; output_price: number }
+      type SettingRow = { value: string } | undefined
+      const pricing = db.prepare('SELECT cli_name, model_name, input_price, output_price FROM token_pricing').all() as PricingRow[]
+      let seeded = 0
+      for (const p of pricing) {
+        if (p.cli_name === 'human') {
+          const dpw = db.prepare("SELECT value FROM system_settings WHERE key='human.daysPerWeek'").get() as SettingRow
+          const hpd = db.prepare("SELECT value FROM system_settings WHERE key='human.hoursPerDay'").get() as SettingRow
+          const meta = JSON.stringify({
+            daysPerWeek: parseFloat(dpw?.value ?? '') || 5,
+            hoursPerDay: parseFloat(hpd?.value ?? '') || 8,
+          })
+          ins.run(`rh-human--${EPOCH0}`, 'human', '', p.input_price, 0, meta, EPOCH0)
+        } else if (String(p.model_name).startsWith('subscription (')) {
+          ins.run(`rh-ai_subscription-${p.cli_name}-${EPOCH0}`, 'ai_subscription', p.cli_name, p.input_price, 0, null, EPOCH0)
+        } else {
+          ins.run(`rh-model-${p.model_name}-${EPOCH0}`, 'model', p.model_name, p.input_price, p.output_price, null, EPOCH0)
+        }
+        seeded++
+      }
+      const users = db.prepare('SELECT id, rate_multiplier FROM users').all() as { id: string; rate_multiplier: number | null }[]
+      for (const u of users) {
+        ins.run(`rh-multiplier-${u.id}-${EPOCH0}`, 'multiplier', u.id, u.rate_multiplier ?? 1, 0, null, EPOCH0)
+        seeded++
+      }
+      if (seeded > 0) console.log(`[DB] rate_history 백필: ${seeded}건 (EPOCH 유효)`)
+    }
+  } catch (e) { console.error('Migration failed for rate_history backfill:', e) }
 
   // ── Slack 통합 ──
   // 워크스페이스 (행마다 워크스페이스 1개 = 봇 토큰 1쌍). 멀티 워크스페이스 관리.
