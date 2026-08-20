@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { getAllTokenPricing, upsertTokenPricing, getSystemSetting, setSystemSetting } from '@/lib/db'
-import { SUBSCRIPTION_MODEL, getAiSubscriptions } from '@/lib/ai-subscription'
+import { subscriptionModelName, SUBSCRIPTION_PREFIX, getAiSubscriptions } from '@/lib/ai-subscription'
 import { isSupportedCurrency } from '@/lib/currency'
 import { getSupportedRates } from '@/lib/currency-server'
 import { logActivity } from '@/lib/activity'
@@ -66,11 +66,11 @@ export async function PUT(req: NextRequest) {
   }
   monthlyUsd = Math.round(monthlyUsd * 100) / 100
 
-  const existing = getAllTokenPricing().find(p => p.cliName === cliName && p.modelName === SUBSCRIPTION_MODEL)
+  const existing = getAllTokenPricing().find(p => p.cliName === cliName && p.modelName.startsWith(SUBSCRIPTION_PREFIX))
   upsertTokenPricing({
     id: existing?.id ?? `tp-sub-${cliName}`,
     cliName,
-    modelName: SUBSCRIPTION_MODEL,
+    modelName: subscriptionModelName(cliName),
     inputPrice: monthlyUsd,
     outputPrice: 0,
     updatedAt: new Date().toISOString(),

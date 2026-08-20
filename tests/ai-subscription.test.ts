@@ -49,3 +49,47 @@ describe('cliFromModelName — 툴 직접개발 exec 의 CLI 역추적', () => {
     expect(cliFromModelName(model)).toBe(expected)
   })
 })
+
+// ─────────────────────────────────────────────────────────────
+// DB 계약: token_pricing.model_name 은 UNIQUE 다.
+// 구독료를 CLI 마다 같은 model_name('subscription (monthly)') 으로 저장하면
+// 두 번째 CLI 에서 제약 위반으로 저장이 실패한다 — Claude 는 되고 Codex 는 500.
+// 테스트 DB 에 token_pricing 이 없어 최초 구현에서 이 버그를 놓쳤다.
+// ─────────────────────────────────────────────────────────────
+import { beforeEach, afterEach } from 'vitest'
+import type DatabaseType from 'better-sqlite3'
+import { setupTestDb, teardownTestDb } from './helpers/test-db'
+import { getAiSubscriptions, subscriptionModelName } from '../src/lib/ai-subscription'
+import { upsertTokenPricing } from '../src/lib/db'
+
+describe('구독료 저장 — CLI 별로 독립 저장된다', () => {
+  let db: DatabaseType.Database
+  beforeEach(() => { db = setupTestDb() })
+  afterEach(() => { teardownTestDb(db) })
+
+  function save(cli: string, monthlyUsd: number) {
+    upsertTokenPricing({
+      id: `tp-sub-${cli}`, cliName: cli, modelName: subscriptionModelName(cli),
+      inputPrice: monthlyUsd, outputPrice: 0, updatedAt: new Date('2026-08-20').toISOString(),
+    })
+  }
+
+  it('여러 CLI 의 구독료를 저장해도 UNIQUE 제약에 걸리지 않는다', () => {
+    expect(() => { save('claude', 200); save('codex', 20); save('gemini', 0) }).not.toThrow()
+    expect(getAiSubscriptions()).toEqual({ claude: 200, codex: 20 })  // 0 은 미설정 = 종량제
+  })
+
+  it('같은 CLI 를 다시 저장하면 갱신된다 (행이 늘지 않는다)', () => {
+    save('claude', 200)
+    save('claude', 100)
+    expect(getAiSubscriptions()).toEqual({ claude: 100 })
+    const n = db.prepare("SELECT COUNT(*) c FROM token_pricing WHERE cli_name='claude'").get() as { c: number }
+    expect(n.c).toBe(1)
+  })
+
+  it('사람 단가(human) 행은 구독료로 잡히지 않는다', () => {
+    upsertTokenPricing({ id: 'tp-human', cliName: 'human', modelName: '관리자 (월급 USD)', inputPrice: 9600, outputPrice: 0, updatedAt: '2026-08-20' })
+    save('claude', 200)
+    expect(getAiSubscriptions()).toEqual({ claude: 200 })
+  })
+})

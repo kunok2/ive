@@ -17,14 +17,21 @@
  */
 import { getAllTokenPricing } from './db'
 
-/** 구독료를 담는 token_pricing 행의 model_name. cli_name 별로 한 행씩. */
-export const SUBSCRIPTION_MODEL = 'subscription (monthly)'
+/**
+ * 구독료를 담는 token_pricing 행의 model_name.
+ * ⚠️ token_pricing.model_name 은 UNIQUE 라 CLI 마다 값이 달라야 한다.
+ * 공통 문자열 하나를 쓰면 두 번째 CLI 저장에서 제약 위반으로 실패한다.
+ */
+export const SUBSCRIPTION_PREFIX = 'subscription ('
+export function subscriptionModelName(cli: string): string {
+  return `${SUBSCRIPTION_PREFIX}${cli})`
+}
 
 /** 구독료가 설정된 CLI → 월 구독료(USD). 0 이하는 미설정으로 보고 제외한다. */
 export function getAiSubscriptions(): Record<string, number> {
   const out: Record<string, number> = {}
   for (const p of getAllTokenPricing()) {
-    if (p.cliName === 'human' || p.modelName !== SUBSCRIPTION_MODEL) continue
+    if (p.cliName === 'human' || !p.modelName.startsWith(SUBSCRIPTION_PREFIX)) continue
     if (p.inputPrice > 0) out[p.cliName] = p.inputPrice
   }
   return out

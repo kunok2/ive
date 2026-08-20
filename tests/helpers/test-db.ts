@@ -11,6 +11,15 @@ export function setupTestDb(): Database.Database {
 
   // 테스트에 필요한 최소 스키마
   db.exec(`
+    CREATE TABLE token_pricing (
+      id TEXT PRIMARY KEY,
+      cli_name TEXT NOT NULL,
+      model_name TEXT NOT NULL UNIQUE,
+      input_price REAL NOT NULL,
+      output_price REAL NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE users (
       id TEXT PRIMARY KEY,
       email TEXT UNIQUE NOT NULL,
