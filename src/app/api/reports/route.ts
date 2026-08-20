@@ -445,7 +445,8 @@ export async function GET(req: NextRequest) {
     const uSuccess = uExecs.filter(e => e.status === 'success').length
     const uFailed = uExecs.filter(e => e.status === 'failed').length
     const uDur = uExecs.reduce((s, e) => s + durationMin(e.startedAt, e.endedAt), 0)
-    // 사람 비용: 이 사람의 검증/확인/툴개발 작업시간 × 단가 × 배수 합 (assigneeType='user'라 AI분=0).
+    // 사람 비용: 이 사람의 검증/확인/툴개발 작업시간 × 단가 × 배수 합.
+    // .human 만 취한다 — 툴개발 exec 은 ive-meta 의 AI 비용(.ai)도 갖지만 여기선 사람 몫만 본다.
     const uCost = uExecs.reduce((s, e) => s + resolveExecutionCostBreakdown(e, humanRate).human, 0)
     const uFinished = uSuccess + uFailed
     const uniqueIssues = new Set(uExecs.map(e => `${e.projectId}:${e.issueIid}`))

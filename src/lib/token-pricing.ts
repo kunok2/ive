@@ -119,11 +119,12 @@ export interface ExecutionCostBreakdown {
 
 /** 단일 execution의 비용을 AI/사람으로 나누어 계산 */
 export function resolveExecutionCostBreakdown(e: CostExec, humanRate: HumanRate): ExecutionCostBreakdown {
-  // AI 비용: IVE 처리(에이전트 exec)의 토큰 비용. 실제 청구액 우선, 없으면 토큰×단가.
-  let ai = 0
-  if (e.assigneeType !== 'user') {
-    ai = e.costUsd > 0 ? e.costUsd : calcCostFromDb(e.inputTokens, e.outputTokens, e.modelName ?? undefined)
-  }
+  // AI 비용: 그 실행이 실제로 소비한 AI 비용. 실제 청구액 우선, 없으면 토큰×단가.
+  //   - IVE 처리(에이전트 exec): 스캐너가 실측한 토큰/청구액.
+  //   - 툴 직접개발(user exec): 이슈 본문 ive-meta 의 cost_usd / 토큰 (스캐너가 동기화해 저장).
+  //     assigneeType 으로 걸러내면 토큰은 합산되는데 비용만 0 이 되어 리포트가 자기모순에 빠진다.
+  //   - 검증/확인 exec(ex-verify, ex-confirm): 토큰·청구액이 없으므로 자연히 0.
+  const ai = e.costUsd > 0 ? e.costUsd : calcCostFromDb(e.inputTokens, e.outputTokens, e.modelName ?? undefined)
   // 사람 비용: 작업시간(분) × 분당단가 × 사용자별 단가 배수(능력/보수 차이 반영, 기본 1)
   let human = 0
   if (humanRate.costPerMin > 0) {
