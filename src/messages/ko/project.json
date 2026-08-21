@@ -75,7 +75,7 @@
   "labelExists": "생성됨",
   "labelMissing": "없음 — Git에서 직접 생성 필요",
   "aiGuide": "AI 도구 가이드",
-  "aiGuideDescription": "외부 AI CLI(Claude Code 등)가 \"IVE에 등록해줘\"를 인식하도록 저장소에 CLAUDE.md, AGENTS.md를 설치합니다.",
+  "aiGuideDescription": "외부 AI CLI(Claude Code 등)가 \"IVE에 등록해줘\"를 인식하고, 단계 라벨의 뜻과 에이전트가 해 둔 일을 검토·확인·마무리하는 절차를 따르도록 저장소에 CLAUDE.md, AGENTS.md를 설치합니다.",
   "aiGuideInstall": "가이드 설치",
   "aiGuideInstallFailed": "가이드 설치에 실패했습니다",
   "aiGuideCreated": "새로 생성됨",

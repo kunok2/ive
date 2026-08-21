@@ -75,7 +75,7 @@
   "labelExists": "exists",
   "labelMissing": "missing — create manually in Git",
   "aiGuide": "AI Tool Guide",
-  "aiGuideDescription": "Install CLAUDE.md and AGENTS.md in the repository so external AI CLIs (Claude Code, etc.) recognize \"register to IVE\" requests.",
+  "aiGuideDescription": "Install CLAUDE.md and AGENTS.md in the repository so external AI CLIs (Claude Code, etc.) recognize \"register to IVE\" requests and follow the stage-label workflow for reviewing, confirming, and closing out work an agent has already done.",
   "aiGuideInstall": "Install Guide",
   "aiGuideInstallFailed": "Failed to install guide",
   "aiGuideCreated": "created",
