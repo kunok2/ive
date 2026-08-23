@@ -2,9 +2,10 @@
  @page { size: 13.333in 7.5in; margin: 0; }
  * { margin:0; padding:0; box-sizing:border-box; }
  html,body { background:#0e0e11; }
- .page { width:1280px; height:720px; background:#0e0e11; overflow:hidden; page-break-after: always; }
+ .page { width:1280px; height:720px; background:#0e0e11; overflow:hidden; page-break-after: always; margin:0 auto; }
  .page:last-child { page-break-after: auto; }
  svg { display:block; width:1280px; height:720px; }
+ @media print { .page { margin:0; } }
  html,body{width:1280px;height:720px;overflow:hidden;}</style></head><body><div class="page">
 <svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
   <defs>
@@ -87,11 +88,6 @@
   <rect x="64" y="612" width="1152" height="72" rx="14" fill="#1c1c20" stroke="#0891b2" stroke-width="1.5"/>
   <text x="90" y="644" font-size="15" font-weight="700" fill="#e4e4e7" text-anchor="start" font-family="-apple-system,'Apple SD Gothic Neo','Pretendard',system-ui,sans-serif">터미널에서 직접 한 작업도, 이슈에 기록만 남기면 IVE가 이력으로 흡수합니다.</text>
   <text x="90" y="666" font-size="11.5" font-weight="600" fill="#8b8b93" text-anchor="start" font-family="-apple-system,'Apple SD Gothic Neo','Pretendard',system-ui,sans-serif">이슈 본문의 ive-meta 블록을 파싱해 실행 이력으로 자동 편입 — IVE를 거치지 않은 개발도 통계에 들어옵니다.</text>
-  <g>
-    <rect x="1024" y="635" width="176" height="26" rx="13" fill="#0e0e11" stroke="#22d3ee" stroke-width="1.2"/>
-    <circle cx="1039" cy="648" r="4" fill="#22d3ee"/>
-    <text x="1051" y="652.5" font-size="12.5" font-weight="700" fill="#e4e4e7" text-anchor="start" font-family="-apple-system,'Apple SD Gothic Neo','Pretendard',system-ui,sans-serif">2026년 3월부터 운영 중</text>
-  </g>
 
   <text x="640" y="710" font-size="11.5" font-weight="600" fill="#5b5b63" text-anchor="middle" font-family="-apple-system,'Apple SD Gothic Neo','Pretendard',system-ui,sans-serif">AI는 코드를 남기고, IVE는 이력을 남깁니다.</text>
 </svg></div></body></html>

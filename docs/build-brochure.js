@@ -18,6 +18,19 @@ function dataUri(rel, mime) {
   const buf = fs.readFileSync(path.join(__dirname, rel));
   return `data:${mime};base64,` + buf.toString('base64');
 }
+function iconPath(rel){
+  const svg = fs.readFileSync(path.join(__dirname, rel), 'utf8');
+  return svg.match(/ d="([^"]+)"/)[1];
+}
+const vscodeP = iconPath('assets/ide/vscode.svg');
+const antigravity = dataUri('assets/ide/antigravity.png','image/png');
+const PM = [
+  ['Linear', iconPath('assets/pm/linear.svg'), '#5E6AD2'],
+  ['Jira',   iconPath('assets/pm/jira.svg'),   '#2684FF'],
+  ['Asana',  iconPath('assets/pm/asana.svg'),  '#F06A6A'],
+  ['Notion', iconPath('assets/pm/notion.svg'), '#e4e4e7'],
+];
+const cursorP = iconPath('assets/ide/cursor.svg');
 const claude   = dataUri('../public/cli/claude.svg',     'image/svg+xml');
 const codex    = dataUri('../public/cli/codex.png',      'image/png');
 const gemini   = dataUri('../public/cli/gemini.png',     'image/png');
@@ -52,8 +65,18 @@ function badge(cx,cy,num,label,w,color=CYAN){
   return `<g>
     <rect x="${x}" y="${cy-h/2}" width="${w}" height="${h}" rx="13" fill="${BG}" stroke="${color}" stroke-width="1.2"/>
     <circle cx="${x+15}" cy="${cy}" r="9" fill="${color}"/>
-    <text x="${x+15}" y="${cy+4}" font-size="12" font-weight="800" fill="${BG}" text-anchor="middle" font-family="system-ui">${num}</text>
+    <text x="${x+15}" y="${cy+4}" font-size="${String(num).length>2?8.5:String(num).length>1?10:12}" font-weight="800" fill="${BG}" text-anchor="middle" font-family="system-ui">${num}</text>
     <text x="${x+30}" y="${cy+4.5}" font-size="12.5" font-weight="700" fill="${TXT}" text-anchor="start" ${FF}>${label}</text>
+  </g>`;
+}
+function badge2(cx,cy,num,l1,l2,w,color=CYAN){
+  const h=44, x=cx-w/2;
+  return `<g>
+    <rect x="${x}" y="${cy-h/2}" width="${w}" height="${h}" rx="16" fill="${BG}" stroke="${color}" stroke-width="1.2"/>
+    <circle cx="${x+15}" cy="${cy}" r="9" fill="${color}"/>
+    <text x="${x+15}" y="${cy+4}" font-size="12" font-weight="800" fill="${BG}" text-anchor="middle" font-family="system-ui">${num}</text>
+    <text x="${x+30}" y="${cy-3}" font-size="12.5" font-weight="700" fill="${TXT}" text-anchor="start" ${FF}>${l1}</text>
+    <text x="${x+30}" y="${cy+15}" font-size="12.5" font-weight="700" fill="${TXT}" text-anchor="start" ${FF}>${l2}</text>
   </g>`;
 }
 function pill(cx,cy,label,w,color,dashed){
@@ -91,27 +114,33 @@ function slideOverview(){ return `
     <marker id="ah"  markerWidth="11" markerHeight="11" refX="8" refY="4" orient="auto"><path d="M0,0 L9,4 L0,8 Z" fill="${CYAN}"/></marker>
     <marker id="aha" markerWidth="11" markerHeight="11" refX="8" refY="4" orient="auto"><path d="M0,0 L9,4 L0,8 Z" fill="${AMBER}"/></marker>
     <marker id="ahc" markerWidth="11" markerHeight="11" refX="8" refY="4" orient="auto-start-reverse"><path d="M0,0 L9,4 L0,8 Z" fill="${CYAN}"/></marker>
+    <marker id="ahr" markerWidth="11" markerHeight="11" refX="8" refY="4" orient="auto"><path d="M0,0 L9,4 L0,8 Z" fill="${RED}"/></marker>
+    <marker id="ahm" markerWidth="11" markerHeight="11" refX="8" refY="4" orient="auto"><path d="M0,0 L9,4 L0,8 Z" fill="${MUT}"/></marker>
   </defs>
 
   <rect width="1280" height="720" fill="url(#vign)"/>
-  ${header('이슈 기반 AI 개발 자동화 플랫폼','이슈 등록·수집 → AI 처리 → MR/PR·CI/CD 반영 → 검증·확인 → Slack 협업 → 통계 리포트')}
+  ${header('이슈 기반 AI 개발 자동화 플랫폼','이슈 등록·수집 → AI 처리 → 검증·MR/PR 병합 → 스테이징·확인자 승인 → 운영 반영 → 통계 리포트')}
 
   <!-- ===== Flow arrows ===== -->
-  <!-- ① 등록 (개발자/링크) · ② 수집 (cyan) -->
-  <path d="M175,192 L175,278"                   fill="none" stroke="${CYAN}" stroke-width="2" marker-end="url(#ah)"/>   <!-- ① dev->git -->
-  <path d="M340,448 C300,430 270,410 232,384"   fill="none" stroke="${CYAN}" stroke-width="2" marker-end="url(#ah)"/>   <!-- ① link->git -->
+  <!-- ① 등록 (개발자/Open API) · ② 수집 (cyan) -->
+  <path d="M177,222 L177,278"                   fill="none" stroke="${CYAN}" stroke-width="2" marker-end="url(#ah)"/>   <!-- ① dev->git -->
+  <path d="M340,440 C302,426 270,408 232,384"   fill="none" stroke="${CYAN}" stroke-width="2" marker-end="url(#ah)"/>   <!-- ① link->git -->
   <path d="M290,332 C400,332 480,366 557,378"   fill="none" stroke="${CYAN}" stroke-width="2" marker-end="url(#ah)"/>   <!-- ② git->IVE -->
-  <path d="M640,304 L640,222"                   fill="none" stroke="${CYAN}" stroke-width="2" marker-end="url(#ah)"/>   <!-- ③ IVE->CLI -->
-  <path d="M845,160 C950,168 1012,230 1080,290" fill="none" stroke="${CYAN}" stroke-width="2" marker-end="url(#ah)"/>   <!-- ④ CLI->verify -->
-  <path d="M982,381 C890,392 800,392 726,388"   fill="none" stroke="${CYAN}" stroke-width="2" marker-end="url(#ah)"/>   <!-- ⑤ verify->IVE -->
+  <path d="M640,304 L640,226"                   fill="none" stroke="${CYAN}" stroke-width="2" marker-end="url(#ah)"/>   <!-- ③ IVE->CLI -->
+  <path d="M756,222 C752,254 716,274 682,302"   fill="none" stroke="${CYAN}" stroke-width="2" marker-end="url(#ah)"/>   <!-- ⑤ CLI->IVE 결과 제출 -->
+  <path d="M721,348 C800,334 900,328 978,324"   fill="none" stroke="${CYAN}" stroke-width="2" marker-end="url(#ah)"/>   <!-- ⑥ IVE->verify 검토 요청 -->
+  <path d="M982,372 C900,382 800,382 726,376"   fill="none" stroke="${MUT}" stroke-width="2" marker-end="url(#ahm)"/>   <!-- 6.5 반려 verify->IVE -->
+  <path d="M982,410 C900,418 800,418 726,412"   fill="none" stroke="${CYAN}" stroke-width="2" marker-end="url(#ah)"/>   <!-- ⑥ 병합 승인 verify->IVE -->
+  <path d="M982,448 C900,454 800,454 726,450"   fill="none" stroke="${CYAN}" stroke-width="2" marker-end="url(#ah)"/>   <!-- ⑧ 검증·확인 통과 verify->IVE -->
   <!-- 산출/전달 (자동 흐름 → cyan) -->
   <path d="M676,456 C720,500 745,548 758,584"   fill="none" stroke="${CYAN}" stroke-width="2" marker-end="url(#ah)"/> <!-- ⑥ IVE->report -->
   <path d="M901,637 L928,637"                   fill="none" stroke="${CYAN}" stroke-width="2" marker-end="url(#ah)"/> <!-- ⑦ report->manager -->
   <!-- 코드 전달 (자동 흐름 → cyan) -->
   <path d="M470,206 C360,224 250,250 210,281"   fill="none" stroke="${CYAN}" stroke-width="2" marker-end="url(#ah)"/> <!-- A cli->git MR/PR -->
-  <path d="M175,382 L175,562"                   fill="none" stroke="${CYAN}" stroke-width="2" marker-end="url(#ah)"/> <!-- B git->ci/cd -->
+  <path d="M556,432 C470,428 380,404 298,378"   fill="none" stroke="${CYAN}" stroke-width="2" marker-end="url(#ah)"/> <!-- ⑥ IVE->git 검증 통과분 MR/PR 병합 -->
+  <path d="M177,382 L177,434"                   fill="none" stroke="${CYAN}" stroke-width="2" marker-end="url(#ah)"/> <!-- ⑥ git->ci/cd 자동 빌드 -->
   <!-- Slack realtime (cyan dashed, bidirectional) -->
-  <path d="M468,586 C505,556 540,500 585,456"   fill="none" stroke="${CYAN}" stroke-width="2" stroke-dasharray="6 5" marker-start="url(#ahc)" marker-end="url(#ahc)"/>
+  <path d="M600,470 C580,510 552,552 528,584"   fill="none" stroke="${CYAN}" stroke-width="2" marker-end="url(#ah)"/>   <!-- IVE -> Slack DM 발송 -->
 
   <!-- ===== Central HUB: IVE ===== -->
   <circle cx="640" cy="388" r="106" fill="${CYAN}" opacity="0.08" filter="url(#glow)"/>
@@ -119,59 +148,88 @@ function slideOverview(){ return `
   <rect x="571" y="319" width="138" height="138" rx="24" fill="none" stroke="#23232a" stroke-width="2"/>
   ${text(640,400,'IVE',{size:56,fill:CYAN,weight:800,ls:2})}
   <text x="640" y="433" font-size="20" font-weight="700" text-anchor="middle" font-family="system-ui"><tspan fill="${SPRING}">Spring</tspan><tspan fill="${AMBER}">ware</tspan></text>
-  ${text(640,503,'오케스트레이터',{size:11.5,fill:MUT,weight:700})}
+  ${text(640,485,'오케스트레이터',{size:11.5,fill:MUT,weight:700})}
 
   <!-- ===== DEVELOPER ===== -->
-  ${card(60,100,230,92,{stroke:AMBER})}
-  <g transform="translate(86,126)" stroke="${AMBER}" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  ${card(64,96,226,126,{stroke:AMBER})}
+  <g transform="translate(90,112)" stroke="${AMBER}" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round">
     <path d="M13,2 L3,15 L13,28"/><path d="M31,2 L41,15 L31,28"/><path d="M27,0 L17,30"/>
   </g>
-  ${text(148,134,'개발자',{anchor:'start',size:17,fill:TXT})}
-  ${text(148,158,'IDE · 바이브 코딩 툴',{anchor:'start',size:12,fill:MUT,weight:600})}
+  ${text(152,122,'개발자',{anchor:'start',size:17,fill:TXT})}
+  ${text(152,144,'IDE · 바이브 코딩 툴',{anchor:'start',size:12,fill:MUT,weight:600})}
+  ${[0,1,2].map(i=>{
+     const x=76+i*70, y=156;
+     const inner = i===0
+       ? `<path transform="translate(${x+20},${y+6}) scale(0.917)" d="${vscodeP}" fill="#0098FF"/>`
+       : i===1
+       ? `<path transform="translate(${x+20},${y+6}) scale(0.917)" d="${cursorP}" fill="${TXT}"/>`
+       : `<image href="${antigravity}" x="${x+20}" y="${y+7}" width="24" height="22"/>`;
+     const name = ['VS Code','Cursor','Antigravity'][i];
+     return `
+     <rect x="${x}" y="${y}" width="64" height="48" rx="12" fill="${BG}" stroke="${BORDER}" stroke-width="1"/>
+     ${inner}
+     ${text(x+32,y+40,name,{size:9.5,fill:MUT,weight:700})}`;
+   }).join('')}
 
   <!-- ===== GIT repos (with provider logos) ===== -->
-  ${card(60,286,230,96)}
-  <g transform="translate(86,312)">
+  ${card(64,286,226,96)}
+  <g transform="translate(90,312)">
     <circle cx="8" cy="6" r="6.5" fill="none" stroke="${CYAN}" stroke-width="2.2"/>
     <circle cx="8" cy="34" r="6.5" fill="none" stroke="${CYAN}" stroke-width="2.2"/>
     <circle cx="34" cy="20" r="6.5" fill="none" stroke="${CYAN}" stroke-width="2.2"/>
     <path d="M8,12 L8,28 M8,28 C8,23 14,20 27,20 M8,12 C8,17 14,20 27,20" fill="none" stroke="${CYAN}" stroke-width="2.2"/>
   </g>
-  ${text(140,318,'Git 저장소',{anchor:'start',size:17,fill:TXT})}
-  <image href="${gitlab}" x="140" y="330" width="15" height="15"/>
-  ${text(159,343,'GitLab',{anchor:'start',size:12,fill:MUT,weight:700})}
-  <image href="${github}" x="214" y="330" width="15" height="15"/>
-  ${text(233,343,'GitHub',{anchor:'start',size:12,fill:MUT,weight:700})}
-  ${text(140,366,'이슈 · MR/PR · 버전 관리',{anchor:'start',size:12,fill:TXT,weight:700})}
+  ${text(144,318,'Git 저장소',{anchor:'start',size:17,fill:TXT})}
+  <image href="${gitlab}" x="144" y="330" width="15" height="15"/>
+  ${text(163,343,'GitLab',{anchor:'start',size:12,fill:MUT,weight:700})}
+  <image href="${github}" x="218" y="330" width="15" height="15"/>
+  ${text(237,343,'GitHub',{anchor:'start',size:12,fill:MUT,weight:700})}
+  ${text(144,366,'이슈 · MR/PR · 버전 관리',{anchor:'start',size:12,fill:TXT,weight:700})}
 
-  <!-- ===== CI/CD + 운영 반영 ===== -->
-  ${card(60,565,230,120,{stroke:CYAND})}
-  <g transform="translate(86,584)" stroke="${CYAN}" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <!-- ===== CI/CD 배포 파이프라인 (빌드 → 스테이징 → 확인자 승인 → 운영) ===== -->
+  ${card(64,440,226,246,{stroke:CYAND})}
+  <g transform="translate(88,462)" stroke="${CYAN}" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round">
     <path d="M11,3 L11,23 M3,12 L11,3 L19,12"/><path d="M2,30 L20,30"/>
   </g>
-  ${text(150,598,'CI/CD · 자동 배포',{anchor:'start',size:17,fill:TXT})}
-  ${text(86,626,'MR/PR 병합 → 자동 빌드',{anchor:'start',size:12.5,fill:MUT,weight:600})}
-  <rect x="86" y="640" width="172" height="26" rx="13" fill="${BG}" stroke="${CYAND}" stroke-width="1.2"/>
-  ${text(99,657,'운영 시스템 자동 반영',{anchor:'start',size:12.5,fill:TXT,weight:700})}
+  ${text(152,478,'CI/CD · 자동 배포',{anchor:'start',size:16,fill:TXT})}
+  ${text(90,508,'병합된 MR/PR → 자동 빌드',{anchor:'start',size:12,fill:MUT,weight:600})}
 
-  <!-- ===== IVE 수집 링크 (확인자·고객·운영시스템 → Git 이슈 등록) ===== -->
-  ${card(300,448,230,96,{stroke:AMBER})}
-  <g transform="translate(316,464)" stroke="${AMBER}" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M11,1 L11,15 M5,9 L11,15 L17,9"/><path d="M2,19 L2,23 L22,23 L22,19"/>
+  <rect x="92" y="516" width="170" height="32" rx="12" fill="${BG}" stroke="${CYAND}" stroke-width="1.4"/>
+  ${text(177,537,'스테이징 반영',{size:13,fill:TXT,weight:700})}
+  <path d="M171,552 L183,552 L177,561 Z" fill="${CYAN}"/>
+
+  <rect x="92" y="566" width="170" height="32" rx="12" fill="${BG}" stroke="${AMBER}" stroke-width="1.4"/>
+  <g transform="translate(104,574)">
+    <circle cx="7" cy="7" r="6.4" fill="none" stroke="${AMBER}" stroke-width="1.8"/>
+    <path d="M4,7 L6.2,9.2 L10.2,4.8" fill="none" stroke="${AMBER}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
   </g>
-  ${text(352,470,'IVE 수집 링크',{anchor:'start',size:16,fill:TXT})}
-  ${text(316,498,'확인자 · 고객 · 운영 시스템',{anchor:'start',size:12,fill:MUT,weight:600})}
-  ${text(316,518,'요청 수집 → Git 이슈 등록',{anchor:'start',size:12,fill:TXT,weight:700})}
+  ${text(125,586,'확인자 확인 · 승인',{anchor:'start',size:12,fill:AMBER,weight:700})}
+  <path d="M171,602 L183,602 L177,611 Z" fill="${AMBER}"/>
+
+  <rect x="92" y="616" width="170" height="32" rx="12" fill="${BG}" stroke="${CYAN}" stroke-width="1.6"/>
+  ${text(177,637,'운영 시스템 반영',{size:13,fill:TXT,weight:700})}
+  ${text(177,670,'승인된 결과물만 운영으로',{size:11.5,fill:DIM,weight:600})}
+
+  <!-- ===== IVE Open API (확인자·고객·운영시스템 → Git 이슈 등록) ===== -->
+  ${card(300,440,230,96,{stroke:AMBER})}
+  <g transform="translate(314,453)" stroke="${AMBER}" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9,1 C4,1 6,10 1,12 C6,14 4,23 9,23"/>
+    <path d="M21,1 C26,1 24,10 29,12 C24,14 26,23 21,23"/>
+    <path d="M11,12 L18,12 M15.5,9 L18.5,12 L15.5,15"/>
+  </g>
+  ${text(352,462,'IVE Open API',{anchor:'start',size:16,fill:TXT})}
+  ${text(316,490,'확인자 · 고객 · 운영 시스템',{anchor:'start',size:12,fill:MUT,weight:600})}
+  ${text(316,510,'API 요청 → Git 이슈 등록',{anchor:'start',size:12,fill:TXT,weight:700})}
 
   <!-- ===== CLI agents ===== -->
-  ${card(435,92,410,126,{stroke:CYAND})}
-  ${text(640,118,'AI CLI 에이전트',{size:18,fill:TXT})}
-  ${text(640,137,'IVE가 이슈 배정 → 코드 작성·수정 → MR/PR 생성',{size:11.5,fill:MUT,weight:600})}
+  ${card(435,96,410,126,{stroke:CYAND})}
+  ${text(640,122,'AI CLI 에이전트',{size:18,fill:TXT})}
+  ${text(640,141,'IVE가 이슈 배정 → 코드 작성·수정 → MR/PR 생성',{size:11.5,fill:MUT,weight:600})}
   ${[['Claude',claude],['Codex',codex],['Gemini',gemini],['OpenCode',opencode]].map((a,i)=>{
      const x=470+i*90; return `
-     <rect x="${x}" y="150" width="68" height="50" rx="12" fill="${BG}" stroke="${BORDER}" stroke-width="1"/>
-     <image href="${a[1]}" x="${x+19}" y="153" width="30" height="30"/>
-     ${text(x+34,194,a[0],{size:11,fill:TXT,weight:700})}`;
+     <rect x="${x}" y="156" width="68" height="48" rx="12" fill="${BG}" stroke="${BORDER}" stroke-width="1"/>
+     <image href="${a[1]}" x="${x+19}" y="161" width="30" height="30"/>
+     ${text(x+34,199,a[0],{size:11,fill:TXT,weight:700})}`;
    }).join('')}
 
   <!-- ===== VERIFY / CONFIRM ===== -->
@@ -188,7 +246,7 @@ function slideOverview(){ return `
   </g>
   ${text(1036,399,'확인자 — 결과물 검증',{anchor:'start',size:13.5,fill:TXT})}
   <line x1="1006" y1="416" x2="1192" y2="416" stroke="${BORDER}" stroke-width="1"/>
-  ${text(1099,442,'통과 → MR 병합 · 이슈 종료',{size:12,fill:MUT,weight:600})}
+  ${text(1099,442,'통과 → IVE가 MR/PR 병합 · 이슈 종료',{size:12,fill:MUT,weight:600})}
 
   <!-- ===== SLACK ===== -->
   ${card(300,588,286,98,{stroke:CYAND})}
@@ -196,7 +254,7 @@ function slideOverview(){ return `
   <image href="${slack}" x="327" y="615" width="40" height="40"/>
   ${text(390,620,'Slack 연동',{anchor:'start',size:16,fill:TXT})}
   ${text(390,642,'코드베이스를 아는 에이전트와',{anchor:'start',size:12,fill:MUT,weight:600})}
-  ${text(390,661,'다자간 대화로 실시간 업무 수행',{anchor:'start',size:12,fill:TXT,weight:700})}
+  ${text(390,661,'DM·대화로 실시간 업무 수행',{anchor:'start',size:12,fill:TXT,weight:700})}
 
   <!-- ===== REPORT / MAIL ===== -->
   ${card(615,588,286,98,{stroke:CYAND})}
@@ -216,20 +274,38 @@ function slideOverview(){ return `
   ${text(994,642,'정기 보고서 자동 수신',{anchor:'start',size:12,fill:MUT,weight:600})}
   ${text(994,661,'경영 의사결정',{anchor:'start',size:12,fill:TXT,weight:700})}
 
+  <path d="M446,584 C480,545 520,505 566,470"   fill="none" stroke="${CYAN}" stroke-width="2" marker-start="url(#ahc)" marker-end="url(#ahc)"/>   <!-- Slack <-> IVE AI봇과 대화 · 카드 위로 그린다 -->
+
+  <!-- ===== PLANNED: 외부 업무·프로젝트 관리 시스템 연동 (미구현 · 계획) ===== -->
+  <path d="M1010,224 C960,254 850,290 716,318" fill="none" stroke="${MUT}" stroke-width="1.8" stroke-dasharray="7 5" marker-end="url(#ahm)"/>
+  ${card(930,96,286,126,{stroke:CYAND})}
+  ${text(1073,122,'업무·프로젝트 관리',{size:16,fill:TXT})}
+  ${text(1073,144,'이슈 · 진행 상태 · 프로세스 동기화',{size:11.5,fill:MUT,weight:600})}
+  ${PM.map((m,i)=>{ const x=946+i*66, y=156; return `
+     <rect x="${x}" y="${y}" width="60" height="48" rx="12" fill="${BG}" stroke="${BORDER}" stroke-width="1"/>
+     <path transform="translate(${x+20},${y+9}) scale(0.833)" d="${m[1]}" fill="${m[2]}"/>
+     ${text(x+30,y+40,m[0],{size:9,fill:MUT,weight:700})}`; }).join('')}
+  ${pill(890,280,'연동 예정',104,MUT,true)}
+
   <!-- ===== Badges & pills ===== -->
-  ${badge(175,235,'1','작업 → 이슈 등록',150)}
-  ${badge(300,430,'1','링크로 등록',116)}
+  ${badge(177,242,'1','작업 → 이슈 등록',150)}
+  ${badge(306,424,'1','API로 등록',112)}
   ${badge(408,330,'2','이슈 수집',104)}
   ${badge(640,260,'3','작업 배정·실행',132)}
-  ${badge(1018,232,'4','결과 제출',104)}
-  ${badge(858,378,'5','검증·확인 통과',136)}
-  ${badge(742,524,'6','이력·통계',102)}
-  ${badge(916,560,'7','리포트 전달',120)}
-  ${pill(345,210,'MR/PR 자동 생성',156,CYAN)}
-  ${pill(175,470,'병합·배포',104,CYAN)}
-  ${pill(495,562,'다자간 대화',118,CYAN,true)}
+  ${badge2(360,214,'4','작업이력','MR/PR 생성',128)}
+  ${badge(770,262,'5','결과 제출',104)}
+  ${badge(437,411,'8','MR/PR 병합',118)}
+  ${badge(177,399,'9','자동 빌드',104)}
+  ${badge(851,335,'6','검토·확인 요청',136)}
+  ${badge(851,380,'6.5','검증·확인 반려',136,MUT)}
+  ${badge(851,416,'7','병합 승인',136)}
+  ${badge(851,453,'10','검증·확인 통과',136)}
+  ${badge(742,524,'11','이력·통계',106)}
+  ${badge(916,568,'12','리포트 전달',124)}
+  ${pill(582,512,'DM 발송',92,CYAN)}
+  ${pill(458,550,'AI봇과 대화',110,CYAN)}
 
-  ${text(640,710,'IVE — Issue-driven aI deVelopment Engine · 한 장으로 보는 전체 운영 구조',{size:11.5,fill:DIM,weight:600})}
+  ${text(640,710,'IVE — Issue-driven AI Development Engine · 한 장으로 보는 전체 운영 구조',{size:11.5,fill:DIM,weight:600})}
 </svg>`; }
 
 // ============================================================
@@ -248,9 +324,9 @@ function roleIcon(type){
 const COLS = [
   { name:'요청자 · 현업', role:'작업 요청 · 진행 확인', icon:'req',
     before:['개발자를 붙잡아야 요청할 수 있음','언제 되는지 알 수 없음','요청이 어디까지 갔는지 모름'],
-    after:['수집 링크로 직접 요청','진행 단계가 그대로 보임','완료되면 알림 수신'] },
+    after:['Open API로 직접 요청','진행 단계가 그대로 보임','완료되면 알림 수신'] },
   { name:'검증자 · 개발자', role:'코드 리뷰 · 핵심 설계', icon:'dev',
-    before:['AI로 빨라졌지만 기록이 안 남음','AI가 만든 MR은 쌓이는데 리뷰 체계가 없음','잦은 컨텍스트 스위칭으로 소모'],
+    before:['AI로 빨라졌지만 기록이 안 남음','AI가 만든 MR/PR은 쌓이는데 리뷰 체계가 없음','잦은 컨텍스트 스위칭으로 소모'],
     after:['작업마다 이력이 남음','리뷰 게이트로 품질을 책임','코드 리뷰·핵심 설계에 집중'] },
   { name:'확인자 · QA', role:'결과물 검수 · 최종 승인', icon:'qa',
     before:['진행 상황을 수동으로 추적·재촉','완성될 때까지 마냥 대기','반려해도 후속 추적이 안 됨'],
@@ -392,7 +468,7 @@ function slideCover(){
   ${text(640,532,'함께 동작',{size:12,fill:DIM,weight:700,ls:2})}
   ${ECO.map((e,i)=>{const x=sx+i*(tw+tg);return `<rect x="${x}" y="${ly}" width="${tw}" height="${tw}" rx="11" fill="${BG}" stroke="${BORDER}" stroke-width="1"/><image href="${e[1]}" x="${x+9}" y="${ly+9}" width="26" height="26"/>`;}).join('')}
 
-  ${text(640,650,'Issue-driven aI deVelopment Engine',{size:13,fill:MUT,weight:700,ls:1})}
+  ${text(640,650,'Issue-driven AI Development Engine',{size:13,fill:MUT,weight:700,ls:1})}
   ${text(640,690,'GitLab · GitHub   |   Claude · Codex · Gemini · OpenCode   |   Slack   |   Docker · 온프레미스',{size:11.5,fill:DIM,weight:600})}
 </svg>`;
 }
@@ -518,7 +594,6 @@ function slideRecord(){
   ${card(64,612,1152,72,{stroke:CYAND})}
   ${text(90,644,'터미널에서 직접 한 작업도, 이슈에 기록만 남기면 IVE가 이력으로 흡수합니다.',{anchor:'start',size:15,fill:TXT})}
   ${text(90,666,'이슈 본문의 ive-meta 블록을 파싱해 실행 이력으로 자동 편입 — IVE를 거치지 않은 개발도 통계에 들어옵니다.',{anchor:'start',size:11.5,fill:MUT,weight:600})}
-  ${pill(1112,648,'2026년 3월부터 운영 중',176,CYAN)}
 
   ${text(640,710,'AI는 코드를 남기고, IVE는 이력을 남깁니다.',{size:11.5,fill:DIM,weight:600})}
 </svg>`; }
@@ -593,9 +668,10 @@ const PAGE_CSS = `
  @page { size: 13.333in 7.5in; margin: 0; }
  * { margin:0; padding:0; box-sizing:border-box; }
  html,body { background:${BG}; }
- .page { width:1280px; height:720px; background:${BG}; overflow:hidden; page-break-after: always; }
+ .page { width:1280px; height:720px; background:${BG}; overflow:hidden; page-break-after: always; margin:0 auto; }
  .page:last-child { page-break-after: auto; }
- svg { display:block; width:1280px; height:720px; }`;
+ svg { display:block; width:1280px; height:720px; }
+ @media print { .page { margin:0; } }`;
 
 const single = (svg) => `<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><style>${PAGE_CSS}
  html,body{width:1280px;height:720px;overflow:hidden;}</style></head><body><div class="page">${svg}</div></body></html>`;

@@ -2,9 +2,10 @@
  @page { size: 13.333in 7.5in; margin: 0; }
  * { margin:0; padding:0; box-sizing:border-box; }
  html,body { background:#0e0e11; }
- .page { width:1280px; height:720px; background:#0e0e11; overflow:hidden; page-break-after: always; }
+ .page { width:1280px; height:720px; background:#0e0e11; overflow:hidden; page-break-after: always; margin:0 auto; }
  .page:last-child { page-break-after: auto; }
  svg { display:block; width:1280px; height:720px; }
+ @media print { .page { margin:0; } }
  html,body{width:1280px;height:720px;overflow:hidden;}</style></head><body><div class="page">
 <svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
   <defs>
