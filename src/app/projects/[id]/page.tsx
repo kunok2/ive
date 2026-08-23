@@ -118,7 +118,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
   // API 로 붙일 때 쓰는 접수 주소 — 토큰은 붙이지 않는다.
   // 토큰은 1회용이고 7일이면 만료돼 저장해 두면 못 쓴다. 부르는 쪽이 시크릿으로 매번 서명한다.
-  const apiReportUrl = typeof window !== 'undefined' ? `${window.location.origin}/p/${id}/report` : ''
+  const apiReportUrl = typeof window !== 'undefined' ? `${window.location.origin}/api/report` : ''
 
   const fetchGitMembers = useCallback(async () => {
     setGitMembersLoading(true)
