@@ -975,6 +975,12 @@ export function initSchema(db: Database.Database) {
        WHERE cli_name = 'gemini'`
     ).run()
     if (moved.changes > 0) console.log(`[DB] gemini 에이전트 ${moved.changes}건을 agy 로 전환`)
+    // 사용자별 허용 CLI 목록(users.allowed_clis, CSV)의 gemini 도 agy 로 옮긴다.
+    // 안 하면 gemini 를 쓰던 사용자가 에이전트 생성 화면에서 agy 를 고를 수 없다.
+    const allowed = db.prepare(
+      `UPDATE users SET allowed_clis = replace(allowed_clis, 'gemini', 'agy') WHERE allowed_clis LIKE '%gemini%'`
+    ).run()
+    if (allowed.changes > 0) console.log(`[DB] allowed_clis 의 gemini → agy 전환 ${allowed.changes}건`)
   } catch (e) { console.error('[DB] agy migration failed:', e) }
 
   // token_pricing 마이그레이션
