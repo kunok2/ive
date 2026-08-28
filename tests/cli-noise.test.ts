@@ -2,7 +2,7 @@
  * cli-noise 골든 테스트 — stderr 양성 필터 + 한도(rate limit/quota) 감지
  *
  * 중요한 로직:
- *   - gemini/opencode가 매 실행 stderr로 찍는 무해한 배너를 거른다. 안 거르면
+ *   - agy/opencode가 매 실행 stderr로 찍는 무해한 배너를 거른다. 안 거르면
  *     실행 상세보기가 노란 경고로 도배되어 실제 출력이 묻힌다(#463).
  *   - CLI별로 제각각인 "사용량 한도 초과" 문구를 공통 패턴으로 분류해, 실패 시
  *     "왜 실패했는지"를 사용자에게 명시한다.
@@ -15,19 +15,19 @@
  */
 import { describe, it, expect } from 'vitest'
 import {
-  stripBenignGeminiStderr,
+  stripBenignAgyStderr,
   stripBenignOpencodeStderr,
   detectRateLimit,
 } from '@/lib/scanner/cli-noise'
 
-describe('stripBenignGeminiStderr', () => {
+describe('stripBenignAgyStderr', () => {
   it('B-1: gemini 양성 배너 제거', () => {
     const raw = [
       'Warning: 256-color support not detected. Using a terminal...',
       'YOLO mode is enabled. All tool calls will be automatically approved.',
       'Ripgrep is not available. Falling back to GrepTool.',
     ].join('\n')
-    expect(stripBenignGeminiStderr(raw).trim()).toBe('')
+    expect(stripBenignAgyStderr(raw).trim()).toBe('')
   })
 
   it('B-2: 진짜 오류는 보존', () => {
@@ -35,7 +35,7 @@ describe('stripBenignGeminiStderr', () => {
       'YOLO mode is enabled. All tool calls will be automatically approved.',
       'Error: Failed to authenticate. Check GEMINI_API_KEY.',
     ].join('\n')
-    const out = stripBenignGeminiStderr(raw)
+    const out = stripBenignAgyStderr(raw)
     expect(out).toContain('Failed to authenticate')
     expect(out).not.toContain('YOLO mode')
   })

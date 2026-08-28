@@ -53,7 +53,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const isOpenCode = agent.cliName === 'opencode'
   const isCodex = agent.cliName === 'codex'
-  const isGemini = agent.cliName === 'gemini'
+  const isAgy = agent.cliName === 'agy'
 
   // 모델: 에이전트 설정 → 시스템 설정 순으로 결정 (opencode는 provider/model 형식 필요)
   const model = agent.modelName || getSystemSetting(`cli.${agent.cliName}.model`) || null
@@ -87,13 +87,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         '-s', 'read-only',
         prompt,
       ]
-    } else if (isGemini) {
-      // gemini -p "prompt" — headless. Gemini CLI에는 --max-turns 플래그가 없으므로 붙이지 않는다.
-      // --skip-trust: 헤드리스 환경에서 trusted-folder 확인을 건너뛴다(없으면 실행 거부됨).
+    } else if (isAgy) {
+      // agy -p "prompt" — headless(print) 모드. agy 에는 --max-turns 가 없어 붙이지 않는다.
+      // 인터뷰는 1회성 Q&A라 도구 승인이 필요 없지만, 헤드리스에서 멈추지 않도록 승인은 건너뛴다.
       args = [
         ...cliParts.slice(1),
         '--output-format', 'text',
-        '--skip-trust',
+        '--dangerously-skip-permissions',
         '-p', prompt,
       ]
     } else {

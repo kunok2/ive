@@ -57,7 +57,7 @@ Issue status is managed in the **local DB**. The `IVE` label on remote issues is
 | DB | SQLite (better-sqlite3) |
 | Auth | JWT (jsonwebtoken) |
 | Encryption | AES-256-GCM (bcryptjs) |
-| AI Agents | Claude, Gemini, Codex (CLI) |
+| AI Agents | Claude, agy(Antigravity), Codex, OpenCode (CLI) |
 
 ---
 

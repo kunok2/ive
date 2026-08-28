@@ -240,7 +240,7 @@ ${userMessage}
   }
 
   // 첨부 이미지 안내. codex(-i)·opencode(-f)는 전용 플래그로도 전달되지만,
-  // claude/gemini는 전용 플래그가 없어 프롬프트의 경로 안내로 Read/파일참조해 인식한다.
+  // claude/agy는 전용 플래그가 없어 프롬프트의 경로 안내로 Read/파일참조해 인식한다.
   // 경로는 workspacePath 하위라 cwd 기준 상대경로로도 접근 가능.
   if (attachedImages && attachedImages.length > 0) {
     const list = attachedImages.map(p => `- ${path.relative(workspacePath, p) || p}`).join('\n')
@@ -523,10 +523,10 @@ function extractTextFromEvent(event: any, cliName: string, state?: { sawDelta?: 
     if (event.type === 'item.completed' && event.item?.type === 'agent_message') {
       return event.item.text ?? null
     }
-  } else if (cliName === 'gemini') {
-    // Gemini stream-json: assistant 메시지의 content
-    if (event.type === 'message' && event.role === 'assistant') {
-      return (event.content ?? '').toString() || null
+  } else if (cliName === 'agy') {
+    // agy stream-json: step_update(agent_response) 의 text_delta
+    if (event.event === 'step_update' && event.step_update?.step_type === 'agent_response') {
+      return (event.step_update.text_delta ?? '').toString() || null
     }
   } else {
     // Claude Code — 채팅은 --include-partial-messages 로 토큰 델타를 받아 스트리밍한다.

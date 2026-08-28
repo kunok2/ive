@@ -46,7 +46,8 @@ export interface StageInfo {
 
 export const CLI_CONFIG: Record<CliName, { label: string; icon: string; color: string }> = {
   claude: { label: 'Claude', icon: 'fa-solid fa-atom', color: 'text-ive-amber' },
-  gemini: { label: 'Gemini', icon: 'fa-brands fa-google', color: 'text-ive-cyan' },
+  agy: { label: 'agy', icon: 'fa-brands fa-google', color: 'text-ive-cyan' },
+  gemini: { label: 'Gemini', icon: 'fa-brands fa-google', color: 'text-ive-cyan' }, // 레거시
   codex: { label: 'Codex', icon: 'fa-solid fa-brain', color: 'text-ive-green-light' },
   opencode: { label: 'OpenCode', icon: 'fa-solid fa-terminal', color: 'text-ive-cyan' },
 }

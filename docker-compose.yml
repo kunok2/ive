@@ -25,7 +25,9 @@ services:
       # 사본이 아니라 같은 디렉터리를 보도록 CLAUDE_CONFIG_HOST_DIR 로 공유 경로를 주입한다.
       - ${CLAUDE_CONFIG_HOST_DIR:-./claude-config}:/home/ive/.claude
       - ./codex-config:/home/ive/.codex
-      - ./gemini-config:/home/ive/.gemini
+      # agy(Antigravity CLI) 설정·자격증명. agy 는 ~/.gemini 아래를 쓴다(Gemini CLI 경로 승계).
+      - ${AGY_CONFIG_HOST_DIR:-./agy-config}:/home/ive/.gemini
+      - ./agy-state:/home/ive/.antigravity
       - ./opencode-config:/home/ive/.local/share/opencode
     # 앱 로거가 죽거나 우회되더라도 컨테이너 stdout이 무한정 커지지 않도록
     # 도커 레벨에서 로테이션 한도를 둔다 (앱 파일 로거와 별도 안전망).

@@ -47,7 +47,8 @@ interface AgentStats {
 // 구분이 필요하면 아이콘 형태로만.
 const cliConfig: Record<CliName, { label: string; icon: string; color: string; desc: string }> = {
   claude: { label: 'Claude Code', icon: 'fa-solid fa-atom', color: 'text-ive-text-muted', desc: 'Anthropic' },
-  gemini: { label: 'Gemini CLI', icon: 'fa-brands fa-google', color: 'text-ive-text-muted', desc: 'Google' },
+  agy: { label: 'agy', icon: 'fa-brands fa-google', color: 'text-ive-text-muted', desc: 'Google Antigravity' },
+  gemini: { label: 'Gemini CLI', icon: 'fa-brands fa-google', color: 'text-ive-text-muted', desc: 'Google (레거시)' },
   codex: { label: 'Codex CLI', icon: 'fa-solid fa-brain', color: 'text-ive-text-muted', desc: 'OpenAI' },
   opencode: { label: 'OpenCode', icon: 'fa-solid fa-terminal', color: 'text-ive-text-muted', desc: 'sst.dev' },
 }

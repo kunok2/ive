@@ -254,64 +254,74 @@ export function formatCodexEventMarkdown(event: any): string | null {
 }
 
 /**
- * Gemini CLI stream-json 이벤트를 읽기 좋은 로그 텍스트(ANSI)로 변환
- * 이벤트: init / message(user|assistant, delta) / tool_use / tool_result / result(stats)
+ * agy(Antigravity CLI) stream-json 이벤트를 읽기 좋은 로그 텍스트(ANSI)로 변환
+ * 이벤트: init / step_update(step_type: user_input|agent_response|tool|checkpoint) / result
+ *   - agent_response: state ACTIVE 는 부분 텍스트(text_delta), DONE 은 마지막 조각 + usage
+ *   - tool: tool_name + tool_info{parameters, output}
+ *   - result: status / response / num_turns / usage
  */
-export function formatGeminiEvent(event: any, showToolUsage: boolean = false): string | null {
-  switch (event.type) {
-    case 'message': {
-      if (event.role !== 'assistant') return null;
-      return (event.content ?? '').toString() || null;
+export function formatAgyEvent(event: any, showToolUsage: boolean = false): string | null {
+  if (event.event === 'step_update') {
+    const su = event.step_update ?? {};
+    if (su.step_type === 'agent_response') {
+      return (su.text_delta ?? '').toString() || null;
     }
-    case 'tool_use': {
+    if (su.step_type === 'tool') {
       if (!showToolUsage) return null;
-      const name = event.tool_name ?? '';
+      // ACTIVE/DONE 두 번 오므로 DONE 에서만 한 줄 남긴다.
+      if (su.state !== 'DONE') return null;
+      const name = su.tool_name ?? su.tool_info?.name ?? '';
       if (!name) return null;
-      const p = event.parameters ?? {};
-      const detail = p.command ?? p.file_path ?? p.path ?? p.summary ?? '';
+      const p = su.tool_info?.parameters ?? {};
+      const detail = p.CommandLine ?? p.command ?? p.FilePath ?? p.file_path ?? p.path ?? p.query ?? '';
       const detailStr = detail ? ` \x1b[33m${String(detail).substring(0, 120)}\x1b[0m` : '';
       return `\x1b[1;34m[Tool] ${name}\x1b[0m${detailStr}`;
     }
-    case 'result': {
-      const s = event.stats ?? {};
-      const inputT = Number(s.input_tokens ?? 0);
-      const outputT = Number(s.output_tokens ?? 0);
-      const cachedT = Number(s.cached ?? 0);
-      const status = event.status === 'success' ? '완료' : (event.status ?? '종료');
-      const meta: string[] = [];
-      if (inputT || outputT) {
-        const parts = [`입력 ${inputT.toLocaleString()}`];
-        if (cachedT) parts.push(`캐시 ${cachedT.toLocaleString()}`);
-        parts.push(`출력 ${outputT.toLocaleString()} 토큰`);
-        meta.push(parts.join(' + '));
-      }
-      const metaStr = meta.length > 0 ? `\x1b[90m(${meta.join(' | ')})\x1b[0m ` : '';
-      return `\x1b[1;32m[${status}]\x1b[0m ${metaStr}`;
-    }
-    case 'error': {
-      const msg = event.error?.message ?? event.error ?? event.message ?? '알 수 없는 오류';
+    return null;
+  }
+  if (event.event === 'result') {
+    const r = event.result ?? {};
+    const u = r.usage ?? {};
+    const inputT = Number(u.input_tokens ?? 0);
+    const outputT = Number(u.output_tokens ?? 0);
+    const cachedT = Number(u.cache_read_tokens ?? 0);
+    const ok = String(r.status ?? '').toUpperCase() === 'SUCCESS';
+    if (!ok) {
+      const msg = r.error ?? r.status ?? '알 수 없는 오류';
       return `\x1b[1;31m[오류]\x1b[0m ${msg}`;
     }
-    default:
-      return null;
+    const meta: string[] = [];
+    if (inputT || outputT) {
+      const parts = [`입력 ${inputT.toLocaleString()}`];
+      if (cachedT) parts.push(`캐시 ${cachedT.toLocaleString()}`);
+      parts.push(`출력 ${outputT.toLocaleString()} 토큰`);
+      meta.push(parts.join(' + '));
+    }
+    const metaStr = meta.length > 0 ? `\x1b[90m(${meta.join(' | ')})\x1b[0m ` : '';
+    return `\x1b[1;32m[완료]\x1b[0m ${metaStr}`;
   }
+  return null;
 }
 
-export function formatGeminiEventMarkdown(event: any): string | null {
-  if (event.type === 'message' && event.role === 'assistant') {
-    return (event.content ?? '').toString() || null;
+export function formatAgyEventMarkdown(event: any): string | null {
+  if (event.event === 'step_update') {
+    const su = event.step_update ?? {};
+    if (su.step_type === 'agent_response') {
+      return (su.text_delta ?? '').toString() || null;
+    }
+    if (su.step_type === 'tool' && su.state === 'DONE') {
+      const name = su.tool_name ?? su.tool_info?.name ?? '';
+      if (!name) return null;
+      const p = su.tool_info?.parameters ?? {};
+      const detail = p.CommandLine ?? p.command ?? p.FilePath ?? p.file_path ?? p.path ?? p.query ?? '';
+      return detail ? `> **🔧 ${name}** \`${String(detail).substring(0, 100)}\`` : `> **🔧 ${name}**`;
+    }
+    return null;
   }
-  if (event.type === 'tool_use') {
-    const name = event.tool_name ?? '';
-    if (!name) return null;
-    const p = event.parameters ?? {};
-    const detail = p.command ?? p.file_path ?? p.path ?? p.summary ?? '';
-    return detail ? `> **🔧 ${name}** \`${String(detail).substring(0, 100)}\`` : `> **🔧 ${name}**`;
-  }
-  if (event.type === 'result') {
-    const s = event.stats ?? {};
-    const inputT = Number(s.input_tokens ?? 0);
-    const outputT = Number(s.output_tokens ?? 0);
+  if (event.event === 'result') {
+    const u = event.result?.usage ?? {};
+    const inputT = Number(u.input_tokens ?? 0);
+    const outputT = Number(u.output_tokens ?? 0);
     const info: string[] = [];
     if (inputT || outputT) info.push(`토큰: ${(inputT + outputT).toLocaleString()}`);
     return `\n---\n**📊 실행 결과** ${info.join(' | ')}`;

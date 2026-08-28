@@ -33,7 +33,7 @@ const PM = [
 const cursorP = iconPath('assets/ide/cursor.svg');
 const claude   = dataUri('../public/cli/claude.svg',     'image/svg+xml');
 const codex    = dataUri('../public/cli/codex.png',      'image/png');
-const gemini   = dataUri('../public/cli/gemini.png',     'image/png');
+const agy      = dataUri('../public/cli/agy.png',        'image/png');
 const opencode = dataUri('../public/cli/opencode.svg',   'image/svg+xml');
 const slack    = dataUri('assets/slack.svg',             'image/svg+xml');
 const iveLogo  = dataUri('../public/slack-icon-1024.png','image/png'); // IVE 앱 아이콘 = 중앙 허브 로고
@@ -225,7 +225,7 @@ function slideOverview(){ return `
   ${card(435,96,410,126,{stroke:CYAND})}
   ${text(640,122,'AI CLI 에이전트',{size:18,fill:TXT})}
   ${text(640,141,'IVE가 이슈 배정 → 코드 작성·수정 → MR/PR 생성',{size:11.5,fill:MUT,weight:600})}
-  ${[['Claude',claude],['Codex',codex],['Gemini',gemini],['OpenCode',opencode]].map((a,i)=>{
+  ${[['Claude',claude],['Codex',codex],['agy',agy],['OpenCode',opencode]].map((a,i)=>{
      const x=470+i*90; return `
      <rect x="${x}" y="156" width="68" height="48" rx="12" fill="${BG}" stroke="${BORDER}" stroke-width="1"/>
      <image href="${a[1]}" x="${x+19}" y="161" width="30" height="30"/>
@@ -435,7 +435,7 @@ function slideScreens(){
 // SLIDE 0 — 표지 (Cover · 한 줄 결과 약속)
 // ============================================================
 function slideCover(){
-  const ECO=[['Claude',claude],['Codex',codex],['Gemini',gemini],['OpenCode',opencode],['GitLab',gitlab],['GitHub',github],['Slack',slack]];
+  const ECO=[['Claude',claude],['Codex',codex],['agy',agy],['OpenCode',opencode],['GitLab',gitlab],['GitHub',github],['Slack',slack]];
   const tw=44,tg=14,n=ECO.length,totalW=n*tw+(n-1)*tg,sx=640-totalW/2,ly=556;
   const CH=[['기존 스택 그대로',176,447],['사람이 최종 검토',176,640],['비용·성과 자동 측정',188,833]];
   return `
@@ -469,7 +469,7 @@ function slideCover(){
   ${ECO.map((e,i)=>{const x=sx+i*(tw+tg);return `<rect x="${x}" y="${ly}" width="${tw}" height="${tw}" rx="11" fill="${BG}" stroke="${BORDER}" stroke-width="1"/><image href="${e[1]}" x="${x+9}" y="${ly+9}" width="26" height="26"/>`;}).join('')}
 
   ${text(640,650,'Issue-driven AI Development Engine',{size:13,fill:MUT,weight:700,ls:1})}
-  ${text(640,690,'GitLab · GitHub   |   Claude · Codex · Gemini · OpenCode   |   Slack   |   Docker · 온프레미스',{size:11.5,fill:DIM,weight:600})}
+  ${text(640,690,'GitLab · GitHub   |   Claude · Codex · agy · OpenCode   |   Slack   |   Docker · 온프레미스',{size:11.5,fill:DIM,weight:600})}
 </svg>`;
 }
 

@@ -44,7 +44,15 @@ WORKDIR /app
 RUN npm install -g @anthropic-ai/claude-code
 RUN npm install -g opencode-ai
 RUN npm install -g @openai/codex
-RUN npm install -g @google/gemini-cli
+# agy (Google Antigravity CLI) — Gemini CLI 단종에 따른 대체.
+#   npm 배포가 아니라 공식 설치 스크립트가 플랫폼 바이너리(tar.gz)를 내려받아 $HOME/.local/bin 에 둔다.
+#   빌드는 root 로 돌아 /root/.local/bin 에 깔리는데 실행 사용자(ive)가 /root 를 못 읽으므로,
+#   임시 HOME 으로 설치한 뒤 다른 CLI 와 같은 관례 위치(/usr/local/bin)로 옮긴다.
+RUN HOME=/tmp/agy-install sh -c 'curl -fsSL https://antigravity.google/cli/install.sh | bash' \
+    && mv /tmp/agy-install/.local/bin/agy /usr/local/bin/agy \
+    && chmod 755 /usr/local/bin/agy \
+    && rm -rf /tmp/agy-install \
+    && agy --version
 
 # Playwright (에이전트가 웹 스크래핑/브라우저 자동화 시 사용)
 # 브라우저 바이너리는 매번 ~150MB CDN 다운로드(느린 상류 회선에 취약) 대신

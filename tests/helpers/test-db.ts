@@ -100,7 +100,7 @@ export function setupTestDb(): Database.Database {
       user_id TEXT NOT NULL,
       name TEXT NOT NULL,
       avatar TEXT NOT NULL DEFAULT 'av-01',
-      cli_name TEXT NOT NULL CHECK(cli_name IN ('claude', 'gemini', 'codex', 'opencode')),
+      cli_name TEXT NOT NULL CHECK(cli_name IN ('claude', 'agy', 'codex', 'opencode', 'gemini')),
       cli_path TEXT NOT NULL DEFAULT '',
       cli_version TEXT NOT NULL DEFAULT '',
       model TEXT NOT NULL DEFAULT '',

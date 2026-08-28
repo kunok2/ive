@@ -28,12 +28,13 @@ const CODEX_MODELS = [
   'o3',
 ]
 
-/** Gemini 주요 모델명 (고정 목록. 빈 값=CLI 기본 모델 사용) */
-const GEMINI_MODELS = [
-  'gemini-3-pro-preview',
-  'gemini-3-flash-preview',
-  'gemini-2.5-pro',
-  'gemini-2.5-flash',
+/** agy(Antigravity CLI) 폴백 모델 목록. 평소엔 `agy models` 로 동적 조회한다(빈 값=CLI 기본 모델). */
+const AGY_MODELS = [
+  'gemini-3.7-flash-high',
+  'gemini-3.6-flash-high',
+  'gemini-3.1-pro-high',
+  'claude-sonnet-4-6',
+  'claude-opus-4-6-thinking',
 ]
 
 /** CLI별 사용 가능한 모델 목록 조회 */
@@ -50,8 +51,20 @@ export async function GET() {
   // Codex: 고정 목록 (CLI에 models 조회 명령 없음)
   result.codex = CODEX_MODELS
 
-  // Gemini: 고정 목록 (CLI에 models 조회 명령 없음)
-  result.gemini = GEMINI_MODELS
+  // agy: `agy models` 로 동적 조회 (실패 시 고정 폴백)
+  //   출력 한 줄 = "<slug>\t<표시명>" 이므로 앞의 slug 만 취한다.
+  result.agy = AGY_MODELS
+  const agyPath = settings['cli.agy.path'] || '/usr/local/bin/agy'
+  const agyBin = agyPath.split(' ')[0]
+  if (fs.existsSync(agyBin)) {
+    try {
+      const { stdout } = await execFileAsync(agyBin, ['models'], { timeout: 15000 })
+      const models = stdout.split('\n')
+        .map(l => l.trim().split('\t')[0].trim())
+        .filter(l => l && !l.includes(' '))
+      if (models.length > 0) result.agy = models
+    } catch { /* fallback: 고정 목록 */ }
+  }
 
   // OpenCode: `opencode models` 명령으로 동적 조회
   const opencodePath = settings['cli.opencode.path'] || '/usr/local/bin/opencode'

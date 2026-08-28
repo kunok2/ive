@@ -68,7 +68,7 @@ export function initSchema(db: Database.Database) {
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
       name TEXT NOT NULL,
-      cli_name TEXT NOT NULL CHECK(cli_name IN ('claude', 'gemini', 'codex', 'opencode')),
+      cli_name TEXT NOT NULL CHECK(cli_name IN ('claude', 'agy', 'codex', 'opencode', 'gemini')),
       cli_path TEXT NOT NULL,
       cli_version TEXT NOT NULL DEFAULT '',
       max_turns INTEGER NOT NULL DEFAULT 200,
@@ -947,6 +947,35 @@ export function initSchema(db: Database.Database) {
       console.log('[DB] agents cli_name CHECK constraint updated to include opencode')
     }
   } catch (e) { console.error('[DB] agents migration failed:', e) }
+
+  // agents.cli_name CHECK constraint에 agy 추가 + gemini 에이전트 전환
+  //   Gemini CLI 가 단종되고 agy(Antigravity CLI)로 대체됐다. 과거 실행 이력의 'gemini' 표기는
+  //   보고서 재현을 위해 그대로 두고, 에이전트 행만 agy 로 옮긴다.
+  //   컬럼 목록을 하드코딩하지 않도록 현재 CREATE TABLE 문의 CHECK 절만 바꿔 재생성한다.
+  try {
+    const row = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='agents'").get() as any
+    if (row && row.sql && !row.sql.includes("'agy'")) {
+      const newSql = row.sql
+        .replace(/CREATE TABLE\s+(?:IF NOT EXISTS\s+)?["'`]?agents["'`]?/i, 'CREATE TABLE agents_new')
+        .replace(/CHECK\s*\(\s*cli_name\s+IN\s*\([^)]*\)\s*\)/i,
+                 "CHECK(cli_name IN ('claude', 'agy', 'codex', 'opencode', 'gemini'))")
+      if (newSql.includes('agents_new') && newSql.includes("'agy'")) {
+        db.pragma('foreign_keys = OFF')
+        db.exec(newSql)
+        db.exec('INSERT INTO agents_new SELECT * FROM agents')
+        db.exec('DROP TABLE agents')
+        db.exec('ALTER TABLE agents_new RENAME TO agents')
+        db.pragma('foreign_keys = ON')
+        console.log('[DB] agents cli_name CHECK constraint updated to include agy')
+      }
+    }
+    const moved = db.prepare(
+      `UPDATE agents SET cli_name = 'agy',
+         cli_path = CASE WHEN cli_path LIKE '%gemini%' THEN '/usr/local/bin/agy' ELSE cli_path END
+       WHERE cli_name = 'gemini'`
+    ).run()
+    if (moved.changes > 0) console.log(`[DB] gemini 에이전트 ${moved.changes}건을 agy 로 전환`)
+  } catch (e) { console.error('[DB] agy migration failed:', e) }
 
   // token_pricing 마이그레이션
   try {

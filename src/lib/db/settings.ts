@@ -27,7 +27,7 @@ export function findTokenPricingForModel(executionModelName: string): TokenPrici
   const lower = executionModelName.toLowerCase()
   const all = getAllTokenPricing().filter(p => p.cliName !== 'human')
 
-  const generic = new Set(['claude', 'gemini', 'openai', 'opencode', 'gpt', 'pro', 'the', 'cli'])
+  const generic = new Set(['claude', 'agy', 'gemini', 'openai', 'opencode', 'gpt', 'pro', 'the', 'cli'])
   type Match = { pricing: TokenPricing; specificity: number }
   const matches: Match[] = []
 

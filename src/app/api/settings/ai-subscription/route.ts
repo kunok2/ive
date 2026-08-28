@@ -7,7 +7,7 @@ import { getSupportedRates } from '@/lib/currency-server'
 import { logActivity } from '@/lib/activity'
 import { CliName } from '@/types'
 
-const CLIS: CliName[] = ['claude', 'codex', 'gemini', 'opencode']
+const CLIS: CliName[] = ['claude', 'codex', 'agy', 'opencode']
 const SETTING_INPUT_CURRENCY = 'ai.subscriptionInputCurrency'
 
 /**

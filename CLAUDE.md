@@ -1,7 +1,7 @@
 # Springware IVE - Project Guide
 
 ## Overview
-GitLab/GitHub 이슈를 AI CLI 에이전트(Claude, Gemini, Codex, OpenCode)가 자동 처리하는 웹 대시보드.
+GitLab/GitHub 이슈를 AI CLI 에이전트(Claude, agy, Codex, OpenCode)가 자동 처리하는 웹 대시보드.
 Next.js 16 + custom server (node-pty, WebSocket) + SQLite (better-sqlite3).
 
 ## Tech Stack
@@ -75,12 +75,12 @@ data/                  # SQLite DB 파일 저장
 - `Agent` - AI 에이전트 (cliName, cliPath, maxTurns, status: available/busy/offline)
 - `ProjectAssignment` - 프로젝트-에이전트 배정
 - `TaskExecution` - 실행 기록 (issueIid, status, tokens, cost, turns)
-- `CliName` = 'claude' | 'gemini' | 'codex' | 'opencode'
+- `CliName` = 'claude' | 'agy' | 'codex' | 'opencode' (+ 레거시 'gemini' — 과거 이력 표시용)
 
 ## Core Flow
 1. **Scanner** (`scanner.ts`): 주기적으로 프로젝트의 GitLab/GitHub 이슈를 폴링
 2. 대상 레이블이 있는 이슈 발견 → DB에 실행(TaskExecution) 생성
-3. 배정된 에이전트가 CLI(claude, gemini 등)를 node-pty로 실행
+3. 배정된 에이전트가 CLI(claude, agy 등)를 node-pty로 실행
 4. WebSocket으로 실행 로그를 실시간 스트리밍 (xterm.js)
 5. 완료 시 MR/PR 생성 또는 이슈 코멘트
 

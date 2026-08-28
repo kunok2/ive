@@ -74,7 +74,7 @@ export default function AgentAvatar({ avatar, userId, size = 'md', className = '
     resolved = `/api/auth/avatar/image?id=${userId}`
   }
 
-  // CLI 회사 브랜드 로고 아바타 ('cli-claude' | 'cli-gemini' | 'cli-codex' | 'cli-opencode')
+  // CLI 회사 브랜드 로고 아바타 ('cli-claude' | 'cli-agy' | 'cli-codex' | 'cli-opencode')
   if (resolved.startsWith('cli-') && CLI_LOGO_NAMES.includes(resolved.slice(4))) {
     return (
       <div className={`relative shrink-0 ${wh} ${className}`}>

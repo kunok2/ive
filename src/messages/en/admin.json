@@ -141,7 +141,7 @@
   "mailSendLogs": "Mail",
   "maxDevelopers": "Max Agents",
   "maxTurns": "Max Turns",
-  "mcpConfigHint": "MCP (Model Context Protocol): register external tool servers agents can use while processing issues (e.g. GitHub, filesystem). Leave empty to use each CLI's built-in tools only. Applies to Claude, OpenCode, Codex, and Gemini; local (e.g. npx) servers are supported. Remote servers work on Claude, OpenCode, and Gemini (not Codex).",
+  "mcpConfigHint": "MCP (Model Context Protocol): register external tool servers agents can use while processing issues (e.g. GitHub, filesystem). Leave empty to use each CLI's built-in tools only. Applies to Claude, OpenCode, Codex, and agy; local (e.g. npx) servers are supported. Remote servers work on Claude, OpenCode, and agy (not Codex).",
   "mcpServer": "MCP Server",
   "modelName": "Model Name",
   "modelPricing": "Model Pricing",

@@ -13,13 +13,13 @@ import {
   formatOpenCodeEventMarkdown,
   formatCodexEvent,
   formatCodexEventMarkdown,
-  formatGeminiEvent,
-  formatGeminiEventMarkdown,
+  formatAgyEvent,
+  formatAgyEventMarkdown,
   formatStreamEvent,
   formatStreamEventMarkdown,
   formatToolInput,
 } from "./formatters";
-import { stripBenignOpencodeStderr, stripBenignGeminiStderr, detectRateLimit } from "./cli-noise";
+import { stripBenignOpencodeStderr, stripBenignAgyStderr, detectRateLimit } from "./cli-noise";
 
 // resolveCliPath는 cli-invocation으로 이동. 기존 import 경로(execute.ts) 호환을 위해 re-export.
 export { resolveCliPath };
@@ -46,7 +46,7 @@ export async function runCliProcess(
 ): Promise<CliRunResult> {
   const isOpenCode = agent.cliName === 'opencode';
   const isCodex = agent.cliName === 'codex';
-  const isGemini = agent.cliName === 'gemini';
+  const isAgy = agent.cliName === 'agy';
   const systemCliModel = agent.modelName || getSystemSetting(`cli.${agent.cliName}.model`);
   const conversationParts: string[] = [];
   const startTime = Date.now();
@@ -125,8 +125,8 @@ export async function runCliProcess(
     let ocErrorMsg = '';
     // 사용량 한도(rate limit/quota) 의심 줄. 실패 종료 시 원인으로 표면화한다.
     let rateLimitHint = '';
-    // Gemini: assistant 메시지가 delta로 여러 번 쪼개져 오므로, 연속된 assistant 구간을 1턴으로 묶기 위한 플래그
-    let prevGeminiAssistant = false;
+    // agy: agent_response 가 text_delta 로 여러 번 쪼개져 오므로, 연속 구간을 1턴으로 묶기 위한 플래그
+    let prevAgyAssistant = false;
 
     const processEvent = (event: any) => {
       // 모델명 캡처
@@ -213,44 +213,42 @@ export async function runCliProcess(
           totalOutputTokens += Number(u.output_tokens ?? 0) + Number(u.reasoning_output_tokens ?? 0);
           totalTurns += 1;
         }
-      } else if (isGemini) {
-        // Gemini stream-json 이벤트 처리: init / message / tool_use / tool_result / result
-        const formatted = formatGeminiEvent(event, project.showToolUsage);
+      } else if (isAgy) {
+        // agy(Antigravity CLI) stream-json 이벤트: init / step_update / result
+        const formatted = formatAgyEvent(event, project.showToolUsage);
         if (formatted) logStream.write(formatted + '\n');
-        const md = formatGeminiEventMarkdown(event);
+        const md = formatAgyEventMarkdown(event);
         if (md) conversationParts.push(md);
+        const su = event.event === 'step_update' ? (event.step_update ?? {}) : null;
         // 도구/사고 활동 추적
-        if (event.type === 'tool_use') {
-          prevGeminiAssistant = false;
-          const toolName = event.tool_name ?? '';
+        if (su?.step_type === 'tool') {
+          prevAgyAssistant = false;
+          const toolName = su.tool_name ?? su.tool_info?.name ?? '';
           if (toolName) {
-            const detail = formatToolInput(toolName, event.parameters ?? {});
+            const detail = formatToolInput(toolName, su.tool_info?.parameters ?? {});
             setToolActivity(executionId, agent.id, toolName, detail);
           }
-        } else if (event.type === 'message' && event.role === 'assistant') {
+        } else if (su?.step_type === 'agent_response') {
           setThinking(executionId, agent.id);
-          if (!prevGeminiAssistant) assistantTurnCount++; // 연속 delta는 1턴으로 묶음
-          prevGeminiAssistant = true;
-        } else if (event.type === 'tool_result' || (event.type === 'message' && event.role === 'user')) {
-          prevGeminiAssistant = false;
+          if (!prevAgyAssistant) assistantTurnCount++; // 연속 text_delta는 1턴으로 묶음
+          prevAgyAssistant = true;
+        } else if (su?.step_type === 'user_input' || su?.step_type === 'checkpoint') {
+          prevAgyAssistant = false;
         }
-        // 한도 초과 감지: error 이벤트 또는 비정상 종료(result.status!=success)
-        if (event.type === 'error') {
-          const emsg = event.error?.message ?? event.error ?? event.message ?? '';
-          const rl = detectRateLimit(typeof emsg === 'string' ? emsg : JSON.stringify(emsg));
-          if (rl) rateLimitHint = rl;
-        }
-        // 토큰 누적 (result.stats; 비용 필드 없음 → DB 단가로 환산)
-        if (event.type === 'result') {
-          if (event.status && event.status !== 'success') {
-            const rl = detectRateLimit(`${event.status} ${JSON.stringify(event.error ?? '')}`);
+        // 토큰 누적 + 한도 초과 감지 (result.usage 는 실행 전체 누계, 비용 필드는 없어 DB 단가로 환산)
+        if (event.event === 'result') {
+          const r = event.result ?? {};
+          if (String(r.status ?? '').toUpperCase() !== 'SUCCESS') {
+            const rl = detectRateLimit(`${r.status ?? ''} ${r.error ?? ''}`);
             if (rl) rateLimitHint = rl;
           }
-          const s = event.stats ?? {};
-          // input_tokens는 캐시 포함 총 입력, cached는 캐시 읽기분(claude 패턴과 동일하게 총입력에 포함)
-          totalInputTokens += Number(s.input_tokens ?? 0);
-          totalCacheReadTokens += Number(s.cached ?? 0);
-          totalOutputTokens += Number(s.output_tokens ?? 0);
+          const u = r.usage ?? {};
+          // input_tokens 는 캐시 포함 총 입력, output_tokens 는 thinking 포함(total = input + output)
+          totalInputTokens += Number(u.input_tokens ?? 0);
+          totalCacheReadTokens += Number(u.cache_read_tokens ?? 0);
+          totalOutputTokens += Number(u.output_tokens ?? 0);
+          const nt = Number(r.num_turns ?? 0);
+          if (nt > 0) totalTurns += nt;
         }
       } else {
         // Claude Code 이벤트 처리
@@ -310,11 +308,11 @@ export async function runCliProcess(
       resetIdleTimer();
       const raw = data.toString();
       // CLI별 양성 배너는 경고 로그/실패진단 양쪽에서 제외한다.
-      // (opencode: DB 마이그레이션 / gemini: 256-color·YOLO·ripgrep 배너)
+      // (opencode: DB 마이그레이션 / agy: 배너·업데이트 안내)
       const cleaned = isOpenCode
         ? stripBenignOpencodeStderr(raw)
-        : isGemini
-          ? stripBenignGeminiStderr(raw)
+        : isAgy
+          ? stripBenignAgyStderr(raw)
           : raw;
       stderrBuffer += cleaned;
       if (stderrBuffer.length > STDERR_BUFFER_MAX) {

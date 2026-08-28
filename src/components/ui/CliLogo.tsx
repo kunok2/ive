@@ -2,7 +2,8 @@
 // codex(OpenAI) 로고는 단색 검정이라 다크 UI에서 invert로 흰색 처리한다.
 const CLI_LOGOS: Record<string, { src: string; invert?: boolean }> = {
   claude: { src: '/cli/claude.svg' },
-  gemini: { src: '/cli/gemini.png' },
+  agy: { src: '/cli/agy.png' },
+  gemini: { src: '/cli/gemini.png' }, // 레거시(과거 실행 이력 표시용)
   codex: { src: '/cli/codex.png', invert: true },
   opencode: { src: '/cli/opencode.svg' },
 }

@@ -12,7 +12,7 @@
   "projectTitle": "1단계: 프로젝트 연결",
   "projectDesc": "OAuth로 GitHub/GitLab에 로그인하면\n내 프로젝트를 한번에 가져옵니다.\n복잡한 설정은 필요 없습니다.",
   "agentTitle": "2단계: AI 에이전트 등록",
-  "agentDesc": "Claude, Gemini 등 AI를 등록하면\n내가 의뢰한 작업을 알아서 처리합니다.",
+  "agentDesc": "Claude, agy 등 AI를 등록하면\n내가 의뢰한 작업을 알아서 처리합니다.",
   "startTitle": "3단계: 할 일을 등록하세요",
   "startDesc": "IVE에서 직접 등록하거나\nGit에서 레이블만 붙이면 자동 인식.\nAI가 알아서 처리합니다.",
   "conclusionTitle": "Springware IVE",

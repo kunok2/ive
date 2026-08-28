@@ -61,11 +61,14 @@ export interface BuildCliOpts {
   /** MCP 서버 설정. undefined면 시스템 설정에서 로드. */
   mcpServers?: Record<string, any> | null
   /** 첨부 이미지 파일 경로(절대경로). codex는 -i, opencode는 -f로 전달.
-   *  claude/gemini는 전용 플래그가 없어 호출 측이 프롬프트에 경로를 안내한다(Read/파일참조). */
+   *  claude/agy는 전용 플래그가 없어 호출 측이 프롬프트에 경로를 안내한다(Read/파일참조). */
   imagePaths?: string[]
 }
 
 const shq = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`
+
+/** agy headless 대기 한도. 기본 5분이라 장시간 에이전트 작업이 중간에 잘린다. */
+const AGY_PRINT_TIMEOUT = '12h'
 
 export interface OpencodeInvocationOpts {
   cliParts: string[]
@@ -224,32 +227,34 @@ export function buildCliInvocation(o: BuildCliOpts): CliInvocation {
     }
   }
 
-  if (cliName === 'gemini') {
-    // MCP: gemini는 워크스페이스의 .gemini/settings.json 에서 mcpServers 를 읽는다.
-    // (설정 비어있으면 파일을 만들지 않으므로 동작 불변)
+  if (cliName === 'agy') {
+    // MCP: agy(Antigravity CLI)는 워크스페이스의 .agents/mcp_config.json 에서 mcpServers 를 읽는다.
+    // (전역 설정은 ~/.gemini/config/mcp_config.json — 워크스페이스 설정이 우선)
     if (mcpServers) {
-      const geminiMcp = toStandardMcp(mcpServers)
-      if (Object.keys(geminiMcp).length > 0) {
+      const agyMcp = toStandardMcp(mcpServers)
+      if (Object.keys(agyMcp).length > 0) {
         try {
-          const dir = path.join(workspacePath, '.gemini')
+          const dir = path.join(workspacePath, '.agents')
           fs.mkdirSync(dir, { recursive: true })
-          fs.writeFileSync(path.join(dir, 'settings.json'), JSON.stringify({ mcpServers: geminiMcp }, null, 2))
+          fs.writeFileSync(path.join(dir, 'mcp_config.json'), JSON.stringify({ mcpServers: agyMcp }, null, 2))
         } catch { /* ignore */ }
       }
     }
+    // headless(print) 모드. --print-timeout 기본값이 5분이라 장시간 작업이 잘리므로 넉넉히 준다.
+    // 세션 이어가기는 --conversation <id> (result 이벤트의 conversation_id).
     const args = [
       ...cliParts.slice(1),
-      '--yolo',
-      '--skip-trust',
+      '--dangerously-skip-permissions',
       '--output-format', 'stream-json',
-      ...(model ? ['-m', model] : []),
+      '--print-timeout', AGY_PRINT_TIMEOUT,
+      ...(model ? ['--model', model] : []),
+      ...(cliSessionId ? ['--conversation', cliSessionId] : []),
       '-p', prompt,
     ]
     return {
       mainCmd, args,
       env: {
         ...process.env,
-        GEMINI_CLI_TRUST_WORKSPACE: 'true',
         GITLAB_TOKEN: token, GITLAB_API_TOKEN: token,
         GITHUB_TOKEN: token,
         IVE_GITLAB_TOKEN: token,

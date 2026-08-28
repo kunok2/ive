@@ -45,6 +45,7 @@ export function cliFromModelName(model?: string | null): string | null {
   if (!model) return null
   const m = model.toLowerCase()
   if (m.includes('claude') || m.includes('opus') || m.includes('sonnet') || m.includes('haiku') || m.includes('fable') || m.includes('mythos')) return 'claude'
+  if (m.includes('antigravity') || m.startsWith('agy')) return 'agy'
   if (m.includes('gemini')) return 'gemini'
   if (m.includes('gpt') || m.includes('codex') || /\bo[34]\b/.test(m)) return 'codex'
   if (m.includes('opencode')) return 'opencode'

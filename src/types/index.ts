@@ -114,7 +114,11 @@ export interface Project {
   createdAt: string
 }
 
-export type CliName = 'claude' | 'gemini' | 'codex' | 'opencode'
+// 'gemini' 는 레거시 — Gemini CLI 가 단종되고 agy(Antigravity CLI)로 대체됐다.
+// 새 에이전트는 만들 수 없지만 과거 실행 이력 표시를 위해 타입에는 남긴다.
+export type CliName = 'claude' | 'agy' | 'codex' | 'opencode' | 'gemini'
+/** 현재 새로 만들 수 있는 CLI (레거시 제외) */
+export const ACTIVE_CLI_NAMES = ['claude', 'agy', 'codex', 'opencode'] as const
 export type AgentStatus = 'available' | 'busy' | 'offline'
 
 // 기본 아바타 20종 — 아이콘으로 정체성 구분, 색은 브랜드(cyan) 변주로 통일.

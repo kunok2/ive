@@ -39,8 +39,8 @@ const SETTING_GROUPS: SettingGroup[] = [
       { key: 'cli.claude.model', label: 'Claude Model', type: 'model-select', cliName: 'claude' },
       { key: 'cli.codex.path', label: 'Codex', type: 'text', placeholder: '/usr/local/bin/codex', defaultValue: '/usr/local/bin/codex' },
       { key: 'cli.codex.model', label: 'Codex Model', type: 'model-select', cliName: 'codex' },
-      { key: 'cli.gemini.path', label: 'Gemini CLI', type: 'text', placeholder: '/usr/local/bin/gemini', defaultValue: '/usr/local/bin/gemini' },
-      { key: 'cli.gemini.model', label: 'Gemini Model', type: 'model-select', cliName: 'gemini' },
+      { key: 'cli.agy.path', label: 'agy (Antigravity CLI)', type: 'text', placeholder: '/usr/local/bin/agy', defaultValue: '/usr/local/bin/agy' },
+      { key: 'cli.agy.model', label: 'agy Model', type: 'model-select', cliName: 'agy' },
       { key: 'cli.opencode.path', label: 'OpenCode', type: 'text', placeholder: '/usr/local/bin/opencode', defaultValue: '/usr/local/bin/opencode' },
       { key: 'cli.opencode.model', label: 'OpenCode Model', type: 'model-select', cliName: 'opencode' },
     ],
@@ -164,7 +164,7 @@ const SETTING_GROUPS: SettingGroup[] = [
 const CLI_ITEMS: { cliName: string; label: string; icon: string; pathKey: string; modelKey: string; pathPlaceholder: string }[] = [
   { cliName: 'claude', label: 'Claude Code', icon: 'fa-solid fa-robot', pathKey: 'cli.claude.path', modelKey: 'cli.claude.model', pathPlaceholder: '/usr/local/bin/claude' },
   { cliName: 'codex', label: 'Codex', icon: 'fa-solid fa-code', pathKey: 'cli.codex.path', modelKey: 'cli.codex.model', pathPlaceholder: '/usr/local/bin/codex' },
-  { cliName: 'gemini', label: 'Gemini CLI', icon: 'fa-solid fa-gem', pathKey: 'cli.gemini.path', modelKey: 'cli.gemini.model', pathPlaceholder: '/usr/local/bin/gemini' },
+  { cliName: 'agy', label: 'agy (Antigravity CLI)', icon: 'fa-solid fa-gem', pathKey: 'cli.agy.path', modelKey: 'cli.agy.model', pathPlaceholder: '/usr/local/bin/agy' },
   { cliName: 'opencode', label: 'OpenCode', icon: 'fa-solid fa-cube', pathKey: 'cli.opencode.path', modelKey: 'cli.opencode.model', pathPlaceholder: '/usr/local/bin/opencode' },
 ]
 

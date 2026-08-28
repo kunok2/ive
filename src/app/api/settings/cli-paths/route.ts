@@ -9,7 +9,7 @@ export async function GET() {
   const settings = getSystemSettings('cli.')
   const paths: Record<string, string> = {
     claude: settings['cli.claude.path'] || '/usr/local/bin/claude',
-    gemini: settings['cli.gemini.path'] || '/usr/local/bin/gemini',
+    agy: settings['cli.agy.path'] || '/usr/local/bin/agy',
     codex: settings['cli.codex.path'] || '/usr/local/bin/codex',
     opencode: settings['cli.opencode.path'] || '/usr/local/bin/opencode',
   }

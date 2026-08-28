@@ -10,10 +10,14 @@ IVE_UID="$(id -u ive)"
 IVE_GID="$(id -g ive)"
 
 # CLI 인증/세션 상태 디렉토리(작음) — 재귀로 맞춘다.
+# agy(Antigravity CLI)는 설정·자격증명을 ~/.gemini 아래에 둔다(Gemini CLI 시절 경로를 승계).
+# ~/.antigravity, ~/.cache/antigravity 는 확장/스테이징용.
 for d in \
   /home/ive/.claude \
   /home/ive/.codex \
   /home/ive/.gemini \
+  /home/ive/.antigravity \
+  /home/ive/.cache/antigravity \
   /home/ive/.local/share/opencode \
 ; do
   mkdir -p "$d"

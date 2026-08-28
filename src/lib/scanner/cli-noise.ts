@@ -23,7 +23,7 @@ const OPENCODE_BENIGN_STDERR: RegExp[] = [
 //   "Warning: 256-color support not detected..."
 //   "YOLO mode is enabled. All tool calls will be automatically approved."  (2회 반복)
 //   "Ripgrep is not available. Falling back to GrepTool."
-const GEMINI_BENIGN_STDERR: RegExp[] = [
+const AGY_BENIGN_STDERR: RegExp[] = [
   /256-color support not detected/i,
   /yolo mode is enabled/i,
   /all tool calls will be automatically approved/i,
@@ -47,8 +47,8 @@ export function stripBenignOpencodeStderr(raw: string): string {
   return stripBenignLines(raw, OPENCODE_BENIGN_STDERR);
 }
 
-export function stripBenignGeminiStderr(raw: string): string {
-  return stripBenignLines(raw, GEMINI_BENIGN_STDERR);
+export function stripBenignAgyStderr(raw: string): string {
+  return stripBenignLines(raw, AGY_BENIGN_STDERR);
 }
 
 // ──────────────── 사용량 한도(rate limit / quota) 감지 ────────────────
@@ -56,7 +56,7 @@ export function stripBenignGeminiStderr(raw: string): string {
 // 사용자에게 "한도 초과로 추정"을 명시한다(#463 후속). 라이브러리/모델별 표현:
 //   Anthropic(claude) : rate_limit_error, "usage limit reached", 429, overloaded(529)
 //   OpenAI(codex)     : 429, "Too Many Requests", insufficient_quota, rate limit
-//   Google(gemini)    : RESOURCE_EXHAUSTED, "exhausted your capacity", quota
+//   Google(agy)       : RESOURCE_EXHAUSTED, "exhausted your capacity", quota
 //   opencode          : provider 따라 위 표현이 그대로 전달됨
 const RATE_LIMIT_PATTERNS: RegExp[] = [
   /rate[\s_-]?limit/i,
