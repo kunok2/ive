@@ -40,7 +40,7 @@ const SETTING_GROUPS: SettingGroup[] = [
       { key: 'cli.codex.path', label: 'Codex', type: 'text', placeholder: '/usr/local/bin/codex', defaultValue: '/usr/local/bin/codex' },
       { key: 'cli.codex.model', label: 'Codex Model', type: 'model-select', cliName: 'codex' },
       { key: 'cli.agy.path', label: 'agy (Antigravity CLI)', type: 'text', placeholder: '/usr/local/bin/agy', defaultValue: '/usr/local/bin/agy' },
-      { key: 'cli.agy.model', label: 'agy Model', type: 'model-select', cliName: 'agy' },
+      { key: 'cli.agy.model', label: 'Antigravity CLI Model', type: 'model-select', cliName: 'agy' },
       { key: 'cli.opencode.path', label: 'OpenCode', type: 'text', placeholder: '/usr/local/bin/opencode', defaultValue: '/usr/local/bin/opencode' },
       { key: 'cli.opencode.model', label: 'OpenCode Model', type: 'model-select', cliName: 'opencode' },
     ],

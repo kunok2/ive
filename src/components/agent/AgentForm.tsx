@@ -23,7 +23,7 @@ export default function AgentForm({ onSuccess, onCancel }: Props) {
 
   const cliTools: { value: CliName; label: string; icon: string; desc: string; defaultName: string }[] = [
     { value: 'claude', label: 'Claude Code', icon: 'fa-solid fa-atom', desc: t('claudeDesc'), defaultName: 'Claude' },
-    { value: 'agy', label: 'agy', icon: 'fa-brands fa-google', desc: t('agyDesc'), defaultName: 'Antigravity' },
+    { value: 'agy', label: 'agy (Antigravity CLI)', icon: 'fa-brands fa-google', desc: t('agyDesc'), defaultName: 'Antigravity' },
     { value: 'codex', label: 'Codex CLI', icon: 'fa-solid fa-brain', desc: t('codexDesc'), defaultName: 'Codex' },
     { value: 'opencode', label: 'OpenCode', icon: 'fa-solid fa-terminal', desc: t('opencodeDesc'), defaultName: 'OpenCode' },
   ]

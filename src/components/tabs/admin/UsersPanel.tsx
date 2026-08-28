@@ -383,7 +383,7 @@ export default function UsersPanel() {
                     <i className="fa-solid fa-terminal mr-1" />{t('cliTools')}
                   </label>
                   <div className="flex flex-wrap gap-2 flex-1 min-w-0">
-                    {[{ value: 'claude', label: 'Claude Code', icon: 'fa-solid fa-atom' }, { value: 'agy', label: 'agy', icon: 'fa-brands fa-google' }, { value: 'codex', label: 'Codex CLI', icon: 'fa-solid fa-brain' }, { value: 'opencode', label: 'OpenCode', icon: 'fa-solid fa-terminal' }].map(cli => {
+                    {[{ value: 'claude', label: 'Claude Code', icon: 'fa-solid fa-atom' }, { value: 'agy', label: 'agy (Antigravity CLI)', icon: 'fa-brands fa-google' }, { value: 'codex', label: 'Codex CLI', icon: 'fa-solid fa-brain' }, { value: 'opencode', label: 'OpenCode', icon: 'fa-solid fa-terminal' }].map(cli => {
                       const checked = limitValues.allowedClis.includes(cli.value)
                       return (
                         <button

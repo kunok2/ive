@@ -11,7 +11,7 @@ import { CliName } from '@/types'
 const CLIS: { name: CliName; label: string }[] = [
   { name: 'claude', label: 'Claude' },
   { name: 'codex', label: 'Codex' },
-  { name: 'agy', label: 'agy' },
+  { name: 'agy', label: 'Antigravity CLI' },
   { name: 'opencode', label: 'OpenCode' },
 ]
 
