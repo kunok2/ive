@@ -108,7 +108,7 @@ export default function UsersPanel() {
   async function handleToggleAdmin(userId: string, currentAdmin: boolean) {
     const newAdmin = !currentAdmin
     const body: any = { userId, isAdmin: newAdmin }
-    if (newAdmin) body.allowedClis = ['claude', 'codex', 'opencode']
+    if (newAdmin) body.allowedClis = ['claude', 'agy', 'codex', 'opencode']
     const res = await fetch('/api/admin/users', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -118,7 +118,7 @@ export default function UsersPanel() {
       setUsers(prev => prev.map(u => u.id === userId ? {
         ...u,
         isAdmin: newAdmin,
-        ...(newAdmin ? { allowedClis: ['claude', 'codex', 'opencode'] as User['allowedClis'] } : {}),
+        ...(newAdmin ? { allowedClis: ['claude', 'agy', 'codex', 'opencode'] as User['allowedClis'] } : {}),
       } : u))
     } else {
       const data = await res.json()

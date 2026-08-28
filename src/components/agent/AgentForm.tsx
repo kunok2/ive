@@ -28,8 +28,11 @@ export default function AgentForm({ onSuccess, onCancel }: Props) {
     { value: 'opencode', label: 'OpenCode', icon: 'fa-solid fa-terminal', desc: t('opencodeDesc'), defaultName: 'OpenCode' },
   ]
 
+  // 관리자는 CLI 제한을 받지 않는다(허용 목록은 일반 사용자에게만 적용).
   const allowedClis = state.user?.allowedClis || ['opencode']
-  const availableTools = cliTools.filter(t => allowedClis.includes(t.value))
+  const availableTools = state.user?.isAdmin
+    ? cliTools
+    : cliTools.filter(t => allowedClis.includes(t.value))
   const defaultCli = (availableTools[0]?.value ?? 'opencode') as CliName
 
   const [cliName, setCliName] = useState<CliName>(defaultCli)
