@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { getSystemSettings } from '@/lib/db'
+import { resolveCliPath } from '@/lib/cli-paths'
 
 export async function GET() {
   const user = await getCurrentUser()
@@ -9,7 +10,7 @@ export async function GET() {
   const settings = getSystemSettings('cli.')
   const paths: Record<string, string> = {
     claude: settings['cli.claude.path'] || '/usr/local/bin/claude',
-    agy: settings['cli.agy.path'] || '/usr/local/bin/agy',
+    agy: settings['cli.agy.path'] || resolveCliPath('agy'),
     codex: settings['cli.codex.path'] || '/usr/local/bin/codex',
     opencode: settings['cli.opencode.path'] || '/usr/local/bin/opencode',
   }

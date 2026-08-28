@@ -1,6 +1,8 @@
 import Database from 'better-sqlite3'
 import bcrypt from 'bcryptjs'
 import { DEFAULT_ADMIN_EMAIL } from '@/lib/constants'
+import fs from 'fs'
+import { resolveCliPath } from '@/lib/cli-paths'
 
 export function initSchema(db: Database.Database) {
   db.exec(`
@@ -969,11 +971,14 @@ export function initSchema(db: Database.Database) {
         console.log('[DB] agents cli_name CHECK constraint updated to include agy')
       }
     }
+    // 전환 시 경로도 agy 로 바꾼다. 설치 위치가 환경마다 달라(도커 /usr/local/bin,
+    // 설치 스크립트 ~/.local/bin) 실제 존재하는 파일을 찾아 넣는다.
+    const agyPath = resolveCliPath('agy')
     const moved = db.prepare(
       `UPDATE agents SET cli_name = 'agy',
-         cli_path = CASE WHEN cli_path LIKE '%gemini%' THEN '/usr/local/bin/agy' ELSE cli_path END
+         cli_path = CASE WHEN cli_path LIKE '%gemini%' THEN ? ELSE cli_path END
        WHERE cli_name = 'gemini'`
-    ).run()
+    ).run(agyPath)
     if (moved.changes > 0) console.log(`[DB] gemini 에이전트 ${moved.changes}건을 agy 로 전환`)
     // 사용자별 허용 CLI 목록(users.allowed_clis, CSV)의 gemini 도 agy 로 옮긴다.
     // 안 하면 gemini 를 쓰던 사용자가 에이전트 생성 화면에서 agy 를 고를 수 없다.
@@ -981,6 +986,12 @@ export function initSchema(db: Database.Database) {
       `UPDATE users SET allowed_clis = replace(allowed_clis, 'gemini', 'agy') WHERE allowed_clis LIKE '%gemini%'`
     ).run()
     if (allowed.changes > 0) console.log(`[DB] allowed_clis 의 gemini → agy 전환 ${allowed.changes}건`)
+    // 시스템 설정의 agy 경로가 비어 있으면 실제 설치 경로로 채운다(설정 화면 기본값과 일치).
+    const hasAgyPath = db.prepare("SELECT 1 FROM system_settings WHERE key = 'cli.agy.path'").get()
+    if (!hasAgyPath && fs.existsSync(agyPath)) {
+      db.prepare("INSERT INTO system_settings (key, value) VALUES ('cli.agy.path', ?)").run(agyPath)
+      console.log(`[DB] cli.agy.path 기본값 설정: ${agyPath}`)
+    }
   } catch (e) { console.error('[DB] agy migration failed:', e) }
 
   // token_pricing 마이그레이션
