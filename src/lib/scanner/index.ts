@@ -50,10 +50,10 @@ import {
   fetchGitHubIssues,
 } from "../github";
 import { Project, Agent, isAgentAvailableNow } from "@/types";
-import { resolveIssueRequesterAsync } from "../ive-author";
+import { resolveIssueRequesterAsync, resolveStageActorAsync } from "../ive-author";
 import { fetchIssueLabelEvents } from "../provider";
 import { isGitBotUser } from "../git-bot";
-import { markersForStageChange } from "../stage-transitions";
+import { markersForStageChange, stageLabelFor } from "../stage-transitions";
 import { openStageExecution, closeStageExecutions, hasOpenStageExecution, pickStageMeta, type StageKind } from "./stage-records";
 import { startStatsCollector } from "../stats-collector";
 import { startReportScheduler } from "../report-scheduler";
@@ -387,8 +387,22 @@ async function scanProject(project: Project, force: boolean = false) {
         const assigneeUser = assigneeInfo?.username
           ? getUserByGitUsername(project.provider === 'github' ? 'github' : 'gitlab', assigneeInfo.username)
           : null;
-        const actor = (markers.verified || markers.rejected || markers.confirmed) ? assigneeInfo : null;
-        const actorUser = actor ? assigneeUser : null;
+
+        // 행위자 판정: "이 단계 라벨을 실제로 부착한 사람" 이 1순위, 담당자(assignee)가 2순위.
+        // 에이전트가 CLI 로 검증·확인을 진행하면 담당자와 실제 수행자가 다를 수 있다.
+        // (IVE 화면 버튼 경로는 프로젝트 토큰=봇이 라벨을 달아 resolveStageActorAsync 가 null →
+        //  종전대로 assignee 로 떨어진다.)
+        const stageLabelNow = anyMarker ? stageLabelFor(project, stage) : null;
+        const labelActor = stageLabelNow
+          ? await resolveStageActorAsync(project, stageLabelNow, () => fetchIssueLabelEvents(project, iid, decryptedToken))
+          : null;
+        const actorName = labelActor?.user?.name || labelActor?.username || assigneeInfo?.name || null;
+        const actorAvatar = labelActor?.user?.avatar || (labelActor ? null : assigneeInfo?.avatar ?? null);
+        const actorUsername = labelActor?.username || assigneeInfo?.username || null;
+        const actor = (markers.verified || markers.rejected || markers.confirmed)
+          ? { name: actorName, avatar: actorAvatar, username: actorUsername }
+          : null;
+        const actorUser = labelActor?.user ?? assigneeUser;
 
         if (markers.verifyStarted) {
           markIssueVerifyStarted(project.id, iid);
@@ -397,9 +411,9 @@ async function scanProject(project: Project, force: boolean = false) {
           openStageExecution(project.id, iid, 'verify', {
             issueTitle: issue.title ?? null,
             issueCreatedAt: issue.created_at ?? null,
-            userId: assigneeUser?.id ?? null,
-            userName: assigneeInfo?.name ?? null,
-            userAvatar: assigneeInfo?.avatar ?? null,
+            userId: actorUser?.id ?? null,
+            userName: actorName,
+            userAvatar: actorAvatar,
           });
         }
         if (markers.verified) {
@@ -421,9 +435,9 @@ async function scanProject(project: Project, force: boolean = false) {
           openStageExecution(project.id, iid, 'confirm', {
             issueTitle: issue.title ?? null,
             issueCreatedAt: issue.created_at ?? null,
-            userId: assigneeUser?.id ?? null,
-            userName: assigneeInfo?.name ?? null,
-            userAvatar: assigneeInfo?.avatar ?? null,
+            userId: actorUser?.id ?? null,
+            userName: actorName,
+            userAvatar: actorAvatar,
           });
         }
         if (markers.confirmed) {

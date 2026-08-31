@@ -256,3 +256,18 @@ export function markersForStageChange(
     confirmed: next === 'done' && (prev === 'confirming' || prev === 'confirm_waiting'),
   }
 }
+
+/** 단계(stage) → 그 단계를 나타내는 라벨. 라벨 이벤트에서 "누가 이 단계로 옮겼는가"를 찾을 때 쓴다. */
+export function stageLabelFor(p: Project, stage: string | null | undefined): string | null {
+  switch (stage) {
+    case 'waiting': return p.labelSchedule || 'IVE-S'
+    case 'dev':
+    case 'dev_fail': return p.labelDev || 'IVE-D'
+    case 'verify_waiting': return p.labelVerifyWait || 'IVE-W'
+    case 'verifying': return p.labelVerify || 'IVE-V'
+    case 'confirm_waiting': return p.labelConfirmWait || 'IVE-P'
+    case 'confirming': return p.labelConfirm || 'IVE-C'
+    case 'done': return p.labelEnd || 'IVE-E'
+    default: return null
+  }
+}

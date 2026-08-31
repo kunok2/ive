@@ -16,6 +16,7 @@
  */
 import { getUserById, getUserByOAuthId, getUserByGitUsername, getAgent } from '@/lib/db'
 import type { User, Agent, Project } from '@/types'
+import { isBotName } from '@/lib/git-bot'
 
 /**
  * Git 쪽 행위자(레이블 부착자 / 이슈 작성자)를 IVE 사용자로 식별한다.
@@ -39,6 +40,48 @@ function matchGitUser(
   if (username) {
     const byName = getUserByGitUsername(provider, username)
     if (byName) return byName
+  }
+  return null
+}
+
+/**
+ * 단계 라벨(IVE-V/P/C/E …)을 **실제로 부착한 사람**을 찾는다.
+ *
+ * 에이전트가 검증·확인을 맡으면 IVE 화면 버튼이 아니라 glab/gh 로 라벨을 옮긴다. 그 경로에서
+ * 종전에는 "이슈 담당자(assignee)"를 행위자로 간주할 수밖에 없어, 담당자와 실제로 검증한 사람이
+ * 다르면 검증자/확인자가 엉뚱하게 기록됐다. 라벨 이벤트에는 누가 언제 달았는지가 남으므로
+ * 그것을 우선 쓴다.
+ *
+ * ⚠️ 봇 계정은 건너뛴다. IVE 자신이 **프로젝트 토큰(봇)** 으로 라벨을 달기 때문에(화면 버튼으로
+ * 승인한 경우가 그렇다) 봇을 그대로 행위자로 삼으면 진짜 검증자를 덮어쓴다. 그런 경우는
+ * 호출부가 assignee 로 fallback 한다.
+ */
+export interface StageActor {
+  username: string
+  /** IVE 계정으로 식별되면 그 사용자. 외부 협력자 등은 null. */
+  user: User | null
+  createdAt: string
+}
+
+export async function resolveStageActorAsync(
+  project: Project,
+  stageLabel: string,
+  fetchLabelEvents: () => Promise<Array<{
+    action: 'add' | 'remove'; label: string; userId: string | null; username?: string | null; createdAt: string
+  }>>,
+): Promise<StageActor | null> {
+  if (!stageLabel) return null
+  try {
+    const events = await fetchLabelEvents()
+    const sorted = [...events].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+    for (const ev of sorted) {
+      if (ev.action !== 'add' || ev.label !== stageLabel) continue
+      const username = ev.username || ''
+      if (!username || isBotName(username)) continue
+      return { username, user: matchGitUser(project.provider, ev.userId, username), createdAt: ev.createdAt }
+    }
+  } catch {
+    // 레이블 이벤트 조회 실패 → 호출부가 assignee 로 fallback
   }
   return null
 }
