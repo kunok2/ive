@@ -214,3 +214,45 @@ export function allStageLabels(p: Project): string[] {
 export function staleStageLabelsToRemove(p: Project, keepLabel: string): string[] {
   return allStageLabels(p).filter(l => l !== keepLabel)
 }
+
+/**
+ * Git UI/CLI 에서 라벨을 직접 옮겼을 때, 그 전이로부터 기록해야 할 검증/확인 마커를 판정한다.
+ *
+ * 에이전트가 검증·확인을 맡으면 IVE 화면 버튼이 아니라 `glab`/`gh` 로 라벨을 옮긴다.
+ * 그래서 이 판정이 곧 보고서의 검증/확인 통계가 된다.
+ *
+ * ⛔ 종전 스캐너는 "verifying → done" 만 승인으로 봤다. 정상 흐름인 **verifying → 확인대기(P)**
+ * 는 승인 조건에 걸리지 않고 "verifying 에서 벗어남" 조건에 걸려 **반려로 기록**됐다.
+ * (화면 버튼으로 승인하면 verified_at 이 먼저 박혀 무해했으나, CLI 로 라벨만 옮기면 오염된다.)
+ * 또 확인 단계(P→C→E)는 라벨로 옮겨도 confirm_started_at/confirmed_at 이 전혀 남지 않았다.
+ */
+export type StageChangeMarkers = {
+  verifyStarted: boolean
+  verified: boolean
+  rejected: boolean
+  confirmStarted: boolean
+  confirmed: boolean
+}
+
+/** 검증 통과로 볼 수 있는 후속 단계 — 확인대기/확인중/완료. */
+const VERIFY_PASSED_STAGES = new Set(['confirm_waiting', 'confirming', 'done'])
+
+export function markersForStageChange(
+  prevStage: string | null | undefined,
+  stage: string | null | undefined,
+): StageChangeMarkers {
+  const prev = prevStage ?? null
+  const next = stage ?? null
+  return {
+    // 검증 시작: 임의 단계 → 검증 중
+    verifyStarted: next === 'verifying' && prev !== 'verifying',
+    // 검증 승인: 검증 중 → 확인대기/확인중/완료
+    verified: prev === 'verifying' && next !== null && VERIFY_PASSED_STAGES.has(next),
+    // 검증 반려: 검증 중 → 그 외(스케줄 복귀, 라벨 제거 등). 승인 경로는 위에서 걸러진다.
+    rejected: prev === 'verifying' && next !== 'verifying' && !(next !== null && VERIFY_PASSED_STAGES.has(next)),
+    // 확인 시작: 임의 단계 → 확인 중
+    confirmStarted: next === 'confirming' && prev !== 'confirming',
+    // 확인 완료: 확인대기/확인중 → 완료 (검증에서 곧장 완료로 건너뛴 경우는 확인으로 치지 않는다)
+    confirmed: next === 'done' && (prev === 'confirming' || prev === 'confirm_waiting'),
+  }
+}

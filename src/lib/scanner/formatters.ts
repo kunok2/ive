@@ -3,6 +3,15 @@
  * - 이벤트 포맷팅, 메타데이터 파싱
  */
 
+/**
+ * ive-meta 블록이 가리키는 작업 단계.
+ *   - 'dev'     : 툴 직접개발(기본값). 이슈 본문에 쌓이는 종전 블록.
+ *   - 'verify'  : 에이전트가 수행한 **검증**. 검토 코멘트에 붙인다.
+ *   - 'confirm' : 에이전트가 수행한 **확인**. 확인 코멘트에 붙인다.
+ * 검증/확인을 에이전트가 대신하면 그 토큰·시간이 어디에도 안 잡히던 것을 이 필드로 구분한다.
+ */
+export type IveMetaStage = 'dev' | 'verify' | 'confirm'
+
 export type IveMetaSession = {
   model: string | null
   inputTokens: number
@@ -11,13 +20,15 @@ export type IveMetaSession = {
   turns: number
   startedAt: string | null
   endedAt: string | null
+  /** 이 블록이 어느 단계의 작업인지. 없으면 'dev'(하위호환). */
+  stage: IveMetaStage
 }
 
 /**
  * ive-meta 블록 하나(<!-- ive-meta ... -->)의 본문을 IveMetaSession 으로 파싱한다.
  */
 function parseIveMetaBlock(inner: string): IveMetaSession {
-  const session: IveMetaSession = { model: null, inputTokens: 0, outputTokens: 0, costUsd: 0, turns: 0, startedAt: null, endedAt: null };
+  const session: IveMetaSession = { model: null, inputTokens: 0, outputTokens: 0, costUsd: 0, turns: 0, startedAt: null, endedAt: null, stage: 'dev' };
   const lines = inner.split('\n');
   for (const line of lines) {
     const kv = line.match(/^\s*(\w+)\s*:\s*(.+)\s*$/);
@@ -33,6 +44,8 @@ function parseIveMetaBlock(inner: string): IveMetaSession {
       // 보고서 쿼리의 MAX(ended_at) 등으로 흘러 들어가 RangeError 를 일으키는 사고 회귀 방지).
       case 'started_at': { const d = new Date(val.trim()); session.startedAt = isNaN(d.getTime()) ? null : d.toISOString(); break; }
       case 'ended_at':   { const d = new Date(val.trim()); session.endedAt   = isNaN(d.getTime()) ? null : d.toISOString(); break; }
+      // 모르는 값은 'dev' 로 (오타 때문에 개발분이 통계에서 사라지지 않게)
+      case 'stage': { const v = val.trim().toLowerCase(); session.stage = (v === 'verify' || v === 'confirm') ? v : 'dev'; break; }
     }
   }
   return session;
@@ -62,7 +75,7 @@ export function parseIveMetaSessions(body: string): IveMetaSession[] {
  */
 export function parseIveMeta(body: string): IveMetaSession {
   const sessions = parseIveMetaSessions(body);
-  return sessions[0] ?? { model: null, inputTokens: 0, outputTokens: 0, costUsd: 0, turns: 0, startedAt: null, endedAt: null };
+  return sessions[0] ?? { model: null, inputTokens: 0, outputTokens: 0, costUsd: 0, turns: 0, startedAt: null, endedAt: null, stage: 'dev' };
 }
 
 /**

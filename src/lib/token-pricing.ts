@@ -99,6 +99,7 @@ interface CostExec {
  * exec 1건의 "사람 작업시간(분)"을 산정한다. (원가 = 낮을수록 좋음)
  *   - IVE 처리(에이전트 exec): 0 — 처리는 AI 비용(토큰)으로 계산.
  *   - 검증/확인(ex-verify, ex-confirm): 근무시간 내 (검증시작→검증완료) 경과. 상한 없음(방치 시 증가).
+ *     단, 그 행에 토큰이 기록돼 있으면 **에이전트가 수행한 검증/확인**이므로 사람 시간 0.
  *   - 툴 직접개발(그 외 user exec): work_sec(확정 작업시간). 스캐너가 ive-meta>/spend>0 으로 산정해 저장.
  *     (이슈 열린 기간 created→등록 으로 부풀리지 않음.)
  */
@@ -106,6 +107,9 @@ export function humanWorkMinutes(e: CostExec): number {
   if (e.assigneeType === 'agent') return 0
   const id = e.id || ''
   if (id.startsWith('ex-verify') || id.startsWith('ex-confirm')) {
+    // 에이전트가 대신한 검증/확인: 코멘트의 ive-meta(stage: verify|confirm)로 토큰이 채워진다.
+    // 사람이 앉아 있던 시간이 아니므로 사람 시간 0 — 비용은 AI 토큰으로만 잡힌다.
+    if (e.inputTokens > 0 || e.outputTokens > 0 || e.costUsd > 0) return 0
     return businessMinutesKST(e.verifyStartedAt || e.startedAt, e.verifiedAt || e.rejectedAt || e.endedAt)
   }
   // 툴 직접개발: 확정 작업시간(work_sec)만 사용.

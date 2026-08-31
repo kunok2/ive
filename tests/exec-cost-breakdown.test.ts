@@ -44,6 +44,26 @@ describe('resolveExecutionCostBreakdown', () => {
     expect(b.human).toBeCloseTo(30)
   })
 
+  it('에이전트가 대신한 검증: 사람 시간 0, 비용은 AI 토큰으로만', () => {
+    // 코멘트의 ive-meta(stage: verify)로 토큰이 채워진 ex-verify 행.
+    // 라벨이 30분 열려 있었어도 사람이 앉아 있던 시간이 아니다.
+    const b = resolveExecutionCostBreakdown({
+      ...base, id: 'ex-verify-agent-1', assigneeType: 'user', costUsd: 0.42,
+      verifyStartedAt: '2026-08-11T09:00:00+09:00', verifiedAt: '2026-08-11T09:30:00+09:00',
+    }, rate)
+    expect(b.human).toBe(0)
+    expect(b.ai).toBeCloseTo(0.42)
+  })
+
+  it('에이전트 검증 판정은 cost_usd 없이 토큰만 있어도 성립한다', () => {
+    const b = resolveExecutionCostBreakdown({
+      ...base, id: 'ex-confirm-agent-1', assigneeType: 'user',
+      inputTokens: 120_000, outputTokens: 4_000, modelName: 'no-such-model-xyz',
+      verifyStartedAt: '2026-08-11T09:00:00+09:00', verifiedAt: '2026-08-11T10:00:00+09:00',
+    }, rate)
+    expect(b.human).toBe(0)
+  })
+
   it('단가 미등록 모델 + cost_usd 없음 → AI 비용 0 (과대계상하지 않음)', () => {
     const b = resolveExecutionCostBreakdown({
       ...base, id: 'ex-ext-p-1-0-y', assigneeType: 'user',

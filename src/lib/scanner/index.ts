@@ -30,7 +30,10 @@ import {
   markIssueVerifyStarted,
   markIssueVerified,
   markIssueVerifyRejected,
+  markIssueConfirmStarted,
+  markIssueConfirmed,
   getIssueAssigneeUsername,
+  getUserByGitUsername,
   getProjectWithUserOAuth,
   updateUserOAuthTokens,
   getOAuthProviderRaw,
@@ -38,7 +41,7 @@ import {
 } from "../db";
 import { fetchProjectMembers } from "../provider";
 import { decrypt, encrypt } from "../crypto";
-import { removeIssueLabels, addIssueComment, createBranch, getDefaultBranch, closeIssue, fetchSingleIssue, fetchMRByBranch } from "../provider";
+import { removeIssueLabels, addIssueComment, createBranch, getDefaultBranch, closeIssue, fetchSingleIssue, fetchMRByBranch, fetchIssueNotes } from "../provider";
 import {
   fetchGitLabIssues,
   refreshGitLabToken,
@@ -50,6 +53,8 @@ import { Project, Agent, isAgentAvailableNow } from "@/types";
 import { resolveIssueRequesterAsync } from "../ive-author";
 import { fetchIssueLabelEvents } from "../provider";
 import { isGitBotUser } from "../git-bot";
+import { markersForStageChange } from "../stage-transitions";
+import { openStageExecution, closeStageExecutions, hasOpenStageExecution, pickStageMeta, type StageKind } from "./stage-records";
 import { startStatsCollector } from "../stats-collector";
 import { startReportScheduler } from "../report-scheduler";
 import { startChatSessionReaper } from "../chat-agent";
@@ -366,33 +371,84 @@ async function scanProject(project: Project, force: boolean = false) {
       const activeExec = hasActiveExecution(project.id, iid);
       const stage = stageFromLabels(labels, project, { hasActiveExec: activeExec });
 
-      // ── 이전 stage와 비교해 Git UI에서 수동으로 검증 단계를 전환했는지 감지 ──
-      // 사용자가 Git UI에서 레이블을 직접 바꾼 경우에도 verify_started_at / verified_at / rejected_at이
-      // 정확히 기록되어야 보고서 검증 통계가 맞는다.
+      // ── 이전 stage와 비교해 Git UI/CLI 에서 수동으로 단계를 전환했는지 감지 ──
+      // 에이전트가 검증·확인을 맡으면 IVE 화면 버튼이 아니라 glab/gh 로 라벨을 옮긴다.
+      // 그 경우에도 verify_started_at / verified_at / rejected_at / confirm_started_at /
+      // confirmed_at 이 남아야 보고서 검증·확인 통계가 맞는다.
+      // 전이 → 마커 판정은 markersForStageChange(순수 함수, 테스트 대상)에 있다.
       const prevStage = getCachedStage(project.id, iid);
       try {
-        // 검증 시작 감지: 임의 단계 → verifying
-        if (stage === 'verifying' && prevStage !== 'verifying') {
+        const markers = markersForStageChange(prevStage, stage);
+        // 담당자(assignee) = 라벨을 옮긴 주체로 간주 (CLI 경로에서는 이것이 유일한 단서).
+        // 확인자 비용/집계는 IVE 사용자 기준이라 git username → IVE 계정까지 역매핑한다.
+        const anyMarker = markers.verifyStarted || markers.verified || markers.rejected
+          || markers.confirmStarted || markers.confirmed;
+        const assigneeInfo = anyMarker ? getIssueAssigneeUsername(project.id, iid) : null;
+        const assigneeUser = assigneeInfo?.username
+          ? getUserByGitUsername(project.provider === 'github' ? 'github' : 'gitlab', assigneeInfo.username)
+          : null;
+        const actor = (markers.verified || markers.rejected || markers.confirmed) ? assigneeInfo : null;
+        const actorUser = actor ? assigneeUser : null;
+
+        if (markers.verifyStarted) {
           markIssueVerifyStarted(project.id, iid);
+          // 화면 버튼 없이 라벨만 옮긴 경우에도 "검증 중" 실행 기록을 남긴다
+          // (없으면 검증이 보고서에서 통째로 빠진다). 이미 열려 있으면 그대로 둔다.
+          openStageExecution(project.id, iid, 'verify', {
+            issueTitle: issue.title ?? null,
+            issueCreatedAt: issue.created_at ?? null,
+            userId: assigneeUser?.id ?? null,
+            userName: assigneeInfo?.name ?? null,
+            userAvatar: assigneeInfo?.avatar ?? null,
+          });
         }
-        // 검증 승인 감지: verifying → done (또는 verifying → verify_waiting 건너뛰고 done로)
-        if (stage === 'done' && prevStage === 'verifying') {
-          const verifierInfo = getIssueAssigneeUsername(project.id, iid);
+        if (markers.verified) {
           markIssueVerified(project.id, iid, {
-            name: verifierInfo.name || '',
-            avatar: verifierInfo.avatar || undefined,
-            username: verifierInfo.username,
+            name: actor?.name || '',
+            avatar: actor?.avatar || undefined,
+            username: actor?.username,
           });
         }
-        // 검증 반려 감지: verifying → 그 외(승인=done만 제외)
-        // null(IVE 레이블 전체 제거)도 포함 — 사용자가 검증을 포기한 경우로 간주
-        if (prevStage === 'verifying' && stage !== 'verifying' && stage !== 'done') {
-          const verifierInfo = getIssueAssigneeUsername(project.id, iid);
+        if (markers.rejected) {
           markIssueVerifyRejected(project.id, iid, {
-            name: verifierInfo.name,
-            avatar: verifierInfo.avatar,
-            username: verifierInfo.username,
+            name: actor?.name,
+            avatar: actor?.avatar,
+            username: actor?.username,
           });
+        }
+        if (markers.confirmStarted) {
+          markIssueConfirmStarted(project.id, iid);
+          openStageExecution(project.id, iid, 'confirm', {
+            issueTitle: issue.title ?? null,
+            issueCreatedAt: issue.created_at ?? null,
+            userId: assigneeUser?.id ?? null,
+            userName: assigneeInfo?.name ?? null,
+            userAvatar: assigneeInfo?.avatar ?? null,
+          });
+        }
+        if (markers.confirmed) {
+          markIssueConfirmed(project.id, iid, {
+            name: actor?.name || null,
+            avatar: actor?.avatar || null,
+            userId: actorUser?.id ?? null,
+          });
+        }
+
+        // 단계 종료 시 그 단계의 실행 기록을 닫는다.
+        // 에이전트가 수행했다면 코멘트의 ive-meta(stage: verify|confirm) 를 읽어 토큰·구간을 채운다
+        // → 그 행은 AI 가 한 것으로 계산된다(사람 시간 0, AI 비용은 토큰).
+        if (markers.verified || markers.rejected || markers.confirmed) {
+          const kind: StageKind = markers.confirmed ? 'confirm' : 'verify';
+          let meta = null as ReturnType<typeof pickStageMeta>;
+          if (hasOpenStageExecution(project.id, iid, kind)) {
+            try {
+              const notes = await fetchIssueNotes(project, iid, decryptedToken, { silent: true });
+              meta = pickStageMeta(notes as Array<{ body?: string | null }>, kind);
+            } catch (e) {
+              slog.warn(`stage ive-meta lookup failed (#${iid}):`, (e as Error).message);
+            }
+          }
+          closeStageExecutions(project.id, iid, kind, markers.rejected ? 'failed' : 'success', meta);
         }
       } catch (e) {
         slog.warn(`verify marker update failed (#${iid}):`, (e as Error).message);
@@ -839,7 +895,10 @@ function syncExternalToolSessions(
   stage: string | null,
 ): { created: number; updated: number } {
   const iid = issue.iid;
-  const sessions = parseIveMetaSessions(issue.description || '');
+  // 툴 직접개발(stage: dev) 블록만 대상. 검증/확인(stage: verify|confirm) 블록은
+  // 그 단계의 실행 기록(ex-verify/ex-confirm)으로 따로 반영된다 — 여기서 개발분으로
+  // 잡으면 같은 작업이 두 번 집계된다.
+  const sessions = parseIveMetaSessions(issue.description || '').filter(s => s.stage === 'dev');
   // 토큰/모델/시각이 전혀 없는 빈 세션은 무시 → 기존 값을 지우지 않는다.
   const meaningful = sessions.filter(s =>
     s.inputTokens || s.outputTokens || s.costUsd || s.turns || s.model || s.startedAt || s.endedAt
