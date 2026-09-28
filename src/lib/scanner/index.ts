@@ -31,6 +31,7 @@ import {
   markIssueVerified,
   markIssueVerifyRejected,
   markIssueConfirmStarted,
+  resetIssueCycleMarkers,
   markIssueConfirmed,
   getIssueAssigneeUsername,
   getUserByGitUsername,
@@ -377,6 +378,12 @@ async function scanProject(project: Project, force: boolean = false) {
       // confirmed_at 이 남아야 보고서 검증·확인 통계가 맞는다.
       // 전이 → 마커 판정은 markersForStageChange(순수 함수, 테스트 대상)에 있다.
       const prevStage = getCachedStage(project.id, iid);
+      // 완료됐던 이슈가 다시 열려 활성 단계로 돌아옴 → 새 사이클. 이전 사이클의 확인 마커를
+      // 아래 마커 기록보다 먼저 비워야 이번 사이클의 확인 시작/완료가 제대로 남는다.
+      if (prevStage === 'done' && stage && stage !== 'done') {
+        try { resetIssueCycleMarkers(project.id, iid); }
+        catch (e) { slog.warn(`resetIssueCycleMarkers failed (#${iid}):`, (e as Error).message); }
+      }
       try {
         const markers = markersForStageChange(prevStage, stage);
         // 담당자(assignee) = 라벨을 옮긴 주체로 간주 (CLI 경로에서는 이것이 유일한 단서).
@@ -876,9 +883,14 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
   return { assigned: assignedCount, waiting: waitingCount };
 }
 
-/** 외부 도구 execution 행(에이전트/담당자 모드 아님) 식별 조건. */
+/**
+ * 외부 도구 execution 행(에이전트/담당자 모드 아님) 식별 조건.
+ * 라벨 전이로 생긴 검증·확인 기록(ex-verify-/ex-confirm-)도 agent_id 빈값 + user_id NULL 일 수
+ * 있으므로(행위자 미매칭) id 접두사로 명시 제외한다 — 안 그러면 외부 도구 이슈로 오인된다.
+ */
 const EXTERNAL_EXEC_WHERE =
-  "assignee_type = 'user' AND (agent_id IS NULL OR agent_id = '') AND user_id IS NULL";
+  "COALESCE(assignee_type, '') = 'user' AND COALESCE(agent_id, '') = '' AND user_id IS NULL"
+  + " AND id NOT LIKE 'ex-verify-%' AND id NOT LIKE 'ex-confirm-%'";
 
 type ExternalIssueLike = {
   iid: number;
@@ -1057,7 +1069,13 @@ export async function reconcileExternalIssue(
   }
 
   // (b) 완료(IVE-E/IVE-W) 상태인데 아직 열려 있으면 닫기 재시도 (멱등)
-  if (stage === 'done' || stage === 'verify_waiting') {
+  //  IVE-W 는 "외부 도구가 끝냈다"는 뜻일 때만 완료다. 외부 등록 뒤 재태깅돼 IVE 가 직접
+  //  실행(에이전트·담당자·검증/확인)을 돌린 이슈라면 IVE-W 는 진짜 검증대기이므로 닫지 않는다.
+  //  (종전엔 과거 외부 행만 보고 닫아, 다시 열어도 스캔마다 또 닫혀 대기 목록·통계에서 사라졌다)
+  const iveDriven = stage === 'verify_waiting' && !!getDb().prepare(
+    `SELECT 1 FROM task_executions WHERE project_id = ? AND issue_iid = ? AND NOT (${EXTERNAL_EXEC_WHERE}) LIMIT 1`
+  ).get(project.id, iid);
+  if (stage === 'done' || (stage === 'verify_waiting' && !iveDriven)) {
     try {
       await closeFn(project, iid);
       closed = true;

@@ -30,6 +30,7 @@ import {
   getGlobalIssuesStartedInRange,
   getGlobalIssuesCompletedInRange,
 } from '@/lib/db/reports'
+import { resetIssueCycleMarkers } from '@/lib/db/executions'
 
 // KST 주차 경계 (월~일).
 // 2026-04-27 (월) ~ 2026-05-03 (일) — 지난주
@@ -286,5 +287,34 @@ describe('Report flow: 유입(inflow) / 유출(outflow)', () => {
     expect(times.size).toBe(1) // 미완료 이슈는 제외
     expect(times.has(`${PROJ}:1`)).toBe(true)
     expect(times.has(`${PROJ}:2`)).toBe(false)
+  })
+
+  // ── 재오픈: 한 번 완료(확인 완료)된 이슈를 다시 열어 재작업 ──
+  it('재오픈 1: 완료를 떠나 새 사이클이면 옛 confirmed_at 이 지워져 재작업 완료가 그 주 유출에 잡힌다', () => {
+    // 지난주: 개발·검증 → 확인 완료(confirmed_at 지난주)
+    seedExecution(db, { id: 'e1a', projectId: PROJ, agentId: 'agent-claude', issueIid: 1, status: 'success', startedAt: kstToUtcIso('2026-04-28 09:00:00'), endedAt: kstToUtcIso('2026-04-28 09:30:00'), verifiedAt: kstToUtcIso('2026-04-28 11:00:00') })
+    seedIssueStage(db, { projectId: PROJ, issueIid: 1, cachedStage: 'done', confirmedAt: kstToUtcIso('2026-04-29 14:00:00') })
+    expect(getIssuesCompletedInRange(USER, LAST_WEEK_START, LAST_WEEK_END).has(`${PROJ}:1`)).toBe(true)
+
+    // 이번주: 다시 열어 재작업 → 진행 중인 동안은 어느 주에도 유출 아님
+    resetIssueCycleMarkers(PROJ, 1)
+    db.prepare("UPDATE issue_stages SET cached_stage = 'verify_waiting' WHERE project_id = ? AND issue_iid = 1").run(PROJ)
+    seedExecution(db, { id: 'e1b', projectId: PROJ, agentId: 'agent-claude', issueIid: 1, status: 'success', startedAt: kstToUtcIso('2026-05-05 09:00:00'), endedAt: kstToUtcIso('2026-05-05 09:30:00') })
+    expect(getIssuesCompletedInRange(USER, THIS_WEEK_START, THIS_WEEK_END).size).toBe(0)
+
+    // 이번주 검증 통과 → 완료. 완료 시각은 이번 사이클(옛 confirmed_at 에 고정되지 않음)
+    db.prepare("UPDATE task_executions SET verified_at = ? WHERE id = 'e1b'").run(kstToUtcIso('2026-05-06 11:00:00'))
+    db.prepare("UPDATE issue_stages SET cached_stage = 'done' WHERE project_id = ? AND issue_iid = 1").run(PROJ)
+    const thisOut = getIssuesCompletedInRange(USER, THIS_WEEK_START, THIS_WEEK_END)
+    expect(thisOut.get(`${PROJ}:1`)).toBe(kstToUtcIso('2026-05-06 11:00:00'))
+  })
+
+  it('재오픈 2: 이전 사이클 확인 기록(ex-confirm 행)은 지우지 않는다', () => {
+    seedExecution(db, { id: 'ex-confirm-1', projectId: PROJ, agentId: null, issueIid: 1, status: 'success', startedAt: kstToUtcIso('2026-04-29 13:00:00'), endedAt: kstToUtcIso('2026-04-29 14:00:00'), assigneeType: 'user' })
+    seedIssueStage(db, { projectId: PROJ, issueIid: 1, cachedStage: 'done', confirmedAt: kstToUtcIso('2026-04-29 14:00:00') })
+    resetIssueCycleMarkers(PROJ, 1)
+    const row = db.prepare("SELECT confirmed_at FROM issue_stages WHERE project_id = ? AND issue_iid = 1").get(PROJ) as any
+    expect(row.confirmed_at).toBeNull()
+    expect(db.prepare("SELECT COUNT(*) c FROM task_executions WHERE id = 'ex-confirm-1'").get()).toEqual({ c: 1 })
   })
 })

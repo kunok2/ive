@@ -8,6 +8,8 @@
  *   R-3: 본문에 ive-meta 가 없으면(빈 메타) 기존 DB 값을 지우지 않는다.
  *   R-4: 에이전트 실행(agent_id 존재)·담당자 모드 실행(user_id 존재)은 절대 건드리지 않는다.
  *   R-5: done/verify_waiting 이면 closeFn 을 호출하고, 그 외(dev_fail)는 호출하지 않는다.
+ *   R-8: 외부 등록(완료) 뒤 재태깅돼 IVE 가 직접 실행을 돌린 이슈는 verify_waiting 이어도 닫지 않는다.
+ *        (다시 열어도 스캔마다 또 닫혀 대기 목록·통계에서 사라지던 회귀 방지)
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import Database from 'better-sqlite3'
@@ -221,5 +223,54 @@ ended_at: 2026-06-22T16:00:00+09:00
     expect(rows).toHaveLength(2) // 중복 INSERT 없음
     const totalCost = rows.reduce((s, r) => s + r.cost_usd, 0)
     expect(totalCost).toBeCloseTo(60) // 48 + 12, 누적 중복 아님
+  })
+
+  // ── 재태깅: 외부 도구로 완료 등록 → 사용자가 다시 열고 IVE-S → 에이전트 개발 → IVE-W ──
+  it('R-8a: 외부 행 뒤에 에이전트 실행이 있으면 verify_waiting 에서 닫지 않는다', async () => {
+    seedExternalExec('ex-ext-1', 10, { i: 1, o: 1, c: 0.1, t: 1 }, 'm')
+    seedExecution(db, {
+      id: 'ex-agent-1', projectId: 'p1', agentId: 'a1', issueIid: 10, status: 'success',
+      startedAt: '2026-05-02T00:00:00.000Z', assigneeType: 'agent',
+    })
+    const close = vi.fn().mockResolvedValue(undefined)
+    const r = await reconcileExternalIssue(project, { iid: 10, description: '', title: 'X' }, 'verify_waiting', close)
+    expect(close).not.toHaveBeenCalled()
+    expect(r.closed).toBe(false)
+  })
+
+  it('R-8b: 재태깅 이슈도 IVE-E(done) 에 도달하면 닫는다', async () => {
+    seedExternalExec('ex-ext-1', 10, { i: 1, o: 1, c: 0.1, t: 1 }, 'm')
+    seedExecution(db, {
+      id: 'ex-agent-1', projectId: 'p1', agentId: 'a1', issueIid: 10, status: 'success',
+      startedAt: '2026-05-02T00:00:00.000Z', assigneeType: 'agent',
+    })
+    const close = vi.fn().mockResolvedValue(undefined)
+    await reconcileExternalIssue(project, { iid: 10, description: '', title: 'X' }, 'done', close)
+    expect(close).toHaveBeenCalledOnce()
+  })
+
+  it('R-8c: 담당자 모드 실행(user_id 존재)이 있어도 verify_waiting 에서 닫지 않는다', async () => {
+    seedExternalExec('ex-ext-1', 10, { i: 1, o: 1, c: 0.1, t: 1 }, 'm')
+    seedExecution(db, {
+      id: 'ex-user-1', projectId: 'p1', agentId: null, issueIid: 10, status: 'success',
+      startedAt: '2026-05-02T00:00:00.000Z', assigneeType: 'user', userId: 'u-assignee',
+    })
+    const close = vi.fn().mockResolvedValue(undefined)
+    await reconcileExternalIssue(project, { iid: 10, description: '', title: 'X' }, 'verify_waiting', close)
+    expect(close).not.toHaveBeenCalled()
+  })
+
+  it('R-8d: 행위자 미매칭 검증 기록(ex-verify-, user_id NULL)은 외부 행이 아니다', async () => {
+    // 외부 행 없이 라벨 전이 검증 기록만 있는 일반 이슈 → 외부 도구 이슈로 오인해 닫으면 안 된다
+    seedExecution(db, {
+      id: 'ex-verify-1', projectId: 'p1', agentId: null, issueIid: 10, status: 'failed',
+      startedAt: '2026-05-02T00:00:00.000Z', assigneeType: 'user', userId: null,
+    })
+    const close = vi.fn().mockResolvedValue(undefined)
+    const r = await reconcileExternalIssue(
+      project, { iid: 10, description: extMetaBody({ input: 9, output: 9, cost: 9, turns: 9 }), title: 'X' }, 'verify_waiting', close,
+    )
+    expect(close).not.toHaveBeenCalled()
+    expect(r.resynced).toBe(false) // 검증 기록을 개발 세션 값으로 덮어쓰지 않는다
   })
 })

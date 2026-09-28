@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb, getProject, getProjectAuthToken, getProjectAccess, hasActiveExecution, stageFromLabels, markIssueVerifyStarted, markIssueVerified, markIssueVerifyRejected, markIssueConfirmed, markIssueConfirmStarted, resetIssueScheduledAt, recordIssueScheduledAt, touchProjectActivity, assignIssueAtomically, getAssignModeMap, getIssueScheduledAt, isIssueAssignee, isIssueAuthor, upsertIssueStageSnapshot, updateExecutionStatus, getVerifyWaitingCount, updateProjectLastChecked, getPresetRoles } from '@/lib/db';
+import { getDb, getProject, getProjectAuthToken, getProjectAccess, hasActiveExecution, stageFromLabels, markIssueVerifyStarted, markIssueVerified, markIssueVerifyRejected, markIssueConfirmed, markIssueConfirmStarted, resetIssueCycleMarkers, resetIssueScheduledAt, recordIssueScheduledAt, touchProjectActivity, assignIssueAtomically, getAssignModeMap, getIssueScheduledAt, isIssueAssignee, isIssueAuthor, upsertIssueStageSnapshot, updateExecutionStatus, getVerifyWaitingCount, updateProjectLastChecked, getPresetRoles } from '@/lib/db';
 import { triggerScan } from '@/lib/scanner';
 import { applyRoleAssignee } from '@/lib/role-assignee';
 import { notifyStageTransition } from '@/lib/slack-notify';
@@ -102,6 +102,8 @@ export async function POST(
     const labelEnd = project.labelEnd || 'IVE-E';
     const isLeavingDone = sanitizedRemove.includes(labelEnd) && !labelsToAdd.includes(labelEnd);
     const isBackToSchedule = labelsToAdd.some(l => l === (project.labelSchedule || 'IVE-S'));
+    // 완료를 떠나면 새 사이클 — 이전 사이클의 확인 마커를 비운다 (보고서 완료 시각이 옛 날짜에 고정되지 않게).
+    if (isLeavingDone) resetIssueCycleMarkers(projectId, Number(iid));
     if (isBackToSchedule || isLeavingDone) {
       try {
         const issue = await fetchSingleIssue(project, Number(iid), token);

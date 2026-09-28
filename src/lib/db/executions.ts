@@ -190,6 +190,24 @@ export function getIssueStageTimes(projectId: string, issueIid: number): IssueSt
   }
 }
 
+/**
+ * 완료(done)된 이슈가 다시 활성 단계로 돌아갈 때(재오픈·재태깅) 이전 사이클의 이슈 단위 확인 마커를 비운다.
+ *
+ * confirm_started_at·confirmed_at 은 이슈당 한 값이다. 비우지 않으면
+ *   - 보고서 완료 시각 = COALESCE(confirmed_at, …) 이 첫 사이클 날짜에 고정돼 재작업 완료가 그 주 유출에 영영 안 잡히고
+ *   - confirm_started_at 은 COALESCE 로 보존돼 두 번째 확인 시간이 첫 사이클부터 계산된다.
+ * 확인 작업 자체(ex-confirm- 실행 행)는 그대로 남으므로 지난 사이클의 작업량·비용은 유지된다.
+ */
+export function resetIssueCycleMarkers(projectId: string, issueIid: number) {
+  getDb().prepare(`
+    UPDATE issue_stages SET
+      confirm_started_at = NULL, confirmed_at = NULL,
+      confirmer_user_id = NULL, confirmer_name = NULL, confirmer_avatar = NULL,
+      updated_at = datetime('now')
+    WHERE project_id = ? AND issue_iid = ?
+  `).run(projectId, issueIid)
+}
+
 export function markIssueConfirmStarted(projectId: string, issueIid: number) {
   const now = new Date().toISOString()
   getDb().prepare(`
