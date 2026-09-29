@@ -525,10 +525,12 @@ async function scanProject(project: Project, force: boolean = false) {
         }
       }
 
-      // ── 외부 도구 이슈 재조정 (이미 인식된 이슈) ──
+      // ── 외부 도구 이슈 재조정 + 완료 이슈 닫기 ──
       // 위 "외부 도구 이슈 인식" 블록은 !hasAnyExecution 조건이라 이슈당 한 번만 동작한다.
-      // 그 이후의 후속 상황(본문 ive-meta 사후 수정, 닫기 실패로 열린 채 남음)을
-      // reconcileExternalIssue 가 멱등하게 처리한다. (로직/근거는 함수 doc 참고)
+      // 그 이후의 후속 상황(본문 ive-meta 사후 수정)과, 완료(IVE-E) 단계인데 열린 채 남은 이슈
+      // (외부 도구·IVE 처리 불문, 닫기 실패 재시도 포함)를 reconcileExternalIssue 가 멱등하게 처리한다.
+      // 활성 실행이 남아 있으면 이번 스캔은 건너뛰고(아래 USER-COMPLETE 가 정리) 다음 스캔에 닫는다.
+      // (로직/근거는 함수 doc 참고)
       if (!activeExec && (stage === 'done' || stage === 'verify_waiting' || stage === 'dev_fail')) {
         await reconcileExternalIssue(project, issue, stage, (p, i) => closeIssue(p, i, decryptedToken));
       }
@@ -1030,10 +1032,14 @@ function syncExternalToolSessions(
  *       → syncExternalToolSessions 로 세션 집합을 행 집합에 멱등 동기화한다. 새 세션(=새 날
  *         작업)은 새 행으로 INSERT 되어 그 날짜(주) 보고서에 집계되고, 기존 세션의 값 변경은
  *         제자리 UPDATE. 몇 번을 읽어도 같은 집합 → 중복집계 없음. 빈 세션은 무시.
- *   (b) IVE-E/IVE-W(완료)인데 닫기 API 실패로 이슈가 열린 채 남음
- *       → closeFn 으로 닫기를 재시도한다. 닫히면 다음 스캔부터 조회 대상에서 빠지므로 자동으로 멈춘다.
+ *   (b) 완료 단계인데 이슈가 열린 채 남음 → closeFn 으로 닫는다(닫기 실패 시 다음 스캔에 재시도).
+ *       닫히면 다음 스캔부터 조회 대상에서 빠지므로 자동으로 멈춘다.
+ *       - IVE-E(done): 외부 도구 이슈든 IVE 가 직접 처리한 이슈든 **모두** 닫는다. (#487)
+ *         종전엔 외부 행이 있는 이슈만 닫아, IVE 화면(확인 → 완료)이나 CLI 라벨 이동으로 완료된
+ *         일반 IVE 작업은 누군가 닫기 버튼을 누를 때까지 IVE-E 인 채 열려 있었다.
+ *       - IVE-W(verify_waiting): 외부 도구가 끝냈다는 뜻일 때만 완료 → 외부 행만 있는 이슈 한정.
  *
- * 대상은 "외부 도구 execution"(EXTERNAL_EXEC_WHERE) 한정.
+ * 재동기화 대상은 "외부 도구 execution"(EXTERNAL_EXEC_WHERE) 한정.
  *   에이전트 실행(agent_id 존재)·담당자 모드 실행(user_id 존재)은 실제 실행 기록이므로 절대 건드리지 않는다.
  *
  * @returns 무엇을 했는지 (테스트/관측용). resynced=DB 갱신 발생, closed=닫기 시도 성공.
@@ -1048,14 +1054,15 @@ export async function reconcileExternalIssue(
   let resynced = false;
   let closed = false;
 
-  // 이미 인식된 외부 도구 이슈만 재조정한다 (행이 하나도 없으면 인식 블록 담당).
-  const hasExternalRow = getDb().prepare(
+  // 재동기화는 이미 인식된 외부 도구 이슈만 한다 (행이 하나도 없으면 인식 블록 담당).
+  const hasExternalRow = !!getDb().prepare(
     `SELECT 1 FROM task_executions WHERE project_id = ? AND issue_iid = ? AND ${EXTERNAL_EXEC_WHERE} LIMIT 1`
   ).get(project.id, iid);
-  if (!hasExternalRow) return { resynced, closed };
 
   // (a) ive-meta 세션 재동기화 — 세션마다 행을 멱등 upsert (신규 세션=새 날 작업은 새 행)
-  const { created, updated } = syncExternalToolSessions(project, issue, stage);
+  const { created, updated } = hasExternalRow
+    ? syncExternalToolSessions(project, issue, stage)
+    : { created: 0, updated: 0 };
   if (created > 0 || updated > 0) {
     resynced = true;
     slog.info(`[RESYNC] Project: ${project.name}, Issue: #${iid} — ive-meta 세션 재동기화 (created=${created}, updated=${updated})`);
@@ -1068,19 +1075,20 @@ export async function reconcileExternalIssue(
     } catch (e) { slog.error({ err: e }, 'Failed to log resync activity:'); }
   }
 
-  // (b) 완료(IVE-E/IVE-W) 상태인데 아직 열려 있으면 닫기 재시도 (멱등)
+  // (b) 완료 상태인데 아직 열려 있으면 닫는다 (멱등, 실패 시 다음 스캔에 재시도)
+  //  IVE-E 는 누가 처리했든 완료다 — 외부 행 유무와 무관하게 닫는다. (#487)
   //  IVE-W 는 "외부 도구가 끝냈다"는 뜻일 때만 완료다. 외부 등록 뒤 재태깅돼 IVE 가 직접
   //  실행(에이전트·담당자·검증/확인)을 돌린 이슈라면 IVE-W 는 진짜 검증대기이므로 닫지 않는다.
   //  (종전엔 과거 외부 행만 보고 닫아, 다시 열어도 스캔마다 또 닫혀 대기 목록·통계에서 사라졌다)
-  const iveDriven = stage === 'verify_waiting' && !!getDb().prepare(
+  const iveDriven = stage === 'verify_waiting' && hasExternalRow && !!getDb().prepare(
     `SELECT 1 FROM task_executions WHERE project_id = ? AND issue_iid = ? AND NOT (${EXTERNAL_EXEC_WHERE}) LIMIT 1`
   ).get(project.id, iid);
-  if (stage === 'done' || (stage === 'verify_waiting' && !iveDriven)) {
+  if (stage === 'done' || (stage === 'verify_waiting' && hasExternalRow && !iveDriven)) {
     try {
       await closeFn(project, iid);
       closed = true;
-      slog.info(`[RECLOSE] Closed external issue #${iid} (${stage})`);
-    } catch (e) { slog.warn({ err: e }, `Failed to (re)close external issue #${iid}:`); }
+      slog.info(`[CLOSE-DONE] Closed issue #${iid} (${stage}${hasExternalRow ? ', external' : ''})`);
+    } catch (e) { slog.warn({ err: e }, `Failed to close completed issue #${iid}:`); }
   }
 
   return { resynced, closed };

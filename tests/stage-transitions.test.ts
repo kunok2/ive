@@ -6,7 +6,8 @@
  *   T-1: 전이 후 결과 라벨 집합에는 단계 라벨이 정확히 1개만 남는다 (stageFromLabels 가 단일 stage 를 결정할 수 있도록).
  *   T-2: 안전망(staleStageLabelsToRemove) 적용 후, "이전 단계 잔재 라벨" 은 모두 제거된다.
  *   T-3: 모든 macro 단계(유입/처리/검증/확인/완료) 사이의 forward / backward 전이가 정의되어 있어야 한다.
- *   T-4: confirming.accept 는 IVE-E 만 추가하고, Git issue close 는 별도 닫기 버튼에서만 수행한다 (자동 close 금지).
+ *   T-4: confirming.accept 는 IVE-E 만 추가하고, Git issue close 는 전이에서 하지 않는다
+ *        (닫기 버튼, 또는 스캐너가 IVE-E 이슈를 닫는다 — reconcileExternalIssue, #487).
  */
 import { describe, it, expect } from 'vitest'
 import { TRANSITIONS, allStageLabels, staleStageLabelsToRemove } from '@/lib/stage-transitions'

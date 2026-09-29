@@ -305,7 +305,7 @@ export async function POST(
       }
     }
 
-    // 확인 완료(accept): confirmer 정보 기록만 (이슈 close 는 별도 닫기 버튼으로만 수행)
+    // 확인 완료(accept): confirmer 정보 기록만 (이슈 close 는 스캐너가 IVE-E 이슈를 닫는다 — reconcileExternalIssue, #487)
     if (action === 'accept' && stage === 'confirming') {
       markIssueConfirmed(projectId, Number(iid), { name: user.name, avatar: user.avatar, userId: user.id });
       // 완료 진입 → 이슈 생성자(사람)에게 DM (fire-and-forget)

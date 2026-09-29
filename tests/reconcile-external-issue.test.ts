@@ -8,6 +8,8 @@
  *   R-3: 본문에 ive-meta 가 없으면(빈 메타) 기존 DB 값을 지우지 않는다.
  *   R-4: 에이전트 실행(agent_id 존재)·담당자 모드 실행(user_id 존재)은 절대 건드리지 않는다.
  *   R-5: done/verify_waiting 이면 closeFn 을 호출하고, 그 외(dev_fail)는 호출하지 않는다.
+ *   R-9: done(IVE-E)은 외부 행이 없어도(IVE 가 직접 처리한 이슈) 닫는다. verify_waiting 은 외부 행이
+ *        있을 때만 닫는다. (#487 — IVE 화면·CLI 로 완료된 이슈가 IVE-E 인 채 열려 남던 문제)
  *   R-8: 외부 등록(완료) 뒤 재태깅돼 IVE 가 직접 실행을 돌린 이슈는 verify_waiting 이어도 닫지 않는다.
  *        (다시 열어도 스캔마다 또 닫혀 대기 목록·통계에서 사라지던 회귀 방지)
  */
@@ -105,7 +107,7 @@ describe('reconcileExternalIssue', () => {
     expect(r.resynced).toBe(false) // 외부 exec 가 없으니 아무것도 안 함
     const row = getExec('exAgent')
     expect(row.input_tokens).toBe(500) // 그대로
-    expect(close).not.toHaveBeenCalled() // 외부 exec 없으면 닫기도 안 함
+    expect(close).toHaveBeenCalledOnce() // done 은 외부 exec 가 없어도 닫는다 (#487)
   })
 
   it('R-4b: 담당자 모드 실행(user_id 존재)은 건드리지 않는다', async () => {
@@ -121,7 +123,7 @@ describe('reconcileExternalIssue', () => {
     expect(r.resynced).toBe(false)
     const row = getExec('exUser')
     expect(row.input_tokens).toBe(500)
-    expect(close).not.toHaveBeenCalled()
+    expect(close).toHaveBeenCalledOnce() // done 은 외부 exec 가 없어도 닫는다 (#487)
   })
 
   it('R-5a: done 이면 닫기를 시도한다', async () => {
@@ -272,5 +274,50 @@ ended_at: 2026-06-22T16:00:00+09:00
     )
     expect(close).not.toHaveBeenCalled()
     expect(r.resynced).toBe(false) // 검증 기록을 개발 세션 값으로 덮어쓰지 않는다
+  })
+
+  // ── #487: IVE 가 직접 처리한 이슈(외부 행 없음)도 IVE-E 면 닫는다 ──
+  it('R-9a: 에이전트가 처리하고 화면에서 확인 → 완료한 이슈(IVE-E)는 닫는다', async () => {
+    seedExecution(db, {
+      id: 'ex-agent-1', projectId: 'p1', agentId: 'a1', issueIid: 473, status: 'success',
+      startedAt: '2026-07-13T13:58:00.000Z', assigneeType: 'agent',
+    })
+    seedExecution(db, {
+      id: 'ex-confirm-1', projectId: 'p1', agentId: null, issueIid: 473, status: 'success',
+      startedAt: '2026-07-13T14:05:00.000Z', assigneeType: 'user', userId: 'u1',
+    })
+    const close = vi.fn().mockResolvedValue(undefined)
+    const r = await reconcileExternalIssue(project, { iid: 473, description: '', title: 'X' }, 'done', close)
+    expect(close).toHaveBeenCalledWith(project, 473)
+    expect(r.closed).toBe(true)
+    expect(r.resynced).toBe(false)
+  })
+
+  it('R-9b: 실행 기록이 전혀 없는 IVE-E 이슈(Git 에서 라벨만 옮김)도 닫는다', async () => {
+    const close = vi.fn().mockResolvedValue(undefined)
+    const r = await reconcileExternalIssue(project, { iid: 20, description: '', title: 'X' }, 'done', close)
+    expect(close).toHaveBeenCalledOnce()
+    expect(r.closed).toBe(true)
+  })
+
+  it('R-9c: 외부 행 없는 verify_waiting(진짜 검증대기)은 닫지 않는다', async () => {
+    seedExecution(db, {
+      id: 'ex-agent-1', projectId: 'p1', agentId: 'a1', issueIid: 21, status: 'success',
+      startedAt: '2026-05-02T00:00:00.000Z', assigneeType: 'agent',
+    })
+    const close = vi.fn().mockResolvedValue(undefined)
+    await reconcileExternalIssue(project, { iid: 21, description: '', title: 'X' }, 'verify_waiting', close)
+    await reconcileExternalIssue(project, { iid: 22, description: '', title: 'X' }, 'verify_waiting', close)
+    expect(close).not.toHaveBeenCalled()
+  })
+
+  it('R-9d: 외부 행 없는 done 이슈는 본문에 ive-meta 가 있어도 재동기화하지 않는다 (인식 블록 담당)', async () => {
+    const close = vi.fn().mockResolvedValue(undefined)
+    const r = await reconcileExternalIssue(
+      project, { iid: 23, description: extMetaBody({ input: 9, output: 9, cost: 9, turns: 9 }), title: 'X' }, 'done', close,
+    )
+    expect(r.resynced).toBe(false)
+    const n = db.prepare('SELECT COUNT(*) AS n FROM task_executions WHERE issue_iid = 23').get() as { n: number }
+    expect(n.n).toBe(0)
   })
 })
