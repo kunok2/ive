@@ -34,6 +34,32 @@ function agentAttemptedEdits(conversationParts: string[]): boolean {
   return conversationParts.some((p) => EDIT_TOOL_RE.test(p));
 }
 
+// 이슈 노트에 실을 「수행 작업」 요약을 만든다.
+// ⛔ 도구 호출 줄(`> **🔧 Bash** `$ grep …``)은 싣지 않는다 — 사람이 읽을 것이 못 되고,
+//    수백 줄이 붙어 정작 무엇을 왜 고쳤는지가 묻힌다(사용자 지적 2026-09-02).
+//    판정에 쓰는 원본(conversationParts)은 그대로 두고, **노트에 실을 때만** 걷어낸다.
+const TOOL_LINE_RE = /^\s*>\s*\*\*🔧/;
+export function buildWorkSummary(conversationParts: string[]): string {
+  const kept: string[] = [];
+  // 여러 줄짜리 명령(heredoc·python3 -c "…")은 첫 줄만 🔧 로 시작하고 나머지 줄은 맨몸으로 따라온다.
+  // 그 꼬리까지 걷어내려고, 백틱이 닫히지 않은 도구 줄을 만나면 닫힐 때까지 계속 버린다.
+  let skipping = false;
+  for (const line of conversationParts.flatMap((p) => p.split('\n'))) {
+    if (skipping) {
+      if (line.trimEnd().endsWith('`')) skipping = false;
+      continue;
+    }
+    if (TOOL_LINE_RE.test(line)) {
+      if (!line.trimEnd().endsWith('`')) skipping = true;
+      continue;
+    }
+    // 도구 줄 사이에 남는 빈 인용줄(`>`)도 버린다.
+    if (line.trim() && !/^\s*>\s*$/.test(line)) kept.push(line);
+  }
+  const prose = kept.join('\n').trim();
+  return prose ? `\n\n### 📝 수행 작업\n${prose}` : '';
+}
+
 /**
  * 변경사항을 커밋, 푸시하고 MR/PR을 생성합니다.
  * 변경사항이 없으면 완료 노트만 남깁니다.
@@ -132,9 +158,7 @@ export async function commitPushAndCreateMR(params: {
     // 완료 노트
     const mrLine = mrUrl ? `- **${mrLabel}:** ${mrUrl}` : `- **${mrLabel}:** 생성 실패 (권한 부족 또는 API 오류)`;
     const iterLine = iterationCount > 1 ? `\n- **반복 횟수:** ${iterationCount}회` : '';
-    const workSummary = conversationParts.length > 0
-      ? `\n\n### 📝 수행 작업\n${conversationParts.filter(p => p.trim()).join('\n')}`
-      : '';
+    const workSummary = buildWorkSummary(conversationParts);
     const completionNote = `<!-- ive-bot -->\n<!-- ive-agent:${agent.id} -->\n## ✅ 개발 완료 — ${agent.name}\n\n${mrLine}\n- **소요 시간:** ${durationStr}${iterLine}${workSummary}`;
     if (isGitHub) {
       await addGitHubIssueComment(project, iid, token, completionNote);
@@ -162,9 +186,7 @@ export async function commitPushAndCreateMR(params: {
       log("코드 변경사항 없음. 작업 완료로 처리.", 'system');
     }
     const iterLine = iterationCount > 1 ? `\n- **반복 횟수:** ${iterationCount}회` : '';
-    const workSummary = conversationParts.length > 0
-      ? `\n\n### 📝 수행 작업\n${conversationParts.filter(p => p.trim()).join('\n')}`
-      : '';
+    const workSummary = buildWorkSummary(conversationParts);
     // 수정 흔적이 있는데 diff가 비면 "확인 필요"로 표면화한다. 깔끔한 "완료"로 덮지 않는다.
     const noChangeHeading = attemptedEdits
       ? `## ⚠️ 변경사항 없음 — 확인 필요 — ${agent.name}\n\n에이전트가 파일 수정 도구를 사용했으나 저장소에 남은 변경이 없습니다. (변경 미반영·되돌림 또는 잘못된 경로 수정 의심)`
