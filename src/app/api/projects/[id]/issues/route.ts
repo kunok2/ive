@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAccess, getProjectAuthToken, getAssignModeMap, setAssignMode, setAssigneeAuto, setPresetRoles, getPresetRoles, getActualRoleAssigneesMap, getAgent, hasActiveExecution, hasAnyExecution, stageFromLabels, touchProjectActivity, getIssueIterationCountsMap, getActiveChatSessionsByProject } from '@/lib/db';
+import { getProject, getProjectAccess, getProjectAuthToken, getAssignModeMap, setAssignMode, setAssigneeAuto, setPresetRoles, getPresetRoles, getActualRoleAssigneesMap, getAgent, hasActiveExecution, stageFromLabels, touchProjectActivity, getIssueIterationCountsMap, getActiveChatSessionsByProject, findIssueIidsByTitle } from '@/lib/db';
 import { isChatAgentRunning } from '@/lib/chat-agent';
 import { triggerScan } from '@/lib/scanner';
 import { getCurrentUser } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import { checkLabelsExist, addIssueComment } from '@/lib/provider';
-import { fetchAllProjectIssues, fetchClosedProjectIssues, createIssue } from '@/lib/provider';
+import { fetchAllProjectIssues, fetchClosedProjectIssuesPage, createIssue } from '@/lib/provider';
+import { parseClosedPageOptions, parseIidSearch, isGitLabSearchable } from '@/lib/closed-issues';
 import { withGitToken, friendlyGitError } from '@/lib/git-token';
 import { prependIveAuthorMarker, stripIveAuthorMarker, stripIveDueMarker, resolveIveAuthorFromBody } from '@/lib/ive-author';
 
@@ -28,9 +29,17 @@ export async function GET(
 
   try {
     const token = getProjectAuthToken(projectId);
-    const issues = stateParam === 'closed'
-      ? await fetchClosedProjectIssues(project, token)
-      : await fetchAllProjectIssues(project, token);
+    // 닫힌 이슈(이력 탭)는 한 페이지만 — 전체를 받으면 이슈가 쌓일수록 수십 초가 걸린다.
+    const closedOpts = stateParam === 'closed'
+      ? { ...parseClosedPageOptions(req.nextUrl.searchParams), label: project.labelTarget }
+      : null;
+    // GitLab 검색은 3글자 미만 단어를 무시한다 → 짧은 검색어는 IVE 가 기록한 제목으로 번호를 찾아 한정한다.
+    if (closedOpts?.search && project.provider !== 'github'
+      && parseIidSearch(closedOpts.search) == null && !isGitLabSearchable(closedOpts.search)) {
+      closedOpts.iids = findIssueIidsByTitle(projectId, closedOpts.search);
+    }
+    const closedPage = closedOpts ? await fetchClosedProjectIssuesPage(project, token, closedOpts) : null;
+    const issues = closedPage ? closedPage.issues : await fetchAllProjectIssues(project, token);
 
     // 배정 모드 맵 + 실제 수행자 맵 로드 (둘 다 batch 쿼리)
     const assignModeMap = getAssignModeMap(projectId);
@@ -43,16 +52,9 @@ export async function GET(
     const isClosed = stateParam === 'closed';
 
     const mapped = issues
-      .filter((issue: any) => {
-        const issueLabels = issue.labels || [];
-        const hasIveLabel = issueLabels.includes(project.labelTarget);
-        if (isClosed) {
-          // 닫힌 이슈: IVE 레이블이 있거나 실행 이력이 있는 이슈만 표시
-          return hasIveLabel || hasAnyExecution(projectId, issue.iid);
-        }
-        // 열린 이슈: IVE 레이블 필수 (없으면 IVE에서 관리하지 않는 이슈)
-        return hasIveLabel;
-      })
+      // IVE 레이블 필수 (없으면 IVE에서 관리하지 않는 이슈).
+      // 닫힌 이슈는 Git 조회 단계에서 이미 IVE 레이블로 한정했으므로(페이지·건수 일치) 여기선 그대로 통과.
+      .filter((issue: any) => isClosed || (issue.labels || []).includes(project.labelTarget))
       .map((issue: any) => {
         // 레이블에서 stage 판정
         const issueLabels = issue.labels || [];
@@ -128,7 +130,8 @@ export async function GET(
         return {
           iid: issue.iid,
           title: issue.title,
-          description: stripIveDueMarker(stripIveAuthorMarker(issue.description || '')),
+          // 이력 목록은 본문을 쓰지 않는다 — 페이로드를 줄이려고 비워 보낸다(상세 화면이 따로 조회).
+          description: isClosed ? '' : stripIveDueMarker(stripIveAuthorMarker(issue.description || '')),
           state: issue.state,
           stage,
           // 진행 중 AI 채팅 표시 — 세션 있으면 대화중, 에이전트가 돌고 있으면 생각중
@@ -168,6 +171,9 @@ export async function GET(
         };
       });
 
+    if (closedPage && closedOpts) {
+      return NextResponse.json({ items: mapped, total: closedPage.total, hasMore: closedPage.hasMore, page: closedOpts.page });
+    }
     return NextResponse.json(mapped);
   } catch (err) {
     console.error('[issues GET] failed:', err)

@@ -2,7 +2,7 @@ export { getOwnerRepo, getGitHubApiBase, getGitHubAuthHeaders } from "./common";
 export { ensureGitHubLabels, addGitHubIssueLabels, removeGitHubIssueLabels, checkGitHubLabelsExist, fetchGitHubIssueLabelEvents } from "./labels";
 export {
   fetchGitHubIssues, addGitHubIssueComment, fetchGitHubIssueNotes, deleteGitHubIssueComment,
-  fetchAllIveIssues, fetchAllProjectIssues, fetchClosedProjectIssues,
+  fetchAllIveIssues, fetchAllProjectIssues, fetchClosedProjectIssuesPage,
   closeGitHubIssue, reopenGitHubIssue, updateGitHubIssue, createGitHubIssue,
   fetchGitHubCollaborators, fetchGitHubIssue,
 } from "./issues";

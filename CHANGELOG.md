@@ -8,6 +8,8 @@ Springware IVE의 굵직한 변경 이력입니다.
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-09-29
+
 ### Added
 - **확인 단계를 "화면 캡처"에서 "동작을 증명하는 증거"로 일반화**: 확인은 원래 실제 화면을 보고 캡처를 올리는 것으로 적었는데, 규칙·정책·배치·스키마·권한처럼 **눈에 보이지 않는 작업**이 더 많다. 가이드의 확인 절을 작업 유형별 증명 표(화면/API/규칙·정책/배치/데이터/알림/성능/권한·보안/문서·설정)와 **증명의 3요소**(재현 경로·실제 출력·전후 또는 양성·음성 대조)로 다시 썼고, 유형별 실행 예시(playwright 캡처, 막혀야 할 요청과 통과해야 할 요청 두 curl, 배치 로그 발췌, 전후 건수 쿼리, 권한 없는 계정의 403)를 붙였다. "테스트 통과·코드 확인함·로직상 문제 없음·에이전트가 요약한 문장"은 증명이 아님을 명시.
 - **검증자/확인자를 "라벨을 실제로 부착한 계정"으로 기록**: CLI 로 라벨을 옮기는 경로에서는 행위자 단서가 이슈 담당자(assignee)뿐이라, 담당자와 실제 검증·확인한 사람이 다르면 엉뚱하게 기록됐다. 이제 라벨 이벤트(GitLab `resource_label_events` / GitHub issue events)에서 **그 단계 라벨을 가장 최근 부착한 사람**을 1순위 행위자로 쓴다(`resolveStageActorAsync`). IVE 자신은 프로젝트 토큰(봇)으로 라벨을 달기 때문에 봇 계정은 건너뛰고, 그 경우(=화면 버튼 경로)는 종전대로 담당자로 떨어진다. 검증/확인 실행 기록의 작업자(user_id)도 같은 기준으로 채운다.
@@ -35,6 +37,7 @@ Springware IVE의 굵직한 변경 이력입니다.
 - **제품 소개서(브로셔) 구조도 개편 — 2장 Product Overview**: 실제 운영 흐름과 어긋나던 부분을 바로잡고 단계를 ①~⑫로 다시 매겼다. ① AI 에이전트가 검증자·확인자에게 **직접** 전달하던 선을 끊고 **IVE 경유**(⑤ 결과 제출 → ⑥ 검토·확인 요청)로, ② 검증 통과 후 **⑦ MR/PR 병합 → ⑧ 자동 빌드 → 스테이징 → 확인자 승인 → 운영 반영** 배포 파이프라인을 카드로 신설(승인 게이트는 사람 색인 앰버), ③ **6.5 검증·확인 반려**(회색) 되돌림 흐름 추가, ④ Slack 연결을 점선 "다자간 대화" 하나에서 **DM 발송 / AI봇과 대화 실선 2줄기**로 분리. 명칭도 정리 — "IVE 수집 링크" → **IVE Open API**(아이콘 교체, 5장 문구 동기화), MR 단독 표기 → MR/PR. 개발자 카드에 IDE 로고(VS Code·Cursor·Antigravity), 우상단에 **업무·프로젝트 관리 연동(Linear·Jira·Asana·Notion)** 영역을 점선 연결 + "연동 예정"으로 추가(미구현 표시). 표기 오류였던 "Issue-driven aI deVelopment Engine" → "AI Development Engine", 근거 없이 붙어 있던 "2026년 3월부터 운영 중" 배지 제거. 카드 끝선·아이콘 칩 높이 정렬, 브라우저에서 볼 때 슬라이드가 좌측에 붙던 문제(가운데 정렬)도 수정. (`docs/build-brochure.js` 재생성 스크립트 기준, HTML/PDF/PNG 일괄 갱신)
 
 ### Performance
+- **이력 탭 로딩 — 전체 조회에서 페이지 조회로 (약 36초 → 1~2초)**: 이력 탭은 열 때마다 닫힌 이슈 **전체**를 Git 에서 100건씩 순차로 받았다(Meta-Shop 1,744건 = 18페이지, 약 36초·10MB, 카드 1,744개를 한 번에 렌더). 이제 50건씩 받고 목록 끝에 닿으면 다음 페이지를 이어 받는다(더 보기 버튼 병행). 정렬(생성일 최신/오래된 순)·검색은 Git 에 맡기고(`fetchClosedProjectIssuesPage` — GitLab `order_by/sort/search/iids[]`, GitHub `/issues`·Search API), IVE 라벨도 Git 조회 단계에서 걸러 페이지가 비거나 건수가 목록과 어긋나지 않게 했다. 탭 건수는 Git 이 알려 주는 전체 건수이고, 목록 응답에서 본문(description)은 뺐다. GitLab 검색은 **3글자 미만 단어를 무시**해("영어"·"버그" → 0건, 실측) 그런 검색어는 IVE 가 기록해 둔 이슈 제목에서 번호를 찾아 최대 100건으로 한정한다(`findIssueIidsByTitle`; GitLab 은 `iids[]` 150개부터 502). 달라진 점: 검색은 작성자 이름이 아니라 제목·본문 기준, "내 것만"은 받은 범위 안에서 거르고, IVE 라벨이 떨어진 채 닫힌 옛 이슈는 이력에서 빠진다.
 - **동시 접속 처리량 튜닝 (측정 기준 SSR 2.2배 / API 2.4배)**: 운영 서버(4코어)에서 웹 서버가 **코어 1개에 묶여** 나머지 3개가 놀고 있었고, SQLite 는 **rollback journal(`delete`) 모드**라 쓰기 1건이 DB 전체에 배타 락을 걸어 그동안 모든 읽기가 멈췄다(대시보드는 2~10초 폴링으로 읽기가 압도적인데 스캐너·통계 스냅샷이 계속 쓴다). 세 가지를 손봤다.
   - **SQLite 동시성**(`connection.ts`): `journal_mode=WAL`(읽기/쓰기 상호 비차단), `busy_timeout=5000`(기존 0 — 쓰기가 겹치는 순간 즉시 SQLITE_BUSY 였다), `synchronous=NORMAL`, 페이지 캐시 2MB→64MB, `temp_store=MEMORY`, `mmap_size=256MB`. 운영 하드웨어에서 운영 DB 복사본(88MB)으로 잰 결과 쓰기 경합 하 읽기 처리량이 **1.5~2.3배**(리더 4/16/32 기준 25,956→59,647, 32,598→64,257, 39,983→60,409 reads/s), 쓰기 처리량도 **1.3~2.1배**.
   - **웹 워커 다중화**(`server.ts`): `WEB_CONCURRENCY`(`auto`=코어 수, 미설정 시 1로 종전과 동일)로 cluster 워커를 띄운다. 백그라운드 작업(스캐너·통계 수집·리포트 스케줄러)은 **워커 0 에서만** 돈다 — 워커마다 스캐너가 돌면 같은 이슈를 중복으로 집어 에이전트를 여러 번 실행하므로(토큰 소진 사고), `IVE_BACKGROUND_JOBS=0` 으로 나머지 워커에서 차단하고 기동 로그로 1회만 뜨는 것을 확인한다.
@@ -173,7 +176,8 @@ OpenCode 작업자 및 모델 단가.
 - Docker/docker-compose 컨테이너 배포, GitLab CI/CD 파이프라인
 - Claude Code CLI 연동, 작업 완료 시 AI 대화 로그를 이슈 노트에 첨부
 
-[Unreleased]: https://gitlab.com/kojoung/ive/-/compare/v1.5.0...main
+[Unreleased]: https://gitlab.com/kojoung/ive/-/compare/v1.6.0...main
+[1.6.0]: https://gitlab.com/kojoung/ive/-/releases/v1.6.0
 [1.5.0]: https://gitlab.com/kojoung/ive/-/releases/v1.5.0
 [1.0.0]: https://gitlab.com/kojoung/ive/-/releases/v1.0.0
 [0.10.0]: https://gitlab.com/kojoung/ive/-/releases/v0.10.0

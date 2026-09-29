@@ -3,6 +3,7 @@
   "noIssues": "No tasks",
   "noIveIssues": "No IVE tasks",
   "noFilterMatch": "No tasks match the current filter",
+  "loadMore": "Load more",
   "loadingIssues": "Loading tasks...",
   "addNewIssue": "Add New Task",
   "firstLineTitle": "1st line = title, from 2nd line = body",

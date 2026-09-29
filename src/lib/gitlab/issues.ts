@@ -1,4 +1,5 @@
 import { Project } from "@/types";
+import { parseIidSearch, type ClosedIssuePage, type ClosedIssuePageOptions } from "@/lib/closed-issues";
 import { getProjectPath, getAuthHeaders, apiUrl } from "./common";
 
 /**
@@ -209,32 +210,49 @@ export async function fetchAllProjectIssues(project: Project, decryptedToken: st
   }
 }
 
-export async function fetchClosedProjectIssues(project: Project, decryptedToken: string) {
+/**
+ * 닫힌 이슈를 한 페이지씩 가져온다 (이력 탭).
+ *
+ * 종전엔 닫힌 이슈 전체(Meta-Shop 1,744건 = 18페이지, 약 36초·10MB)를 매번 순차로 받았다.
+ * 이력은 최근 것부터 보면 되므로 정렬·검색을 GitLab 에 맡기고 요청 1번으로 한 페이지만 받는다.
+ * - search 가 숫자(#123)면 이슈 번호로, 아니면 제목·본문 검색 (3글자 미만 단어는 GitLab 이 무시 → 호출측이 iids 로 한정)
+ * - total 은 X-Total (GitLab 이 1만 건 초과 시 생략 → null)
+ */
+export async function fetchClosedProjectIssuesPage(
+  project: Project,
+  decryptedToken: string,
+  opts: ClosedIssuePageOptions,
+): Promise<ClosedIssuePage> {
   const projectPath = getProjectPath(project.repoUrl);
-  if (!projectPath) return [];
+  if (!projectPath) return { issues: [], total: 0, hasMore: false };
 
-  const headers = getAuthHeaders(project, decryptedToken);
+  const q = new URLSearchParams({
+    state: 'closed',
+    order_by: 'created_at',
+    sort: opts.sort,
+    per_page: String(opts.perPage),
+    page: String(opts.page),
+  });
+  if (opts.label) q.set('labels', opts.label);
+  const search = (opts.search || '').trim();
+  const iid = parseIidSearch(search);
+  if (opts.iids) {
+    // 짧은 검색어 — 호출측이 IVE DB 제목으로 찾은 번호로 한정 (정렬·페이지는 GitLab 이 그대로 처리)
+    if (opts.iids.length === 0) return { issues: [], total: 0, hasMore: false };
+    for (const n of opts.iids) q.append('iids[]', String(n));
+  } else if (iid != null) q.append('iids[]', String(iid));
+  else if (search) q.set('search', search);
 
-  try {
-    const allIssues: any[] = [];
-    let page = 1;
-    while (true) {
-      const res = await fetch(
-        apiUrl(project, `/issues?state=closed&per_page=100&page=${page}`),
-        { headers }
-      );
-      if (!res.ok) break;
-      const issues = await res.json();
-      if (issues.length === 0) break;
-      allIssues.push(...issues);
-      if (issues.length < 100) break;
-      page++;
-    }
-    return allIssues.sort((a: any, b: any) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
-  } catch (err) {
-    console.error(`[GitLab] Error fetching closed project issues for ${project.name}:`, err);
-    return [];
-  }
+  const res = await fetch(apiUrl(project, `/issues?${q.toString()}`), { headers: getAuthHeaders(project, decryptedToken) });
+  if (!res.ok) throw new Error(`닫힌 이슈 조회 실패: ${res.status} ${res.statusText}`);
+  const issues = await res.json();
+  const totalHeader = res.headers.get('x-total');
+  const nextPage = res.headers.get('x-next-page');
+  return {
+    issues,
+    total: totalHeader ? Number(totalHeader) : null,
+    hasMore: nextPage != null ? nextPage !== '' : issues.length === opts.perPage,
+  };
 }
 
 /**

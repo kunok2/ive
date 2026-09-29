@@ -15,6 +15,8 @@ interface FilterToolbarProps {
   onFetchClosedIssues: () => void
   issues: IveIssue[]
   closedIssues: IveIssue[]
+  /** 이력 전체 건수 (서버가 모르면 null → 받은 건수로 표시) */
+  closedTotal?: number | null
   onClearSelected: () => void
   issueSearchQuery: string
   onSearchQueryChange: (query: string) => void
@@ -33,6 +35,7 @@ export default function FilterToolbar({
   onFetchClosedIssues,
   issues,
   closedIssues,
+  closedTotal = null,
   onClearSelected,
   issueSearchQuery,
   onSearchQueryChange,
@@ -71,7 +74,8 @@ export default function FilterToolbar({
                 : tab.key === 'active' ? issues.filter(i => (i.stage === 'dev' || i.stage === 'verify_waiting' || i.stage === 'verifying' || i.stage === 'confirm_waiting' || i.stage === 'confirming') && mineFilter(i)).length
                 : tab.key === 'failed' ? issues.filter(i => (i.stage === 'dev_fail' || i.stage === 'rejected') && mineFilter(i)).length
                 : tab.key === 'done' ? issues.filter(i => i.stage === 'done' && mineFilter(i)).length
-                : tab.key === 'history' ? closedIssues.filter(mineFilter).length
+                // 이력은 한 페이지씩 받으므로 전체 건수는 서버(Git)가 알려 준 값. "내 것만"은 받은 범위 안에서 센다.
+                : tab.key === 'history' ? ((onlyMine && canFilterMine) || closedTotal == null ? closedIssues.filter(mineFilter).length : closedTotal)
                 : 0
               return count > 0 ? <span className="ml-1 text-xs opacity-60">{count}</span> : null
             })()}

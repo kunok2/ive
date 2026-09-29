@@ -137,6 +137,12 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   })
   const [closedIssues, setClosedIssues] = useState<IveIssue[]>([])
   const [closedLoading, setClosedLoading] = useState(false)
+  // 이력(닫힌 이슈)은 한 페이지씩 받는다 — 전체를 받으면 이슈가 쌓일수록 수십 초가 걸린다.
+  const [closedHasMore, setClosedHasMore] = useState(false)
+  const [closedTotal, setClosedTotal] = useState<number | null>(null)
+  const [closedLoadingMore, setClosedLoadingMore] = useState(false)
+  const closedPageRef = useRef(1)
+  const closedReqSeqRef = useRef(0)
   const [loading, setLoading] = useState(false)
   const [navigatingIid, setNavigatingIid] = useState<number | null>(null)
   const [bulkMode, setBulkMode] = useState(false)
@@ -163,6 +169,12 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   const [creatingMode, setCreatingMode] = useState<'register' | 'process' | null>(null)
   const handleCreateIssueRef = useRef<(registerOnly?: boolean) => void>(() => {})
   const [issueSearchQuery, setIssueSearchQuery] = useState('')
+  // 이력 탭 검색은 서버(Git)로 보낸다 — 타이핑마다 요청하지 않게 300ms 디바운스.
+  const [closedSearch, setClosedSearch] = useState('')
+  useEffect(() => {
+    const t = setTimeout(() => setClosedSearch(issueSearchQuery.trim()), 300)
+    return () => clearTimeout(t)
+  }, [issueSearchQuery])
   const [closing, setClosing] = useState<number | null>(null)
   const [preferredAgentId, setPreferredAgentId] = useState<string | null>(null)
   const [gitMembers, setGitMembers] = useState<{ id: number; username: string; name: string; avatarUrl: string }[]>([])
@@ -247,16 +259,51 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     fetch(`/api/projects/${selectedProjectId}/confirmer-candidates`).then(res => res.ok ? res.json() : []).then(setConfirmerMembers).catch(() => setConfirmerMembers([]))
   }, [selectedProjectId])
 
+  const closedPageUrl = useCallback((page: number) => {
+    const q = new URLSearchParams({ state: 'closed', page: String(page), sort: sortOrder === 'oldest' ? 'asc' : 'desc' })
+    if (closedSearch) q.set('q', closedSearch)
+    return `/api/projects/${selectedProjectId}/issues?${q.toString()}`
+  }, [selectedProjectId, sortOrder, closedSearch])
+
+  /** 이력 첫 페이지부터 다시 받는다 (프로젝트·정렬·검색어가 바뀌거나 새로고침할 때). */
   const fetchClosedIssues = useCallback(() => {
     if (!selectedProjectId) return Promise.resolve()
+    const seq = ++closedReqSeqRef.current
     setClosedLoading(true)
-    return fetch(`/api/projects/${selectedProjectId}/issues?state=closed`)
-      .then(res => res.ok ? res.json() : [])
-      .then(data => setClosedIssues(data))
-      .finally(() => setClosedLoading(false))
-  }, [selectedProjectId])
+    return fetch(closedPageUrl(1))
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (seq !== closedReqSeqRef.current) return // 더 새 요청이 나갔으면 버린다
+        closedPageRef.current = 1
+        setClosedIssues(data?.items ?? [])
+        setClosedHasMore(!!data?.hasMore)
+        setClosedTotal(data?.total ?? null)
+      })
+      .finally(() => { if (seq === closedReqSeqRef.current) setClosedLoading(false) })
+  }, [selectedProjectId, closedPageUrl])
 
-  useEffect(() => { setClosedIssues([]) }, [selectedProjectId])
+  /** 다음 페이지를 이어 붙인다 (목록 끝 도달 / 더 보기). */
+  const loadMoreClosedIssues = useCallback(() => {
+    if (!selectedProjectId || closedLoading || closedLoadingMore || !closedHasMore) return
+    const seq = closedReqSeqRef.current
+    const nextPage = closedPageRef.current + 1
+    setClosedLoadingMore(true)
+    fetch(closedPageUrl(nextPage))
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (seq !== closedReqSeqRef.current || !data) return
+        closedPageRef.current = nextPage
+        setClosedIssues(prev => {
+          const seen = new Set(prev.map(i => i.iid))
+          return [...prev, ...(data.items as IveIssue[]).filter(i => !seen.has(i.iid))]
+        })
+        setClosedHasMore(!!data.hasMore)
+        if (data.total != null) setClosedTotal(data.total)
+      })
+      .finally(() => setClosedLoadingMore(false))
+  }, [selectedProjectId, closedLoading, closedLoadingMore, closedHasMore, closedPageUrl])
+
+  useEffect(() => { setClosedIssues([]); setClosedTotal(null); setClosedHasMore(false) }, [selectedProjectId])
   useEffect(() => { fetchIssues() }, [fetchIssues])
   useEffect(() => { if (filter === 'history' && selectedProjectId) fetchClosedIssues() }, [filter, selectedProjectId, fetchClosedIssues])
   useEffect(() => { if (activeTab === 'issues' && selectedProjectId) { fetchIssues(); fetchGitMembers() } }, [activeTab])
@@ -624,7 +671,8 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     return true
   })).filter(issue => {
     if (onlyMine && canFilterMine && !isMine(issue)) return false
-    if (!issueSearchQuery) return true
+    // 이력은 서버가 제목·본문으로 이미 검색했다 — 로컬에서 다시 거르면 본문 일치 건이 빠진다.
+    if (isHistoryTab || !issueSearchQuery) return true
     const q = issueSearchQuery.toLowerCase()
     return issue.title.toLowerCase().includes(q) || String(issue.iid).includes(q) || (issue.author?.name || '').toLowerCase().includes(q)
   }).sort((a, b) => {
@@ -681,6 +729,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
               onFetchClosedIssues={fetchClosedIssues}
               issues={issues}
               closedIssues={closedIssues}
+              closedTotal={closedTotal}
               onClearSelected={() => setSelected(new Set())}
               issueSearchQuery={issueSearchQuery}
               onSearchQueryChange={setIssueSearchQuery}
@@ -727,6 +776,9 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
           loading={loading}
           closedLoading={closedLoading}
           closedIssues={closedIssues}
+          closedHasMore={closedHasMore}
+          closedLoadingMore={closedLoadingMore}
+          onLoadMoreClosed={loadMoreClosedIssues}
           stageInfo={STAGE_INFO}
           selected={selected}
           bulkMode={bulkMode}

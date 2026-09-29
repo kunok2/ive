@@ -1,6 +1,6 @@
 'use client'
 
-import type { ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
 import IssueCard from './IssueCard'
 import type { IveIssue, ProjectAgent, StageInfo } from './types'
@@ -19,6 +19,10 @@ interface IssueListProps {
   loading: boolean
   closedLoading: boolean
   closedIssues: IveIssue[]
+  /** 이력: 다음 페이지가 있는지 / 받는 중인지 / 이어 받기 */
+  closedHasMore?: boolean
+  closedLoadingMore?: boolean
+  onLoadMoreClosed?: () => void
   stageInfo: Record<string, StageInfo>
   selected: Set<number>
   bulkMode: boolean
@@ -55,6 +59,9 @@ export default function IssueList({
   loading,
   closedLoading,
   closedIssues,
+  closedHasMore = false,
+  closedLoadingMore = false,
+  onLoadMoreClosed,
   stageInfo,
   selected,
   bulkMode,
@@ -78,6 +85,19 @@ export default function IssueList({
   headerSlot,
 }: IssueListProps) {
   const tIssue = useTranslations('issue')
+
+  // 이력: 목록 끝(센티널)이 보이면 다음 페이지를 이어 받는다. 버튼은 관찰이 안 되는 환경용 대체 수단.
+  const sentinelRef = useRef<HTMLDivElement | null>(null)
+  const showLoadMore = isHistoryTab && closedHasMore && !!onLoadMoreClosed
+  useEffect(() => {
+    const el = sentinelRef.current
+    if (!showLoadMore || !el || typeof IntersectionObserver === 'undefined') return
+    const io = new IntersectionObserver(entries => {
+      if (entries.some(e => e.isIntersecting)) onLoadMoreClosed?.()
+    }, { rootMargin: '400px 0px' })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [showLoadMore, onLoadMoreClosed])
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar" data-scroll-container="issues-list">
@@ -126,6 +146,20 @@ export default function IssueList({
               />
               )
             })}
+            {showLoadMore && (
+              <div ref={sentinelRef} className="flex justify-center py-3">
+                <button
+                  type="button"
+                  onClick={() => onLoadMoreClosed?.()}
+                  disabled={closedLoadingMore}
+                  className="text-sm font-bold text-ive-text-dim hover:text-ive-text px-4 py-2 rounded-lg bg-ive-bg-card border border-ive-border-subtle hover:border-ive-green/30 transition-all disabled:opacity-60"
+                >
+                  {closedLoadingMore
+                    ? <><i className="fa-solid fa-spinner fa-spin mr-1" />{tIssue('loadingIssues')}</>
+                    : <><i className="fa-solid fa-chevron-down mr-1" />{tIssue('loadMore')}</>}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

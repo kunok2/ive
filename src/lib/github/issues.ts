@@ -1,5 +1,6 @@
 import { Project } from "@/types";
-import { getOwnerRepo, getGitHubAuthHeaders, apiUrl, normalizeIssue } from "./common";
+import { getOwnerRepo, getGitHubAuthHeaders, getGitHubApiBase, apiUrl, normalizeIssue } from "./common";
+import type { ClosedIssuePage, ClosedIssuePageOptions } from "@/lib/closed-issues";
 import { ensureGitHubLabels } from "./labels";
 import { setIveDueMarker } from "@/lib/ive-author";
 
@@ -171,36 +172,60 @@ export async function fetchAllProjectIssues(project: Project, decryptedToken: st
   }
 }
 
-export async function fetchClosedProjectIssues(project: Project, decryptedToken: string) {
+/**
+ * 닫힌 이슈를 한 페이지씩 가져온다 (이력 탭). GitLab 구현과 같은 모양을 돌려준다.
+ * - 검색어 없음: /issues (PR 이 섞여 오므로 걸러냄 — 한 페이지가 perPage 보다 적을 수 있음), 다음 페이지는 Link rel="next"
+ * - 검색어: Search API (제목·본문), 숫자(#123)면 이슈 단건
+ */
+export async function fetchClosedProjectIssuesPage(
+  project: Project,
+  decryptedToken: string,
+  opts: ClosedIssuePageOptions,
+): Promise<ClosedIssuePage> {
   const ownerRepo = getOwnerRepo(project.repoUrl);
-  if (!ownerRepo) return [];
-
+  if (!ownerRepo) return { issues: [], total: 0, hasMore: false };
   const headers = getGitHubAuthHeaders(project, decryptedToken);
+  const search = (opts.search || '').trim();
 
-  try {
-    const allIssues: any[] = [];
-    let page = 1;
-    while (true) {
-      const res = await fetch(
-        apiUrl(project, `/issues?state=closed&per_page=100&page=${page}`),
-        { headers }
-      );
-      if (!res.ok) break;
-      const issues = await res.json();
-      if (issues.length === 0) break;
-      for (const issue of issues) {
-        if (!issue.pull_request) {
-          allIssues.push(normalizeIssue(issue));
-        }
-      }
-      if (issues.length < 100) break;
-      page++;
-    }
-    return allIssues.sort((a: any, b: any) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
-  } catch (err) {
-    console.error(`[GitHub] Error fetching closed project issues for ${project.name}:`, err);
-    return [];
+  const iidMatch = search.match(/^#?(\d+)$/);
+  if (iidMatch) {
+    if (opts.page > 1) return { issues: [], total: null, hasMore: false };
+    const res = await fetch(apiUrl(project, `/issues/${iidMatch[1]}`), { headers });
+    if (res.status === 404) return { issues: [], total: 0, hasMore: false };
+    if (!res.ok) throw new Error(`닫힌 이슈 조회 실패: ${res.status} ${res.statusText}`);
+    const issue = await res.json();
+    const hasLabel = !opts.label || (issue.labels || []).some((l: string | { name?: string }) => (typeof l === 'string' ? l : l.name) === opts.label);
+    const ok = issue.state === 'closed' && !issue.pull_request && hasLabel;
+    return { issues: ok ? [normalizeIssue(issue)] : [], total: ok ? 1 : 0, hasMore: false };
   }
+
+  if (search) {
+    const labelQ = opts.label ? ` label:"${opts.label.replace(/"/g, '')}"` : '';
+    const q = `repo:${ownerRepo} is:issue is:closed${labelQ} ${search}`;
+    const params = new URLSearchParams({
+      q, sort: 'created', order: opts.sort, per_page: String(opts.perPage), page: String(opts.page),
+    });
+    const res = await fetch(`${getGitHubApiBase(project.repoUrl)}/search/issues?${params.toString()}`, { headers });
+    if (!res.ok) throw new Error(`닫힌 이슈 검색 실패: ${res.status} ${res.statusText}`);
+    const data = await res.json();
+    const total = typeof data.total_count === 'number' ? data.total_count : null;
+    const items = (data.items || []).map(normalizeIssue);
+    return { issues: items, total, hasMore: total != null ? opts.page * opts.perPage < total : items.length === opts.perPage };
+  }
+
+  const params = new URLSearchParams({
+    state: 'closed', sort: 'created', direction: opts.sort, per_page: String(opts.perPage), page: String(opts.page),
+  });
+  if (opts.label) params.set('labels', opts.label);
+  const res = await fetch(apiUrl(project, `/issues?${params.toString()}`), { headers });
+  if (!res.ok) throw new Error(`닫힌 이슈 조회 실패: ${res.status} ${res.statusText}`);
+  const raw = await res.json();
+  const link = res.headers.get('link') || '';
+  return {
+    issues: raw.filter((i: { pull_request?: unknown }) => !i.pull_request).map(normalizeIssue),
+    total: null,
+    hasMore: /rel="next"/.test(link),
+  };
 }
 
 /**

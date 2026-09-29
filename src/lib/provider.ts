@@ -4,6 +4,7 @@
 import { Project } from "@/types";
 import * as gitlab from "./gitlab";
 import * as github from "./github";
+import type { ClosedIssuePageOptions } from "./closed-issues";
 
 // Issues
 export function fetchAllProjectIssues(project: Project, token: string) {
@@ -12,10 +13,10 @@ export function fetchAllProjectIssues(project: Project, token: string) {
     : gitlab.fetchAllProjectIssues(project, token);
 }
 
-export function fetchClosedProjectIssues(project: Project, token: string) {
+export function fetchClosedProjectIssuesPage(project: Project, token: string, opts: ClosedIssuePageOptions) {
   return project.provider === 'github'
-    ? github.fetchClosedProjectIssues(project, token)
-    : gitlab.fetchClosedProjectIssues(project, token);
+    ? github.fetchClosedProjectIssuesPage(project, token, opts)
+    : gitlab.fetchClosedProjectIssuesPage(project, token, opts);
 }
 
 export function createIssue(project: Project, token: string, title: string, description: string, labels: string[], assignees?: { ids?: number[]; usernames?: string[] }, options?: { isOAuth?: boolean; dueDate?: string | null }) {

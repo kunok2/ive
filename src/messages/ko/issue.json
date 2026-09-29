@@ -3,6 +3,7 @@
   "noIssues": "작업가 없습니다",
   "noIveIssues": "IVE 작업이 없습니다",
   "noFilterMatch": "해당 필터에 맞는 작업가 없습니다",
+  "loadMore": "더 보기",
   "loadingIssues": "작업 불러오는 중...",
   "addNewIssue": "새 작업 추가",
   "firstLineTitle": "첫 줄 = 제목, 두 번째 줄부터 = 본문",

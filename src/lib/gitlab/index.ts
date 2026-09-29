@@ -15,7 +15,7 @@ export {
   fetchGitLabIssueTimeSpentSec,
   fetchAllIveIssues,
   fetchAllProjectIssues,
-  fetchClosedProjectIssues,
+  fetchClosedProjectIssuesPage,
   closeGitLabIssue,
   reopenGitLabIssue,
   updateGitLabIssue,

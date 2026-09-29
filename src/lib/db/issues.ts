@@ -707,3 +707,27 @@ export function getMyVerifierCounts(
   const verifying = Number(r?.verifying || 0)
   return { verifyWaiting, verifying, total: verifyWaiting + verifying }
 }
+
+/**
+ * 이슈 제목에 검색어(공백으로 나눈 단어 모두)가 들어간 이슈 번호 — 최신 번호순, 최대 limit 개.
+ * 이력 탭에서 GitLab 검색이 무시하는 짧은 검색어(3글자 미만, 예: "영어")를 IVE 가 기록해 둔 제목으로 찾는다.
+ * limit 100 = GitLab 이 iids[] 를 받아 주는 선(150개부터 502, 실측).
+ * 제목은 실행 기록(task_executions)과 단계 스냅샷(issue_stages) 양쪽에서 모은다.
+ */
+export function findIssueIidsByTitle(projectId: string, search: string, limit = 100): number[] {
+  const words = search.trim().split(/\s+/).filter(Boolean)
+  if (words.length === 0) return []
+  const escape = (w: string) => w.replace(/[\\%_]/g, c => '\\' + c)
+  const cond = words.map(() => "t.issue_title LIKE ? ESCAPE '\\'").join(' AND ')
+  const rows = getDb().prepare(`
+    SELECT DISTINCT t.issue_iid AS iid FROM (
+      SELECT issue_iid, issue_title FROM task_executions WHERE project_id = ? AND issue_title IS NOT NULL
+      UNION
+      SELECT issue_iid, issue_title FROM issue_stages WHERE project_id = ? AND issue_title IS NOT NULL
+    ) t
+    WHERE ${cond}
+    ORDER BY t.issue_iid DESC
+    LIMIT ?
+  `).all(projectId, projectId, ...words.map(w => `%${escape(w)}%`), limit) as { iid: number }[]
+  return rows.map(r => r.iid)
+}
