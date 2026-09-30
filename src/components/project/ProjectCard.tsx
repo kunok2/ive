@@ -475,7 +475,11 @@ export default function ProjectCard({ project }: Props) {
           const avatarSrc = actor?.avatar
           const isPhotoUrl = typeof avatarSrc === 'string' && (avatarSrc.startsWith('/') || avatarSrc.startsWith('http'))
           return (
-            <div key={`${kind}-${issue.iid}`} className="flex items-center gap-1.5 text-xs">
+            <div
+              key={`${kind}-${issue.iid}`}
+              onClick={() => router.push(`/issues/${project.id}/${issue.iid}`)}
+              className="flex items-center gap-1.5 text-xs cursor-pointer rounded-lg -mx-1 px-1 py-0.5 hover:bg-ive-amber/5 transition-colors"
+            >
               {avatarSrc ? (
                 isPhotoUrl ? (
                   <img src={avatarSrc} alt="" className="w-7 h-7 rounded-lg object-cover shrink-0 border border-ive-border" />
@@ -510,7 +514,12 @@ export default function ProjectCard({ project }: Props) {
               const activity = ex.agentId ? activities[ex.agentId] : undefined
               const displayName = isVerify ? ex.userName : agentName
               return (
-                <div key={ex.id} className="flex items-center gap-1.5 text-xs">
+                <div
+                  key={ex.id}
+                  // LiveTracePanel 의 「전체화면」 버튼과 동일한 이동 (채팅 세션은 이슈 상세로)
+                  onClick={() => router.push(isChat ? `/issues/${project.id}/${ex.issueIid}` : `/executions/${ex.id}`)}
+                  className="flex items-center gap-1.5 text-xs cursor-pointer rounded-lg -mx-1 px-1 py-0.5 hover:bg-ive-amber/5 transition-colors"
+                >
                   {isVerify ? (
                     ex.userAvatar === 'photo' && ex.userId ? (
                       <img src={`/api/auth/avatar/image?id=${ex.userId}`} alt="" className="w-7 h-7 rounded-lg object-cover shrink-0 border border-ive-border" />
