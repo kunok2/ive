@@ -23,6 +23,9 @@ for d in \
   mkdir -p "$d"
   chown -R "$IVE_UID:$IVE_GID" "$d"
 done
+# 위 mkdir -p 가 root 로 만든 부모(~/.cache)도 ive 것으로 — 아니면 ~/.cache 에 쓰는 프로그램이 죽거나 멈춘다
+# (Firefox 는 시작 캐시를 못 써 기동에서 무한 대기 → 에이전트가 원인을 못 찾고 헛돌았다, dazzlepf #1788).
+chown "$IVE_UID:$IVE_GID" /home/ive/.cache
 
 # data/workspaces는 시간이 지나면 커질 수 있어 마운트 루트만(비재귀) 맞춘다.
 # 실패 모드는 "root가 만든 빈 마운트 루트에 ive가 못 쓰는 것"이므로 루트만 고치면 충분하다.

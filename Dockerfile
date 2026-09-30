@@ -60,6 +60,9 @@ RUN HOME=/tmp/agy-install sh -c 'curl -fsSL https://antigravity.google/cli/insta
 # - npm 글로벌은 npx playwright 용이며, 복사한 브라우저와 동일 버전(1.55.0)으로 핀.
 # - OS 의존성만 install-deps(apt)로 설치. 브라우저는 받지 않음.
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
+# install 은 기본으로 「지금 판이 안 쓰는 브라우저」를 지운다 — 아래 1.62.1 설치가 복사해 둔 1.55.0 chromium 을
+# 지웠다. 여러 판을 한 경로에 두므로 정리를 끈다(에이전트가 런타임에 다른 판을 받을 때도 마찬가지).
+ENV PLAYWRIGHT_SKIP_BROWSER_GC=1
 COPY --from=pwbrowsers /ms-playwright /opt/playwright-browsers
 RUN npm install -g playwright@1.55.0 \
     && npx playwright install-deps chromium \
