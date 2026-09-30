@@ -4,7 +4,7 @@
  */
 import { spawn } from "child_process";
 import { Project, Agent } from "@/types";
-import { getSystemSetting, updateExecutionPid, updateExecutionTokens } from "../db";
+import { getExecution, getSystemSetting, updateExecutionPid, updateExecutionTokens } from "../db";
 import { setToolActivity, setThinking, clearActivity } from "../tool-activity";
 import { calcCostFromDb } from "../token-pricing";
 import { buildCliInvocation, resolveCliPath } from "../cli-invocation";
@@ -23,6 +23,14 @@ import { stripBenignOpencodeStderr, stripBenignAgyStderr, detectRateLimit } from
 
 // resolveCliPath는 cli-invocation으로 이동. 기존 import 경로(execute.ts) 호환을 위해 re-export.
 export { resolveCliPath };
+
+/** 한 실행의 시간 상한(분). 설정 cli.maxRunMinutes, 없으면 40분. 0 이면 상한 없음. 프롬프트에도 같은 값을 알린다. */
+export function getMaxRunMinutes(): number {
+  const raw = getSystemSetting('cli.maxRunMinutes');
+  if (raw === null || raw === undefined || raw === '') return 40;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : 40;
+}
 
 export interface CliRunResult {
   durationSeconds: number;
@@ -108,6 +116,24 @@ export async function runCliProcess(
       }, idleTimeoutSec * 1000);
     };
     resetIdleTimer();
+
+    // 실행 시간 상한: 도구 이벤트를 계속 흘리며 헛도는 경우(환경 우회·범위 밖 작업)는 유휴 워치독이 못 잡는다.
+    // 상한을 넘기면 강제 종료한다 — 그때까지의 변경은 execute 가 패치로 보존한다. 0 이면 끈다.
+    // (#1788: 17분에 끝난 수정 뒤로 33분을 브라우저 라이브러리 우회·검사 스크립트 신설에 썼다)
+    const maxRunMinutes = getMaxRunMinutes();
+    let killedByRunLimit = false;
+    const runLimitTimer: NodeJS.Timeout | null = maxRunMinutes > 0
+      ? setTimeout(() => {
+          killedByRunLimit = true;
+          log(`실행 시간 상한 ${maxRunMinutes}분 초과 — 프로세스를 강제 종료합니다.`, 'error');
+          try {
+            if (child.pid) process.kill(-child.pid, 'SIGKILL');
+          } catch (e) {
+            const err = e as NodeJS.ErrnoException;
+            if (err.code !== 'ESRCH') log(`상한 종료 실패: ${err.message}`, 'warn');
+          }
+        }, maxRunMinutes * 60 * 1000)
+      : null;
 
     // 토큰/비용 누적 변수
     let stdoutBuffer = '';
@@ -327,6 +353,7 @@ export async function runCliProcess(
 
     child.on('close', (code, signal) => {
       if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+      if (runLimitTimer) clearTimeout(runLimitTimer);
       // 버퍼에 남은 데이터 처리
       if (stdoutBuffer.trim()) {
         try {
@@ -370,7 +397,14 @@ export async function runCliProcess(
         detail.push(`OpenCode 오류: ${ocErrorMsg}`);
       }
       detail.push(`Agent CLI exited with code ${code}${signal ? ` (signal: ${signal})` : ''}`);
-      if (killedByWatchdog) {
+      // 사용자 중지(killExecution)는 SIGKILL 을 보내기 전에 상태를 failed 로 적는다 — 러너는 아직 안 적었다.
+      const stoppedByUser = !killedByWatchdog && !killedByRunLimit
+        && getExecution(executionId)?.status === 'failed';
+      if (killedByRunLimit) {
+        detail.push(`힌트: 실행 시간 상한 ${maxRunMinutes}분을 넘겨 강제 종료했습니다(설정 cli.maxRunMinutes). 그때까지의 변경은 패치로 보존됩니다.`);
+      } else if (stoppedByUser) {
+        detail.push('힌트: 사용자가 실행을 중지했습니다. 그때까지의 변경은 패치로 보존됩니다.');
+      } else if (killedByWatchdog) {
         detail.push(`힌트: ${Math.floor(idleTimeoutSec / 60)}분간 무응답(hang)으로 워치독이 강제 종료했습니다. CLI 인증 상태나 인터랙티브 프롬프트 대기 여부를 확인하세요.`);
       } else if (signal === 'SIGKILL' || code === 137) {
         detail.push('힌트: 메모리 부족(OOM) 또는 강제 종료로 추정됩니다.');
@@ -388,6 +422,7 @@ export async function runCliProcess(
     });
     child.on('error', (err) => {
       if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+      if (runLimitTimer) clearTimeout(runLimitTimer);
       log(`CLI 실행 실패: ${err.message}`, 'error');
       reject(err);
     });

@@ -95,3 +95,27 @@ describe('buildPrompt — 언어 지시', () => {
     expect(p).toContain('English')
   })
 })
+
+// #1788: 17분에 끝난 수정 뒤로 33분을 브라우저 라이브러리 우회·검사 스크립트 신설에 썼다.
+//   P-7: 범위 밖 검사 스크립트 신설·수정 금지 지시
+//   P-8: 검증 환경을 우회하지 말고 「확인 못 했다」로 보고하라는 지시
+//   P-9: 시간 상한이 있으면 프롬프트에 그 값을 알린다 / 0 이면 알리지 않는다
+describe('buildPrompt — 범위·검증 환경·시간 예산 (#1788)', () => {
+  it('P-7: 범위 밖 검사 스크립트 작업 금지', () => {
+    const p = buildPrompt(makeProject(), issue, 1, false, false, true, 1, '', '')
+    expect(p).toContain('Do NOT create or modify shared lint/check scripts')
+  })
+
+  it('P-8: 시스템 패키지 설치·우회 금지 + 미검증 명시', () => {
+    const p = buildPrompt(makeProject(), issue, 1, false, false, true, 1, '', '')
+    expect(p).toContain('Do NOT install system packages')
+    expect(p).toContain('확인 못 했다')
+  })
+
+  it('P-9: 시간 상한 전달 시 분 단위로 안내, 0 이면 생략', () => {
+    const withLimit = buildPrompt(makeProject(), issue, 1, false, false, true, 1, '', '', false, 'a', 40)
+    expect(withLimit).toContain('force-stopped after 40 minutes')
+    const noLimit = buildPrompt(makeProject(), issue, 1, false, false, true, 1, '', '', false, 'a', 0)
+    expect(noLimit).not.toContain('force-stopped')
+  })
+})

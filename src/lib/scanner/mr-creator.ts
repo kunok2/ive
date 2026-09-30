@@ -10,6 +10,7 @@ import { updateExecutionStatus, updateAgentStatus, getAssigneeAuto, getPresetRol
 import { addIssueLabels, removeIssueLabels } from "../provider";
 import { notifyStageTransition } from "../slack-notify";
 import { runAutoAssign } from "./auto-assign";
+import type { PreservedChanges } from "./git-ops";
 import { applyRoleAssignee } from "../role-assignee";
 import {
   addGitLabIssueComment,
@@ -257,11 +258,21 @@ export async function postErrorNote(
   token: string,
   errMessage: string,
   isGitHub: boolean,
+  preserved?: PreservedChanges | null,
 ): Promise<void> {
   const formatted = errMessage.includes('\n')
     ? `\n\n\`\`\`\n${errMessage}\n\`\`\``
     : ` ${errMessage}`;
-  const errorNote = `<!-- ive-bot -->\n<!-- ive-agent:${agent.id} -->\n## ❌ 실행 오류 — ${agent.name}\n\n- **오류:**${formatted}`;
+  let errorNote = `<!-- ive-bot -->\n<!-- ive-agent:${agent.id} -->\n## ❌ 실행 오류 — ${agent.name}\n\n- **오류:**${formatted}`;
+  if (preserved) {
+    // 패치 본문은 코멘트 한도를 넘지 않게 작은 것만 싣는다. 큰 것은 서버 파일 경로만 남긴다.
+    const PATCH_INLINE_MAX = 40000;
+    const fileName = preserved.patchPath.split('/').pop();
+    errorNote += `\n\n### 중단 시점까지의 변경 (보존됨)\n\n서버 \`data/logs/${fileName}\` 에 패치로 저장했습니다. \`git apply\` 로 되살릴 수 있습니다.\n\n\`\`\`\n${preserved.stat}\n\`\`\``;
+    if (preserved.patch.length <= PATCH_INLINE_MAX && !preserved.patch.includes('GIT binary patch')) {
+      errorNote += `\n\n<details>\n<summary>패치 전문</summary>\n\n\`\`\`diff\n${preserved.patch}\n\`\`\`\n</details>`;
+    }
+  }
   try {
     if (isGitHub) {
       await addGitHubIssueComment(project, iid, token, errorNote);

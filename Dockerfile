@@ -15,8 +15,8 @@ COPY . .
 RUN npm run build
 
 # ---- Playwright 브라우저 스테이지 ----
-# 공식 playwright 이미지에서 브라우저 바이너리만 가져오기 위한 스테이지.
-# chromium 만 쓰므로 firefox/webkit 은 제거해 이미지 비대화 방지.
+# 공식 playwright 이미지에서 1.55.0(스크래퍼 판) 브라우저 바이너리만 가져오기 위한 스테이지.
+# 이 판은 chromium 만 쓰므로 firefox/webkit 은 제거. 화면 검증용 3종은 아래 런타임 단계에서 판별로 받는다.
 FROM mcr.microsoft.com/playwright:v1.55.0-jammy AS pwbrowsers
 RUN find /ms-playwright -maxdepth 1 -type d \( -name 'firefox*' -o -name 'webkit*' \) -exec rm -rf {} + || true
 
@@ -64,6 +64,19 @@ COPY --from=pwbrowsers /ms-playwright /opt/playwright-browsers
 RUN npm install -g playwright@1.55.0 \
     && npx playwright install-deps chromium \
     && chmod -R o+rx /opt/playwright-browsers
+
+# 대상 저장소가 쓰는 Playwright 판의 브라우저 3종(chromium·webkit·firefox)과 그 OS 라이브러리.
+# 에이전트는 root 가 없어 --with-deps 를 못 한다 — 여기서 미리 깔아 두지 않으면 WebKit·Firefox 를
+# 띄우려고 .deb 를 풀고 LD_LIBRARY_PATH 를 만지며 헛돈다(#1788: 설치 10분 + 우회 17분 뒤 실패).
+# - 판마다 브라우저 리비전 폴더가 달라 여러 판을 한 경로에 함께 둘 수 있다.
+# - 대상 저장소의 판이 바뀌면 이 목록에 더한다(dazzlepf apps/web/frontend = 1.62.1).
+# - 경로를 모두에게 쓰기 허용 → 목록에 없는 판도 에이전트가 root 없이 브라우저만 받아 쓸 수 있다.
+ARG PLAYWRIGHT_EXTRA_VERSIONS="1.62.1"
+RUN for v in $PLAYWRIGHT_EXTRA_VERSIONS; do \
+      npx -y playwright@$v install --with-deps chromium webkit firefox || exit 1; \
+    done \
+    && rm -rf /var/lib/apt/lists/* \
+    && chmod -R a+rwX /opt/playwright-browsers
 
 # ── 앱 의존성 (package-lock 바뀔 때만 재설치) ──
 COPY package.json package-lock.json .npmrc ./

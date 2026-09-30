@@ -28,8 +28,8 @@ import { Project, Agent } from "@/types";
 import { defaultLocale } from "@/i18n/config";
 import fs from "fs";
 import path from "path";
-import { setupWorkspace } from "./git-ops";
-import { resolveCliPath, runCliProcess } from "./cli-runner";
+import { setupWorkspace, preserveWorkspaceChanges } from "./git-ops";
+import { getMaxRunMinutes, resolveCliPath, runCliProcess } from "./cli-runner";
 import { downloadIssueImages } from "./issue-images";
 import { commitPushAndCreateMR, postErrorNote } from "./mr-creator";
 import { buildPrompt, buildConflictPrompt } from "./prompt-builder";
@@ -227,7 +227,7 @@ export async function executeTask(
     // 4. 프롬프트 구성
     // 프로젝트가 OAuth 토큰을 쓰는 경우 에이전트에게 Bearer 헤더를 쓰도록 지시.
     // PAT 기반이면 PRIVATE-TOKEN 유지. 잘못된 헤더는 401 → 에이전트가 "토큰 만료"로 오해함.
-    const prompt = buildPrompt(project, issue, iid, isConflictTask, isGitHub, isKo, iterationCount, latestFeedback, iterationContext, !!project.usesOAuthToken, agent.id);
+    const prompt = buildPrompt(project, issue, iid, isConflictTask, isGitHub, isKo, iterationCount, latestFeedback, iterationContext, !!project.usesOAuthToken, agent.id, getMaxRunMinutes());
 
     // 4-1. 첨부 이미지 다운로드 → 워크스페이스 저장 → 프롬프트에 경로 안내 (에이전트가 분석)
     const issueImagePaths = await downloadIssueImages(
@@ -282,7 +282,10 @@ export async function executeTask(
       updateProjectConflictCount(project.id, 0);
     }
     if (!isConflictTask) {
-      await postErrorNote(project, agent, iid, token, err.message, isGitHub);
+      // 중지·시간 상한·오류로 끝나도 그때까지 한 수정은 남긴다 — 작업 디렉토리는 아래 finally 에서 지워진다.
+      const preserved = await preserveWorkspaceChanges(workspacePath, logDir, executionId);
+      if (preserved) log(`변경 보존: ${preserved.patchPath}\n${preserved.stat}`, 'system');
+      await postErrorNote(project, agent, iid, token, err.message, isGitHub, preserved);
     }
     updateExecutionStatus(executionId, 'failed', new Date().toISOString());
   } finally {

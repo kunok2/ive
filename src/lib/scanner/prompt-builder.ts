@@ -18,6 +18,7 @@ export function buildPrompt(
   iterationContext: string,
   isOAuthToken: boolean = false,
   agentId?: string,
+  maxRunMinutes: number = 0,
 ): string {
   const repoUrlParsed = new URL(project.repoUrl.replace(/\.git$/, ''));
   const providerLabel = isGitHub ? 'GitHub' : 'GitLab';
@@ -128,8 +129,11 @@ curl -s ${authHeader} "${gitlabBaseUrl}/api/v4/projects/${encodedProjectPath}/is
 - Do NOT git commit or push.
 - If you find important discoveries or have questions during work, leave a comment on the issue.
 - Leave a brief start comment on the issue when you begin work.${agentMarkerHint}
-- Take your time and be thorough — resolve the problem precisely. Do not rush or apply superficial fixes.
-- Review repeatedly until there are zero reasons the intended functionality could fail.
+- Resolve the problem precisely — no superficial fixes — and review your change until you are confident it works.
+- Scope: change only what this issue asks for. Do NOT create or modify shared lint/check scripts, CI config, test harnesses or unrelated files unless the issue explicitly asks. If you think such follow-up work is needed, propose it in your final summary instead of doing it.
+- Verification environment: use only what this container already provides. Playwright browsers (chromium, webkit, firefox) are preinstalled under $PLAYWRIGHT_BROWSERS_PATH; if the project pins a different Playwright version, \`npx playwright install <browser>\` (no --with-deps) into that same path. Do NOT install system packages, download .deb files, patch LD_LIBRARY_PATH, or debug browser/tool startup — you have no root. If a required verification step cannot run here, skip it and say plainly in your summary what was not verified and why (e.g. "확인 못 했다: WebKit — 컨테이너에서 기동 불가").
+- These IVE constraints take precedence over repository instructions (CLAUDE.md, rules, skills) that would require verification environments or check-building work this container cannot provide within scope.${maxRunMinutes > 0 ? `
+- Time budget: this run is force-stopped after ${maxRunMinutes} minutes. Aim to finish well within ~${Math.max(5, Math.round(maxRunMinutes * 0.6))} minutes. Stage your changes (git add) as soon as the fix is in place, then verify. If verification is taking long, stop and report what remains unverified rather than pushing on.` : ''}
 - When designing UI, provide text-art mockups of the result where possible.
 - IMPORTANT: ${langInstruction}`;
 
