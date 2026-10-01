@@ -80,9 +80,16 @@ function collectSnapshots() {
       `SELECT
         SUM(CASE WHEN cached_stage = 'waiting' THEN 1 ELSE 0 END) as waiting,
         SUM(CASE WHEN cached_stage = 'verify_waiting' THEN 1 ELSE 0 END) as verify_waiting,
-        SUM(CASE WHEN cached_stage = 'confirm_waiting' THEN 1 ELSE 0 END) as confirm_waiting
+        SUM(CASE WHEN cached_stage = 'confirm_waiting' THEN 1 ELSE 0 END) as confirm_waiting,
+        SUM(CASE WHEN cached_stage = 'dev' THEN 1 ELSE 0 END) as dev,
+        SUM(CASE WHEN cached_stage = 'dev_fail' THEN 1 ELSE 0 END) as dev_fail,
+        SUM(CASE WHEN cached_stage = 'verifying' THEN 1 ELSE 0 END) as verifying,
+        SUM(CASE WHEN cached_stage = 'confirming' THEN 1 ELSE 0 END) as confirming
       FROM issue_stages WHERE project_id = ?`
-    ).get(project.id) as { waiting: number | null; verify_waiting: number | null; confirm_waiting: number | null }
+    ).get(project.id) as {
+      waiting: number | null; verify_waiting: number | null; confirm_waiting: number | null
+      dev: number | null; dev_fail: number | null; verifying: number | null; confirming: number | null
+    }
     const waiting = waitingRow.waiting ?? 0
     const verifyWaiting = waitingRow.verify_waiting ?? 0
     const confirmWaiting = waitingRow.confirm_waiting ?? 0
@@ -107,6 +114,10 @@ function collectSnapshots() {
       waiting,
       verifyWaiting,
       confirmWaiting,
+      dev: waitingRow.dev ?? 0,
+      devFail: waitingRow.dev_fail ?? 0,
+      verifying: waitingRow.verifying ?? 0,
+      confirming: waitingRow.confirming ?? 0,
       completed: todayStats.completed,
       failed: todayStats.failed,
       totalTokens: todayStats.total_tokens,

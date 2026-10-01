@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { logActivity } from '@/lib/activity'
-import { getProjectAutomation, updateProjectAutomation, hasRole, DEFAULT_LIMITS, DEFAULT_BUNDLE, type AutomationLimits, type DefaultRoles, type RoleDefaults, type PresetRoleInfo, type BundleSettings } from '@/lib/db'
+import { getProjectAutomation, updateProjectAutomation, hasRole, DEFAULT_LIMITS, DEFAULT_BUNDLE, type AutomationLimits, type DefaultRoles, type RoleDefaults, type PresetRoleInfo, type BundleSettings, recordConfigChanges } from '@/lib/db'
 import { checkProjectSettingsAccess } from '@/lib/project-permissions'
 import { violatesSelfReview, autoAssignAllAgents, agentRoleAvailable } from '@/lib/role-assignment'
 
@@ -157,11 +157,15 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     changed.push(`비밀값(${Object.keys(s).join(',')})`)   // 값은 기록하지 않는다
   }
 
+  const beforeAuto = getProjectAutomation(id)
   try {
     updateProjectAutomation(id, patch, user.id)
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 409 })
   }
+  // 설정 변경 로그 — 자동화 규칙이 바뀐 시점 전후로 작업 결과를 비교할 수 있게. 비밀값(stagingSecrets)은 이름 목록만 담긴다
+  recordConfigChanges('automation', id, beforeAuto as unknown as Record<string, unknown>, getProjectAutomation(id) as unknown as Record<string, unknown>,
+    ['defaultRoles', 'authorAllowlist', 'stagingSecretNames', 'limits', 'staging', 'bundle', 'closeIssueOnMerge'], { projectId: id, actorUserId: user.id })
   logActivity({
     userId: user.id, category: 'project', action: 'update_automation',
     detail: `단계 자동화 설정 변경: ${acc.project.name} — ${changed.join(', ') || '없음'}`,

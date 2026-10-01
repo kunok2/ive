@@ -252,6 +252,11 @@ export interface StatSnapshot {
   waiting: number          // 처리 대기 (에이전트 배정 기다림)
   verifyWaiting: number    // 검증 대기 (사람 검증 기다림)
   confirmWaiting: number   // 확인 대기 (사람 확인 기다림)
+  // 보유(완료 전 전 단계)를 세기 위한 나머지 단계 — 프로젝트 스냅샷에만 채운다
+  dev?: number             // 처리 중 (에이전트·사람)
+  devFail?: number         // 처리 실패 후 멈춤
+  verifying?: number       // 검증 중
+  confirming?: number      // 확인 중
   completed: number
   failed: number
   totalTokens: number

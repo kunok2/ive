@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getAgent, updateAgent, deleteAgent } from '@/lib/db'
+import { getAgent, updateAgent, deleteAgent, recordConfigChanges } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { logActivity } from '@/lib/activity'
 
@@ -21,7 +21,14 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
   const { id } = await params
   const body = await req.json()
+  const before = getAgent(id)
   updateAgent({ ...body, id, userId: user.id })
+  // 설정 변경 로그 — 모델·CLI·휴가가 바뀐 시점 전후로 작업 결과를 비교할 수 있게 남긴다
+  const after = getAgent(id)
+  if (before && after) {
+    recordConfigChanges('agent', id, before as unknown as Record<string, unknown>, after as unknown as Record<string, unknown>,
+      ['cliName', 'modelName', 'maxTurns', 'enabled', 'pausedUntil'], { actorUserId: user.id })
+  }
   logActivity({ userId: user.id, category: 'agent', action: 'update_agent', detail: `개발자 수정: ${body.name || id}`, targetType: 'agent', targetId: id, req })
   return NextResponse.json({ ...body, id })
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
-import { getProject, getProjectAuthToken, getProjectAccess, updateProjectConflictCount, markIssueVerified, touchProjectActivity, getDb, updateExecutionStatus, upsertIssueStageSnapshot } from '@/lib/db'
+import { getProject, getProjectAuthToken, getProjectAccess, updateProjectConflictCount, markIssueVerified, touchProjectActivity, getDb, updateExecutionStatus, upsertIssueStageSnapshot, recordStageEvent } from '@/lib/db'
+import { userActor } from '@/lib/event-actor'
 import { fetchOpenMRs, mergeMR, closeMR, fetchSingleIssue, addIssueLabels, removeIssueLabels } from '@/lib/provider'
 import { logActivity } from '@/lib/activity'
 
@@ -124,6 +125,11 @@ export async function POST(
           'SELECT cached_stage, assignee_username, assignee_name, assignee_avatar, assignee_provider, assignee_git_user_id, issue_title FROM issue_stages WHERE project_id = ? AND issue_iid = ?'
         ).get(id, issueIid) as any
         if (stageRow) {
+          // 사건 로그 — 일괄 병합으로 완료 처리
+          recordStageEvent({
+            projectId: id, issueIid, fromStage: stageRow.cached_stage, toStage: 'done', action: 'bulk_merge',
+            actor: userActor(user), source: 'ui',
+          })
           upsertIssueStageSnapshot(id, issueIid, {
             cachedStage: 'done',
             assigneeUsername: stageRow.assignee_username,

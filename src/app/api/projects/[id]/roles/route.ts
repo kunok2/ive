@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { logActivity } from '@/lib/activity'
-import { getRoster, setRosterEntry, setRosterRates, getDb, type RoleKey } from '@/lib/db'
+import { getRoster, setRosterEntry, setRosterRates, getDb, type RoleKey, recordConfigChanges } from '@/lib/db'
 import { checkProjectSettingsAccess, rosterEligibleAgents } from '@/lib/project-permissions'
 import { agentRoleAvailable } from '@/lib/role-assignment'
 
@@ -86,7 +86,11 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     gitUserId = m?.git_user_id ?? null
   }
 
+  const beforeEntry = getRoster(id).find(r => r.subjectType === subjectType && r.subjectId === subjectId)
   setRosterEntry(id, { subjectType, subjectId, gitUserId, name, avatar, roles }, user.id)
+  // 설정 변경 로그 — 누가 어떤 역할을 맡을 수 있게 됐는지(명부). 대상 = subjectType:subjectId
+  recordConfigChanges('roster', `${subjectType}:${subjectId}`,
+    { roles: beforeEntry?.roles ?? null }, { roles }, ['roles'], { projectId: id, actorUserId: user.id })
   const on = (Object.keys(roles) as RoleKey[]).filter(k => roles[k])
   logActivity({
     userId: user.id, category: 'project', action: 'update_roster',

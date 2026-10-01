@@ -47,7 +47,10 @@ import {
   updateUserOAuthTokens,
   getOAuthProviderRaw,
   completeMergedIssue,
+  recordStageEvent, recordWaitIfChanged, recordIssueLink, SYSTEM_ACTOR,
 } from "../db";
+import { gitActor } from "../event-actor";
+import { recordScannedStageChange } from "./stage-events";
 import { fetchProjectMembers } from "../provider";
 import { decrypt, encrypt } from "../crypto";
 import { removeIssueLabels, addIssueComment, createBranch, getDefaultBranch, closeIssue, fetchSingleIssue, fetchMRByBranch, fetchIssueNotes } from "../provider";
@@ -69,7 +72,7 @@ import { startReportScheduler } from "../report-scheduler";
 import { startChatSessionReaper } from "../chat-agent";
 import fs from "fs";
 import path from "path";
-import { parseIveMetaSessions } from "./formatters";
+import { parseIveMetaSessions, parseIveMetaFixes } from "./formatters";
 import { dispatchStageWorkers, type StageIssue } from "./stage-dispatch";
 import { tickBundles, reopenIfClosedByGit } from "./bundle-deploy";
 import { applyDefaultRoles } from "../role-assignment";
@@ -497,6 +500,17 @@ async function scanProject(project: Project, force: boolean = false) {
           }
           closeStageExecutions(project.id, iid, kind, markers.rejected ? 'failed' : 'success', meta);
         }
+
+        // 사건 로그 — 라벨 변화로 감지한 단계 전이(Git 화면·glab/gh 로 사람이 옮긴 경우). IVE 가 직접 옮긴 전이는 건너뛴다
+        await recordScannedStageChange({
+          project, iid, prevStage, stage,
+          knownActor: anyMarker ? labelActor : undefined,
+          resolveActor: async () => {
+            const lbl = stageLabelFor(project, stage);
+            return lbl ? resolveStageActorAsync(project, lbl, () => fetchIssueLabelEvents(project, iid, decryptedToken)) : null;
+          },
+          assigneeUsername: () => (assigneeInfo ?? getIssueAssigneeUsername(project.id, iid))?.username ?? null,
+        });
       } catch (e) {
         slog.warn(`verify marker update failed (#${iid}):`, (e as Error).message);
       }
@@ -517,6 +531,20 @@ async function scanProject(project: Project, force: boolean = false) {
         });
       } catch (e) {
         slog.warn(`upsertIssueStageSnapshot failed (#${iid}):`, (e as Error).message);
+      }
+
+      // 사건 로그 — 후속 이슈 연결. ive-meta 의 `fixes: #N` 은 "이 작업이 이전 이슈 #N 을 고친다"는 뜻이다
+      try {
+        for (const ref of parseIveMetaFixes(issue.description || '')) {
+          if (ref === iid) continue;
+          const author = issue.author || {};
+          recordIssueLink(project.id, iid, project.id, ref, {
+            kind: 'fixes', source: 'external',
+            actor: gitActor(project, { username: author.username || author.login || null, gitUserId: author.id ?? null }),
+          });
+        }
+      } catch (e) {
+        slog.warn(`issue link record failed (#${iid}):`, (e as Error).message);
       }
 
       // ── 외부 도구 이슈 인식 ──
@@ -763,6 +791,12 @@ async function scanProject(project: Project, force: boolean = false) {
           assigneeGitUserId: null,
           issueTitle: null,
         })
+        // 사건 로그 — 스냅샷은 두 경우 모두 'done' 이지만, 머지 없이 닫힌(버려진) 이슈를 완료로 세지 않도록 구분해 남긴다
+        recordStageEvent({
+          projectId: project.id, issueIid: iid, fromStage: row.cached_stage,
+          toStage: mergeComplete ? 'done' : 'closed', action: mergeComplete ? 'merged' : 'abandoned',
+          actor: SYSTEM_ACTOR, source: 'scanner',
+        })
 
         if (mergeComplete) {
           // completeMergedIssue 가 이미 잔류 활성 execution 을 success 로 마감함.
@@ -840,6 +874,7 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
     // 이 상태는 "사람이 직접 처리 중"이므로 진짜 대기가 아님
     if (assignInfo.mode === 'assignee') {
       slog.info(`[WAIT] Issue #${issue.iid} — assignee 모드, 담당자가 IVE-D 레이블 부여 대기`);
+      recordWaitIfChanged(project.id, issue.iid, 'assignee_mode');
       continue;
     }
 
@@ -854,6 +889,7 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
     );
     if (!requester) {
       slog.info(`[SKIP] Issue #${issue.iid} — 의뢰자 판정 실패 (오너 정보 없음)`);
+      recordWaitIfChanged(project.id, issue.iid, 'requester_unknown');
       waitingCount++;
       continue;
     }
@@ -899,14 +935,17 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
         if (designated && designated.userId !== requester.user.id && !isAgentEligibleForProject(project, designated)) {
           try { setStageWorkerNote(project.id, issue.iid, PROCESSOR_INELIGIBLE_NOTE); } catch { /* ignore */ }
         }
+        recordWaitIfChanged(project.id, issue.iid, 'preferred_not_in_pool', { detail: { agentId: preferredAgentId } });
         continue;
       } else if (!isAgentAvailableNow(a, now)) {
         // 지정 에이전트가 휴가/사용중지 상태 → 다른 에이전트로 자동 전환 금지, 복귀까지 대기
         slog.info(`[WAIT] Issue #${issue.iid} — 지정 작업자 '${a.name}' 휴가/사용중지(${a.enabled === false ? '무기한' : `~${a.pausedUntil}`}), 대기`);
+        recordWaitIfChanged(project.id, issue.iid, 'preferred_paused', { detail: { agentId: a.id } });
         continue;
       } else if (busyAgentIds.has(a.id) || countActiveExecutionsByAgent(a.id) > 0) {
         // 지정 에이전트가 바쁨 → 이번 스캔 스킵, 다음 스캔에서 재시도
         slog.info(`[WAIT] Issue #${issue.iid} — 지정 작업자 '${a.name}' 작업 중, 대기`);
+        recordWaitIfChanged(project.id, issue.iid, 'preferred_busy', { detail: { agentId: a.id } });
         continue;
       } else {
         availableAgent = a;
@@ -959,6 +998,7 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
     } else {
       waitingCount++;
       slog.info(`[SKIP] No available agent for Issue #${issue.iid}. Will retry in next scan.`);
+      recordWaitIfChanged(project.id, issue.iid, 'no_agent', { detail: { poolSize: userAgents.length } });
     }
   }
   slog.info(`processIssues result: assigned=${assignedCount}, waiting=${waitingCount}, busyAgents=[${[...busyAgentIds].join(',')}]`);

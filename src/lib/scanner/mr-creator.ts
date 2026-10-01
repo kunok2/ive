@@ -6,7 +6,8 @@ const slog = getLogger("Scanner");
 import fs from "fs";
 import { promisify } from "util";
 import { Project, Agent } from "@/types";
-import { updateExecutionStatus, updateAgentStatus, getAssigneeAuto, getPresetRoles, getProjectAutomation } from "../db";
+import { updateExecutionStatus, updateAgentStatus, getAssigneeAuto, getPresetRoles, getProjectAutomation, recordStageEvent } from "../db";
+import { agentActor, executionPromptVersion } from "../event-actor";
 import { addIssueLabels, removeIssueLabels } from "../provider";
 import { notifyStageTransition } from "../slack-notify";
 import { runAutoAssign } from "./auto-assign";
@@ -180,6 +181,13 @@ export async function commitPushAndCreateMR(params: {
     try {
       await removeIssueLabels(project, iid, token, [project.labelDev || 'IVE-D']);
       await addIssueLabels(project, iid, token, [project.labelVerifyWait || 'IVE-W']);
+      // 사건 로그 — 에이전트 처리 완료(처리 → 검증대기). 다음 스캔이 같은 전이를 감지해도 중복 기록하지 않는다
+      recordStageEvent({
+        projectId: project.id, issueIid: iid, fromStage: 'dev', toStage: 'verify_waiting', action: 'complete',
+        actor: agentActor(agent, executionId), source: 'worker', executionId,
+        promptVersion: executionPromptVersion(executionId),
+        detail: { changes: true },
+      });
     } catch (e) { slog.warn({ err: e }, `Label switch failed:`); }
     log("작업 완료 → 검증대기 (IVE-W). 검증자가 검증시작을 클릭하면 검증이 시작됩니다.", 'system');
     updateExecutionStatus(executionId, 'success', new Date().toISOString());
@@ -213,6 +221,13 @@ export async function commitPushAndCreateMR(params: {
     try {
       await removeIssueLabels(project, iid, token, [project.labelDev || 'IVE-D']);
       await addIssueLabels(project, iid, token, [project.labelVerifyWait || 'IVE-W']);
+      // 사건 로그 — 에이전트 처리 완료(처리 → 검증대기). 다음 스캔이 같은 전이를 감지해도 중복 기록하지 않는다
+      recordStageEvent({
+        projectId: project.id, issueIid: iid, fromStage: 'dev', toStage: 'verify_waiting', action: 'complete',
+        actor: agentActor(agent, executionId), source: 'worker', executionId,
+        promptVersion: executionPromptVersion(executionId),
+        detail: { changes: false },
+      });
     } catch (e) { slog.warn({ err: e }, `Label switch failed:`); }
     updateExecutionStatus(executionId, 'success', new Date().toISOString());
     await maybeAutoAssign(project, iid, token, log);

@@ -8,10 +8,21 @@
 import { Project } from '@/types'
 import { TRANSITIONS, staleStageLabelsToRemove } from './stage-transitions'
 import { addIssueLabels, removeIssueLabels, fetchSingleIssue } from './provider'
-import { stageFromLabels, hasActiveExecution, upsertIssueStageSnapshot } from './db'
+import { stageFromLabels, hasActiveExecution, upsertIssueStageSnapshot, recordStageEvent, SYSTEM_ACTOR, type EventActor, type EventSource } from './db'
+import { executionPromptVersion } from './event-actor'
+
+/** 사건 로그에 남길 맥락 — 누가(에이전트·system) 어떤 실행으로 옮겼는지. */
+export interface StageMoveMeta {
+  actor?: EventActor
+  source?: EventSource
+  executionId?: string | null
+  reason?: string | null
+  detail?: Record<string, unknown> | null
+}
 
 export async function applyStageAction(
   project: Project, iid: number, token: string, stage: string, action: string,
+  meta: StageMoveMeta = {},
 ): Promise<string | null> {
   const transition = (TRANSITIONS[stage] || []).find(t => t.action === action)
   if (!transition) throw new Error(`허용되지 않는 전이: ${stage} → ${action}`)
@@ -36,6 +47,12 @@ export async function applyStageAction(
     assigneeProvider: project.provider,
     assigneeGitUserId: a?.id != null ? String(a.id) : null,
     issueTitle: issue?.title || null,
+  })
+  recordStageEvent({
+    projectId: project.id, issueIid: iid, fromStage: stage, toStage: newStage, action,
+    actor: meta.actor ?? SYSTEM_ACTOR, source: meta.source ?? 'worker',
+    executionId: meta.executionId ?? null, promptVersion: executionPromptVersion(meta.executionId),
+    reason: meta.reason ?? null, detail: meta.detail ?? null,
   })
   return newStage
 }

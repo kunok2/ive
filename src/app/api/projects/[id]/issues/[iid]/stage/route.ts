@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb, getProject, getProjectAuthToken, getProjectAccess, hasActiveExecution, stageFromLabels, markIssueVerifyStarted, markIssueVerified, markIssueVerifyRejected, markIssueConfirmed, markIssueConfirmStarted, resetIssueCycleMarkers, resetIssueScheduledAt, recordIssueScheduledAt, touchProjectActivity, assignIssueAtomically, getAssignModeMap, getIssueScheduledAt, isIssueAssignee, isIssueAuthor, upsertIssueStageSnapshot, updateExecutionStatus, getVerifyWaitingCount, updateProjectLastChecked, getPresetRoles } from '@/lib/db';
+import { getDb, getProject, getProjectAuthToken, getProjectAccess, hasActiveExecution, stageFromLabels, markIssueVerifyStarted, markIssueVerified, markIssueVerifyRejected, markIssueConfirmed, markIssueConfirmStarted, resetIssueCycleMarkers, resetIssueScheduledAt, recordIssueScheduledAt, touchProjectActivity, assignIssueAtomically, getAssignModeMap, getIssueScheduledAt, isIssueAssignee, isIssueAuthor, upsertIssueStageSnapshot, updateExecutionStatus, getVerifyWaitingCount, updateProjectLastChecked, getPresetRoles, recordStageEvent } from '@/lib/db';
+import { userActor } from '@/lib/event-actor';
 import { triggerScan } from '@/lib/scanner';
 import { applyRoleAssignee } from '@/lib/role-assignee';
 import { notifyStageTransition } from '@/lib/slack-notify';
@@ -373,6 +374,12 @@ export async function POST(
       assigneeProvider: project.provider,
       assigneeGitUserId: assigneeInfo.gitUserId,
       issueTitle: issue?.title || null,
+    });
+
+    // 사건 로그 — 화면 버튼은 이전 단계(stage)·작업자(로그인 사용자)를 확실히 아는 경로다
+    recordStageEvent({
+      projectId, issueIid: Number(iid), fromStage: stage, toStage: newStage, action,
+      actor: userActor(user), source: 'ui',
     });
 
     // 활동 로그 기록

@@ -20,7 +20,9 @@ import {
   touchProjectActivity,
   upsertIssueStageSnapshot,
   getAvailableAgentsByUser,
+  recordStageEvent,
 } from "../db";
+import { agentActor } from "../event-actor";
 import { addIssueLabels, removeIssueLabels } from "../provider";
 import { fetchGitLabIssueNotes } from "../gitlab";
 import { fetchGitHubIssueNotes } from "../github";
@@ -105,6 +107,11 @@ function devStageSpec(waitingSince?: string | null): StageKindSpec<DevPrep> {
             issueTitle: issue.title || null,
           });
         } catch (e) { slog.warn({ err: e }, `Failed to update cached_stage to dev for #${iid}:`); }
+        // 사건 로그 — 에이전트 배정으로 처리 시작(대기 → 처리). 작업자·실행을 아는 자리에서 남긴다
+        recordStageEvent({
+          projectId: project.id, issueIid: iid, fromStage: 'waiting', toStage: 'dev', action: 'start_dev',
+          actor: agentActor(agent, executionId), source: 'scanner', executionId,
+        });
 
         // 레이블 전환: IVE-S 제거, IVE-D 부착 (개발 시작)
         try {

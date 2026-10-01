@@ -22,6 +22,7 @@ import {
 } from '../db'
 import { addIssueComment, fetchSingleIssue } from '../provider'
 import { applyStageAction } from '../stage-apply'
+import { agentActor } from '../event-actor'
 import { maskSecrets } from '../secret-mask'
 import { notifyStageTransition, getIveBaseUrl } from '../slack-notify'
 import { buildConfirmPrompt, resolveEditable, CONFIRM_EDITABLE_DEFAULT, CONFIRM_RESULT_MARKER } from '../role-prompts'
@@ -286,7 +287,7 @@ function confirmSpec(input: ConfirmInput): StageKindSpec<ConfirmPrep> {
       setStageWorkerNote(project.id, iid, null)
 
       if (input.stage === 'confirm_waiting') {
-        const next = await applyStageAction(project, iid, token, 'confirm_waiting', 'start_confirmation')
+        const next = await applyStageAction(project, iid, token, 'confirm_waiting', 'start_confirmation', { actor: agentActor(ctx.agent, executionId), executionId })
         markIssueConfirmStarted(project.id, iid)
         log(`단계: 확인대기 → ${next === 'confirming' ? '확인 중' : next}`, 'system')
       }
@@ -392,7 +393,7 @@ function confirmSpec(input: ConfirmInput): StageKindSpec<ConfirmPrep> {
 
       const move = async (action: 'accept' | 'retry', label: string) => {
         try {
-          await applyStageAction(project, iid, token, 'confirming', action)
+          await applyStageAction(project, iid, token, 'confirming', action, { actor: agentActor(agent, executionId), executionId, reason: result.verdict, detail: result.reason ? { reason: String(result.reason).slice(0, 500) } : null })
           log(label, 'system')
           return true
         } catch (e) {

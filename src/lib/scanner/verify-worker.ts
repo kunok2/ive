@@ -24,6 +24,7 @@ import {
 } from '../db'
 import { addIssueComment, fetchSingleIssue } from '../provider'
 import { applyStageAction } from '../stage-apply'
+import { agentActor } from '../event-actor'
 import { applyRoleAssignee } from '../role-assignee'
 import { maskSecrets } from '../secret-mask'
 import { getIveBaseUrl } from '../slack-notify'
@@ -207,7 +208,7 @@ function verifySpec(input: VerifyInput): StageKindSpec<VerifyPrep> {
       setStageWorkerNote(project.id, iid, null)
 
       if (input.stage === 'verify_waiting') {
-        const next = await applyStageAction(project, iid, token, 'verify_waiting', 'start_verification')
+        const next = await applyStageAction(project, iid, token, 'verify_waiting', 'start_verification', { actor: agentActor(ctx.agent, ctx.executionId), executionId: ctx.executionId })
         markIssueVerifyStarted(project.id, iid)
         log(`단계: 검증대기 → ${next === 'verifying' ? '검증 중' : next}`, 'system')
       }
@@ -330,7 +331,7 @@ function verifySpec(input: VerifyInput): StageKindSpec<VerifyPrep> {
 
       const move = async (action: 'approve' | 'reject', label: string) => {
         try {
-          await applyStageAction(project, iid, token, 'verifying', action)
+          await applyStageAction(project, iid, token, 'verifying', action, { actor: agentActor(agent, executionId), executionId, reason: result.verdict, detail: result.reason ? { reason: String(result.reason).slice(0, 500) } : null })
           log(label, 'system')
           return true
         } catch (e) {

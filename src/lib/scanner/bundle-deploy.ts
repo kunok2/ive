@@ -146,7 +146,7 @@ async function returnToProcessor(project: Project, token: string, item: BundleIt
     const body = `## ${title}\n\n${detail}\n\n- ${isKo ? '묶음' : 'Bundle'} #${bundle.id} · ${isKo ? '대상' : 'target'} \`${bundle.targetBranch}\` · ${isKo ? '검증한 커밋' : 'verified commit'} \`${item.sourceSha.slice(0, 12)}\``
     await addIssueComment(project, iid, token, body)
     if (stage === 'confirm_waiting') {
-      await applyStageAction(project, iid, token, 'confirm_waiting', 'return_to_dev')
+      await applyStageAction(project, iid, token, 'confirm_waiting', 'return_to_dev', { source: 'bundle', reason: 'bundle_failed', detail: { bundleId: bundle.id, title } })
       resetIssueScheduledAt(project.id, iid)
     } else {
       setStageWorkerNote(project.id, iid, `${title} — ${isKo ? '단계가 이미 바뀌어 옮기지 않았습니다' : 'stage already changed'}`)

@@ -5,8 +5,8 @@ import { kstDateToUTCISO } from '../date-utils'
 
 export function createSnapshot(s: StatSnapshot) {
   getDb().prepare(
-    'INSERT INTO stat_snapshots (id, entity_type, entity_id, timestamp, running, waiting, verify_waiting, confirm_waiting, completed, failed, total_tokens, cost_usd) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-  ).run(s.id, s.entityType, s.entityId, s.timestamp, s.running, s.waiting, s.verifyWaiting, s.confirmWaiting, s.completed, s.failed, s.totalTokens, s.costUsd)
+    'INSERT INTO stat_snapshots (id, entity_type, entity_id, timestamp, running, waiting, verify_waiting, confirm_waiting, dev, dev_fail, verifying, confirming, completed, failed, total_tokens, cost_usd) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(s.id, s.entityType, s.entityId, s.timestamp, s.running, s.waiting, s.verifyWaiting, s.confirmWaiting, s.dev ?? 0, s.devFail ?? 0, s.verifying ?? 0, s.confirming ?? 0, s.completed, s.failed, s.totalTokens, s.costUsd)
 }
 
 export function getSnapshots(entityType: 'project' | 'agent' | 'verifier', entityId: string, limit: number = 60): StatSnapshot[] {

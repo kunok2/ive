@@ -70,6 +70,27 @@ export function parseIveMetaSessions(body: string): IveMetaSession[] {
 }
 
 /**
+ * ive-meta 블록의 `fixes:` 줄 — "이 작업이 고치는 이전 이슈" 번호들(같은 프로젝트).
+ * 예: `fixes: #412, #418`. 블록이 여러 개면 모두 모은다. 중복·0 이하는 뺀다.
+ * 보고서의 "완료 후 뒤집힘"(나중 작업이 이전 결과를 고침)을 판정하는 근거가 된다.
+ */
+export function parseIveMetaFixes(body: string): number[] {
+  if (!body) return [];
+  const out = new Set<number>();
+  for (const match of body.matchAll(/<!--\s*ive-meta\s([\s\S]*?)-->/g)) {
+    for (const line of match[1].split('\n')) {
+      const m = line.match(/^\s*fixes\s*:\s*(.+)$/i);
+      if (!m) continue;
+      for (const n of m[1].matchAll(/#?(\d+)/g)) {
+        const v = Number(n[1]);
+        if (Number.isInteger(v) && v > 0) out.add(v);
+      }
+    }
+  }
+  return [...out];
+}
+
+/**
  * 이슈 본문에서 첫 <!-- ive-meta ... --> 블록을 파싱한다 (하위호환 단일 진입점).
  * 다세션 처리는 parseIveMetaSessions 를 사용한다.
  */

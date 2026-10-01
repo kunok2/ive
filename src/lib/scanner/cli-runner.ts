@@ -3,6 +3,9 @@
  * (CLI 경로 해석·명령/인자 조립은 ../cli-invocation 으로 통합)
  */
 import { spawn } from "child_process";
+import fs from "fs";
+import os from "os";
+import path from "path";
 import { Project, Agent } from "@/types";
 import { getExecution, getSystemSetting, updateExecutionPid, updateExecutionTokens } from "../db";
 import { setToolActivity, setThinking, clearActivity } from "../tool-activity";
@@ -65,7 +68,11 @@ export async function runCliProcess(
   const isOpenCode = agent.cliName === 'opencode';
   const isCodex = agent.cliName === 'codex';
   const isAgy = agent.cliName === 'agy';
+  // 모델을 따로 지정하지 않은 codex 는 자기 설정 파일(config.toml)의 모델로 돈다. 이벤트에는 모델이 실리지 않으므로
+  // 그 파일에서 읽어 기록한다 — 비어 두면 보고서의 모델별 결과 평가에서 이 실행들이 통째로 빠진다.
   const systemCliModel = agent.modelName || getSystemSetting(`cli.${agent.cliName}.model`);
+  // 실행 명령에는 넣지 않고(codex 는 종전대로 자기 설정으로 돈다) 기록에만 쓴다.
+  const recordedFallbackModel = systemCliModel || (isCodex ? readCodexConfigModel() : '');
   const conversationParts: string[] = [];
   const startTime = Date.now();
 
@@ -386,7 +393,7 @@ export async function runCliProcess(
       log(`CLI 종료: code=${code}, signal=${signal}`, code === 0 ? 'system' : 'error');
       // 토큰/비용/턴 DB 저장
       const finalTurns = totalTurns > 0 ? totalTurns : assistantTurnCount;
-      const finalModel = detectedModel || systemCliModel || undefined;
+      const finalModel = detectedModel || recordedFallbackModel || undefined;
       if (totalInputTokens || totalOutputTokens || totalCostUsd || finalTurns) {
         const finalCost = totalCostUsd > 0
           ? totalCostUsd
@@ -444,4 +451,25 @@ export async function runCliProcess(
 
   const durationSeconds = Math.floor((Date.now() - startTime) / 1000);
   return { durationSeconds, conversationParts };
+}
+
+/** codex 설정 파일의 최상위 `model = "..."` 값. 섹션([...]) 안의 model 은 그 섹션 설정이라 보지 않는다. */
+export function parseCodexConfigModel(toml: string): string | null {
+  for (const raw of toml.split('\n')) {
+    const line = raw.trim();
+    if (line.startsWith('[')) break;
+    const m = line.match(/^model\s*=\s*["']([^"']+)["']/);
+    if (m) return m[1].trim() || null;
+  }
+  return null;
+}
+
+/** 실행 환경의 codex 설정에서 기본 모델을 읽는다. 없거나 못 읽으면 빈 문자열. */
+function readCodexConfigModel(): string {
+  try {
+    const home = process.env.CODEX_HOME || path.join(os.homedir(), '.codex');
+    return parseCodexConfigModel(fs.readFileSync(path.join(home, 'config.toml'), 'utf8')) || '';
+  } catch {
+    return '';
+  }
 }

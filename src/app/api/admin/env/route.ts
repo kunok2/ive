@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
-import { getSystemSettings, setSystemSettings } from '@/lib/db'
+import { getSystemSettings, setSystemSettings, getSystemSetting, recordConfigChanges } from '@/lib/db'
 import { logActivity } from '@/lib/activity'
 import { reloadLogger, normalizeConfig } from '@/lib/logger'
 
@@ -39,7 +39,18 @@ export async function POST(req: Request) {
     }
   }
 
+  // 설정 변경 로그 — 결과에 영향을 주는 칸(CLI 기본 모델·단계 동시 실행 수 등)만. 비밀값 칸은 남기지 않는다
+  const trackedKeys = Object.keys(filteredSettings).filter(k => (k.startsWith('cli.') || k.startsWith('stage.')) && !PASSWORD_KEYS.includes(k))
+  const beforeTracked: Record<string, unknown> = {}
+  for (const k of trackedKeys) beforeTracked[k] = getSystemSetting(k)
+
   setSystemSettings(filteredSettings)
+
+  if (trackedKeys.length > 0) {
+    const afterTracked: Record<string, unknown> = {}
+    for (const k of trackedKeys) afterTracked[k] = getSystemSetting(k)
+    recordConfigChanges('system', 'system', beforeTracked, afterTracked, trackedKeys, { actorUserId: user.id })
+  }
 
   // If any log.* setting changed, hot-reload the logger so new policy
   // takes effect without a restart.

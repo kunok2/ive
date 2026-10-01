@@ -1447,6 +1447,84 @@ function migrateStageAutomation(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_stage_bundle_items_bundle ON stage_bundle_items(bundle_id);
   `)
 
+  // 사건 로그 — 보고서·평가를 나중에 캐낼 원재료. 추가만 하고 고치거나 지우지 않는다(lib/db/events.ts).
+  //   issue_events  : 단계 전이(stage)·배정 대기 사유(wait)·후속 이슈 연결(link). 작업자는 사건마다 남긴다
+  //   config_events : 결과에 영향을 주는 설정 변경(에이전트 모델·CLI, 시스템 CLI 모델, 자동화, 명부)
+  //   person_aliases: 같은 사람의 여러 이름(표시 이름·Git 계정) → IVE 사용자
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS issue_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      occurred_at TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      issue_iid INTEGER NOT NULL,
+      event TEXT NOT NULL,
+      from_stage TEXT DEFAULT NULL,
+      to_stage TEXT DEFAULT NULL,
+      action TEXT DEFAULT NULL,
+      actor_type TEXT NOT NULL DEFAULT 'unknown',
+      actor_user_id TEXT DEFAULT NULL,
+      actor_git_username TEXT DEFAULT NULL,
+      actor_agent_id TEXT DEFAULT NULL,
+      actor_model TEXT DEFAULT NULL,
+      source TEXT NOT NULL,
+      execution_id TEXT DEFAULT NULL,
+      prompt_version TEXT DEFAULT NULL,
+      reason TEXT DEFAULT NULL,
+      ref_project_id TEXT DEFAULT NULL,
+      ref_issue_iid INTEGER DEFAULT NULL,
+      detail TEXT DEFAULT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_issue_events_issue ON issue_events(project_id, issue_iid, occurred_at);
+    CREATE INDEX IF NOT EXISTS idx_issue_events_time ON issue_events(occurred_at);
+    CREATE INDEX IF NOT EXISTS idx_issue_events_kind ON issue_events(event, occurred_at);
+
+    CREATE TABLE IF NOT EXISTS config_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      occurred_at TEXT NOT NULL,
+      scope TEXT NOT NULL,
+      project_id TEXT DEFAULT NULL,
+      target_id TEXT NOT NULL,
+      field TEXT NOT NULL,
+      old_value TEXT DEFAULT NULL,
+      new_value TEXT DEFAULT NULL,
+      actor_user_id TEXT DEFAULT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_config_events_target ON config_events(scope, target_id, occurred_at);
+    CREATE INDEX IF NOT EXISTS idx_config_events_time ON config_events(occurred_at);
+
+    CREATE TABLE IF NOT EXISTS person_aliases (
+      alias TEXT NOT NULL COLLATE NOCASE,
+      kind TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      source TEXT NOT NULL DEFAULT 'auto',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (alias, kind)
+    );
+    CREATE INDEX IF NOT EXISTS idx_person_aliases_user ON person_aliases(user_id);
+  `)
+  // 사용자 표에서 자동으로 알 수 있는 별칭을 채운다(INSERT OR IGNORE — 관리자가 고친 연결은 그대로).
+  // 표시 이름이 겹치는 사용자들은 누구인지 정할 수 없으므로 이름 별칭을 만들지 않는다.
+  try {
+    db.exec(`
+      INSERT OR IGNORE INTO person_aliases (alias, kind, user_id, source)
+        SELECT TRIM(name), 'name', id, 'auto' FROM users
+        WHERE name IS NOT NULL AND TRIM(name) <> ''
+          AND TRIM(name) NOT IN (SELECT TRIM(name) FROM users GROUP BY TRIM(name) HAVING COUNT(*) > 1);
+      INSERT OR IGNORE INTO person_aliases (alias, kind, user_id, source)
+        SELECT TRIM(gitlab_username), 'gitlab', id, 'auto' FROM users
+        WHERE gitlab_username IS NOT NULL AND TRIM(gitlab_username) <> '';
+      INSERT OR IGNORE INTO person_aliases (alias, kind, user_id, source)
+        SELECT TRIM(github_username), 'github', id, 'auto' FROM users
+        WHERE github_username IS NOT NULL AND TRIM(github_username) <> '';
+    `)
+  } catch (e) { console.warn('[DB] person_aliases sync skipped:', (e as Error).message) }
+  // 보유 건수를 모든 미완료 단계로 세기 위한 스냅샷 칸(종전에는 대기 3단계만 셌다)
+  try { db.exec(`ALTER TABLE stat_snapshots ADD COLUMN dev INTEGER NOT NULL DEFAULT 0`) } catch { /* 이미 존재 */ }
+  try { db.exec(`ALTER TABLE stat_snapshots ADD COLUMN dev_fail INTEGER NOT NULL DEFAULT 0`) } catch { /* 이미 존재 */ }
+  try { db.exec(`ALTER TABLE stat_snapshots ADD COLUMN verifying INTEGER NOT NULL DEFAULT 0`) } catch { /* 이미 존재 */ }
+  try { db.exec(`ALTER TABLE stat_snapshots ADD COLUMN confirming INTEGER NOT NULL DEFAULT 0`) } catch { /* 이미 존재 */ }
+
   // 이행: 지금 검증자 목록에 자동으로 보이던 Git 멤버를 검증 역할로 명부에 넣는다.
   // INSERT OR IGNORE 라 매 기동마다 돌아도 안전하다 — 사람이 역할을 바꾸거나 뺀 줄은 그대로 남는다.
   db.exec(`

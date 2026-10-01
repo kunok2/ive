@@ -16,7 +16,7 @@ import { Project, Agent, isAgentAvailableNow } from '@/types'
 import {
   getPresetRoles, getAgent, countActiveExecutionsByAgent, getProjectAutomation, getStagingSecrets,
   getSystemSetting, setStageWorkerNote, getStageWorkerNote, getIssueAutomationApproval, getRoster, getDb, hasRole,
-  getLatestBundleItem, getBundle, getUserById, getProjectAccess, getIssueIntakeChannel,
+  getLatestBundleItem, getBundle, getUserById, getProjectAccess, getIssueIntakeChannel, recordWaitIfChanged,
 } from '../db'
 import { isBotName } from '../git-bot'
 import { extractIveAuthorId } from '../ive-author'
@@ -36,7 +36,11 @@ const lastCheckAt = new Map<string, number>()
 export interface StageIssue { issue: any; stage: string }
 
 function note(projectId: string, iid: number, text: string | null) {
-  if (getStageWorkerNote(projectId, iid) !== text) setStageWorkerNote(projectId, iid, text)
+  if (getStageWorkerNote(projectId, iid) !== text) {
+    setStageWorkerNote(projectId, iid, text)
+    // 사건 로그 — 검증·확인 작업자를 띄우지 못한 사유(바뀔 때만)
+    if (text) recordWaitIfChanged(projectId, iid, 'stage_dispatch', { detail: { note: text } })
+  }
 }
 
 function globalCap(kind: StageKind): number {
