@@ -7,6 +7,7 @@ import { decrypt } from './crypto'
 import { defaultLocale } from '@/i18n/config'
 import { Agent, Project } from '@/types'
 import { resolveCliPath, buildCliInvocation } from './cli-invocation'
+import { stripBenignClaudeStderr } from './scanner/cli-noise'
 
 const execFile = promisify(require('child_process').execFile)
 
@@ -360,7 +361,8 @@ export async function runChatAgentWithCallback(
 
     let lastStderr = ''
     child.stderr?.on('data', (data: Buffer) => {
-      const msg = data.toString().trim()
+      const raw = data.toString()
+      const msg = (cliName === 'claude' ? stripBenignClaudeStderr(raw) : raw).trim()
       if (msg) { lastStderr = (lastStderr + '\n' + msg).slice(-600); console.warn(`[Chat #${issueIid}] stderr: ${msg}`) }
     })
 
@@ -450,7 +452,8 @@ export async function* runChatAgent(opts: ChatAgentOptions): AsyncGenerator<{ ty
 
     let lastStderr2 = ''
     child.stderr?.on('data', (data: Buffer) => {
-      const msg = data.toString().trim()
+      const raw = data.toString()
+      const msg = (cliName === 'claude' ? stripBenignClaudeStderr(raw) : raw).trim()
       if (msg) { lastStderr2 = (lastStderr2 + '\n' + msg).slice(-600); console.warn(`[Chat #${issueIid}] stderr: ${msg}`) }
     })
 

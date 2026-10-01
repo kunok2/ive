@@ -19,7 +19,7 @@ import {
   formatStreamEventMarkdown,
   formatToolInput,
 } from "./formatters";
-import { stripBenignOpencodeStderr, stripBenignAgyStderr, detectRateLimit } from "./cli-noise";
+import { stripBenignOpencodeStderr, stripBenignAgyStderr, stripBenignClaudeStderr, detectRateLimit } from "./cli-noise";
 
 // resolveCliPath는 cli-invocation으로 이동. 기존 import 경로(execute.ts) 호환을 위해 re-export.
 export { resolveCliPath };
@@ -334,12 +334,14 @@ export async function runCliProcess(
       resetIdleTimer();
       const raw = data.toString();
       // CLI별 양성 배너는 경고 로그/실패진단 양쪽에서 제외한다.
-      // (opencode: DB 마이그레이션 / agy: 배너·업데이트 안내)
+      // (opencode: DB 마이그레이션 / agy: 배너·업데이트 안내 / claude: 미신뢰 워크스페이스 허용목록 무시)
       const cleaned = isOpenCode
         ? stripBenignOpencodeStderr(raw)
         : isAgy
           ? stripBenignAgyStderr(raw)
-          : raw;
+          : agent.cliName === 'claude'
+            ? stripBenignClaudeStderr(raw)
+            : raw;
       stderrBuffer += cleaned;
       if (stderrBuffer.length > STDERR_BUFFER_MAX) {
         stderrBuffer = stderrBuffer.slice(-STDERR_BUFFER_MAX);

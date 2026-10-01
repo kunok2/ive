@@ -32,6 +32,18 @@ const AGY_BENIGN_STDERR: RegExp[] = [
   /loaded cached credentials/i,
 ];
 
+// ──────────────── claude 양성 stderr ────────────────
+// 클론한 저장소에 .claude/settings.json(permissions.allow)이 커밋돼 있으면, 신뢰 다이얼로그를
+// 거친 적 없는 워크스페이스라 그 허용 목록을 무시한다는 경고를 매 실행 찍는다. IVE는
+// --dangerously-skip-permissions 로 실행하므로 허용 목록 무시는 동작에 영향이 없다.
+//   "Ignoring 22 permissions.allow entries from .claude/settings.json: this workspace has not
+//    been trusted. Run Claude Code interactively here once and accept the trust dialog, or set
+//    projects[...].hasTrustDialogAccepted: true in ~/.claude.json."
+const CLAUDE_BENIGN_STDERR: RegExp[] = [
+  /^ignoring \d+ permissions\.\w+ entr(?:y|ies) from .*has not been trusted/i,
+  /^run claude code interactively here once and accept the trust dialog/i,
+];
+
 function stripBenignLines(raw: string, patterns: RegExp[]): string {
   return raw
     .split('\n')
@@ -45,6 +57,10 @@ function stripBenignLines(raw: string, patterns: RegExp[]): string {
 
 export function stripBenignOpencodeStderr(raw: string): string {
   return stripBenignLines(raw, OPENCODE_BENIGN_STDERR);
+}
+
+export function stripBenignClaudeStderr(raw: string): string {
+  return stripBenignLines(raw, CLAUDE_BENIGN_STDERR);
 }
 
 export function stripBenignAgyStderr(raw: string): string {

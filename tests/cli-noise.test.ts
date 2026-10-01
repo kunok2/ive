@@ -17,8 +17,31 @@ import { describe, it, expect } from 'vitest'
 import {
   stripBenignAgyStderr,
   stripBenignOpencodeStderr,
+  stripBenignClaudeStderr,
   detectRateLimit,
 } from '@/lib/scanner/cli-noise'
+
+describe('stripBenignClaudeStderr', () => {
+  it('B-1: 미신뢰 워크스페이스 허용목록 무시 경고 제거 (한 줄/줄바꿈 모두)', () => {
+    const oneLine = 'Ignoring 22 permissions.allow entries from .claude/settings.json: this workspace has not been trusted. Run Claude Code interactively here once and accept the trust dialog, or set projects["/app/workspaces/x/issue-1794"].hasTrustDialogAccepted: true in /home/ive/.claude.json.'
+    expect(stripBenignClaudeStderr(oneLine).trim()).toBe('')
+    const wrapped = [
+      'Ignoring 1 permissions.allow entry from .claude/settings.json: this workspace has not been trusted.',
+      'Run Claude Code interactively here once and accept the trust dialog, or set projects["/w"].hasTrustDialogAccepted: true in /home/ive/.claude.json.',
+    ].join('\n')
+    expect(stripBenignClaudeStderr(wrapped).trim()).toBe('')
+  })
+
+  it('B-2: 진짜 오류는 보존', () => {
+    const raw = [
+      'Ignoring 3 permissions.allow entries from .claude/settings.json: this workspace has not been trusted.',
+      'Error: Invalid API key · Please run /login',
+    ].join('\n')
+    const out = stripBenignClaudeStderr(raw)
+    expect(out).toContain('Invalid API key')
+    expect(out).not.toContain('Ignoring')
+  })
+})
 
 describe('stripBenignAgyStderr', () => {
   it('B-1: gemini 양성 배너 제거', () => {
