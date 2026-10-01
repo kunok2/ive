@@ -1,5 +1,6 @@
 'use client'
 
+import type { PresetRole, RoleAgentCandidate } from '@/components/issue/RoleAvatarBar'
 import { useTranslations } from 'next-intl'
 import RoleAvatarBar from '@/components/issue/RoleAvatarBar'
 import { macroIndexFromStage } from '@/app/issues/[projectId]/[iid]/_components/StageProgress'
@@ -13,7 +14,7 @@ interface GitMember {
   avatarUrl: string
 }
 
-type RolePresetPayload = { mode: 'creator' | 'auto' | 'specific'; userId: string | null; username: string | null }
+type RolePresetPayload = PresetRole
 
 interface IssueCardProps {
   issue: IveIssue
@@ -29,6 +30,7 @@ interface IssueCardProps {
   gitMembers: GitMember[]
   /** 확인자 후보 — IVE 사용자(미지정 시 gitMembers fallback). */
   confirmerMembers?: GitMember[]
+  roleAgents?: { verify: RoleAgentCandidate[]; confirm: RoleAgentCandidate[]; process: RoleAgentCandidate[] }
   locale?: string
   timezone?: string
   onToggleSelect: (iid: number) => void
@@ -53,6 +55,7 @@ export default function IssueCard({
   closing,
   gitMembers,
   confirmerMembers,
+  roleAgents,
   locale,
   timezone,
   onToggleSelect,
@@ -124,6 +127,12 @@ export default function IssueCard({
           </button>
         )}
       </div>
+      {issue.stageWorkerNote && (
+        <div className="mb-1.5 px-2 py-1 rounded-lg bg-ive-amber/10 border border-ive-amber/20 text-xs text-ive-amber truncate" title={issue.stageWorkerNote}>
+          <i className="fa-solid fa-robot mr-1" />
+          {issue.stageWorkerNote}
+        </div>
+      )}
       {issue.stage === 'dev_fail' && issue.failReason && (
         <div className="mb-1.5 px-2 py-1 rounded-lg bg-ive-red/10 border border-ive-red/20 text-xs text-ive-red">
           <i className="fa-solid fa-triangle-exclamation mr-1" />
@@ -139,6 +148,8 @@ export default function IssueCard({
             currentMacro={macroIndexFromStage(issue.stage)}
             gitMembers={gitMembers}
             confirmerMembers={confirmerMembers}
+            verifierAgents={roleAgents?.verify}
+            confirmerAgents={roleAgents?.confirm}
             creator={{
               name: issue.author?.name ?? null,
               avatar: issue.author?.avatar ?? null,

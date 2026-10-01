@@ -165,3 +165,22 @@ export async function downloadGitLabUpload(
   const buffer = Buffer.from(await res.arrayBuffer());
   return { buffer, contentType };
 }
+
+/**
+ * ancestor 커밋이 descendant 커밋의 조상(같은 커밋 포함)인가.
+ * `git merge-base --is-ancestor A B` 와 같은 판정: merge_base(A, B) == A.
+ * GitLab API: GET /projects/:id/repository/merge_base?refs[]=A&refs[]=B
+ * @returns true/false, 판정 불가(커밋 없음·권한)면 null
+ */
+export async function isGitLabAncestorCommit(
+  project: Project, decryptedToken: string, ancestor: string, descendant: string,
+): Promise<boolean | null> {
+  const headers = getAuthHeaders(project, decryptedToken);
+  const q = `refs[]=${encodeURIComponent(ancestor)}&refs[]=${encodeURIComponent(descendant)}`;
+  const res = await fetch(apiUrl(project, `/repository/merge_base?${q}`), { headers });
+  if (!res.ok) return null;
+  const data = await res.json().catch(() => null);
+  const base = String(data?.id || '');
+  if (!base) return null;
+  return base.startsWith(ancestor) || ancestor.startsWith(base);
+}

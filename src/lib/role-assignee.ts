@@ -16,7 +16,7 @@ import { Project, User } from '@/types'
 import { updateIssue, fetchSingleIssue, addIssueComment } from './provider'
 import { runAutoAssign } from './scanner/auto-assign'
 import type { PresetRoleInfo } from './db/issues'
-import { getActualRoleAssignees } from './db'
+import { getActualRoleAssignees, getAgent } from './db'
 
 export interface RoleAssignResult {
   success: boolean
@@ -55,8 +55,19 @@ export async function applyRoleAssignee(
     return { success: true, mode: preset.mode, username: null, userId: existing.userId }
   }
 
+  // 에이전트가 맡은 역할 — 에이전트는 Git 계정이 없으므로 Git 담당자는 바꾸지 않는다.
+  // 단계 작업자가 기동 조건(배포 확인 등)이 갖춰지면 시작한다는 안내만 남긴다.
+  if (preset.mode === 'agent') {
+    try {
+      const agent = preset.agentId ? getAgent(preset.agentId) : null
+      const note = `<!-- ive-bot -->\n## 🤖 ${roleLabel} 배정\n\n에이전트 **${agent?.name || preset.agentId || '-'}** 이(가) ${roleLabel}로 지정되어 있어 이 단계를 맡습니다.${roleLabel === '확인자' ? ' staging 에 배포된 것이 확인되면 자동으로 시작합니다.' : ''}`
+      await addIssueComment(project, iid, token, note)
+    } catch (e) { console.warn(`[RoleAssignee] agent note failed for #${iid}:`, e) }
+    return { success: true, mode: 'agent', username: null, userId: null }
+  }
+
   if (preset.mode === 'auto') {
-    const r = await runAutoAssign(project, iid, token)
+    const r = await runAutoAssign(project, iid, token, roleLabel === '검증자' ? 'verify' : 'confirm')
     return {
       success: !!r,
       mode: 'auto',

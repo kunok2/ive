@@ -196,6 +196,26 @@ export function setupTestDb(): Database.Database {
       FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
     );
 
+    -- 역할 명부 (보고서가 사람 단가 배수를 「프로젝트 × 사람 × 역할」로 읽는다)
+    CREATE TABLE project_role_members (
+      project_id TEXT NOT NULL,
+      subject_type TEXT NOT NULL,
+      subject_id TEXT NOT NULL,
+      git_user_id TEXT DEFAULT NULL,
+      name TEXT NOT NULL DEFAULT '',
+      avatar TEXT NOT NULL DEFAULT '',
+      can_process INTEGER NOT NULL DEFAULT 0,
+      can_verify INTEGER NOT NULL DEFAULT 0,
+      can_confirm INTEGER NOT NULL DEFAULT 0,
+      rate_process REAL NOT NULL DEFAULT 1,
+      rate_verify REAL NOT NULL DEFAULT 1,
+      rate_confirm REAL NOT NULL DEFAULT 1,
+      source TEXT NOT NULL DEFAULT 'manual',
+      updated_by TEXT DEFAULT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (project_id, subject_type, subject_id)
+    );
+
     CREATE TABLE system_settings (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL,

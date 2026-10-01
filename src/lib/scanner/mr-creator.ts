@@ -6,7 +6,7 @@ const slog = getLogger("Scanner");
 import fs from "fs";
 import { promisify } from "util";
 import { Project, Agent } from "@/types";
-import { updateExecutionStatus, updateAgentStatus, getAssigneeAuto, getPresetRoles } from "../db";
+import { updateExecutionStatus, updateAgentStatus, getAssigneeAuto, getPresetRoles, getProjectAutomation } from "../db";
 import { addIssueLabels, removeIssueLabels } from "../provider";
 import { notifyStageTransition } from "../slack-notify";
 import { runAutoAssign } from "./auto-assign";
@@ -90,6 +90,14 @@ export async function commitPushAndCreateMR(params: {
   const isGitHub = project.provider === 'github';
   const mrLabel = isGitHub ? 'PR' : 'MR';
 
+  // 커밋·MR 문구 — 프로젝트 설정 「MR 머지로 이슈 자동 닫기」(기본 켬 = 종전 문구)
+  //   켬 : 「fix: resolve #N - 제목」 Git 닫기 키워드 — 기본 브랜치에 머지되면 Git 이 이슈를 닫는다(종전 동작)
+  //   끔 : 「fix(#N): 제목」 — 이슈는 확인을 거쳐 완료(E)가 될 때 IVE 가 닫는다(단계 자동화·묶음 배포를 쓰는 프로젝트)
+  const closeOnMerge = getProjectAutomation(project.id).closeIssueOnMerge
+  const commitTitle = closeOnMerge ? `fix: resolve #${iid} - ${issueTitle}` : `fix(#${iid}): ${issueTitle}`
+  const mrDescription = (kind: 'MR' | 'PR') => closeOnMerge
+    ? `Auto-generated ${kind} to resolve issue #${iid}. (Iteration #${iterationCount})`
+    : `Auto-generated ${kind} for issue #${iid}. (Iteration #${iterationCount})`
   // 변경 사항 확인
   //  - CLI 에이전트가 git add를 빠뜨릴 수 있으므로 모든 변경을 스테이징(add -A)한 뒤 판정
   //  - 일부 에이전트(opencode 등)는 "commit 금지" 지시를 무시하고 스스로 커밋해버림.
@@ -111,7 +119,7 @@ export async function commitPushAndCreateMR(params: {
     // 스테이징만 된(미커밋) 변경이 있을 때만 추가 커밋한다 (변경 없는데 commit하면 실패).
     await execFile('git', ['checkout', '-B', branchName], { cwd: workspacePath });
     if (hasUncommitted) {
-      await execFile('git', ['commit', '-m', `fix: resolve #${iid} - ${issueTitle}`], { cwd: workspacePath });
+      await execFile('git', ['commit', '-m', commitTitle], { cwd: workspacePath });
     }
 
     // 푸시
@@ -133,8 +141,8 @@ export async function commitPushAndCreateMR(params: {
         const prResult = await createGitHubPR(project, token, {
           source_branch: branchName,
           target_branch: baseBranch,
-          title: `fix: resolve #${iid} - ${issueTitle}`,
-          description: `Auto-generated PR to resolve issue #${iid}. (Iteration #${iterationCount})`,
+          title: commitTitle,
+          description: mrDescription('PR'),
         });
         mrUrl = prResult?.web_url || "";
       }
@@ -147,8 +155,8 @@ export async function commitPushAndCreateMR(params: {
         const mrResult = await createGitLabMR(project, token, {
           source_branch: branchName,
           target_branch: baseBranch,
-          title: `fix: resolve #${iid} - ${issueTitle}`,
-          description: `Auto-generated MR to resolve issue #${iid}. (Iteration #${iterationCount})`,
+          title: commitTitle,
+          description: mrDescription('MR'),
           remove_source_branch: false,
           squash: true,
         });

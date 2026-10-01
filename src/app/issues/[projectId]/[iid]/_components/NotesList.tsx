@@ -73,6 +73,8 @@ interface NotesListProps {
   chatStreamText: string
   // Refs
   scrollContainerRef: RefObject<HTMLDivElement | null>
+  /** 본문과 활동 기록 사이에 끼울 블록 (단계 자동화·증적 패널) */
+  topSlot?: React.ReactNode
   notesEndRef: RefObject<HTMLDivElement | null>
   // Handlers
   onRefreshAll: () => Promise<void>
@@ -85,7 +87,7 @@ export default function NotesList({
   mode, chatSessionId, chatHistoryOnly, chatMessages, chatAgentName, chatAgentAvatar,
   chatSending, chatSendingStartTime, chatStreamText,
   scrollContainerRef, notesEndRef,
-  onRefreshAll, onDeleteNote,
+  onRefreshAll, onDeleteNote, topSlot,
 }: NotesListProps) {
   const { state } = useStore()
   const tc = useTranslations('common')
@@ -101,6 +103,7 @@ export default function NotesList({
               <MarkdownNote body={cleanNoteBody(issue.description)} projectId={projectId} />
             </div>
           )}
+          {topSlot}
           <div className="py-1.5 pr-2 flex items-center justify-between mt-2 sticky top-0 z-10 bg-ive-bg-deep/95 backdrop-blur-sm">
             <span className="text-xs font-bold text-ive-text-dim uppercase tracking-widest">
               <i className="fa-solid fa-comments mr-1" />{tIssue('activityLog')}

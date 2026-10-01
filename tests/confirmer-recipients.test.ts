@@ -30,8 +30,10 @@ function setup() {
       project_id TEXT NOT NULL, issue_iid INTEGER NOT NULL, stage TEXT DEFAULT '', updated_at TEXT,
       preset_verifier_mode TEXT DEFAULT 'creator', preset_verifier_user_id TEXT, preset_verifier_username TEXT,
       preset_confirmer_mode TEXT DEFAULT 'creator', preset_confirmer_user_id TEXT, preset_confirmer_username TEXT,
+      preset_verifier_agent_id TEXT, preset_confirmer_agent_id TEXT,
       PRIMARY KEY (project_id, issue_iid)
     );
+    CREATE TABLE agents (id TEXT PRIMARY KEY, name TEXT, avatar TEXT);
   `)
   d.prepare(`INSERT INTO oauth_providers (id, type, name) VALUES ('gl', 'gitlab', 'GitLab'), ('gh', 'github', 'GitHub')`).run()
   // 비멤버 확인자(슬랙 연결 O) — git id 700, gitlab 로그인

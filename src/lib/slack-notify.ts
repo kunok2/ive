@@ -16,7 +16,7 @@ import { getUserByOAuthId, getUserByGitUsername, getSystemSetting, getPresetRole
 import { sendSlackDM } from './slack'
 
 /** IVE 공개 베이스 URL. system_settings['oauth.redirect_base'] → env → 빈 값(스킵). 백그라운드(스캐너)에서도 동작. */
-function getIveBaseUrl(): string {
+export function getIveBaseUrl(): string {
   const stored = getSystemSetting('oauth.redirect_base') // oauth.ts OAUTH_REDIRECT_BASE_KEY 와 동일 키
   if (stored && stored.trim()) return stored.trim().replace(/\/+$/, '')
   const env = process.env.OAUTH_REDIRECT_BASE
@@ -108,6 +108,7 @@ function recipientFromGitIdentity(project: Project, id: string | null, username:
  */
 export function resolveConfirmRecipients(project: Project, issue: any, iid: number): StageRecipient[] {
   const preset = getPresetRoles(project.id, iid).confirmer
+  if (preset.mode === 'agent') return []   // 확인은 에이전트가 한다 — 사람에게 확인 요청을 보내지 않는다
   if (preset.mode === 'specific' && (preset.userId || preset.username)) {
     const r = recipientFromGitIdentity(project, preset.userId, preset.username)
     return r ? [r] : []
@@ -171,6 +172,12 @@ export async function notifyStageTransition(project: Project, iid: number, token
     // 트리거: 알림 라벨(IVE-N)이 붙은 이슈만 (등록 시 '알림 발송' 체크)
     const notifyLabel = project.labelNotify || 'IVE-N'
     if (!extractLabels(issue).includes(notifyLabel)) return
+
+    // 그 단계를 에이전트가 맡았으면 사람에게 "검증/확인하세요" 를 보내지 않는다(단계 작업자가 한다).
+    if (kind === 'verify' || kind === 'confirm') {
+      const preset = getPresetRoles(project.id, iid)
+      if ((kind === 'verify' ? preset.verifier : preset.confirmer).mode === 'agent') return
+    }
 
     const recipients = kind === 'confirm'
       ? resolveConfirmRecipients(project, issue, iid)

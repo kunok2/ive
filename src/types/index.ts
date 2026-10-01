@@ -12,7 +12,6 @@ export interface User {
   timezone?: string    // 사용자 지정 타임존 (예: 'Asia/Seoul')
   currency?: string | null     // 표시 통화 코드 (ISO 4217, 예: 'KRW'). null/'USD' = 환산 안 함
   currencyRate?: number | null // 수동 고정 환율 (USD→통화). null = 자동 글로벌 환율 사용 (있으면 자동보다 우선)
-  rateMultiplier: number  // 사람단가 배수 (기본 1.0). 사람 비용 = 작업시간 × (기본단가 × 배수)
   gitlabUsername?: string | null  // 본인 GitLab username. 확인자/담당자→IVE 계정 매핑 fallback(oauth id 매칭 실패 시). 로그인 시 자동 저장 + 직접 입력
   githubUsername?: string | null  // 본인 GitHub username. 위와 동일(GitHub 프로젝트용)
   slackUserId?: string     // 본인 Slack member ID (U...). 작업완료 DM·채널멘션 대상. 빈 값이면 DM 불가
@@ -185,6 +184,11 @@ export interface Agent {
   pausedUntil?: string | null   // 자동 복귀 예약 시각(ISO). 이 시각 전까지는 기간제 휴가
   createdAt: string
   pendingCount?: number         // 지정 대기 이슈 수 (API 응답에만 포함, 정렬용)
+  /** 역할 요약 (API 응답에만) — 명부에서 가진 역할별 프로젝트 수, 검증자·확인자로 지정된 이슈의 대기·진행 */
+  roleSummary?: {
+    roles: { process: number; verify: number; confirm: number }
+    verifyWaiting: number; verifying: number; confirmWaiting: number; confirming: number
+  }
 }
 
 /**

@@ -6,7 +6,7 @@ import { formatDateMedium } from '@/lib/format-date'
 import { type StageAction } from './StageActions'
 import StageProgress from './StageProgress'
 import DeadlineProgress from './DeadlineProgress'
-import { type PresetRole } from '@/components/issue/RoleAvatarBar'
+import { type PresetRole, type RoleAgentCandidate } from '@/components/issue/RoleAvatarBar'
 import { createImagePasteHandlers } from '@/lib/paste-upload'
 import { useMemo, useRef, useEffect } from 'react'
 
@@ -79,6 +79,8 @@ interface IssueHeaderProps {
   gitMembers: IssueAssignee[]
   /** 확인자 후보 — 검증자/담당자(프로젝트 멤버)와 달리 provider 로 식별되는 모든 IVE 사용자. */
   confirmerMembers?: IssueAssignee[]
+  /** 역할 명부의 에이전트 — 검증자·확인자 picker 후보 */
+  roleAgents?: { verify: RoleAgentCandidate[]; confirm: RoleAgentCandidate[] }
   preferredAgent: {
     assignMode?: string
     preferredAgentId: string | null
@@ -110,7 +112,7 @@ interface IssueHeaderProps {
 export default function IssueHeader({
   issue, iterationCount,
   canEditAssignees, isClosing, editMode, editTitle, editDesc, saving, showDesc,
-  projectId, gitMembers, confirmerMembers, preferredAgent,
+  projectId, gitMembers, confirmerMembers, roleAgents, preferredAgent,
   onBack, onCloseIssue, onStartEdit, onSaveEdit, onCancelEdit,
   onSetEditTitle, onSetEditDesc, onSetShowDesc, onOpenAssigneePicker, onOpenAgentPicker,
   onPresetVerifierChange, onPresetConfirmerChange, onDueDateChange, isCreator, onToast,
@@ -276,6 +278,8 @@ export default function IssueHeader({
               onProcessorClick: onOpenAgentPicker ?? onOpenAssigneePicker,
               onVerifierChange: onPresetVerifierChange,
               onConfirmerChange: onPresetConfirmerChange,
+              verifierAgents: roleAgents?.verify,
+              confirmerAgents: roleAgents?.confirm,
             }}
           />
           {/* 마감일 진행 — 시작일시 → 마감일시 + 소진율. 작성자만 수정 가능.

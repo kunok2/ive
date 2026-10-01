@@ -37,6 +37,15 @@ export interface CliRunResult {
   conversationParts: string[];
 }
 
+/** 단계(kind)별로 다른 실행 조건. 생략하면 처리(D) 단계의 종전 값(에이전트 maxTurns, cli.maxRunMinutes, 시스템 MCP). */
+export interface CliRunOptions {
+  maxTurns?: number;
+  maxRunMinutes?: number;
+  /** undefined 면 시스템 설정(mcp.config), 값이 있으면 그것만 */
+  mcpServers?: Record<string, any> | null;
+  extraEnv?: Record<string, string>;
+}
+
 /**
  * CLI 프로세스를 실행하고 이벤트를 파싱합니다.
  */
@@ -51,6 +60,7 @@ export async function runCliProcess(
   logStream: { write(data: string): void; end(): void },
   log: (msg: string, type?: 'info' | 'error' | 'warn' | 'system') => void,
   imagePaths?: string[],
+  runOpts?: CliRunOptions,
 ): Promise<CliRunResult> {
   const isOpenCode = agent.cliName === 'opencode';
   const isCodex = agent.cliName === 'codex';
@@ -69,10 +79,12 @@ export async function runCliProcess(
       prompt,
       token,
       workspacePath,
-      maxTurns: agent.maxTurns || 200,
+      maxTurns: runOpts?.maxTurns || agent.maxTurns || 200,
       model: systemCliModel || null,
       cliSessionId: null,
       imagePaths,
+      ...(runOpts?.mcpServers !== undefined ? { mcpServers: runOpts.mcpServers } : {}),
+      extraEnv: runOpts?.extraEnv,
     });
 
     // 보안: 호출 명령어(플래그·인자 포함)는 상세보기 로그에 남기지 않는다.
@@ -120,7 +132,7 @@ export async function runCliProcess(
     // 실행 시간 상한: 도구 이벤트를 계속 흘리며 헛도는 경우(환경 우회·범위 밖 작업)는 유휴 워치독이 못 잡는다.
     // 상한을 넘기면 강제 종료한다 — 그때까지의 변경은 execute 가 패치로 보존한다. 0 이면 끈다.
     // (#1788: 17분에 끝난 수정 뒤로 33분을 브라우저 라이브러리 우회·검사 스크립트 신설에 썼다)
-    const maxRunMinutes = getMaxRunMinutes();
+    const maxRunMinutes = runOpts?.maxRunMinutes ?? getMaxRunMinutes();
     let killedByRunLimit = false;
     const runLimitTimer: NodeJS.Timeout | null = maxRunMinutes > 0
       ? setTimeout(() => {

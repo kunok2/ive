@@ -18,7 +18,9 @@ interface GitMember {
   avatarUrl: string
 }
 
-type RoleMode = 'creator' | 'auto' | 'specific'
+type RoleMode = 'creator' | 'auto' | 'specific' | 'agent'
+
+interface RoleAgent { id: string; name: string; avatar: string; cliName?: string | null }
 
 interface IssueAddFormProps {
   selectedProjectId: string
@@ -41,11 +43,18 @@ interface IssueAddFormProps {
   verifierMode: RoleMode
   verifierUserId: string | null
   verifierUsername: string | null
-  onVerifierChange: (mode: RoleMode, userId: string | null, username: string | null) => void
+  onVerifierChange: (mode: RoleMode, userId: string | null, username: string | null, agentId?: string | null) => void
+  verifierAgentId?: string | null
   confirmerMode: RoleMode
   confirmerUserId: string | null
   confirmerUsername: string | null
-  onConfirmerChange: (mode: RoleMode, userId: string | null, username: string | null) => void
+  onConfirmerChange: (mode: RoleMode, userId: string | null, username: string | null, agentId?: string | null) => void
+  confirmerAgentId?: string | null
+  /** 역할 명부의 에이전트 — 검증자·확인자 후보 */
+  roleAgents?: { verify: RoleAgent[]; confirm: RoleAgent[] }
+  /** 「모든 단계 자동배정」 — 처리·검증·확인을 명부의 에이전트로 한꺼번에 */
+  autoAllAgents?: boolean
+  onAutoAllAgentsChange?: (v: boolean) => void
   // 마감일 (선택). 'YYYY-MM-DD' 또는 빈 문자열.
   dueDate: string
   onDueDateChange: (v: string) => void
@@ -60,6 +69,7 @@ interface RoleTriggerProps {
   userId: string | null
   username: string | null
   members: GitMember[]
+  agent?: RoleAgent | null
   onClick: () => void
   isOpen?: boolean
 }
@@ -68,7 +78,7 @@ interface RoleTriggerProps {
  * 역할 picker 트리거 버튼 — 클릭하면 폼 본문 내 InlineRolePicker 가 펼쳐진다.
  * 표시: 미배정(생성자) / 자동배정 / 선택한 멤버 아바타+이름
  */
-function RoleTrigger({ label, icon, mode, userId, username, members, onClick, isOpen = false }: RoleTriggerProps) {
+function RoleTrigger({ label, icon, mode, userId, username, members, agent, onClick, isOpen = false }: RoleTriggerProps) {
   const tIssue = useTranslations('issue')
   const member = mode === 'specific' && userId
     ? members.find(m => String(m.id) === userId)
@@ -85,7 +95,12 @@ function RoleTrigger({ label, icon, mode, userId, username, members, onClick, is
           isOpen ? 'rounded-t-lg border-b-transparent border-ive-green/50' : 'rounded-lg'
         }`}
       >
-        {mode === 'auto' ? (
+        {mode === 'agent' ? (
+          <span className="flex items-center gap-1 bg-ive-bg-deep rounded px-1.5 py-0.5">
+            <AgentAvatar avatar={agent?.avatar || 'av-01'} size="xs" />
+            <span className="text-ive-text font-bold text-xs">{agent?.name || tIssue('roleModeAgent')}</span>
+          </span>
+        ) : mode === 'auto' ? (
           <span className="flex items-center gap-1 bg-ive-cyan/10 rounded px-1.5 py-0.5">
             <i className="fa-solid fa-shuffle text-xs text-ive-cyan" />
             <span className="text-ive-cyan font-bold text-xs">{tIssue('roleModeAuto')}</span>
@@ -118,10 +133,12 @@ function RoleTrigger({ label, icon, mode, userId, username, members, onClick, is
 interface InlineRolePickerProps {
   mode: RoleMode
   userId: string | null
+  agentId?: string | null
+  agents?: RoleAgent[]
   gitMembers: GitMember[]
   search: string
   onSearchChange: (v: string) => void
-  onPick: (mode: RoleMode, userId: string | null, username: string | null) => void
+  onPick: (mode: RoleMode, userId: string | null, username: string | null, agentId?: string | null) => void
   noneLabel: string
 }
 
@@ -130,7 +147,7 @@ interface InlineRolePickerProps {
  * - 페이지의 일반 흐름에 자리잡으므로, 폼이 길어지면 부모 스크롤 컨테이너 가 알아서 처리.
  * - 모바일 키보드가 올라와도 사용자가 스크롤하면 모든 옵션과 검색창에 접근 가능.
  */
-function InlineRolePicker({ mode, userId, gitMembers, search, onSearchChange, onPick, noneLabel }: InlineRolePickerProps) {
+function InlineRolePicker({ mode, userId, agentId, agents, gitMembers, search, onSearchChange, onPick, noneLabel }: InlineRolePickerProps) {
   const tIssue = useTranslations('issue')
   const filtered = gitMembers.filter(m => {
     if (!search) return true
@@ -187,6 +204,32 @@ function InlineRolePicker({ mode, userId, gitMembers, search, onSearchChange, on
             <div className="text-xs text-ive-text-dim truncate">{tIssue('autoAssignDesc')}</div>
           </div>
         </button>
+        {(agents || []).filter(a => !search || a.name.toLowerCase().includes(search.toLowerCase())).length > 0 && (
+          <>
+            <div className="px-4 pt-2.5 pb-1 text-xs font-bold text-ive-text-dim"><i className="fa-solid fa-robot mr-1" />{tIssue('pickerAgents')}</div>
+            {(agents || []).filter(a => !search || a.name.toLowerCase().includes(search.toLowerCase())).map(a => {
+              const isPicked = mode === 'agent' && agentId === a.id
+              return (
+                <button
+                  key={`agent-${a.id}`}
+                  type="button"
+                  onClick={() => onPick('agent', null, null, a.id)}
+                  className={`w-full px-4 py-2.5 text-left text-sm flex items-center gap-3 transition-colors ${
+                    isPicked ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text hover:bg-white/5'
+                  }`}
+                >
+                  {isPicked ? <i className="fa-solid fa-circle-dot text-xs shrink-0 w-4" /> : <i className="fa-regular fa-circle text-xs shrink-0 w-4 opacity-30" />}
+                  <AgentAvatar avatar={a.avatar || 'av-01'} size="sm" />
+                  <div className="min-w-0 flex-1">
+                    <div className="font-bold truncate">{a.name}</div>
+                    {a.cliName && <div className="text-xs text-ive-text-dim truncate">{a.cliName}</div>}
+                  </div>
+                </button>
+              )
+            })}
+            <div className="px-4 pt-2.5 pb-1 text-xs font-bold text-ive-text-dim"><i className="fa-solid fa-user mr-1" />{tIssue('pickerPeople')}</div>
+          </>
+        )}
         {filtered.map(m => {
           const isPicked = pickedId === String(m.id)
           return (
@@ -235,6 +278,11 @@ export default function IssueAddForm({
   confirmerUserId,
   confirmerUsername,
   onConfirmerChange,
+  verifierAgentId = null,
+  confirmerAgentId = null,
+  roleAgents,
+  autoAllAgents = false,
+  onAutoAllAgentsChange,
   dueDate,
   onDueDateChange,
   notify,
@@ -242,6 +290,7 @@ export default function IssueAddForm({
 }: IssueAddFormProps) {
   const tIssue = useTranslations('issue')
   const tCommon = useTranslations('common')
+  const ta = useTranslations('automation')
   const { toast } = useToast()
 
   const agentDropdownRef = useRef<HTMLDivElement>(null)
@@ -380,6 +429,18 @@ export default function IssueAddForm({
         <span><i className="fa-solid fa-users-gear mr-1" />{tIssue('preferredAgent')} · {tIssue('verifier')} · {tIssue('confirmer')}</span>
         <span><i className="fa-solid fa-chevron-up text-[10px] mr-1" />{tIssue('assignmentToggleHide')}</span>
       </button>
+      {/* 「모든 단계 자동배정」 — 켜면 처리·검증·확인을 명부의 가장 한가한 에이전트로 한꺼번에 지정 */}
+      {onAutoAllAgentsChange && (
+        <button
+          type="button"
+          onClick={() => onAutoAllAgentsChange(!autoAllAgents)}
+          className={`w-full mb-2 px-3 py-2 rounded-lg border flex items-center justify-between gap-2 text-xs font-bold transition-colors ${autoAllAgents ? 'bg-ive-green/10 border-ive-green/40 text-ive-green' : 'bg-ive-bg-card border-ive-border-dark text-ive-text-dim hover:border-ive-green/50'}`}
+        >
+          <span className="text-left"><i className="fa-solid fa-wand-magic-sparkles mr-1.5" />{ta('autoAllInForm')}</span>
+          <i className={`fa-solid ${autoAllAgents ? 'fa-toggle-on' : 'fa-toggle-off'} text-sm`} />
+        </button>
+      )}
+      {!autoAllAgents && (<>
       {/* 에이전트 지정 드롭다운 */}
       <div ref={agentDropdownRef} className="relative mb-2">
         <label className="text-xs font-bold text-ive-text-dim mb-1 block">
@@ -484,6 +545,7 @@ export default function IssueAddForm({
         userId={verifierUserId}
         username={verifierUsername}
         members={gitMembers}
+        agent={roleAgents?.verify.find(a => a.id === verifierAgentId) ?? null}
         onClick={openVerifierPicker}
         isOpen={openPicker === 'verifier'}
       />
@@ -491,11 +553,13 @@ export default function IssueAddForm({
         <InlineRolePicker
           mode={verifierMode}
           userId={verifierUserId}
+          agentId={verifierAgentId}
+          agents={roleAgents?.verify}
           gitMembers={gitMembers}
           search={verifierSearch}
           onSearchChange={setVerifierSearch}
-          onPick={(mode, userId, username) => {
-            onVerifierChange(mode, userId, username)
+          onPick={(mode, userId, username, agentId) => {
+            onVerifierChange(mode, userId, username, agentId)
             setOpenPicker(null)
           }}
           noneLabel={tIssue('roleModeCreator')}
@@ -508,6 +572,7 @@ export default function IssueAddForm({
         userId={confirmerUserId}
         username={confirmerUsername}
         members={confirmerList}
+        agent={roleAgents?.confirm.find(a => a.id === confirmerAgentId) ?? null}
         onClick={openConfirmerPicker}
         isOpen={openPicker === 'confirmer'}
       />
@@ -515,16 +580,19 @@ export default function IssueAddForm({
         <InlineRolePicker
           mode={confirmerMode}
           userId={confirmerUserId}
+          agentId={confirmerAgentId}
+          agents={roleAgents?.confirm}
           gitMembers={confirmerList}
           search={confirmerSearch}
           onSearchChange={setConfirmerSearch}
-          onPick={(mode, userId, username) => {
-            onConfirmerChange(mode, userId, username)
+          onPick={(mode, userId, username, agentId) => {
+            onConfirmerChange(mode, userId, username, agentId)
             setOpenPicker(null)
           }}
           noneLabel={tIssue('roleModeCreator')}
         />
       )}
+      </>)}
       </>)}
 
       <div className="flex gap-2">

@@ -19,6 +19,8 @@ export function buildPrompt(
   isOAuthToken: boolean = false,
   agentId?: string,
   maxRunMinutes: number = 0,
+  /** 프로젝트 덮어쓰기(역할 프롬프트 「처리」). null/undefined 면 기존 문자열 그대로 */
+  instructionsOverride?: string | null,
 ): string {
   const repoUrlParsed = new URL(project.repoUrl.replace(/\.git$/, ''));
   const providerLabel = isGitHub ? 'GitHub' : 'GitLab';
@@ -119,6 +121,23 @@ curl -s ${authHeader} "${gitlabBaseUrl}/api/v4/projects/${encodedProjectPath}/is
     ? `\n- IMPORTANT: When posting any comment on the issue, ALWAYS prepend this exact HTML comment at the very top of the comment body, on its own line: \`<!-- ive-agent:${agentId} -->\`. It is invisible in Git UI but lets IVE show the correct agent name/avatar. Example comment body:\n\n    \`\`\`\n    <!-- ive-agent:${agentId} -->\n    작업 시작합니다.\n    \`\`\``
     : '';
 
+  const timeBudget = maxRunMinutes > 0 ? `
+- Time budget: this run is force-stopped after ${maxRunMinutes} minutes. Aim to finish well within ~${Math.max(5, Math.round(maxRunMinutes * 0.6))} minutes. Stage your changes (git add) as soon as the fix is in place, then verify. If verification is taking long, stop and report what remains unverified rather than pushing on.` : '';
+
+  if (instructionsOverride && instructionsOverride.trim()) {
+    // 덮어쓰기: 편집 가능한 줄만 바꾸고 IVE 고정 줄(스테이징·커밋 금지·코멘트 마커·시간 예산·언어)은 유지.
+    prompt += `
+
+## Instructions:
+${instructionsOverride.trim()}
+- After completing changes, stage them with git add.
+- Do NOT git commit or push.
+- If you find important discoveries or have questions during work, leave a comment on the issue.
+- Leave a brief start comment on the issue when you begin work.${agentMarkerHint}${timeBudget}
+- IMPORTANT: ${langInstruction}`;
+    return prompt;
+  }
+
   prompt += `
 
 ## Instructions:
@@ -132,8 +151,7 @@ curl -s ${authHeader} "${gitlabBaseUrl}/api/v4/projects/${encodedProjectPath}/is
 - Resolve the problem precisely — no superficial fixes — and review your change until you are confident it works.
 - Scope: change only what this issue asks for. Do NOT create or modify shared lint/check scripts, CI config, test harnesses or unrelated files unless the issue explicitly asks. If you think such follow-up work is needed, propose it in your final summary instead of doing it.
 - Verification environment: use only what this container already provides. Playwright browsers (chromium, webkit, firefox) are preinstalled under $PLAYWRIGHT_BROWSERS_PATH; if the project pins a different Playwright version, \`npx playwright install <browser>\` (no --with-deps) into that same path. Do NOT install system packages, download .deb files, patch LD_LIBRARY_PATH, or debug browser/tool startup — you have no root. If a required verification step cannot run here, skip it and say plainly in your summary what was not verified and why (e.g. "확인 못 했다: WebKit — 컨테이너에서 기동 불가").
-- These IVE constraints take precedence over repository instructions (CLAUDE.md, rules, skills) that would require verification environments or check-building work this container cannot provide within scope.${maxRunMinutes > 0 ? `
-- Time budget: this run is force-stopped after ${maxRunMinutes} minutes. Aim to finish well within ~${Math.max(5, Math.round(maxRunMinutes * 0.6))} minutes. Stage your changes (git add) as soon as the fix is in place, then verify. If verification is taking long, stop and report what remains unverified rather than pushing on.` : ''}
+- These IVE constraints take precedence over repository instructions (CLAUDE.md, rules, skills) that would require verification environments or check-building work this container cannot provide within scope.${timeBudget}
 - When designing UI, provide text-art mockups of the result where possible.
 - IMPORTANT: ${langInstruction}`;
 

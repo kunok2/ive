@@ -74,6 +74,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
   const { state, refreshAgents, updateAgent } = useStore()
   const t = useTranslations('agent')
   const tc = useTranslations('common')
+  const ta = useTranslations('automation')
   const statusConfig = {
     available: { label: t('statusAvailable'), dot: 'bg-ive-green' },
     busy: { label: t('statusBusy'), dot: 'bg-ive-amber' },
@@ -197,14 +198,15 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
     } catch { /* ignore */ }
   }, [agent.id])
 
+  // 통계·추이·대기열은 카드를 펼쳤을 때만 — 접힌 헤더는 이 값을 쓰지 않는다(에이전트가 많으면 카드마다 10초 폴링이 쌓인다)
   useEffect(() => {
-    if (compact) return
+    if (compact || collapsed) return
     fetchStats()
     const timer = setInterval(fetchStats, 10000)
     const onVisible = () => { if (document.visibilityState === 'visible') fetchStats() }
     document.addEventListener('visibilitychange', onVisible)
     return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVisible) }
-  }, [fetchStats, compact])
+  }, [fetchStats, compact, collapsed])
 
   useEffect(() => {
     if (!expandedPanel || expandedPanel === 'stats' || expandedPanel === 'pending') return
@@ -339,6 +341,15 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
               <span className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold bg-ive-cyan/20 text-ive-cyan">
                 <i className="fa-solid fa-robot" />{t('workerBadge')}
               </span>
+              {/* 역할 명부에서 맡은 검증·확인 역할 — 대기·진행 건수가 있으면 행동 필요(amber) */}
+              {([
+                { key: 'verify', icon: 'fa-user-check', n: agent.roleSummary?.roles.verify || 0, backlog: (agent.roleSummary?.verifyWaiting || 0) + (agent.roleSummary?.verifying || 0) },
+                { key: 'confirm', icon: 'fa-circle-check', n: agent.roleSummary?.roles.confirm || 0, backlog: (agent.roleSummary?.confirmWaiting || 0) + (agent.roleSummary?.confirming || 0) },
+              ]).filter(r => r.n > 0).map(r => (
+                <span key={r.key} className={`shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold ${r.backlog > 0 ? 'bg-ive-amber/20 text-ive-amber' : 'bg-ive-cyan/20 text-ive-cyan'}`}>
+                  <i className={`fa-solid ${r.icon}`} />{ta(`role_${r.key}`)}{r.backlog > 0 ? ` ${r.backlog}` : ''}
+                </span>
+              ))}
             </div>
             <div className="text-sm text-ive-text-muted truncate">{cli.label} · {agent.modelName || cli.desc}</div>
             {collapsed && assignedProjects && assignedProjects.length > 0 && (

@@ -63,6 +63,8 @@ export interface BuildCliOpts {
   /** 첨부 이미지 파일 경로(절대경로). codex는 -i, opencode는 -f로 전달.
    *  claude/agy는 전용 플래그가 없어 호출 측이 프롬프트에 경로를 안내한다(Read/파일참조). */
   imagePaths?: string[]
+  /** 단계 작업자가 추가로 넣는 환경변수(staging 테스트 계정 등). 비밀값은 여기로만 전달한다. */
+  extraEnv?: Record<string, string>
 }
 
 const shq = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`
@@ -180,6 +182,12 @@ function buildCodexMcpArgs(mcpServers: Record<string, any>): string[] {
  * `sh -c "exec ..."` 로 감싸고 프롬프트를 stdin으로 전달한다. `exec` 라 PID는 유지된다.
  */
 export function buildCliInvocation(o: BuildCliOpts): CliInvocation {
+  const inv = buildCliInvocationBase(o)
+  if (o.extraEnv && Object.keys(o.extraEnv).length > 0) inv.env = { ...inv.env, ...o.extraEnv }
+  return inv
+}
+
+function buildCliInvocationBase(o: BuildCliOpts): CliInvocation {
   const { cliName, resolvedCliPath, prompt, token, workspacePath, maxTurns, model, cliSessionId } = o
   const imagePaths = o.imagePaths ?? []
   const cliParts = resolvedCliPath.split(' ')

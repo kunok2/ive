@@ -1,3 +1,4 @@
+import { releaseAgentFromProject } from './roles'
 import { Project, ProjectShare, ShareRole } from '@/types'
 import { getDb } from './connection'
 import { getProject, mapProject, type ProjectRow } from './projects'
@@ -41,16 +42,37 @@ export function createProjectShare(share: ProjectShare) {
   ).run(share.id, share.projectId, share.userId, share.role, share.createdAt)
 }
 
+/**
+ * 편집 권한을 잃은 사람(공유 해제·viewer 로 하향)의 에이전트는 그 프로젝트 일을 하지 않는다 —
+ * 명부에서 빼고, 그 에이전트로 배정돼 있던 진행 중 이슈는 사람 기본값으로 되돌린다.
+ */
+function releaseUserAgentsFromProject(projectId: string, userId: string) {
+  const db = getDb()
+  const proj = db.prepare('SELECT user_id FROM projects WHERE id = ?').get(projectId) as { user_id: string } | undefined
+  if (!proj || proj.user_id === userId) return
+  for (const a of db.prepare('SELECT id FROM agents WHERE user_id = ?').all(userId) as { id: string }[]) {
+    releaseAgentFromProject(projectId, a.id)
+    db.prepare(`DELETE FROM project_role_members WHERE project_id = ? AND subject_type = 'agent' AND subject_id = ?`).run(projectId, a.id)
+  }
+}
+
 export function updateProjectShareRole(id: string, role: ShareRole) {
-  getDb().prepare('UPDATE project_shares SET role = ? WHERE id = ?').run(role, id)
+  const db = getDb()
+  const share = db.prepare('SELECT project_id, user_id FROM project_shares WHERE id = ?').get(id) as { project_id: string; user_id: string } | undefined
+  db.prepare('UPDATE project_shares SET role = ? WHERE id = ?').run(role, id)
+  if (share && role !== 'editor') releaseUserAgentsFromProject(share.project_id, share.user_id)
 }
 
 export function deleteProjectShare(id: string) {
-  getDb().prepare('DELETE FROM project_shares WHERE id = ?').run(id)
+  const db = getDb()
+  const share = db.prepare('SELECT project_id, user_id FROM project_shares WHERE id = ?').get(id) as { project_id: string; user_id: string } | undefined
+  db.prepare('DELETE FROM project_shares WHERE id = ?').run(id)
+  if (share) releaseUserAgentsFromProject(share.project_id, share.user_id)
 }
 
 export function deleteProjectShareByUser(projectId: string, userId: string): boolean {
   const r = getDb().prepare('DELETE FROM project_shares WHERE project_id = ? AND user_id = ?').run(projectId, userId)
+  if (r.changes > 0) releaseUserAgentsFromProject(projectId, userId)
   return r.changes > 0
 }
 

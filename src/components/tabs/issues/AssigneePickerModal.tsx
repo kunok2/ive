@@ -1,6 +1,7 @@
 'use client'
 
 import Modal from '@/components/ui/Modal'
+import AgentAvatar from '@/components/agent/AgentAvatar'
 import { useTranslations } from 'next-intl'
 
 interface GitMember {
@@ -27,6 +28,10 @@ interface AssigneePickerModalProps {
   title?: string
   /** "미배정" 옵션 라벨. 검증자/확인자에서는 "미배정 (생성자)" 식으로 의미가 다름. */
   noneLabel?: string
+  /** 에이전트 후보 (역할 명부에서 이 역할을 가진 에이전트). 있으면 사람 목록 위에 따로 보인다. */
+  agents?: { id: string; name: string; avatar: string; cliName?: string | null }[]
+  agentPick?: string | null
+  onAgentPickChange?: (agentId: string | null) => void
 }
 
 export default function AssigneePickerModal({
@@ -43,6 +48,9 @@ export default function AssigneePickerModal({
   onConfirm,
   title,
   noneLabel,
+  agents,
+  agentPick = null,
+  onAgentPickChange,
 }: AssigneePickerModalProps) {
   const tIssue = useTranslations('issue')
   const tCommon = useTranslations('common')
@@ -55,12 +63,14 @@ export default function AssigneePickerModal({
     return (m.name || '').toLowerCase().includes(q) || m.username.toLowerCase().includes(q)
   })
 
-  const isNoneSelected = !pick && !autoMode
-  const isAutoSelected = !pick && autoMode
+  const isNoneSelected = !pick && !autoMode && !agentPick
+  const isAutoSelected = !pick && autoMode && !agentPick
 
-  const selectNone = () => { onAutoModeChange(false); onPickChange(null) }
-  const selectAuto = () => { onAutoModeChange(true); onPickChange(null) }
-  const selectMember = (m: GitMember) => { onAutoModeChange(false); onPickChange(m) }
+  const selectNone = () => { onAutoModeChange(false); onPickChange(null); onAgentPickChange?.(null) }
+  const selectAuto = () => { onAutoModeChange(true); onPickChange(null); onAgentPickChange?.(null) }
+  const selectMember = (m: GitMember) => { onAutoModeChange(false); onPickChange(m); onAgentPickChange?.(null) }
+  const selectAgent = (id: string) => { onAutoModeChange(false); onPickChange(null); onAgentPickChange?.(id) }
+  const filteredAgents = (agents || []).filter(a => !search || a.name.toLowerCase().includes(search.toLowerCase()))
 
   return (
     <Modal open={open} onClose={onClose} title={`${effectiveTitle}${iids.length > 1 && !iids.includes(-1) ? ` (${iids.length}${tCommon('items')})` : ''}`} size="sm">
@@ -104,6 +114,31 @@ export default function AssigneePickerModal({
             <div className="text-xs text-ive-text-dim truncate">{tIssue('autoAssignDesc')}</div>
           </div>
         </button>
+        {filteredAgents.length > 0 && (
+          <>
+            <div className="px-4 pt-3 pb-1 text-xs font-bold text-ive-text-dim"><i className="fa-solid fa-robot mr-1" />{tIssue('pickerAgents')}</div>
+            {filteredAgents.map(a => {
+              const isPicked = agentPick === a.id
+              return (
+                <button
+                  key={`agent-${a.id}`}
+                  onClick={() => selectAgent(a.id)}
+                  className={`w-full px-4 py-3 text-left text-sm flex items-center gap-3 transition-colors ${
+                    isPicked ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text hover:bg-white/5'
+                  }`}
+                >
+                  {isPicked ? <i className="fa-solid fa-circle-dot text-xs shrink-0 w-4" /> : <i className="fa-regular fa-circle text-xs shrink-0 w-4 opacity-30" />}
+                  <AgentAvatar avatar={a.avatar || 'av-01'} size="sm" />
+                  <div className="min-w-0 flex-1">
+                    <div className="font-bold truncate">{a.name}</div>
+                    {a.cliName && <div className="text-xs text-ive-text-dim truncate">{a.cliName}</div>}
+                  </div>
+                </button>
+              )
+            })}
+            <div className="px-4 pt-3 pb-1 text-xs font-bold text-ive-text-dim"><i className="fa-solid fa-user mr-1" />{tIssue('pickerPeople')}</div>
+          </>
+        )}
         {filtered.map(m => {
           const isPicked = pick?.id === m.id
           return (

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getProject, getProjectAccess, getProjectAuthToken, hasActiveExecution, stageFromLabels, getPresetRoles, getAssigneeAuto, getActualRoleAssignees, getIssueStageTimes, getIssueRetryCounts, getIssueForwardCounts } from '@/lib/db'
+import { getProject, getProjectAccess, getProjectAuthToken, hasActiveExecution, stageFromLabels, getPresetRoles, getAssigneeAuto, getActualRoleAssignees, getIssueStageTimes, getIssueRetryCounts, getIssueForwardCounts, getStageWorkerNote } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { logActivity } from '@/lib/activity'
 import { updateIssue, fetchSingleIssue } from '@/lib/provider'
@@ -167,18 +167,18 @@ export async function GET(
     const assigneeAuto = getAssigneeAuto(projectId, Number(iid))
     const actuals = getActualRoleAssignees(projectId, Number(iid))
 
-    // 자동배정/지정 결과 — 단계별 Git assignee 를 해당 역할의 실제 사람으로 fallback
+    // 자동배정/지정 결과 — 단계별 Git assignee 를 해당 역할의 실제 사람으로 fallback (그 역할을 에이전트가 맡았으면 제외)
     //   verify_waiting/verifying: Git assignee = 검증자 (auto-assign 또는 수동 지정 결과)
     //   confirm_waiting/confirming: Git assignee = 확인자
     const firstAssignee = assignees[0]
-    if (!actuals.verifier && firstAssignee && (stage === 'verify_waiting' || stage === 'verifying')) {
+    if (!actuals.verifier && firstAssignee && presetRoles.verifier.mode !== 'agent' && (stage === 'verify_waiting' || stage === 'verifying')) {
       actuals.verifier = {
         userId: String(firstAssignee.id),
         name: firstAssignee.name || firstAssignee.username,
         avatar: firstAssignee.avatarUrl || null,
       }
     }
-    if (!actuals.confirmer && firstAssignee && (stage === 'confirm_waiting' || stage === 'confirming')) {
+    if (!actuals.confirmer && firstAssignee && presetRoles.confirmer.mode !== 'agent' && (stage === 'confirm_waiting' || stage === 'confirming')) {
       actuals.confirmer = {
         userId: String(firstAssignee.id),
         name: firstAssignee.name || firstAssignee.username,
@@ -214,6 +214,7 @@ export async function GET(
       assigneeAuto,
       presetVerifier: presetRoles.verifier,
       presetConfirmer: presetRoles.confirmer,
+      stageWorkerNote: (stage === 'done' || issue.state === 'closed') ? null : getStageWorkerNote(projectId, Number(iid)),
       actualProcessor: actuals.processor,
       actualVerifier: actuals.verifier,
       actualConfirmer: actuals.confirmer,

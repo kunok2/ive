@@ -48,18 +48,19 @@ export interface ReportExecution {
   verifierUserId: string | null
   assigneeType: string
   workSec: number         // 툴 직접개발 확정 작업시간(초): ive-meta>/spend>0
-  rateMultiplier: number  // 이 exec의 사람 비용에 적용할 단가 배수 (검증=검증자, 확인=확인자, 툴개발=개발자, 기본1)
+  rateMultiplier: number  // 이 exec의 사람 비용에 적용할 단가 배수 — 그 프로젝트에서 그 역할을 한 사람의 배수 (기본 1)
 }
 
 /**
- * exec 1건의 사람 비용에 적용할 단가 배수를 해결한다.
- * 사람 작업(검증/확인/툴개발)의 비용 귀속자는 모두 te.user_id 다 —
- * ex-verify/ex-confirm placeholder 행도 작업자(검증자/확인자)를 user_id 에 저장한다.
- * 따라서 te.user_id 의 IVE 사용자 배수(human_multiplier)를 그대로 쓴다.
- * 에이전트 exec은 user_id 가 없어 NULL → 1 (사람 비용 0이라 무의미).
+ * exec 1건의 사람 비용에 적용할 단가 배수.
+ * 단가 배수는 「프로젝트 × 사람 × 역할」 값이다(프로젝트 화면 → 역할·단계 자동화 → 역할 탭에서 역할과 함께 정한다).
+ * 역할은 실행 종류로 정한다: ex-verify = 검증, ex-confirm = 확인, 그 밖의 사람 실행(담당자 처리·툴 직접개발) = 처리.
+ * 그 프로젝트 역할 명부에서 이 실행의 사람 줄을 찾지 못하면 종전 사람별 배수(users.rate_multiplier — 화면에서는 더 이상 바꾸지 않는다,
+ * 이전 보고서 숫자를 지키기 위한 읽기 전용 값), 그것도 없으면 1.
+ * 에이전트 exec 은 사람 비용이 0 이라 무의미하다.
  */
 function resolveRowRateMultiplier(r: any): number {
-  return r.human_multiplier ?? 1
+  return r.role_multiplier ?? r.human_multiplier ?? 1
 }
 
 function mapReportExecution(r: any): ReportExecution {
@@ -111,7 +112,20 @@ const REPORT_EXEC_QUERY = `
          te.verifier_name, te.verifier_avatar, te.verifier_username,
          COALESCE(te.verifier_user_id, vu.id) as verifier_user_id_resolved,
          vu.avatar as verifier_user_avatar,
-         hu.rate_multiplier as human_multiplier
+         hu.rate_multiplier as human_multiplier,
+         -- 그 프로젝트에서 그 역할을 한 사람의 단가 배수 (역할 명부의 사람 줄)
+         --   사람 찾기: IVE 사용자의 Git(OAuth) id·Git username · 실행 행의 Git 사용자 id(담당자 처리) · 검증자 Git username · 툴 직접개발 작성자 이름
+         CASE WHEN te.assignee_type = 'user' THEN (
+           SELECT CASE WHEN te.id LIKE 'ex-verify-%' THEN m.rate_verify WHEN te.id LIKE 'ex-confirm-%' THEN m.rate_confirm ELSE m.rate_process END
+           FROM project_role_members m
+           WHERE m.project_id = te.project_id AND m.subject_type = 'user' AND (
+                 (m.git_user_id IS NOT NULL AND (m.git_user_id = hu.oauth_user_id OR m.git_user_id = te.user_id))
+              OR (p.provider = 'gitlab' AND hu.gitlab_username IS NOT NULL AND m.subject_id = hu.gitlab_username)
+              OR (p.provider = 'github' AND hu.github_username IS NOT NULL AND m.subject_id = hu.github_username)
+              OR (te.id LIKE 'ex-verify-%' AND te.verifier_username IS NOT NULL AND m.subject_id = te.verifier_username)
+              OR (te.user_id IS NULL AND te.user_name IS NOT NULL AND (m.name = te.user_name OR m.subject_id = te.user_name)))
+           LIMIT 1
+         ) END as role_multiplier
   FROM task_executions te
   JOIN projects p ON p.id = te.project_id
   LEFT JOIN agents a ON a.id = te.agent_id

@@ -15,8 +15,6 @@
   "projectStatsDesc": "Shows Waiting, Working, Verifying, Done, and Merge counts. Tap each number to open a detail panel.",
   "projectScanner": "Scanner Control",
   "projectScannerDesc": "Pause or resume automatic task detection.",
-  "projectScan": "Scan Now",
-  "projectScanDesc": "Check for new tasks immediately without waiting for the next scan cycle.",
 
   "tabAgents": "Agents Tab",
   "tabAgentsDesc": "Manage both AI agents (auto-coding) and verifiers (human review) in one place.",

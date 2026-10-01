@@ -56,7 +56,6 @@ const StoreContext = createContext<{
   addAgent: (a: Omit<Agent, 'id' | 'userId' | 'createdAt'>) => Promise<void>
   updateAgent: (a: Agent) => Promise<void>
   deleteAgent: (id: string) => Promise<void>
-  scanProjectNow: (id: string) => Promise<void>
 }>({
   state: { user: null, projects: [], agents: [], loading: true, authChecked: false },
   refreshUser: async () => null,
@@ -69,7 +68,6 @@ const StoreContext = createContext<{
   addAgent: async () => {},
   updateAgent: async () => {},
   deleteAgent: async () => {},
-  scanProjectNow: async () => {},
 })
 
 export function StoreProvider({ children }: { children: ReactNode }) {
@@ -262,27 +260,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     await refresh()
   }, [refreshAgents, refresh])
 
-  const scanProjectNow = useCallback(async (id: string) => {
-    const res = await fetch(`/api/projects/${id}/scan`, { method: 'POST' })
-    if (res.ok) {
-      await refresh()
-      // 스캔은 서버에서 비동기(fire-and-forget)로 실행돼 응답 시점엔 아직 끝나지 않는다.
-      // 완료 후 lastCheckedAt 등이 반영되도록 잠시 뒤 한 번 더 새로고침해 체감 반응을 준다.
-      // (refresh는 변경분이 있을 때만 dispatch하므로 변화 없으면 사실상 no-op)
-      setTimeout(() => { refresh() }, 2000)
-      setTimeout(() => { refresh() }, 5000)
-    } else {
-      const data = await res.json()
-      throw new Error(data.error || '스캔 실행 실패')
-    }
-  }, [refresh])
 
   return (
     <StoreContext.Provider value={{
       state, refreshUser, refresh, logout,
       addProject, updateProject, deleteProject,
       refreshAgents, addAgent, updateAgent, deleteAgent,
-      scanProjectNow,
     }}>
       {children}
     </StoreContext.Provider>

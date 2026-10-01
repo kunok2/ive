@@ -371,3 +371,20 @@ export async function fetchGitLabProjectMembers(project: Project, decryptedToken
       avatarUrl: m.avatar_url,
     }));
 }
+
+/**
+ * 이슈가 마지막으로 닫힌 것이 커밋·MR 때문인가 (GitLab 닫기 키워드 — 「resolve #N」 등이 기본 브랜치에 들어옴).
+ * 사람이 직접 닫았으면 false, 알 수 없으면 null.
+ */
+export async function isGitLabIssueClosedByGit(project: Project, issueIid: number, decryptedToken: string): Promise<boolean | null> {
+  try {
+    const res = await fetch(apiUrl(project, `/issues/${issueIid}/resource_state_events?per_page=100`), { headers: getAuthHeaders(project, decryptedToken) });
+    if (!res.ok) return null;
+    const events = (await res.json()) as any[];
+    const closed = events.filter(e => e?.state === 'closed').pop();
+    if (!closed) return null;
+    return !!(closed.source_commit || closed.source_merge_request);
+  } catch {
+    return null;
+  }
+}

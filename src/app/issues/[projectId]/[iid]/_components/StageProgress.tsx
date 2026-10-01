@@ -11,6 +11,7 @@ import {
   type PresetRole,
   type ActualProcessor,
   type ActualPerson,
+  type RoleAgentCandidate,
   renderAvatar,
   renderProcessorContent,
   renderPresetContent,
@@ -93,6 +94,9 @@ interface StageProgressProps {
     onProcessorClick?: () => void
     onVerifierChange?: (preset: PresetRole) => Promise<void> | void
     onConfirmerChange?: (preset: PresetRole) => Promise<void> | void
+    /** 검증·확인을 맡길 수 있는 에이전트 (역할 명부) */
+    verifierAgents?: RoleAgentCandidate[]
+    confirmerAgents?: RoleAgentCandidate[]
   }
 }
 
@@ -236,19 +240,21 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
     }
     return null
   }
-  async function confirmVerifier(pick: GitMember | null, auto: boolean) {
+  async function confirmVerifier(pick: GitMember | null, auto: boolean, agentId?: string | null) {
     if (!roles) return
     let next: PresetRole
-    if (auto) next = { mode: 'auto', userId: null, username: null }
+    if (agentId) next = { mode: 'agent', userId: null, username: null, agentId }
+    else if (auto) next = { mode: 'auto', userId: null, username: null }
     else if (pick) next = { mode: 'specific', userId: String(pick.id), username: pick.username }
     else next = { mode: 'creator', userId: null, username: null }
     await roles.onVerifierChange?.(next)
     setVerifierModalOpen(false)
   }
-  async function confirmConfirmer(pick: GitMember | null, auto: boolean) {
+  async function confirmConfirmer(pick: GitMember | null, auto: boolean, agentId?: string | null) {
     if (!roles) return
     let next: PresetRole
-    if (auto) next = { mode: 'auto', userId: null, username: null }
+    if (agentId) next = { mode: 'agent', userId: null, username: null, agentId }
+    else if (auto) next = { mode: 'auto', userId: null, username: null }
     else if (pick) next = { mode: 'specific', userId: String(pick.id), username: pick.username }
     else next = { mode: 'creator', userId: null, username: null }
     await roles.onConfirmerChange?.(next)
@@ -519,6 +525,8 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
             initialPick={initialPickFor(roles.verifier)}
             initialAuto={roles.verifier.mode === 'auto'}
             withAuto
+            agents={roles.verifierAgents}
+            initialAgentId={roles.verifier.mode === 'agent' ? (roles.verifier.agentId ?? null) : null}
             onConfirm={confirmVerifier}
             title={tIssue('verifier')}
             noneLabel={tIssue('roleModeCreator')}
@@ -530,6 +538,8 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
             initialPick={initialPickFor(roles.confirmer, confirmerList)}
             initialAuto={roles.confirmer.mode === 'auto'}
             withAuto
+            agents={roles.confirmerAgents}
+            initialAgentId={roles.confirmer.mode === 'agent' ? (roles.confirmer.agentId ?? null) : null}
             onConfirm={confirmConfirmer}
             title={tIssue('confirmer')}
             noneLabel={tIssue('roleModeCreator')}

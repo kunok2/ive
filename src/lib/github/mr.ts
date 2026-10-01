@@ -286,7 +286,7 @@ export async function fetchGitHubBranchCheckRuns(project: Project, decryptedToke
     let status = 'running';
     if (allCompleted) status = anyFailed ? 'failed' : 'success';
 
-    return [{ id: 0, status, web_url: branchData.commit?.html_url, created_at: runs[0]?.started_at }];
+    return [{ id: 0, status, sha, web_url: branchData.commit?.html_url, created_at: runs[0]?.started_at }];
   } catch (err) {
     console.error(`[GitHub] Error fetching check runs for branch ${ref}:`, err);
     return [];

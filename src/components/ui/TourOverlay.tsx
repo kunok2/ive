@@ -16,7 +16,6 @@ export const tourSteps: Record<string, TourStep[]> = {
     { target: 'add-project', titleKey: 'addProject', contentKey: 'addProjectDesc' },
     { target: 'project-card-stats', titleKey: 'projectStats', contentKey: 'projectStatsDesc' },
     { target: 'project-scanner-toggle', titleKey: 'projectScanner', contentKey: 'projectScannerDesc' },
-    { target: 'project-scan-now', titleKey: 'projectScan', contentKey: 'projectScanDesc' },
   ],
   agents: [
     { target: 'tab-agents', titleKey: 'tabAgents', contentKey: 'tabAgentsDesc' },

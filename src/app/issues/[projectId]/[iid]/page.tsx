@@ -1,5 +1,7 @@
 'use client'
 
+import type { PresetRole, RoleAgentCandidate } from '@/components/issue/RoleAvatarBar'
+import IssueAutomationPanel from './_components/IssueAutomationPanel'
 import { use, useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import MobileTabBar from '@/components/layout/MobileTabBar'
@@ -80,8 +82,8 @@ interface IssueDetail {
   iveAuthorAvatar: string | null
   assignees?: IssueAssignee[]
   assigneeAuto?: boolean
-  presetVerifier?: { mode: 'creator' | 'auto' | 'specific'; userId: string | null; username: string | null }
-  presetConfirmer?: { mode: 'creator' | 'auto' | 'specific'; userId: string | null; username: string | null }
+  presetVerifier?: PresetRole
+  presetConfirmer?: PresetRole
   actualProcessor?: { agentId: string | null; agentName: string | null; agentAvatar: string | null; cliName: string | null } | null
   actualVerifier?: { userId: string | null; name: string | null; avatar: string | null } | null
   actualConfirmer?: { userId: string | null; name: string | null; avatar: string | null } | null
@@ -119,6 +121,8 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
   const [gitMembers, setGitMembers] = useState<IssueAssignee[]>([])
   // 확인자 후보 — 검증자/담당자(프로젝트 멤버)와 달리 provider 로 식별되는 모든 IVE 사용자.
   const [confirmerMembers, setConfirmerMembers] = useState<IssueAssignee[]>([])
+  // 역할 명부의 에이전트 — 검증자·확인자 picker 후보
+  const [roleAgents, setRoleAgents] = useState<{ verify: RoleAgentCandidate[]; confirm: RoleAgentCandidate[] }>({ verify: [], confirm: [] })
   const [assigneePickerOpen, setAssigneePickerOpen] = useState(false)
   const [agentPickerOpen, setAgentPickerOpen] = useState(false)
   const [agentPickerSaving, setAgentPickerSaving] = useState(false)
@@ -288,6 +292,15 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
       .then(res => res.ok ? res.json() : [])
       .then(setConfirmerMembers)
       .catch(() => setConfirmerMembers([]))
+    fetch(`/api/projects/${projectId}/roles`)
+      .then(res => res.ok ? res.json() : null)
+      .then(d => {
+        const agents = ((d?.roster || []) as { subjectType: string; subjectId: string; name: string; avatar: string; cliName?: string | null; roles: Record<'process' | 'verify' | 'confirm', boolean> }[])
+          .filter(r => r.subjectType === 'agent')
+        const pick = (k: 'verify' | 'confirm') => (d?.agentRoles?.[k] === false ? [] : agents.filter(a => a.roles[k])).map(a => ({ id: a.subjectId, name: a.name, avatar: a.avatar, cliName: a.cliName ?? null }))
+        setRoleAgents({ verify: pick('verify'), confirm: pick('confirm') })
+      })
+      .catch(() => setRoleAgents({ verify: [], confirm: [] }))
   }, [fetchIssue, fetchNotes, fetchPreferredAgent, projectId, state.agents])
 
   // 백그라운드 폴링 — 에이전트 실행/스캐너 등 외부 상태 변화를 자동 반영.
@@ -885,7 +898,8 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
 
   // Verify-waiting popup — 이슈당 1회 자동 트리거
   useEffect(() => {
-    if (loading || !issue || issue.stage !== 'verify_waiting' || !canStartVerification || verifyPopupShownRef.current) return
+    // 검증을 에이전트가 맡은 이슈는 사람에게 시작 팝업을 띄우지 않는다(버튼으로 직접 시작은 가능)
+    if (loading || !issue || issue.stage !== 'verify_waiting' || !canStartVerification || issue.presetVerifier?.mode === 'agent' || verifyPopupShownRef.current) return
     verifyPopupShownRef.current = true
     confirm({ title: tIssue('startVerificationPopupTitle'), message: tIssue('startVerificationPopupMessage'), confirmText: tIssue('startVerification'), cancelText: tc('cancel'), variant: 'info' })
       .then(ok => { if (ok) handleStageAction('start_verification') })
@@ -894,7 +908,8 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
 
   // Confirm-waiting popup — 이슈당 1회 자동 트리거
   useEffect(() => {
-    if (loading || !issue || issue.stage !== 'confirm_waiting' || !canStartConfirmation || confirmPopupShownRef.current) return
+    // 확인을 에이전트가 맡은 이슈는 사람에게 시작 팝업을 띄우지 않는다(staging 배포 후 에이전트가 시작)
+    if (loading || !issue || issue.stage !== 'confirm_waiting' || !canStartConfirmation || issue.presetConfirmer?.mode === 'agent' || confirmPopupShownRef.current) return
     confirmPopupShownRef.current = true
     confirm({ title: tIssue('startConfirmationPopupTitle'), message: tIssue('startConfirmationPopupMessage'), confirmText: tIssue('startConfirmation'), cancelText: tc('cancel'), variant: 'info' })
       .then(ok => { if (ok) handleStageAction('start_confirmation') })
@@ -976,6 +991,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
         projectId={projectId}
         gitMembers={gitMembers}
         confirmerMembers={confirmerMembers}
+        roleAgents={roleAgents}
         preferredAgent={preferredAgent}
         onBack={() => router.back()}
         onStageAction={handleStageAction}
@@ -996,6 +1012,11 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
               method: 'PATCH', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ verifier: preset }),
             })
+            if (res.ok) {
+              // 서버 저장값(에이전트 이름·아바타 포함)으로 맞춘다
+              const saved = await res.clone().json().catch(() => null)
+              if (saved?.verifier) setIssue(prev => prev ? { ...prev, presetVerifier: saved.verifier } : prev)
+            }
             if (!res.ok) {
               const d = await res.json().catch(() => ({}))
               toast(d.error || '검증자 변경 실패', 'error')
@@ -1016,6 +1037,11 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
               method: 'PATCH', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ confirmer: preset }),
             })
+            if (res.ok) {
+              // 서버 저장값(에이전트 이름·아바타 포함)으로 맞춘다
+              const saved = await res.clone().json().catch(() => null)
+              if (saved?.confirmer) setIssue(prev => prev ? { ...prev, presetConfirmer: saved.confirmer } : prev)
+            }
             if (!res.ok) {
               const d = await res.json().catch(() => ({}))
               toast(d.error || '확인자 변경 실패', 'error')
@@ -1053,6 +1079,15 @@ export default function IssueDetailPage({ params }: { params: Promise<{ projectI
         notesEndRef={notesEndRef}
         onRefreshAll={refreshAll}
         onDeleteNote={handleDeleteNote}
+        topSlot={
+          <IssueAutomationPanel
+            projectId={projectId}
+            iid={iid}
+            stage={issue.state === 'closed' ? 'closed' : issue.stage}
+            canEditRoles={canEditAssignees}
+            onChanged={() => { void fetchIssue(); void fetchPreferredAgent() }}
+          />
+        }
       />
 
       <BottomInputArea

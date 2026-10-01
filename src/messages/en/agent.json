@@ -87,7 +87,5 @@
   "oldestWait": "Oldest wait",
   "approvedToday": "Today approved",
   "rejectedToday": "Today rejected",
-  "last7Days": "Last 7 days",
-  "rateMultiplier": "Rate multiplier",
-  "rateMultiplierHint": "human rate × multiplier (default 1)"
+  "last7Days": "Last 7 days"
 }

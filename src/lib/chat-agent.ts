@@ -1,4 +1,5 @@
 import { spawn, ChildProcess } from 'child_process'
+import { maskSecrets } from './secret-mask'
 import fs from 'fs'
 import path from 'path'
 import { promisify } from 'util'
@@ -128,13 +129,8 @@ interface ChatAgentOptions {
   imageOutbox?: string  // 설정 시(Slack): 여기 저장한 이미지가 채널에 업로드됨. cwd 기준 상대 폴더명.
 }
 
-/** 로그/에러 메시지에 섞일 수 있는 토큰류를 마스킹 (clone URL, gh/glab 토큰 등). */
-export function maskSecrets(s: string): string {
-  return (s || '')
-    .replace(/(x-access-token|oauth2):[^@\s]+@/gi, '$1:***@')
-    .replace(/\b(gh[pousr]_[A-Za-z0-9]{20,})\b/g, 'gh***')
-    .replace(/\b(glpat-[A-Za-z0-9_-]{10,})\b/g, 'glpat-***')
-}
+/** 로그/에러 메시지에 섞일 수 있는 토큰류를 마스킹 — 규칙은 secret-mask 로 공용화 (기존 import 경로 호환). */
+export { maskSecrets }
 
 /**
  * CLI 비정상 종료(code !== 0)를 사용자에게 보일 메시지로 변환한다.

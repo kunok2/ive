@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getProject, getProjectAccess, getPresetRoles, setPresetRoles, isIssueAuthor, getProjectAuthToken } from '@/lib/db'
+import { getProject, getProjectAccess, getPresetRoles, setPresetRoles, isIssueAuthor, getProjectAuthToken, hasRole, getAssignMode, markRolesInitialized, setStageWorkerNote } from '@/lib/db'
+import { violatesSelfReview, agentRoleAvailable } from '@/lib/role-assignment'
 import { getCurrentUser } from '@/lib/auth'
 import { logActivity } from '@/lib/activity'
 import { fetchSingleIssue } from '@/lib/provider'
@@ -9,8 +10,8 @@ import { fetchSingleIssue } from '@/lib/provider'
  *
  * Body 형태 (둘 중 한 쪽 또는 둘 다 보낼 수 있음):
  *   {
- *     verifier?:  { mode: 'creator' | 'auto' | 'specific', userId?: string | null, username?: string | null }
- *     confirmer?: { mode: 'creator' | 'auto' | 'specific', userId?: string | null, username?: string | null }
+ *     verifier?:  { mode: 'creator' | 'auto' | 'specific' | 'agent', userId?, username?, agentId? }
+ *     confirmer?: { mode: 'creator' | 'auto' | 'specific' | 'agent', userId?, username?, agentId? }
  *   }
  *
  * 권한: 프로젝트 접근 + (관리자 OR 이슈 작성자) — 검증자/확인자 사전배정은 작성자가 결정.
@@ -48,25 +49,46 @@ export async function PATCH(
   const body = await req.json()
   const current = getPresetRoles(projectId, Number(iid))
 
-  const sanitize = (input: any, fallback: typeof current.verifier) => {
+  const sanitize = (input: any, fallback: typeof current.verifier, role: 'verify' | 'confirm') => {
     if (!input) return fallback
-    const mode = input.mode === 'auto' || input.mode === 'specific' ? input.mode : 'creator'
+    const mode = input.mode === 'auto' || input.mode === 'specific' || input.mode === 'agent' ? input.mode : 'creator'
     if (mode === 'specific') {
       return {
         mode: 'specific' as const,
         userId: input.userId ? String(input.userId) : null,
         username: input.username ? String(input.username) : null,
+        agentId: null,
       }
     }
-    return { mode, userId: null, username: null }
+    if (mode === 'agent') {
+      // 에이전트는 역할 명부에서 그 역할을 가진 것만
+      const agentId = input.agentId ? String(input.agentId) : ''
+      if (!agentRoleAvailable(role)) throw new Error('검증 에이전트 작업자는 아직 없어 검증자를 에이전트로 지정할 수 없습니다')
+      if (!agentId || !hasRole(projectId, role, 'agent', agentId)) throw new Error(`명부에 ${role === 'verify' ? '검증' : '확인'} 역할로 올라 있는 에이전트만 지정할 수 있습니다`)
+      return { mode: 'agent' as const, userId: null, username: null, agentId }
+    }
+    return { mode, userId: null, username: null, agentId: null }
   }
 
-  const next = {
-    verifier: sanitize(body.verifier, current.verifier),
-    confirmer: sanitize(body.confirmer, current.confirmer),
+  let next: { verifier: ReturnType<typeof sanitize>; confirmer: ReturnType<typeof sanitize> }
+  try {
+    next = {
+      verifier: sanitize(body.verifier, current.verifier, 'verify'),
+      confirmer: sanitize(body.confirmer, current.confirmer, 'confirm'),
+    }
+  } catch (e) {
+    return NextResponse.json({ error: (e as Error).message }, { status: 400 })
+  }
+  // 자기 작업을 자기가 검수하지 않는다
+  const proc = getAssignMode(projectId, Number(iid))
+  if (proc.mode === 'agent' && violatesSelfReview(proc.agentId, next.verifier)) {
+    return NextResponse.json({ error: '처리자와 같은 에이전트를 검증자로 지정할 수 없습니다' }, { status: 400 })
   }
 
   setPresetRoles(projectId, Number(iid), next)
+  // 사람이 직접 정한 역할 — 프로젝트 기본 배정이 덮어쓰지 않게
+  markRolesInitialized(projectId, Number(iid))
+  setStageWorkerNote(projectId, Number(iid), null)   // 역할을 다시 정했으니 이전 안내(배정 불가 등)는 지운다
   logActivity({
     userId: user.id,
     category: 'task',
@@ -76,5 +98,6 @@ export async function PATCH(
     targetId: `${projectId}:${iid}`,
     req,
   })
-  return NextResponse.json({ verifier: next.verifier, confirmer: next.confirmer })
+  const saved = getPresetRoles(projectId, Number(iid))
+  return NextResponse.json({ verifier: saved.verifier, confirmer: saved.confirmer })
 }

@@ -6,7 +6,6 @@ import { Project, Agent, TaskExecution, StatSnapshot } from '@/types'
 import { useEffect, useState, useCallback } from 'react'
 import { useStore } from '@/lib/store'
 import { formatDateShort, formatDateMedium } from '@/lib/format-date'
-import { useDialog } from '@/components/ui/ConfirmDialog'
 import { getKSTTodayStartISO } from '@/lib/date-utils'
 import Sparkline from '@/components/ui/Sparkline'
 import ExecutionList from '@/components/execution/ExecutionList'
@@ -50,13 +49,11 @@ export default function ProjectCard({ project }: Props) {
   const isOwner = !project.shareRole
   const canEdit = isOwner || project.shareRole === 'editor'
   const router = useRouter()
-  const { updateProject, scanProjectNow, state } = useStore()
+  const { updateProject, state } = useStore()
   const userLocale = state.user?.locale
   const userTz = state.user?.timezone
-  const { alert: showAlert } = useDialog()
   const { navigateToAddIssue } = useTab()
   const tp = useTranslations('project')
-  const [scanning, setScanning] = useState(false)
   const [expandedPanel, _setExpandedPanel] = useState<'running' | 'done' | 'waiting' | 'verifying' | 'confirming' | 'conflicts' | null>(() => {
     if (typeof window === 'undefined') return null
     const saved = sessionStorage.getItem(`pc-panel-${project.id}`)
@@ -176,16 +173,8 @@ export default function ProjectCard({ project }: Props) {
 
   const toggleScanner = async (e: React.MouseEvent) => {
     e.preventDefault(); e.stopPropagation()
-    await updateProject({ ...project, accessToken: '', scannerActive: !project.scannerActive, lastCheckedAt: !project.scannerActive ? new Date().toISOString() : project.lastCheckedAt })
-  }
-
-  const handleManualScan = async (e: React.MouseEvent) => {
-    e.preventDefault(); e.stopPropagation()
-    if (scanning) return
-    setScanning(true)
-    try { await scanProjectNow(project.id) }
-    catch (err) { showAlert({ message: err instanceof Error ? err.message : tp('scanError'), variant: 'error' }) }
-    finally { setScanning(false) }
+    // 재개 시 즉시 스캔은 서버(PUT)가 트리거한다
+    await updateProject({ ...project, accessToken: '', scannerActive: !project.scannerActive })
   }
 
   const handleKill = async (id: string) => {
@@ -199,6 +188,35 @@ export default function ProjectCard({ project }: Props) {
   }
 
   const runningExecs = executions.filter(e => e.status === 'running' || e.status === 'assigned')
+  // 검증·확인 단계 작업자(에이전트)의 실행 — 처리가 아니라 그 단계로 보인다
+  const stageKindOf = (id: string): 'verify' | 'confirm' | null =>
+    id.startsWith('ex-verify-') ? 'verify' : id.startsWith('ex-confirm-') ? 'confirm' : null
+  // 에이전트 실행 → 실시간 화면(LiveTracePanel) 탭. 처리·검증·확인 패널이 같은 화면을 쓴다.
+  // #272: 프로젝트 배정 폐기 → 현재 실행 중인 에이전트만 탭으로 표시.
+  // execution row에 inline JOIN된 agent_name/agent_avatar 사용 (다른 사용자 풀의 에이전트도 표시 가능).
+  const toAgentTabs = (execs: typeof runningExecs) => execs.map(ex => ({
+    agent: {
+      id: ex.agentId,
+      userId: '',
+      name: ex.agentName ?? '',
+      avatar: ex.agentAvatar ?? 'av-01',
+      cliName: 'claude' as const,
+      cliPath: '',
+      cliVersion: '',
+      modelName: ex.modelName ?? '',
+      maxTurns: 0,
+      status: 'busy' as const,
+      snapshotInterval: 1,
+      sparklinePoints: 60,
+      statsRetention: 7,
+      enabled: true,
+      createdAt: '',
+    } satisfies Agent,
+    execution: ex,
+  }))
+  // 검증·확인 단계를 지금 에이전트가 돌리고 있는 실행
+  const liveStageExecs = (kind: 'verify' | 'confirm') => runningExecs.filter(e => e.assigneeType !== 'user' && stageKindOf(e.id) === kind)
+  const liveAgentCount = runningExecs.filter(e => e.assigneeType !== 'user').length
   const doneExecs = executions.filter(e => e.status !== 'running' && e.status !== 'assigned')
   const todayStartISO = getKSTTodayStartISO()
   // agent_id가 비어있으면(=null/'') 외부 도구 execution. mapExecution에서 NULL→''로 정규화하긴 하지만
@@ -235,9 +253,9 @@ export default function ProjectCard({ project }: Props) {
     return () => clearInterval(timer)
   }, [project.id])
 
-  // activities 폴링 (AI 에이전트 작업 중일 때만)
+  // activities 폴링 (AI 에이전트 작업 중일 때만 — 처리·검증·확인 모두)
   useEffect(() => {
-    if (agentWorkingCount === 0) return
+    if (liveAgentCount === 0) return
     const fetchActivities = async () => {
       try {
         const res = await fetch('/api/activities')
@@ -252,7 +270,7 @@ export default function ProjectCard({ project }: Props) {
     fetchActivities()
     const timer = setInterval(fetchActivities, 2000)
     return () => clearInterval(timer)
-  }, [agentWorkingCount])
+  }, [liveAgentCount])
 
   return (
     <div
@@ -312,11 +330,6 @@ export default function ProjectCard({ project }: Props) {
                   <button data-tour="project-scanner-toggle" onClick={toggleScanner} className="flex items-center gap-1 transition-all" title={project.scannerActive ? tp('pauseScanner') : tp('resumeScanner')} aria-label={project.scannerActive ? tp('pauseScanner') : tp('resumeScanner')}>
                     <span className={`h-8 px-2.5 rounded-lg flex items-center gap-1 text-xs font-bold transition-all ${project.scannerActive ? 'bg-ive-bg-deep text-ive-green/60 hover:text-ive-green hover:bg-ive-green/10 border border-ive-border-dark' : 'bg-ive-red/10 text-ive-red border border-ive-red/30 hover:bg-ive-red/20 scale-105'}`}>
                       {project.scannerActive ? <i className="fa-solid fa-pause text-xs" /> : <i className="fa-solid fa-play text-xs ml-px" />}
-                    </span>
-                  </button>
-                  <button data-tour="project-scan-now" onClick={handleManualScan} disabled={scanning} className="flex items-center gap-1 transition-all disabled:opacity-30 disabled:cursor-not-allowed" title={tp('scanNow')} aria-label={tp('manualScan')}>
-                    <span className={`h-8 px-2.5 rounded-lg flex items-center gap-1 text-xs font-bold transition-all ${scanning ? 'bg-ive-green/20 text-ive-green border border-ive-green/30' : 'bg-ive-bg-deep text-ive-green/60 hover:text-ive-green hover:bg-ive-green/10 border border-ive-border-dark'}`}>
-                      {scanning ? <i className="fa-solid fa-circle-notch fa-spin text-xs" /> : <i className="fa-solid fa-rocket text-xs" />}
                     </span>
                   </button>
                   <button
@@ -538,7 +551,12 @@ export default function ProjectCard({ project }: Props) {
                     {isChat ? `💬 #${ex.issueIid} ${tp('chatLabel')}` : `#${ex.issueIid} `}
                     {!isChat && ex.issueTitle && `${ex.issueTitle}`}
                   </MarqueeText>
-                  <span className={`shrink-0 text-xs font-mono font-bold tabular-nums ml-auto ${'text-ive-amber/70'}`}>
+                  {!isVerify && stageKindOf(ex.id) && (
+                    <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-ive-amber/70 ml-auto">
+                      {tp(stageKindOf(ex.id) === 'verify' ? 'verifyingBadge' : 'confirmingBadge')}
+                    </span>
+                  )}
+                  <span className={`shrink-0 text-xs font-mono font-bold tabular-nums ${!isVerify && stageKindOf(ex.id) ? '' : 'ml-auto'} ${'text-ive-amber/70'}`}>
                     {formatDuration(ex.startedAt)}
                     {tick >= 0 ? '' : ''}
                   </span>
@@ -551,47 +569,32 @@ export default function ProjectCard({ project }: Props) {
         )
       })()}
 
-      {/* 작업 현황 패널 (AI 에이전트만) */}
-      {expandedPanel === 'running' && (() => {
-        const agentExecs = runningExecs.filter(e => e.assigneeType !== 'user')
-        // #272: 프로젝트 배정 폐기 → 현재 실행 중인 에이전트만 탭으로 표시.
-        // execution row에 inline JOIN된 agent_name/agent_avatar 사용 (다른 사용자 풀의 에이전트도 표시 가능).
-        const agentTabs = agentExecs.map(ex => ({
-          agent: {
-            id: ex.agentId,
-            userId: '',
-            name: ex.agentName ?? '',
-            avatar: ex.agentAvatar ?? 'av-01',
-            cliName: 'claude' as const,
-            cliPath: '',
-            cliVersion: '',
-            modelName: ex.modelName ?? '',
-            maxTurns: 0,
-            status: 'busy' as const,
-            snapshotInterval: 1,
-            sparklinePoints: 60,
-            statsRetention: 7,
-            enabled: true,
-            createdAt: '',
-          } satisfies Agent,
-          execution: ex,
-        }))
-        return (
-          <div className="flex-1 flex flex-col min-h-0">
-            <LiveTracePanel
-              agents={agentTabs}
-              projectId={project.id}
-              onKill={handleKill}
-              onAllCompleted={() => setExpandedPanel(null)}
-            />
-          </div>
-        )
-      })()}
+      {/* 작업 현황 패널 (AI 에이전트만) — 처리 */}
+      {expandedPanel === 'running' && (
+        <div className="flex-1 flex flex-col min-h-0">
+          <LiveTracePanel
+            agents={toAgentTabs(runningExecs.filter(e => e.assigneeType !== 'user' && !stageKindOf(e.id)))}
+            projectId={project.id}
+            onKill={handleKill}
+            onAllCompleted={() => setExpandedPanel(null)}
+          />
+        </div>
+      )}
 
       {/* 검증 중 패널 — IVE-V 라벨 단계 이슈 목록 (라벨 기반, task_execution 없어도 표시) */}
       {expandedPanel === 'verifying' && (
         <div className="flex-1 flex flex-col min-h-0 border-t border-ive-amber/20">
-          {verifyingIssues.length === 0 ? (
+          {/* 에이전트가 이 단계를 돌리는 중이면 처리 패널과 같은 실시간 화면 */}
+          {liveStageExecs('verify').length > 0 && (
+            <div className="flex-1 flex flex-col min-h-0">
+              <LiveTracePanel
+                agents={toAgentTabs(liveStageExecs('verify'))}
+                projectId={project.id}
+                onKill={handleKill}
+              />
+            </div>
+          )}
+          {liveStageExecs('verify').length > 0 && verifyingIssues.every((i: any) => liveStageExecs('verify').some(e => e.issueIid === i.iid)) ? null : verifyingIssues.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center gap-2 text-ive-text-dim text-sm">
               <i className="fa-solid fa-inbox text-2xl" />
               <span>{tp('noVerifying')}</span>
@@ -636,7 +639,17 @@ export default function ProjectCard({ project }: Props) {
       {/* 확인 중 패널 — IVE-C 라벨 단계 이슈 목록 (검증 패널과 동일 구조) */}
       {expandedPanel === 'confirming' && (
         <div className="flex-1 flex flex-col min-h-0 border-t border-ive-amber/20">
-          {confirmingIssues.length === 0 ? (
+          {/* 에이전트가 이 단계를 돌리는 중이면 처리 패널과 같은 실시간 화면 */}
+          {liveStageExecs('confirm').length > 0 && (
+            <div className="flex-1 flex flex-col min-h-0">
+              <LiveTracePanel
+                agents={toAgentTabs(liveStageExecs('confirm'))}
+                projectId={project.id}
+                onKill={handleKill}
+              />
+            </div>
+          )}
+          {liveStageExecs('confirm').length > 0 && confirmingIssues.every((i: any) => liveStageExecs('confirm').some(e => e.issueIid === i.iid)) ? null : confirmingIssues.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center gap-2 text-ive-text-dim text-sm">
               <i className="fa-solid fa-inbox text-2xl" />
               <span>{tp('noConfirming')}</span>

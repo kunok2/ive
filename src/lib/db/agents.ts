@@ -58,8 +58,12 @@ export function updateAgent(a: Agent) {
 }
 
 export function deleteAgent(id: string, userId: string) {
-  clearPreferredAgentRefs(id)
-  getDb().prepare('DELETE FROM agents WHERE id = ? AND user_id = ?').run(id, userId)
+  // 소유자의 삭제가 실제로 일어났을 때만 이슈 배정·역할 명부의 참조를 정리한다(남의 에이전트 id 로 호출돼도 무해).
+  const db = getDb()
+  db.transaction(() => {
+    const r = db.prepare('DELETE FROM agents WHERE id = ? AND user_id = ?').run(id, userId)
+    if (r.changes > 0) clearPreferredAgentRefs(id)
+  })()
 }
 
 export function updateAgentStatus(id: string, status: Agent['status']) {

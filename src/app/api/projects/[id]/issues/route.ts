@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAccess, getProjectAuthToken, getAssignModeMap, setAssignMode, setAssigneeAuto, setPresetRoles, getPresetRoles, getActualRoleAssigneesMap, getAgent, hasActiveExecution, stageFromLabels, touchProjectActivity, getIssueIterationCountsMap, getActiveChatSessionsByProject, findIssueIidsByTitle } from '@/lib/db';
+import { getProject, getProjectAccess, getProjectAuthToken, getAssignModeMap, setAssignMode, setAssigneeAuto, setPresetRoles, getPresetRoles, getActualRoleAssigneesMap, getAgent, hasActiveExecution, stageFromLabels, touchProjectActivity, getIssueIterationCountsMap, getActiveChatSessionsByProject, findIssueIidsByTitle, hasRole, markRolesInitialized, setStageWorkerNote, getStageWorkerNote, setIssueIntakeChannel, type RoleMode } from '@/lib/db';
+import { autoAssignAllAgents, agentRoleAvailable } from '@/lib/role-assignment';
 import { isChatAgentRunning } from '@/lib/chat-agent';
 import { triggerScan } from '@/lib/scanner';
 import { getCurrentUser } from '@/lib/auth';
@@ -110,16 +111,16 @@ export async function GET(
         const presetRoles = getPresetRoles(projectId, issue.iid);
         const actuals = { ...(actualRolesMap.get(issue.iid) || { processor: null, verifier: null, confirmer: null }) };
 
-        // 자동배정/지정 결과 — 단계별 Git assignee 를 해당 역할의 실제 사람으로 fallback
+        // 자동배정/지정 결과 — 단계별 Git assignee 를 해당 역할의 실제 사람으로 fallback (그 역할을 에이전트가 맡았으면 제외)
         const firstAssignee = assignees[0];
-        if (!actuals.verifier && firstAssignee && (stage === 'verify_waiting' || stage === 'verifying')) {
+        if (!actuals.verifier && firstAssignee && presetRoles.verifier.mode !== 'agent' && (stage === 'verify_waiting' || stage === 'verifying')) {
           actuals.verifier = {
             userId: String(firstAssignee.id),
             name: firstAssignee.name || firstAssignee.username,
             avatar: firstAssignee.avatarUrl || null,
           };
         }
-        if (!actuals.confirmer && firstAssignee && (stage === 'confirm_waiting' || stage === 'confirming')) {
+        if (!actuals.confirmer && firstAssignee && presetRoles.confirmer.mode !== 'agent' && (stage === 'confirm_waiting' || stage === 'confirming')) {
           actuals.confirmer = {
             userId: String(firstAssignee.id),
             name: firstAssignee.name || firstAssignee.username,
@@ -155,6 +156,7 @@ export async function GET(
           authorId: issue.author?.id ?? null,
           presetVerifier: presetRoles.verifier,
           presetConfirmer: presetRoles.confirmer,
+          stageWorkerNote: (stage === 'done' || issue.state === 'closed') ? null : getStageWorkerNote(projectId, issue.iid),
           actualProcessor: actuals.processor,
           actualVerifier: actuals.verifier,
           actualConfirmer: actuals.confirmer,
@@ -197,8 +199,23 @@ export async function POST(
     return NextResponse.json({ error: '작업 생성 권한이 없습니다.' }, { status: 403 });
   }
 
-  const { title, description, asDev, preferredAgentId, assignMode: reqAssignMode, assigneeIds, assigneeUsernames, assigneeAuto, verifierMode, verifierUserId, verifierUsername, confirmerMode, confirmerUserId, confirmerUsername, dueDate, notify } = await req.json();
+  const { title, description, asDev, preferredAgentId, assignMode: reqAssignMode, assigneeIds, assigneeUsernames, assigneeAuto, verifierMode, verifierUserId, verifierUsername, verifierAgentId, confirmerMode, confirmerUserId, confirmerUsername, confirmerAgentId, autoAllAgents, rolesExplicit, dueDate, notify } = await req.json();
   if (!title?.trim()) return NextResponse.json({ error: '제목을 입력하세요.' }, { status: 400 });
+  // 에이전트 검증자·확인자는 역할 명부에서 그 역할을 가진 것만, 처리자 ≠ 검증자. (「모든 단계 자동배정」이어도 같은 검사)
+  {
+    if (verifierMode === 'agent' && !agentRoleAvailable('verify')) {
+      return NextResponse.json({ error: '검증 에이전트 작업자는 아직 없어 검증자를 에이전트로 지정할 수 없습니다.' }, { status: 400 });
+    }
+    if (verifierMode === 'agent' && !(verifierAgentId && hasRole(projectId, 'verify', 'agent', verifierAgentId))) {
+      return NextResponse.json({ error: '검증 역할로 명부에 있는 에이전트만 검증자로 지정할 수 있습니다.' }, { status: 400 });
+    }
+    if (confirmerMode === 'agent' && !(confirmerAgentId && hasRole(projectId, 'confirm', 'agent', confirmerAgentId))) {
+      return NextResponse.json({ error: '확인 역할로 명부에 있는 에이전트만 확인자로 지정할 수 있습니다.' }, { status: 400 });
+    }
+    if (preferredAgentId && verifierMode === 'agent' && verifierAgentId === preferredAgentId) {
+      return NextResponse.json({ error: '처리자와 검증자를 같은 에이전트로 지정할 수 없습니다.' }, { status: 400 });
+    }
+  }
   // dueDate 검증 (선택). YYYY-MM-DD 외 값은 무시.
   const dueDateNormalized: string | null = (typeof dueDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dueDate)) ? dueDate : null;
 
@@ -262,22 +279,33 @@ export async function POST(
       if (assigneeAuto) {
         setAssigneeAuto(projectId, issue.iid, true);
       }
-      // 검증자/확인자 사전 배정 — 'creator' / 'auto' / 'specific'
+      // 검증자/확인자 사전 배정 — 'creator' / 'auto' / 'specific' / 'agent'
       if (verifierMode || confirmerMode) {
         setPresetRoles(projectId, issue.iid, {
           verifier: {
-            mode: (verifierMode as 'creator' | 'auto' | 'specific') || 'creator',
+            mode: (verifierMode as RoleMode) || 'creator',
             userId: verifierMode === 'specific' ? (verifierUserId ?? null) : null,
             username: verifierMode === 'specific' ? (verifierUsername ?? null) : null,
+            agentId: verifierMode === 'agent' ? (verifierAgentId ?? null) : null,
           },
           confirmer: {
-            mode: (confirmerMode as 'creator' | 'auto' | 'specific') || 'creator',
+            mode: (confirmerMode as RoleMode) || 'creator',
             userId: confirmerMode === 'specific' ? (confirmerUserId ?? null) : null,
             username: confirmerMode === 'specific' ? (confirmerUsername ?? null) : null,
+            agentId: confirmerMode === 'agent' ? (confirmerAgentId ?? null) : null,
           },
         });
       }
+      // 「모든 단계 자동배정」 — 세 역할을 명부의 가장 한가한 에이전트로 한꺼번에 (위의 개별 선택보다 우선)
+      if (autoAllAgents) {
+        const out = autoAssignAllAgents(projectId, issue.iid, { isKo: user.locale !== 'en' });
+        if (out.warnings.length) setStageWorkerNote(projectId, issue.iid, out.warnings.join(' / '));
+      }
+      // 등록 폼에서 역할을 직접 정했으면 프로젝트 기본 배정을 덮어쓰지 않는다
+      if (autoAllAgents || rolesExplicit) markRolesInitialized(projectId, issue.iid);
     }
+    // 들어온 경로 — IVE 등록 폼 (경로별 기본 배정)
+    if (issue.iid) { try { setIssueIntakeChannel(projectId, issue.iid, 'ive') } catch { /* 기록 실패는 기본 배정만 접수 쪽으로 간다 */ } }
 
     // assignee 모드: 가이드 노트 작성 (담당자에게 레이블 변경 안내)
     if (issue.iid && isAssigneeMode) {

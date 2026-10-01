@@ -1128,50 +1128,27 @@ export function initSchema(db: Database.Database) {
     }
   } catch (e) { console.error('[DB] users mail_unsubscribed migration failed:', e) }
 
-  // users.password NOT NULL → NULL 허용
+  // 본인 Git username (확인자/담당자 → IVE 계정 매핑 fallback). 예전에는 아래 재생성에만 들어 있어 새 DB 에서는 칸이 생기지 않았다.
+  try {
+    const userCols = (db.prepare("PRAGMA table_info(users)").all() as { name: string }[]).map(c => c.name)
+    if (!userCols.includes('gitlab_username')) db.exec("ALTER TABLE users ADD COLUMN gitlab_username TEXT")
+    if (!userCols.includes('github_username')) db.exec("ALTER TABLE users ADD COLUMN github_username TEXT")
+  } catch (e) { console.error('[DB] users git username columns migration failed:', e) }
+
+  // users.password NOT NULL → NULL 허용 (OAuth 가입자는 비밀번호가 없다)
+  // 지금 테이블 정의를 그대로 옮기고 password 제약만 푼다 — 고정 칸 목록으로 다시 만들면 그 사이 추가된 칸이 떨어져 나간다.
   try {
     const sqlRow = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").get() as any
     if (sqlRow?.sql && /password\s+TEXT\s+NOT\s+NULL/i.test(sqlRow.sql)) {
       console.log('[DB] Migrating users: password NOT NULL → nullable (OAuth 지원)')
+      const newSql = String(sqlRow.sql)
+        .replace(/^CREATE TABLE\s+(IF NOT EXISTS\s+)?["`\[]?users["`\]]?/i, 'CREATE TABLE users_new')
+        .replace(/password\s+TEXT\s+NOT\s+NULL/i, 'password TEXT')
+      const cols = (db.prepare("PRAGMA table_info(users)").all() as { name: string }[]).map(c => `"${c.name}"`).join(', ')
       db.pragma('foreign_keys = OFF')
-      db.exec(`
-        CREATE TABLE users_new (
-          id TEXT PRIMARY KEY,
-          email TEXT NOT NULL,
-          name TEXT NOT NULL,
-          password TEXT,
-          created_at TEXT NOT NULL DEFAULT (datetime('now')),
-          is_admin INTEGER NOT NULL DEFAULT 0,
-          max_agents INTEGER NOT NULL DEFAULT 0,
-          max_turns INTEGER NOT NULL DEFAULT 0,
-          avatar TEXT NOT NULL DEFAULT 'av-01',
-          allowed_clis TEXT NOT NULL DEFAULT 'opencode',
-          locale TEXT,
-          timezone TEXT,
-          git_username TEXT,
-          gitlab_username TEXT,
-          github_username TEXT,
-          oauth_provider_id TEXT,
-          oauth_user_id TEXT,
-          oauth_access_token TEXT,
-          oauth_refresh_token TEXT,
-          oauth_token_expires_at TEXT,
-          UNIQUE(email)
-        )
-      `)
-      db.exec(`
-        INSERT INTO users_new (
-          id, email, name, password, created_at,
-          is_admin, max_agents, max_turns, avatar, allowed_clis,
-          locale, timezone, git_username, gitlab_username, github_username,
-          oauth_provider_id, oauth_user_id, oauth_access_token, oauth_refresh_token, oauth_token_expires_at
-        ) SELECT
-          id, email, name, password, created_at,
-          is_admin, max_agents, max_turns, avatar, allowed_clis,
-          locale, timezone, git_username, gitlab_username, github_username,
-          oauth_provider_id, oauth_user_id, oauth_access_token, oauth_refresh_token, oauth_token_expires_at
-        FROM users
-      `)
+      db.exec('DROP TABLE IF EXISTS users_new')
+      db.exec(newSql)
+      db.exec(`INSERT INTO users_new (${cols}) SELECT ${cols} FROM users`)
       db.exec('DROP INDEX IF EXISTS idx_users_oauth')
       db.exec('DROP TABLE users')
       db.exec('ALTER TABLE users_new RENAME TO users')
@@ -1309,8 +1286,174 @@ export function initSchema(db: Database.Database) {
     );
   `)
 
+  migrateStageAutomation(db)
+
   seedAdmin(db)
   seedTokenPricing(db)
+}
+
+/**
+ * 처리·검증·확인 역할에 사람 또는 에이전트를 배정하는 모델 (단계 자동화).
+ *
+ *   project_role_members : 프로젝트별 역할 명부. 한 줄 = (대상, 역할들). 대상은 사람(Git username) 또는 에이전트.
+ *                          source='sync' 는 Git 멤버 동기화로 자동 들어온 줄(멤버가 빠지면 같이 빠짐),
+ *                          'manual' 은 사람이 손댄 줄(역할을 전부 끈 줄은 "명시적 제외" 기록으로 남는다).
+ *   project_automation   : 프로젝트별 기본 배정·안전장치·상한·staging 정보·비밀값(암호화).
+ *   role_prompts(+history): 역할별 프롬프트의 편집 가능한 부분(프로젝트 덮어쓰기)과 변경 이력.
+ *   issue_stages         : 검증자·확인자 preset 에 에이전트 지정(mode='agent' + *_agent_id),
+ *                          기본 배정 적용 시각, 외부 작성자 이슈의 자동 실행 승인.
+ *   task_executions      : 실행 때 쓴 프롬프트 판(prompt_version), 단계 종류(stage_kind).
+ */
+function migrateStageAutomation(db: Database.Database) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS project_role_members (
+      project_id TEXT NOT NULL,
+      subject_type TEXT NOT NULL CHECK(subject_type IN ('user', 'agent')),
+      subject_id TEXT NOT NULL,
+      git_user_id TEXT DEFAULT NULL,
+      name TEXT NOT NULL DEFAULT '',
+      avatar TEXT NOT NULL DEFAULT '',
+      can_process INTEGER NOT NULL DEFAULT 0,
+      can_verify INTEGER NOT NULL DEFAULT 0,
+      can_confirm INTEGER NOT NULL DEFAULT 0,
+      source TEXT NOT NULL DEFAULT 'manual' CHECK(source IN ('sync', 'manual')),
+      updated_by TEXT DEFAULT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (project_id, subject_type, subject_id),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS project_automation (
+      project_id TEXT PRIMARY KEY,
+      default_roles TEXT NOT NULL DEFAULT '{}',
+      author_allowlist TEXT NOT NULL DEFAULT '[]',
+      staging_secrets TEXT NOT NULL DEFAULT '',
+      limits TEXT NOT NULL DEFAULT '{}',
+      updated_by TEXT DEFAULT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS role_prompts (
+      project_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      body TEXT NOT NULL,
+      version INTEGER NOT NULL DEFAULT 1,
+      updated_by TEXT DEFAULT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (project_id, kind),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS role_prompt_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      body TEXT DEFAULT NULL,
+      updated_by TEXT DEFAULT NULL,
+      updated_by_name TEXT DEFAULT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_role_prompt_history ON role_prompt_history(project_id, kind, version);
+  `)
+
+  // 확인(④) 단계의 staging 정보(주소·배포 커밋 확인 주소 등) — IVE 동작용 메타정보라 IVE 에 둔다
+  try { db.exec(`ALTER TABLE project_automation ADD COLUMN staging TEXT NOT NULL DEFAULT '{}'`) } catch { /* 이미 존재 */ }
+  try { db.exec(`ALTER TABLE issue_stages ADD COLUMN preset_verifier_agent_id TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
+  try { db.exec(`ALTER TABLE issue_stages ADD COLUMN preset_confirmer_agent_id TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
+  try { db.exec(`ALTER TABLE issue_stages ADD COLUMN roles_initialized_at TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
+  try { db.exec(`ALTER TABLE issue_stages ADD COLUMN automation_approved_at TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
+  try { db.exec(`ALTER TABLE issue_stages ADD COLUMN automation_approved_by TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
+  try { db.exec(`ALTER TABLE issue_stages ADD COLUMN author_username TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
+  try { db.exec(`ALTER TABLE issue_stages ADD COLUMN stage_worker_note TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
+  // 이슈가 들어온 경로 — 'ive'(IVE 등록 폼) | 'report'(작업 접수 페이지). NULL = Git 직접·API 등 IVE 밖. 경로별 기본 배정·자동 실행 허용에 쓴다
+  try { db.exec(`ALTER TABLE issue_stages ADD COLUMN intake_channel TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
+  try { db.exec(`ALTER TABLE task_executions ADD COLUMN prompt_version TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
+  try { db.exec(`ALTER TABLE task_executions ADD COLUMN stage_kind TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
+  // 단계 작업자 판정 (확인: pass | fail | blocked). 순환 상한·재기동 판단에 쓴다.
+  try { db.exec(`ALTER TABLE task_executions ADD COLUMN stage_verdict TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
+  // 사람 단가 배수 — 프로젝트 × 사람 × 역할 (기본 단가 × 배수). 처음 생길 때 그 사람의 종전 배수(users.rate_multiplier)로 채워
+  // 적용 직후 보고서 숫자가 바뀌지 않게 한다. 연결 기준: 명부의 Git 사용자 id = IVE 사용자의 OAuth id (프로젝트와 같은 공급자)
+  const rmCols = (db.prepare('PRAGMA table_info(project_role_members)').all() as { name: string }[]).map(c => c.name)
+  if (!rmCols.includes('rate_process')) {
+    db.exec(`ALTER TABLE project_role_members ADD COLUMN rate_process REAL NOT NULL DEFAULT 1`)
+    db.exec(`ALTER TABLE project_role_members ADD COLUMN rate_verify REAL NOT NULL DEFAULT 1`)
+    db.exec(`ALTER TABLE project_role_members ADD COLUMN rate_confirm REAL NOT NULL DEFAULT 1`)
+    try {
+      // 명부 사람 줄 ↔ IVE 사용자: 같은 공급자의 OAuth id, 또는 사용자 정보의 Git username
+      const linked = `(SELECT u.rate_multiplier FROM users u JOIN projects p ON p.id = project_role_members.project_id
+          LEFT JOIN oauth_providers op ON op.id = u.oauth_provider_id
+        WHERE u.rate_multiplier > 0 AND (
+          (project_role_members.git_user_id IS NOT NULL AND u.oauth_user_id = project_role_members.git_user_id AND op.type = p.provider)
+          OR (p.provider = 'gitlab' AND u.gitlab_username = project_role_members.subject_id)
+          OR (p.provider = 'github' AND u.github_username = project_role_members.subject_id))
+        ORDER BY u.rate_multiplier DESC LIMIT 1)`
+      db.exec(`
+        UPDATE project_role_members SET rate_process = ${linked}, rate_verify = ${linked}, rate_confirm = ${linked}
+        WHERE subject_type = 'user' AND ${linked} IS NOT NULL
+      `)
+    } catch (e) { console.warn('[DB] role rate migration skipped:', (e as Error).message) }
+  }
+  // 묶음 배포 설정(출발 조건·검사 명령·자동 머지) — 3.5.1
+  try { db.exec(`ALTER TABLE project_automation ADD COLUMN bundle TEXT NOT NULL DEFAULT '{}'`) } catch { /* 이미 존재 */ }
+  // MR 머지로 이슈 자동 닫기 — 처리(D) 커밋·MR 문구에 Git 닫기 키워드(resolve #N)를 넣을지. NULL = 켬(종전 동작)
+  try { db.exec(`ALTER TABLE project_automation ADD COLUMN close_on_merge INTEGER DEFAULT NULL`) } catch { /* 이미 존재 */ }
+
+  // 묶음 배포 — 검증(③) 통과 이슈를 모아 staging 에 한 번 푸시한다.
+  //   stage_bundles      : 묶음 하나(출발·머지·푸시·배포·확인 진행 상태)
+  //   stage_bundle_items : 묶음 대기열과 묶음에 실린 이슈 (bundle_id 가 NULL 이면 아직 대기)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS stage_bundles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      target_branch TEXT NOT NULL,
+      base_sha TEXT DEFAULT NULL,
+      pushed_sha TEXT DEFAULT NULL,
+      pipeline_status TEXT DEFAULT NULL,
+      pipeline_url TEXT DEFAULT NULL,
+      note TEXT DEFAULT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      approved_at TEXT DEFAULT NULL,
+      approved_by TEXT DEFAULT NULL,
+      departed_at TEXT DEFAULT NULL,
+      pushed_at TEXT DEFAULT NULL,
+      deployed_at TEXT DEFAULT NULL,
+      finished_at TEXT DEFAULT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_stage_bundles_project ON stage_bundles(project_id, status);
+
+    CREATE TABLE IF NOT EXISTS stage_bundle_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_id TEXT NOT NULL,
+      issue_iid INTEGER NOT NULL,
+      bundle_id INTEGER DEFAULT NULL,
+      status TEXT NOT NULL,
+      source_sha TEXT NOT NULL,
+      mr_iid INTEGER DEFAULT NULL,
+      mr_url TEXT DEFAULT NULL,
+      issue_title TEXT DEFAULT NULL,
+      merge_sha TEXT DEFAULT NULL,
+      mr_result TEXT DEFAULT NULL,
+      note TEXT DEFAULT NULL,
+      queued_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_stage_bundle_items_issue ON stage_bundle_items(project_id, issue_iid);
+    CREATE INDEX IF NOT EXISTS idx_stage_bundle_items_bundle ON stage_bundle_items(bundle_id);
+  `)
+
+  // 이행: 지금 검증자 목록에 자동으로 보이던 Git 멤버를 검증 역할로 명부에 넣는다.
+  // INSERT OR IGNORE 라 매 기동마다 돌아도 안전하다 — 사람이 역할을 바꾸거나 뺀 줄은 그대로 남는다.
+  db.exec(`
+    INSERT OR IGNORE INTO project_role_members (project_id, subject_type, subject_id, git_user_id, name, avatar, can_verify, source)
+    SELECT project_id, 'user', username, git_user_id, COALESCE(NULLIF(name, ''), username), avatar_url, 1, 'sync'
+    FROM project_members
+  `)
 }
 
 function seedTokenPricing(db: Database.Database) {

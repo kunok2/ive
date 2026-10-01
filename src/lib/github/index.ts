@@ -3,7 +3,7 @@ export { ensureGitHubLabels, addGitHubIssueLabels, removeGitHubIssueLabels, chec
 export {
   fetchGitHubIssues, addGitHubIssueComment, fetchGitHubIssueNotes, deleteGitHubIssueComment,
   fetchAllIveIssues, fetchAllProjectIssues, fetchClosedProjectIssuesPage,
-  closeGitHubIssue, reopenGitHubIssue, updateGitHubIssue, createGitHubIssue,
+  closeGitHubIssue, reopenGitHubIssue, isGitHubIssueClosedByGit, updateGitHubIssue, createGitHubIssue,
   fetchGitHubCollaborators, fetchGitHubIssue,
 } from "./issues";
 export {
@@ -13,5 +13,5 @@ export {
 } from "./mr";
 export {
   createGitHubBranch, getGitHubDefaultBranch,
-  readGitHubRepoFile, upsertGitHubRepoFile, uploadGitHubFile, downloadGitHubFile,
+  readGitHubRepoFile, upsertGitHubRepoFile, uploadGitHubFile, downloadGitHubFile, isGitHubAncestorCommit,
 } from "./branches";

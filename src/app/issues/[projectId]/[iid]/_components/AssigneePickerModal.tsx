@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import Modal from '@/components/ui/Modal'
+import AgentAvatar from '@/components/agent/AgentAvatar'
 
 interface IssueAssignee {
   id: number
@@ -15,7 +16,7 @@ interface AssigneePickerModalProps {
   open: boolean
   gitMembers: IssueAssignee[]
   initialPick: IssueAssignee | null
-  onConfirm: (pick: IssueAssignee | null, auto: boolean) => void
+  onConfirm: (pick: IssueAssignee | null, auto: boolean, agentId?: string | null) => void
   onClose: () => void
   /** 모달 타이틀 (역할명). 미지정 시 '담당자' */
   title?: string
@@ -25,23 +26,28 @@ interface AssigneePickerModalProps {
   withAuto?: boolean
   /** 모달이 열릴 때 자동배정 모드로 시작할지 */
   initialAuto?: boolean
+  /** 에이전트 후보 (역할 명부) — 있으면 사람 목록 위에 따로 보인다 */
+  agents?: { id: string; name: string; avatar: string; cliName?: string | null }[]
+  initialAgentId?: string | null
 }
 
-export default function AssigneePickerModal({ open, gitMembers, initialPick, onConfirm, onClose, title, noneLabel, withAuto = false, initialAuto = false }: AssigneePickerModalProps) {
+export default function AssigneePickerModal({ open, gitMembers, initialPick, onConfirm, onClose, title, noneLabel, withAuto = false, initialAuto = false, agents, initialAgentId = null }: AssigneePickerModalProps) {
   const tc = useTranslations('common')
   const tIssue = useTranslations('issue')
   const [search, setSearch] = useState('')
   const [pick, setPick] = useState<IssueAssignee | null>(initialPick)
   const [auto, setAuto] = useState(initialAuto)
+  const [agentId, setAgentId] = useState<string | null>(initialAgentId)
 
   // Sync pick & search when modal opens
   useEffect(() => {
     if (open) {
       setPick(initialPick)
       setAuto(initialAuto)
+      setAgentId(initialAgentId)
       setSearch('')
     }
-  }, [open, initialPick, initialAuto])
+  }, [open, initialPick, initialAuto, initialAgentId])
 
   const filtered = gitMembers.filter(m => {
     if (!search) return true
@@ -49,8 +55,9 @@ export default function AssigneePickerModal({ open, gitMembers, initialPick, onC
     return (m.name || '').toLowerCase().includes(q) || m.username.toLowerCase().includes(q)
   })
 
-  const isNoneSelected = !pick && !auto
-  const isAutoSelected = !pick && auto
+  const isNoneSelected = !pick && !auto && !agentId
+  const isAutoSelected = !pick && auto && !agentId
+  const filteredAgents = (agents || []).filter(a => !search || a.name.toLowerCase().includes(search.toLowerCase()))
 
   return (
     <Modal open={open} onClose={onClose} title={title ?? tIssue('assignee')} size="sm">
@@ -67,7 +74,7 @@ export default function AssigneePickerModal({ open, gitMembers, initialPick, onC
       <div>
         {/* 미배정/생성자 옵션 */}
         <button
-          onClick={() => { setPick(null); setAuto(false) }}
+          onClick={() => { setPick(null); setAuto(false); setAgentId(null) }}
           className={`w-full px-4 py-3 text-left text-sm flex items-center gap-3 transition-colors ${
             isNoneSelected ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text-dim hover:bg-white/5'
           }`}
@@ -81,7 +88,7 @@ export default function AssigneePickerModal({ open, gitMembers, initialPick, onC
         {/* 자동배정 옵션 (옵션) */}
         {withAuto && (
           <button
-            onClick={() => { setPick(null); setAuto(true) }}
+            onClick={() => { setPick(null); setAuto(true); setAgentId(null) }}
             className={`w-full px-4 py-3 text-left text-sm flex items-center gap-3 transition-colors ${
               isAutoSelected ? 'bg-ive-cyan/10 text-ive-cyan' : 'text-ive-text-dim hover:bg-white/5'
             }`}
@@ -96,12 +103,37 @@ export default function AssigneePickerModal({ open, gitMembers, initialPick, onC
             </div>
           </button>
         )}
+        {filteredAgents.length > 0 && (
+          <>
+            <div className="px-4 pt-3 pb-1 text-xs font-bold text-ive-text-dim"><i className="fa-solid fa-robot mr-1" />{tIssue('pickerAgents')}</div>
+            {filteredAgents.map(a => {
+              const isPicked = agentId === a.id
+              return (
+                <button
+                  key={`agent-${a.id}`}
+                  onClick={() => { setPick(null); setAuto(false); setAgentId(a.id) }}
+                  className={`w-full px-4 py-3 text-left text-sm flex items-center gap-3 transition-colors ${
+                    isPicked ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text hover:bg-white/5'
+                  }`}
+                >
+                  {isPicked ? <i className="fa-solid fa-circle-dot text-xs shrink-0 w-4" /> : <i className="fa-regular fa-circle text-xs shrink-0 w-4 opacity-30" />}
+                  <AgentAvatar avatar={a.avatar || 'av-01'} size="sm" />
+                  <div className="min-w-0 flex-1">
+                    <div className="font-bold truncate">{a.name}</div>
+                    {a.cliName && <div className="text-xs text-ive-text-dim truncate">{a.cliName}</div>}
+                  </div>
+                </button>
+              )
+            })}
+            <div className="px-4 pt-3 pb-1 text-xs font-bold text-ive-text-dim"><i className="fa-solid fa-user mr-1" />{tIssue('pickerPeople')}</div>
+          </>
+        )}
         {filtered.map(m => {
           const isPicked = pick?.id === m.id
           return (
             <button
               key={m.id}
-              onClick={() => { setPick(m); setAuto(false) }}
+              onClick={() => { setPick(m); setAuto(false); setAgentId(null) }}
               className={`w-full px-4 py-3 text-left text-sm flex items-center gap-3 transition-colors ${
                 isPicked ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text hover:bg-white/5'
               }`}
@@ -124,7 +156,7 @@ export default function AssigneePickerModal({ open, gitMembers, initialPick, onC
           {tc('cancel')}
         </button>
         <button
-          onClick={() => onConfirm(pick, auto)}
+          onClick={() => onConfirm(pick, auto, agentId)}
           className="flex-1 py-2 rounded-lg text-sm font-bold bg-ive-green text-ive-bg-deep transition-all active:scale-[0.98]"
         >
           {tc('confirm')}

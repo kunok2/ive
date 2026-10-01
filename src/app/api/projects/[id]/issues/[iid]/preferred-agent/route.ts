@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAuthToken, getProjectAccess, isIssueAssignee, isIssueAuthor, getAssignMode, setAssignMode, getAgent, getAgentsByUser, hasActiveExecution, stageFromLabels } from '@/lib/db';
+import { getProject, getProjectAuthToken, getProjectAccess, isIssueAssignee, isIssueAuthor, getAssignMode, setAssignMode, getAgent, getAgentsByUser, hasActiveExecution, stageFromLabels, hasRole, getPresetRoles, markRolesInitialized, setStageWorkerNote } from '@/lib/db';
+import { violatesSelfReview } from '@/lib/role-assignment';
 import { getCurrentUser } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import { fetchSingleIssue } from '@/lib/provider';
@@ -82,12 +83,20 @@ export async function PATCH(
     const requester = issueForRequester ? resolveIssueRequester(project, issueForRequester) : null;
     const ownerId = requester?.user.id ?? project.userId;
     const pool = getAgentsByUser(ownerId);
-    if (!pool.find(a => a.id === agentId)) {
-      return NextResponse.json({ error: '의뢰자 본인의 에이전트만 지정할 수 있습니다.' }, { status: 400 });
+    // 프로젝트 역할 명부에 처리 역할로 올라 있는 에이전트도 지정할 수 있다(소유자·editor 가 내어 준 에이전트).
+    if (!pool.find(a => a.id === agentId) && !hasRole(projectId, 'process', 'agent', agentId)) {
+      return NextResponse.json({ error: '의뢰자 본인의 에이전트 또는 역할 명부의 처리 에이전트만 지정할 수 있습니다.' }, { status: 400 });
+    }
+    // 자기 작업을 자기가 검수하지 않는다 — 검증자로 지정된 에이전트는 처리자가 될 수 없다.
+    if (violatesSelfReview(agentId, getPresetRoles(projectId, Number(iid)).verifier)) {
+      return NextResponse.json({ error: '이 에이전트는 이 이슈의 검증자라 처리자로 지정할 수 없습니다.' }, { status: 400 });
     }
   }
 
   setAssignMode(projectId, Number(iid), mode, agentId || null);
+  // 사람이 직접 정한 처리자 — 프로젝트 기본 배정이 덮어쓰지 않게
+  markRolesInitialized(projectId, Number(iid));
+  setStageWorkerNote(projectId, Number(iid), null);   // 처리자를 다시 정했으니 이전 안내는 지운다
 
   const agent = (mode === 'agent' && agentId) ? getAgent(agentId) : null;
   logActivity({

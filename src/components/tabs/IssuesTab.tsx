@@ -1,5 +1,6 @@
 'use client'
 
+import type { RoleAgentCandidate, PresetRole } from '@/components/issue/RoleAvatarBar'
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useStore } from '@/lib/store'
@@ -180,13 +181,20 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   const [gitMembers, setGitMembers] = useState<{ id: number; username: string; name: string; avatarUrl: string }[]>([])
   // 확인자 후보 — 검증자/담당자(프로젝트 멤버)와 달리, provider 로 식별되는 모든 IVE 사용자.
   const [confirmerMembers, setConfirmerMembers] = useState<{ id: number; username: string; name: string; avatarUrl: string }[]>([])
+  // 역할 명부의 에이전트 — 검증자·확인자 picker 후보
+  const [roleAgents, setRoleAgents] = useState<{ verify: RoleAgentCandidate[]; confirm: RoleAgentCandidate[]; process: RoleAgentCandidate[] }>({ verify: [], confirm: [], process: [] })
   const [selectedAssignees, setSelectedAssignees] = useState<{ id: number; username: string; name: string; avatarUrl: string }[]>([])
   const [autoAssign, setAutoAssign] = useState(false)
-  // 검증자/확인자 사전 배정 — 'creator' | 'auto' | 'specific'
-  const [verifierMode, setVerifierMode] = useState<'creator' | 'auto' | 'specific'>('creator')
+  // 검증자/확인자 사전 배정 — 'creator' | 'auto' | 'specific' | 'agent'
+  const [verifierMode, setVerifierMode] = useState<PresetRole['mode']>('creator')
+  const [verifierAgentId, setVerifierAgentId] = useState<string | null>(null)
   const [verifierUserId, setVerifierUserId] = useState<string | null>(null)
   const [verifierUsername, setVerifierUsername] = useState<string | null>(null)
-  const [confirmerMode, setConfirmerMode] = useState<'creator' | 'auto' | 'specific'>('creator')
+  const [confirmerMode, setConfirmerMode] = useState<PresetRole['mode']>('creator')
+  const [confirmerAgentId, setConfirmerAgentId] = useState<string | null>(null)
+  // 「모든 단계 자동배정」, 등록 폼에서 역할을 직접 골랐는지(골랐으면 프로젝트 기본 배정이 덮어쓰지 않는다)
+  const [autoAllAgents, setAutoAllAgents] = useState(false)
+  const [rolesTouched, setRolesTouched] = useState(false)
   const [confirmerUserId, setConfirmerUserId] = useState<string | null>(null)
   const [confirmerUsername, setConfirmerUsername] = useState<string | null>(null)
   // 마감일 (YYYY-MM-DD). 빈 문자열이면 미설정.
@@ -254,7 +262,13 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   }, [selectedProjectId])
 
   const fetchGitMembers = useCallback(() => {
-    if (!selectedProjectId) { setGitMembers([]); setConfirmerMembers([]); return }
+    if (!selectedProjectId) { setGitMembers([]); setConfirmerMembers([]); setRoleAgents({ verify: [], confirm: [], process: [] }); return }
+    fetch(`/api/projects/${selectedProjectId}/roles`).then(res => res.ok ? res.json() : null).then(d => {
+      const agents = ((d?.roster || []) as { subjectType: string; subjectId: string; name: string; avatar: string; cliName?: string | null; roles: Record<'process' | 'verify' | 'confirm', boolean> }[])
+        .filter(r => r.subjectType === 'agent')
+      const pick = (k: 'process' | 'verify' | 'confirm') => (d?.agentRoles?.[k] === false ? [] : agents.filter(a => a.roles[k])).map(a => ({ id: a.subjectId, name: a.name, avatar: a.avatar, cliName: a.cliName ?? null }))
+      setRoleAgents({ verify: pick('verify'), confirm: pick('confirm'), process: pick('process') })
+    }).catch(() => setRoleAgents({ verify: [], confirm: [], process: [] }))
     fetch(`/api/projects/${selectedProjectId}/members`).then(res => res.ok ? res.json() : []).then(setGitMembers).catch(() => setGitMembers([]))
     fetch(`/api/projects/${selectedProjectId}/confirmer-candidates`).then(res => res.ok ? res.json() : []).then(setConfirmerMembers).catch(() => setConfirmerMembers([]))
   }, [selectedProjectId])
@@ -304,6 +318,12 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   }, [selectedProjectId, closedLoading, closedLoadingMore, closedHasMore, closedPageUrl])
 
   useEffect(() => { setClosedIssues([]); setClosedTotal(null); setClosedHasMore(false) }, [selectedProjectId])
+  // 프로젝트를 바꾸면 이전 프로젝트 명부의 에이전트 선택을 비운다(다른 프로젝트 명부엔 없는 에이전트라 등록이 거절된다)
+  useEffect(() => {
+    setVerifierMode(m => (m === 'agent' ? 'creator' : m)); setVerifierAgentId(null)
+    setConfirmerMode(m => (m === 'agent' ? 'creator' : m)); setConfirmerAgentId(null)
+    setAutoAllAgents(false)
+  }, [selectedProjectId])
   useEffect(() => { fetchIssues() }, [fetchIssues])
   useEffect(() => { if (filter === 'history' && selectedProjectId) fetchClosedIssues() }, [filter, selectedProjectId, fetchClosedIssues])
   useEffect(() => { if (activeTab === 'issues' && selectedProjectId) { fetchIssues(); fetchGitMembers() } }, [activeTab])
@@ -560,17 +580,22 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
         body: JSON.stringify({
           title, description,
           asDev: effectiveAsDev,
-          assignMode: preferredAgentId === 'assignee' ? 'assignee' : preferredAgentId === 'none' ? undefined : preferredAgentId ? 'agent' : 'auto',
-          preferredAgentId: (preferredAgentId && preferredAgentId !== 'none' && preferredAgentId !== 'assignee') ? preferredAgentId : undefined,
+          // 「모든 단계 자동배정」이면 숨겨진 개별 선택은 보내지 않는다(서버가 세 역할을 명부에서 고른다)
+          assignMode: autoAllAgents ? 'auto' : preferredAgentId === 'assignee' ? 'assignee' : preferredAgentId === 'none' ? undefined : preferredAgentId ? 'agent' : 'auto',
+          preferredAgentId: (!autoAllAgents && preferredAgentId && preferredAgentId !== 'none' && preferredAgentId !== 'assignee') ? preferredAgentId : undefined,
           assigneeIds: selectedAssignees.length > 0 ? selectedAssignees.map(a => a.id) : undefined,
           assigneeUsernames: selectedAssignees.length > 0 ? selectedAssignees.map(a => a.username) : undefined,
           assigneeAuto: autoAssign || undefined,
-          verifierMode,
-          verifierUserId: verifierMode === 'specific' ? verifierUserId : null,
-          verifierUsername: verifierMode === 'specific' ? verifierUsername : null,
-          confirmerMode,
-          confirmerUserId: confirmerMode === 'specific' ? confirmerUserId : null,
-          confirmerUsername: confirmerMode === 'specific' ? confirmerUsername : null,
+          verifierMode: autoAllAgents ? 'creator' : verifierMode,
+          verifierUserId: !autoAllAgents && verifierMode === 'specific' ? verifierUserId : null,
+          verifierUsername: !autoAllAgents && verifierMode === 'specific' ? verifierUsername : null,
+          confirmerMode: autoAllAgents ? 'creator' : confirmerMode,
+          confirmerUserId: !autoAllAgents && confirmerMode === 'specific' ? confirmerUserId : null,
+          confirmerUsername: !autoAllAgents && confirmerMode === 'specific' ? confirmerUsername : null,
+          verifierAgentId: !autoAllAgents && verifierMode === 'agent' ? verifierAgentId : null,
+          confirmerAgentId: !autoAllAgents && confirmerMode === 'agent' ? confirmerAgentId : null,
+          autoAllAgents: autoAllAgents || undefined,
+          rolesExplicit: rolesTouched || undefined,
           dueDate: newDueDate || undefined,
           notify: notifyOnDone || undefined,
         }),
@@ -578,8 +603,9 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
       if (res.ok) {
         const created = await res.json()
         handleBodyChange(''); setShowAddForm(false); setPreferredAgentId(null); setSelectedAssignees([]); setAutoAssign(false)
-        setVerifierMode('creator'); setVerifierUserId(null); setVerifierUsername(null)
-        setConfirmerMode('creator'); setConfirmerUserId(null); setConfirmerUsername(null)
+        setVerifierMode('creator'); setVerifierUserId(null); setVerifierUsername(null); setVerifierAgentId(null)
+        setConfirmerMode('creator'); setConfirmerUserId(null); setConfirmerUsername(null); setConfirmerAgentId(null)
+        setAutoAllAgents(false); setRolesTouched(false)
         setNewDueDate(''); setNotifyOnDone(false)
         const selectedAgent = preferredAgentId ? projectAgents.find(a => a.agentId === preferredAgentId) : null
         const newIssue: IveIssue = {
@@ -791,6 +817,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
           projectAgents={projectAgents}
           gitMembers={gitMembers}
           confirmerMembers={confirmerMembers}
+          roleAgents={roleAgents}
           locale={state.user?.locale}
           timezone={state.user?.timezone}
           headerSlot={showAddForm ? (
@@ -803,7 +830,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
               onCreateIssue={handleCreateIssue}
               onCancel={() => { setShowAddForm(false); handleBodyChange('') }}
               preferredAgentId={preferredAgentId}
-              onPreferredAgentIdChange={setPreferredAgentId}
+              onPreferredAgentIdChange={(id) => { setPreferredAgentId(id); setRolesTouched(true) }}
               projectAgents={projectAgents}
               gitMembers={gitMembers}
               confirmerMembers={confirmerMembers}
@@ -813,19 +840,28 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
               verifierMode={verifierMode}
               verifierUserId={verifierUserId}
               verifierUsername={verifierUsername}
-              onVerifierChange={(mode, userId, username) => {
+              onVerifierChange={(mode, userId, username, agentId) => {
                 setVerifierMode(mode)
                 setVerifierUserId(userId)
                 setVerifierUsername(username)
+                setVerifierAgentId(agentId ?? null)
+                setRolesTouched(true)
               }}
+              verifierAgentId={verifierAgentId}
               confirmerMode={confirmerMode}
               confirmerUserId={confirmerUserId}
               confirmerUsername={confirmerUsername}
-              onConfirmerChange={(mode, userId, username) => {
+              onConfirmerChange={(mode, userId, username, agentId) => {
                 setConfirmerMode(mode)
                 setConfirmerUserId(userId)
                 setConfirmerUsername(username)
+                setConfirmerAgentId(agentId ?? null)
+                setRolesTouched(true)
               }}
+              confirmerAgentId={confirmerAgentId}
+              roleAgents={roleAgents}
+              autoAllAgents={autoAllAgents}
+              onAutoAllAgentsChange={(roleAgents.process.length + roleAgents.confirm.length) > 0 ? setAutoAllAgents : undefined}
               dueDate={newDueDate}
               onDueDateChange={setNewDueDate}
               notify={notifyOnDone}
@@ -846,7 +882,11 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                 method: 'PATCH', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ verifier: preset }),
               })
-              if (!res.ok) {
+              if (res.ok) {
+                // 서버가 돌려준 저장값(에이전트 이름·아바타 포함)으로 맞춘다
+                const saved = await res.json().catch(() => null)
+                if (saved?.verifier) setIssues(list => list.map(i => i.iid === iid ? { ...i, presetVerifier: saved.verifier } : i))
+              } else {
                 const d = await res.json().catch(() => ({}))
                 toast(d.error || tIssue('verifierChangeFailed') || '검증자 변경 실패', 'error')
                 setIssues(list => list.map(i => i.iid === iid ? { ...i, presetVerifier: prev } : i))
@@ -865,7 +905,11 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                 method: 'PATCH', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ confirmer: preset }),
               })
-              if (!res.ok) {
+              if (res.ok) {
+                // 서버가 돌려준 저장값(에이전트 이름·아바타 포함)으로 맞춘다
+                const saved = await res.json().catch(() => null)
+                if (saved?.confirmer) setIssues(list => list.map(i => i.iid === iid ? { ...i, presetConfirmer: saved.confirmer } : i))
+              } else {
                 const d = await res.json().catch(() => ({}))
                 toast(d.error || tIssue('confirmerChangeFailed') || '확인자 변경 실패', 'error')
                 setIssues(list => list.map(i => i.iid === iid ? { ...i, presetConfirmer: prev } : i))

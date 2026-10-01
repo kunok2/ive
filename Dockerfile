@@ -81,6 +81,11 @@ RUN for v in $PLAYWRIGHT_EXTRA_VERSIONS; do \
     && rm -rf /var/lib/apt/lists/* \
     && chmod -R a+rwX /opt/playwright-browsers
 
+# 확인(④) 단계 작업자가 staging 을 직접 열어 보는 Playwright MCP.
+# 판은 src/lib/scanner/confirm-worker.ts PLAYWRIGHT_MCP_PACKAGE 와 같아야 한다.
+# 브라우저는 받지 않는다 — IVE 가 위에서 깐 chromium 을 --executable-path 로 넘긴다.
+RUN PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install -g @playwright/mcp@0.0.78
+
 # ── 앱 의존성 (package-lock 바뀔 때만 재설치) ──
 COPY package.json package-lock.json .npmrc ./
 RUN npm ci --omit=dev

@@ -49,6 +49,13 @@ export function reopenIssue(project: Project, iid: number, token: string) {
     : gitlab.reopenGitLabIssue(project, iid, token);
 }
 
+/** 이슈가 마지막으로 닫힌 것이 커밋·MR(닫기 키워드) 때문인가 — 사람이 닫았으면 false, 모르면 null */
+export function isIssueClosedByGit(project: Project, iid: number, token: string): Promise<boolean | null> {
+  return project.provider === 'github'
+    ? github.isGitHubIssueClosedByGit(project, iid, token)
+    : gitlab.isGitLabIssueClosedByGit(project, iid, token);
+}
+
 
 export function fetchIssueNotes(project: Project, iid: number, token: string, options?: { isOAuth?: boolean; silent?: boolean }) {
   return project.provider === 'github'
@@ -236,4 +243,11 @@ export function upsertRepoFile(project: Project, token: string, filePath: string
   return project.provider === 'github'
     ? github.upsertGitHubRepoFile(project, token, filePath, content, commitMessage, branch)
     : gitlab.upsertGitLabRepoFile(project, token, filePath, content, commitMessage, branch);
+}
+
+/** ancestor 커밋이 descendant 커밋에 포함되는가 (`git merge-base --is-ancestor`). 판정 불가면 null */
+export function isAncestorCommit(project: Project, token: string, ancestor: string, descendant: string) {
+  return project.provider === 'github'
+    ? github.isGitHubAncestorCommit(project, token, ancestor, descendant)
+    : gitlab.isGitLabAncestorCommit(project, token, ancestor, descendant);
 }

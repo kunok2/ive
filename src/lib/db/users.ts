@@ -1,3 +1,4 @@
+import { clearPreferredAgentRefs } from './issues'
 import { User } from '@/types'
 import { getDb } from './connection'
 import { deleteSlackWorkspace } from './slack'
@@ -17,7 +18,6 @@ export function mapUser(r: any): User {
     timezone: r.timezone,
     currency: r.currency ?? null,
     currencyRate: r.currency_rate ?? null,
-    rateMultiplier: r.rate_multiplier ?? 1,
     gitlabUsername: r.gitlab_username ?? null,
     githubUsername: r.github_username ?? null,
     slackUserId: r.slack_user_id ?? '',
@@ -127,6 +127,8 @@ export function deleteUser(id: string) {
   // 소유한 Slack 워크스페이스를 함께 정리(고아 방지 — 고아가 되면 아무도 재설치 못 함)
   const wsIds = (getDb().prepare('SELECT id FROM slack_workspaces WHERE default_user_id = ?').all(id) as any[]).map(r => r.id)
   for (const wid of wsIds) deleteSlackWorkspace(wid)
+  // 그 사람의 에이전트는 FK 로 함께 지워진다 — 이슈 배정·역할 명부의 참조를 먼저 정리(아무도 맡지 않은 이슈가 생기지 않게)
+  for (const a of getDb().prepare('SELECT id FROM agents WHERE user_id = ?').all(id) as { id: string }[]) clearPreferredAgentRefs(a.id)
   getDb().prepare('DELETE FROM users WHERE id = ?').run(id)
 }
 

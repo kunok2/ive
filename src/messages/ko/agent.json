@@ -87,7 +87,5 @@
   "oldestWait": "가장 오래된 대기",
   "approvedToday": "금일 승인",
   "rejectedToday": "금일 반려",
-  "last7Days": "최근 7일",
-  "rateMultiplier": "단가 배수",
-  "rateMultiplierHint": "사람단가 × 배수 (기본 1)"
+  "last7Days": "최근 7일"
 }

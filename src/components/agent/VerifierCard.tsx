@@ -35,12 +35,8 @@ interface QueueItem {
 
 interface Props {
   verifier: VerifierSummary
-  /** 관리자 + IVE 사용자 연결된 검증자만 단가 배수 편집 가능 */
-  canEditMultiplier?: boolean
-  /** 현재 사람단가 배수 (기본 1) */
-  multiplier?: number
-  /** 배수 저장 콜백 (blur 자동저장) */
-  onSaveMultiplier?: (value: number) => void
+  /** 어떤 역할의 카드인가 — 처리: 처리대기/처리중(담당자 처리), 확인: 확인대기/확인중 (기본 검증) */
+  role?: 'process' | 'verify' | 'confirm'
 }
 
 function fmtDur(min: number): string {
@@ -51,40 +47,39 @@ function fmtDur(min: number): string {
   return m > 0 ? `${h}시간 ${m}분` : `${h}시간`
 }
 
-export default function VerifierCard({ verifier, canEditMultiplier = false, multiplier = 1, onSaveMultiplier }: Props) {
+export default function VerifierCard({ verifier, role = 'verify' }: Props) {
   const t = useTranslations('agent')
-  // 사람단가 배수 입력 (blur 자동저장). prop 변경 시 동기화.
-  const [multInput, setMultInput] = useState(String(multiplier))
-  useEffect(() => { setMultInput(String(multiplier)) }, [multiplier])
-  const commitMultiplier = () => {
-    const v = parseFloat(multInput)
-    if (!Number.isFinite(v) || v <= 0) { setMultInput(String(multiplier)); return }
-    const rounded = Math.round(v * 100) / 100
-    if (rounded !== multiplier) onSaveMultiplier?.(rounded)
-    setMultInput(String(rounded))
-  }
+  const ta = useTranslations('automation')
+  const isConfirm = role === 'confirm'
+  const isProcess = role === 'process'
+  // 역할별 문구·단계 — 처리자·확인자 카드는 같은 모양으로 그 역할의 대기/진행을 보인다
+  const L = isProcess
+    ? { badge: ta('processorBadge'), icon: 'fa-user-gear', active: ta('processingLabel'), waiting: ta('processWaitingLabel'), done: ta('processDoneLabel'), failed: ta('processFailedLabel'), waitStage: 'waiting', activeStage: 'dev', key: 'pc' }
+    : isConfirm
+      ? { badge: ta('confirmerBadge'), icon: 'fa-circle-check', active: ta('confirmingLabel'), waiting: ta('confirmWaitingLabel'), done: t('approvedLabel'), failed: t('rejectedLabel'), waitStage: 'confirm_waiting', activeStage: 'confirming', key: 'cc' }
+      : { badge: t('verifierBadge'), icon: 'fa-user-check', active: t('verifyingLabel'), waiting: t('verifyWaitingLabel'), done: t('approvedLabel'), failed: t('rejectedLabel'), waitStage: 'verify_waiting', activeStage: 'verifying', key: 'vc' }
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window === 'undefined') return true
-    return sessionStorage.getItem(`vc-collapsed-${verifier.provider}-${verifier.username}`) !== 'false'
+    return sessionStorage.getItem(`${L.key}-collapsed-${verifier.provider}-${verifier.username}`) !== 'false'
   })
   const toggleCollapsed = () => {
     setCollapsed(prev => {
       const next = !prev
-      sessionStorage.setItem(`vc-collapsed-${verifier.provider}-${verifier.username}`, String(next))
+      sessionStorage.setItem(`${L.key}-collapsed-${verifier.provider}-${verifier.username}`, String(next))
       return next
     })
   }
   type PanelKey = 'waiting' | 'verifying' | 'approved' | 'rejected' | 'stats'
   const [expandedPanel, _setExpandedPanel] = useState<PanelKey | null>(() => {
     if (typeof window === 'undefined') return null
-    const saved = sessionStorage.getItem(`vc-panel-${verifier.provider}-${verifier.username}`)
+    const saved = sessionStorage.getItem(`${L.key}-panel-${verifier.provider}-${verifier.username}`)
     const valid: PanelKey[] = ['waiting', 'verifying', 'approved', 'rejected', 'stats']
     return saved && (valid as string[]).includes(saved) ? (saved as PanelKey) : null
   })
   const setExpandedPanel = (v: PanelKey | null) => {
     _setExpandedPanel(v)
-    if (v) sessionStorage.setItem(`vc-panel-${verifier.provider}-${verifier.username}`, v)
-    else sessionStorage.removeItem(`vc-panel-${verifier.provider}-${verifier.username}`)
+    if (v) sessionStorage.setItem(`${L.key}-panel-${verifier.provider}-${verifier.username}`, v)
+    else sessionStorage.removeItem(`${L.key}-panel-${verifier.provider}-${verifier.username}`)
   }
   const [snapshots, setSnapshots] = useState<StatSnapshot[]>([])
   const [queue, setQueue] = useState<QueueItem[]>([])
@@ -92,25 +87,29 @@ export default function VerifierCard({ verifier, canEditMultiplier = false, mult
   const fetchData = useCallback(async () => {
     try {
       const [snapRes, queueRes] = await Promise.all([
-        fetch(`/api/verifiers/${encodeURIComponent(verifier.username)}/snapshots?mode=daily_avg`),
-        fetch(`/api/verifiers/${encodeURIComponent(verifier.username)}/queue`),
+        // 추이(스냅샷)는 검증 기준으로만 쌓인다 — 처리자·확인자 카드는 추이 없이 건수·큐만
+        role !== 'verify' ? Promise.resolve(null) : fetch(`/api/verifiers/${encodeURIComponent(verifier.username)}/snapshots?mode=daily_avg`),
+        fetch(`/api/verifiers/${encodeURIComponent(verifier.username)}/queue${role !== 'verify' ? `?role=${role}` : ''}`),
       ])
-      if (snapRes.ok) setSnapshots(await snapRes.json())
+      if (snapRes?.ok) setSnapshots(await snapRes.json())
       if (queueRes.ok) {
         const data = await queueRes.json()
         setQueue(data.items || [])
       }
     } catch { /* ignore */ }
-  }, [verifier.username])
+  }, [verifier.username, role])
 
+  // 대기열·추이는 카드를 펼쳤을 때만 불러온다 — 접힌 카드의 건수는 목록 API 한 번으로 이미 받는다.
+  // (사람이 수백 명이면 카드마다 15초 폴링이 수백 건이 된다)
   useEffect(() => {
+    if (collapsed) return
     let cancelled = false
     void (async () => { if (!cancelled) await fetchData() })()
     const timer = setInterval(fetchData, 15000)
     const onVisible = () => { if (document.visibilityState === 'visible') void fetchData() }
     document.addEventListener('visibilitychange', onVisible)
     return () => { cancelled = true; clearInterval(timer); document.removeEventListener('visibilitychange', onVisible) }
-  }, [fetchData])
+  }, [fetchData, collapsed])
 
   const verifyingCount = verifier.verifying
   const waitingCount = verifier.verifyWaiting
@@ -124,8 +123,8 @@ export default function VerifierCard({ verifier, canEditMultiplier = false, mult
       ? 'border-ive-amber/40'
       : expandedPanel ? 'border-ive-cyan/30' : 'border-ive-border-subtle'
 
-  const waitingQueue = queue.filter(q => q.stage === 'verify_waiting')
-  const verifyingQueue = queue.filter(q => q.stage === 'verifying')
+  const waitingQueue = queue.filter(q => q.stage === L.waitStage)
+  const verifyingQueue = queue.filter(q => q.stage === L.activeStage)
 
   const providerIcon = verifier.provider === 'github' ? 'fa-github' : 'fa-gitlab'
 
@@ -142,7 +141,7 @@ export default function VerifierCard({ verifier, canEditMultiplier = false, mult
             <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
               <span className="text-base font-bold text-ive-text truncate">{verifier.name}</span>
               <span className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold bg-ive-cyan/20 text-ive-cyan">
-                <i className="fa-solid fa-user-check" />{t('verifierBadge')}
+                <i className={`fa-solid ${L.icon}`} />{L.badge}
               </span>
               {verifier.iveUser ? (
                 <span
@@ -222,27 +221,6 @@ export default function VerifierCard({ verifier, canEditMultiplier = false, mult
             )}
           </div>
 
-          {/* 사람단가 배수 — 관리자 + IVE 사용자 연결 검증자만. blur 자동저장. */}
-          {canEditMultiplier && (
-            <div className="flex items-center gap-2 text-sm font-bold">
-              <span className="text-ive-text-muted shrink-0"><i className="fa-solid fa-coins w-4 text-center" /> {t('rateMultiplier')}</span>
-              <div className="inline-flex items-center gap-1">
-                <span className="text-ive-text-dim">×</span>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  min="0.1"
-                  step="0.1"
-                  value={multInput}
-                  onChange={e => setMultInput(e.target.value)}
-                  onBlur={commitMultiplier}
-                  onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-                  className="w-16 px-2 py-0.5 rounded-lg bg-ive-bg-deep border border-ive-border-dark text-ive-text font-bold text-sm text-right focus:outline-none focus:border-ive-cyan/50"
-                />
-              </div>
-              <span className="text-xs font-bold text-ive-text-dim">{t('rateMultiplierHint')}</span>
-            </div>
-          )}
         </div>
 
         {/* 대시보드 통계 바 — 검증중/승인/반려/대기/통계 */}
@@ -253,7 +231,7 @@ export default function VerifierCard({ verifier, canEditMultiplier = false, mult
           >
             <span className={`text-sm font-bold ${verifyingCount > 0 ? 'text-ive-amber animate-pulse' : 'text-ive-text-dim'}`}>{verifyingCount}</span>
             <Sparkline data={snapshots.map(s => s.running)} width={40} height={12} color="amber" />
-            <span className="text-xs text-ive-text-dim font-bold">{t('verifyingLabel')}</span>
+            <span className="text-xs text-ive-text-dim font-bold">{L.active}</span>
           </button>
 
           <button
@@ -262,7 +240,7 @@ export default function VerifierCard({ verifier, canEditMultiplier = false, mult
           >
             <span className={`text-sm font-bold ${verifier.approvedToday > 0 ? 'text-ive-green' : 'text-ive-text-dim'}`}>{verifier.approvedToday}</span>
             <Sparkline data={snapshots.map(s => s.completed)} width={40} height={12} color="cyan" />
-            <span className="text-xs text-ive-text-dim font-bold">{t('approvedLabel')}</span>
+            <span className="text-xs text-ive-text-dim font-bold">{L.done}</span>
           </button>
 
           <button
@@ -271,7 +249,7 @@ export default function VerifierCard({ verifier, canEditMultiplier = false, mult
           >
             <span className={`text-sm font-bold ${verifier.rejectedToday > 0 ? 'text-ive-red' : 'text-ive-text-dim'}`}>{verifier.rejectedToday}</span>
             <Sparkline data={snapshots.map(s => s.failed)} width={40} height={12} color="red" />
-            <span className="text-xs text-ive-text-dim font-bold">{t('rejectedLabel')}</span>
+            <span className="text-xs text-ive-text-dim font-bold">{L.failed}</span>
           </button>
 
           <button
@@ -280,7 +258,7 @@ export default function VerifierCard({ verifier, canEditMultiplier = false, mult
           >
             <span className={`text-sm font-bold ${isOverloaded ? 'text-ive-red animate-pulse' : isTight ? 'text-ive-amber' : waitingCount > 0 ? 'text-ive-cyan' : 'text-ive-text-dim'}`}>{waitingCount}</span>
             <Sparkline data={snapshots.map(s => s.waiting)} width={40} height={12} color="cyan" />
-            <span className="text-xs text-ive-text-dim font-bold">{t('verifyWaitingLabel')}</span>
+            <span className="text-xs text-ive-text-dim font-bold">{L.waiting}</span>
           </button>
 
           <button
@@ -298,7 +276,7 @@ export default function VerifierCard({ verifier, canEditMultiplier = false, mult
           <div className="border-t border-ive-cyan/20">
             <div className="px-3 py-2 bg-ive-bg-deep/50 border-b border-ive-border-dark">
               <span className="text-xs font-bold text-ive-cyan uppercase tracking-widest">
-                <i className="fa-solid fa-clock mr-1" />{t('verifyWaitingCount', { count: waitingQueue.length })}
+                <i className="fa-solid fa-clock mr-1" />{L.waiting} {waitingQueue.length}
               </span>
             </div>
             <div className="max-h-[50vh] overflow-y-auto divide-y divide-ive-border-dark">
@@ -326,7 +304,7 @@ export default function VerifierCard({ verifier, canEditMultiplier = false, mult
           <div className="border-t border-ive-amber/20">
             <div className="px-3 py-2 bg-ive-bg-deep/50 border-b border-ive-border-dark">
               <span className="text-xs font-bold text-ive-amber uppercase tracking-widest">
-                <i className="fa-solid fa-magnifying-glass mr-1" />{t('verifyingCount', { count: verifyingQueue.length })}
+                <i className="fa-solid fa-magnifying-glass mr-1" />{L.active} {verifyingQueue.length}
               </span>
             </div>
             <div className="max-h-[50vh] overflow-y-auto divide-y divide-ive-border-dark">
@@ -354,7 +332,7 @@ export default function VerifierCard({ verifier, canEditMultiplier = false, mult
           <div className="border-t border-ive-green/20">
             <div className="px-3 py-2 bg-ive-bg-deep/50 border-b border-ive-border-dark">
               <span className="text-xs font-bold text-ive-green uppercase tracking-widest">
-                <i className="fa-solid fa-circle-check mr-1" />{t('approvedToday')}: {verifier.approvedToday}건 / {t('last7Days')}: {verifier.approved7d}건
+                <i className="fa-solid fa-circle-check mr-1" />{L.done} — {ta('todayLabel')}: {verifier.approvedToday} / {t('last7Days')}: {verifier.approved7d}
               </span>
             </div>
           </div>
@@ -365,7 +343,7 @@ export default function VerifierCard({ verifier, canEditMultiplier = false, mult
           <div className="border-t border-ive-red/20">
             <div className="px-3 py-2 bg-ive-bg-deep/50 border-b border-ive-border-dark">
               <span className="text-xs font-bold text-ive-red uppercase tracking-widest">
-                <i className="fa-solid fa-circle-xmark mr-1" />{t('rejectedToday')}: {verifier.rejectedToday}건 / {t('last7Days')}: {verifier.rejected7d}건
+                <i className="fa-solid fa-circle-xmark mr-1" />{L.failed} — {ta('todayLabel')}: {verifier.rejectedToday} / {t('last7Days')}: {verifier.rejected7d}
               </span>
             </div>
           </div>
@@ -389,11 +367,11 @@ export default function VerifierCard({ verifier, canEditMultiplier = false, mult
                 <div className="text-ive-text">{fmtDur(verifier.oldestWaitMin)}</div>
               </div>
               <div className="bg-ive-bg-deep rounded-lg p-2">
-                <div className="text-xs font-bold text-ive-text-dim">{t('last7Days')} {t('approvedLabel')}</div>
+                <div className="text-xs font-bold text-ive-text-dim">{t('last7Days')} {L.done}</div>
                 <div className="text-ive-text">{verifier.approved7d}건</div>
               </div>
               <div className="bg-ive-bg-deep rounded-lg p-2">
-                <div className="text-xs font-bold text-ive-text-dim">{t('last7Days')} {t('rejectedLabel')}</div>
+                <div className="text-xs font-bold text-ive-text-dim">{t('last7Days')} {L.failed}</div>
                 <div className="text-ive-text">{verifier.rejected7d}건</div>
               </div>
             </div>

@@ -2,6 +2,7 @@ import { Project } from '@/types'
 import { getDb } from './connection'
 import { getKSTTodayStartISO } from '../date-utils'
 import { isBotName } from '../git-bot'
+import { syncRosterWithMembers } from './roles'
 
 // ── Issue Stage (레이블 기반 상태 판정) ──
 
@@ -188,17 +189,35 @@ export function getPreferredIssuesByAgent(agentId: string): { projectId: string;
 }
 
 export function clearPreferredAgentRefs(agentId: string) {
-  getDb().prepare('UPDATE issue_stages SET preferred_agent_id = NULL WHERE preferred_agent_id = ?').run(agentId)
+  const db = getDb()
+  db.prepare('UPDATE issue_stages SET preferred_agent_id = NULL WHERE preferred_agent_id = ?').run(agentId)
+  // 검증자·확인자로 지정돼 있던 이슈는 사람 기본값(creator)으로 되돌린다 — 없는 에이전트를 기다리며 멈추지 않도록.
+  db.prepare(`UPDATE issue_stages SET preset_verifier_mode = 'creator', preset_verifier_agent_id = NULL
+    WHERE preset_verifier_mode = 'agent' AND preset_verifier_agent_id = ?`).run(agentId)
+  db.prepare(`UPDATE issue_stages SET preset_confirmer_mode = 'creator', preset_confirmer_agent_id = NULL
+    WHERE preset_confirmer_mode = 'agent' AND preset_confirmer_agent_id = ?`).run(agentId)
+  db.prepare(`DELETE FROM project_role_members WHERE subject_type = 'agent' AND subject_id = ?`).run(agentId)
 }
 
 // ── Preset Verifier / Confirmer (이슈 생성 시 사전 배정) ──
 
-export type RoleMode = 'creator' | 'auto' | 'specific'
+/**
+ * 검증자/확인자 preset 모드.
+ *   creator | auto | specific : 사람 (기존)
+ *   agent                     : 에이전트 지정 — 그 단계는 스캐너가 단계 작업자로 기동한다.
+ * `specific` 은 종전대로 "특정 사람" 만 뜻한다. 에이전트를 새 모드로 둔 이유: 기존 행·기존 화면이
+ * specific=사람 전제로 userId(Git id)를 assignee 로 쓰므로, 뜻을 넓히면 기존 경로가 에이전트 id 를
+ * Git id 로 오인한다. 새 모드는 기존 행을 건드리지 않는다(이행 불필요).
+ */
+export type RoleMode = 'creator' | 'auto' | 'specific' | 'agent'
 
 export interface PresetRoleInfo {
   mode: RoleMode
   userId: string | null      // GitLab/GitHub user id (specific 모드일 때)
   username: string | null    // 표시용
+  agentId?: string | null    // agent 모드일 때 agents.id
+  agentName?: string | null  // 표시용 (agent 모드)
+  agentAvatar?: string | null
 }
 
 export interface PresetRolesInfo {
@@ -206,22 +225,34 @@ export interface PresetRolesInfo {
   confirmer: PresetRoleInfo
 }
 
-const DEFAULT_ROLE: PresetRoleInfo = { mode: 'creator', userId: null, username: null }
+const DEFAULT_ROLE: PresetRoleInfo = { mode: 'creator', userId: null, username: null, agentId: null }
 
 export function getPresetRoles(projectId: string, issueIid: number): PresetRolesInfo {
-  const r = getDb().prepare(
-    'SELECT preset_verifier_mode, preset_verifier_user_id, preset_verifier_username, preset_confirmer_mode, preset_confirmer_user_id, preset_confirmer_username FROM issue_stages WHERE project_id = ? AND issue_iid = ?'
+  const r = getDb().prepare(`
+    SELECT s.preset_verifier_mode, s.preset_verifier_user_id, s.preset_verifier_username, s.preset_verifier_agent_id,
+      s.preset_confirmer_mode, s.preset_confirmer_user_id, s.preset_confirmer_username, s.preset_confirmer_agent_id,
+      va.name as v_agent_name, va.avatar as v_agent_avatar, ca.name as c_agent_name, ca.avatar as c_agent_avatar
+    FROM issue_stages s
+    LEFT JOIN agents va ON va.id = s.preset_verifier_agent_id
+    LEFT JOIN agents ca ON ca.id = s.preset_confirmer_agent_id
+    WHERE s.project_id = ? AND s.issue_iid = ?`
   ).get(projectId, issueIid) as any
   return {
     verifier: {
       mode: (r?.preset_verifier_mode as RoleMode) || 'creator',
       userId: r?.preset_verifier_user_id ?? null,
       username: r?.preset_verifier_username ?? null,
+      agentId: r?.preset_verifier_agent_id ?? null,
+      agentName: r?.v_agent_name ?? null,
+      agentAvatar: r?.v_agent_avatar ?? null,
     },
     confirmer: {
       mode: (r?.preset_confirmer_mode as RoleMode) || 'creator',
       userId: r?.preset_confirmer_user_id ?? null,
       username: r?.preset_confirmer_username ?? null,
+      agentId: r?.preset_confirmer_agent_id ?? null,
+      agentName: r?.c_agent_name ?? null,
+      agentAvatar: r?.c_agent_avatar ?? null,
     },
   }
 }
@@ -235,23 +266,41 @@ export function setPresetRoles(
   const c = roles.confirmer || DEFAULT_ROLE
   getDb().prepare(`
     INSERT INTO issue_stages (project_id, issue_iid, stage,
-      preset_verifier_mode, preset_verifier_user_id, preset_verifier_username,
-      preset_confirmer_mode, preset_confirmer_user_id, preset_confirmer_username,
+      preset_verifier_mode, preset_verifier_user_id, preset_verifier_username, preset_verifier_agent_id,
+      preset_confirmer_mode, preset_confirmer_user_id, preset_confirmer_username, preset_confirmer_agent_id,
       updated_at)
-    VALUES (?, ?, '', ?, ?, ?, ?, ?, ?, datetime('now'))
+    VALUES (?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
     ON CONFLICT(project_id, issue_iid) DO UPDATE SET
       preset_verifier_mode = excluded.preset_verifier_mode,
       preset_verifier_user_id = excluded.preset_verifier_user_id,
       preset_verifier_username = excluded.preset_verifier_username,
+      preset_verifier_agent_id = excluded.preset_verifier_agent_id,
       preset_confirmer_mode = excluded.preset_confirmer_mode,
       preset_confirmer_user_id = excluded.preset_confirmer_user_id,
       preset_confirmer_username = excluded.preset_confirmer_username,
+      preset_confirmer_agent_id = excluded.preset_confirmer_agent_id,
       updated_at = datetime('now')
   `).run(
     projectId, issueIid,
-    v.mode, v.userId, v.username,
-    c.mode, c.userId, c.username,
+    v.mode, v.userId, v.username, v.mode === 'agent' ? (v.agentId ?? null) : null,
+    c.mode, c.userId, c.username, c.mode === 'agent' ? (c.agentId ?? null) : null,
   )
+}
+
+/** 기본 배정(프로젝트 설정)을 이 이슈에 이미 적용했는가 — 한 번만 적용한다. */
+export function getRolesInitializedAt(projectId: string, issueIid: number): string | null {
+  const r = getDb().prepare('SELECT roles_initialized_at FROM issue_stages WHERE project_id = ? AND issue_iid = ?')
+    .get(projectId, issueIid) as any
+  return r?.roles_initialized_at ?? null
+}
+
+export function markRolesInitialized(projectId: string, issueIid: number) {
+  getDb().prepare(`
+    INSERT INTO issue_stages (project_id, issue_iid, stage, roles_initialized_at, updated_at)
+    VALUES (?, ?, '', datetime('now'), datetime('now'))
+    ON CONFLICT(project_id, issue_iid) DO UPDATE SET
+      roles_initialized_at = COALESCE(issue_stages.roles_initialized_at, excluded.roles_initialized_at)
+  `).run(projectId, issueIid)
 }
 
 // ── Actual Role Assignees (실제 수행 이력) ──
@@ -278,6 +327,9 @@ function resolveUserAvatar(avatar: string | null | undefined, userId: string | n
   return avatar
 }
 
+// 처리자(D) 판정에서 단계 작업자 행(검증·확인·재현 에이전트)을 뺀다 — 확인 에이전트가 처리자로 보이면 안 된다.
+const NOT_STAGE_ROW = "te.id NOT LIKE 'ex-verify-%' AND te.id NOT LIKE 'ex-confirm-%' AND te.id NOT LIKE 'ex-reproduce-%'"
+
 export function getActualRoleAssignees(projectId: string, issueIid: number): ActualRoleAssignees {
   const db = getDb()
 
@@ -285,7 +337,7 @@ export function getActualRoleAssignees(projectId: string, issueIid: number): Act
   const pRow = db.prepare(`
     SELECT te.agent_id as agentId, a.name as agentName, a.avatar as agentAvatar, a.cli_name as cliName
     FROM task_executions te LEFT JOIN agents a ON a.id = te.agent_id
-    WHERE te.project_id = ? AND te.issue_iid = ? AND te.assignee_type = 'agent'
+    WHERE te.project_id = ? AND te.issue_iid = ? AND te.assignee_type = 'agent' AND ${NOT_STAGE_ROW}
     ORDER BY te.started_at DESC LIMIT 1
   `).get(projectId, issueIid) as any
   const processor = pRow?.agentId ? {
@@ -348,7 +400,7 @@ export function getActualRoleAssigneesMap(projectId: string): Map<number, Actual
     SELECT te.issue_iid as iid, te.agent_id as agentId, a.name as agentName, a.avatar as agentAvatar, a.cli_name as cliName,
       te.started_at as startedAt
     FROM task_executions te LEFT JOIN agents a ON a.id = te.agent_id
-    WHERE te.project_id = ? AND te.assignee_type = 'agent'
+    WHERE te.project_id = ? AND te.assignee_type = 'agent' AND ${NOT_STAGE_ROW}
     ORDER BY te.started_at DESC
   `).all(projectId) as any[]
   for (const r of pRows) {
@@ -431,6 +483,8 @@ export function replaceProjectMembers(
       if (!m.username) continue
       stmt.run(projectId, m.username, m.name || m.username, m.avatarUrl || '', m.provider || 'gitlab', m.gitUserId ?? null)
     }
+    // 역할 명부: 새 멤버는 검증 역할로, 빠진 멤버의 자동(sync) 줄은 제거. 사람이 정한 줄은 유지.
+    syncRosterWithMembers(projectId, members)
   })
   tx()
 }
@@ -511,17 +565,42 @@ export interface VerifierSummary {
 }
 
 export function getVerifiersList(userId: string): VerifierSummary[] {
+  return getRolePeopleList(userId, 'verify')
+}
+
+/** 확인자 목록 — 검증자 카드와 같은 모양(대기·진행·처리 건수). verifyWaiting/verifying 은 확인대기/확인중. */
+export function getConfirmersList(userId: string): VerifierSummary[] {
+  return getRolePeopleList(userId, 'confirm')
+}
+
+/** 처리자(사람) 목록 — 같은 카드 모양. verifyWaiting/verifying 은 처리대기(스케줄)/처리중, approved/rejected 는 처리 완료/실패. */
+export function getProcessorsList(userId: string): VerifierSummary[] {
+  return getRolePeopleList(userId, 'process')
+}
+
+/**
+ * 역할(검증·확인)을 가진 사람 목록 + 역할별 대기·진행 건수.
+ * 사람 후보는 역할 명부(project_role_members)에서 그 역할을 가진 사람이다. 명부 밖이어도 지금 그 단계의
+ * Git 담당자로 걸려 있는 사람은 일감이 있으므로 함께 보인다(종전 검증자 목록과 같은 규칙).
+ */
+function getRolePeopleList(userId: string, role: 'process' | 'verify' | 'confirm'): VerifierSummary[] {
   const db = getDb()
   const accessCondition = `(p.user_id = ? OR EXISTS (SELECT 1 FROM project_shares ps WHERE ps.project_id = p.id AND ps.user_id = ?))`
   const todayStartISO = getKSTTodayStartISO()
   const week7Ago = new Date(Date.now() - 7 * 86400 * 1000).toISOString()
+  const roleCol = role === 'process' ? 'can_process' : role === 'verify' ? 'can_verify' : 'can_confirm'
+  const [waitStage, activeStage] = role === 'process' ? ['waiting', 'dev'] : role === 'verify' ? ['verify_waiting', 'verifying'] : ['confirm_waiting', 'confirming']
+  // 그 단계를 사람이 맡은 이슈만 그 사람의 일감이다 — 처리: 담당자 모드, 검증·확인: 에이전트 배정이 아닌 것
+  const personOwned = role === 'process'
+    ? `COALESCE(s.assign_mode, '') = 'assignee'`
+    : `COALESCE(s.${role === 'verify' ? 'preset_verifier_mode' : 'preset_confirmer_mode'}, '') != 'agent'`
 
   const memberRows = db.prepare(`
-    SELECT pm.username, pm.name, pm.avatar_url, pm.provider, pm.git_user_id, p.id as project_id, p.name as project_name, p.color as project_color
-    FROM project_members pm JOIN projects p ON p.id = pm.project_id
-    WHERE ${accessCondition}
+    SELECT m.subject_id as username, m.name, m.avatar as avatar_url, p.provider, m.git_user_id,
+      p.id as project_id, p.name as project_name, p.color as project_color
+    FROM project_role_members m JOIN projects p ON p.id = m.project_id
+    WHERE m.subject_type = 'user' AND m.${roleCol} = 1 AND ${accessCondition}
   `).all(userId, userId) as any[]
-
   interface Meta {
     username: string; name: string; avatar: string; provider: string; gitUserId: string | null
     projects: Map<string, { id: string; name: string; color: string; provider: string }>
@@ -545,11 +624,13 @@ export function getVerifiersList(userId: string): VerifierSummary[] {
   const currentRows = db.prepare(`
     SELECT s.assignee_username as username, COALESCE(s.assignee_provider, 'gitlab') as provider,
       MAX(s.assignee_name) as name, MAX(s.assignee_avatar) as avatar, MAX(s.assignee_git_user_id) as git_user_id,
-      SUM(CASE WHEN s.cached_stage = 'verifying' THEN 1 ELSE 0 END) as verifying,
-      SUM(CASE WHEN s.cached_stage = 'verify_waiting' THEN 1 ELSE 0 END) as verify_waiting,
-      MIN(CASE WHEN s.cached_stage IN ('verify_waiting', 'verifying') THEN s.verify_waiting_since ELSE NULL END) as oldest_wait_at
+      SUM(CASE WHEN s.cached_stage = '${activeStage}' THEN 1 ELSE 0 END) as verifying,
+      SUM(CASE WHEN s.cached_stage = '${waitStage}' THEN 1 ELSE 0 END) as verify_waiting,
+      MIN(CASE WHEN s.cached_stage IN ('${waitStage}', '${activeStage}') THEN ${role === 'verify' ? 's.verify_waiting_since' : 'NULL'} ELSE NULL END) as oldest_wait_at
     FROM issue_stages s JOIN projects p ON p.id = s.project_id
-    WHERE s.assignee_username IS NOT NULL AND s.cached_stage IN ('verify_waiting', 'verifying') AND ${accessCondition}
+    WHERE s.assignee_username IS NOT NULL AND s.cached_stage IN ('${waitStage}', '${activeStage}') AND ${accessCondition}
+      -- 그 단계를 에이전트가 맡은 이슈는 사람의 일감으로 세지 않는다(Git 담당자로만 걸려 있을 뿐)
+      AND ${personOwned}
     GROUP BY COALESCE(s.assignee_provider, 'gitlab'), s.assignee_username
   `).all(userId, userId) as any[]
   const currentMap = new Map<string, any>()
@@ -577,7 +658,24 @@ export function getVerifiersList(userId: string): VerifierSummary[] {
     }
   }
 
-  const execStats = db.prepare(`
+  // 처리(사람): 담당자 모드 처리 실행(사람 행, 검증·확인 행 제외)의 완료·실패·소요 시간. 실행 행의 user_id 는 Git 사용자 id 다.
+  const processStats = role === 'process' ? db.prepare(`
+    SELECT te.user_id as gitUserId, p.provider as provider,
+      SUM(CASE WHEN te.status = 'success' AND te.ended_at >= ? THEN 1 ELSE 0 END) as approved_7d,
+      SUM(CASE WHEN te.status = 'failed' AND te.ended_at >= ? THEN 1 ELSE 0 END) as rejected_7d,
+      SUM(CASE WHEN te.status = 'success' AND te.ended_at >= ? THEN 1 ELSE 0 END) as approved_today,
+      SUM(CASE WHEN te.status = 'failed' AND te.ended_at >= ? THEN 1 ELSE 0 END) as rejected_today,
+      AVG(CASE WHEN te.status = 'success' AND te.ended_at >= ?
+        THEN (julianday(te.ended_at) - julianday(te.started_at)) * 1440 ELSE NULL END) as avg_verify_min
+    FROM task_executions te JOIN projects p ON p.id = te.project_id
+    WHERE te.assignee_type = 'user' AND te.user_id IS NOT NULL
+      AND te.id NOT LIKE 'ex-verify-%' AND te.id NOT LIKE 'ex-confirm-%' AND te.id NOT LIKE 'ex-reproduce-%' AND te.id NOT LIKE 'exec-chat-%'
+      AND ${accessCondition}
+    GROUP BY p.provider, te.user_id
+  `).all(week7Ago, week7Ago, todayStartISO, todayStartISO, week7Ago, userId, userId) as any[] : []
+  const processMap = new Map<string, any>(processStats.map(r => [`${r.provider || 'gitlab'}:${r.gitUserId}`, r]))
+
+  const execStats = role === 'process' ? [] : role === 'verify' ? db.prepare(`
     SELECT te.verifier_username as username, p.provider as provider,
       SUM(CASE WHEN te.verified_at IS NOT NULL AND te.verified_at >= ? THEN 1 ELSE 0 END) as approved_7d,
       SUM(CASE WHEN te.rejected_at IS NOT NULL AND te.rejected_at >= ? THEN 1 ELSE 0 END) as rejected_7d,
@@ -590,6 +688,21 @@ export function getVerifiersList(userId: string): VerifierSummary[] {
     WHERE te.verifier_username IS NOT NULL AND ${accessCondition}
     GROUP BY p.provider, te.verifier_username
   `).all(week7Ago, week7Ago, todayStartISO, todayStartISO, week7Ago, userId, userId) as any[]
+  // 확인: 완료(confirmed_at) 시점의 Git 담당자가 확인자다(단계 전이 때 확인자로 교체되므로).
+  // 확인 반려(재작업 요청)는 따로 기록되지 않아 0 으로 둔다.
+  : db.prepare(`
+    SELECT s.assignee_username as username, p.provider as provider,
+      SUM(CASE WHEN s.confirmed_at >= ? THEN 1 ELSE 0 END) as approved_7d,
+      0 as rejected_7d,
+      SUM(CASE WHEN s.confirmed_at >= ? THEN 1 ELSE 0 END) as approved_today,
+      0 as rejected_today,
+      AVG(CASE WHEN s.confirmed_at >= ? AND s.confirm_started_at IS NOT NULL
+        THEN (strftime('%s', s.confirmed_at) - strftime('%s', s.confirm_started_at)) / 60.0
+        ELSE NULL END) as avg_verify_min
+    FROM issue_stages s JOIN projects p ON p.id = s.project_id
+    WHERE s.assignee_username IS NOT NULL AND s.confirmed_at IS NOT NULL AND ${accessCondition}
+    GROUP BY p.provider, s.assignee_username
+  `).all(week7Ago, todayStartISO, week7Ago, userId, userId) as any[]
   const execMap = new Map<string, any>()
   for (const r of execStats) {
     const key = metaKey(r.provider, r.username)
@@ -604,7 +717,7 @@ export function getVerifiersList(userId: string): VerifierSummary[] {
     .filter(([, meta]) => !isBotName(meta.username) && !isBotName(meta.name))
     .map(([key, meta]) => {
     const curr = currentMap.get(key)
-    const exec = execMap.get(key)
+    const exec = role === 'process' ? (meta.gitUserId ? processMap.get(`${meta.provider}:${meta.gitUserId}`) : null) : execMap.get(key)
     const oldestWaitMs = curr?.oldest_wait_at ? now - new Date(curr.oldest_wait_at + 'Z').getTime() : 0
     const iveUser = meta.gitUserId ? (iveUserByGitId.get(`${meta.provider}:${meta.gitUserId}`) || null) : null
     return {
@@ -639,6 +752,7 @@ export function getVerifierBacklogForReport(userId: string): {
       MIN(CASE WHEN s.cached_stage IN ('verify_waiting', 'verifying') THEN s.verify_waiting_since ELSE NULL END) as oldest_wait_at
     FROM issue_stages s JOIN projects p ON p.id = s.project_id
     WHERE s.assignee_username IS NOT NULL AND s.cached_stage IN ('verify_waiting', 'verifying')
+      AND COALESCE(s.preset_verifier_mode, '') != 'agent'
       AND (p.user_id = ? OR EXISTS (SELECT 1 FROM project_shares ps WHERE ps.project_id = p.id AND ps.user_id = ?))
     GROUP BY s.assignee_username
   `).all(userId, userId) as any[]
@@ -664,13 +778,36 @@ export function getVerifierBacklogForReport(userId: string): {
   }))
 }
 
-export function getVerifierQueue(userId: string, username: string): { projectId: string; projectName: string; projectColor: string; issueIid: number; issueTitle: string; stage: string; waitingSince: string | null }[] {
+export function getVerifierQueue(userId: string, username: string, role: 'process' | 'verify' | 'confirm' = 'verify'): { projectId: string; projectName: string; projectColor: string; issueIid: number; issueTitle: string; stage: string; waitingSince: string | null }[] {
+  if (role === 'process') {
+    // 담당자 모드로 사람이 처리하는 이슈 (스케줄 = 처리대기, 개발 = 처리중)
+    return getDb().prepare(`
+      SELECT s.project_id as projectId, p.name as projectName, p.color as projectColor,
+        s.issue_iid as issueIid, COALESCE(s.issue_title, '') as issueTitle,
+        CASE WHEN s.cached_stage = 'dev_fail' THEN 'dev' ELSE s.cached_stage END as stage, s.scheduled_at as waitingSince
+      FROM issue_stages s JOIN projects p ON p.id = s.project_id
+      WHERE s.assignee_username = ? AND s.cached_stage IN ('waiting', 'dev', 'dev_fail') AND COALESCE(s.assign_mode, '') = 'assignee'
+        AND (p.user_id = ? OR EXISTS (SELECT 1 FROM project_shares ps WHERE ps.project_id = p.id AND ps.user_id = ?))
+      ORDER BY s.issue_iid ASC
+    `).all(username, userId, userId) as any[]
+  }
+  if (role === 'confirm') {
+    return getDb().prepare(`
+      SELECT s.project_id as projectId, p.name as projectName, p.color as projectColor,
+        s.issue_iid as issueIid, COALESCE(s.issue_title, '') as issueTitle,
+        s.cached_stage as stage, NULL as waitingSince
+      FROM issue_stages s JOIN projects p ON p.id = s.project_id
+      WHERE s.assignee_username = ? AND s.cached_stage IN ('confirm_waiting', 'confirming') AND COALESCE(s.preset_confirmer_mode, '') != 'agent'
+        AND (p.user_id = ? OR EXISTS (SELECT 1 FROM project_shares ps WHERE ps.project_id = p.id AND ps.user_id = ?))
+      ORDER BY s.issue_iid ASC
+    `).all(username, userId, userId) as any[]
+  }
   return getDb().prepare(`
     SELECT s.project_id as projectId, p.name as projectName, p.color as projectColor,
       s.issue_iid as issueIid, COALESCE(s.issue_title, '') as issueTitle,
       s.cached_stage as stage, s.verify_waiting_since as waitingSince
     FROM issue_stages s JOIN projects p ON p.id = s.project_id
-    WHERE s.assignee_username = ? AND s.cached_stage IN ('verify_waiting', 'verifying')
+    WHERE s.assignee_username = ? AND s.cached_stage IN ('verify_waiting', 'verifying') AND COALESCE(s.preset_verifier_mode, '') != 'agent'
       AND (p.user_id = ? OR EXISTS (SELECT 1 FROM project_shares ps WHERE ps.project_id = p.id AND ps.user_id = ?))
     ORDER BY s.verify_waiting_since IS NULL, s.verify_waiting_since ASC, s.issue_iid ASC
   `).all(username, userId, userId) as any[]
@@ -685,7 +822,7 @@ export function getMyVerifierQueue(
       s.cached_stage as stage, s.verify_waiting_since as waitingSince
     FROM issue_stages s JOIN projects p ON p.id = s.project_id
     WHERE s.assignee_git_user_id = ? AND p.provider = ?
-      AND s.cached_stage IN ('verify_waiting', 'verifying')
+      AND s.cached_stage IN ('verify_waiting', 'verifying') AND COALESCE(s.preset_verifier_mode, '') != 'agent'
       AND (p.user_id = ? OR EXISTS (SELECT 1 FROM project_shares ps WHERE ps.project_id = p.id AND ps.user_id = ?))
     ORDER BY s.verify_waiting_since IS NULL, s.verify_waiting_since ASC, s.issue_iid ASC
   `).all(oauthUserId, providerType, userId, userId) as any[]
@@ -700,7 +837,7 @@ export function getMyVerifierCounts(
       SUM(CASE WHEN s.cached_stage = 'verifying' THEN 1 ELSE 0 END) as verifying
     FROM issue_stages s JOIN projects p ON p.id = s.project_id
     WHERE s.assignee_git_user_id = ? AND p.provider = ?
-      AND s.cached_stage IN ('verify_waiting', 'verifying')
+      AND s.cached_stage IN ('verify_waiting', 'verifying') AND COALESCE(s.preset_verifier_mode, '') != 'agent'
       AND (p.user_id = ? OR EXISTS (SELECT 1 FROM project_shares ps WHERE ps.project_id = p.id AND ps.user_id = ?))
   `).get(oauthUserId, providerType, userId, userId) as any
   const verifyWaiting = Number(r?.verify_waiting || 0)

@@ -165,3 +165,20 @@ export async function downloadGitHubFile(
   const buffer = Buffer.from(await res.arrayBuffer());
   return { buffer, contentType };
 }
+
+/**
+ * ancestor 커밋이 descendant 커밋의 조상(같은 커밋 포함)인가.
+ * GitHub API: GET /repos/:o/:r/compare/A...B → status identical|ahead 면 A 는 B 의 조상.
+ * @returns true/false, 판정 불가면 null
+ */
+export async function isGitHubAncestorCommit(
+  project: Project, decryptedToken: string, ancestor: string, descendant: string,
+): Promise<boolean | null> {
+  const headers = getGitHubAuthHeaders(project, decryptedToken);
+  const res = await fetch(apiUrl(project, `/compare/${encodeURIComponent(ancestor)}...${encodeURIComponent(descendant)}`), { headers });
+  if (!res.ok) return null;
+  const data = await res.json().catch(() => null);
+  const status = String(data?.status || '');
+  if (!status) return null;
+  return status === 'identical' || status === 'ahead';
+}

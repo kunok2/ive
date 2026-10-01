@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getAgentsByUser, createAgent, getUserById, getSystemSetting, countPreferredIssuesByAgent } from '@/lib/db'
+import { getAgentsByUser, createAgent, getUserById, getSystemSetting, countPreferredIssuesByAgent, getAgentRoleSummary } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { logActivity } from '@/lib/activity'
 
@@ -9,7 +9,8 @@ export async function GET() {
 
   const agents = getAgentsByUser(user.id)
   // 정렬용 pending 이슈 수 포함 (지정 대기 이슈)
-  const enriched = agents.map(a => ({ ...a, pendingCount: countPreferredIssuesByAgent(a.id) }))
+  // 역할 요약: 명부에서 가진 역할(처리·검증·확인) + 검증자·확인자로 지정된 이슈의 대기·진행 건수
+  const enriched = agents.map(a => ({ ...a, pendingCount: countPreferredIssuesByAgent(a.id), roleSummary: getAgentRoleSummary(a.id) }))
   return NextResponse.json(enriched)
 }
 

@@ -6,6 +6,14 @@ import {
   updateProjectLastChecked,
   updateProjectError,
   getAgentsByUser,
+  getAgent,
+  hasRole,
+  getRolesInitializedAt,
+  markRolesInitialized,
+  getPresetRoles,
+  setStageWorkerNote,
+  getStageWorkerNote,
+  getActiveBundleItem,
   createExecution,
   updateExecutionStatus,
   updateExecutionTokens,
@@ -62,6 +70,10 @@ import { startChatSessionReaper } from "../chat-agent";
 import fs from "fs";
 import path from "path";
 import { parseIveMetaSessions } from "./formatters";
+import { dispatchStageWorkers, type StageIssue } from "./stage-dispatch";
+import { tickBundles, reopenIfClosedByGit } from "./bundle-deploy";
+import { applyDefaultRoles } from "../role-assignment";
+import { isAgentEligibleForProject } from "../project-permissions";
 import { executeTask } from "./execute";
 
 // Re-export for external consumers
@@ -87,6 +99,9 @@ declare global {
   var pendingScanProjectId: string | null | undefined; // 스캔 중 트리거된 프로젝트 ID (undefined = 없음, null = 전체)
 }
 
+/** 명부에서 고른 처리 에이전트의 주인이 편집 권한을 잃었을 때 이슈에 남기는 안내 (처리 시작·재지정 시 지운다) */
+const PROCESSOR_INELIGIBLE_NOTE = '지정 처리 에이전트를 이 이슈에서 쓸 수 없습니다 — 처리자를 다시 지정해 주세요';
+
 export function startScanner() {
   if (global.scanInterval) {
     slog.info("Scanner already running. (V2)");
@@ -98,6 +113,13 @@ export function startScanner() {
 
   // 서버 재시작으로 고착된 실행 복구
   resetStuckExecutions();
+  // 비정상 종료로 남은 확인 작업자 비밀값 파일(평문) 정리 — 정상 종료 때는 작업자가 지운다
+  try {
+    const logDir = path.join(process.cwd(), 'data', 'logs');
+    if (fs.existsSync(logDir)) {
+      for (const f of fs.readdirSync(logDir)) if (f.endsWith('.secrets.env')) fs.rmSync(path.join(logDir, f), { force: true });
+    }
+  } catch (e) { slog.warn(`secrets file cleanup failed: ${(e as Error).message}`); }
 
   // 30초마다 전체 프로젝트 체크 (각 프로젝트의 checkInterval에 따라 실제 작업 수행 결정)
   // 1분 주기 프로젝트를 안정적으로 잡기 위해 폴링 주기를 30초로 설정
@@ -217,8 +239,9 @@ async function runScan() {
  */
 async function scanProject(project: Project, force: boolean = false) {
   try {
-    // 스캐너 활성화 여부 확인 (수동 실행 시에도 비활성 상태면 건너뜀)
-    if (!force && project.scannerActive === false) {
+    // 스캐너 일시정지 — 주기 스캔뿐 아니라 이벤트 트리거(force) 스캔도 건너뛴다.
+    // 정지는 토큰 소진 등 장애 시 비상 정지 수단이라 어떤 경로로도 새 작업이 시작되면 안 된다.
+    if (project.scannerActive === false) {
       return;
     }
 
@@ -365,6 +388,9 @@ async function scanProject(project: Project, force: boolean = false) {
 
     // 레이블로 상태 판정 후, waiting 이슈를 processIssues로 전달
     const waitingIssues: any[] = []
+    const stageIssues: StageIssue[] = []
+    // 이번 스캔에서 본 열린 이슈의 단계 — 묶음 배포가 실린 이슈의 진행(확인 끝남 등)을 판정한다
+    const scanStages = new Map<number, string | null>()
     const processedIids = new Set<number>()
     for (const [iid, issue] of issueMap) {
       processedIids.add(iid)
@@ -653,10 +679,26 @@ async function scanProject(project: Project, force: boolean = false) {
             });
           } catch (e) { slog.error({ err: e }, 'Failed to log detect_issue activity:'); }
         }
+        // 프로젝트 기본 배정(「모든 단계 자동배정」 포함)을 처음 보는 스케줄 이슈에 한 번 적용.
+        // 기본 배정이 없는 프로젝트는 아무것도 하지 않는다(종전 동작).
+        // 이미 실행 이력이 있는 이슈(반려·재시도로 돌아온 이슈, 이 기능 이전 이슈)는 사람이 정한 배정을 존중해 건드리지 않는다.
+        try {
+          const initializedAt = getRolesInitializedAt(project.id, iid);
+          if (!initializedAt && hasAnyExecution(project.id, iid)) markRolesInitialized(project.id, iid);
+          else if (applyDefaultRoles(project, iid, initializedAt)) {
+            slog.info(`[ROLES] Issue #${iid} — 프로젝트 기본 배정 적용`);
+          }
+        } catch (e) { slog.warn(`applyDefaultRoles failed (#${iid}):`, (e as Error).message); }
         waitingIssues.push(issue);
       } else if (stage === 'verify_waiting') {
         // 검증대기 이슈는 별도 카운터로 추적 (처리대기와 구분)
         verifyWaitingCount++;
+      }
+      scanStages.set(iid, stage);
+      if (stage === 'verify_waiting' || stage === 'verifying' || stage === 'confirm_waiting' || stage === 'confirming') stageIssues.push({ issue, stage });
+      // 처리 대기를 벗어났으면(사람이 라벨로 옮긴 경우 등) 「지정 처리 에이전트를 쓸 수 없음」 안내는 더 이상 맞지 않다
+      if (stage !== 'waiting') {
+        try { if (getStageWorkerNote(project.id, iid) === PROCESSOR_INELIGIBLE_NOTE) setStageWorkerNote(project.id, iid, null); } catch { /* ignore */ }
       }
     }
 
@@ -668,6 +710,15 @@ async function scanProject(project: Project, force: boolean = false) {
       issueCount += waiting;
     }
 
+    // 단계 작업자(③ 검증 · ④ 확인) — 그 단계 배정이 에이전트인 이슈만. 사람 배정은 종전대로 기다린다.
+    try {
+      await dispatchStageWorkers(project, stageIssues, decryptedToken);
+    } catch (e) { slog.warn(`dispatchStageWorkers failed (${project.name}):`, (e as Error).message); }
+    // 묶음 배포 — 검증 에이전트가 통과시킨 이슈의 대기열·묶음을 한 걸음 진행 (대기열이 빈 프로젝트는 아무것도 하지 않는다)
+    try {
+      await tickBundles(project, decryptedToken, scanStages);
+    } catch (e) { slog.warn(`tickBundles failed (${project.name}):`, (e as Error).message); }
+
     // 이번 스캔에서 발견되지 않은 기존 이슈(좀비) 정리
     const staleRows = getDb().prepare(`
       SELECT issue_iid, cached_stage FROM issue_stages
@@ -677,6 +728,15 @@ async function scanProject(project: Project, force: boolean = false) {
     for (const row of staleRows) {
       if (!processedIids.has(row.issue_iid)) {
         const iid = row.issue_iid
+        // 묶음으로 staging 에 실려 확인을 기다리는 이슈 — Git 이 커밋 메시지로 닫았으면 다시 열고 정리하지 않는다.
+        // (이번 스캔 목록을 받은 뒤 다시 열렸을 수도 있으니 한 건 조회해 열려 있으면 그대로 둔다)
+        if (getActiveBundleItem(project.id, iid)?.status === 'pushed') {
+          try {
+            const cur = await fetchSingleIssue(project, iid, decryptedToken)
+            if (cur && cur.state !== 'closed') continue
+            if (cur && await reopenIfClosedByGit(project, decryptedToken, iid, cur)) continue
+          } catch (e) { slog.warn(`reopen check failed (#${iid}):`, (e as Error).message) }
+        }
         // 이번 스캔 결과(Open 이슈)에 없음 -> Closed 되었거나 IVE 레이블이 제거됨.
         // 단순 실패로 마감하기 전에 "메인 브랜치 머지로 닫힌 완료 작업"인지 먼저 판정한다. (#467)
         let mergeComplete = false
@@ -820,11 +880,25 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
     const now = Date.now();
 
     if (preferredAgentId) {
-      const a = userAgents.find(a => a.id === preferredAgentId);
+      // 의뢰자 풀 밖이어도 이 프로젝트 역할 명부에 처리 역할로 올라 있는 에이전트면 쓴다
+      // (명부는 소유자·editor 의 에이전트를 프로젝트에 내어 준 것 — 의뢰자가 달라도 지정대로 처리).
+      const a = userAgents.find(a => a.id === preferredAgentId)
+        ?? ((): Agent | undefined => {
+          // 명부의 처리 에이전트라도 소유자가 지금 이 프로젝트의 소유자·editor 일 때만
+          if (!hasRole(project.id, 'process', 'agent', preferredAgentId)) return undefined;
+          const ag = getAgent(preferredAgentId);
+          return ag && isAgentEligibleForProject(project, ag) ? ag : undefined;
+        })();
       if (!a) {
         // 지정 에이전트가 의뢰자 풀에 없음 → 다른 에이전트로 자동 전환 금지
         // 사용자가 직접 작업자를 지정했으므로 그 의도를 존중한다.
         slog.info(`[WAIT] Issue #${issue.iid} — 지정 작업자(${preferredAgentId})가 의뢰자(${requester.user.name}) 풀에 없음, 대기`);
+        // 명부에서 고른 남의 에이전트인데 그 주인이 이 프로젝트 편집 권한을 잃은 경우만 화면에 알린다
+        // (의뢰자 풀에도 없으니 다시 지정하지 않으면 영영 처리되지 않는다). 에이전트를 안 쓰는 프로젝트엔 생기지 않는 경우.
+        const designated = getAgent(preferredAgentId);
+        if (designated && designated.userId !== requester.user.id && !isAgentEligibleForProject(project, designated)) {
+          try { setStageWorkerNote(project.id, issue.iid, PROCESSOR_INELIGIBLE_NOTE); } catch { /* ignore */ }
+        }
         continue;
       } else if (!isAgentAvailableNow(a, now)) {
         // 지정 에이전트가 휴가/사용중지 상태 → 다른 에이전트로 자동 전환 금지, 복귀까지 대기
@@ -843,8 +917,12 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
     // 선호 에이전트가 없거나 리셋된 경우: 라운드로빈 (가장 최근 완료가 오래된 에이전트 우선)
     if (useRoundRobin && !availableAgent) {
       let oldestTime = Infinity;
+      // 이 이슈의 검증자로 지정된 에이전트는 처리자로 고르지 않는다(자기 작업을 자기가 검수하지 않는다)
+      const verifierPreset = getPresetRoles(project.id, issue.iid).verifier;
+      const verifierAgentId = verifierPreset.mode === 'agent' ? verifierPreset.agentId : null;
       for (const a of userAgents) {
         if (!isAgentAvailableNow(a, now)) continue; // 휴가/사용중지 에이전트는 자동 배정 제외
+        if (verifierAgentId && a.id === verifierAgentId) continue;
         if (busyAgentIds.has(a.id)) continue;
         const running = countActiveExecutionsByAgent(a.id);
         if (running === 0) {
@@ -867,6 +945,8 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
       const waitingSince = getIssueScheduledAt(project.id, issue.iid) || new Date().toISOString();
 
       // 비동기로 태스크 실행 (개발자별 토큰 우선) — 트랜잭션은 executeTask 내에서 처리
+      // 처리가 시작되면 「지정 처리 에이전트를 쓸 수 없음」 안내는 더 이상 맞지 않으므로 지운다(다른 안내는 그대로)
+      try { if (getStageWorkerNote(project.id, issue.iid) === PROCESSOR_INELIGIBLE_NOTE) setStageWorkerNote(project.id, issue.iid, null); } catch { /* ignore */ }
       executeTask(project, issue, availableAgent, agentToken, waitingSince)
         .then(() => {
           slog.info(`[DONE] Issue #${issue.iid} processed.`);

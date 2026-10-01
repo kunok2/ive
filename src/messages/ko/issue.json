@@ -181,5 +181,8 @@
   "completedAt": "완료",
   "completedEarly": "{remain} 일찍 완료",
   "completedLate": "{remain} 늦게 완료",
-  "completedOnTime": "정시 완료"
+  "completedOnTime": "정시 완료",
+  "pickerAgents": "에이전트",
+  "pickerPeople": "사람",
+  "roleModeAgent": "에이전트"
 }

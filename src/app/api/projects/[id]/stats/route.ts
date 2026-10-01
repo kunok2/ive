@@ -20,10 +20,12 @@ export async function GET(
   const db = getDb()
   const todayStartISO = getKSTTodayStartISO()
 
-  // AI 에이전트 작업 중 (assigneeType이 'user'가 아닌 것)
+  // AI 에이전트 처리 중 (assigneeType이 'user'가 아닌 것).
+  // 검증·확인·재현 단계 작업자의 실행(ex-verify-/ex-confirm-/ex-reproduce-)은 처리가 아니다 — 그 이슈는 아래 검증 중·확인 중으로 센다.
   const agentWorkingExec = db.prepare(`
     SELECT COUNT(*) as count FROM task_executions
     WHERE project_id = ? AND status IN ('running', 'assigned') AND (assignee_type IS NULL OR assignee_type != 'user')
+      AND id NOT LIKE 'ex-verify-%' AND id NOT LIKE 'ex-confirm-%' AND id NOT LIKE 'ex-reproduce-%'
   `).get(id) as any
   const agentWorking = agentWorkingExec?.count ?? 0
 

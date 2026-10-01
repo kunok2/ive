@@ -4,14 +4,22 @@ import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { DEFAULT_AVATARS } from '@/types'
 import AssigneePickerModal from '@/components/tabs/issues/AssigneePickerModal'
+import CliLogo, { CLI_LOGO_NAMES } from '@/components/ui/CliLogo'
 
-export type RoleMode = 'creator' | 'auto' | 'specific'
+export type RoleMode = 'creator' | 'auto' | 'specific' | 'agent'
 
 export interface PresetRole {
   mode: RoleMode
   userId: string | null
   username: string | null
+  /** mode='agent' — 검증·확인을 맡은 에이전트 */
+  agentId?: string | null
+  agentName?: string | null
+  agentAvatar?: string | null
 }
+
+/** 역할 명부에서 그 역할을 가진 에이전트 (picker 후보) */
+export interface RoleAgentCandidate { id: string; name: string; avatar: string; cliName?: string | null }
 
 export interface GitMember {
   id: number
@@ -80,6 +88,9 @@ export interface RoleAvatarBarProps {
   size?: 'sm' | 'md'
   /** 현재 단계 macro index (1=유입,2=처리,3=검증,4=확인,5=완료). 제공 시 해당 단계 미만의 슬롯은 편집 잠금 */
   currentMacro?: 0 | 1 | 2 | 3 | 4 | 5
+  /** 검증·확인을 맡길 수 있는 에이전트 (역할 명부) */
+  verifierAgents?: RoleAgentCandidate[]
+  confirmerAgents?: RoleAgentCandidate[]
 }
 
 /**
@@ -93,6 +104,8 @@ export default function RoleAvatarBar({
   onProcessorClick, onVerifierChange, onConfirmerChange,
   size = 'md',
   currentMacro = 0,
+  verifierAgents,
+  confirmerAgents,
 }: RoleAvatarBarProps) {
   const tIssue = useTranslations('issue')
   // 확인자 picker/표시 목록 — IVE 사용자 후보(미지정 시 프로젝트 멤버 fallback). 검증자는 항상 gitMembers.
@@ -110,11 +123,13 @@ export default function RoleAvatarBar({
   const [verifierSearch, setVerifierSearch] = useState('')
   const [verifierPick, setVerifierPick] = useState<GitMember | null>(null)
   const [verifierAuto, setVerifierAuto] = useState(false)
+  const [verifierAgentPick, setVerifierAgentPick] = useState<string | null>(null)
 
   const [confirmerModalOpen, setConfirmerModalOpen] = useState(false)
   const [confirmerSearch, setConfirmerSearch] = useState('')
   const [confirmerPick, setConfirmerPick] = useState<GitMember | null>(null)
   const [confirmerAuto, setConfirmerAuto] = useState(false)
+  const [confirmerAgentPick, setConfirmerAgentPick] = useState<string | null>(null)
 
   const dim = size === 'sm' ? 'w-[18px] h-[18px]' : 'w-[22px] h-[22px]'
   const iconSize = size === 'sm' ? 'text-[8px]' : 'text-[10px]'
@@ -125,6 +140,7 @@ export default function RoleAvatarBar({
     setVerifierPick(verifier.mode === 'specific' && verifier.userId
       ? (gitMembers.find(m => String(m.id) === verifier.userId) || null)
       : null)
+    setVerifierAgentPick(verifier.mode === 'agent' ? (verifier.agentId ?? null) : null)
     setVerifierSearch('')
     setVerifierModalOpen(true)
   }
@@ -135,13 +151,15 @@ export default function RoleAvatarBar({
     setConfirmerPick(confirmer.mode === 'specific' && confirmer.userId
       ? (confirmerList.find(m => String(m.id) === confirmer.userId) || null)
       : null)
+    setConfirmerAgentPick(confirmer.mode === 'agent' ? (confirmer.agentId ?? null) : null)
     setConfirmerSearch('')
     setConfirmerModalOpen(true)
   }
 
   async function confirmVerifier() {
     let next: PresetRole
-    if (verifierAuto) next = { mode: 'auto', userId: null, username: null }
+    if (verifierAgentPick) next = { mode: 'agent', userId: null, username: null, agentId: verifierAgentPick }
+    else if (verifierAuto) next = { mode: 'auto', userId: null, username: null }
     else if (verifierPick) next = { mode: 'specific', userId: String(verifierPick.id), username: verifierPick.username }
     else next = { mode: 'creator', userId: null, username: null }
     await onVerifierChange?.(next)
@@ -150,7 +168,8 @@ export default function RoleAvatarBar({
 
   async function confirmConfirmer() {
     let next: PresetRole
-    if (confirmerAuto) next = { mode: 'auto', userId: null, username: null }
+    if (confirmerAgentPick) next = { mode: 'agent', userId: null, username: null, agentId: confirmerAgentPick }
+    else if (confirmerAuto) next = { mode: 'auto', userId: null, username: null }
     else if (confirmerPick) next = { mode: 'specific', userId: String(confirmerPick.id), username: confirmerPick.username }
     else next = { mode: 'creator', userId: null, username: null }
     await onConfirmerChange?.(next)
@@ -237,6 +256,9 @@ export default function RoleAvatarBar({
         autoMode={verifierAuto}
         onAutoModeChange={setVerifierAuto}
         onConfirm={confirmVerifier}
+        agents={verifierAgents}
+        agentPick={verifierAgentPick}
+        onAgentPickChange={setVerifierAgentPick}
         title={tIssue('verifier') || '검증자'}
         noneLabel={tIssue('roleModeCreator') || '미배정 (생성자)'}
       />
@@ -253,6 +275,9 @@ export default function RoleAvatarBar({
         autoMode={confirmerAuto}
         onAutoModeChange={setConfirmerAuto}
         onConfirm={confirmConfirmer}
+        agents={confirmerAgents}
+        agentPick={confirmerAgentPick}
+        onAgentPickChange={setConfirmerAgentPick}
         title={tIssue('confirmer') || '확인자'}
         noneLabel={tIssue('roleModeCreator') || '미배정 (생성자)'}
       />
@@ -316,6 +341,15 @@ function RoleSlot({ dim, ringClass, title, interactive, isCurrent, onClick, cont
  */
 export function renderAvatar(src: string | null | undefined, alt: string | null, dim: string, dimmed = false): React.ReactNode {
   const opacityCls = dimmed ? 'opacity-60' : ''
+
+  // CLI 브랜드 로고 아바타 ('cli-claude' 등) — 에이전트 카드(AgentAvatar)와 같은 모양
+  if (src && src.startsWith('cli-') && CLI_LOGO_NAMES.includes(src.slice(4))) {
+    return (
+      <span className={`${dim} flex items-center justify-center bg-ive-bg-deep pointer-events-none ${opacityCls}`}>
+        <CliLogo cli={src.slice(4)} className="w-[80%] h-[80%]" />
+      </span>
+    )
+  }
 
   // URL 직접 표시
   if (src && (src.startsWith('http') || src.startsWith('/') || src.startsWith('data:'))) {
@@ -400,6 +434,11 @@ function renderPlaceholder(dim: string, iconSize: string): React.ReactNode {
 }
 
 export function renderPresetContent(preset: PresetRole, members: GitMember[], creator: CreatorInfo, dim: string, iconSize: string): React.ReactNode {
+  if (preset.mode === 'agent') {
+    return preset.agentAvatar
+      ? renderAvatar(preset.agentAvatar, preset.agentName ?? null, dim)
+      : <i className={`fa-solid fa-robot text-ive-cyan ${iconSize}`} />
+  }
   if (preset.mode === 'auto') {
     return <i className={`fa-solid fa-shuffle text-ive-cyan ${iconSize}`} />
   }
@@ -421,6 +460,7 @@ export function presetTooltip(
   creator: CreatorInfo,
   t: ReturnType<typeof useTranslations<'issue'>>,
 ): string {
+  if (preset.mode === 'agent') return t('roleTooltipFormat', { role: roleName, value: `${t('roleModeAgent')} · ${preset.agentName || preset.agentId || '-'}` })
   if (preset.mode === 'auto') return t('roleTooltipFormat', { role: roleName, value: t('roleModeAuto') })
   if (preset.mode === 'specific') {
     const m = preset.userId ? members.find(x => String(x.id) === preset.userId) : null

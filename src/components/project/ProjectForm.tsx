@@ -199,6 +199,7 @@ export default function ProjectForm({ existing, onSuccess, onCancel }: Props) {
 
       {existing && <SharingSection existing={existing} />}
 
+
       {/* Submit / Cancel buttons */}
       <div className="sticky bottom-0 -mx-4 px-4 pt-3 pb-1 mt-2 border-t border-ive-border-dark bg-ive-bg-solid flex gap-2">
         {onCancel && (

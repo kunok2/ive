@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getProject, getProjectAuthToken, touchProjectActivity } from '@/lib/db'
+import { getProject, getProjectAuthToken, touchProjectActivity, setIssueIntakeChannel } from '@/lib/db'
 import { createIssue, checkLabelsExist } from '@/lib/provider'
 import { friendlyGitError } from '@/lib/git-token'
 import { verifyReportToken } from '@/lib/report-token'
 import { getCurrentUser } from '@/lib/auth'
-import { prependIveAuthorMarker } from '@/lib/ive-author'
+import { prependIveAuthorMarker, stripAllIveMarkers, stripIveDueMarker } from '@/lib/ive-author'
 
 // Rate limiting store (in-memory, single-instance)
 const rateLimitStore = new Map<string, number[]>()
@@ -94,8 +94,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: '내용을 입력하세요.' }, { status: 400 })
   }
 
-  // XSS 필터링 적용
-  const cleanContent = sanitizeContent(sanitizedContent)
+  // XSS 필터링 적용 + IVE 마커 제거 — 공개 접수 창구라 외부인이 본문에 「IVE 에서 누가 썼다」 마커를 넣어
+  // 의뢰자·자동 실행 허용 판정을 꾸미지 못하게 한다(진짜 의뢰자 마커는 아래에서 IVE 가 붙인다)
+  const cleanContent = stripIveDueMarker(stripAllIveMarkers(sanitizeContent(sanitizedContent)))
 
   // 내용 파싱: 첫 줄 = 제목, 나머지 = 본문
   const lines = cleanContent.split('\n')
@@ -150,6 +151,8 @@ export async function POST(req: NextRequest) {
     const labels = [project.labelTarget, project.labelSchedule || 'IVE-S']
 
     const issue = await createIssue(project, authToken, title, description, labels, undefined, { isOAuth: project.usesOAuthToken, dueDate: dueDateNormalized })
+    // 들어온 경로 — 작업 접수 페이지 (경로별 기본 배정·자동 실행 허용)
+    if (issue?.iid) { try { setIssueIntakeChannel(projectId, issue.iid, 'report') } catch { /* ignore */ } }
 
     touchProjectActivity(projectId)
 

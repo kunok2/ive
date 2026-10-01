@@ -181,5 +181,8 @@
   "completedAt": "Completed",
   "completedEarly": "Completed {remain} early",
   "completedLate": "Completed {remain} late",
-  "completedOnTime": "Completed on time"
+  "completedOnTime": "Completed on time",
+  "pickerAgents": "Agents",
+  "pickerPeople": "People",
+  "roleModeAgent": "Agent"
 }

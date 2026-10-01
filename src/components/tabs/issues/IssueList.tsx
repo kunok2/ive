@@ -1,5 +1,6 @@
 'use client'
 
+import type { PresetRole, RoleAgentCandidate } from '@/components/issue/RoleAvatarBar'
 import { useEffect, useRef, type ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
 import IssueCard from './IssueCard'
@@ -39,6 +40,7 @@ interface IssueListProps {
   gitMembers: GitMember[]
   /** 확인자 후보 — IVE 사용자(미지정 시 gitMembers fallback). */
   confirmerMembers?: GitMember[]
+  roleAgents?: { verify: RoleAgentCandidate[]; confirm: RoleAgentCandidate[]; process: RoleAgentCandidate[] }
   locale?: string
   timezone?: string
   /** 스크롤 영역 맨 위에 함께 렌더할 노드(예: IssueAddForm). 폼이 커져도 본문 스크롤로 모두 접근 가능하게 한다. */
@@ -48,8 +50,8 @@ interface IssueListProps {
   onOpenAgentPicker: (iid: number) => void
   onOpenAssigneeModal: (iids: number[]) => void
   onCloseIssue: (e: React.MouseEvent, iid: number) => void
-  onPresetVerifierChange?: (iid: number, preset: { mode: 'creator' | 'auto' | 'specific'; userId: string | null; username: string | null }) => Promise<void> | void
-  onPresetConfirmerChange?: (iid: number, preset: { mode: 'creator' | 'auto' | 'specific'; userId: string | null; username: string | null }) => Promise<void> | void
+  onPresetVerifierChange?: (iid: number, preset: PresetRole) => Promise<void> | void
+  onPresetConfirmerChange?: (iid: number, preset: PresetRole) => Promise<void> | void
 }
 
 export default function IssueList({
@@ -73,6 +75,7 @@ export default function IssueList({
   closing,
   gitMembers,
   confirmerMembers,
+  roleAgents,
   locale,
   timezone,
   onToggleSelect,
@@ -134,6 +137,7 @@ export default function IssueList({
                 closing={closing}
                 gitMembers={gitMembers}
                 confirmerMembers={confirmerMembers}
+                roleAgents={roleAgents}
                 locale={locale}
                 timezone={timezone}
                 onToggleSelect={onToggleSelect}

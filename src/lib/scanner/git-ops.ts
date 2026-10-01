@@ -24,8 +24,6 @@ export async function setupWorkspace(
   isConflictTask: boolean,
   log: (msg: string, type?: 'info' | 'error' | 'warn' | 'system') => void,
 ): Promise<GitSetupResult> {
-  const isGitHub = project.provider === 'github';
-
   // 1. 작업 디렉토리 준비
   log("작업 디렉토리 준비 중...", 'system');
   if (fs.existsSync(workspacePath)) {
@@ -34,14 +32,7 @@ export async function setupWorkspace(
   fs.mkdirSync(workspacePath, { recursive: true });
 
   // 2. Git 클론 및 준비
-  let repoUrl: string;
-  if (project.authType === 'basic') {
-    repoUrl = project.repoUrl.replace('https://', `https://${encodeURIComponent(project.gitUsername)}:${encodeURIComponent(token)}@`);
-  } else if (isGitHub) {
-    repoUrl = project.repoUrl.replace('https://', `https://x-access-token:${token}@`);
-  } else {
-    repoUrl = project.repoUrl.replace('https://', `https://oauth2:${token}@`);
-  }
+  const repoUrl = authedRepoUrl(project, token);
   const branchName = `dev-${iid}`;
 
   log("저장소 클론 중...", 'system');
@@ -67,6 +58,42 @@ export async function setupWorkspace(
   // 여기서는 기본 브랜치에서 작업
 
   return { workspacePath, baseBranch, branchName };
+}
+
+/** 토큰을 넣은 clone URL (로그에 남기지 말 것 — 남더라도 secret-mask 가 가린다) */
+export function authedRepoUrl(project: Project, token: string): string {
+  if (project.authType === 'basic') {
+    return project.repoUrl.replace('https://', `https://${encodeURIComponent(project.gitUsername)}:${encodeURIComponent(token)}@`);
+  } else if (project.provider === 'github') {
+    return project.repoUrl.replace('https://', `https://x-access-token:${token}@`);
+  }
+  return project.repoUrl.replace('https://', `https://oauth2:${token}@`);
+}
+
+/**
+ * 읽기 전용 단계(확인 등)용 워크스페이스: 브랜치를 부분 클론한 뒤 지정 커밋으로 체크아웃한다.
+ * 코드를 고치지 않으므로 dev-{iid} 브랜치는 만들지 않는다.
+ */
+export async function cloneAtCommit(
+  project: Project,
+  workspacePath: string,
+  token: string,
+  branch: string | null,
+  commit: string,
+  log: (msg: string, type?: 'info' | 'error' | 'warn' | 'system') => void,
+): Promise<void> {
+  log("작업 디렉토리 준비 중...", 'system');
+  if (fs.existsSync(workspacePath)) fs.rmSync(workspacePath, { recursive: true, force: true });
+  fs.mkdirSync(workspacePath, { recursive: true });
+  log(`저장소 클론 중... (${branch || '기본 브랜치'} → ${commit.slice(0, 12)})`, 'system');
+  await execFile('git', ['clone', '--filter=blob:none', ...(branch ? ['--branch', branch] : []), authedRepoUrl(project, token), '.'], { cwd: workspacePath, maxBuffer: 16 * 1024 * 1024 });
+  try {
+    await execFile('git', ['checkout', '--detach', commit], { cwd: workspacePath });
+  } catch {
+    // 배포 커밋이 그 브랜치 이력에 없으면(강제 푸시 등) 커밋을 직접 받아 온다
+    await execFile('git', ['fetch', 'origin', commit], { cwd: workspacePath });
+    await execFile('git', ['checkout', '--detach', commit], { cwd: workspacePath });
+  }
 }
 
 async function detectAndCheckoutDefault(workspacePath: string): Promise<string> {

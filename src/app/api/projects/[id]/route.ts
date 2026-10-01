@@ -3,6 +3,7 @@ import { getProject, updateProject, deleteProject, getProjectAccess, deleteProje
 import { getCurrentUser } from '@/lib/auth'
 import { encrypt } from '@/lib/crypto'
 import { logActivity } from '@/lib/activity'
+import { triggerScan } from '@/lib/scanner'
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser()
@@ -53,6 +54,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   }
 
   updateProject(updatedProject)
+  // 스캐너 재개 — 다음 주기를 기다리지 않고 바로 스캔
+  if (!existing.scannerActive && updatedProject.scannerActive) triggerScan(id)
   logActivity({ userId: user.id, category: 'project', action: 'update_project', detail: `프로젝트 수정: ${body.name || id}`, targetType: 'project', targetId: id, req })
   return NextResponse.json({ ...updatedProject })
 }

@@ -396,3 +396,20 @@ export async function fetchGitHubIssue(project: Project, issueNumber: number, de
   }
   return normalizeIssue(await res.json());
 }
+
+/**
+ * 이슈가 마지막으로 닫힌 것이 커밋·PR 머지 때문인가 (GitHub 닫기 키워드 — 「fixes #N」 등).
+ * 사람이 직접 닫았으면 false, 알 수 없으면 null.
+ */
+export async function isGitHubIssueClosedByGit(project: Project, issueNumber: number, decryptedToken: string): Promise<boolean | null> {
+  try {
+    const res = await fetch(apiUrl(project, `/issues/${issueNumber}/events?per_page=100`), { headers: getGitHubAuthHeaders(project, decryptedToken) });
+    if (!res.ok) return null;
+    const events = (await res.json()) as any[];
+    const closed = events.filter(e => e?.event === 'closed').pop();
+    if (!closed) return null;
+    return !!closed.commit_id;
+  } catch {
+    return null;
+  }
+}
