@@ -7,6 +7,7 @@ import { useDialog } from '@/components/ui/ConfirmDialog'
 import { useToast } from '@/components/ui/Toast'
 import CustomSelect from '@/components/ui/CustomSelect'
 import AgentAvatar from '@/components/agent/AgentAvatar'
+import Modal from '@/components/ui/Modal'
 
 interface ReportScheduleState {
   id: string; reportType: string; enabled: boolean
@@ -32,6 +33,19 @@ export default function ReportScheduleView() {
   const [sending, setSending] = useState<string | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<Partial<ReportScheduleState>>({})
+  // 메일 미리보기 — 실제 발송과 같은 함수로 만든 그 사람의 메일
+  const [preview, setPreview] = useState<{ type: string; email: string } | null>(null)
+  const [previewMail, setPreviewMail] = useState<{ subject: string; html: string; error?: string } | null>(null)
+
+  useEffect(() => {
+    if (!preview?.email) { setPreviewMail(null); return }
+    let alive = true
+    setPreviewMail(null)
+    fetch(`/api/admin/reports/preview?type=${preview.type}&email=${encodeURIComponent(preview.email)}`)
+      .then(async r => { const d = await r.json(); if (alive) setPreviewMail(r.ok ? d : { subject: '', html: '', error: d.error }) })
+      .catch(e => { if (alive) setPreviewMail({ subject: '', html: '', error: String(e) }) })
+    return () => { alive = false }
+  }, [preview])
 
   async function fetchData() {
     try {
@@ -173,6 +187,15 @@ export default function ReportScheduleView() {
                     {sending === opt.value ? <i className="fa-solid fa-circle-notch fa-spin" /> : <i className="fa-solid fa-paper-plane" />}
                   </button>
                   <button
+                    onClick={() => setPreview({ type: opt.value, email: schedule.recipients[0] || '' })}
+                    disabled={!schedule.recipients.length}
+                    className="w-7 h-7 rounded-lg bg-ive-bg-deep text-ive-text-dim flex items-center justify-center text-xs active:scale-95 disabled:opacity-40"
+                    title={t('previewTitle')}
+                    aria-label={t('previewTitle')}
+                  >
+                    <i className="fa-solid fa-eye" />
+                  </button>
+                  <button
                     onClick={() => isEditing ? cancelEdit() : startEdit(schedule)}
                     className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs active:scale-95 ${isEditing ? 'bg-ive-amber/15 text-ive-amber' : 'bg-ive-bg-deep text-ive-text-dim'}`}
                   >
@@ -282,6 +305,29 @@ export default function ReportScheduleView() {
           </div>
         )
       })}
+      <Modal open={!!preview} onClose={() => setPreview(null)} title={t('previewTitle')}>
+        {preview && (
+          <div className="space-y-3">
+            <CustomSelect
+              size="sm"
+              value={preview.email}
+              onChange={v => setPreview(p => (p ? { ...p, email: v } : p))}
+              options={(schedules.find(s => s.reportType === preview.type)?.recipients || []).map(e => ({
+                value: e, label: users.find(u => u.email === e)?.name ? `${users.find(u => u.email === e)!.name} · ${e}` : e,
+              }))}
+            />
+            {!previewMail && <div className="text-center py-6 text-ive-text-dim text-sm"><i className="fa-solid fa-circle-notch fa-spin" /></div>}
+            {previewMail?.error && <div className="text-sm font-bold text-ive-red">{previewMail.error}</div>}
+            {previewMail && !previewMail.error && (
+              <>
+                <div className="text-sm font-bold text-ive-text break-all">{previewMail.subject}</div>
+                <iframe title={t('previewTitle')} srcDoc={previewMail.html} sandbox="" className="w-full h-[60vh] rounded-lg border border-ive-border-subtle bg-white" />
+                <p className="text-xs text-ive-text-dim">{t('previewHint')}</p>
+              </>
+            )}
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }

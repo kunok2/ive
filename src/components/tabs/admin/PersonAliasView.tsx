@@ -1,0 +1,92 @@
+'use client'
+
+/**
+ * 사람 이름 연결 — 기록에 남은 이름·Git 계정을 IVE 사용자에 잇는다(고르면 바로 저장).
+ * 보고서의 사람별 집계가 한 사람을 여러 이름으로 나눠 세지 않게 한다.
+ */
+import { useEffect, useState, useCallback } from 'react'
+import { useTranslations } from 'next-intl'
+import CustomSelect from '@/components/ui/CustomSelect'
+import { useToast } from '@/components/ui/Toast'
+
+interface Row { alias: string; kind: 'name' | 'gitlab' | 'github'; count?: number; userId?: string }
+interface Data { unresolved: Row[]; linked: Row[]; users: { id: string; name: string; email: string }[] }
+
+export default function PersonAliasView() {
+  const t = useTranslations('reportV2')
+  const { toast } = useToast()
+  const [data, setData] = useState<Data | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    const r = await fetch('/api/admin/people')
+    if (r.ok) setData(await r.json())
+  }, [])
+  useEffect(() => { load() }, [load])
+
+  async function link(row: Row, userId: string) {
+    setBusy(`${row.kind}:${row.alias}`)
+    try {
+      const r = await fetch('/api/admin/people', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ alias: row.alias, kind: row.kind, userId }) })
+      if (!r.ok) toast((await r.json().catch(() => null))?.error || t('people.failed'), 'error')
+      await load()
+    } finally { setBusy(null) }
+  }
+
+  async function unlink(row: Row) {
+    setBusy(`${row.kind}:${row.alias}`)
+    try {
+      await fetch(`/api/admin/people?alias=${encodeURIComponent(row.alias)}&kind=${row.kind}`, { method: 'DELETE' })
+      await load()
+    } finally { setBusy(null) }
+  }
+
+  if (!data) return null
+  const userName = (id?: string) => data.users.find(u => u.id === id)?.name ?? id ?? ''
+  const options = [{ value: '', label: t('people.pick') }, ...data.users.map(u => ({ value: u.id, label: `${u.name} · ${u.email}` }))]
+
+  return (
+    <div className="bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden">
+      <div className="px-4 py-3 flex items-center gap-2">
+        <i className="fa-solid fa-link text-sm text-ive-text-dim" />
+        <span className="text-sm font-bold text-ive-text flex-1">{t('people.title')}</span>
+        <span className="text-xs text-ive-text-dim">{t('people.unresolvedN', { n: data.unresolved.length })}</span>
+      </div>
+      <div className="px-4 pb-4 border-t border-ive-border-dark pt-3 space-y-3">
+        <p className="text-xs text-ive-text-dim">{t('people.desc')}</p>
+        {data.unresolved.length === 0 ? (
+          <p className="text-xs font-bold text-ive-text-secondary">{t('people.allResolved')}</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {data.unresolved.map(r => (
+              <div key={`${r.kind}:${r.alias}`} className="flex items-center gap-2">
+                <div className="flex-1 min-w-0 flex items-center gap-1.5">
+                  <span className="text-sm font-bold text-ive-text truncate">{r.alias}</span>
+                  <span className="px-2 py-0.5 rounded-lg text-xs font-bold bg-white/5 text-ive-text-secondary shrink-0">{t(`people.kind.${r.kind}`)}</span>
+                  <span className="text-xs text-ive-text-dim shrink-0">{t('people.records', { n: r.count ?? 0 })}</span>
+                </div>
+                <CustomSelect size="sm" className="w-44 shrink-0" value="" onChange={v => { if (v) link(r, v) }} options={options} disabled={busy === `${r.kind}:${r.alias}`} />
+              </div>
+            ))}
+          </div>
+        )}
+        {data.linked.length > 0 && (
+          <div className="pt-2 border-t border-ive-border-dark flex flex-col gap-1.5">
+            <span className="text-xs font-bold text-ive-text-muted">{t('people.linked')}</span>
+            {data.linked.map(r => (
+              <div key={`${r.kind}:${r.alias}`} className="flex items-center gap-2 text-sm">
+                <span className="font-bold text-ive-text truncate">{r.alias}</span>
+                <span className="text-xs text-ive-text-dim shrink-0">{t(`people.kind.${r.kind}`)}</span>
+                <i className="fa-solid fa-arrow-right text-xs text-ive-text-dim" />
+                <span className="font-bold text-ive-text flex-1 truncate">{userName(r.userId)}</span>
+                <button onClick={() => unlink(r)} disabled={busy === `${r.kind}:${r.alias}`} aria-label={t('people.unlink')} title={t('people.unlink')} className="w-7 h-7 rounded-lg flex items-center justify-center text-xs text-ive-text-dim hover:bg-white/5 disabled:opacity-40">
+                  <i className="fa-solid fa-xmark" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}

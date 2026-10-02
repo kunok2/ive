@@ -24,9 +24,14 @@ interface ExecInfo {
   modelName: string
   status: string
   assigneeType: 'agent' | 'user'
+  userId: string | null
   userName: string | null
   userAvatar: string | null
 }
+
+// 사람 실행은 단계별로 id 접두가 다르다 (stage route: ex- / ex-verify- / ex-confirm-)
+const stageKindOf = (id: string): 'verify' | 'confirm' | null =>
+  id.startsWith('ex-verify-') ? 'verify' : id.startsWith('ex-confirm-') ? 'confirm' : null
 
 export default function ExecutionDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -61,6 +66,7 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
             modelName: data.modelName ?? '',
             status: data.status,
             assigneeType: data.assigneeType ?? 'agent',
+            userId: data.userId ?? null,
             userName: data.userName ?? null,
             userAvatar: data.userAvatar ?? null,
           })
@@ -115,7 +121,7 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
             <div className="flex items-center gap-2 min-w-0">
               {execInfo.assigneeType === 'user' ? (
                 execInfo.userAvatar ? (
-                  <img src={execInfo.userAvatar} alt="" className="w-7 h-7 rounded-lg border border-ive-cyan/30 shrink-0" />
+                  <AgentAvatar avatar={execInfo.userAvatar} userId={execInfo.userId} size="sm" />
                 ) : (
                   <div className="w-7 h-7 rounded-lg bg-ive-cyan/20 flex items-center justify-center shrink-0">
                     <i className="fa-solid fa-user text-ive-cyan text-xs" />
@@ -187,20 +193,25 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
         <div ref={containerRef} className="flex-1 min-h-0 flex flex-col items-center justify-center gap-4">
           <div className="text-center">
             {execInfo.userAvatar ? (
-              <img src={execInfo.userAvatar} alt="" className="w-20 h-20 rounded-lg mx-auto mb-3 border-2 border-ive-cyan/30" />
+              <AgentAvatar avatar={execInfo.userAvatar} userId={execInfo.userId} size="lg" className="mx-auto mb-3" />
             ) : (
               <i className="fa-solid fa-user-circle text-6xl text-ive-cyan/50 mb-3 block" />
             )}
             <div className="text-lg font-bold text-ive-text">{execInfo.userName}</div>
-            <div className="text-sm text-ive-cyan mt-2">
-              <i className="fa-solid fa-user-check mr-1" />{te('assignedToUser')}
-            </div>
+            {execInfo.status === 'assigned' && (
+              <div className="text-sm text-ive-cyan mt-2">
+                <i className="fa-solid fa-user-check mr-1" />
+                {te(stageKindOf(id) === 'verify' ? 'assignedToVerifier' : stageKindOf(id) === 'confirm' ? 'assignedToConfirmer' : 'assignedToUser')}
+              </div>
+            )}
             <div className={`text-xs mt-2 px-3 py-1 rounded-lg inline-block font-bold ${
               execInfo.status === 'assigned' ? 'bg-ive-cyan/20 text-ive-cyan' :
               execInfo.status === 'success' ? 'bg-ive-green/20 text-ive-green' :
               'bg-ive-red/20 text-ive-red'
             }`}>
-              {execInfo.status === 'assigned' ? te('assigned') : execInfo.status === 'success' ? te('completed') : te('failed')}
+              {execInfo.status === 'assigned'
+                ? te(stageKindOf(id) === 'verify' ? 'verifying' : stageKindOf(id) === 'confirm' ? 'confirming' : 'assigned')
+                : execInfo.status === 'success' ? te('completed') : te('failed')}
             </div>
           </div>
         </div>

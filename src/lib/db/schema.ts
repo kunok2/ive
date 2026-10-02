@@ -1519,6 +1519,24 @@ function migrateStageAutomation(db: Database.Database) {
         WHERE github_username IS NOT NULL AND TRIM(github_username) <> '';
     `)
   } catch (e) { console.warn('[DB] person_aliases sync skipped:', (e as Error).message) }
+  // 하루 마감 보유 — 프로젝트·날짜(KST)별로 그날 마지막에 본 단계별 보유 건수. 분 단위 스냅샷은 7일 뒤 지워지므로
+  // 지난 기간의 "기간 말 보유"와 보유 추이는 이 표에서 읽는다. 수집기가 매분 그날 줄을 덮어쓴다(마지막 값이 마감값).
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS held_daily (
+      project_id TEXT NOT NULL,
+      date TEXT NOT NULL,
+      waiting INTEGER NOT NULL DEFAULT 0,
+      dev INTEGER NOT NULL DEFAULT 0,
+      dev_fail INTEGER NOT NULL DEFAULT 0,
+      verify_waiting INTEGER NOT NULL DEFAULT 0,
+      verifying INTEGER NOT NULL DEFAULT 0,
+      confirm_waiting INTEGER NOT NULL DEFAULT 0,
+      confirming INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (project_id, date)
+    );
+    CREATE INDEX IF NOT EXISTS idx_held_daily_date ON held_daily(date);
+  `)
   // 보유 건수를 모든 미완료 단계로 세기 위한 스냅샷 칸(종전에는 대기 3단계만 셌다)
   try { db.exec(`ALTER TABLE stat_snapshots ADD COLUMN dev INTEGER NOT NULL DEFAULT 0`) } catch { /* 이미 존재 */ }
   try { db.exec(`ALTER TABLE stat_snapshots ADD COLUMN dev_fail INTEGER NOT NULL DEFAULT 0`) } catch { /* 이미 존재 */ }

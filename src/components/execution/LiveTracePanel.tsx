@@ -248,7 +248,7 @@ export default function LiveTracePanel({ agents, projectId, onKill, onAllComplet
               <div className="flex-1 flex flex-col items-center justify-center gap-3 min-h-0">
                 <div className="text-center">
                   {current.execution!.userAvatar ? (
-                    <img src={current.execution!.userAvatar} alt="" className="w-12 h-12 rounded-lg mx-auto mb-2 border-2 border-ive-cyan/30" />
+                    <AgentAvatar avatar={current.execution!.userAvatar} userId={current.execution!.userId} size="lg" className="mx-auto mb-2" />
                   ) : (
                     <i className="fa-solid fa-user-circle text-4xl text-ive-cyan/50 mb-2" />
                   )}

@@ -10,6 +10,7 @@ import { useToast } from '@/components/ui/Toast'
 import CliLogo from '@/components/ui/CliLogo'
 import ActivityContent from './ActivityContent'
 import ReportScheduleView from './ReportScheduleView'
+import PersonAliasView from './PersonAliasView'
 
 type UsersSubView = 'users' | 'activity' | 'reports'
 
@@ -197,6 +198,7 @@ export default function UsersPanel() {
       <main>
         {tabBar}
         <ReportScheduleView />
+        <div className="mt-3"><PersonAliasView /></div>
         <div className="mt-5">
           <button
             onClick={() => { setReportLogOpen(v => !v); if (!reportLogOpen && reportLogs.length === 0) fetchReportLogs(0) }}

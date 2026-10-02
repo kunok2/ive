@@ -335,6 +335,44 @@ export function syncPersonAliasesFromUsers(): number {
   }
 }
 
+/** 별칭 연결 해제(관리 화면) */
+export function removePersonAlias(alias: string, kind: AliasKind): void {
+  getDb().prepare(`DELETE FROM person_aliases WHERE alias = ? COLLATE NOCASE AND kind = ?`).run(alias.trim(), kind)
+}
+
+/**
+ * 기록에 남았지만 IVE 사용자로 정해지지 않는 사람 이름·Git 계정 — 관리자가 연결할 후보.
+ * 사용자 표(이름이 한 명뿐·Git 계정)나 별칭표로 이미 정해지는 것은 뺀다.
+ */
+export function unresolvedPersonNames(): { alias: string; kind: AliasKind; count: number }[] {
+  const db = getDb()
+  const rows = db.prepare(`
+    SELECT alias, kind, SUM(n) AS count FROM (
+      SELECT TRIM(user_name) AS alias, 'name' AS kind, COUNT(*) AS n FROM task_executions
+        WHERE user_name IS NOT NULL AND TRIM(user_name) <> '' AND (user_id IS NULL OR user_id NOT IN (SELECT id FROM users)) GROUP BY 1
+      UNION ALL
+      SELECT TRIM(verifier_name), 'name', COUNT(*) FROM task_executions
+        WHERE verifier_name IS NOT NULL AND TRIM(verifier_name) <> '' AND (verifier_user_id IS NULL OR verifier_user_id NOT IN (SELECT id FROM users)) GROUP BY 1
+      UNION ALL
+      SELECT TRIM(assignee_username), 'gitlab', COUNT(*) FROM issue_stages
+        WHERE assignee_username IS NOT NULL AND TRIM(assignee_username) <> '' AND (assignee_provider IS NULL OR assignee_provider = 'gitlab') GROUP BY 1
+      UNION ALL
+      SELECT TRIM(assignee_username), 'github', COUNT(*) FROM issue_stages
+        WHERE assignee_username IS NOT NULL AND TRIM(assignee_username) <> '' AND assignee_provider = 'github' GROUP BY 1
+    ) GROUP BY alias COLLATE NOCASE, kind ORDER BY count DESC
+  `).all() as { alias: string; kind: AliasKind; count: number }[]
+  return rows.filter(r => {
+    if (r.kind === 'name') {
+      const n = db.prepare(`SELECT COUNT(*) AS c FROM users WHERE TRIM(name) = ?`).get(r.alias) as { c: number }
+      if (n.c === 1) return false
+    } else {
+      const col = r.kind === 'github' ? 'github_username' : 'gitlab_username'
+      if (db.prepare(`SELECT 1 FROM users WHERE ${col} = ? COLLATE NOCASE`).get(r.alias)) return false
+    }
+    return !resolvePersonAlias(r.alias, r.kind)
+  })
+}
+
 /** 이 사람의 모든 별칭(관리 화면용). */
 export function getPersonAliases(userId?: string): { alias: string; kind: AliasKind; userId: string; source: string }[] {
   const rows = (userId

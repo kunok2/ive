@@ -15,6 +15,7 @@ import color from './color.json'
 import execution from './execution.json'
 import mr from './mr.json'
 import report from './report.json'
+import reportV2 from './reportV2.json'
 import pull from './pull.json'
 import ws from './ws.json'
 import pipeline from './pipeline.json'
@@ -44,6 +45,7 @@ const messages = {
   execution,
   mr,
   report,
+  reportV2,
   pull,
   ws,
   pipeline,

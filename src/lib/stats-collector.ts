@@ -3,7 +3,7 @@ import {
   createSnapshot, cleanOldSnapshots, cleanOldExecutions, cleanOldActivityLogs,
   getSystemSetting, countPreferredIssuesByAgent
 } from './db'
-import { getKSTTodayStartISO } from './date-utils'
+import { getKSTTodayStartISO, utcISOToKSTDate } from './date-utils'
 
 interface VerifierAggRow {
   username: string
@@ -104,6 +104,19 @@ function collectSnapshots() {
       FROM task_executions
       WHERE project_id = ? AND started_at >= ? AND status != 'running'
     `).get(project.id, todayStartISO) as { completed: number; failed: number; total_tokens: number; cost_usd: number }
+
+    // 하루 마감 보유 — 그날(KST) 줄을 매분 덮어쓴다. 마지막으로 쓴 값이 그날의 마감값이 된다
+    try {
+      db.prepare(`
+        INSERT INTO held_daily (project_id, date, waiting, dev, dev_fail, verify_waiting, verifying, confirm_waiting, confirming, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(project_id, date) DO UPDATE SET
+          waiting = excluded.waiting, dev = excluded.dev, dev_fail = excluded.dev_fail,
+          verify_waiting = excluded.verify_waiting, verifying = excluded.verifying,
+          confirm_waiting = excluded.confirm_waiting, confirming = excluded.confirming, updated_at = excluded.updated_at
+      `).run(project.id, utcISOToKSTDate(now), waiting, waitingRow.dev ?? 0, waitingRow.dev_fail ?? 0, verifyWaiting,
+        waitingRow.verifying ?? 0, confirmWaiting, waitingRow.confirming ?? 0, now)
+    } catch (e) { console.warn('[StatsCollector] held_daily upsert failed:', (e as Error).message) }
 
     createSnapshot({
       id: `snap-p-${project.id}-${Date.now()}`,
