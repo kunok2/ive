@@ -6,6 +6,8 @@ import { initLoggerFromDb } from '../logger'
 
 declare global {
   var db: Database.Database | undefined;
+  // server.ts 가 요청을 받기 전에 잡아 둔 루트 실행 컨텍스트에서 fn 을 실행한다 (없으면 그냥 실행)
+  var __iveRunInRootContext: (<R>(fn: () => R) => R) | undefined;
 }
 
 export function getDb() {
@@ -45,8 +47,13 @@ export function getDb() {
     // 웹 서버를 여러 워커로 띄우는 경우(WEB_CONCURRENCY) 워커마다 스캐너가 돌면
     // 같은 이슈를 여러 번 집어 에이전트를 중복 실행한다(토큰 소진 사고). 그래서
     // 워커 0 을 제외한 워커는 IVE_BACKGROUND_JOBS=0 을 받아 여기서 걸러진다.
+    //
+    // 첫 getDb() 는 페이지 렌더링 도중일 수 있다. 그 컨텍스트를 타이머가 물려받으면 Next/React 의
+    // 요청 단위 fetch 메모이즈가 스캐너에 영구 적용돼 Git 조회가 첫 응답에 고정된다.
+    // 그래서 반드시 요청과 무관한 루트 컨텍스트에서 시작한다 (server.ts 참고).
     if (process.env.NODE_ENV !== 'test' && process.env.IVE_BACKGROUND_JOBS !== '0') {
-      startScanner();
+      const runInRoot = global.__iveRunInRootContext ?? (<R>(fn: () => R) => fn());
+      runInRoot(() => startScanner());
     }
   }
   return global.db

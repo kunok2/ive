@@ -10,6 +10,14 @@ import { WebSocketServer, WebSocket } from 'ws'
 import * as pty from 'node-pty'
 import jwt from 'jsonwebtoken'
 import { handleChatWebSocket } from './src/lib/chat-ws'
+import { AsyncLocalStorage } from 'async_hooks'
+
+// 백그라운드 작업(스캐너 등)을 시작할 "요청과 무관한" 실행 컨텍스트. 아무 요청도 받기 전인
+// 지금(모듈 로드 시점) 잡아 둔다. 스캐너는 첫 getDb() 호출 때 시작되는데, 그 호출이 페이지
+// 렌더링 중이면 setInterval 이 그 요청의 컨텍스트를 물려받아 Next/React 의 요청 단위 fetch
+// 메모이즈가 영구히 적용된다 → 같은 GitLab 조회가 첫 응답을 계속 재사용해 새 이슈·레이블 변경을
+// 못 보게 된다(1.8.0 배포 후 대기 건 미시작·IVE-E 미닫힘 장애). connection.ts 가 이걸로 감싸 시작한다.
+globalThis.__iveRunInRootContext = AsyncLocalStorage.snapshot()
 
 const KNOWN_DEFAULT_JWT_SECRETS = [
   'springware-ive-dev-secret-change-in-production',
