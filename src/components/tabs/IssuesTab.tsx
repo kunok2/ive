@@ -5,6 +5,7 @@ import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useStore } from '@/lib/store'
 import { useTab } from '@/lib/tab-context'
+import { parseIidSearch } from '@/lib/closed-issues'
 import { useToast } from '@/components/ui/Toast'
 import PullToRefresh from '@/components/ui/PullToRefresh'
 import { useDialog } from '@/components/ui/ConfirmDialog'
@@ -699,8 +700,11 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     if (onlyMine && canFilterMine && !isMine(issue)) return false
     // 이력은 서버가 제목·본문으로 이미 검색했다 — 로컬에서 다시 거르면 본문 일치 건이 빠진다.
     if (isHistoryTab || !issueSearchQuery) return true
-    const q = issueSearchQuery.toLowerCase()
-    return issue.title.toLowerCase().includes(q) || String(issue.iid).includes(q) || (issue.author?.name || '').toLowerCase().includes(q)
+    // 「#1870」·「1870」은 이슈 번호로 찾는다 — 이력 탭(서버 검색)과 같은 규칙
+    const iid = parseIidSearch(issueSearchQuery)
+    if (iid != null) return issue.iid === iid
+    const q = issueSearchQuery.trim().toLowerCase()
+    return issue.title.toLowerCase().includes(q) || (issue.author?.name || '').toLowerCase().includes(q)
   }).sort((a, b) => {
     if (sortOrder === 'newest') return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
