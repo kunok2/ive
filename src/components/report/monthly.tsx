@@ -6,9 +6,9 @@
 import type { ReactNode } from 'react'
 import type { MonthPoint, Risks, Held, Evaluation, Grade } from '@/lib/report-model/types'
 import { GRADES } from '@/lib/report-model/types'
-import { Card, SectionTitle, SHARE_OPACITY } from './sections'
+import { Card, SectionTitle } from './sections'
 import { MonthBars } from './charts'
-import { fmtHours, pct, MIN_SAMPLE, type Tr } from './format'
+import { fmtHours, pct, MIN_SAMPLE, projectSwatchStyles, OTHERS_ID, type Tr } from './format'
 
 export function MonthsSection({ months, tr }: { months: MonthPoint[]; tr: Tr }) {
   if (months.length === 0) return null
@@ -62,7 +62,9 @@ export function ShareTrendSection({ months, tr }: { months: MonthPoint[]; tr: Tr
     return m.projectShares.length > 0 && o > 0.005 ? o : 0
   }
   const hasOther = months.some(m => otherOf(m) > 0)
-  const legend = [...top.map(p => ({ id: p.id, name: p.name })), ...(hasOther ? [{ id: '__others', name: tr('others') }] : [])]
+  const legend = [...top.map(p => ({ id: p.id, name: p.name, color: p.color })), ...(hasOther ? [{ id: OTHERS_ID, name: tr('others'), color: null }] : [])]
+  // 조각 색 = 프로젝트 주제색 — 달이 바뀌어도 같은 프로젝트는 같은 색 (주간 화면·메일과 같은 규칙)
+  const swatches = projectSwatchStyles(legend)
   const first = withData[0]
   const lead = top[0]
   return (
@@ -75,7 +77,7 @@ export function ShareTrendSection({ months, tr }: { months: MonthPoint[]; tr: Tr
             <div key={m.start} className="flex flex-col gap-0.5 h-full justify-end">
               {m.projectShares.length === 0
                 ? <div className="h-full rounded-lg border border-dashed border-ive-border" />
-                : parts.map((v, i) => v > 0 && <div key={legend[i].id} className={SHARE_OPACITY[Math.min(i, 3)]} style={{ flexGrow: v, flexBasis: 0 }} />)}
+                : parts.map((v, i) => v > 0 && <div key={legend[i].id} style={{ ...swatches[i], flexGrow: v, flexBasis: 0 }} />)}
             </div>
           )
         })}
@@ -85,7 +87,7 @@ export function ShareTrendSection({ months, tr }: { months: MonthPoint[]; tr: Tr
       </div>
       <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-bold text-ive-text-secondary">
         {legend.map((l, i) => (
-          <span key={l.id} className="inline-flex items-center gap-1"><span className={`w-2 h-2 rounded-full ${SHARE_OPACITY[Math.min(i, 3)]}`} />{l.name}</span>
+          <span key={l.id} className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full shrink-0" style={swatches[i]} />{l.name}</span>
         ))}
       </div>
       {lead && first !== ref && (

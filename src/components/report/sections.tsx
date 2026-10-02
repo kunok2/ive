@@ -8,7 +8,7 @@ import { useState, type ReactNode } from 'react'
 import type {
   Held, ActionItems, HeldStage, HeldIssue, ProjectRow, Done, Cost, CompletedItem,
 } from '@/lib/report-model/types'
-import { fmtHours, pct, deltaTone, toneClass, agedCount, type Tr } from './format'
+import { fmtHours, pct, deltaTone, toneClass, agedCount, projectSwatchStyles, OTHERS_ID, type Tr } from './format'
 
 export function Card({ children, highlight = false }: { children: ReactNode; highlight?: boolean }) {
   return <section className={`bg-ive-bg-card border ${highlight ? 'border-ive-cyan/50' : 'border-ive-border-subtle'} rounded-lg p-4 flex flex-col gap-3`}>{children}</section>
@@ -242,16 +242,18 @@ export function PeopleSection({ held, tr }: { held: Held; tr: Tr }) {
 
 // ─── ⑤ 사람 시간이 쓰인 곳 ───
 
-/** 비중 막대 조각 색(상위 3개 + 기타) — 월간 비중 추이와 같은 색 */
-export const SHARE_OPACITY = ['bg-ive-cyan', 'bg-ive-cyan/60', 'bg-ive-cyan/35', 'bg-ive-cyan/20']
-
 export function ProjectsSection({ projects, cost, tr, prevLabel }: { projects: ProjectRow[]; cost: Cost; tr: Tr; prevLabel: string }) {
   if (projects.length === 0) return null
   const withHours = projects.filter(p => p.humanHours > 0)
   const top = withHours.slice(0, 3)
   const rest = withHours.slice(3)
   const restShare = rest.reduce((s, p) => s + p.share, 0)
-  const shareParts = [...top.map(p => ({ id: p.id, name: p.name, share: p.share })), ...(rest.length ? [{ id: '__others', name: tr('others'), share: restShare }] : [])]
+  const shareParts = [...top.map(p => ({ id: p.id, name: p.name, color: p.color, share: p.share })), ...(rest.length ? [{ id: OTHERS_ID, name: tr('others'), color: null, share: restShare }] : [])]
+  // 조각 색 = 프로젝트 주제색(월간 비중 추이·메일과 같은 규칙). 표 전체 순서로 한 번에 정해
+  // 막대·범례·표의 이름 앞 점이 같은 프로젝트에 늘 같은 색을 쓴다(주제색이 겹치면 뒤 프로젝트가 옅어진다)
+  const colorParts = [...projects, { id: OTHERS_ID, color: null }]
+  const swatchOf = new Map(projectSwatchStyles(colorParts).map((st, i) => [colorParts[i].id, st]))
+  const swatches = shareParts.map(s => swatchOf.get(s.id)!)
   // 지난 기간 대비 비중 변화가 가장 큰 프로젝트 한 줄
   const moved = withHours.filter(p => p.prevShare != null).map(p => ({ p, d: p.share - (p.prevShare ?? 0) }))
     .sort((a, b) => Math.abs(b.d) - Math.abs(a.d))[0]
@@ -261,11 +263,11 @@ export function ProjectsSection({ projects, cost, tr, prevLabel }: { projects: P
       {withHours.length > 0 ? (
         <>
           <div className="flex h-3 rounded-full overflow-hidden gap-0.5 bg-ive-bg">
-            {shareParts.map((s, i) => <div key={s.id} className={SHARE_OPACITY[Math.min(i, 3)]} style={{ flexGrow: s.share, flexBasis: 0 }} />)}
+            {shareParts.map((s, i) => <div key={s.id} style={{ ...swatches[i], flexGrow: s.share, flexBasis: 0 }} />)}
           </div>
           <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-bold text-ive-text-secondary">
             {shareParts.map((s, i) => (
-              <span key={s.id} className="inline-flex items-center gap-1"><span className={`w-2 h-2 rounded-full ${SHARE_OPACITY[Math.min(i, 3)]}`} />{s.name} {pct(s.share)}</span>
+              <span key={s.id} className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full shrink-0" style={swatches[i]} />{s.name} {pct(s.share)}</span>
             ))}
           </div>
           {moved && Math.abs(moved.d) >= 0.05 && (
@@ -288,7 +290,12 @@ export function ProjectsSection({ projects, cost, tr, prevLabel }: { projects: P
           <tbody>
             {projects.map(p => (
               <tr key={p.id} className="border-t border-ive-border-dark">
-                <td className="text-left py-1.5 pr-2 text-ive-text"><div className="truncate max-w-36">{p.name}</div></td>
+                <td className="text-left py-1.5 pr-2 text-ive-text">
+                  <div className="flex items-center gap-1.5 max-w-36">
+                    <span className="w-2 h-2 rounded-full shrink-0" style={swatchOf.get(p.id)} />
+                    <span className="truncate">{p.name}</span>
+                  </div>
+                </td>
                 <td className="text-right py-1.5 px-1 tabular-nums text-ive-text">{p.humanHours > 0 || p.prevHumanHours > 0
                   ? <>{p.humanHours > 0 ? `${Math.round(p.humanHours)}h · ${pct(p.share)}` : '0h'} <MiniDelta cur={Math.round(p.humanHours)} prev={Math.round(p.prevHumanHours)} goodWhenUp={null} /></>
                   : '—'}</td>

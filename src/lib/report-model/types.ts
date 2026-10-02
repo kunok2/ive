@@ -103,6 +103,8 @@ export interface Trend {
 export interface ProjectRow {
   id: string
   name: string
+  /** 프로젝트 주제색(프로젝트 설정의 구분 색) — 프로젝트별 차트가 이 색으로 칠한다 */
+  color: string
   humanHours: number
   prevHumanHours: number
   share: number
@@ -160,7 +162,7 @@ export interface MonthPoint {
   completed: number
   heldEnd: number | null
   leadMedianH: number | null
-  projectShares: { id: string; name: string; share: number }[]
+  projectShares: { id: string; name: string; color: string; share: number }[]
 }
 
 export interface Risks {

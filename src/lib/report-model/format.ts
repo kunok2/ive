@@ -38,3 +38,27 @@ export const agedCount = (issues: { ageHours: number }[]) => issues.filter(i => 
 
 /** 작업 결과 평가 — 이 건수가 모여야 비율을 보여준다 */
 export const MIN_SAMPLE = 20
+
+// ─── 프로젝트 주제색 ───
+
+/** 주제색이 없는 옛 프로젝트 — 프로젝트 카드와 같은 기본색 */
+export const DEFAULT_PROJECT_COLOR = '#4ade80'
+/** 주제색 중 "흰색" — 밝은 배경(라이트 테마·메일)에서 보이지 않아 중립색으로 바꿔 칠한다 */
+export const WHITE_PROJECT_COLOR = '#e0e0e0'
+/** 비중 막대의 「기타」 조각 id */
+export const OTHERS_ID = '__others'
+
+/**
+ * 프로젝트별 비중 막대 조각의 색 — 화면과 메일이 같은 규칙으로 칠한다.
+ * 프로젝트는 주제색, 「기타」는 중립(color: null). 같은 주제색이 다시 나오면 농도를 낮춰 구분한다.
+ */
+export function projectSwatches(parts: { id: string; color?: string | null }[]): { color: string | null; alpha: number }[] {
+  const seen = new Map<string, number>()
+  return parts.map(p => {
+    if (p.id === OTHERS_ID) return { color: null, alpha: 1 }
+    const color = (p.color || DEFAULT_PROJECT_COLOR).toLowerCase()
+    const n = seen.get(color) ?? 0
+    seen.set(color, n + 1)
+    return { color, alpha: [1, 0.55, 0.3][Math.min(n, 2)] }
+  })
+}

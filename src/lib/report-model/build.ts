@@ -24,7 +24,7 @@ import {
   type Done, type Trend, type ProjectRow, type Cost, type PersonRole, type Grade, type Evaluation, type WorkerEval,
   type MonthPoint, type Risks, type CompletedItem,
 } from './types'
-import { AGED_HOURS, MIN_SAMPLE } from './format'
+import { AGED_HOURS, MIN_SAMPLE, DEFAULT_PROJECT_COLOR } from './format'
 
 const HOUR = 3_600_000
 const MATURITY_DAYS = 30
@@ -482,7 +482,7 @@ function monthPoint(c: Ctx, scope: Scope, m: Period, liveNow: number | null): Mo
     completed: completed.length, heldEnd,
     leadMedianH: d.done.leadMedianH,
     projectShares: Array.from(cost.projectMinutes.entries())
-      .map(([id, min]) => ({ id, name: c.projects.get(id)?.name ?? id, share: totalMin > 0 ? min / totalMin : 0 }))
+      .map(([id, min]) => ({ id, name: c.projects.get(id)?.name ?? id, color: c.projects.get(id)?.color ?? DEFAULT_PROJECT_COLOR, share: totalMin > 0 ? min / totalMin : 0 }))
       .sort((a, b) => b.share - a.share),
   }
 }
@@ -571,7 +571,7 @@ export function buildReportModel(scope: Scope, type: ReportType, day: string, no
   const totalMin = Array.from(cc.projectMinutes.values()).reduce((sum, v) => sum + v, 0)
   const prevTotalMin = Array.from(pc.projectMinutes.values()).reduce((sum, v) => sum + v, 0)
   const projectRows: ProjectRow[] = projectList.map(p => ({
-    id: p.id, name: p.name,
+    id: p.id, name: p.name, color: p.color,
     humanHours: (cc.projectMinutes.get(p.id) ?? 0) / 60,
     prevHumanHours: (pc.projectMinutes.get(p.id) ?? 0) / 60,
     share: totalMin > 0 ? (cc.projectMinutes.get(p.id) ?? 0) / totalMin : 0,

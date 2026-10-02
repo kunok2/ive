@@ -12,7 +12,7 @@ import { createTranslator } from 'next-intl'
 import ko from '@/messages/ko/reportV2.json'
 import en from '@/messages/en/reportV2.json'
 import type { ReportModel, HeldIssue } from '../report-model/types'
-import { fmtHours, pct, deltaTone, agedCount, MIN_SAMPLE, type Tr } from '../report-model/format'
+import { fmtHours, pct, deltaTone, agedCount, MIN_SAMPLE, projectSwatches, OTHERS_ID, WHITE_PROJECT_COLOR, type Tr } from '../report-model/format'
 
 export type MailKind = 'member' | 'lead' | 'exec'
 
@@ -63,7 +63,7 @@ function deltaSpan(cur: number, prev: Src, goodWhenUp: boolean | null, shown?: [
   return ` <span ${attrs} style="font-size:13px;font-weight:700;color:${COLOR.secondary}"><span style="color:${arrow}">${d > 0 ? '▲' : '▼'}</span>${Math.abs(d)}</span>`
 }
 
-/** 상태 표시 점(빨강=멈춤·주황=살펴볼 것) — 의미색은 숫자가 아니라 여기에만 */
+/** 표시 점 — 상태(빨강=멈춤·주황=살펴볼 것)와 프로젝트 주제색. 의미색은 숫자가 아니라 여기에만 */
 const dot = (color: string) => `<span style="display:inline-block;width:8px;height:8px;border-radius:4px;background:${color};margin-right:6px"></span>`
 
 function block(title: string, body: string): string {
@@ -80,11 +80,33 @@ function row(labelHtml: string, value: string): string {
 }
 const rows = (inner: string) => `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${inner}</table>`
 const line = (html: string) => `<div style="font-size:13px;font-weight:700;color:${COLOR.secondary};margin-top:4px">${html}</div>`
-const SHADES = ['#0891b2', '#38bdf8', '#7dd3fc', '#bae6fd']
 
-function shareBar(parts: { share: number }[]): string {
-  const cells = parts.filter(p => p.share > 0).map((p, i) =>
-    `<td style="height:10px;background:${SHADES[Math.min(i, 3)]};width:${Math.max(1, Math.round(p.share * 100))}%"></td>`).join('')
+/**
+ * 프로젝트별 비중 조각의 메일 색 — 화면과 같은 규칙(projectSwatches: 주제색, 같은 색이 겹치면 농도↓).
+ * 메일 클라이언트마다 투명도 지원이 달라 농도는 흰 바탕과 미리 섞은 단색으로 낸다.
+ * 흰색 주제색은 흰 바탕에서 사라지므로 회색으로, 「기타」는 옅은 회색.
+ */
+function mailSwatches(parts: { id: string; color?: string | null }[]): string[] {
+  return projectSwatches(parts).map(s => {
+    if (s.color == null) return '#d4d4d8'
+    const hex = s.color === WHITE_PROJECT_COLOR ? '#a1a1aa' : s.color
+    const m = /^#([0-9a-f]{6})$/i.exec(hex)
+    if (!m || s.alpha >= 1) return hex
+    const n = parseInt(m[1], 16)
+    const mix = (c: number) => Math.round(c * s.alpha + 255 * (1 - s.alpha)).toString(16).padStart(2, '0')
+    return `#${mix(n >> 16)}${mix((n >> 8) & 0xff)}${mix(n & 0xff)}`
+  })
+}
+/** 보고서의 프로젝트 → 메일 색. 프로젝트 표 순서로 정해, 사람 시간 막대와 비중 추이가 같은 색을 쓴다 */
+function projectMailColors(m: ReportModel): Map<string, string> {
+  const parts = [...m.projects, { id: OTHERS_ID, color: null }]
+  const colors = mailSwatches(parts)
+  return new Map(parts.map((p, i) => [p.id, colors[i]]))
+}
+
+function shareBar(parts: { share: number; color: string }[]): string {
+  const cells = parts.filter(p => p.share > 0).map(p =>
+    `<td style="height:10px;background:${p.color};width:${Math.max(1, Math.round(p.share * 100))}%"></td>`).join('')
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-radius:5px;overflow:hidden;margin:4px 0 8px"><tr>${cells}</tr></table>`
 }
 
@@ -156,9 +178,10 @@ function peopleBlock(t: T, now: ReportModel): string {
 function projectsBlock(t: T, m: ReportModel): string {
   if (!m.projects.length) return ''
   const withHours = m.projects.filter(p => p.humanHours > 0)
-  const parts = withHours.slice(0, 3).map(p => ({ share: p.share }))
   const rest = withHours.slice(3).reduce((s, p) => s + p.share, 0)
-  if (rest > 0) parts.push({ share: rest })
+  // 막대 조각·줄 이름 앞 점이 같은 프로젝트에 늘 같은 색 — 화면 ProjectsSection 과 같은 순서로 한 번에 정한다
+  const colorOf = projectMailColors(m)
+  const parts = [...withHours.slice(0, 3).map(p => ({ share: p.share, color: colorOf.get(p.id)! })), ...(rest > 0 ? [{ share: rest, color: colorOf.get(OTHERS_ID)! }] : [])]
   const body = m.projects.slice(0, 6).map((p, i) => {
     const at = `closed.projects.${i}`
     const hours = p.humanHours > 0 || p.prevHumanHours > 0
@@ -167,7 +190,7 @@ function projectsBlock(t: T, m: ReportModel): string {
       : '—'
     const done = `${esc(t('colDone'))} ${num(`${at}.completed`, p.completed, String(p.completed))}${deltaSpan(p.completed, [`${at}.prevCompleted`, p.prevCompleted], true)}`
     const held = p.held == null ? '' : ` · ${esc(t('colHeld'))} ${num(`${at}.held`, p.held, String(p.held))}${deltaSpan(p.held, [`${at}.prevHeld`, p.prevHeld], false)}`
-    return row(esc(p.name), `${hours}<div style="font-size:12px;color:${COLOR.secondary}">${done}${held}</div>`)
+    return row(dot(colorOf.get(p.id)!) + esc(p.name), `${hours}<div style="font-size:12px;color:${COLOR.secondary}">${done}${held}</div>`)
   }).join('')
   return block(t('projectsTitle'), (parts.length ? shareBar(parts) : '') + rows(body))
 }
@@ -185,10 +208,11 @@ function doneBlock(t: T, closed: ReportModel, prevLabel: string): string {
 function shareTrendBlock(t: T, m: ReportModel): string {
   const months = m.months ?? []
   if (!months.some(x => x.projectShares.length)) return ''
+  const colorOf = projectMailColors(m)
   return block(t('shareTrendTitle', { n: months.length }), rows(months.map((x, i) => row(
     esc(t('monthShort', { m: Number(x.label.slice(5, 7)) })),
     x.projectShares.length === 0 ? esc(t('noRecord'))
-      : x.projectShares.slice(0, 3).map((s, j) => `${esc(s.name)} ${num(`closed.months.${i}.projectShares.${j}.share`, s.share, pct(s.share))}`).join(' · '),
+      : x.projectShares.slice(0, 3).map((s, j) => `${dot(colorOf.get(s.id) ?? mailSwatches([s])[0])}${esc(s.name)} ${num(`closed.months.${i}.projectShares.${j}.share`, s.share, pct(s.share))}`).join(' · '),
   )).join('')))
 }
 

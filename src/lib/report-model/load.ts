@@ -4,7 +4,7 @@
  */
 import { getDb, getExecutionsInRange, getGlobalExecutionsInRange, resolveManualAlias, type ReportExecution } from '../db'
 import { kstDayStartISO } from './period'
-import { AGED_HOURS } from './format'
+import { AGED_HOURS, DEFAULT_PROJECT_COLOR } from './format'
 import type { HeldStage } from './types'
 
 export type Scope = string | null
@@ -17,16 +17,16 @@ const PROCESS_EXEC_SQL = (alias = 'te') => `${alias}.issue_iid > 0
   AND ${alias}.id NOT LIKE 'ex-verify-%' AND ${alias}.id NOT LIKE 'ex-confirm-%'
   AND ${alias}.id NOT LIKE 'ex-conflict-%' AND ${alias}.id NOT LIKE 'exec-chat%' AND ${alias}.id NOT LIKE 'ex-reproduce-%'`
 
-export interface ScopedProject { id: string; name: string; provider: string }
+export interface ScopedProject { id: string; name: string; provider: string; color: string }
 
 export function scopedProjects(scope: Scope): ScopedProject[] {
   const rows = scope
     ? getDb().prepare(`
-        SELECT id, name, provider FROM projects p
+        SELECT id, name, provider, color FROM projects p
         WHERE p.user_id = ? OR EXISTS (SELECT 1 FROM project_shares ps WHERE ps.project_id = p.id AND ps.user_id = ?)
         ORDER BY name`).all(scope, scope)
-    : getDb().prepare(`SELECT id, name, provider FROM projects ORDER BY name`).all()
-  return (rows as any[]).map(r => ({ id: r.id, name: r.name, provider: r.provider }))
+    : getDb().prepare(`SELECT id, name, provider, color FROM projects ORDER BY name`).all()
+  return (rows as any[]).map(r => ({ id: r.id, name: r.name, provider: r.provider, color: r.color || DEFAULT_PROJECT_COLOR }))
 }
 
 export function execsInRange(scope: Scope, start: string, end: string): ReportExecution[] {

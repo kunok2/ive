@@ -269,6 +269,23 @@ describe('R-10 확정본', () => {
     expect(again.done.total).toBe(first.done.total)
     expect(again.snapshotAt).toBe(first.snapshotAt)
   })
+
+  it('프로젝트 주제색은 확정하지 않는다 — 색 도입 전 확정본도, 색을 바꾼 뒤에도 지금 색으로 그린다', () => {
+    seedWeek()
+    db.prepare(`UPDATE projects SET color = '#60a5fa' WHERE id = 'p1'`).run()
+    const first = getReportModel('u-lead', 'weekly', '2026-09-29', new Date('2026-10-09T00:00:00Z'))
+    expect(first.projects.find(p => p.id === 'p1')?.color).toBe('#60a5fa')
+    // 색 도입 전에 저장된 확정본 — payload 에 color 가 없다
+    const row = db.prepare(`SELECT id, payload FROM report_snapshots`).get() as { id: string; payload: string }
+    const legacy = JSON.parse(row.payload)
+    legacy.projects.forEach((p: any) => { delete p.color })
+    db.prepare(`UPDATE report_snapshots SET payload = ? WHERE id = ?`).run(JSON.stringify(legacy), row.id)
+    db.prepare(`UPDATE projects SET color = '#f472b6' WHERE id = 'p1'`).run()
+    const again = getReportModel('u-lead', 'weekly', '2026-09-29', new Date('2026-10-09T00:00:00Z'))
+    expect(again.snapshotAt).toBe(first.snapshotAt)
+    expect(again.projects.find(p => p.id === 'p1')?.color).toBe('#f472b6')
+    expect(again.projects.every(p => typeof p.color === 'string' && p.color.length > 0)).toBe(true)
+  })
 })
 
 describe('사람 이름 연결 후보', () => {
