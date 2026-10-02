@@ -1,5 +1,4 @@
 {
-  "none": "—",
   "durMin": "{m}분",
   "durHour": "{h}시간",
   "durDayHour": "{d}일 {h}시간",
@@ -62,7 +61,7 @@
   "peopleRight": "사람 손 {n}건 · {p}명",
   "peopleNone": "지금 사람 손에 있는 일은 없습니다",
   "personCount": "{n}건 · 최장 {t}",
-  "peopleExcluded": "AI 쪽(처리 대기·AI 처리 중·AI 실패) {n}건은 사람 손에 있지 않아 빠집니다.",
+  "peopleExcluded": "사람 손에 있지 않은 {n}건(AI 처리 대기·처리 중·실패, 에이전트가 맡은 검증·확인, 담당자를 알 수 없는 일)은 빠집니다.",
   "projectsTitle": "사람 시간이 쓰인 곳",
   "hoursRight": "{h}시간 · 겹침 제거",
   "hoursNone": "이 기간에 기록된 사람 작업시간이 없습니다",
@@ -88,8 +87,8 @@
   "prevShort": "{label} {v}",
   "noRecord": "기록 없음",
   "leadNoRecordHint": "직접 처리 후 기록한 일은 접수 시각이 없어 처리 기간에서 빠집니다.",
-  "compareTitle": "유입과 완료 · {label}와 비교",
-  "heldCompareTitle": "안고 있는 일 · {label}와 비교",
+  "compareTitle": "유입과 완료 · {label} 대비",
+  "heldCompareTitle": "안고 있는 일 · {label} 대비",
   "heldTrendNoRecord": "보유 추이는 기록이 쌓이는 날부터 그려집니다.",
   "legInflow": "유입",
   "legDone": "완료",
@@ -146,16 +145,14 @@
     "person": "사람"
   },
   "collecting": "데이터 쌓는 중 · {n}/{min}",
-  "cmpClear": "{a}와 {b}: 한 번에 통과 비율 차이가 뚜렷함",
-  "cmpUnclear": "{a}와 {b}: 아직 차이가 뚜렷하지 않음",
+  "cmpClear": "{a} · {b}: 한 번에 통과 비율 차이가 뚜렷함",
+  "cmpUnclear": "{a} · {b}: 아직 차이가 뚜렷하지 않음",
   "cmpNeedMore": "판단하려면 한쪽에 약 {n}건이 더 필요합니다.",
   "cmpDifferentProjects": "두 작업자가 맡은 프로젝트가 달라, 차이의 일부는 일의 난이도 때문일 수 있습니다.",
   "evalVerifiers": "검증자별 · 승인 후 확인에서 반려된 비율",
   "verifierLine": "{v} · 승인 {n}건 중 {r}건",
-  "evalNote": "순위가 아니라 결과 분포입니다. 사람별 결과는 관리자와 본인에게만 보입니다.",
+  "evalNote": "순위가 아니라 결과 분포입니다. 사람별 결과는 관리자 설정에 따라 관리자와 본인, 또는 본인에게만 보입니다.",
   "mail": {
-    "vsStart": "지난주 말 {n}건",
-    "equation": "지난주 말 {s} + 유입 {i} − 완료 {c} = 지금 {e}",
     "teamActions": "팀이 손쓸 것",
     "failed": "AI가 실패해서 멈춘 일",
     "aged": "7일 넘게 묵은 일",
@@ -180,7 +177,11 @@
     "greeting": "{name}님, {period} 보고입니다.",
     "openReport": "전체 보고서 보기",
     "footer": "이 메일은 IVE 보고서 화면과 같은 계산으로 만들어집니다. 수신 대상은 관리자 설정에서 정합니다.",
-    "snapshotNote": "{at}(UTC)에 확정된 값입니다."
+    "snapshotNote": "{at}(UTC)에 확정된 값입니다.",
+    "noActivityTitle": "이번 기간",
+    "noActivity": "활동이 없었습니다. 들어온 일도, 끝낸 일도, 안고 있는 일도 없습니다.",
+    "provisionalNote": "기간이 끝난 직후의 잠정 값입니다. 늦게 등록되는 사후 기록이 더해지면 보고서 화면의 숫자가 달라질 수 있습니다.",
+    "evalPeopleOnScreen": "사람별 결과는 보고서 화면에서 볼 수 있습니다(공개 범위 설정에 따름)."
   },
   "people": {
     "title": "사람 이름 연결",
@@ -196,6 +197,51 @@
       "name": "이름",
       "gitlab": "GitLab",
       "github": "GitHub"
-    }
-  }
+    },
+    "loadFailed": "사람 이름 목록을 불러오지 못했습니다.",
+    "unlinkFailed": "연결을 풀지 못했습니다"
+  },
+  "evalInMonthly": "월간 보고",
+  "hoursPerCompleted": "완료 1건당 사람 시간",
+  "hoursValue": "{h}시간",
+  "evalVis": {
+    "title": "작업 결과 평가 공개 범위",
+    "desc": "사람별 평가 결과를 누가 볼 수 있는지 정합니다. AI(모델) 결과와 사람·AI 묶음 결과는 항상 모두에게 보입니다. 고르면 바로 저장됩니다.",
+    "admin_self": "관리자와 본인",
+    "self": "본인만",
+    "failed": "저장하지 못했습니다",
+    "loadFailed": "평가 공개 범위를 불러오지 못했습니다."
+  },
+  "provisionalBadge": "잠정",
+  "provisionalHint": "기간이 끝난 직후라 늦게 등록되는 사후 기록이 더해지면 숫자가 바뀔 수 있습니다. {date}에 확정됩니다.",
+  "modelUnknown": "{cli} (모델 미기록)",
+  "mineTitle": "내 손에 있는 일 · {n}건",
+  "mineNone": "지금 내 손에 있는 일은 없습니다",
+  "riskAgedPrev": "지난 기간 말 {n}건",
+  "errorCode": "오류 코드: {code}",
+  "type": {
+    "weekly": "주간",
+    "monthly": "월간",
+    "yearly": "연간"
+  },
+  "dayLabels": [
+    "일",
+    "월",
+    "화",
+    "수",
+    "목",
+    "금",
+    "토"
+  ],
+  "loadingCompact": "로딩 중...",
+  "noWorkInPeriod": "해당 기간에 처리된 작업이 없습니다.",
+  "periodWeeklyLabel": "{year}.{month1}.{day1} ~ {month2}.{day2}",
+  "regenerateTitle": "보고서 다시 확정",
+  "regenerateMessage": "저장된 확정본을 지우고 현재 단가로 다시 계산합니다. 이미 메일로 보낸 수치와 달라질 수 있습니다.",
+  "regenerateConfirm": "다시 확정",
+  "snapshotBadge": "확정",
+  "snapshotHint": "{at} 에 확정된 값입니다. 단가를 나중에 바꿔도 이 보고서 숫자는 변하지 않습니다.",
+  "today": "오늘",
+  "yearMonth": "{year}년 {month}월",
+  "yearUnit": "{year}년"
 }

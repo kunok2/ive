@@ -94,15 +94,24 @@ export function allocateWork(segments: WorkSegment[]): WorkAllocation {
     byPerson.set(s.person, list)
   }
   for (const [person, list] of byPerson) {
-    const points = Array.from(new Set(list.flatMap(s => [s.start, s.end]))).sort((a, b) => a - b)
+    // 시작·끝 지점을 시간순으로 훑으며(스윕) 지금 열려 있는 작업 수를 센다 — O(n log n)
+    const points: { t: number; d: 1 | -1; projectId: string }[] = []
+    for (const s of list) { points.push({ t: s.start, d: 1, projectId: s.projectId }); points.push({ t: s.end, d: -1, projectId: s.projectId }) }
+    points.sort((a, b) => a.t - b.t || a.d - b.d) // 같은 시각이면 끝을 먼저
+    const open = new Map<string, number>() // 프로젝트 → 열린 작업 수
+    let active = 0
     let union = 0
-    for (let i = 0; i + 1 < points.length; i++) {
-      const a = points[i], b = points[i + 1]
-      const active = list.filter(s => s.start <= a && s.end >= b)
-      if (active.length === 0) continue
-      const mins = (b - a) / 60_000
+    for (let i = 0; i < points.length; i++) {
+      const p = points[i]
+      open.set(p.projectId, (open.get(p.projectId) ?? 0) + p.d)
+      if ((open.get(p.projectId) ?? 0) <= 0) open.delete(p.projectId)
+      active += p.d
+      const next = points[i + 1]
+      if (!next || active <= 0 || next.t <= p.t) continue
+      const mins = (next.t - p.t) / 60_000
       union += mins
-      for (const s of active) projectMinutes.set(s.projectId, (projectMinutes.get(s.projectId) ?? 0) + mins / active.length)
+      // 이 구간의 시간을 열린 작업 수만큼 나눠 각 작업의 프로젝트에 준다
+      for (const [pid, n] of open) projectMinutes.set(pid, (projectMinutes.get(pid) ?? 0) + mins * n / active)
     }
     personMinutes.set(person, union)
   }

@@ -44,6 +44,7 @@ interface Props {
   gitlabUsername?: string | null
   githubUsername?: string | null
   mailUnsubscribed?: boolean
+  reportMailUnsubscribed?: boolean
   onSuccess?: () => void
   onCancel?: () => void
   onEmailChanged?: () => void
@@ -61,7 +62,7 @@ type SlackWorkspaceRow = {
   enabled: boolean
 }
 
-export default function UserProfileForm({ userId, email, name, avatar, locale: userLocale, timezone: userTimezone, currency: userCurrency, currencyRate: userCurrencyRate, slackUserId: userSlackUserId, slackNotify: userSlackNotify, gitlabUsername: userGitlabUsername, githubUsername: userGithubUsername, mailUnsubscribed: userMailUnsubscribed, onSuccess, onCancel, onEmailChanged, onAvatarChanged, onSettingsChanged }: Props) {
+export default function UserProfileForm({ userId, email, name, avatar, locale: userLocale, timezone: userTimezone, currency: userCurrency, currencyRate: userCurrencyRate, slackUserId: userSlackUserId, slackNotify: userSlackNotify, gitlabUsername: userGitlabUsername, githubUsername: userGithubUsername, mailUnsubscribed: userMailUnsubscribed, reportMailUnsubscribed: userReportMailUnsubscribed, onSuccess, onCancel, onEmailChanged, onAvatarChanged, onSettingsChanged }: Props) {
   const t = useTranslations('auth')
   const tc = useTranslations('common')
   const currentLocale = useLocale()
@@ -152,6 +153,33 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
       setMailPrefSaved(true)
       setTimeout(() => setMailPrefSaved(false), 2000)
     } catch { setMailPrefErr(true) }
+  }, [onSettingsChanged])
+
+  // 보고서 메일 수신 여부(본인). on = 수신. 관리자가 받을 사람으로 정해도 본인이 끄면 보내지 않는다.
+  const [reportMailOn, setReportMailOn] = useState(!(userReportMailUnsubscribed ?? false))
+  const [reportPrefSaved, setReportPrefSaved] = useState(false)
+  const [reportPrefErr, setReportPrefErr] = useState(false)
+  const [reportPrefBusy, setReportPrefBusy] = useState(false)
+  // 저장이 끝날 때까지 다시 누르지 못하게 하고, 실패하면 화면 값을 되돌린다(서버와 어긋나지 않게)
+  const saveReportPref = useCallback(async (subscribed: boolean) => {
+    setReportPrefSaved(false)
+    setReportPrefErr(false)
+    setReportPrefBusy(true)
+    setReportMailOn(subscribed)
+    try {
+      const res = await fetch('/api/settings/report-mail', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subscribed }),
+      })
+      if (!res.ok) throw new Error()
+      onSettingsChanged?.()
+      setReportPrefSaved(true)
+      setTimeout(() => setReportPrefSaved(false), 2000)
+    } catch {
+      setReportMailOn(!subscribed)
+      setReportPrefErr(true)
+    } finally { setReportPrefBusy(false) }
   }, [onSettingsChanged])
 
   const loadSlack = useCallback(async () => {
@@ -895,6 +923,31 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
                 <p className="text-xs text-ive-green mt-1"><i className="fa-solid fa-circle-check mr-1" />{t('settingsSaved')}</p>
               )}
               {mailPrefErr && (
+                <p className="text-xs text-ive-red mt-1"><i className="fa-solid fa-triangle-exclamation mr-1" />{tc('saveFailed')}</p>
+              )}
+            </div>
+
+            {/* 보고서 메일 수신 — 본인이 직접 켜고 끔 */}
+            <div className="border-t border-ive-border-dark pt-3">
+              <label id="report-mail-label" className="block text-xs font-bold text-ive-text-muted mb-1.5 uppercase">
+                <i className="fa-solid fa-file-lines mr-1.5" />{t('reportMailLabel')}
+              </label>
+              <p className="text-xs text-ive-text-dim mb-2 leading-relaxed">{t('reportMailDesc')}</p>
+              <button
+                type="button"
+                aria-labelledby="report-mail-label"
+                aria-pressed={reportMailOn}
+                disabled={reportPrefBusy}
+                onClick={() => saveReportPref(!reportMailOn)}
+                className={`px-3 py-2 rounded-lg text-xs font-bold border transition-all disabled:opacity-40 ${reportMailOn ? 'bg-ive-green/15 border-ive-green/40 text-ive-green' : 'bg-ive-bg-deep border-ive-border-subtle text-ive-text-dim'}`}
+              >
+                <i className={`fa-solid ${reportMailOn ? 'fa-envelope' : 'fa-bell-slash'} mr-1`} />
+                {reportMailOn ? t('reportMailReceiveOn') : t('reportMailReceiveOff')}
+              </button>
+              {reportPrefSaved && (
+                <p className="text-xs text-ive-green mt-1"><i className="fa-solid fa-circle-check mr-1" />{t('settingsSaved')}</p>
+              )}
+              {reportPrefErr && (
                 <p className="text-xs text-ive-red mt-1"><i className="fa-solid fa-triangle-exclamation mr-1" />{tc('saveFailed')}</p>
               )}
             </div>

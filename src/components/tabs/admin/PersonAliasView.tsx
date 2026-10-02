@@ -4,7 +4,7 @@
  * 사람 이름 연결 — 기록에 남은 이름·Git 계정을 IVE 사용자에 잇는다(고르면 바로 저장).
  * 보고서의 사람별 집계가 한 사람을 여러 이름으로 나눠 세지 않게 한다.
  */
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 import CustomSelect from '@/components/ui/CustomSelect'
 import { useToast } from '@/components/ui/Toast'
@@ -16,34 +16,47 @@ export default function PersonAliasView() {
   const t = useTranslations('reportV2')
   const { toast } = useToast()
   const [data, setData] = useState<Data | null>(null)
+  const [loadError, setLoadError] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
 
+  // 처음 불러오기에 실패하면 안내만, 이미 그린 뒤 다시 불러오기에 실패하면 목록은 두고 알린다
+  const loaded = useRef(false)
   const load = useCallback(async () => {
-    const r = await fetch('/api/admin/people')
-    if (r.ok) setData(await r.json())
-  }, [])
+    try {
+      const r = await fetch('/api/admin/people')
+      if (!r.ok) throw new Error()
+      setData(await r.json())
+      setLoadError(false)
+      loaded.current = true
+    } catch {
+      if (loaded.current) toast(t('people.loadFailed'), 'error')
+      else setLoadError(true)
+    }
+  }, [toast, t])
   useEffect(() => { load() }, [load])
 
   async function link(row: Row, userId: string) {
     setBusy(`${row.kind}:${row.alias}`)
     try {
       const r = await fetch('/api/admin/people', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ alias: row.alias, kind: row.kind, userId }) })
-      if (!r.ok) toast((await r.json().catch(() => null))?.error || t('people.failed'), 'error')
+      if (!r.ok) toast(t('people.failed'), 'error')
       await load()
-    } finally { setBusy(null) }
+    } catch { toast(t('people.failed'), 'error') } finally { setBusy(null) }
   }
 
   async function unlink(row: Row) {
     setBusy(`${row.kind}:${row.alias}`)
     try {
-      await fetch(`/api/admin/people?alias=${encodeURIComponent(row.alias)}&kind=${row.kind}`, { method: 'DELETE' })
+      const r = await fetch(`/api/admin/people?alias=${encodeURIComponent(row.alias)}&kind=${row.kind}`, { method: 'DELETE' })
+      if (!r.ok) toast(t('people.unlinkFailed'), 'error')
       await load()
-    } finally { setBusy(null) }
+    } catch { toast(t('people.unlinkFailed'), 'error') } finally { setBusy(null) }
   }
 
+  if (loadError) return <p className="text-xs font-bold text-ive-red">{t('people.loadFailed')}</p>
   if (!data) return null
   const userName = (id?: string) => data.users.find(u => u.id === id)?.name ?? id ?? ''
-  const options = [{ value: '', label: t('people.pick') }, ...data.users.map(u => ({ value: u.id, label: `${u.name} · ${u.email}` }))]
+  const options = data.users.map(u => ({ value: u.id, label: `${u.name} · ${u.email}` }))
 
   return (
     <div className="bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden">
@@ -65,7 +78,7 @@ export default function PersonAliasView() {
                   <span className="px-2 py-0.5 rounded-lg text-xs font-bold bg-white/5 text-ive-text-secondary shrink-0">{t(`people.kind.${r.kind}`)}</span>
                   <span className="text-xs text-ive-text-dim shrink-0">{t('people.records', { n: r.count ?? 0 })}</span>
                 </div>
-                <CustomSelect size="sm" className="w-44 shrink-0" value="" onChange={v => { if (v) link(r, v) }} options={options} disabled={busy === `${r.kind}:${r.alias}`} />
+                <CustomSelect size="sm" className="w-44 shrink-0" value="" placeholder={t('people.pick')} onChange={v => { if (v) link(r, v) }} options={options} disabled={busy === `${r.kind}:${r.alias}`} />
               </div>
             ))}
           </div>
@@ -79,7 +92,7 @@ export default function PersonAliasView() {
                 <span className="text-xs text-ive-text-dim shrink-0">{t(`people.kind.${r.kind}`)}</span>
                 <i className="fa-solid fa-arrow-right text-xs text-ive-text-dim" />
                 <span className="font-bold text-ive-text flex-1 truncate">{userName(r.userId)}</span>
-                <button onClick={() => unlink(r)} disabled={busy === `${r.kind}:${r.alias}`} aria-label={t('people.unlink')} title={t('people.unlink')} className="w-7 h-7 rounded-lg flex items-center justify-center text-xs text-ive-text-dim hover:bg-white/5 disabled:opacity-40">
+                <button onClick={() => unlink(r)} disabled={busy === `${r.kind}:${r.alias}`} aria-label={t('people.unlink')} title={t('people.unlink')} className="w-8 h-8 rounded-lg flex items-center justify-center text-xs text-ive-text-dim hover:bg-white/5 disabled:opacity-40">
                   <i className="fa-solid fa-xmark" />
                 </button>
               </div>

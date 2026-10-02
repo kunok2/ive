@@ -15,9 +15,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import Database from 'better-sqlite3'
 import { initSchema } from '@/lib/db/schema'
 import {
-  recordStageEvent, recordWaitIfChanged, recordIssueLink, getIssueEvents, getLastStageEventTo,
-  recordConfigChanges, getConfigEvents, addPersonAlias, setPersonAlias, resolvePersonAlias,
-  syncPersonAliasesFromUsers, SYSTEM_ACTOR,
+  recordStageEvent, recordWaitIfChanged, recordIssueLink, getIssueEvents, getLastStageEvent,
+  recordConfigChanges, getConfigEvents, setPersonAlias, resolveManualAlias, SYSTEM_ACTOR,
 } from '@/lib/db'
 import { gitActor, agentActor } from '@/lib/event-actor'
 import { parseIveMetaFixes } from '@/lib/scanner/formatters'
@@ -43,7 +42,7 @@ afterEach(() => { db.close(); (globalThis as any).db = undefined })
 describe('recordStageEvent', () => {
   it('E-1: 작업자가 직접 남긴 전이를 스캐너가 다시 감지해도 한 줄만 남는다', () => {
     expect(recordStageEvent({ projectId: 'p', issueIid: 1, fromStage: 'dev', toStage: 'verify_waiting', action: 'complete', source: 'worker', actor: { type: 'agent', agentId: 'a1', model: 'claude-opus-5-5' } })).toBe(true)
-    expect(getLastStageEventTo('p', 1)).toBe('verify_waiting')
+    expect(getLastStageEvent('p', 1)?.to).toBe('verify_waiting')
     expect(recordStageEvent({ projectId: 'p', issueIid: 1, fromStage: 'dev', toStage: 'verify_waiting', source: 'scanner' })).toBe(false)
     const rows = getIssueEvents('p', 1)
     expect(rows).toHaveLength(1)
@@ -112,7 +111,7 @@ describe('parseIveMetaFixes', () => {
     const body = [
       'fixes: #999 (블록 밖 — 무시)',
       '<!-- ive-meta\nmodel: claude-opus-5-5\nfixes: #412, #418\n-->',
-      '<!-- ive-meta\nfixes: 418 #420\n-->',
+      '<!-- ive-meta\nfixes: #418 #420 (2026-06-01 회귀)\n-->',
     ].join('\n')
     expect(parseIveMetaFixes(body).sort((a, b) => a - b)).toEqual([412, 418, 420])
     expect(parseIveMetaFixes('<!-- ive-meta\nmodel: x\n-->')).toEqual([])
@@ -142,24 +141,22 @@ describe('recordConfigChanges', () => {
 })
 
 describe('person_aliases', () => {
-  it('E-6: 사용자 표에서 이름·Git 계정 별칭을 채우고, 이름이 겹치면 이름 별칭은 만들지 않는다', () => {
+  it('E-6: 별칭은 관리자가 직접 연결한 것만 쓴다 — 예전에 자동으로 채운 줄은 기동 때 지운다', () => {
     seedUsers(db)
-    syncPersonAliasesFromUsers()
-    expect(resolvePersonAlias('정균옥', 'name')).toBe('u1')
-    expect(resolvePersonAlias('KOJOUNG', 'gitlab')).toBe('u1')
-    expect(resolvePersonAlias('동명이인')).toBeNull()
-    // 여러 번 돌려도 같은 결과
-    expect(syncPersonAliasesFromUsers()).toBe(0)
+    db.prepare(`INSERT INTO person_aliases (alias, kind, user_id, source) VALUES ('옛이름', 'name', 'u2', 'auto')`).run()
+    initSchema(db)
+    expect(resolveManualAlias('옛이름', 'name')).toBeNull()
+    expect((db.prepare(`SELECT COUNT(*) AS c FROM person_aliases`).get() as { c: number }).c).toBe(0)
   })
 
-  it('E-6: 자동 채우기는 관리자가 고친 연결을 덮어쓰지 않는다', () => {
+  it('E-6: 관리자 연결은 대소문자·앞뒤 공백을 무시하고, 다시 연결하면 바뀐다', () => {
     seedUsers(db)
-    setPersonAlias('관리자', 'name', 'u1')
-    setPersonAlias('김개발', 'name', 'u1') // 관리자가 일부러 다른 사람에게 연결
-    syncPersonAliasesFromUsers()
-    expect(addPersonAlias('김개발', 'name', 'u2')).toBe(false)
-    expect(resolvePersonAlias('김개발', 'name')).toBe('u1')
-    expect(resolvePersonAlias('관리자')).toBe('u1')
+    setPersonAlias(' 관리자 ', 'name', 'u1')
+    expect(resolveManualAlias('관리자', 'name')).toBe('u1')
+    setPersonAlias('KIM-DEV', 'gitlab', 'u1')
+    setPersonAlias('kim-dev', 'gitlab', 'u2')
+    expect(resolveManualAlias('Kim-Dev', 'gitlab')).toBe('u2')
+    expect(resolveManualAlias('kim-dev', 'github')).toBeNull()
   })
 })
 

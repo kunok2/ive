@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getExecution, updateExecutionStatus, getProject, getProjectAccess, recordStageEvent } from '@/lib/db'
+import { getExecution, updateExecutionStatus, getProject, getProjectAccess, recordStageEvent, markHumanStageEnd } from '@/lib/db'
 import { userActor } from '@/lib/event-actor'
 import { getCurrentUser } from '@/lib/auth'
 import { logActivity } from '@/lib/activity'
@@ -32,6 +32,7 @@ export async function POST(
   const finalStatus = status === 'failed' ? 'failed' : 'success'
 
   updateExecutionStatus(id, finalStatus, new Date().toISOString())
+  if (finalStatus === 'failed') markHumanStageEnd(id, 'fail') // 검증·확인 기록이면 반려(처리 기록이면 아무것도 하지 않는다)
 
   // 레이블 전환: 성공 → IVE-D 제거 + IVE-V 부착 / 실패 → IVE-D 유지 (활성 실행 없으면 dev_fail로 자동 판정)
   const project = getProject(execution.projectId)

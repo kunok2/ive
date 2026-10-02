@@ -23,6 +23,7 @@ export function mapUser(r: any): User {
     slackUserId: r.slack_user_id ?? '',
     slackNotify: r.slack_notify == null ? true : r.slack_notify === 1,
     mailUnsubscribed: r.mail_unsubscribed === 1,
+    reportMailUnsubscribed: r.report_mail_unsubscribed === 1,
     oauthProviderId: r.oauth_provider_id ?? null,
     oauthUserId: r.oauth_user_id ?? null,
     oauthTokenExpiresAt: r.oauth_token_expires_at ?? null,
@@ -183,4 +184,9 @@ export function setUserMailUnsubscribed(id: string, unsubscribed: boolean) {
 export function createUser(u: any) {
   // 회원가입 자체가 약관·처리방침 동의 시점이므로 terms_agreed_at을 함께 기록한다.
   getDb().prepare("INSERT INTO users (id, email, password, name, terms_agreed_at) VALUES (?, ?, ?, ?, datetime('now'))").run(u.id, u.email, u.password, u.name)
+}
+
+/** 보고서 메일 수신 거부 — 본인 설정 화면에서만 바꾼다 */
+export function setUserReportMailUnsubscribed(id: string, unsubscribed: boolean) {
+  getDb().prepare('UPDATE users SET report_mail_unsubscribed = ? WHERE id = ?').run(unsubscribed ? 1 : 0, id)
 }

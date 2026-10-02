@@ -47,7 +47,7 @@ import {
   updateUserOAuthTokens,
   getOAuthProviderRaw,
   completeMergedIssue,
-  recordStageEvent, recordWaitIfChanged, recordIssueLink, SYSTEM_ACTOR,
+  recordStageEvent, recordWaitIfChanged, recordIssueLink, SYSTEM_ACTOR, markHumanStageEnd,
 } from "../db";
 import { gitActor } from "../event-actor";
 import { recordScannedStageChange } from "./stage-events";
@@ -413,6 +413,8 @@ async function scanProject(project: Project, force: boolean = false) {
         try { resetIssueCycleMarkers(project.id, iid); }
         catch (e) { slog.warn(`resetIssueCycleMarkers failed (#${iid}):`, (e as Error).message); }
       }
+      // 마커 처리에서 이미 조회한 라벨 부착자 — 사건 로그가 같은 조회를 되풀이하지 않게 넘긴다
+      let stageActorKnown: Awaited<ReturnType<typeof resolveStageActorAsync>> | undefined = undefined;
       try {
         const markers = markersForStageChange(prevStage, stage);
         // 담당자(assignee) = 라벨을 옮긴 주체로 간주 (CLI 경로에서는 이것이 유일한 단서).
@@ -432,6 +434,7 @@ async function scanProject(project: Project, force: boolean = false) {
         const labelActor = stageLabelNow
           ? await resolveStageActorAsync(project, stageLabelNow, () => fetchIssueLabelEvents(project, iid, decryptedToken))
           : null;
+        if (anyMarker) stageActorKnown = labelActor;
         const actorName = labelActor?.user?.name || labelActor?.username || assigneeInfo?.name || null;
         const actorAvatar = labelActor?.user?.avatar || (labelActor ? null : assigneeInfo?.avatar ?? null);
         const actorUsername = labelActor?.username || assigneeInfo?.username || null;
@@ -500,19 +503,30 @@ async function scanProject(project: Project, force: boolean = false) {
           }
           closeStageExecutions(project.id, iid, kind, markers.rejected ? 'failed' : 'success', meta);
         }
+        // 확인 반려: 확인 중 → 완료가 아닌 단계(라벨로 되돌림). 열린 확인 기록을 반려로 닫는다
+        // (닫지 않으면 아래 USER-COMPLETE 가 성공으로 닫아 반려가 통과로 남는다)
+        if (prevStage === 'confirming' && stage !== 'confirming' && stage !== 'done' && hasOpenStageExecution(project.id, iid, 'confirm')) {
+          closeStageExecutions(project.id, iid, 'confirm', 'failed');
+        }
 
-        // 사건 로그 — 라벨 변화로 감지한 단계 전이(Git 화면·glab/gh 로 사람이 옮긴 경우). IVE 가 직접 옮긴 전이는 건너뛴다
+      } catch (e) {
+        slog.warn(`verify marker update failed (#${iid}):`, (e as Error).message);
+      }
+
+      // 사건 로그 — 라벨 변화로 감지한 단계 전이. 마커 처리와 따로 감싸 한쪽 실패가 다른 쪽을 막지 않게 한다
+      try {
         await recordScannedStageChange({
           project, iid, prevStage, stage,
-          knownActor: anyMarker ? labelActor : undefined,
+          knownActor: stageActorKnown,
           resolveActor: async () => {
             const lbl = stageLabelFor(project, stage);
             return lbl ? resolveStageActorAsync(project, lbl, () => fetchIssueLabelEvents(project, iid, decryptedToken)) : null;
           },
-          assigneeUsername: () => (assigneeInfo ?? getIssueAssigneeUsername(project.id, iid))?.username ?? null,
+          assigneeUsername: () => getIssueAssigneeUsername(project.id, iid)?.username ?? null,
+          author: issue.author ? { username: issue.author.username || issue.author.login || null, gitUserId: issue.author.id ?? null } : null,
         });
       } catch (e) {
-        slog.warn(`verify marker update failed (#${iid}):`, (e as Error).message);
+        slog.warn(`stage event record failed (#${iid}):`, (e as Error).message);
       }
 
       // 검증자별 부하 집계용 스냅샷 — Git assignee + 현재 stage 저장
@@ -609,6 +623,7 @@ async function scanProject(project: Project, force: boolean = false) {
         const userExec = getAssignedUserExecution(project.id, iid);
         if (userExec) {
           updateExecutionStatus(userExec.id, 'failed', new Date().toISOString());
+          markHumanStageEnd(userExec.id, 'fail'); // 검증·확인 기록이면 반려(라벨을 되돌림)
           slog.info(`[USER-FAIL] Issue #${iid} — 레이블 변경 감지 (stage: ${stage}), 작업 실패 처리`);
         }
       }
@@ -814,6 +829,8 @@ async function scanProject(project: Project, force: boolean = false) {
           ).all(project.id, iid) as { id: string }[]
           for (const ex of lingeringExecs) {
             updateExecutionStatus(ex.id, 'failed', new Date().toISOString())
+            // 열려 있던 검증·확인 기록은 반려가 아니라 버려진 것 — 보고서가 사람의 반려로 세지 않게 표시한다
+            markHumanStageEnd(ex.id, 'abandoned')
           }
           if (lingeringExecs.length > 0) {
             slog.info(`Cleaned ${lingeringExecs.length} lingering execution(s) for stale issue #${iid}`)

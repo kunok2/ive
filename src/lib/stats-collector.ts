@@ -4,6 +4,7 @@ import {
   getSystemSetting, countPreferredIssuesByAgent
 } from './db'
 import { getKSTTodayStartISO, utcISOToKSTDate } from './date-utils'
+import { agedHeldByProject } from './report-model/load'
 
 interface VerifierAggRow {
   username: string
@@ -108,14 +109,14 @@ function collectSnapshots() {
     // 하루 마감 보유 — 그날(KST) 줄을 매분 덮어쓴다. 마지막으로 쓴 값이 그날의 마감값이 된다
     try {
       db.prepare(`
-        INSERT INTO held_daily (project_id, date, waiting, dev, dev_fail, verify_waiting, verifying, confirm_waiting, confirming, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO held_daily (project_id, date, waiting, dev, dev_fail, verify_waiting, verifying, confirm_waiting, confirming, over7, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(project_id, date) DO UPDATE SET
           waiting = excluded.waiting, dev = excluded.dev, dev_fail = excluded.dev_fail,
           verify_waiting = excluded.verify_waiting, verifying = excluded.verifying,
-          confirm_waiting = excluded.confirm_waiting, confirming = excluded.confirming, updated_at = excluded.updated_at
+          confirm_waiting = excluded.confirm_waiting, confirming = excluded.confirming, over7 = excluded.over7, updated_at = excluded.updated_at
       `).run(project.id, utcISOToKSTDate(now), waiting, waitingRow.dev ?? 0, waitingRow.dev_fail ?? 0, verifyWaiting,
-        waitingRow.verifying ?? 0, confirmWaiting, waitingRow.confirming ?? 0, now)
+        waitingRow.verifying ?? 0, confirmWaiting, waitingRow.confirming ?? 0, agedHeldByProject([project.id], new Date(now)).get(project.id) ?? 0, now)
     } catch (e) { console.warn('[StatsCollector] held_daily upsert failed:', (e as Error).message) }
 
     createSnapshot({

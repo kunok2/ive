@@ -40,7 +40,7 @@ export async function POST(req: Request) {
   }
 
   // 설정 변경 로그 — 결과에 영향을 주는 칸(CLI 기본 모델·단계 동시 실행 수 등)만. 비밀값 칸은 남기지 않는다
-  const trackedKeys = Object.keys(filteredSettings).filter(k => (k.startsWith('cli.') || k.startsWith('stage.')) && !PASSWORD_KEYS.includes(k))
+  const trackedKeys = Object.keys(filteredSettings).filter(k => (k.startsWith('cli.') || k.startsWith('stage.') || k.startsWith('report.')) && !PASSWORD_KEYS.includes(k))
   const beforeTracked: Record<string, unknown> = {}
   for (const k of trackedKeys) beforeTracked[k] = getSystemSetting(k)
 

@@ -47,11 +47,11 @@ describe('CLI 경로의 검증/확인 실행 기록', () => {
     expect(hasOpenStageExecution(PROJ, IID, 'confirm')).toBe(true)
   })
 
-  it('반려는 failed 로 닫힌다', () => {
+  it('반려는 failed 로 닫히고, 반려라는 까닭(fail)을 남긴다', () => {
     openStageExecution(PROJ, IID, 'verify', {})
     closeStageExecutions(PROJ, IID, 'verify', 'failed')
-    const row = getDb().prepare("SELECT status FROM task_executions WHERE id LIKE 'ex-verify-%'").get() as any
-    expect(row.status).toBe('failed')
+    const row = getDb().prepare("SELECT status, stage_verdict FROM task_executions WHERE id LIKE 'ex-verify-%'").get() as any
+    expect(row).toMatchObject({ status: 'failed', stage_verdict: 'fail' })
   })
 
   it('에이전트가 남긴 ive-meta 로 토큰·구간이 채워지고, 사람 비용은 0이 된다', () => {

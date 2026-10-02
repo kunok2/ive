@@ -46,7 +46,7 @@ export interface IssueEventInput {
 }
 
 /** 'none'·빈 문자열은 단계 없음(null)으로 맞춘다. 화면 경로는 null 을 'none' 으로 쓴다. */
-function normStage(s: string | null | undefined): string | null {
+export function normStage(s: string | null | undefined): string | null {
   if (!s || s === 'none') return null
   return s
 }
@@ -79,12 +79,8 @@ export function recordStageEvent(e: Omit<IssueEventInput, 'event'>): boolean {
     const to = normStage(e.toStage)
     const from = normStage(e.fromStage)
     if (from === to) return false
-    const last = getDb().prepare(`
-      SELECT to_stage FROM issue_events
-      WHERE project_id = ? AND issue_iid = ? AND event = 'stage'
-      ORDER BY id DESC LIMIT 1
-    `).get(e.projectId, e.issueIid) as { to_stage: string | null } | undefined
-    if (last && (last.to_stage ?? null) === to) return false
+    const last = getLastStageEvent(e.projectId, e.issueIid)
+    if (last && last.to === to) return false
     insert({ ...e, event: 'stage' })
     return true
   } catch (err) {
@@ -93,15 +89,13 @@ export function recordStageEvent(e: Omit<IssueEventInput, 'event'>): boolean {
   }
 }
 
-/** 이 이슈의 마지막 단계 사건의 도착 단계(없으면 undefined). 같은 전이를 다시 조사하지 않으려고 쓴다. */
-export function getLastStageEventTo(projectId: string, issueIid: number): string | null | undefined {
-  try {
-    const r = getDb().prepare(`
-      SELECT to_stage FROM issue_events WHERE project_id = ? AND issue_iid = ? AND event = 'stage'
-      ORDER BY id DESC LIMIT 1
-    `).get(projectId, issueIid) as { to_stage: string | null } | undefined
-    return r ? (r.to_stage ?? null) : undefined
-  } catch { return undefined }
+/** 이 이슈의 마지막 단계 사건(도착 단계·시각). 없으면 null */
+export function getLastStageEvent(projectId: string, issueIid: number): { to: string | null; at: string } | null {
+  const r = getDb().prepare(`
+    SELECT to_stage, occurred_at FROM issue_events WHERE project_id = ? AND issue_iid = ? AND event = 'stage'
+    ORDER BY id DESC LIMIT 1
+  `).get(projectId, issueIid) as { to_stage: string | null; occurred_at: string } | undefined
+  return r ? { to: r.to_stage ?? null, at: r.occurred_at } : null
 }
 
 /**
@@ -200,17 +194,6 @@ export function getIssueEvents(projectId: string, issueIid: number): IssueEventR
   return rows.map(mapEvent)
 }
 
-/** 기간 안의 사건(오래된 순). start/end 는 UTC ISO. */
-export function getIssueEventsInRange(startISO: string, endISO: string, kinds?: IssueEventKind[]): IssueEventRow[] {
-  const kindFilter = kinds && kinds.length > 0 ? `AND event IN (${kinds.map(() => '?').join(',')})` : ''
-  const rows = getDb().prepare(`
-    SELECT * FROM issue_events
-    WHERE occurred_at >= ? AND occurred_at < ? ${kindFilter}
-    ORDER BY occurred_at ASC, id ASC
-  `).all(startISO, endISO, ...(kinds ?? [])) as any[]
-  return rows.map(mapEvent)
-}
-
 // ─── 설정 변경 ───
 
 export type ConfigScope = 'agent' | 'system' | 'automation' | 'roster' | 'preset'
@@ -274,19 +257,15 @@ export function getConfigEvents(scope?: ConfigScope, targetId?: string): ConfigE
 
 export type AliasKind = 'name' | 'gitlab' | 'github'
 
-/** 별칭 → IVE 사용자 연결. 이미 있으면 바꾸지 않는다(사람이 고친 연결을 덮어쓰지 않도록). */
-export function addPersonAlias(alias: string, kind: AliasKind, userId: string, source: 'auto' | 'manual' = 'auto'): boolean {
+/**
+ * 관리자가 직접 연결한 별칭만으로 사용자 id 를 찾는다. 사람 판정은 이것과 지금의 사용자 표만 쓴다 —
+ * 자동 별칭은 기동 때 채운 것이라 그 뒤 생긴 동명이인·계정 변경을 반영하지 못한다.
+ */
+export function resolveManualAlias(alias: string | null | undefined, kind: AliasKind): string | null {
   const a = alias?.trim()
-  if (!a || !userId) return false
-  try {
-    const r = getDb().prepare(`
-      INSERT OR IGNORE INTO person_aliases (alias, kind, user_id, source) VALUES (?, ?, ?, ?)
-    `).run(a, kind, userId, source)
-    return r.changes > 0
-  } catch (err) {
-    console.warn('[events] addPersonAlias failed:', (err as Error).message)
-    return false
-  }
+  if (!a) return null
+  const row = getDb().prepare(`SELECT user_id FROM person_aliases WHERE alias = ? COLLATE NOCASE AND kind = ? AND source = 'manual' LIMIT 1`).get(a, kind)
+  return (row as { user_id: string } | undefined)?.user_id ?? null
 }
 
 /** 관리자가 직접 연결(기존 연결을 바꾼다). */
@@ -295,44 +274,6 @@ export function setPersonAlias(alias: string, kind: AliasKind, userId: string): 
     INSERT INTO person_aliases (alias, kind, user_id, source) VALUES (?, ?, ?, 'manual')
     ON CONFLICT(alias, kind) DO UPDATE SET user_id = excluded.user_id, source = 'manual', updated_at = datetime('now')
   `).run(alias.trim(), kind, userId)
-}
-
-/** 별칭 → IVE 사용자 id. 이름은 대소문자·앞뒤 공백을 무시한다. */
-export function resolvePersonAlias(alias: string | null | undefined, kind?: AliasKind): string | null {
-  const a = alias?.trim()
-  if (!a) return null
-  const row = kind
-    ? getDb().prepare(`SELECT user_id FROM person_aliases WHERE alias = ? COLLATE NOCASE AND kind = ? LIMIT 1`).get(a, kind)
-    : getDb().prepare(`SELECT user_id FROM person_aliases WHERE alias = ? COLLATE NOCASE ORDER BY kind = 'name' LIMIT 1`).get(a)
-  return (row as { user_id: string } | undefined)?.user_id ?? null
-}
-
-/** IVE 사용자 표에서 자동으로 알 수 있는 별칭(표시 이름·Git 계정)을 채운다. 여러 번 돌려도 안전하다. */
-export function syncPersonAliasesFromUsers(): number {
-  try {
-    const db = getDb()
-    let n = 0
-    n += db.prepare(`
-      INSERT OR IGNORE INTO person_aliases (alias, kind, user_id, source)
-      SELECT TRIM(name), 'name', id, 'auto' FROM users
-      WHERE name IS NOT NULL AND TRIM(name) <> ''
-        AND TRIM(name) NOT IN (SELECT TRIM(name) FROM users GROUP BY TRIM(name) HAVING COUNT(*) > 1)
-    `).run().changes
-    n += db.prepare(`
-      INSERT OR IGNORE INTO person_aliases (alias, kind, user_id, source)
-      SELECT TRIM(gitlab_username), 'gitlab', id, 'auto' FROM users
-      WHERE gitlab_username IS NOT NULL AND TRIM(gitlab_username) <> ''
-    `).run().changes
-    n += db.prepare(`
-      INSERT OR IGNORE INTO person_aliases (alias, kind, user_id, source)
-      SELECT TRIM(github_username), 'github', id, 'auto' FROM users
-      WHERE github_username IS NOT NULL AND TRIM(github_username) <> ''
-    `).run().changes
-    return n
-  } catch (err) {
-    console.warn('[events] syncPersonAliasesFromUsers failed:', (err as Error).message)
-    return 0
-  }
 }
 
 /** 별칭 연결 해제(관리 화면) */
@@ -348,8 +289,11 @@ export function unresolvedPersonNames(): { alias: string; kind: AliasKind; count
   const db = getDb()
   const rows = db.prepare(`
     SELECT alias, kind, SUM(n) AS count FROM (
-      SELECT TRIM(user_name) AS alias, 'name' AS kind, COUNT(*) AS n FROM task_executions
-        WHERE user_name IS NOT NULL AND TRIM(user_name) <> '' AND (user_id IS NULL OR user_id NOT IN (SELECT id FROM users)) GROUP BY 1
+      SELECT TRIM(te.user_name) AS alias, 'name' AS kind, COUNT(*) AS n FROM task_executions te LEFT JOIN projects p ON p.id = te.project_id
+        WHERE te.user_name IS NOT NULL AND TRIM(te.user_name) <> ''
+          AND (te.user_id IS NULL OR (te.user_id NOT IN (SELECT id FROM users)
+            -- Git 숫자 id 는 그 프로젝트의 공급자(GitLab/GitHub) 계정으로만 맞춘다(보고서의 사람 판정과 같은 규칙)
+            AND NOT EXISTS (SELECT 1 FROM users u JOIN oauth_providers op ON op.id = u.oauth_provider_id WHERE op.type = p.provider AND u.oauth_user_id = te.user_id))) GROUP BY 1
       UNION ALL
       SELECT TRIM(verifier_name), 'name', COUNT(*) FROM task_executions
         WHERE verifier_name IS NOT NULL AND TRIM(verifier_name) <> '' AND (verifier_user_id IS NULL OR verifier_user_id NOT IN (SELECT id FROM users)) GROUP BY 1
@@ -363,13 +307,13 @@ export function unresolvedPersonNames(): { alias: string; kind: AliasKind; count
   `).all() as { alias: string; kind: AliasKind; count: number }[]
   return rows.filter(r => {
     if (r.kind === 'name') {
-      const n = db.prepare(`SELECT COUNT(*) AS c FROM users WHERE TRIM(name) = ?`).get(r.alias) as { c: number }
+      const n = db.prepare(`SELECT COUNT(*) AS c FROM users WHERE TRIM(name) = ? COLLATE NOCASE`).get(r.alias) as { c: number }
       if (n.c === 1) return false
     } else {
       const col = r.kind === 'github' ? 'github_username' : 'gitlab_username'
       if (db.prepare(`SELECT 1 FROM users WHERE ${col} = ? COLLATE NOCASE`).get(r.alias)) return false
     }
-    return !resolvePersonAlias(r.alias, r.kind)
+    return !resolveManualAlias(r.alias, r.kind)
   })
 }
 

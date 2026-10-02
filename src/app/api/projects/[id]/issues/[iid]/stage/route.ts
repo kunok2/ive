@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb, getProject, getProjectAuthToken, getProjectAccess, hasActiveExecution, stageFromLabels, markIssueVerifyStarted, markIssueVerified, markIssueVerifyRejected, markIssueConfirmed, markIssueConfirmStarted, resetIssueCycleMarkers, resetIssueScheduledAt, recordIssueScheduledAt, touchProjectActivity, assignIssueAtomically, getAssignModeMap, getIssueScheduledAt, isIssueAssignee, isIssueAuthor, upsertIssueStageSnapshot, updateExecutionStatus, getVerifyWaitingCount, updateProjectLastChecked, getPresetRoles, recordStageEvent } from '@/lib/db';
+import { getDb, getProject, getProjectAuthToken, getProjectAccess, hasActiveExecution, stageFromLabels, markIssueVerifyStarted, markIssueVerified, markIssueVerifyRejected, markIssueConfirmed, markIssueConfirmStarted, resetIssueCycleMarkers, resetIssueScheduledAt, recordIssueScheduledAt, touchProjectActivity, assignIssueAtomically, getAssignModeMap, getIssueScheduledAt, isIssueAssignee, isIssueAuthor, upsertIssueStageSnapshot, updateExecutionStatus, getVerifyWaitingCount, updateProjectLastChecked, getPresetRoles, recordStageEvent, markHumanStageEnd } from '@/lib/db';
 import { userActor } from '@/lib/event-actor';
 import { triggerScan } from '@/lib/scanner';
 import { applyRoleAssignee } from '@/lib/role-assignee';
@@ -269,6 +269,7 @@ export async function POST(
       const endStatus = (action === 'approve' || action === 'complete') ? 'success' : 'failed';
       for (const ex of verifyExecs) {
         updateExecutionStatus(ex.id, endStatus, new Date().toISOString());
+        if (endStatus === 'failed') markHumanStageEnd(ex.id, 'fail');
       }
     }
 
@@ -322,6 +323,7 @@ export async function POST(
       const endStatus = action === 'accept' ? 'success' : 'failed';
       for (const ex of confirmExecs) {
         updateExecutionStatus(ex.id, endStatus, new Date().toISOString());
+        if (endStatus === 'failed') markHumanStageEnd(ex.id, 'fail');
       }
     }
 

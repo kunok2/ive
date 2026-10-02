@@ -436,5 +436,8 @@
   "unsubscribedExcluded": "수신거부 {count}명 제외",
   "unsubscribedTag": "수신거부",
   "users": "사용자",
-  "viewAccessStats": "이 메일로 IVE에 접속한 통계 보기"
+  "viewAccessStats": "이 메일로 IVE에 접속한 통계 보기",
+  "reportUnsubscribedTag": "보고서 수신거부",
+  "previewSkipUnsubscribed": "이 사람은 보고서 메일을 받지 않기로 설정해 보내지 않습니다.",
+  "previewSkipNothing": "손에 든 일도, 팀이 손쓸 것도 없어 이번에는 보내지 않습니다."
 }

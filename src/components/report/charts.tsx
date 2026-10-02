@@ -32,7 +32,7 @@ function useIsMobile(breakpoint = 768) {
 function Tip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null
   return (
-    <div className="border border-ive-border rounded-lg" style={{ fontSize: 11, padding: '8px 12px', background: 'color-mix(in srgb, var(--color-ive-bg-solid) 92%, transparent)', backdropFilter: 'blur(8px)' }}>
+    <div className="border border-ive-border rounded-lg text-xs px-3 py-2" style={{ background: 'color-mix(in srgb, var(--color-ive-bg-solid) 92%, transparent)', backdropFilter: 'blur(8px)' }}>
       <div className="font-bold text-ive-text mb-1">{label}</div>
       {payload.map((p: any, i: number) => (
         <div key={i}><span className="text-ive-text-secondary">{p.name}: </span><span className="font-bold text-ive-text">{p.value ?? '—'}</span></div>
@@ -48,7 +48,7 @@ function Legend({ items }: { items: { label: string; color: string; dashed?: boo
         <span key={i.label} className="inline-flex items-center gap-1">
           {i.dashed || i.line
             ? <span className="inline-block w-3 align-middle" style={{ borderTop: `2px ${i.dashed ? 'dashed' : 'solid'} ${i.color}` }} />
-            : <span className="inline-block w-2 h-2 rounded-sm" style={{ background: i.color }} />}
+            : <span className="inline-block w-2 h-2 rounded-full" style={{ background: i.color }} />}
           {i.label}
         </span>
       ))}
@@ -56,7 +56,7 @@ function Legend({ items }: { items: { label: string; color: string; dashed?: boo
   )
 }
 
-export function labelFor(type: 'weekly' | 'monthly' | 'yearly', key: string, dayLabels: string[], tr: Tr): string {
+function labelFor(type: 'weekly' | 'monthly' | 'yearly', key: string, dayLabels: string[], tr: Tr): string {
   if (type === 'yearly') return tr('monthShort', { m: Number(key.slice(5, 7)) })
   if (type === 'weekly') return dayLabels[new Date(`${key}T00:00:00Z`).getUTCDay()]
   return String(Number(key.slice(8, 10)))
@@ -113,9 +113,9 @@ export function HeldCompare({ trend, type, tr, dayLabels, prevLabel }: { trend: 
   )
 }
 
-/** 월별 막대(이번 달 강조) */
-export function MonthBars({ months, pick, tr, emphasizeLast = true }: { months: MonthPoint[]; pick: (m: MonthPoint) => number | null; tr: Tr; emphasizeLast?: boolean }) {
-  const data = months.map((m, i) => ({ label: tr('monthShort', { m: Number(m.label.slice(5, 7)) }), v: pick(m), last: emphasizeLast && i === months.length - 1 }))
+/** 월별 완료 막대(마지막 달 강조) */
+export function MonthBars({ months, tr }: { months: MonthPoint[]; tr: Tr }) {
+  const data = months.map((m, i) => ({ label: tr('monthShort', { m: Number(m.label.slice(5, 7)) }), v: m.completed, last: i === months.length - 1 }))
   return (
     <ResponsiveContainer width="100%" height={120}>
       <BarChart data={data} margin={{ top: 14, right: 4, left: 0, bottom: 0 }}>

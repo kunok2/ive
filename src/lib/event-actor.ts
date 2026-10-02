@@ -5,7 +5,7 @@
  * 사람은 IVE 사용자 id(통합 식별자)로, 에이전트는 에이전트 id + 그 실행이 쓴 모델로 남긴다.
  */
 import type { Agent, Project } from '@/types'
-import { getDb, getUserByOAuthId, getUserByGitUsername, resolvePersonAlias, getSystemSetting, type EventActor } from './db'
+import { getDb, getUserByOAuthId, getUserByGitUsername, resolveManualAlias, getSystemSetting, type EventActor } from './db'
 
 export function userActor(user: { id: string } | null | undefined, gitUsername?: string | null): EventActor {
   if (!user?.id) return gitUsername ? { type: 'user', gitUsername } : { type: 'unknown' }
@@ -59,7 +59,7 @@ export function gitActor(
   try {
     if (gitUserId) userId = getUserByOAuthId(provider, gitUserId)?.id ?? null
     if (!userId && username) userId = getUserByGitUsername(provider, username)?.id ?? null
-    if (!userId && username) userId = resolvePersonAlias(username, provider)
+    if (!userId && username) userId = resolveManualAlias(username, provider)
   } catch { /* 찾지 못함 */ }
   return { type: 'user', userId, gitUsername: username }
 }

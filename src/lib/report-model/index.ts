@@ -7,36 +7,35 @@
  */
 import { getReportSnapshot, putReportSnapshot, deleteReportSnapshot } from '../db'
 import { buildReportModel } from './build'
-import { periodOf, isClosed, type ReportType } from './period'
+import { periodOf, isClosed, addDays, kstToday, FINALIZE_AFTER_DAYS, type ReportType } from './period'
 import type { Scope } from './load'
 import type { ReportModel } from './types'
 
 export * from './types'
-export { periodOf, previousPeriod, kstToday, type ReportType, type Period } from './period'
-export { buildReportModel } from './build'
+export { periodOf, previousPeriod, kstToday, FINALIZE_AFTER_DAYS, type ReportType, type Period } from './period'
 
 const snapKind = (type: ReportType) => `${type}@v2`
 /** 범위 없는 전체 보고서(관리자 메일 등)의 확정본 소유자 표기 */
 const GLOBAL_SCOPE = '__all__'
 
 /**
- * 보고서 모델을 얻는다. 닫힌 기간이면 확정본(없으면 지금 계산해 확정), 진행 중이면 매번 계산한다.
+ * 보고서 모델을 얻는다. 끝나고 FINALIZE_AFTER_DAYS 가 지난 기간은 확정본(없으면 지금 계산해 확정),
+ * 그 전(진행 중·막 끝남)은 매번 계산한다. 막 끝나 아직 확정 전인 기간은 provisional(잠정)로 표시한다.
  */
 export function getReportModel(scope: Scope, type: ReportType, day: string, now: Date = new Date()): ReportModel {
   const p = periodOf(type, day)
   const owner = scope ?? GLOBAL_SCOPE
-  if (isClosed(p, now)) {
+  if (isClosed(p, now) && kstToday(now) >= addDays(p.end, FINALIZE_AFTER_DAYS)) {
     const snap = getReportSnapshot(owner, snapKind(type), p.start, p.end)
-    if (snap && (snap.payload as ReportModel)?.version === 2) {
-      return { ...(snap.payload as ReportModel), snapshotAt: snap.generatedAt }
-    }
+    if (snap) return { ...(snap.payload as ReportModel), snapshotAt: snap.generatedAt }
     const model = buildReportModel(scope, type, day, now)
     const at = putReportSnapshot(owner, snapKind(type), p.start, p.end, model)
     // 동시에 두 번 계산됐으면 먼저 저장된 쪽이 확정본이다 — 그것을 다시 읽어 돌려준다
     const saved = getReportSnapshot(owner, snapKind(type), p.start, p.end)
     return saved ? { ...(saved.payload as ReportModel), snapshotAt: saved.generatedAt } : { ...model, snapshotAt: at }
   }
-  return buildReportModel(scope, type, day, now)
+  const model = buildReportModel(scope, type, day, now)
+  return isClosed(p, now) ? { ...model, provisional: true } : model
 }
 
 /** 확정본 재생성 — 지우면 다음 조회에서 지금의 계산·단가로 다시 확정된다 */

@@ -35,14 +35,18 @@ export default function ReportScheduleView() {
   const [editForm, setEditForm] = useState<Partial<ReportScheduleState>>({})
   // 메일 미리보기 — 실제 발송과 같은 함수로 만든 그 사람의 메일
   const [preview, setPreview] = useState<{ type: string; email: string } | null>(null)
-  const [previewMail, setPreviewMail] = useState<{ subject: string; html: string; error?: string } | null>(null)
+  const [previewMail, setPreviewMail] = useState<{ subject: string; html: string; error?: string; skip?: 'unsubscribed' | 'nothing_for_member' | null } | null>(null)
 
   useEffect(() => {
     if (!preview?.email) { setPreviewMail(null); return }
     let alive = true
     setPreviewMail(null)
     fetch(`/api/admin/reports/preview?type=${preview.type}&email=${encodeURIComponent(preview.email)}`)
-      .then(async r => { const d = await r.json(); if (alive) setPreviewMail(r.ok ? d : { subject: '', html: '', error: d.error }) })
+      .then(async r => {
+        const d = await r.json().catch(() => null)
+        if (!alive) return
+        setPreviewMail(r.ok && d ? d : { subject: '', html: '', error: d?.error || `HTTP ${r.status}` })
+      })
       .catch(e => { if (alive) setPreviewMail({ subject: '', html: '', error: String(e) }) })
     return () => { alive = false }
   }, [preview])
@@ -320,8 +324,11 @@ export default function ReportScheduleView() {
             {previewMail?.error && <div className="text-sm font-bold text-ive-red">{previewMail.error}</div>}
             {previewMail && !previewMail.error && (
               <>
+                {previewMail.skip && (
+                  <div className="text-xs font-bold text-ive-amber"><i className="fa-solid fa-circle-info mr-1" />{t(previewMail.skip === 'unsubscribed' ? 'previewSkipUnsubscribed' : 'previewSkipNothing')}</div>
+                )}
                 <div className="text-sm font-bold text-ive-text break-all">{previewMail.subject}</div>
-                <iframe title={t('previewTitle')} srcDoc={previewMail.html} sandbox="" className="w-full h-[60vh] rounded-lg border border-ive-border-subtle bg-white" />
+                <iframe title={t('previewTitle')} srcDoc={previewMail.html.replace('<head>', '<head><base target="_blank">')} sandbox="allow-popups allow-popups-to-escape-sandbox" className="w-full h-[60vh] rounded-lg border border-ive-border-subtle bg-white" />
                 <p className="text-xs text-ive-text-dim">{t('previewHint')}</p>
               </>
             )}

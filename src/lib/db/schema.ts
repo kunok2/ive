@@ -1450,7 +1450,7 @@ function migrateStageAutomation(db: Database.Database) {
   // 사건 로그 — 보고서·평가를 나중에 캐낼 원재료. 추가만 하고 고치거나 지우지 않는다(lib/db/events.ts).
   //   issue_events  : 단계 전이(stage)·배정 대기 사유(wait)·후속 이슈 연결(link). 작업자는 사건마다 남긴다
   //   config_events : 결과에 영향을 주는 설정 변경(에이전트 모델·CLI, 시스템 CLI 모델, 자동화, 명부)
-  //   person_aliases: 같은 사람의 여러 이름(표시 이름·Git 계정) → IVE 사용자
+  //   person_aliases: 관리자가 직접 이은 이름·Git 계정 → IVE 사용자
   db.exec(`
     CREATE TABLE IF NOT EXISTS issue_events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1503,22 +1503,10 @@ function migrateStageAutomation(db: Database.Database) {
     );
     CREATE INDEX IF NOT EXISTS idx_person_aliases_user ON person_aliases(user_id);
   `)
-  // 사용자 표에서 자동으로 알 수 있는 별칭을 채운다(INSERT OR IGNORE — 관리자가 고친 연결은 그대로).
-  // 표시 이름이 겹치는 사용자들은 누구인지 정할 수 없으므로 이름 별칭을 만들지 않는다.
-  try {
-    db.exec(`
-      INSERT OR IGNORE INTO person_aliases (alias, kind, user_id, source)
-        SELECT TRIM(name), 'name', id, 'auto' FROM users
-        WHERE name IS NOT NULL AND TRIM(name) <> ''
-          AND TRIM(name) NOT IN (SELECT TRIM(name) FROM users GROUP BY TRIM(name) HAVING COUNT(*) > 1);
-      INSERT OR IGNORE INTO person_aliases (alias, kind, user_id, source)
-        SELECT TRIM(gitlab_username), 'gitlab', id, 'auto' FROM users
-        WHERE gitlab_username IS NOT NULL AND TRIM(gitlab_username) <> '';
-      INSERT OR IGNORE INTO person_aliases (alias, kind, user_id, source)
-        SELECT TRIM(github_username), 'github', id, 'auto' FROM users
-        WHERE github_username IS NOT NULL AND TRIM(github_username) <> '';
-    `)
-  } catch (e) { console.warn('[DB] person_aliases sync skipped:', (e as Error).message) }
+  // 별칭은 관리자가 직접 연결한 것만 쓴다(자동 판정은 항상 지금의 사용자 표로). 예전에 자동으로 채운 줄은 지운다
+  db.exec(`DELETE FROM person_aliases WHERE source <> 'manual'`)
+  // 보고서 메일 수신 거부 — 본인만 바꾼다(관리자는 배지로만 본다). 안내·소식 메일(mail_unsubscribed)과 별개
+  try { db.exec(`ALTER TABLE users ADD COLUMN report_mail_unsubscribed INTEGER NOT NULL DEFAULT 0`) } catch { /* 이미 존재 */ }
   // 하루 마감 보유 — 프로젝트·날짜(KST)별로 그날 마지막에 본 단계별 보유 건수. 분 단위 스냅샷은 7일 뒤 지워지므로
   // 지난 기간의 "기간 말 보유"와 보유 추이는 이 표에서 읽는다. 수집기가 매분 그날 줄을 덮어쓴다(마지막 값이 마감값).
   db.exec(`
@@ -1537,6 +1525,8 @@ function migrateStageAutomation(db: Database.Database) {
     );
     CREATE INDEX IF NOT EXISTS idx_held_daily_date ON held_daily(date);
   `)
+  // 7일 넘게 보유 중인 일 수(그날 마감). 기록 전의 줄은 NULL — 보고서는 "기록 없음"으로 본다
+  try { db.exec(`ALTER TABLE held_daily ADD COLUMN over7 INTEGER DEFAULT NULL`) } catch { /* 이미 존재 */ }
   // 보유 건수를 모든 미완료 단계로 세기 위한 스냅샷 칸(종전에는 대기 3단계만 셌다)
   try { db.exec(`ALTER TABLE stat_snapshots ADD COLUMN dev INTEGER NOT NULL DEFAULT 0`) } catch { /* 이미 존재 */ }
   try { db.exec(`ALTER TABLE stat_snapshots ADD COLUMN dev_fail INTEGER NOT NULL DEFAULT 0`) } catch { /* 이미 존재 */ }

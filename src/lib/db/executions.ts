@@ -99,11 +99,23 @@ export function updateExecutionPid(id: string, pid: number) {
   getDb().prepare('UPDATE task_executions SET pid = ? WHERE id = ?').run(pid, id)
 }
 
+/**
+ * 사람이 맡은 검증·확인 기록(ex-verify-/ex-confirm-)이 "실패"로 닫힌 까닭 — 보고서가 반려와 아닌 것을 가른다.
+ *  fail: 반려(검증·확인에서 통과시키지 않음) · cancelled: 사람이 취소 · abandoned: 이슈가 머지 없이 닫혀 정리됨
+ */
+export type HumanStageEnd = 'fail' | 'cancelled' | 'abandoned'
+export function markHumanStageEnd(id: string, why: HumanStageEnd) {
+  if (!id.startsWith('ex-verify-') && !id.startsWith('ex-confirm-')) return
+  // 에이전트의 판정(pass/fail/blocked)은 덮어쓰지 않는다
+  getDb().prepare("UPDATE task_executions SET stage_verdict = ? WHERE id = ? AND COALESCE(assignee_type, '') <> 'agent'").run(why, id)
+}
+
 export function killExecution(id: string): boolean {
   const r = getDb().prepare('SELECT * FROM task_executions WHERE id = ?').get(id) as any
   if (!r) return false
   if (r.assignee_type === 'user') {
     getDb().prepare("UPDATE task_executions SET status = 'failed', ended_at = ? WHERE id = ?").run(new Date().toISOString(), id)
+    markHumanStageEnd(id, 'cancelled')
     return true
   }
   if (r.pid) {

@@ -71,7 +71,7 @@ export function parseIveMetaSessions(body: string): IveMetaSession[] {
 
 /**
  * ive-meta 블록의 `fixes:` 줄 — "이 작업이 고치는 이전 이슈" 번호들(같은 프로젝트).
- * 예: `fixes: #412, #418`. 블록이 여러 개면 모두 모은다. 중복·0 이하는 뺀다.
+ * 예: `fixes: #412, #418`. 반드시 # 을 붙인 번호만 이슈로 본다(날짜·설명 속 숫자를 이슈로 오인하지 않게). 블록이 여러 개면 모두 모은다.
  * 보고서의 "완료 후 뒤집힘"(나중 작업이 이전 결과를 고침)을 판정하는 근거가 된다.
  */
 export function parseIveMetaFixes(body: string): number[] {
@@ -81,7 +81,8 @@ export function parseIveMetaFixes(body: string): number[] {
     for (const line of match[1].split('\n')) {
       const m = line.match(/^\s*fixes\s*:\s*(.+)$/i);
       if (!m) continue;
-      for (const n of m[1].matchAll(/#?(\d+)/g)) {
+      // 같은 프로젝트의 #번호만 — 다른 프로젝트 참조(group/proj#12)는 이 프로젝트의 #12 가 아니다
+      for (const n of m[1].matchAll(/(?<![\w./-])#(\d+)/g)) {
         const v = Number(n[1]);
         if (Number.isInteger(v) && v > 0) out.add(v);
       }

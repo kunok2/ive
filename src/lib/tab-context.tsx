@@ -31,17 +31,53 @@ const TabContext = createContext<{
   navigateToAddIssue: () => {},
 })
 
+/** 메일 링크 매개변수 — 메인 화면(/)에서만 쓰고 지운다(다른 화면의 ?tab= 은 건드리지 않는다) */
+const LINK_PARAMS = ['tab', 'mine', 'rtype', 'rdate']
+const isMainPage = () => typeof window !== 'undefined' && window.location.pathname === '/'
+
+/**
+ * 메일 등 바깥에서 여는 링크: ?tab=reports&rtype=weekly&rdate=YYYY-MM-DD(그 기간 보고서), ?tab=reports&mine=1(내 손에 있는 일)
+ * 탭은 바로 정하고, 보고서 기간·"내 손에 있는 일" 강조는 보고서 탭이 처음 그릴 때 읽도록 sessionStorage 에 넘긴다(한 번만).
+ */
+function linkedTab(): TabKey | null {
+  if (!isMainPage()) return null
+  const q = new URLSearchParams(window.location.search)
+  const tab = q.get('tab')
+  if (!tab || !['projects', 'issues', 'agents', 'reports', 'admin'].includes(tab)) return null
+  try {
+    const rtype = q.get('rtype'), rdate = q.get('rdate'), mine = q.get('mine') === '1'
+    const typeOk = !!rtype && /^(weekly|monthly|yearly)$/.test(rtype)
+    if (tab === 'reports' && (typeOk || mine)) {
+      sessionStorage.setItem('ive-report-link', JSON.stringify({
+        type: typeOk ? rtype : 'weekly', date: !mine && rdate && /^\d{4}-\d{2}-\d{2}$/.test(rdate) ? rdate : null, mine,
+      }))
+    }
+  } catch { /* 저장소를 못 쓰면 탭만 연다 */ }
+  return tab as TabKey
+}
+
 export function TabProvider({ children }: { children: ReactNode }) {
   const { state: { user } } = useStore()
   const userIdRef = useRef<string | null>(null)
 
   const [activeTab, setActiveTabState] = useState<TabKey>(() => {
+    const linked = linkedTab()
+    if (linked) { try { localStorage.setItem('ive-active-tab', linked) } catch { /* 무시 */ } return linked }
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('ive-active-tab')
       if (saved && ['projects', 'issues', 'agents', 'reports', 'admin'].includes(saved)) return saved as TabKey
     }
     return 'projects'
   })
+  // 링크 매개변수는 한 번 쓰고 주소창에서 지운다(새로고침해도 다시 적용되지 않게)
+  useEffect(() => {
+    if (!isMainPage()) return
+    const u = new URL(window.location.href)
+    if (LINK_PARAMS.some(k => u.searchParams.has(k))) {
+      LINK_PARAMS.forEach(k => u.searchParams.delete(k))
+      window.history.replaceState(null, '', u.pathname + (u.search ? u.search : '') + u.hash)
+    }
+  }, [])
   const setActiveTab = useCallback((tab: TabKey) => {
     setActiveTabState(tab)
     localStorage.setItem('ive-active-tab', tab)

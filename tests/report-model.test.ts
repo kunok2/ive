@@ -7,10 +7,10 @@
  * R-4 보유 식: 기초 + 유입 − 완료 = 기말 이 맞는 데이터에서 gap = 0. 진행 중 기간은 지금 건수(issue_stages)를 쓴다.
  * R-5 일의 형태: 에이전트 처리 / 사람 처리 / 직접 처리(사후 기록)를 구분하고, 처리 기간에서 사후 기록은 뺀다.
  * R-6 범위: 공유받지 않은 프로젝트는 보고서에 나오지 않는다(메일도 같은 범위).
- * R-7 지금 손쓸 것: AI 실패·7일 넘은 일·한 사람 쏠림(같은 역할 2명 이상, 절반 이상, 3건 이상).
- * R-8 메일 = 화면: 메일의 모든 숫자 칸(data-metric)이 보고서 모델의 값과 같다.
+ * R-7 지금 손쓸 것: AI 실패·7일 넘은 일·한 사람 쏠림(역할마다, 그 역할 보유의 절반 이상, 3건 이상).
+ * R-8 메일 = 화면: 메일의 모든 숫자 칸(data-metric)의 값(data-value)이 보고서 모델의 그 경로 값과 같다.
  * R-9 발송: IVE 계정이 없는 주소에는 보내지 않고 기록만 남긴다. 팀장/팀원 메일 구분.
- * R-10 확정본: 닫힌 기간은 처음 계산한 값을 저장하고, 데이터가 바뀌어도 그 값을 돌려준다.
+ * R-10 확정본: 끝나고 3일이 지난 기간은 처음 계산한 값을 저장하고 그 값을 돌려준다. 그 전에는 늦게 들어온 기록도 반영한다.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import Database from 'better-sqlite3'
@@ -21,7 +21,7 @@ vi.mock('@/lib/mail', () => ({ createTransporter: () => ({ sendMail: mailMock.se
 import { initSchema } from '@/lib/db/schema'
 import { periodOf, previousPeriod, isClosed, buckets, kstDayStartISO } from '@/lib/report-model/period'
 import { allocateWork, median, quantile, wilson, requiredSamplePerGroup, gradeOf, normalizeModel, businessSegmentsKST } from '@/lib/report-model/compute'
-import { buildReportModel } from '@/lib/report-model/build'
+import { buildReportModel, liveHeldAll, mineFrom } from '@/lib/report-model/build'
 import { getReportModel } from '@/lib/report-model'
 import { renderReportMail } from '@/lib/report-mailer/render'
 import { sendReport, weeklyKindFor } from '@/lib/report-mailer'
@@ -171,7 +171,7 @@ describe('R-4·R-5·R-6 주간 모델', () => {
     const lead = buildReportModel('u-lead', 'weekly', '2026-10-02', NOW)
     expect(lead.projects.map(p => p.name)).not.toContain('Secret')
     const park = buildReportModel('u-park', 'weekly', '2026-10-02', NOW)
-    expect(park.held.issues?.some(i => i.projectId === 'p3')).toBe(false)
+    expect(park.held.end).toBe(2) // p1 #1·#3 — p3 #9 는 공유받지 않았다
     const lee = buildReportModel('u-lee', 'weekly', '2026-10-02', NOW)
     expect(lee.done.byForm.direct).toBe(0) // p2(직접 처리)는 이검증에게 공유되지 않았다
   })
@@ -181,7 +181,21 @@ describe('R-4·R-5·R-6 주간 모델', () => {
     const m = buildReportModel('u-lead', 'weekly', '2026-10-02', NOW)
     expect(m.actions?.failed.map(f => f.iid)).toEqual([3])
     expect(m.held.people).toEqual([expect.objectContaining({ name: '박개발', role: 'process', count: 1 })])
-    expect(m.actions?.concentration).toBeNull() // 같은 역할에 한 사람뿐이면 쏠림으로 보지 않는다
+    expect(m.actions?.concentrations).toEqual([]) // 1건뿐이면 쏠림이 아니다(3건 이상)
+  })
+
+  it('R-7 한 사람 쏠림은 역할마다 본다 — 그 역할을 혼자 들고 있어도 3건 이상이면 쏠림', () => {
+    seedBase()
+    db.prepare(`UPDATE users SET gitlab_username = 'park' WHERE id = 'u-park'`).run()
+    db.prepare(`UPDATE users SET gitlab_username = 'lee' WHERE id = 'u-lee'`).run()
+    for (let i = 0; i < 3; i++) stage('p1', 300 + i, 'verify_waiting', { assignee_username: 'lee', assignee_name: '이검증', scheduled_at: iso(kst('2026-09-30T09:00:00')) })
+    for (let i = 0; i < 4; i++) stage('p1', 310 + i, 'waiting', { assign_mode: 'assignee', assignee_username: 'park', assignee_name: '박개발', scheduled_at: iso(kst('2026-09-30T09:00:00')) })
+    stage('p1', 320, 'waiting', { assign_mode: 'assignee', assignee_username: 'lead', assignee_name: '정팀장', scheduled_at: iso(kst('2026-09-30T09:00:00')) })
+    const m = buildReportModel('u-lead', 'weekly', '2026-10-02', NOW)
+    expect(m.actions?.concentrations.map(c => [c.role, c.name, c.count, c.roleTotal, c.roleHolders])).toEqual([
+      ['process', '박개발', 4, 5, 2],
+      ['verify', '이검증', 3, 3, 1],
+    ])
   })
 })
 
@@ -192,7 +206,7 @@ describe('R-8 메일 = 화면', () => {
     const closed = buildReportModel('u-lead', 'weekly', '2026-09-25', NOW)
     const { subject, html } = renderReportMail({ kind: 'lead', closed, now, money: v => `$${v.toFixed(2)}`, baseUrl: 'https://ive', recipient: { userId: 'u-lead', name: '정팀장', locale: 'ko' } })
     const metric = (k: string) => [...html.matchAll(new RegExp(`data-metric="${k.replace(/\./g, '\\.')}"[^>]*>([^<]*)<`, 'g'))].map(x => x[1])
-    expect(metric('now.held.end')).toEqual([`${now.held.end}건`])
+    expect(metric('now.held.end')).toEqual([`${now.held.end}건`, `${now.held.end}`]) // 큰 숫자와 보유 식
     expect(metric('now.actions.failed.length')).toEqual([`${now.actions!.failed.length}건`])
     expect(metric('closed.done.total')).toEqual([`${closed.done.total}건`])
     expect(subject).toContain(`안고 있는 일 ${now.held.end}건`)
@@ -201,12 +215,14 @@ describe('R-8 메일 = 화면', () => {
 
   it('팀원 메일은 그 사람 손에 있는 일만 담는다', () => {
     seedWeek()
+    db.prepare(`UPDATE users SET gitlab_username = 'park' WHERE id = 'u-park'`).run()
     const now = buildReportModel('u-park', 'weekly', '2026-10-02', NOW)
     const closed = buildReportModel('u-park', 'weekly', '2026-09-25', NOW)
-    const park = renderReportMail({ kind: 'member', closed, now, money: v => `$${v}`, baseUrl: '', recipient: { userId: 'u-park', name: '박개발', locale: 'ko' } })
+    const all = liveHeldAll(NOW)
+    const park = renderReportMail({ kind: 'member', closed, now, mine: mineFrom(all, 'u-park'), money: v => `$${v}`, baseUrl: '', recipient: { userId: 'u-park', name: '박개발', locale: 'ko' } })
     expect(park.subject).toContain('내 손에 1건')
     expect(park.html).toContain('#1 이슈 1')
-    const lee = renderReportMail({ kind: 'member', closed, now, money: v => `$${v}`, baseUrl: '', recipient: { userId: 'u-lee', name: '이검증', locale: 'en' } })
+    const lee = renderReportMail({ kind: 'member', closed, now, mine: mineFrom(all, 'u-lee'), money: v => `$${v}`, baseUrl: '', recipient: { userId: 'u-lee', name: '이검증', locale: 'en' } })
     expect(lee.subject).toContain('0 on your plate')
     expect(lee.html).not.toContain('#1 이슈 1')
   })
@@ -232,14 +248,24 @@ describe('R-9 발송', () => {
 })
 
 describe('R-10 확정본', () => {
+  it('끝난 지 3일이 안 됐으면 확정하지 않고, 늦게 들어온 사후 기록도 반영한다', () => {
+    seedWeek()
+    const early = getReportModel('u-lead', 'weekly', '2026-09-29', new Date('2026-10-06T00:00:00Z'))
+    expect(early.snapshotAt).toBeUndefined()
+    exec({ id: 'ex-ext-6', project_id: 'p1', issue_iid: 6, assignee_type: 'user', user_name: '박개발', status: 'success', started_at: iso(kst('2026-10-02T10:00:00')), ended_at: iso(kst('2026-10-02T11:00:00')), work_sec: 3600 })
+    stage('p1', 6, 'done')
+    const later = getReportModel('u-lead', 'weekly', '2026-09-29', new Date('2026-10-06T01:00:00Z'))
+    expect(later.done.total).toBe(early.done.total + 1)
+  })
+
   it('닫힌 기간은 처음 계산한 값을 돌려준다', () => {
     seedWeek()
-    const first = getReportModel('u-lead', 'weekly', '2026-09-29', new Date('2026-10-06T00:00:00Z'))
+    const first = getReportModel('u-lead', 'weekly', '2026-09-29', new Date('2026-10-09T00:00:00Z'))
     expect(first.snapshotAt).toBeTruthy()
     // 기간 안에 완료가 하나 더 생겨도 확정본은 그대로
     exec({ id: 'ex-ext-5', project_id: 'p1', issue_iid: 5, assignee_type: 'user', user_name: '박개발', status: 'success', started_at: iso(kst('2026-10-01T10:00:00')), ended_at: iso(kst('2026-10-01T11:00:00')), work_sec: 3600 })
     stage('p1', 5, 'done')
-    const again = getReportModel('u-lead', 'weekly', '2026-09-29', new Date('2026-10-06T00:00:00Z'))
+    const again = getReportModel('u-lead', 'weekly', '2026-09-29', new Date('2026-10-09T00:00:00Z'))
     expect(again.done.total).toBe(first.done.total)
     expect(again.snapshotAt).toBe(first.snapshotAt)
   })
@@ -274,6 +300,129 @@ describe('팀원 메일 — 내 손에 있는 일', () => {
       expect(mail.subject).toContain('내 손에 1건')
       expect(mail.html).toContain('#30 이슈 30')
       expect(mail.subject).toContain('안고 있는 일 0건') // 공유받은 프로젝트가 없어 팀 보유는 0
+    } finally { vi.useRealTimers() }
+  })
+})
+
+describe('리뷰에서 찾은 결함 — 회귀 방지', () => {
+  it('채팅·충돌 검사는 완료가 아니고, 채팅 한 번으로 예전 완료가 이번 기간으로 옮겨오지 않는다', () => {
+    seedBase()
+    // #50: 9/7 처리 완료(검증 없음), 이번 주 채팅
+    exec({ id: 'ex-50', project_id: 'p1', agent_id: 'a1', assignee_type: 'agent', issue_iid: 50, status: 'success', started_at: iso(kst('2026-09-07T10:00:00')), ended_at: iso(kst('2026-09-07T11:00:00')) })
+    exec({ id: 'exec-chat-1', project_id: 'p1', agent_id: 'a1', assignee_type: 'agent', issue_iid: 50, status: 'success', started_at: iso(kst('2026-09-30T10:00:00')), ended_at: iso(kst('2026-09-30T10:05:00')) })
+    stage('p1', 50, 'done')
+    // 충돌 검사(iid 0)
+    exec({ id: 'ex-conflict-1', project_id: 'p1', agent_id: 'a1', assignee_type: 'agent', issue_iid: 0, status: 'success', started_at: iso(kst('2026-09-30T10:00:00')), ended_at: iso(kst('2026-09-30T10:05:00')) })
+    const m = buildReportModel('u-lead', 'weekly', '2026-10-02', NOW)
+    expect(m.completedList.map(i => i.iid)).toEqual([])
+    expect(m.done.total).toBe(0)
+  })
+
+  it('머지 없이 닫혀 실패로만 끝난 이슈는 완료가 아니다', () => {
+    seedBase()
+    exec({ id: 'ex-70', project_id: 'p1', agent_id: 'a1', assignee_type: 'agent', issue_iid: 70, status: 'failed', started_at: iso(kst('2026-09-30T10:00:00')), ended_at: iso(kst('2026-09-30T11:00:00')) })
+    stage('p1', 70, 'done') // 스캐너 정리 경로는 버려진 이슈도 done 으로 둔다
+    expect(buildReportModel('u-lead', 'weekly', '2026-10-02', NOW).done.total).toBe(0)
+  })
+
+  it('다시 열렸다 완료된 이슈는 재오픈 시각에 유입으로 세고, 처리 기간도 그때부터 잰다', async () => {
+    seedBase()
+    const { recordStageEvent } = await import('@/lib/db')
+    exec({ id: 'ex-60a', project_id: 'p1', agent_id: 'a1', assignee_type: 'agent', issue_iid: 60, status: 'success', started_at: iso(kst('2026-09-01T10:00:00')), ended_at: iso(kst('2026-09-01T11:00:00')), verified_at: iso(kst('2026-09-02T10:00:00')) })
+    recordStageEvent({ projectId: 'p1', issueIid: 60, fromStage: 'done', toStage: 'waiting', source: 'scanner', occurredAt: iso(kst('2026-09-29T09:00:00')) })
+    exec({ id: 'ex-60b', project_id: 'p1', agent_id: 'a1', assignee_type: 'agent', issue_iid: 60, status: 'success', started_at: iso(kst('2026-09-29T10:00:00')), ended_at: iso(kst('2026-09-29T11:00:00')), verified_at: iso(kst('2026-09-29T15:00:00')) })
+    stage('p1', 60, 'done', { scheduled_at: iso(kst('2026-09-01T09:00:00')) })
+    const m = buildReportModel('u-lead', 'weekly', '2026-10-02', NOW)
+    expect(m.done.total).toBe(1)
+    expect(m.held.inflow).toBe(1)
+    expect(m.done.leadMedianH).toBeCloseTo(6) // 9/29 09:00 → 15:00
+  })
+
+  it('직접 처리(사후 기록)는 완료된 기간에 유입으로도 세어, 기간 경계를 넘어도 보유 식이 맞는다', () => {
+    seedBase()
+    db.prepare(`INSERT INTO held_daily (project_id, date, updated_at) VALUES ('p1','2026-09-27','x')`).run()
+    exec({ id: 'ex-ext-80', project_id: 'p1', issue_iid: 80, assignee_type: 'user', user_name: '박개발', status: 'success', started_at: iso(kst('2026-09-26T22:00:00')), ended_at: iso(kst('2026-09-28T02:00:00')), work_sec: 3600 })
+    stage('p1', 80, 'done')
+    exec({ id: 'ex-ext-81', project_id: 'p1', issue_iid: 81, assignee_type: 'user', user_name: '박개발', status: 'success', started_at: iso(kst('2026-09-30T10:00:00')), ended_at: iso(kst('2026-09-30T12:00:00')), verified_at: iso(kst('2026-09-30T12:00:00')), work_sec: 7200 })
+    stage('p1', 81, 'done')
+    const m = buildReportModel('u-lead', 'weekly', '2026-10-02', NOW)
+    expect(m.held.start).toBe(0)
+    expect(m.held.gap).toBe(0)
+    expect(m.done.byForm.direct).toBe(m.done.total)
+  })
+
+  it('AI 구독료는 기간 일수만큼만 배부된다(끝 날짜를 하루 더 넣지 않는다)', () => {
+    seedBase()
+    db.prepare(`INSERT OR REPLACE INTO token_pricing (id, cli_name, model_name, input_price, output_price, updated_at) VALUES ('sub-claude','claude','subscription (claude)',300,0,datetime('now'))`).run()
+    db.prepare(`INSERT INTO agents (id, user_id, name, cli_name, cli_path) VALUES ('a1','u-lead','A','claude','claude')`).run()
+    exec({ id: 'ex-90', project_id: 'p1', agent_id: 'a1', assignee_type: 'agent', issue_iid: 90, status: 'success', started_at: iso(kst('2026-09-30T10:00:00')), ended_at: iso(kst('2026-09-30T11:00:00')), input_tokens: 1000, output_tokens: 100, cost_usd: 5 })
+    const m = buildReportModel('u-lead', 'weekly', '2026-10-02', NOW)
+    // 9/28~10/4 = 9월 3일(300/30) + 10월 4일(300/31)
+    expect(m.cost.aiActual).toBeCloseTo(3 * 10 + 4 * 300 / 31, 5)
+  })
+
+  it('검증 에이전트는 사람 의존도에 들지 않고, 판단 불가(blocked)는 반려가 아니다', () => {
+    seedBase()
+    for (let i = 0; i < 8; i++) {
+      exec({ id: `ex-verify-ag${i}`, project_id: 'p1', issue_iid: 100 + i, assignee_type: 'agent', user_name: 'VerifyBot', status: 'failed', stage_verdict: 'blocked', model_name: 'claude-opus-5-5', started_at: iso(kst('2026-09-15T10:00:00')), ended_at: iso(kst('2026-09-15T11:00:00')) })
+    }
+    for (let i = 0; i < 4; i++) {
+      exec({ id: `ex-verify-h${i}`, project_id: 'p1', issue_iid: 200 + i, assignee_type: 'user', user_id: 'u-lee', user_name: '이검증', status: 'success', verified_at: iso(kst('2026-09-16T10:00:00')), started_at: iso(kst('2026-09-16T09:00:00')), ended_at: iso(kst('2026-09-16T10:00:00')) })
+    }
+    exec({ id: 'ex-verify-h9', project_id: 'p1', issue_iid: 209, assignee_type: 'user', user_id: 'u-lee', user_name: '이검증', status: 'failed', rejected_at: iso(kst('2026-09-16T11:00:00')), started_at: iso(kst('2026-09-16T10:30:00')), ended_at: iso(kst('2026-09-16T11:00:00')) })
+    const m = buildReportModel('u-lead', 'monthly', '2026-09-15', NOW)
+    expect(m.risks?.concentrations).toEqual([])
+    expect(m.risks?.rejectRate).toBeCloseTo(1 / 5)
+  })
+
+  it('Git 계정·숫자 id 는 공급자까지 맞을 때만 같은 사람이고, 표시 이름만 같은 사람의 일은 "내 손에"에 넣지 않는다', async () => {
+    seedBase()
+    db.prepare(`INSERT INTO oauth_providers (id, type, name, base_url, client_id, client_secret) VALUES ('gl','gitlab','GL','x','x','x'), ('gh','github','GH','x','x','x')`).run()
+    db.prepare(`UPDATE users SET gitlab_username = 'kim', oauth_provider_id = 'gh', oauth_user_id = '42' WHERE id = 'u-park'`).run()
+    db.prepare(`INSERT INTO projects (id, user_id, name, repo_url, access_token, provider) VALUES ('pgh','u-out','GH Secret','https://x','t','github'), ('pgl','u-out','GL Secret','https://x','t','gitlab')`).run()
+    // GitHub 의 다른 kim 이 담당 → 박개발(GitLab kim)의 일이 아니다
+    stage('pgh', 1, 'verify_waiting', { assignee_username: 'kim', assignee_name: 'Kim GH', scheduled_at: iso(kst('2026-09-30T09:00:00')) })
+    // 표시 이름만 같은 외부 담당자 → 약한 식별
+    stage('pgh', 2, 'verify_waiting', { assignee_username: 'park-ext', assignee_name: '박개발', scheduled_at: iso(kst('2026-09-30T09:00:00')) })
+    // GitLab 프로젝트에서 Git 숫자 id 42 (박개발의 42 는 GitHub id) → 다른 사람
+    exec({ id: 'ex-gl', project_id: 'pgl', issue_iid: 3, assignee_type: 'user', user_id: '42', user_name: 'Someone', status: 'assigned', started_at: iso(kst('2026-09-30T09:00:00')) })
+    stage('pgl', 3, 'dev', { assign_mode: 'assignee', scheduled_at: iso(kst('2026-09-30T09:00:00')) })
+    // 진짜 박개발 일: GitLab 프로젝트에서 gitlab kim
+    stage('pgl', 4, 'verify_waiting', { assignee_username: 'kim', assignee_name: 'Kim', scheduled_at: iso(kst('2026-09-30T09:00:00')) })
+    const { liveHeldAll } = await import('@/lib/report-model/build')
+    const mine = liveHeldAll(NOW).filter(i => i.personStrong && i.personKey === 'u:u-park').map(i => `${i.projectId}#${i.iid}`)
+    expect(mine).toEqual(['pgl#4'])
+  })
+
+  it('"내 손에 있는 일"은 300건에서 자르지 않는다', async () => {
+    seedBase()
+    db.prepare(`UPDATE users SET gitlab_username = 'park' WHERE id = 'u-park'`).run()
+    for (let i = 0; i < 320; i++) stage('p1', 1000 + i, 'waiting', { scheduled_at: iso(kst('2026-08-01T09:00:00')) })
+    stage('p1', 2000, 'verify_waiting', { assignee_username: 'park', assignee_name: '박개발', scheduled_at: iso(kst('2026-10-01T09:00:00')) })
+    const { liveHeldAll } = await import('@/lib/report-model/build')
+    expect(liveHeldAll(NOW).filter(i => i.personKey === 'u:u-park' && i.personStrong).map(i => i.iid)).toEqual([2000])
+  })
+
+  it('사람 작업시간 계산은 구간이 많아도 빠르다(겹침 제거 스윕)', () => {
+    const t0 = Date.UTC(2026, 0, 1)
+    const segs = Array.from({ length: 20000 }, (_, i) => ({ person: 'A', projectId: `p${i % 3}`, start: t0 + i * 30 * 60_000, end: t0 + i * 30 * 60_000 + 45 * 60_000 }))
+    const t = Date.now()
+    const a = allocateWork(segs)
+    expect(Date.now() - t).toBeLessThan(500)
+    expect(a.personMinutes.get('A')).toBe(19999 * 30 + 45)
+    const total = [...a.projectMinutes.values()].reduce((s, v) => s + v, 0)
+    expect(total).toBeCloseTo(a.personMinutes.get('A')!, 5)
+  })
+
+  it('발송은 같은 스케줄·기간을 동시에 두 번 돌리지 않는다', async () => {
+    seedWeek()
+    vi.useFakeTimers({ now: NOW, toFake: ['Date'] })
+    try {
+      const schedule = { id: 'rs-lock', reportType: 'weekly', enabled: true, recipients: ['lead@x.com'], sendDay: 1, sendHour: 9 } as any
+      const [a, b] = await Promise.all([sendReport(schedule), sendReport(schedule)])
+      expect(a.sent + b.sent).toBe(1)
+      const again = await sendReport(schedule)
+      expect(again.sent).toBe(0)
     } finally { vi.useRealTimers() }
   })
 })

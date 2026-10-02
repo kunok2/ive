@@ -24,6 +24,8 @@ export interface HeldIssue extends IssueRef {
   /** 사람 손에 있으면 그 사람 */
   personKey: string | null
   personName: string | null
+  /** 사람이 확실히 식별됐는가(IVE id·공급자까지 맞춘 Git id/계정·관리자 연결). 표시 이름만으로 정했으면 false */
+  personStrong: boolean
   role: PersonRole | null
 }
 
@@ -49,19 +51,29 @@ export interface Held {
   /** 지금 보유 ÷ 최근 28일 하루 평균 완료(사후 기록 제외) */
   drainDays: number | null
   byStage: { stage: HeldStage; count: number; oldestHours: number | null }[] | null
-  /** 7일 넘게 보유 중인 일 (live 일 때만) */
+  /** 7일 넘게 보유 중인 일 — 진행 중이면 지금, 닫힌 기간이면 기간 말(기록이 없으면 null) */
   over7: number | null
+  /** 지난 기간 말 7일 넘게 보유 중이던 일(기록이 없으면 null) */
+  prevOver7: number | null
   people: HeldPerson[] | null
   /** 사람 손 보유 합계 */
   peopleTotal: number | null
-  /** 지금 보유 중인 일(live 일 때만, 오래된 순, 최대 300건) — 메일의 "내 손에 있는 일"에 쓴다 */
-  issues: HeldIssue[] | null
+}
+
+/** 한 역할의 보유가 한 사람에게 몰림(그 역할 보유의 절반 이상, 3건 이상) — 역할마다 하나까지 */
+export interface Concentration {
+  role: PersonRole
+  name: string
+  count: number
+  roleTotal: number
+  roleHolders: number
+  oldestHours: number
 }
 
 export interface ActionItems {
   failed: (IssueRef & { hours: number })[]
   aged: HeldIssue[]
-  concentration: { role: PersonRole; name: string; count: number; roleTotal: number; roleHolders: number; oldestHours: number } | null
+  concentrations: Concentration[]
 }
 
 export interface Done {
@@ -76,7 +88,6 @@ export interface Done {
   /** AI 처리 이슈 중 재실행·반려 없이 끝난 비율 */
   firstPass: number | null
   prevFirstPass: number | null
-  firstPassN: number
 }
 
 export interface Trend {
@@ -87,14 +98,13 @@ export interface Trend {
   prevCompleted: number[]
   held: (number | null)[]
   prevHeld: (number | null)[]
-  prevInflowTotal: number
 }
 
 export interface ProjectRow {
   id: string
   name: string
-  color: string
   humanHours: number
+  prevHumanHours: number
   share: number
   prevShare: number | null
   completed: number
@@ -122,7 +132,9 @@ export const GRADES: Grade[] = ['pass', 'rerun', 'rejected_pass', 'rejected_repe
 
 export interface WorkerEval {
   key: string
+  /** 사람 이름 또는 모델 이름. 모델이 기록되지 않았으면 CLI 이름(modelUnknown) */
   name: string
+  modelUnknown?: boolean
   kind: 'agent' | 'person'
   grades: Record<Grade, number>
   n: number
@@ -138,8 +150,8 @@ export interface Evaluation {
   groups: { key: 'agent' | 'person'; grades: Record<Grade, number>; n: number; passRate: number | null }[]
   workers: WorkerEval[]
   /** 처리 작업자 중 둘씩 비교한 판단(표본 충분한 쌍만) */
-  comparisons: { a: string; b: string; state: 'clear' | 'unclear'; needMore: number | null; differentProjects: boolean }[]
-  verifiers: { key: string; name: string; approved: number; laterRejected: number; rate: number | null; state: 'ok' | 'collecting' }[]
+  comparisons: { a: string; b: string; aKey: string; bKey: string; state: 'clear' | 'unclear'; needMore: number | null; differentProjects: boolean }[]
+  verifiers: { key: string; name: string; modelUnknown?: boolean; approved: number; laterRejected: number; rate: number | null; state: 'ok' | 'collecting' }[]
 }
 
 export interface MonthPoint {
@@ -148,17 +160,15 @@ export interface MonthPoint {
   completed: number
   heldEnd: number | null
   leadMedianH: number | null
-  perCompleted: number | null
   projectShares: { id: string; name: string; share: number }[]
 }
 
 export interface Risks {
-  concentration: { role: PersonRole; name: string; share: number; count: number; total: number } | null
+  /** 한 사람 의존 — 역할(검증 판정·사람 처리 완료)마다 한 사람 비중 50% 이상(10건 이상) */
+  concentrations: { role: PersonRole; name: string; share: number; count: number; total: number }[]
   rejectRate: number | null
   prevRejectRate: number | null
   rejectTopProject: { name: string; rate: number } | null
-  agedEnd: number | null
-  prevAgedEnd: number | null
 }
 
 export interface CompletedItem extends IssueRef {
@@ -171,11 +181,11 @@ export interface ReportModel {
   version: 2
   type: ReportType
   period: { start: string; end: string }
-  prevPeriod: { start: string; end: string }
   isCurrent: boolean
-  computedAt: string
   /** 확정본이면 확정 시각 */
   snapshotAt?: string
+  /** 기간은 끝났지만 아직 확정 전(늦게 들어오는 사후 기록을 기다리는 중) — 숫자가 바뀔 수 있다 */
+  provisional?: boolean
   /** 보유 기록(held_daily)이 시작된 날짜 — 그 이전 기간은 보유가 "기록 없음" */
   heldTrackingSince: string | null
   held: Held

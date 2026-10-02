@@ -11,7 +11,7 @@
  *     읽어 토큰·비용·구간을 행에 채운다. 토큰이 있는 행은 AI 가 한 것이므로 사람 시간은 0으로
  *     계산된다(token-pricing.humanWorkMinutes).
  */
-import { getDb, createExecution, updateExecutionStatus, updateExecutionTokens } from '../db'
+import { getDb, createExecution, updateExecutionStatus, updateExecutionTokens, markHumanStageEnd } from '../db'
 import { parseIveMetaSessions, type IveMetaSession } from './formatters'
 
 export type StageKind = 'verify' | 'confirm'
@@ -78,6 +78,7 @@ export function closeStageExecutions(
   const endedAt = meta?.endedAt || new Date().toISOString()
   for (const r of rows) {
     updateExecutionStatus(r.id, status, endedAt)
+    if (status === 'failed') markHumanStageEnd(r.id, 'fail')
     if (meta && (meta.inputTokens || meta.outputTokens || meta.costUsd || meta.turns || meta.model)) {
       updateExecutionTokens(r.id, meta.inputTokens, meta.outputTokens, meta.costUsd, meta.turns, meta.model || undefined, 0, 0)
     }

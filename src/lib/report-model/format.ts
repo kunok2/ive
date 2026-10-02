@@ -1,0 +1,40 @@
+/**
+ * 보고서 표기 — 화면과 메일이 함께 쓴다(같은 값은 같은 글자로).
+ * 숫자에는 색을 쓰지 않는다(디자인 가이드). 색은 상태·증감 의미에만.
+ */
+export type Tr = (key: string, params?: Record<string, string | number>) => string
+
+/** 시간(시) → "1일 6시간" / "4시간" / "35분". 기록이 없으면 "기록 없음" */
+export function fmtHours(tr: Tr, h: number | null | undefined): string {
+  if (h == null || !Number.isFinite(h)) return tr('noRecord')
+  if (h < 1) return tr('durMin', { m: Math.max(1, Math.round(h * 60)) })
+  // 전체를 먼저 시 단위로 반올림한 뒤 나눈다(23.6시간이 "24시간", 47.6시간이 "1일 24시간"이 되지 않게)
+  const total = Math.round(h)
+  if (total < 24) return tr('durHour', { h: total })
+  const d = Math.floor(total / 24), r = total - d * 24
+  return r > 0 ? tr('durDayHour', { d, h: r }) : tr('durDay', { d })
+}
+
+export function pct(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(v)) return '—'
+  return `${Math.round(v * 100)}%`
+}
+
+/**
+ * 증감의 의미. goodWhenUp: 늘면 좋은 맥락(완료)이면 true, 늘면 나쁜 맥락(보유·비용)이면 false.
+ * 이전 값이 없거나 0 이거나 변화가 ±5% 이하면 중립(색 없음).
+ */
+export function deltaTone(cur: number, prev: number | null | undefined, goodWhenUp: boolean): 'good' | 'bad' | 'neutral' {
+  if (prev == null || prev === 0) return 'neutral'
+  const r = (cur - prev) / prev
+  if (Math.abs(r) <= 0.05) return 'neutral'
+  return (r > 0) === goodWhenUp ? 'good' : 'bad'
+}
+
+/** 7일 넘게 보유하면 "오래 머문 일" */
+export const AGED_HOURS = 7 * 24
+/** 7일 넘게 보유 중인 일 수 — 화면("내 손에 있는 일")과 메일이 같은 함수로 센다 */
+export const agedCount = (issues: { ageHours: number }[]) => issues.filter(i => i.ageHours >= AGED_HOURS).length
+
+/** 작업 결과 평가 — 이 건수가 모여야 비율을 보여준다 */
+export const MIN_SAMPLE = 20

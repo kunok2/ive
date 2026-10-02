@@ -11,7 +11,8 @@ import {
 import {
   scopedProjects, execsInRange, completedInRange, issueFacts, heldNow, heldDaily, heldTrackingSince,
   overturnedKeys, personOf, resetPersonCache, receivedInRange, verifyDecisions, confirmRejections,
-  type Scope, type IssueFacts, type IssueExec, type HeldRow, type ScopedProject,
+  loadIssueHistory, heldReceipts, receiptBefore, isExternalRow, byIssue,
+  type Scope, type IssueFacts, type IssueExec, type HeldRow, type ScopedProject, type IssueHistory, type CycleEvent,
 } from './load'
 import {
   median, quantile, wilson, requiredSamplePerGroup, gradeOf, normalizeModel, allocateWork, businessSegmentsKST,
@@ -19,26 +20,34 @@ import {
 } from './compute'
 import {
   GRADES, HELD_STAGES,
-  type ReportModel, type WorkForm, type HeldIssue, type HeldPerson, type Held, type ActionItems,
+  type ReportModel, type WorkForm, type HeldIssue, type HeldPerson, type Held, type ActionItems, type Concentration,
   type Done, type Trend, type ProjectRow, type Cost, type PersonRole, type Grade, type Evaluation, type WorkerEval,
   type MonthPoint, type Risks, type CompletedItem,
 } from './types'
+import { AGED_HOURS, MIN_SAMPLE } from './format'
 
 const HOUR = 3_600_000
-const AGED_HOURS = 7 * 24
 const MATURITY_DAYS = 30
 const EVAL_WINDOW_DAYS = 90
-const MIN_SAMPLE = 20
+const ALL_TIME = '1970-01-01T00:00:00.000Z'
+
+// 프로젝트 → Git 공급자 (사람 식별에 쓴다). buildReportModel·liveHeldAll 이 요청마다 범위의 프로젝트로 채운다
+const providerByProject = new Map<string, string>()
+const projectProvider = (projectId: string): string | null => providerByProject.get(projectId) ?? null
+function setProviders(projects: ScopedProject[]) {
+  providerByProject.clear()
+  for (const p of projects) providerByProject.set(p.id, p.provider)
+}
 
 // ─── 실행·이슈 판정 ───
 
 const isStageRow = (id: string) => id.startsWith('ex-verify') || id.startsWith('ex-confirm')
 const isProcessExec = (e: { id: string }) =>
-  !isStageRow(e.id) && !e.id.startsWith('ex-conflict') && !e.id.startsWith('exec-chat')
+  !isStageRow(e.id) && !e.id.startsWith('ex-conflict') && !e.id.startsWith('exec-chat') && !e.id.startsWith('ex-reproduce')
 const isAgentProcess = (e: IssueExec) => isProcessExec(e) && !!e.agentId && e.assigneeType !== 'user'
-const isExternal = (e: IssueExec) => isProcessExec(e) && e.assigneeType === 'user' && !e.agentId && !e.userId
+const isExternal = (e: IssueExec) => isProcessExec(e) && isExternalRow(e)
 
-export function formOf(f: IssueFacts): WorkForm {
+function formOf(f: IssueFacts): WorkForm {
   if (f.execs.some(isAgentProcess)) return 'agent'
   const proc = f.execs.filter(isProcessExec)
   if (proc.length > 0 && proc.every(isExternal)) return 'direct'
@@ -61,13 +70,6 @@ function wasReviewed(f: IssueFacts): boolean {
   return f.execs.some(e => isStageRow(e.id) || !!e.verifiedAt || !!e.rejectedAt) || !!f.confirmedAt
 }
 
-function receivedAt(f: IssueFacts): string | null {
-  const times = [f.scheduledAt, ...f.execs.filter(isProcessExec).map(e => e.issueCreatedAt), ...f.execs.filter(isProcessExec).map(e => e.startedAt)]
-    .filter((t): t is string => !!t && !isNaN(new Date(t).getTime()))
-  if (times.length === 0) return null
-  return times.reduce((a, b) => (new Date(a) < new Date(b) ? a : b))
-}
-
 function hoursBetween(a: string | null, b: string | null): number | null {
   if (!a || !b) return null
   const d = (new Date(b).getTime() - new Date(a).getTime()) / HOUR
@@ -77,7 +79,7 @@ function hoursBetween(a: string | null, b: string | null): number | null {
 // ─── 사람 작업시간·비용 ───
 
 function personForExec(e: ReportExecution) {
-  return personOf(e.userId, e.userName, e.id.startsWith('ex-verify') ? e.verifierUsername : null)
+  return personOf(e.userId, e.userName, e.id.startsWith('ex-verify') ? e.verifierUsername : null, e.projectProvider)
 }
 
 function segmentsOf(execs: ReportExecution[]): WorkSegment[] {
@@ -105,7 +107,8 @@ interface CostCalc {
 
 function costOf(execs: ReportExecution[], period: Period): CostCalc {
   const rate = getHumanRate()
-  const policy = buildAiCostPolicy(execs, period.start, period.end)
+  // 구독료 배부는 KST 0시의 UTC 시각으로 받는다(날짜 문자열을 넘기면 끝 날짜까지 하루가 더 배부된다)
+  const policy = buildAiCostPolicy(execs, kstDayStartISO(period.start), kstDayStartISO(period.end))
   const alloc = allocateWork(segmentsOf(execs))
   let human = 0, ai = 0, aiNotional = 0
   for (const e of execs) {
@@ -132,40 +135,42 @@ function costOf(execs: ReportExecution[], period: Period): CostCalc {
 
 // ─── 보유 ───
 
-function personOfHeld(r: HeldRow): { key: string; name: string; role: PersonRole } | null {
+function personOfHeld(r: HeldRow): { key: string; name: string; strong: boolean; role: PersonRole } | null {
   if (r.stage === 'dev') {
     if (r.activeAssigneeType !== 'user') return null // 에이전트가 처리 중
-    const p = personOf(r.activeUserId, r.activeUserName, r.assigneeUsername)
+    const p = personOf(r.activeUserId, r.activeUserName, r.assigneeUsername, r.provider)
     return p ? { ...p, role: 'process' } : null
   }
   if (r.stage === 'waiting') {
     if (r.assignMode !== 'assignee') return null // 에이전트 배정 대기
-    const p = personOf(null, r.assigneeName, r.assigneeUsername)
+    const p = personOf(r.assigneeGitUserId, r.assigneeName, r.assigneeUsername, r.provider)
     return p ? { ...p, role: 'process' } : null
   }
   if (r.stage === 'dev_fail') return null
   if (r.stage === 'verify_waiting' || r.stage === 'verifying') {
     if (r.presetVerifierMode === 'agent') return null
-    const p = personOf(null, r.assigneeName, r.assigneeUsername)
+    const p = personOf(r.assigneeGitUserId, r.assigneeName, r.assigneeUsername, r.provider)
     return p ? { ...p, role: 'verify' } : null
   }
   if (r.presetConfirmerMode === 'agent') return null
   const p = r.stage === 'confirming' && (r.confirmerUserId || r.confirmerName)
-    ? personOf(r.confirmerUserId, r.confirmerName)
-    : personOf(null, r.assigneeName, r.assigneeUsername)
+    ? personOf(r.confirmerUserId, r.confirmerName, null, r.provider)
+    : personOf(r.assigneeGitUserId, r.assigneeName, r.assigneeUsername, r.provider)
   return p ? { ...p, role: 'confirm' } : null
 }
 
-function liveHeld(rows: HeldRow[], projects: Map<string, ScopedProject>, now: Date): { issues: HeldIssue[] } {
-  const issues: HeldIssue[] = rows.map(r => {
+/** 지금 보유 중인 일 — 나이는 이번 사이클 접수(마지막 재오픈, 없으면 처음 접수)부터 */
+function liveHeld(pids: string[], projects: Map<string, ScopedProject>, now: Date): HeldIssue[] {
+  const receipts = heldReceipts(pids)
+  return heldNow(pids).map(r => {
     const who = personOfHeld(r)
-    const age = r.receivedAt ? Math.max(0, (now.getTime() - new Date(r.receivedAt).getTime()) / HOUR) : 0
+    const at = receipts.get(`${r.projectId}:${r.iid}`)
+    const age = at ? Math.max(0, (now.getTime() - new Date(at).getTime()) / HOUR) : 0
     return {
       projectId: r.projectId, projectName: projects.get(r.projectId)?.name ?? r.projectId, iid: r.iid, title: r.title,
-      stage: r.stage, ageHours: age, personKey: who?.key ?? null, personName: who?.name ?? null, role: who?.role ?? null,
+      stage: r.stage, ageHours: age, personKey: who?.key ?? null, personName: who?.name ?? null, personStrong: who?.strong ?? false, role: who?.role ?? null,
     }
   })
-  return { issues }
 }
 
 function peopleOf(issues: HeldIssue[]): HeldPerson[] {
@@ -186,25 +191,30 @@ function actionsOf(issues: HeldIssue[], people: HeldPerson[]): ActionItems {
     .map(i => ({ projectId: i.projectId, projectName: i.projectName, iid: i.iid, title: i.title, hours: i.ageHours }))
     .sort((a, b) => b.hours - a.hours)
   const aged = issues.filter(i => i.ageHours >= AGED_HOURS).sort((a, b) => b.ageHours - a.ageHours)
-  let concentration: ActionItems['concentration'] = null
+  // 역할마다: 그 역할 보유의 절반 이상(3건 이상)을 한 사람이 들고 있으면 몰림
+  const concentrations: Concentration[] = []
   for (const role of ['process', 'verify', 'confirm'] as PersonRole[]) {
-    const holders = people.filter(p => p.role === role)
-    if (holders.length < 2) continue
+    const holders = people.filter(p => p.role === role) // 건수 많은 순
+    if (holders.length === 0) continue
     const total = holders.reduce((s, p) => s + p.count, 0)
     const top = holders[0]
-    if (top.count >= 3 && top.count / total >= 0.5 && (!concentration || top.count / total > concentration.count / concentration.roleTotal)) {
-      concentration = { role, name: top.name, count: top.count, roleTotal: total, roleHolders: holders.length, oldestHours: top.oldestHours }
+    // 같은 건수로 둘 이상이 들고 있으면 "한 사람"에게 몰린 것이 아니다
+    if (top.count >= 3 && top.count / total >= 0.5 && holders[1]?.count !== top.count) {
+      concentrations.push({ role, name: top.name, count: top.count, roleTotal: total, roleHolders: holders.length, oldestHours: top.oldestHours })
     }
   }
-  return { failed, aged, concentration }
+  return { failed, aged, concentrations }
 }
 
-/** 날짜(KST)의 하루 마감 보유 합계. 그날 기록이 하나도 없으면 null */
-function heldOnDay(pids: string[], day: string, byProject?: Map<string, number>): number | null {
+/** 날짜(KST)의 하루 마감 보유. 그날 기록이 하나도 없으면 null. over7 은 그날 모든 줄에 기록이 있을 때만 */
+function heldOnDay(pids: string[], day: string, byProject?: Map<string, number>): { total: number; over7: number | null } | null {
   const rows = heldDaily(pids, day, addDays(day, 1))
   if (rows.length === 0) return null
   for (const r of rows) byProject?.set(r.projectId, r.total)
-  return rows.reduce((s, r) => s + r.total, 0)
+  return {
+    total: rows.reduce((s, r) => s + r.total, 0),
+    over7: rows.every(r => r.over7 != null) ? rows.reduce((s, r) => s + (r.over7 ?? 0), 0) : null,
+  }
 }
 
 // ─── 완료 ───
@@ -215,41 +225,40 @@ interface DoneCalc {
   byProject: Map<string, number>
 }
 
-function doneOf(completed: Map<string, string>, facts: Map<string, IssueFacts>, projects: Map<string, ScopedProject>): DoneCalc {
+/** 끝낸 일 — 완료한 사이클마다(다시 열렸다 다시 끝난 일은 그때마다 한 건) */
+function doneOf(completed: CycleEvent[], facts: Map<string, IssueFacts>, history: Map<string, IssueHistory>, projects: Map<string, ScopedProject>, confirmRej: Map<string, string[]>): DoneCalc {
   const byForm: Record<WorkForm, number> = { agent: 0, human: 0, direct: 0 }
   const leads: number[] = []
   let humanH = 0, totalH = 0, fpPass = 0, fpN = 0
   const list: CompletedItem[] = []
   const byProject = new Map<string, number>()
-  for (const [key, at] of completed) {
+  for (const { key, at } of completed) {
     const f = facts.get(key)
     if (!f) continue
     const form = formOf(f)
     byForm[form]++
     byProject.set(f.projectId, (byProject.get(f.projectId) ?? 0) + 1)
-    let lead: number | null = null
-    if (form !== 'direct') {
-      lead = hoursBetween(receivedAt(f), at)
-      if (lead != null) leads.push(lead)
-    }
+    // 처리 기간 = 이번 사이클 접수 → 완료 (직접 처리·사후 기록은 접수 시각이 없으므로 재지 않는다)
+    const lead = form !== 'direct' ? hoursBetween(receiptBefore(history.get(key), at), at) : null
+    if (lead != null) leads.push(lead)
     if (form === 'agent') {
       const runs = processRuns(f)
-      const devEnd = runs.map(e => e.endedAt).filter((t): t is string => !!t).sort().pop() ?? null
-      const total = hoursBetween(receivedAt(f), at)
+      const devEnd = runs.map(e => e.endedAt).filter((t): t is string => !!t && t <= at).sort().pop() ?? null
       const humanPart = hoursBetween(devEnd, at)
-      if (total != null && humanPart != null && total > 0) { totalH += total; humanH += Math.min(humanPart, total) }
+      if (lead != null && humanPart != null && lead > 0) { totalH += lead; humanH += Math.min(humanPart, lead) }
       fpN++
-      if (runs.length <= 1 && rejectCount(f, undefined) === 0) fpPass++
+      // 작업 결과 평가의 "한 번에 통과"와 같은 기준 — 확인 단계 반려도 반려다
+      if (runs.length <= 1 && rejectCount(f, confirmRej.get(key)) === 0) fpPass++
     }
     list.push({ projectId: f.projectId, projectName: projects.get(f.projectId)?.name ?? f.projectId, iid: f.iid, title: f.title, form, completedAt: at, leadH: lead })
   }
   list.sort((a, b) => (a.completedAt < b.completedAt ? 1 : -1))
   return {
     done: {
-      total: completed.size, byForm,
+      total: completed.length, byForm,
       leadMedianH: median(leads), leadP90H: quantile(leads, 0.9),
       humanWaitShare: totalH > 0 ? humanH / totalH : null,
-      firstPass: fpN > 0 ? fpPass / fpN : null, firstPassN: fpN,
+      firstPass: fpN > 0 ? fpPass / fpN : null,
     },
     list, byProject,
   }
@@ -262,10 +271,10 @@ function bucketKey(type: ReportType, iso: string): string {
   return type === 'yearly' ? `${d.slice(0, 7)}-01` : d
 }
 
-function countBy(type: ReportType, m: Map<string, string>, keys: string[]): number[] {
+function countBy(type: ReportType, events: CycleEvent[], keys: string[]): number[] {
   const idx = new Map(keys.map((k, i) => [k, i]))
   const out = keys.map(() => 0)
-  for (const at of m.values()) {
+  for (const { at } of events) {
     const i = idx.get(bucketKey(type, at))
     if (i != null) out[i]++
   }
@@ -294,44 +303,62 @@ function heldSeries(type: ReportType, pids: string[], period: Period, today: str
 
 // ─── 작업 결과 평가 ───
 
-function evaluationOf(scope: Scope, pids: string[], periodEnd: string, today: string): Evaluation {
-  const windowEnd = addDays(periodEnd < today ? periodEnd : today, -MATURITY_DAYS)
+/** 조립 중 여러 섹션이 함께 쓰는 데이터 — 한 번만 읽는다 */
+interface Ctx {
+  pids: string[]
+  projects: Map<string, ScopedProject>
+  history: Map<string, IssueHistory>
+  /** 확인 반려(전 기간) — 완료의 "한 번에 통과"와 평가 등급이 같은 기준을 쓴다 */
+  confirmRej: Map<string, string[]>
+  today: string
+}
+
+const emptyGrades = (): Record<Grade, number> => ({ pass: 0, rerun: 0, rejected_pass: 0, rejected_repeat: 0, overturned: 0 })
+
+/** 모델이 기록된 에이전트는 모델 이름, 없으면 CLI 이름(모델 미기록 표시) */
+function agentWorker(model: string | null | undefined, cli: string | null | undefined): { key: string; name: string; modelUnknown: boolean } {
+  const m = normalizeModel(model)
+  return m ? { key: `m:${m}`, name: m, modelUnknown: false } : { key: `m:?${cli || 'agent'}`, name: cli || 'agent', modelUnknown: true }
+}
+
+function evaluationOf(c: Ctx, periodEnd: string): Evaluation {
+  const windowEnd = addDays(periodEnd < c.today ? periodEnd : c.today, -MATURITY_DAYS)
   const windowStart = addDays(windowEnd, -EVAL_WINDOW_DAYS)
-  const completed = completedInRange(scope, windowStart, windowEnd)
+  // 평가는 이슈마다 한 번(그 이슈의 처리 이력 전체로 등급을 매긴다)
+  const completed = byIssue(completedInRange(c.history, windowStart, windowEnd))
   const facts = issueFacts(Array.from(completed.keys()))
   const sinceISO = kstDayStartISO(windowStart)
-  const overturned = overturnedKeys(pids, sinceISO)
-  const confirmRej = confirmRejections(pids, sinceISO)
+  const overturned = overturnedKeys(c.pids, sinceISO)
 
-  const empty = (): Record<Grade, number> => ({ pass: 0, rerun: 0, rejected_pass: 0, rejected_repeat: 0, overturned: 0 })
   const workers = new Map<string, WorkerEval & { projects: Set<string> }>()
-  const groups = { agent: empty(), person: empty() }
-  for (const [key] of completed) {
+  const groups = { agent: emptyGrades(), person: emptyGrades() }
+  for (const key of completed.keys()) {
     const f = facts.get(key)
     if (!f || !wasReviewed(f)) continue
     const form = formOf(f)
     if (form === 'direct') continue
     const runs = processRuns(f)
-    const grade = gradeOf({ runs: runs.length, rejects: rejectCount(f, confirmRej.get(key)), overturned: overturned.has(key) })
-    const first = runs[0]
-    let wkey: string, name: string, kind: 'agent' | 'person'
+    const grade = gradeOf({ runs: runs.length, rejects: rejectCount(f, c.confirmRej.get(key)), overturned: overturned.has(key) })
+    let who: { key: string; name: string; modelUnknown?: boolean }, kind: 'agent' | 'person'
     if (form === 'agent') {
-      const firstAgent = runs.find(isAgentProcess) ?? first
-      const model = normalizeModel(firstAgent?.modelName)
+      const firstAgent = runs.find(isAgentProcess) ?? runs[0]
+      who = agentWorker(firstAgent?.modelName, firstAgent?.cliName)
       kind = 'agent'
-      name = model ?? `${firstAgent?.cliName || 'agent'} (모델 미기록)`
-      wkey = `m:${name}`
     } else {
-      const p = personOf(first?.userId, first?.userName)
+      const p = personOf(runs[0]?.userId, runs[0]?.userName, null, projectProvider(f.projectId))
       if (!p) continue
-      kind = 'person'; name = p.name; wkey = p.key
+      who = { key: p.key, name: p.name }
+      kind = 'person'
     }
     groups[kind][grade]++
-    const w = workers.get(wkey) ?? { key: wkey, name, kind, grades: empty(), n: 0, passRate: null, ciLow: null, ciHigh: null, state: 'collecting' as const, projects: new Set<string>() }
+    const w = workers.get(who.key) ?? {
+      key: who.key, name: who.name, ...(who.modelUnknown ? { modelUnknown: true } : {}), kind,
+      grades: emptyGrades(), n: 0, passRate: null, ciLow: null, ciHigh: null, state: 'collecting' as const, projects: new Set<string>(),
+    }
     w.grades[grade]++
     w.n++
     w.projects.add(f.projectId)
-    workers.set(wkey, w)
+    workers.set(who.key, w)
   }
   const list = Array.from(workers.values()).map(w => {
     const ci = wilson(w.grades.pass, w.n)
@@ -348,7 +375,7 @@ function evaluationOf(scope: Scope, pids: string[], periodEnd: string, today: st
       const inter = [...a.projects].filter(p => b.projects.has(p)).length
       const union = new Set([...a.projects, ...b.projects]).size
       comparisons.push({
-        a: a.name, b: b.name, state: overlap ? 'unclear' : 'clear',
+        a: a.name, b: b.name, aKey: a.key, bKey: b.key, state: overlap ? 'unclear' : 'clear',
         needMore: overlap && need != null ? Math.max(0, need - Math.min(a.n, b.n)) : null,
         differentProjects: union > 0 && inter / union < 0.5,
       })
@@ -356,15 +383,16 @@ function evaluationOf(scope: Scope, pids: string[], periodEnd: string, today: st
   }
 
   // 검증자: 승인한 일이 확인 단계에서 반려된 비율
-  const decisions = verifyDecisions(pids, sinceISO, kstDayStartISO(windowEnd))
-  const vmap = new Map<string, { key: string; name: string; approved: number; laterRejected: number }>()
+  const decisions = verifyDecisions(c.pids, sinceISO, kstDayStartISO(windowEnd))
+  const vmap = new Map<string, { key: string; name: string; modelUnknown?: boolean; approved: number; laterRejected: number }>()
   for (const d of decisions) {
     if (!d.approvedAt) continue
-    const p = personOf(d.userId, d.userName, d.username)
+    // 에이전트 검증자는 모델 단위(에이전트 이름으로 나누지 않는다), 사람은 통합 식별자
+    const p = d.byAgent ? agentWorker(d.model, null) : personOf(d.userId, d.userName, d.username, projectProvider(d.projectId))
     if (!p) continue
-    const cur = vmap.get(p.key) ?? { key: p.key, name: p.name, approved: 0, laterRejected: 0 }
+    const cur = vmap.get(p.key) ?? { key: p.key, name: p.name, ...('modelUnknown' in p && p.modelUnknown ? { modelUnknown: true } : {}), approved: 0, laterRejected: 0 }
     cur.approved++
-    const rej = confirmRej.get(`${d.projectId}:${d.iid}`) ?? []
+    const rej = c.confirmRej.get(`${d.projectId}:${d.iid}`) ?? []
     if (rej.some(r => r > d.approvedAt!)) cur.laterRejected++
     vmap.set(p.key, cur)
   }
@@ -385,8 +413,8 @@ function evaluationOf(scope: Scope, pids: string[], periodEnd: string, today: st
 
 // ─── 위험 ───
 
-function risksOf(scope: Scope, pids: string[], period: Period, prev: Period, projects: Map<string, ScopedProject>, live: HeldIssue[] | null, completed: Map<string, string>, facts: Map<string, IssueFacts>): Risks {
-  const decisionsIn = (p: Period) => verifyDecisions(pids, kstDayStartISO(p.start), kstDayStartISO(p.end))
+function risksOf(c: Ctx, period: Period, prev: Period, completed: CycleEvent[], facts: Map<string, IssueFacts>): Risks {
+  const decisionsIn = (p: Period) => verifyDecisions(c.pids, kstDayStartISO(p.start), kstDayStartISO(p.end))
   const cur = decisionsIn(period)
   const prevD = decisionsIn(prev)
   const rate = (d: typeof cur) => {
@@ -397,6 +425,7 @@ function risksOf(scope: Scope, pids: string[], period: Period, prev: Period, pro
   let rejectTopProject: Risks['rejectTopProject'] = null
   const byP = new Map<string, { n: number; r: number }>()
   for (const d of cur) {
+    if (!d.approvedAt && !d.rejectedAt) continue // 판단 불가·오류는 판정이 아니다
     const v = byP.get(d.projectId) ?? { n: 0, r: 0 }
     v.n++; if (d.rejectedAt) v.r++
     byP.set(d.projectId, v)
@@ -404,62 +433,56 @@ function risksOf(scope: Scope, pids: string[], period: Period, prev: Period, pro
   for (const [pid, v] of byP) {
     if (v.n < 5) continue
     const r = v.r / v.n
-    if (!rejectTopProject || r > rejectTopProject.rate) rejectTopProject = { name: projects.get(pid)?.name ?? pid, rate: r }
+    if (!rejectTopProject || r > rejectTopProject.rate) rejectTopProject = { name: c.projects.get(pid)?.name ?? pid, rate: r }
   }
-  // 한 사람 의존: 검증 판정 · 사람 처리 완료에서 한 사람 비중 50% 이상(10건 이상, 2명 이상)
-  let concentration: Risks['concentration'] = null
+  // 한 사람 의존: 역할(검증 판정 · 사람 처리 완료)마다 한 사람 비중 50% 이상(10건 이상)
+  const concentrations: Risks['concentrations'] = []
   const check = (role: PersonRole, counts: Map<string, { name: string; n: number }>) => {
     const total = Array.from(counts.values()).reduce((s, v) => s + v.n, 0)
-    if (counts.size < 2 || total < 10) return
-    const top = Array.from(counts.values()).sort((a, b) => b.n - a.n)[0]
+    if (total < 10) return
+    const [top, second] = Array.from(counts.values()).sort((a, b) => b.n - a.n)
     const share = top.n / total
-    if (share >= 0.5 && (!concentration || share > concentration.share)) concentration = { role, name: top.name, share, count: top.n, total }
+    if (share >= 0.5 && second?.n !== top.n) concentrations.push({ role, name: top.name, share, count: top.n, total })
   }
   const vc = new Map<string, { name: string; n: number }>()
   for (const d of cur) {
-    const p = personOf(d.userId, d.userName, d.username)
+    if (d.byAgent) continue // 검증 에이전트는 사람 의존도가 아니다
+    const p = personOf(d.userId, d.userName, d.username, projectProvider(d.projectId))
     if (!p) continue
     const v = vc.get(p.key) ?? { name: p.name, n: 0 }
     v.n++; vc.set(p.key, v)
   }
   check('verify', vc)
   const pc = new Map<string, { name: string; n: number }>()
-  for (const key of completed.keys()) {
+  for (const { key } of completed) {
     const f = facts.get(key)
     if (!f || formOf(f) !== 'human') continue
     const first = processRuns(f)[0]
-    const p = personOf(first?.userId, first?.userName)
+    const p = personOf(first?.userId, first?.userName, null, projectProvider(f.projectId))
     if (!p) continue
     const v = pc.get(p.key) ?? { name: p.name, n: 0 }
     v.n++; pc.set(p.key, v)
   }
   check('process', pc)
-  void scope
-  return {
-    concentration, rejectRate: rate(cur), prevRejectRate: rate(prevD), rejectTopProject,
-    agedEnd: live ? live.filter(i => i.ageHours >= AGED_HOURS).length : null,
-    prevAgedEnd: null,
-  }
+  return { concentrations, rejectRate: rate(cur), prevRejectRate: rate(prevD), rejectTopProject }
 }
 
 // ─── 월별 묶음(월간·연간) ───
 
-function monthPoint(scope: Scope, pids: string[], m: Period, projects: Map<string, ScopedProject>, today: string, liveNow: number | null): MonthPoint {
-  const completed = completedInRange(scope, m.start, m.end)
-  const facts = issueFacts(Array.from(completed.keys()))
-  const d = doneOf(completed, facts, projects)
-  const c = costOf(execsInRange(scope, m.start, m.end), m)
-  const totalMin = Array.from(c.projectMinutes.values()).reduce((s, v) => s + v, 0)
+function monthPoint(c: Ctx, scope: Scope, m: Period, liveNow: number | null): MonthPoint {
+  const completed = completedInRange(c.history, m.start, m.end)
+  const d = doneOf(completed, issueFacts(completed.map(x => x.key)), c.history, c.projects, c.confirmRej)
+  const cost = costOf(execsInRange(scope, m.start, m.end), m)
+  const totalMin = Array.from(cost.projectMinutes.values()).reduce((s, v) => s + v, 0)
   const lastDay = addDays(m.end, -1)
-  const heldEnd = m.start <= today && today <= lastDay && liveNow != null ? liveNow
-    : lastDay < today ? heldOnDay(pids, lastDay) : null
+  const heldEnd = m.start <= c.today && c.today <= lastDay && liveNow != null ? liveNow
+    : lastDay < c.today ? heldOnDay(c.pids, lastDay)?.total ?? null : null
   return {
     label: m.start.slice(0, 7), start: m.start,
-    completed: completed.size, heldEnd,
+    completed: completed.length, heldEnd,
     leadMedianH: d.done.leadMedianH,
-    perCompleted: completed.size > 0 ? c.cost.total / completed.size : null,
-    projectShares: Array.from(c.projectMinutes.entries())
-      .map(([id, min]) => ({ id, name: projects.get(id)?.name ?? id, share: totalMin > 0 ? min / totalMin : 0 }))
+    projectShares: Array.from(cost.projectMinutes.entries())
+      .map(([id, min]) => ({ id, name: c.projects.get(id)?.name ?? id, share: totalMin > 0 ? min / totalMin : 0 }))
       .sort((a, b) => b.share - a.share),
   }
 }
@@ -468,49 +491,54 @@ function monthPoint(scope: Scope, pids: string[], m: Period, projects: Map<strin
 
 export function buildReportModel(scope: Scope, type: ReportType, day: string, now: Date = new Date()): ReportModel {
   resetPersonCache()
+  const projectList = scopedProjects(scope)
+  setProviders(projectList)
   const period = periodOf(type, day)
   const prev = previousPeriod(period)
   const today = kstToday(now)
   const isCurrent = !isClosed(period, now) && today >= period.start
-  const projectList = scopedProjects(scope)
-  const projects = new Map(projectList.map(p => [p.id, p]))
   const pids = projectList.map(p => p.id)
+  const c: Ctx = {
+    pids, projects: new Map(projectList.map(p => [p.id, p])),
+    history: loadIssueHistory(pids), confirmRej: confirmRejections(pids, ALL_TIME), today,
+  }
 
   // 접수·완료
-  const received = receivedInRange(pids, period.start, period.end)
-  const prevReceived = receivedInRange(pids, prev.start, prev.end)
-  const completed = completedInRange(scope, period.start, period.end)
-  const prevCompleted = completedInRange(scope, prev.start, prev.end)
-  const facts = issueFacts([...completed.keys(), ...prevCompleted.keys()])
+  const completed = completedInRange(c.history, period.start, period.end)
+  const prevCompleted = completedInRange(c.history, prev.start, prev.end)
+  const facts = issueFacts([...new Set([...completed, ...prevCompleted].map(x => x.key))])
+  const received = receivedInRange(c.history, period.start, period.end)
+  const prevReceived = receivedInRange(c.history, prev.start, prev.end)
+  const cur = doneOf(completed, facts, c.history, c.projects, c.confirmRej)
+  const prevDone = doneOf(prevCompleted, facts, c.history, c.projects, c.confirmRej)
 
-  const cur = doneOf(completed, facts, projects)
-  const prevDone = doneOf(prevCompleted, facts, projects)
-
-  // 보유
-  const liveIssues = isCurrent ? liveHeld(heldNow(pids), projects, now).issues : null
+  // 보유 — 진행 중이면 지금, 닫힌 기간이면 기간 말 마감 기록. 기초 = 지난 기간 말 마감 기록
+  const liveIssues = isCurrent ? liveHeld(pids, c.projects, now) : null
   const endByProject = new Map<string, number>()
-  let end: number | null
+  let end: number | null, over7: number | null
   if (liveIssues) {
     end = liveIssues.length
+    over7 = liveIssues.filter(i => i.ageHours >= AGED_HOURS).length
     for (const i of liveIssues) endByProject.set(i.projectId, (endByProject.get(i.projectId) ?? 0) + 1)
   } else {
-    end = heldOnDay(pids, addDays(period.end, -1), endByProject)
+    const e = heldOnDay(pids, addDays(period.end, -1), endByProject)
+    end = e?.total ?? null
+    over7 = e?.over7 ?? null
   }
   const startByProject = new Map<string, number>()
-  const start = heldOnDay(pids, addDays(period.start, -1), startByProject)
+  const s = heldOnDay(pids, addDays(period.start, -1), startByProject)
+  const start = s?.total ?? null
   const people = liveIssues ? peopleOf(liveIssues) : null
   let drainDays: number | null = null
   if (liveIssues) {
-    const recent = completedInRange(scope, addDays(today, -28), addDays(today, 1))
-    const recentFacts = issueFacts(Array.from(recent.keys()).filter(k => !facts.has(k)))
-    const all = new Map([...facts, ...recentFacts])
-    const n = Array.from(recent.keys()).filter(k => { const f = all.get(k); return f && formOf(f) !== 'direct' }).length
+    // 최근 28일 하루 평균 완료(직접 처리·사후 기록 제외 — 보유를 거치지 않은 일이다)
+    const n = completedInRange(c.history, addDays(today, -28), addDays(today, 1)).filter(x => !c.history.get(x.key)?.direct).length
     drainDays = n > 0 ? liveIssues.length / (n / 28) : null
   }
   const held: Held = {
     live: !!liveIssues, end, start,
-    inflow: received.size, completed: completed.size,
-    gap: start != null && end != null ? start + received.size - completed.size - end : null,
+    inflow: received.length, completed: completed.length,
+    gap: start != null && end != null ? start + received.length - completed.length - end : null,
     drainDays,
     byStage: liveIssues
       ? HELD_STAGES.map(stage => {
@@ -518,10 +546,9 @@ export function buildReportModel(scope: Scope, type: ReportType, day: string, no
         return { stage, count: xs.length, oldestHours: xs.length ? Math.max(...xs.map(i => i.ageHours)) : null }
       })
       : null,
-    over7: liveIssues ? liveIssues.filter(i => i.ageHours >= AGED_HOURS).length : null,
+    over7, prevOver7: s?.over7 ?? null,
     people,
-    peopleTotal: people ? people.reduce((s, p) => s + p.count, 0) : null,
-    issues: liveIssues ? [...liveIssues].sort((a, b) => b.ageHours - a.ageHours).slice(0, 300) : null,
+    peopleTotal: people ? people.reduce((sum, p) => sum + p.count, 0) : null,
   }
 
   // 추이
@@ -536,54 +563,66 @@ export function buildReportModel(scope: Scope, type: ReportType, day: string, no
     prevCompleted: countBy(type, prevCompleted, prevKeys),
     held: heldSeries(type, pids, period, today, liveIssues ? liveIssues.length : null),
     prevHeld: heldSeries(type, pids, prev, today, null),
-    prevInflowTotal: prevReceived.size,
   }
 
   // 비용·사람 시간·프로젝트
-  const c = costOf(execsInRange(scope, period.start, period.end), period)
+  const cc = costOf(execsInRange(scope, period.start, period.end), period)
   const pc = costOf(execsInRange(scope, prev.start, prev.end), prev)
-  const totalMin = Array.from(c.projectMinutes.values()).reduce((s, v) => s + v, 0)
-  const prevTotalMin = Array.from(pc.projectMinutes.values()).reduce((s, v) => s + v, 0)
-  const prevEndByProject = new Map<string, number>()
-  heldOnDay(pids, addDays(prev.end, -1), prevEndByProject)
+  const totalMin = Array.from(cc.projectMinutes.values()).reduce((sum, v) => sum + v, 0)
+  const prevTotalMin = Array.from(pc.projectMinutes.values()).reduce((sum, v) => sum + v, 0)
   const projectRows: ProjectRow[] = projectList.map(p => ({
-    id: p.id, name: p.name, color: p.color,
-    humanHours: (c.projectMinutes.get(p.id) ?? 0) / 60,
-    share: totalMin > 0 ? (c.projectMinutes.get(p.id) ?? 0) / totalMin : 0,
+    id: p.id, name: p.name,
+    humanHours: (cc.projectMinutes.get(p.id) ?? 0) / 60,
+    prevHumanHours: (pc.projectMinutes.get(p.id) ?? 0) / 60,
+    share: totalMin > 0 ? (cc.projectMinutes.get(p.id) ?? 0) / totalMin : 0,
     prevShare: prevTotalMin > 0 ? (pc.projectMinutes.get(p.id) ?? 0) / prevTotalMin : null,
     completed: cur.byProject.get(p.id) ?? 0,
     prevCompleted: prevDone.byProject.get(p.id) ?? 0,
     held: end != null ? endByProject.get(p.id) ?? 0 : null,
-    prevHeld: start != null ? (startByProject.get(p.id) ?? 0) : (prevEndByProject.size ? prevEndByProject.get(p.id) ?? 0 : null),
-  })).filter(r => r.humanHours > 0 || r.completed > 0 || r.prevCompleted > 0 || (r.held ?? 0) > 0)
+    prevHeld: start != null ? startByProject.get(p.id) ?? 0 : null,
+  })).filter(r => r.humanHours > 0 || r.prevHumanHours > 0 || r.completed > 0 || r.prevCompleted > 0 || (r.held ?? 0) > 0)
     .sort((a, b) => b.humanHours - a.humanHours || b.completed - a.completed)
 
   const cost: Cost = {
-    ...c.cost,
-    perCompleted: completed.size > 0 ? c.cost.total / completed.size : null,
-    prevPerCompleted: prevCompleted.size > 0 ? pc.cost.total / prevCompleted.size : null,
-    humanHoursPerCompleted: completed.size > 0 && c.cost.humanHours > 0 ? c.cost.humanHours / completed.size : null,
+    ...cc.cost,
+    perCompleted: completed.length > 0 ? cc.cost.total / completed.length : null,
+    prevPerCompleted: prevCompleted.length > 0 ? pc.cost.total / prevCompleted.length : null,
+    humanHoursPerCompleted: completed.length > 0 && cc.cost.humanHours > 0 ? cc.cost.humanHours / completed.length : null,
   }
-
-  const done: Done = { ...cur.done, prevTotal: prevCompleted.size, prevFirstPass: prevDone.done.firstPass }
 
   const model: ReportModel = {
     version: 2, type,
     period: { start: period.start, end: period.end },
-    prevPeriod: { start: prev.start, end: prev.end },
-    isCurrent, computedAt: now.toISOString(),
-    heldTrackingSince: heldTrackingSince(),
+    isCurrent,
+    heldTrackingSince: heldTrackingSince(pids),
     held,
     actions: liveIssues && people ? actionsOf(liveIssues, people) : null,
-    done, trend, projects: projectRows, cost,
+    done: { ...cur.done, prevTotal: prevCompleted.length, prevFirstPass: prevDone.done.firstPass },
+    trend, projects: projectRows, cost,
     completedList: cur.list,
   }
 
   if (type !== 'weekly') {
     const months = type === 'monthly' ? lastMonths(period, 6) : buckets(period).map(d => periodOf('monthly', d))
-    model.months = months.filter(m => m.start <= today).map(m => monthPoint(scope, pids, m, projects, today, liveIssues ? liveIssues.length : null))
-    model.risks = risksOf(scope, pids, period, prev, projects, liveIssues, completed, facts)
-    model.evaluation = evaluationOf(scope, pids, period.end, today)
+    model.months = months.filter(m => m.start <= today).map(m => monthPoint(c, scope, m, liveIssues ? liveIssues.length : null))
+    model.risks = risksOf(c, period, prev, completed, facts)
+    model.evaluation = evaluationOf(c, period.end)
   }
   return model
+}
+
+/**
+ * 지금 보유 중인 일 전부(전체 범위, 자르지 않음) — "내 손에 있는 일"(메일·화면)용.
+ * 받는 사람의 공유 범위와 무관하게 그 사람이 확실히 식별되어 들고 있는 일만 골라 쓴다(personStrong).
+ */
+export function liveHeldAll(now: Date = new Date()): HeldIssue[] {
+  resetPersonCache()
+  const all = scopedProjects(null)
+  setProviders(all)
+  return liveHeld(all.map(p => p.id), new Map(all.map(p => [p.id, p])), now)
+}
+
+/** 그 사람 손에 있는 일 — 확실히 식별된 담당만(표시 이름만 같은 다른 사람의 일은 넣지 않는다). 오래된 순 */
+export function mineFrom(all: HeldIssue[], userId: string): HeldIssue[] {
+  return all.filter(i => i.personStrong && i.personKey === `u:${userId}`).sort((a, b) => b.ageHours - a.ageHours)
 }

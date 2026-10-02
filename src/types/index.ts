@@ -16,6 +16,7 @@ export interface User {
   githubUsername?: string | null  // 본인 GitHub username. 위와 동일(GitHub 프로젝트용)
   slackUserId?: string     // 본인 Slack member ID (U...). 작업완료 DM·채널멘션 대상. 빈 값이면 DM 불가
   slackNotify: boolean     // 작업완료 Slack 알림 수신 여부 (기본 true). false면 라벨이 있어도 안 받음(본인 veto)
+  reportMailUnsubscribed?: boolean // 보고서 메일 수신 거부(본인만 변경). true면 보고서 메일을 보내지 않는다
   mailUnsubscribed: boolean // 브로드캐스트(관리자 발송) 메일 수신거부 여부 (기본 false). true면 일괄 발송 대상에서 제외
   oauthProviderId?: string | null  // OAuth 로그인 공급자 ID (oauth_providers.id)
   oauthUserId?: string | null      // 공급자 측 사용자 고유 ID (문자열화)

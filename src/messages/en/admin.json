@@ -436,5 +436,8 @@
   "unsubscribedExcluded": "{count} unsubscribed excluded",
   "unsubscribedTag": "Unsubscribed",
   "users": "Users",
-  "viewAccessStats": "View IVE access stats from this mail"
+  "viewAccessStats": "View IVE access stats from this mail",
+  "reportUnsubscribedTag": "Report opt-out",
+  "previewSkipUnsubscribed": "This person turned off report emails, so it won't be sent.",
+  "previewSkipNothing": "Nothing on their plate and nothing for the team to act on, so it won't be sent this time."
 }

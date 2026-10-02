@@ -11,6 +11,7 @@ import CliLogo from '@/components/ui/CliLogo'
 import ActivityContent from './ActivityContent'
 import ReportScheduleView from './ReportScheduleView'
 import PersonAliasView from './PersonAliasView'
+import EvalVisibilityView from './EvalVisibilityView'
 
 type UsersSubView = 'users' | 'activity' | 'reports'
 
@@ -199,6 +200,7 @@ export default function UsersPanel() {
         {tabBar}
         <ReportScheduleView />
         <div className="mt-3"><PersonAliasView /></div>
+        <div className="mt-3"><EvalVisibilityView /></div>
         <div className="mt-5">
           <button
             onClick={() => { setReportLogOpen(v => !v); if (!reportLogOpen && reportLogs.length === 0) fetchReportLogs(0) }}
@@ -295,6 +297,11 @@ export default function UsersPanel() {
                   {u.mailUnsubscribed && (
                     <span className="text-xs font-bold bg-ive-amber/15 text-ive-amber px-1.5 py-0.5 rounded-lg shrink-0">
                       <i className="fa-solid fa-envelope mr-1" />{t('unsubscribedTag')}
+                    </span>
+                  )}
+                  {u.reportMailUnsubscribed && (
+                    <span className="text-xs font-bold bg-ive-amber/15 text-ive-amber px-1.5 py-0.5 rounded-lg shrink-0">
+                      <i className="fa-solid fa-file-lines mr-1" />{t('reportUnsubscribedTag')}
                     </span>
                   )}
                 </div>

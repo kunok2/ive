@@ -6,18 +6,18 @@
  */
 import { useState, type ReactNode } from 'react'
 import type {
-  ReportModel, Held, ActionItems, HeldStage, ProjectRow, Done, Cost, CompletedItem, PersonRole,
+  Held, ActionItems, HeldStage, HeldIssue, ProjectRow, Done, Cost, CompletedItem,
 } from '@/lib/report-model/types'
-import { fmtHours, pct, deltaTone, toneClass, type Tr } from './format'
+import { fmtHours, pct, deltaTone, toneClass, agedCount, type Tr } from './format'
 
-export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <section className={`bg-ive-bg-card border border-ive-border-subtle rounded-lg p-4 flex flex-col gap-3 ${className}`}>{children}</section>
+export function Card({ children, highlight = false }: { children: ReactNode; highlight?: boolean }) {
+  return <section className={`bg-ive-bg-card border ${highlight ? 'border-ive-cyan/50' : 'border-ive-border-subtle'} rounded-lg p-4 flex flex-col gap-3`}>{children}</section>
 }
 
 export function SectionTitle({ children, right }: { children: ReactNode; right?: ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-2">
-      <span className="text-xs font-bold text-ive-text-secondary">{children}</span>
+      <span className="text-base font-bold text-ive-text">{children}</span>
       {right != null && <span className="text-xs font-bold text-ive-text-muted">{right}</span>}
     </div>
   )
@@ -36,9 +36,10 @@ function Delta({ cur, prev, goodWhenUp, text }: { cur: number; prev: number | nu
   if (prev == null) return null
   const d = cur - prev
   const tone = deltaTone(cur, prev, goodWhenUp)
+  // 숫자에는 색을 쓰지 않는다 — 증감 방향 화살표에만 의미색
   return (
-    <span className={`inline-flex items-center gap-1 text-xs font-bold ${toneClass[tone]}`}>
-      {d !== 0 && <i className={`fa-solid ${d > 0 ? 'fa-arrow-up' : 'fa-arrow-down'}`} />}
+    <span className="inline-flex items-center gap-1 text-xs font-bold text-ive-text-secondary">
+      {d !== 0 && <i className={`fa-solid ${d > 0 ? 'fa-arrow-up' : 'fa-arrow-down'} ${toneClass[tone]}`} />}
       {d === 0 ? '±0' : Math.abs(d).toLocaleString()} · {text}
     </span>
   )
@@ -53,9 +54,10 @@ const STAGE_BADGE: Record<HeldStage, string> = {
   confirm_waiting: 'bg-ive-amber/20 text-ive-amber',
   confirming: 'bg-ive-amber/20 text-ive-amber',
 }
+// 막대 조각 색 = 각 줄 앞 견본 점 색(범례 1:1). 배지와 같은 의미 계열: 대기=시안, 진행·사람 단계=주황 농도, 실패=빨강
 const STAGE_BAR: Record<HeldStage, string> = {
-  waiting: 'bg-ive-cyan/30', dev: 'bg-ive-cyan/90', dev_fail: 'bg-ive-red',
-  verify_waiting: 'bg-ive-cyan/70', verifying: 'bg-ive-cyan/60', confirm_waiting: 'bg-ive-cyan/45', confirming: 'bg-ive-cyan/40',
+  waiting: 'bg-ive-cyan', dev: 'bg-ive-amber', dev_fail: 'bg-ive-red',
+  verify_waiting: 'bg-ive-amber/80', verifying: 'bg-ive-amber/60', confirm_waiting: 'bg-ive-amber/45', confirming: 'bg-ive-amber/30',
 }
 
 // ─── ① 지금 안고 있는 일 ───
@@ -78,9 +80,10 @@ export function HeldCard({ held, tr, prevLabel, tracking }: { held: Held; tr: Tr
           </div>
           {held.live && (
             <div className="text-sm font-bold text-ive-text-secondary">
-              {held.drainDays != null ? tr('drainDays', { d: held.drainDays < 1 ? '1' : Math.round(held.drainDays) }) : tr('drainUnknown')}
+              {held.drainDays != null ? tr('drainDays', { d: held.drainDays < 1 ? 1 : Math.round(held.drainDays) }) : tr('drainUnknown')}
               {' · '}
               {held.over7 ? tr('over7', { n: held.over7 }) : tr('over7None')}
+              {held.over7 != null && <> <MiniDelta cur={held.over7} prev={held.prevOver7} goodWhenUp={false} /></>}
             </div>
           )}
         </>
@@ -131,6 +134,11 @@ function IssueLine({ text, right, href }: { text: string; right: string; href: s
 }
 
 const issueHref = (projectId: string, iid: number) => `/issues/${projectId}/${iid}`
+/** UTC 시각 → KST 월-일 (보고서 기간은 KST 기준) */
+const kstMonthDay = (iso: string) => {
+  const t = new Date(iso.includes('T') ? iso : iso.replace(' ', 'T') + 'Z').getTime()
+  return Number.isFinite(t) ? new Date(t + 9 * 3_600_000).toISOString().slice(5, 10) : ''
+}
 
 export function ActionCards({ actions, tr }: { actions: ActionItems; tr: Tr }) {
   const items: ReactNode[] = []
@@ -150,17 +158,16 @@ export function ActionCards({ actions, tr }: { actions: ActionItems; tr: Tr }) {
       </ActionCard>,
     )
   }
-  if (actions.concentration) {
-    const c = actions.concentration
+  for (const c of actions.concentrations) {
     items.push(
-      <ActionCard key="c" tone="amber" icon="fa-triangle-exclamation" title={tr('actConcentration', { name: c.name })}>
+      <ActionCard key={`c-${c.role}`} tone="amber" icon="fa-triangle-exclamation" title={tr('actConcentration', { name: c.name })}>
         <span className="text-xs font-bold text-ive-text-secondary">{tr('actConcentrationDetail', { role: tr(`role.${c.role}`), people: c.roleHolders, total: c.roleTotal, n: c.count, t: fmtHours(tr, c.oldestHours) })}</span>
       </ActionCard>,
     )
   }
   return (
     <section className="flex flex-col gap-2">
-      <span className="text-xs font-bold text-ive-text-secondary pt-1">{items.length > 0 ? tr('actTitleN', { n: items.length }) : tr('actTitle')}</span>
+      <span className="text-base font-bold text-ive-text pt-1">{items.length > 0 ? tr('actTitleN', { n: items.length }) : tr('actTitle')}</span>
       {items.length > 0 ? items : (
         <div className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-3 flex items-center gap-2">
           <i className="fa-solid fa-circle-check text-sm text-ive-cyan" />
@@ -180,12 +187,15 @@ export function WhereSection({ held, tr }: { held: Held; tr: Tr }) {
     <Card>
       <SectionTitle right={tr('countN', { n: held.end })}>{tr('whereTitle')}</SectionTitle>
       <div className="flex h-2.5 rounded-full overflow-hidden gap-0.5 bg-ive-bg">
-        {rows.map(s => <div key={s.stage} className={STAGE_BAR[s.stage]} style={{ width: `${(s.count / held.end!) * 100}%` }} />)}
+        {rows.map(s => <div key={s.stage} className={STAGE_BAR[s.stage]} style={{ flexGrow: s.count, flexBasis: 0 }} />)}
       </div>
       <div className="flex flex-col">
         {rows.map((s, i) => (
           <div key={s.stage} className={`flex items-center justify-between gap-2 min-h-10 ${i < rows.length - 1 ? 'border-b border-ive-border-dark' : ''}`}>
-            <span className={`px-2 py-0.5 rounded-lg text-xs font-bold ${STAGE_BADGE[s.stage]}`}>{tr(`stage.${s.stage}`)}</span>
+            <span className="flex items-center gap-2">
+              <span className={`w-2 h-2 rounded-full ${STAGE_BAR[s.stage]}`} aria-hidden="true" />
+              <span className={`px-2 py-0.5 rounded-lg text-xs font-bold ${STAGE_BADGE[s.stage]}`}>{tr(`stage.${s.stage}`)}</span>
+            </span>
             <span className="flex gap-4 text-sm font-bold tabular-nums">
               <span className="text-ive-text">{tr('countN', { n: s.count })}</span>
               <span className="text-ive-text-secondary w-24 text-right">{tr('oldest', { t: fmtHours(tr, s.oldestHours) })}</span>
@@ -232,7 +242,8 @@ export function PeopleSection({ held, tr }: { held: Held; tr: Tr }) {
 
 // ─── ⑤ 사람 시간이 쓰인 곳 ───
 
-const SHARE_OPACITY = ['bg-ive-cyan', 'bg-ive-cyan/60', 'bg-ive-cyan/35', 'bg-ive-cyan/20']
+/** 비중 막대 조각 색(상위 3개 + 기타) — 월간 비중 추이와 같은 색 */
+export const SHARE_OPACITY = ['bg-ive-cyan', 'bg-ive-cyan/60', 'bg-ive-cyan/35', 'bg-ive-cyan/20']
 
 export function ProjectsSection({ projects, cost, tr, prevLabel }: { projects: ProjectRow[]; cost: Cost; tr: Tr; prevLabel: string }) {
   if (projects.length === 0) return null
@@ -240,7 +251,7 @@ export function ProjectsSection({ projects, cost, tr, prevLabel }: { projects: P
   const top = withHours.slice(0, 3)
   const rest = withHours.slice(3)
   const restShare = rest.reduce((s, p) => s + p.share, 0)
-  const shareParts = [...top.map(p => ({ name: p.name, share: p.share })), ...(rest.length ? [{ name: tr('others'), share: restShare }] : [])]
+  const shareParts = [...top.map(p => ({ id: p.id, name: p.name, share: p.share })), ...(rest.length ? [{ id: '__others', name: tr('others'), share: restShare }] : [])]
   // 지난 기간 대비 비중 변화가 가장 큰 프로젝트 한 줄
   const moved = withHours.filter(p => p.prevShare != null).map(p => ({ p, d: p.share - (p.prevShare ?? 0) }))
     .sort((a, b) => Math.abs(b.d) - Math.abs(a.d))[0]
@@ -250,11 +261,11 @@ export function ProjectsSection({ projects, cost, tr, prevLabel }: { projects: P
       {withHours.length > 0 ? (
         <>
           <div className="flex h-3 rounded-full overflow-hidden gap-0.5 bg-ive-bg">
-            {shareParts.map((s, i) => <div key={s.name} className={SHARE_OPACITY[Math.min(i, 3)]} style={{ width: `${s.share * 100}%` }} />)}
+            {shareParts.map((s, i) => <div key={s.id} className={SHARE_OPACITY[Math.min(i, 3)]} style={{ flexGrow: s.share, flexBasis: 0 }} />)}
           </div>
           <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-bold text-ive-text-secondary">
             {shareParts.map((s, i) => (
-              <span key={s.name} className="inline-flex items-center gap-1"><span className={`w-2 h-2 rounded-sm ${SHARE_OPACITY[Math.min(i, 3)]}`} />{s.name} {pct(s.share)}</span>
+              <span key={s.id} className="inline-flex items-center gap-1"><span className={`w-2 h-2 rounded-full ${SHARE_OPACITY[Math.min(i, 3)]}`} />{s.name} {pct(s.share)}</span>
             ))}
           </div>
           {moved && Math.abs(moved.d) >= 0.05 && (
@@ -277,8 +288,10 @@ export function ProjectsSection({ projects, cost, tr, prevLabel }: { projects: P
           <tbody>
             {projects.map(p => (
               <tr key={p.id} className="border-t border-ive-border-dark">
-                <td className="text-left py-1.5 pr-2 text-ive-text truncate max-w-[9rem]">{p.name}</td>
-                <td className="text-right py-1.5 px-1 tabular-nums text-ive-text">{p.humanHours > 0 ? `${Math.round(p.humanHours)}h · ${pct(p.share)}` : '—'}</td>
+                <td className="text-left py-1.5 pr-2 text-ive-text"><div className="truncate max-w-36">{p.name}</div></td>
+                <td className="text-right py-1.5 px-1 tabular-nums text-ive-text">{p.humanHours > 0 || p.prevHumanHours > 0
+                  ? <>{p.humanHours > 0 ? `${Math.round(p.humanHours)}h · ${pct(p.share)}` : '0h'} <MiniDelta cur={Math.round(p.humanHours)} prev={Math.round(p.prevHumanHours)} goodWhenUp={null} /></>
+                  : '—'}</td>
                 <td className="text-right py-1.5 px-1 tabular-nums text-ive-text">{p.completed} <MiniDelta cur={p.completed} prev={p.prevCompleted} goodWhenUp /></td>
                 <td className="text-right py-1.5 pl-1 tabular-nums text-ive-text">{p.held == null ? '—' : <>{p.held} <MiniDelta cur={p.held} prev={p.prevHeld} goodWhenUp={false} /></>}</td>
               </tr>
@@ -291,11 +304,12 @@ export function ProjectsSection({ projects, cost, tr, prevLabel }: { projects: P
   )
 }
 
-function MiniDelta({ cur, prev, goodWhenUp }: { cur: number; prev: number | null | undefined; goodWhenUp: boolean }) {
+/** 표 안의 작은 증감 — 화살표에만 의미색. goodWhenUp 이 null 이면 좋고 나쁨이 없는 값(사람 시간)이라 색 없음 */
+function MiniDelta({ cur, prev, goodWhenUp }: { cur: number; prev: number | null | undefined; goodWhenUp: boolean | null }) {
   if (prev == null || cur === prev) return null
   const up = cur > prev
-  const good = up === goodWhenUp
-  return <span className={good ? 'text-ive-cyan' : 'text-ive-red'}>{up ? '▲' : '▼'}{Math.abs(cur - prev)}</span>
+  const color = goodWhenUp == null ? 'text-ive-text-muted' : up === goodWhenUp ? 'text-ive-cyan' : 'text-ive-red'
+  return <span className="text-ive-text-secondary"><span className={color}>{up ? '▲' : '▼'}</span>{Math.abs(cur - prev)}</span>
 }
 
 // ─── ⑥ 끝낸 일 ───
@@ -340,6 +354,9 @@ export function CostSection({ cost, tr, fmtMoney, prevLabel }: { cost: Cost; tr:
         <Row label={tr('humanHours')} value={cost.humanHours > 0 ? tr('hoursPeople', { h: Math.round(cost.humanHours), p: cost.people }) : <NoRecord tr={tr} />} />
         <Row label={tr('humanCost')} value={cost.humanRateSet ? fmtMoney(cost.humanCost) : <span className="text-ive-text-secondary">{tr('humanRateUnset')}</span>} />
         <Row label={tr('aiActual')} value={fmtMoney(cost.aiActual)} />
+        {cost.humanHoursPerCompleted != null && (
+          <Row label={tr('hoursPerCompleted')} value={tr('hoursValue', { h: cost.humanHoursPerCompleted.toFixed(1) })} />
+        )}
         <div className="border-t border-ive-border-dark pt-1.5">
           <Row strong label={tr('perCompleted')} value={cost.perCompleted == null ? '—' : (
             <>{fmtMoney(cost.perCompleted)}{cost.prevPerCompleted != null && (() => {
@@ -375,12 +392,12 @@ export function CompletedList({ items, tr }: { items: CompletedItem[]; tr: Tr })
       {open && (
         <div className="px-4 pb-3 flex flex-col">
           {items.slice(0, limit).map(i => (
-            <a key={`${i.projectId}:${i.iid}`} href={issueHref(i.projectId, i.iid)} className="flex items-center justify-between gap-2 py-2 border-t border-ive-border-dark text-xs font-bold hover:bg-white/[0.03]">
+            <a key={`${i.projectId}:${i.iid}:${i.completedAt}`} href={issueHref(i.projectId, i.iid)} className="flex items-center justify-between gap-2 py-2 border-t border-ive-border-dark text-xs font-bold hover:bg-white/[0.03]">
               <span className="flex flex-col min-w-0">
                 <span className="text-ive-text truncate">#{i.iid} {i.title ?? ''}</span>
                 <span className="text-ive-text-muted truncate">{i.projectName} · {tr(`form.${i.form}`)}</span>
               </span>
-              <span className="text-ive-text-secondary tabular-nums shrink-0">{i.leadH != null ? fmtHours(tr, i.leadH) : i.completedAt.slice(5, 10)}</span>
+              <span className="text-ive-text-secondary tabular-nums shrink-0">{i.leadH != null ? fmtHours(tr, i.leadH) : kstMonthDay(i.completedAt)}</span>
             </a>
           ))}
           {items.length > limit && (
@@ -392,4 +409,34 @@ export function CompletedList({ items, tr }: { items: CompletedItem[]; tr: Tr })
   )
 }
 
-export type { ReportModel, PersonRole }
+// ─── 내 손에 있는 일 ───
+
+/** 지금 내가 들고 있는 일(확실히 식별된 담당만, 공유 범위 밖 프로젝트 포함) — 메일의 "내 손에 있는 일"과 같은 목록 */
+export function MineSection({ mine, tr, highlight }: { mine: HeldIssue[]; tr: Tr; highlight: boolean }) {
+  const [limit, setLimit] = useState(10)
+  if (mine.length === 0 && !highlight) return null
+  const aged = agedCount(mine)
+  return (
+    <Card highlight={highlight}>
+      <SectionTitle right={aged > 0 ? tr('over7', { n: aged }) : undefined}>{tr('mineTitle', { n: mine.length })}</SectionTitle>
+      {mine.length === 0 ? (
+        <span className="text-sm font-bold text-ive-text-secondary">{tr('mineNone')}</span>
+      ) : (
+        <div className="flex flex-col">
+          {mine.slice(0, limit).map(i => (
+            <a key={`${i.projectId}:${i.iid}`} href={issueHref(i.projectId, i.iid)} className="flex items-center justify-between gap-2 py-2 border-t border-ive-border-dark first:border-t-0 text-xs font-bold hover:bg-white/[0.03]">
+              <span className="flex flex-col min-w-0">
+                <span className="text-ive-text truncate">#{i.iid} {i.title ?? ''}</span>
+                <span className="text-ive-text-muted truncate">{i.projectName} · {tr(`stage.${i.stage}`)}{i.role ? ` · ${tr(`role.${i.role}`)}` : ''}</span>
+              </span>
+              <span className="text-ive-text-secondary tabular-nums shrink-0">{tr('elapsed', { t: fmtHours(tr, i.ageHours) })}</span>
+            </a>
+          ))}
+          {mine.length > limit && (
+            <button onClick={() => setLimit(l => l + 20)} className="mt-2 px-3 py-2 rounded-lg bg-white/5 border border-ive-border-subtle text-sm font-bold text-ive-text-muted">{tr('showMore')}</button>
+          )}
+        </div>
+      )}
+    </Card>
+  )
+}

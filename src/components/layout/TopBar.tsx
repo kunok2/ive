@@ -208,6 +208,7 @@ export default function TopBar() {
           gitlabUsername={state.user.gitlabUsername}
           githubUsername={state.user.githubUsername}
           mailUnsubscribed={state.user.mailUnsubscribed}
+          reportMailUnsubscribed={state.user.reportMailUnsubscribed}
           onSuccess={() => setShowChangePassword(false)}
           onCancel={() => setShowChangePassword(false)}
           onEmailChanged={() => refreshUser()}

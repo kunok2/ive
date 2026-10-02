@@ -5,6 +5,12 @@
  * UTC 자정 Date 로만 다뤄 시간대와 무관하게 계산한다.
  */
 export type ReportType = 'weekly' | 'monthly' | 'yearly'
+
+/**
+ * 기간이 끝나고 이 일수가 지나야 확정한다. 직접 처리한 일은 끝난 뒤 이슈로 등록(사후 기록)되며
+ * 작업 시각으로 거슬러 기록되므로, 끝나자마자 확정하면 늦게 들어온 기록이 영영 빠진다.
+ */
+export const FINALIZE_AFTER_DAYS = 3
 export interface Period { type: ReportType; start: string; end: string }
 
 const DAY = 86_400_000
