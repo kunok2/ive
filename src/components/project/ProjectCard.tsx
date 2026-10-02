@@ -60,6 +60,7 @@ export default function ProjectCard({ project }: Props) {
     return (saved === 'running' || saved === 'done' || saved === 'waiting' || saved === 'verifying' || saved === 'confirming' || saved === 'conflicts') ? saved as any : null
   })
   const setExpandedPanel = (v: 'running' | 'done' | 'waiting' | 'verifying' | 'confirming' | 'conflicts' | null) => {
+    if (v) sessionStorage.removeItem(`pc-panel-count-${project.id}-${v}`)
     _setExpandedPanel(v)
     if (v) sessionStorage.setItem(`pc-panel-${project.id}`, v)
     else sessionStorage.removeItem(`pc-panel-${project.id}`)
@@ -235,6 +236,29 @@ export default function ProjectCard({ project }: Props) {
   const failedCount = stats?.failed ?? 0
   const totalDone = completedCount + failedCount
   const yesterdayDiff = stats ? totalDone - stats.yesterdayCompleted : 0
+
+  // 펼친 패널의 건수가 1건 이상이었다가 0이 되면(작업이 처리되어 비워짐) 패널을 닫는다.
+  // 처음부터 0건인 패널을 사용자가 직접 연 경우는 그대로 둔다.
+  // 상세 화면에 다녀오면 카드가 다시 마운트되므로 마지막으로 본 건수를 sessionStorage에 둔다.
+  const expandedCount: number | null =
+    !expandedPanel || expandedPanel === 'done' ? null
+    : expandedPanel === 'conflicts' ? mergeCount
+    : !stats ? null
+    : expandedPanel === 'waiting' ? stats.waiting + (stats.verifyWaiting ?? 0) + (stats.confirmWaiting ?? 0)
+    : expandedPanel === 'running' ? agentWorkingCount
+    : expandedPanel === 'verifying' ? verifyingCount
+    : confirmingCount
+  useEffect(() => {
+    if (!expandedPanel || expandedCount === null) return
+    const key = `pc-panel-count-${project.id}-${expandedPanel}`
+    const lastSeen = Number(sessionStorage.getItem(key) ?? '0')
+    if (expandedCount === 0 && lastSeen > 0) {
+      sessionStorage.removeItem(key)
+      setExpandedPanel(null)
+    } else {
+      sessionStorage.setItem(key, String(expandedCount))
+    }
+  }, [expandedPanel, expandedCount, project.id])
 
   // 실시간 충돌(병합) 카운트 — DB 캐시와 별도로 API에서 직접 조회
   useEffect(() => {

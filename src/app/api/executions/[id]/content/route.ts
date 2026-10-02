@@ -30,6 +30,7 @@ export async function GET(
     issueIid: execution.issueIid,
     issueTitle: execution.issueTitle ?? '',
     startedAt: execution.startedAt,
+    endedAt: execution.endedAt ?? null,
     agentName: agent?.name ?? execution.agentName ?? '',
     agentAvatar: agent?.avatar ?? 'av-01',
     modelName: execution.modelName ?? '',

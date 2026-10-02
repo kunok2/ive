@@ -8,8 +8,10 @@ import type { ToolActivity } from '@/lib/tool-activity'
 import { useTranslations } from 'next-intl'
 import { useStore } from '@/lib/store'
 
-function formatDuration(startedAt: string): string {
-  const s = Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000)
+// 끝난 실행은 종료 시각까지만 센다 (없으면 진행 중 → 현재 시각까지)
+function formatDuration(startedAt: string, endedAt?: string | null): string {
+  const end = endedAt ? new Date(endedAt).getTime() : Date.now()
+  const s = Math.floor((end - new Date(startedAt).getTime()) / 1000)
   if (s < 60) return `${s}s`
   if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`
   return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`
@@ -19,6 +21,7 @@ interface ExecInfo {
   issueIid: number
   issueTitle: string
   startedAt: string
+  endedAt: string | null
   agentName: string
   agentAvatar: string
   modelName: string
@@ -61,6 +64,7 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
             issueIid: data.issueIid,
             issueTitle: data.issueTitle,
             startedAt: data.startedAt,
+            endedAt: data.endedAt ?? null,
             agentName: data.agentName,
             agentAvatar: data.agentAvatar,
             modelName: data.modelName ?? '',
@@ -160,7 +164,7 @@ export default function ExecutionDetailPage({ params }: { params: Promise<{ id: 
                     </>
                   )}
                   <span className={`font-mono font-bold ${execInfo.assigneeType === 'user' ? 'text-ive-cyan' : 'text-ive-amber'}`}>
-                    {formatDuration(execInfo.startedAt)}
+                    {formatDuration(execInfo.startedAt, execInfo.endedAt)}
                     {tick >= 0 ? '' : ''}
                   </span>
                 </div>
