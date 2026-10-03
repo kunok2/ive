@@ -4,8 +4,8 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import type { Project, TaskExecution } from '@/types'
+import type { TodayDoneIssue } from '@/lib/db/issues'
 import { useTab } from '@/lib/tab-context'
-import { getKSTTodayStartISO } from '@/lib/date-utils'
 import { execKind, ageOf, ageText, STAGE_TONE } from '@/lib/active-work'
 import WaitPill from '@/components/project/WaitPill'
 import AgentAvatar from '@/components/agent/AgentAvatar'
@@ -44,6 +44,8 @@ export default function ProjectBoard({ project }: { project: Project }) {
   const { navigateToAddIssue } = useTab()
   const [issues, setIssues] = useState<BoardIssue[] | null>(null)
   const [execs, setExecs] = useState<TaskExecution[]>([])
+  // 완료(오늘) — 카드 「완료」 숫자와 같은 근거(오늘 완료·반려로 바뀐 이슈)
+  const [doneToday, setDoneToday] = useState<TodayDoneIssue[]>([])
   // 경과는 분 단위 — 30초마다 다시 그린다
   const [now, setNow] = useState(() => Date.now())
   // 에이전트 도구 배지 — 카드와 같은 실시간 도구 활동
@@ -54,8 +56,9 @@ export default function ProjectBoard({ project }: { project: Project }) {
     let alive = true
     const loadIssues = () => fetch(`/api/projects/${project.id}/issues`).then(r => r.ok ? r.json() : []).then(d => { if (alive) setIssues(Array.isArray(d) ? d : []) }).catch(() => {})
     const loadExecs = () => fetch(`/api/projects/${project.id}/executions`).then(r => r.ok ? r.json() : []).then(d => { if (alive) setExecs(Array.isArray(d) ? d : []) }).catch(() => {})
-    loadIssues(); loadExecs()
-    const t1 = setInterval(loadIssues, 10_000)
+    const loadDone = () => fetch(`/api/projects/${project.id}/done-today`).then(r => r.ok ? r.json() : []).then(d => { if (alive) setDoneToday(Array.isArray(d) ? d : []) }).catch(() => {})
+    loadIssues(); loadExecs(); loadDone()
+    const t1 = setInterval(() => { loadIssues(); loadDone() }, 10_000)
     const t2 = setInterval(loadExecs, 5_000)
     const t3 = setInterval(() => setNow(Date.now()), 30_000)
     return () => { alive = false; clearInterval(t1); clearInterval(t2); clearInterval(t3) }
@@ -117,14 +120,14 @@ export default function ProjectBoard({ project }: { project: Project }) {
       href: kind === 'process' && e.assigneeType !== 'user' ? `/executions/${e.id}` : issueHref(e.issueIid),
     })
   }
-  // 완료(오늘) — 카드의 「완료」 칸과 같은 기준(오늘 시작해 끝난 사람 판정·외부 도구 기록), 이슈마다 한 줄
-  const today = getKSTTodayStartISO()
-  const seen = new Set<number>()
-  for (const e of execs) {
-    if (e.status === 'running' || e.status === 'assigned' || e.startedAt < today || seen.has(e.issueIid)) continue
-    if (!(e.verifiedAt != null || e.rejectedAt != null || !e.agentId)) continue
-    seen.add(e.issueIid)
-    cols.done.push({ key: `d-${e.id}`, iid: e.issueIid, title: e.issueTitle ?? '', who: execWho(e), face: execFace(e), startedAt: null, href: issueHref(e.issueIid) })
+  // 완료(오늘) — 카드의 「완료」 숫자와 같은 근거: 오늘 완료·반려로 바뀐 이슈(issue_stages).
+  // 실행 기록으로 세면 어제 시작한 일·사후 등록·최근 실행 목록 밖의 일이 빠진다(60건 처리에 「오늘 완료 1」).
+  for (const d of doneToday) {
+    cols.done.push({
+      key: `d-${d.iid}`, iid: d.iid, title: d.title, who: d.who?.name ?? null,
+      face: d.who ? { src: d.who.avatar || 'person', userId: d.who.userId, human: true } : null,
+      startedAt: null, href: issueHref(d.iid),
+    })
   }
 
   const color = project.color || '#4ade80'

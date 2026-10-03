@@ -77,6 +77,32 @@ export function countTodayStageTransitions(projectId: string, stage: string, tod
   return r?.count ?? 0
 }
 
+/** 오늘 완료·반려로 바뀐 이슈 — 카드 「완료」 숫자(countTodayStageTransitions)와 같은 조건의 목록 */
+export interface TodayDoneIssue {
+  iid: number
+  title: string
+  stage: 'done' | 'rejected'
+  at: string
+  /** 마지막에 맡은 사람 — 확인자 > 담당자 */
+  who: { name: string; avatar: string | null; userId: string | null } | null
+}
+export function listTodayDoneIssues(projectId: string, todayStartISO: string): TodayDoneIssue[] {
+  const rows = getDb().prepare(`
+    SELECT issue_iid AS iid, issue_title AS title, cached_stage AS stage, updated_at AS at,
+           confirmer_name, confirmer_avatar, confirmer_user_id, assignee_name, assignee_avatar
+    FROM issue_stages
+    WHERE project_id = ? AND cached_stage IN ('done', 'rejected') AND datetime(updated_at) >= datetime(?)
+    ORDER BY datetime(updated_at) DESC
+  `).all(projectId, todayStartISO) as any[]
+  return rows.map(r => ({
+    // updated_at 은 datetime('now') 의 UTC 'YYYY-MM-DD HH:MM:SS' — 화면이 시간대를 오해하지 않게 ISO(Z)로
+    iid: r.iid, title: r.title || `#${r.iid}`, stage: r.stage, at: String(r.at).includes('T') ? r.at : `${String(r.at).replace(' ', 'T')}Z`,
+    who: r.confirmer_name ? { name: r.confirmer_name, avatar: r.confirmer_avatar ?? null, userId: r.confirmer_user_id ?? null }
+      : r.assignee_name ? { name: r.assignee_name, avatar: r.assignee_avatar ?? null, userId: null }
+      : null,
+  }))
+}
+
 export function recordIssueScheduledAt(projectId: string, issueIid: number, scheduledAt: string) {
   getDb().prepare(`
     INSERT INTO issue_stages (project_id, issue_iid, stage, scheduled_at, updated_at)

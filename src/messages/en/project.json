@@ -144,6 +144,8 @@
   "confirmWaitBadge": "Confirm Wait",
   "confirmingBadge": "Confirming",
   "todayRecords": "Today's Records ({count})",
+  "todayDoneIssues": "Done today ({count})",
+  "doneRejected": "Rejected",
   "errorLabel": "Error:",
   "conflictLabel": "Merge",
   "reportPage": "Task Submission Page",

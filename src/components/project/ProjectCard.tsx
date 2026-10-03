@@ -5,10 +5,9 @@ import { useRouter } from 'next/navigation'
 import { Project, Agent, TaskExecution, StatSnapshot } from '@/types'
 import { useEffect, useState, useCallback } from 'react'
 import { useStore } from '@/lib/store'
-import { formatDateShort, formatDateMedium } from '@/lib/format-date'
-import { getKSTTodayStartISO } from '@/lib/date-utils'
+import { formatDateShort, formatDateMedium, formatTime } from '@/lib/format-date'
 import Sparkline from '@/components/ui/Sparkline'
-import ExecutionList from '@/components/execution/ExecutionList'
+import type { TodayDoneIssue } from '@/lib/db/issues'
 import LiveTracePanel from '@/components/execution/LiveTracePanel'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 import MarqueeText from '@/components/ui/MarqueeText'
@@ -78,6 +77,8 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
   const [stats, setStats] = useState<ProjectStats | null>(null)
   const [snapshots, setSnapshots] = useState<StatSnapshot[]>([])
   const [executions, setExecutions] = useState<TaskExecution[]>([])
+  // 완료 칸 펼침 목록 — 「완료」 숫자와 같은 근거(오늘 완료·반려로 바뀐 이슈, 닫힌 이슈 포함)
+  const [doneToday, setDoneToday] = useState<TodayDoneIssue[]>([])
   const [killing, setKilling] = useState<string | null>(null)
   const [waitingIssues, setWaitingIssues] = useState<any[]>([])
   const [verifyingIssues, setVerifyingIssues] = useState<any[]>([])
@@ -218,11 +219,6 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
   // 검증·확인 단계를 지금 에이전트가 돌리고 있는 실행
   const liveStageExecs = (kind: 'verify' | 'confirm') => runningExecs.filter(e => e.assigneeType !== 'user' && stageKindOf(e.id) === kind)
   const liveAgentCount = runningExecs.filter(e => e.assigneeType !== 'user').length
-  const doneExecs = executions.filter(e => e.status !== 'running' && e.status !== 'assigned')
-  const todayStartISO = getKSTTodayStartISO()
-  // agent_id가 비어있으면(=null/'') 외부 도구 execution. mapExecution에서 NULL→''로 정규화하긴 하지만
-  // 호출 경로가 여럿이라 방어적으로 둘 다 처리.
-  const todayDoneExecs = doneExecs.filter(e => e.startedAt >= todayStartISO && (e.verifiedAt != null || e.rejectedAt != null || !e.agentId))
 
   // 라이브 값(/api/.../conflicts)이 단일 진실. stats.conflictCount는
   // 'merge 단계 이슈 수'라는 다른 지표라 fallback으로 쓰면 카운트가 어긋남(0 MR인데
@@ -306,6 +302,15 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
     const timer = setInterval(fetchConflictCount, 60000)
     return () => clearInterval(timer)
   }, [project.id])
+
+  useEffect(() => {
+    if (expandedPanel !== 'done') return
+    let alive = true
+    const load = () => fetch(`/api/projects/${project.id}/done-today`).then(r => r.ok ? r.json() : []).then(d => { if (alive) setDoneToday(Array.isArray(d) ? d : []) }).catch(() => {})
+    load()
+    const timer = setInterval(load, 10_000)
+    return () => { alive = false; clearInterval(timer) }
+  }, [expandedPanel, project.id])
 
   // activities 폴링 (AI 에이전트 작업 중일 때만 — 처리·검증·확인 모두)
   useEffect(() => {
@@ -783,15 +788,36 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
       {/* 수행기록 패널 */}
       {expandedPanel === 'done' && (
         <div className="flex-1 flex flex-col min-h-0 border-t border-ive-green/20">
-          {todayDoneExecs.length > 0 && (
+          {doneToday.length > 0 && (
             <div className="px-3 py-2 bg-ive-bg-deep/50 border-b border-ive-border-dark shrink-0">
               <span className="text-xs font-bold text-ive-green uppercase tracking-widest">
-                <i className="fa-solid fa-clock-rotate-left mr-1" />{tp('todayRecords', { count: todayDoneExecs.length })}
+                <i className="fa-solid fa-circle-check mr-1" />{tp('todayDoneIssues', { count: doneToday.length })}
               </span>
             </div>
           )}
           <div className="flex-1 flex flex-col overflow-y-auto" data-scroll-container>
-            <ExecutionList executions={todayDoneExecs} onKill={handleKill} killing={killing} scrollKey={`pc-done-${project.id}`} />
+            <div className="space-y-2 p-3">
+              {doneToday.map(d => (
+                <div
+                  key={d.iid}
+                  onClick={() => router.push(`/issues/${project.id}/${d.iid}`)}
+                  className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-3 hover:border-ive-cyan/40 transition-all cursor-pointer active:scale-[0.98]"
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-sm font-bold text-ive-text-muted">#{d.iid}</span>
+                    {d.stage === 'rejected' && <span className="px-1.5 py-0.5 rounded-lg text-xs font-bold bg-ive-red/15 text-ive-red">{tp('doneRejected')}</span>}
+                    <span className="ml-auto shrink-0 text-xs font-bold tabular-nums text-ive-text-secondary">{formatTime(d.at, userLocale, userTz)}</span>
+                  </div>
+                  <MarqueeText className="text-sm text-ive-text font-bold">{d.title}</MarqueeText>
+                  {d.who && (
+                    <div className="flex items-center gap-1.5 text-xs text-ive-text-secondary mt-1 min-w-0">
+                      <AgentAvatar avatar={d.who.avatar || 'person'} userId={d.who.userId} size="xs" />
+                      <span className="truncate">{d.who.name}</span>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
