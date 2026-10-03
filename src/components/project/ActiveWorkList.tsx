@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
 import { WORK_KINDS, STAGE_TONE, ageOf, ageText, type WorkKind } from '@/lib/active-work'
+import MarqueeText from '@/components/ui/MarqueeText'
 
 export interface ActiveItem {
   key: string
@@ -21,7 +22,7 @@ export interface ActiveItem {
 /**
  * 진행 중인 일 — 종류(처리 → 검증 → 확인 → 채팅)로 묶는다.
  * 한 묶음을 한 사람이 맡고 있으면 이름은 묶음 제목에 한 번만, 여럿이면 줄마다 보인다.
- * 줄은 「#번호 제목 · 경과」, 제목은 말줄임. 묶음마다 maxPerKind 줄까지 보이고 나머지는 「더 보기」(onMore).
+ * 줄은 「#번호 제목 · 경과」, 제목이 칸보다 길면 흐른다(MarqueeText — 긴 작업 이름을 끝까지 읽게, #64·#79). 묶음마다 maxPerKind 줄까지 보이고 나머지는 「더 보기」(onMore).
  */
 export default function ActiveWorkList({ items, maxPerKind = 3, onMore }: {
   items: ActiveItem[]
@@ -63,7 +64,7 @@ export default function ActiveWorkList({ items, maxPerKind = 3, onMore }: {
                   {!singleWho && it.avatar}
                   {!singleWho && it.who && <span className={`shrink-0 max-w-24 truncate ${STAGE_TONE[g.kind].text} opacity-80`}>{it.who}</span>}
                   <span className="shrink-0 text-ive-text-dim">#{it.iid}</span>
-                  <span className="flex-1 min-w-0 truncate text-ive-text-muted">{it.title}</span>
+                  <span className="flex-1 min-w-0"><MarqueeText className="text-ive-text-muted">{it.title}</MarqueeText></span>
                   {age && (
                     <span className={`shrink-0 tabular-nums ${age.aged ? 'px-1.5 py-0.5 rounded-lg bg-ive-red/15 text-ive-red' : 'text-ive-text-secondary'}`}>
                       {ageText(tp, age)}
