@@ -38,7 +38,7 @@ const stageKindOf = (id: string): 'verify' | 'confirm' | null =>
 
 /**
  * 실행 트레이스 — 실행 화면(/executions/[id])과 넓은 화면 프로젝트 탭의 오른쪽 칸(embedded)이 같이 쓴다.
- * embedded 이면 ← 대신 닫기(×)로 보드로 돌아간다(목록이 바로 옆에 있다).
+ * embedded 이면 ← 가 단계 보드로 돌아간다(다른 화면과 같은 닫기).
  */
 export default function ExecutionTraceView({ id, embedded = false, onClose }: { id: string; embedded?: boolean; onClose?: () => void }) {
   const router = useRouter()
@@ -118,14 +118,15 @@ export default function ExecutionTraceView({ id, embedded = false, onClose }: { 
     <div className={`${embedded ? 'flex-1 min-w-0' : 'h-full'} bg-ive-bg-deep flex flex-col overflow-hidden`}>
       <div className="bg-ive-bg-card border-b border-ive-border-dark px-4 py-3 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3 min-w-0">
-          {!embedded && (
-            <button
-              onClick={() => router.back()}
-              className="w-8 h-8 rounded-lg bg-ive-bg-deep border border-ive-border-dark flex items-center justify-center text-ive-text-muted hover:text-ive-green transition-colors shrink-0"
-            >
-              <i className="fa-solid fa-arrow-left" />
-            </button>
-          )}
+          {/* ← 닫기 — 전체 화면이면 뒤로, 오른쪽 칸(embedded)이면 단계 보드로 */}
+          <button
+            onClick={() => (embedded ? onClose?.() : router.back())}
+            title={embedded ? tc('close') : undefined}
+            aria-label={embedded ? tc('close') : undefined}
+            className="w-8 h-8 rounded-lg bg-ive-bg-deep border border-ive-border-dark flex items-center justify-center text-ive-text-muted hover:text-ive-green transition-colors shrink-0"
+          >
+            <i className="fa-solid fa-arrow-left" />
+          </button>
           {execInfo ? (
             <div className="flex items-center gap-2 min-w-0">
               {execInfo.assigneeType === 'user' ? (
@@ -203,16 +204,6 @@ export default function ExecutionTraceView({ id, embedded = false, onClose }: { 
               className="text-xs font-bold text-ive-red/70 border border-ive-red/30 px-3 py-1.5 rounded-lg bg-ive-bg-deep hover:bg-ive-red/10 transition-colors disabled:opacity-40"
             >
               {killing ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-skull-crossbones mr-1" />{te('forceStop')}</>}
-            </button>
-          )}
-          {embedded && (
-            <button
-              onClick={onClose}
-              title={tc('close')}
-              aria-label={tc('close')}
-              className="w-8 h-8 rounded-lg bg-ive-bg-deep border border-ive-border-dark flex items-center justify-center text-ive-text-muted hover:text-ive-text transition-colors"
-            >
-              <i className="fa-solid fa-xmark" />
             </button>
           )}
         </div>
