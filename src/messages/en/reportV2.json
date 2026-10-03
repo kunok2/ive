@@ -244,5 +244,6 @@
   "today": "Today",
   "yearMonth": "{month}/{year}",
   "yearUnit": "{year}",
-  "liveAsOf": "As of {time} · refreshes every minute"
+  "liveAsOfSec": "As of {time} · refreshes every {n}s",
+  "liveAsOfMin": "As of {time} · refreshes every {n} min"
 }

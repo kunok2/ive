@@ -108,17 +108,18 @@ export default function ReportsTab() {
   const prevLabel = tr(`prev.${type}`)
   const next = nextPeriod(shown)
   const isTodayPeriod = shown.start <= today && today < shown.end
-  // 진행 중인 기간은 1분마다 저절로 다시 받는다(보고서 탭을 보고 있을 때만). 끝난 기간은 고정
+  // 진행 중인 기간은 저절로 다시 받는다 — 주간 10초, 월간·연간 1분(범위가 넓어 계산이 무겁고 덜 자주 바뀐다)(보고서 탭을 보고 있을 때만). 끝난 기간은 고정
   const { activeTab } = useTab()
   const live = isTodayPeriod && activeTab === 'reports'
+  const liveSec = type === 'weekly' ? 10 : 60
   useEffect(() => {
     if (!live) return
     const refresh = () => { if (document.visibilityState === 'visible') fetchReport(true) }
-    const timer = setInterval(refresh, 60_000)
+    const timer = setInterval(refresh, liveSec * 1000)
     document.addEventListener('visibilitychange', refresh)
     return () => { clearInterval(timer); document.removeEventListener('visibilitychange', refresh) }
-  }, [live, fetchReport])
-  const asOf = fetchedAt ? new Date(fetchedAt).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) : null
+  }, [live, liveSec, fetchReport])
+  const asOf = fetchedAt ? new Date(fetchedAt).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : null
   // 메일의 "내 일 열기"로 왔으면 내 손에 있는 일로 내린다(한 번만)
   const mineRef = useRef<HTMLDivElement>(null)
   const mineScrolled = useRef(false)
@@ -164,10 +165,10 @@ export default function ReportsTab() {
           {/* 진행 중인 기간 다음은 아직 오지 않은 기간이라 열지 않는다 */}
           <button aria-label={tr('nextPeriod')} disabled={next.start > today} onClick={() => setDate(next.start)} className="w-11 h-11 flex items-center justify-center rounded-lg text-ive-text-secondary hover:text-ive-text disabled:opacity-40"><i className="fa-solid fa-chevron-right" /></button>
         </div>
-        {/* 진행 중인 기간: 몇 시 기준 숫자인지(1분마다 저절로 갱신). 끝난 기간은 위의 확정·잠정 배지로 충분하다 */}
+        {/* 진행 중인 기간: 몇 시 기준 숫자인지(주간 10초·월간 1분마다 저절로 갱신). 끝난 기간은 위의 확정·잠정 배지로 충분하다 */}
         {isTodayPeriod && asOf && (
           <div className="text-center text-xs font-bold text-ive-text-dim -mt-1">
-            <i className="fa-solid fa-rotate mr-1 opacity-70" />{tr('liveAsOf', { time: asOf })}
+            <i className="fa-solid fa-rotate mr-1 opacity-70" />{tr(liveSec < 60 ? 'liveAsOfSec' : 'liveAsOfMin', { time: asOf, n: liveSec < 60 ? liveSec : liveSec / 60 })}
           </div>
         )}
       </div>
