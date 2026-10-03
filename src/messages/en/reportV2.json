@@ -57,6 +57,21 @@
     "confirming": "Confirming"
   },
   "oldest": "oldest {t}",
+  "stageTimeTitle": "Where the time went",
+  "stageTimeRight": "{n} done · avg {t} each",
+  "flow": {
+    "waiting": "Waiting to process",
+    "dev": "Processing",
+    "verify_waiting": "Waiting to verify",
+    "verifying": "Verifying",
+    "confirm_waiting": "Waiting to confirm",
+    "confirming": "Confirming"
+  },
+  "stageTimeSplit": "Work {work} · waiting {wait} — longest: {stage}",
+  "stageTimePrev": "{label}: {n} done · avg {t} each",
+  "stageTimeNone": "No completed work to measure.",
+  "stageTimeNote": "Each completed item's intake → done is split by its run records: time while a process, verify or confirm record was open counts as that stage; gaps in between count as waiting for the next stage. Direct and after-the-fact work has no intake time and is not measured.",
+  "stageTrendTitle": "Time by stage · {n, plural, one {# month} other {# months}}",
   "peopleTitle": "Who has it",
   "peopleRight": "{n} with {p, plural, one {# person} other {# people}}",
   "peopleNone": "Nothing is with people right now",

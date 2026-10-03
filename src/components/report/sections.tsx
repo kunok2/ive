@@ -6,7 +6,7 @@
  */
 import { useState, type ReactNode } from 'react'
 import type {
-  Held, ActionItems, HeldStage, HeldIssue, ProjectRow, Done, Cost, CompletedItem,
+  Held, ActionItems, HeldStage, HeldIssue, ProjectRow, Done, Cost, CompletedItem, FlowStage, StageTime,
 } from '@/lib/report-model/types'
 import { fmtHours, pct, deltaTone, toneClass, agedCount, projectSwatchStyles, OTHERS_ID, type Tr } from './format'
 import AgentAvatar from '@/components/agent/AgentAvatar'
@@ -64,7 +64,7 @@ const STAGE_BADGE: Record<HeldStage, string> = {
   confirming: 'bg-ive-stage-confirm/20 text-ive-stage-confirm',
 }
 // 막대 조각 색 = 각 줄 앞 견본 점 색(범례 1:1). 단계색(처리 노랑·검증 보라·확인 분홍), 그 단계 대기는 옅게, 처리 대기=시안, 실패=빨강
-const STAGE_BAR: Record<HeldStage, string> = {
+export const STAGE_BAR: Record<HeldStage, string> = {
   waiting: 'bg-ive-cyan', dev: 'bg-ive-stage-process', dev_fail: 'bg-ive-red',
   verify_waiting: 'bg-ive-stage-verify/45', verifying: 'bg-ive-stage-verify', confirm_waiting: 'bg-ive-stage-confirm/45', confirming: 'bg-ive-stage-confirm',
 }
@@ -212,6 +212,64 @@ export function WhereSection({ held, tr }: { held: Held; tr: Tr }) {
           </div>
         ))}
       </div>
+    </Card>
+  )
+}
+
+// ─── 어디서 시간이 걸렸나 ───
+
+const WORK_STAGES: FlowStage[] = ['dev', 'verifying', 'confirming']
+
+/** 끝낸 일의 접수 → 완료를 단계별로 — 막대·줄 색은 「어디에 있나」와 같은 단계색(범례 1:1) */
+export function StageTimeSection({ st, tr, prevLabel }: { st: StageTime | undefined; tr: Tr; prevLabel: string }) {
+  if (!st) return null
+  const rows = st.stages.filter(s => s.share > 0)
+  const prevOf = (stage: FlowStage) => st.prevStages?.find(p => p.stage === stage)?.avgH ?? null
+  const work = st.stages.filter(s => WORK_STAGES.includes(s.stage)).reduce((sum, s) => sum + s.share, 0)
+  const longest = rows.reduce<StageTime['stages'][number] | null>((m, s) => (!m || s.share > m.share ? s : m), null)
+  const prevAvg = st.prevStages ? st.prevStages.reduce((sum, s) => sum + s.avgH, 0) : null
+  return (
+    <Card>
+      <SectionTitle right={st.n > 0 && st.avgH != null ? tr('stageTimeRight', { n: st.n, t: fmtHours(tr, st.avgH) }) : undefined}>{tr('stageTimeTitle')}</SectionTitle>
+      {rows.length === 0 ? (
+        <span className="text-sm font-bold text-ive-text-secondary">{tr('stageTimeNone')}</span>
+      ) : (
+        <>
+          <div className="flex h-2.5 rounded-full overflow-hidden gap-0.5 bg-ive-bg">
+            {rows.map(s => <div key={s.stage} className={STAGE_BAR[s.stage]} style={{ flexGrow: s.share, flexBasis: 0 }} />)}
+          </div>
+          {longest && (
+            <span className="text-sm font-bold text-ive-text-secondary">
+              {tr('stageTimeSplit', { work: pct(work), wait: pct(1 - work), stage: tr(`flow.${longest.stage}`) })}
+            </span>
+          )}
+          <div className="flex flex-col">
+            {rows.map((s, i) => {
+              const prev = prevOf(s.stage)
+              const tone = prev != null ? deltaTone(s.avgH, prev, false) : 'neutral'
+              return (
+                <div key={s.stage} className={`flex items-center justify-between gap-2 min-h-10 ${i < rows.length - 1 ? 'border-b border-ive-border-dark' : ''}`}>
+                  <span className="flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full ${STAGE_BAR[s.stage]}`} aria-hidden="true" />
+                    <span className={`px-2 py-0.5 rounded-lg text-xs font-bold ${STAGE_BADGE[s.stage]}`}>{tr(`flow.${s.stage}`)}</span>
+                  </span>
+                  <span className="flex items-center gap-4 text-sm font-bold tabular-nums">
+                    <span className="text-ive-text" title={prev != null ? tr('prevShort', { label: prevLabel, v: fmtHours(tr, prev) }) : undefined}>
+                      {fmtHours(tr, s.avgH)}
+                      {tone !== 'neutral' && <i className={`fa-solid ${s.avgH > (prev ?? 0) ? 'fa-arrow-up' : 'fa-arrow-down'} text-xs ml-1 ${toneClass[tone]}`} />}
+                    </span>
+                    <span className="text-ive-text-secondary w-10 text-right">{pct(s.share)}</span>
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </>
+      )}
+      {prevAvg != null && (
+        <span className="text-xs font-bold text-ive-text-secondary">{tr('stageTimePrev', { label: prevLabel, n: st.prevN, t: fmtHours(tr, prevAvg) })}</span>
+      )}
+      <span className="text-xs font-bold text-ive-text-muted">{tr('stageTimeNote')}</span>
     </Card>
   )
 }
@@ -406,8 +464,9 @@ export function CompletedList({ items, tr }: { items: CompletedItem[]; tr: Tr })
         <span>{tr('completedList')}</span>
         <span className="flex items-center gap-2 text-xs text-ive-text-muted">{tr('countN', { n: items.length })}<i className={`fa-solid fa-chevron-${open ? 'up' : 'down'}`} /></span>
       </button>
+      {/* PC 다단: 펼친 목록이 단 높이를 키워 다른 카드를 다른 단으로 밀지 않도록 카드 안에서 스크롤한다 */}
       {open && (
-        <div className="px-4 pb-3 flex flex-col">
+        <div className="px-4 pb-3 flex flex-col desk:max-h-[480px] desk:overflow-y-auto">
           {items.slice(0, limit).map(i => (
             <a key={`${i.projectId}:${i.iid}:${i.completedAt}`} href={issueHref(i.projectId, i.iid)} className="flex items-center justify-between gap-2 py-2 border-t border-ive-border-dark text-xs font-bold hover:bg-white/[0.03]">
               <span className="flex flex-col min-w-0">

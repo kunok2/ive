@@ -57,6 +57,21 @@
     "confirming": "확인 중"
   },
   "oldest": "최장 {t}",
+  "stageTimeTitle": "어디서 시간이 걸렸나",
+  "stageTimeRight": "끝낸 일 {n}건 · 건당 평균 {t}",
+  "flow": {
+    "waiting": "처리 대기",
+    "dev": "처리",
+    "verify_waiting": "검증 대기",
+    "verifying": "검증",
+    "confirm_waiting": "확인 대기",
+    "confirming": "확인"
+  },
+  "stageTimeSplit": "작업 {work} · 기다림 {wait} — 가장 오래 머문 곳은 {stage}",
+  "stageTimePrev": "{label}: 끝낸 일 {n}건 · 건당 평균 {t}",
+  "stageTimeNone": "잴 수 있는 끝낸 일이 없습니다.",
+  "stageTimeNote": "끝낸 일의 접수 → 완료를 실행 기록으로 나눴습니다. 처리·검증·확인 기록이 열려 있던 동안은 그 단계, 사이의 빈 시간은 다음 단계를 기다린 시간입니다. 직접 처리·사후 기록은 접수 시각이 없어 재지 않습니다.",
+  "stageTrendTitle": "단계별 시간 비중 · {n}개월",
   "peopleTitle": "누구 손에 있나",
   "peopleRight": "사람 손 {n}건 · {p}명",
   "peopleNone": "지금 사람 손에 있는 일은 없습니다",

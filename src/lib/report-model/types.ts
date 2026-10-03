@@ -90,6 +90,26 @@ export interface Done {
   prevFirstPass: number | null
 }
 
+/** 끝낸 일이 접수 → 완료 사이에 머문 자리(처리·검증·확인과 각각의 대기) */
+export type FlowStage = 'waiting' | 'dev' | 'verify_waiting' | 'verifying' | 'confirm_waiting' | 'confirming'
+export const FLOW_STAGES: FlowStage[] = ['waiting', 'dev', 'verify_waiting', 'verifying', 'confirm_waiting', 'confirming']
+
+/**
+ * 단계별 시간 — 기간 안에 끝낸 일(사이클)의 접수 → 완료를 실행 기록으로 나눈 것.
+ * 처리 실행·검증 기록·확인 기록이 열려 있던 동안은 그 단계, 그 사이 빈 시간은 다음 단계의 대기.
+ * 단계 합 = 처리 기간이라 비중의 합은 1이다. 직접 처리·사후 기록(접수 시각 없음)은 재지 않는다.
+ */
+export interface StageTime {
+  /** 잰 완료 건수 */
+  n: number
+  /** 한 건 평균 처리 기간(시간) = 단계별 평균의 합 */
+  avgH: number | null
+  /** 단계마다 한 건 평균(거치지 않은 일은 0으로 넣는다)과 비중 */
+  stages: { stage: FlowStage; avgH: number; share: number }[]
+  prevN: number
+  prevStages: { stage: FlowStage; avgH: number; share: number }[] | null
+}
+
 export interface Trend {
   labels: string[]
   inflow: (number | null)[]
@@ -163,6 +183,8 @@ export interface MonthPoint {
   heldEnd: number | null
   leadMedianH: number | null
   projectShares: { id: string; name: string; color: string; share: number }[]
+  /** 그달 끝낸 일의 단계별 시간 비중(잰 일이 없으면 null). 이 항목 전에 확정된 보고서에는 없다 */
+  stageShares?: { stage: FlowStage; share: number }[] | null
 }
 
 export interface Risks {
@@ -193,6 +215,8 @@ export interface ReportModel {
   held: Held
   actions: ActionItems | null
   done: Done
+  /** 이 항목 전에 확정된 보고서에는 없다(읽을 때 채운다 — index.getReportModel) */
+  stageTime?: StageTime
   trend: Trend
   projects: ProjectRow[]
   cost: Cost

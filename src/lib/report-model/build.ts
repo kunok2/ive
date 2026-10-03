@@ -19,10 +19,10 @@ import {
   type WorkSegment,
 } from './compute'
 import {
-  GRADES, HELD_STAGES,
+  GRADES, HELD_STAGES, FLOW_STAGES,
   type ReportModel, type WorkForm, type HeldIssue, type HeldPerson, type Held, type ActionItems, type Concentration,
   type Done, type Trend, type ProjectRow, type Cost, type PersonRole, type Grade, type Evaluation, type WorkerEval,
-  type MonthPoint, type Risks, type CompletedItem,
+  type MonthPoint, type Risks, type CompletedItem, type FlowStage, type StageTime,
 } from './types'
 import { AGED_HOURS, MIN_SAMPLE, DEFAULT_PROJECT_COLOR } from './format'
 
@@ -264,6 +264,96 @@ function doneOf(completed: CycleEvent[], facts: Map<string, IssueFacts>, history
   }
 }
 
+// ─── 단계별 시간 ───
+
+type Activity = { kind: 'dev' | 'verifying' | 'confirming'; start: number; end: number; ok: boolean }
+
+/**
+ * 한 사이클(접수 lo → 완료 hi)을 단계로 나눈 시간(시).
+ * 처리 실행·검증 기록(ex-verify)·확인 기록(ex-confirm)이 열려 있던 동안은 그 단계(겹치면 나중에 시작한 쪽),
+ * 아무것도 열려 있지 않은 동안은 마지막으로 끝난 일이 정한 대기 —
+ * 처리 성공 → 검증 대기, 검증 승인 → 확인 대기, 처리 실패·반려(검증·확인) 또는 아직 아무것도 없음 → 처리 대기.
+ */
+export function stageHoursOf(execs: IssueExec[], lo: number, hi: number): Record<FlowStage, number> {
+  const out = Object.fromEntries(FLOW_STAGES.map(s => [s, 0])) as Record<FlowStage, number>
+  const acts: Activity[] = []
+  for (const e of execs) {
+    const kind = e.id.startsWith('ex-verify') ? 'verifying' : e.id.startsWith('ex-confirm') ? 'confirming' : isProcessExec(e) ? 'dev' : null
+    if (!kind) continue
+    const start = new Date(e.startedAt).getTime()
+    const end = e.endedAt ? new Date(e.endedAt).getTime() : hi
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= lo || start >= hi) continue
+    acts.push({ kind, start, end: Math.max(start, end), ok: e.status === 'success' })
+  }
+  const cuts = [...new Set([lo, hi, ...acts.flatMap(a => [a.start, a.end]).filter(t => t > lo && t < hi)])].sort((a, b) => a - b)
+  for (let i = 0; i + 1 < cuts.length; i++) {
+    const a = cuts[i], b = cuts[i + 1]
+    const open = acts.filter(x => x.start <= a && x.end >= b && x.end > x.start).sort((x, y) => y.start - x.start)[0]
+    let st: FlowStage
+    if (open) st = open.kind
+    else {
+      const last = acts.filter(x => x.end <= a).sort((x, y) => y.end - x.end || y.start - x.start)[0]
+      st = !last || !last.ok ? 'waiting'
+        : last.kind === 'dev' ? 'verify_waiting'
+        : last.kind === 'verifying' ? 'confirm_waiting'
+        : 'confirming' // 확인을 마친 뒤 완료 시각까지 남은 틈
+    }
+    out[st] += (b - a) / HOUR
+  }
+  return out
+}
+
+/** 끝낸 일들의 단계별 합계 — 접수 시각이 없는 일(직접 처리·사후 기록)은 재지 않는다 */
+function stageTotalsOf(completed: CycleEvent[], facts: Map<string, IssueFacts>, history: Map<string, IssueHistory>): { n: number; sum: Record<FlowStage, number> } {
+  const sum = Object.fromEntries(FLOW_STAGES.map(s => [s, 0])) as Record<FlowStage, number>
+  let n = 0
+  for (const { key, at } of completed) {
+    const f = facts.get(key)
+    if (!f || formOf(f) === 'direct') continue
+    const receipt = receiptBefore(history.get(key), at)
+    if (!receipt) continue
+    const lo = new Date(receipt).getTime(), hi = new Date(at).getTime()
+    if (!(hi > lo)) continue
+    const h = stageHoursOf(f.execs, lo, hi)
+    for (const s of FLOW_STAGES) sum[s] += h[s]
+    n++
+  }
+  return { n, sum }
+}
+
+function stageRows(t: { n: number; sum: Record<FlowStage, number> }) {
+  const total = FLOW_STAGES.reduce((s, k) => s + t.sum[k], 0)
+  return FLOW_STAGES.map(stage => ({ stage, avgH: t.n > 0 ? t.sum[stage] / t.n : 0, share: total > 0 ? t.sum[stage] / total : 0 }))
+}
+
+/** 단계별 시간 — 화면·메일의 「어디서 시간이 걸렸나」 */
+export function stageTimeOf(completed: CycleEvent[], prevCompleted: CycleEvent[], facts: Map<string, IssueFacts>, history: Map<string, IssueHistory>): StageTime {
+  const cur = stageTotalsOf(completed, facts, history)
+  const prev = stageTotalsOf(prevCompleted, facts, history)
+  return {
+    n: cur.n,
+    avgH: cur.n > 0 ? FLOW_STAGES.reduce((s, k) => s + cur.sum[k], 0) / cur.n : null,
+    stages: stageRows(cur),
+    prevN: prev.n,
+    prevStages: prev.n > 0 ? stageRows(prev) : null,
+  }
+}
+
+/**
+ * 단계별 시간만 따로 — 이 항목이 생기기 전에 확정된 보고서를 읽을 때 채운다.
+ * 실행 기록은 지난 기간에 대해 바뀌지 않으므로 확정 당시 계산과 같은 값이다.
+ */
+export function stageTimeForPeriod(scope: Scope, type: ReportType, day: string): StageTime {
+  const pids = scopedProjects(scope).map(p => p.id)
+  const period = periodOf(type, day)
+  const prev = previousPeriod(period)
+  const history = loadIssueHistory(pids)
+  const completed = completedInRange(history, period.start, period.end)
+  const prevCompleted = completedInRange(history, prev.start, prev.end)
+  const facts = issueFacts([...new Set([...completed, ...prevCompleted].map(x => x.key))])
+  return stageTimeOf(completed, prevCompleted, facts, history)
+}
+
 // ─── 추이 ───
 
 function bucketKey(type: ReportType, iso: string): string {
@@ -471,7 +561,8 @@ function risksOf(c: Ctx, period: Period, prev: Period, completed: CycleEvent[], 
 
 function monthPoint(c: Ctx, scope: Scope, m: Period, liveNow: number | null): MonthPoint {
   const completed = completedInRange(c.history, m.start, m.end)
-  const d = doneOf(completed, issueFacts(completed.map(x => x.key)), c.history, c.projects, c.confirmRej)
+  const facts = issueFacts(completed.map(x => x.key))
+  const d = { ...doneOf(completed, facts, c.history, c.projects, c.confirmRej), facts }
   const cost = costOf(execsInRange(scope, m.start, m.end), m)
   const totalMin = Array.from(cost.projectMinutes.values()).reduce((s, v) => s + v, 0)
   const lastDay = addDays(m.end, -1)
@@ -481,6 +572,10 @@ function monthPoint(c: Ctx, scope: Scope, m: Period, liveNow: number | null): Mo
     label: m.start.slice(0, 7), start: m.start,
     completed: completed.length, heldEnd,
     leadMedianH: d.done.leadMedianH,
+    stageShares: (() => {
+      const t = stageTotalsOf(completed, d.facts, c.history)
+      return t.n > 0 ? stageRows(t).map(({ stage, share }) => ({ stage, share })) : null
+    })(),
     projectShares: Array.from(cost.projectMinutes.entries())
       .map(([id, min]) => ({ id, name: c.projects.get(id)?.name ?? id, color: c.projects.get(id)?.color ?? DEFAULT_PROJECT_COLOR, share: totalMin > 0 ? min / totalMin : 0 }))
       .sort((a, b) => b.share - a.share),
@@ -598,6 +693,7 @@ export function buildReportModel(scope: Scope, type: ReportType, day: string, no
     held,
     actions: liveIssues && people ? actionsOf(liveIssues, people) : null,
     done: { ...cur.done, prevTotal: prevCompleted.length, prevFirstPass: prevDone.done.firstPass },
+    stageTime: stageTimeOf(completed, prevCompleted, facts, c.history),
     trend, projects: projectRows, cost,
     completedList: cur.list,
   }

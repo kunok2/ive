@@ -4,14 +4,14 @@
  *
  * 메일 종류
  *  - member(주간·팀원): 내 손에 있는 일 · 팀 보유(식) · 팀이 손쓸 것 · 지난주 끝낸 일
- *  - lead(주간·팀장):   팀 보유(식) · 손쓸 것 · 누구 손에 · 사람 시간이 쓰인 곳(프로젝트별 완료·보유) · 지난주 끝낸 일
- *  - exec(월간·연간):   기간 말 보유(식·7일 넘은 일) · 산출 추이 · 처리 기간 · 투입과 비용 · 사람 시간이 쓰인 곳과 비중 추이 · 살펴볼 위험 · 작업 결과 평가(사람·AI 묶음, 모델별)
+ *  - lead(주간·팀장):   팀 보유(식) · 손쓸 것 · 누구 손에 · 사람 시간이 쓰인 곳(프로젝트별 완료·보유) · 지난주 끝낸 일 · 어디서 시간이 걸렸나
+ *  - exec(월간·연간):   기간 말 보유(식·7일 넘은 일) · 산출 추이 · 처리 기간 · 어디서 시간이 걸렸나 · 투입과 비용 · 사람 시간이 쓰인 곳과 비중 추이 · 살펴볼 위험 · 작업 결과 평가(사람·AI 묶음, 모델별)
  * 막 끝나 아직 확정 전인 기간(provisional)은 끝에 잠정 값이라고 밝힌다.
  */
 import { createTranslator } from 'next-intl'
 import ko from '@/messages/ko/reportV2.json'
 import en from '@/messages/en/reportV2.json'
-import type { ReportModel, HeldIssue } from '../report-model/types'
+import type { ReportModel, HeldIssue, FlowStage } from '../report-model/types'
 import { fmtHours, pct, deltaTone, agedCount, MIN_SAMPLE, projectSwatches, OTHERS_ID, WHITE_PROJECT_COLOR, type Tr } from '../report-model/format'
 
 export type MailKind = 'member' | 'lead' | 'exec'
@@ -204,6 +204,39 @@ function doneBlock(t: T, closed: ReportModel, prevLabel: string): string {
   ))
 }
 
+/** 흰 바탕과 미리 섞은 단색(메일 클라이언트마다 투명도 지원이 달라서) */
+function onWhite(hex: string, alpha: number): string {
+  const n = parseInt(hex.slice(1), 16)
+  const mix = (c: number) => Math.round(c * alpha + 255 * (1 - alpha)).toString(16).padStart(2, '0')
+  return `#${mix(n >> 16)}${mix((n >> 8) & 0xff)}${mix(n & 0xff)}`
+}
+/** 단계색 — 화면(STAGE_BAR)과 같은 규칙: 처리 대기=시안, 처리 노랑·검증 보라·확인 분홍, 그 단계 대기는 옅게 */
+const FLOW_COLOR: Record<FlowStage, string> = {
+  waiting: '#22d3ee', dev: '#f59e0b',
+  verify_waiting: onWhite('#a78bfa', 0.45), verifying: '#a78bfa',
+  confirm_waiting: onWhite('#f472b6', 0.45), confirming: '#f472b6',
+}
+const WORK_STAGES: FlowStage[] = ['dev', 'verifying', 'confirming']
+
+/** 어디서 시간이 걸렸나 — 화면 StageTimeSection 의 숫자판(단계별 건당 평균·비중) */
+function stageTimeBlock(t: T, m: ReportModel): string {
+  const at = 'closed'
+  const st = m.stageTime
+  if (!st || st.n === 0) return ''
+  const shown = st.stages.map((s, i) => ({ s, i })).filter(x => x.s.share > 0)
+  if (!shown.length) return ''
+  const work = st.stages.filter(s => WORK_STAGES.includes(s.stage)).reduce((sum, s) => sum + s.share, 0)
+  const longest = shown.reduce((a, b) => (b.s.share > a.s.share ? b : a))
+  const head = `<div style="font-size:13px;font-weight:700;color:${COLOR.secondary};margin:0 0 4px">${nums([[`${at}.stageTime.n`, st.n], [`${at}.stageTime.avgH`, st.avgH]], t('stageTimeRight', { n: st.n, t: fmtHours(t, st.avgH) }))}</div>`
+  return block(t('stageTimeTitle'), head
+    + shareBar(shown.map(x => ({ share: x.s.share, color: FLOW_COLOR[x.s.stage] })))
+    + line(esc(t('stageTimeSplit', { work: pct(work), wait: pct(1 - work), stage: t(`flow.${longest.s.stage}`) })))
+    + rows(shown.map(({ s, i }) => row(
+      `${dot(FLOW_COLOR[s.stage])}${esc(t(`flow.${s.stage}`))}`,
+      `${num(`${at}.stageTime.stages.${i}.avgH`, s.avgH, fmtHours(t, s.avgH))} · ${num(`${at}.stageTime.stages.${i}.share`, s.share, pct(s.share))}`,
+    )).join('')))
+}
+
 /** 월간·연간: 사람 시간 비중 추이(화면 ShareTrendSection 의 숫자판) — 달마다 상위 3개 프로젝트 */
 function shareTrendBlock(t: T, m: ReportModel): string {
   const months = m.months ?? []
@@ -251,6 +284,7 @@ function execBlocks(t: T, m: ReportModel, money: (usd: number) => string, prevLa
   out.push(block(t('mail.execDone'), `<div style="font-size:28px;line-height:1.1">${num('closed.done.total', d.total, t('countN', { n: d.total }))}${deltaSpan(d.total, ['closed.done.prevTotal', d.prevTotal], true)}</div>${bars}` + rows(
     row(esc(t('leadMedian')), num('closed.done.leadMedianH', d.leadMedianH, fmtHours(t, d.leadMedianH))),
   )))
+  out.push(stageTimeBlock(t, m))
   const c = m.cost
   out.push(block(t('costTitle'), rows(
     row(esc(t('humanHours')), c.humanHours > 0 ? nums([['closed.cost.humanHours', c.humanHours], ['closed.cost.people', c.people]], t('hoursPeople', { h: Math.round(c.humanHours), p: c.people })) : esc(t('noRecord'))) +
@@ -351,6 +385,7 @@ export function renderReportMail(input: RenderInput): { subject: string; html: s
     if (now) { parts.push(heldBlock(t, now, 'now', prevLabel)); parts.push(actionsBlock(t, now)); parts.push(peopleBlock(t, now)) }
     parts.push(projectsBlock(t, closed))
     parts.push(doneBlock(t, closed, prevLabel))
+    parts.push(stageTimeBlock(t, closed))
   } else {
     parts.push(execBlocks(t, closed, input.money, prevLabel))
   }

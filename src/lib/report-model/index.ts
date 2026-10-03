@@ -6,7 +6,7 @@
  * 확정본은 종전 보고서와 섞이지 않도록 보고서 종류 뒤에 판(@v2)을 붙여 저장한다.
  */
 import { getReportSnapshot, putReportSnapshot, deleteReportSnapshot, getDb } from '../db'
-import { buildReportModel } from './build'
+import { buildReportModel, stageTimeForPeriod } from './build'
 import { periodOf, isClosed, addDays, kstToday, FINALIZE_AFTER_DAYS, type ReportType } from './period'
 import type { Scope } from './load'
 import type { ReportModel } from './types'
@@ -35,6 +35,14 @@ function withProjectColors(model: ReportModel): ReportModel {
 }
 
 /**
+ * 단계별 시간이 생기기 전에 확정된 보고서 — 읽을 때 채운다(저장본은 그대로 둔다).
+ * 근거인 실행 기록은 지난 기간에 대해 바뀌지 않으므로 확정 당시 계산과 같은 값이다.
+ */
+function withStageTime(model: ReportModel, scope: Scope, type: ReportType, day: string): ReportModel {
+  return model.stageTime ? model : { ...model, stageTime: stageTimeForPeriod(scope, type, day) }
+}
+
+/**
  * 보고서 모델을 얻는다. 끝나고 FINALIZE_AFTER_DAYS 가 지난 기간은 확정본(없으면 지금 계산해 확정),
  * 그 전(진행 중·막 끝남)은 매번 계산한다. 막 끝나 아직 확정 전인 기간은 provisional(잠정)로 표시한다.
  */
@@ -43,12 +51,12 @@ export function getReportModel(scope: Scope, type: ReportType, day: string, now:
   const owner = scope ?? GLOBAL_SCOPE
   if (isClosed(p, now) && kstToday(now) >= addDays(p.end, FINALIZE_AFTER_DAYS)) {
     const snap = getReportSnapshot(owner, snapKind(type), p.start, p.end)
-    if (snap) return { ...withProjectColors(snap.payload as ReportModel), snapshotAt: snap.generatedAt }
+    if (snap) return { ...withStageTime(withProjectColors(snap.payload as ReportModel), scope, type, day), snapshotAt: snap.generatedAt }
     const model = buildReportModel(scope, type, day, now)
     const at = putReportSnapshot(owner, snapKind(type), p.start, p.end, model)
     // 동시에 두 번 계산됐으면 먼저 저장된 쪽이 확정본이다 — 그것을 다시 읽어 돌려준다
     const saved = getReportSnapshot(owner, snapKind(type), p.start, p.end)
-    return saved ? { ...withProjectColors(saved.payload as ReportModel), snapshotAt: saved.generatedAt } : { ...model, snapshotAt: at }
+    return saved ? { ...withStageTime(withProjectColors(saved.payload as ReportModel), scope, type, day), snapshotAt: saved.generatedAt } : { ...model, snapshotAt: at }
   }
   const model = buildReportModel(scope, type, day, now)
   return isClosed(p, now) ? { ...model, provisional: true } : model

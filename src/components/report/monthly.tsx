@@ -5,8 +5,8 @@
  */
 import type { ReactNode } from 'react'
 import type { MonthPoint, Risks, Held, Evaluation, Grade } from '@/lib/report-model/types'
-import { GRADES } from '@/lib/report-model/types'
-import { Card, SectionTitle, PersonFace } from './sections'
+import { GRADES, FLOW_STAGES } from '@/lib/report-model/types'
+import { Card, SectionTitle, PersonFace, STAGE_BAR } from './sections'
 import { MonthBars } from './charts'
 import { fmtHours, pct, MIN_SAMPLE, projectSwatchStyles, OTHERS_ID, type Tr } from './format'
 
@@ -96,6 +96,38 @@ export function ShareTrendSection({ months, tr }: { months: MonthPoint[]; tr: Tr
           m1: Number(first.label.slice(5, 7)), m2: Number(ref.label.slice(5, 7)),
         })}</span>
       )}
+    </Card>
+  )
+}
+
+/** 달마다 끝낸 일의 단계별 시간 비중 — 색은 「어디서 시간이 걸렸나」와 같은 단계색(범례 1:1) */
+export function StageTrendSection({ months, tr }: { months: MonthPoint[]; tr: Tr }) {
+  if (!months.some(m => m.stageShares?.length)) return null
+  const used = FLOW_STAGES.filter(st => months.some(m => (m.stageShares?.find(s => s.stage === st)?.share ?? 0) > 0))
+  const cols = { gridTemplateColumns: `repeat(${months.length}, minmax(0, 1fr))` }
+  return (
+    <Card>
+      <SectionTitle>{tr('stageTrendTitle', { n: months.length })}</SectionTitle>
+      <div className="grid gap-2 h-28" style={cols}>
+        {months.map(m => (
+          <div key={m.start} className="flex flex-col-reverse gap-0.5 h-full">
+            {!m.stageShares?.length
+              ? <div className="h-full rounded-lg border border-dashed border-ive-border" />
+              : used.map(st => {
+                const v = m.stageShares!.find(s => s.stage === st)?.share ?? 0
+                return v > 0 && <div key={st} title={`${tr(`flow.${st}`)} ${pct(v)}`} className={STAGE_BAR[st]} style={{ flexGrow: v, flexBasis: 0 }} />
+              })}
+          </div>
+        ))}
+      </div>
+      <div className="grid gap-2 text-center text-xs font-bold text-ive-text-muted" style={cols}>
+        {months.map(m => <span key={m.start}>{tr('monthShort', { m: Number(m.label.slice(5, 7)) })}</span>)}
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-bold text-ive-text-secondary">
+        {used.map(st => (
+          <span key={st} className="inline-flex items-center gap-1"><span className={`w-2 h-2 rounded-full shrink-0 ${STAGE_BAR[st]}`} />{tr(`flow.${st}`)}</span>
+        ))}
+      </div>
     </Card>
   )
 }

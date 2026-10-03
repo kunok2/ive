@@ -18,10 +18,10 @@ import { useTab } from '@/lib/tab-context'
 import type { ReportModel, HeldIssue } from '@/lib/report-model/types'
 import { periodOf, previousPeriod, nextPeriod, addDays, FINALIZE_AFTER_DAYS, type ReportType } from '@/lib/report-model/period'
 import {
-  HeldCard, ActionCards, WhereSection, PeopleSection, ProjectsSection, DoneSection, CostSection, CompletedList, MineSection, Card, SectionTitle,
+  HeldCard, ActionCards, WhereSection, PeopleSection, ProjectsSection, DoneSection, StageTimeSection, CostSection, CompletedList, MineSection, Card, SectionTitle,
 } from '@/components/report/sections'
 import { TrendCompare, HeldCompare } from '@/components/report/charts'
-import { MonthsSection, ShareTrendSection, RiskSection, EvaluationSection } from '@/components/report/monthly'
+import { MonthsSection, ShareTrendSection, StageTrendSection, RiskSection, EvaluationSection } from '@/components/report/monthly'
 import type { Tr } from '@/components/report/format'
 
 const USD_CURRENCY: ResolvedCurrency = { code: 'USD', rate: 1, source: 'usd', updatedAt: null }
@@ -197,6 +197,8 @@ export default function ReportsTab() {
               <ErrorBoundary label={tr('projectsTitle')}><ProjectsSection projects={model.projects} cost={model.cost} tr={tr} prevLabel={prevLabel} /></ErrorBoundary>
               {model.months && <ErrorBoundary label={tr('shareTrendTitle', { n: 6 })}><ShareTrendSection months={model.months} tr={tr} /></ErrorBoundary>}
               <ErrorBoundary label={tr('doneTitle')}><DoneSection done={model.done} tr={tr} prevLabel={prevLabel} /></ErrorBoundary>
+              <ErrorBoundary label={tr('stageTimeTitle')}><StageTimeSection st={model.stageTime} tr={tr} prevLabel={prevLabel} /></ErrorBoundary>
+              {model.months && <ErrorBoundary label={tr('stageTrendTitle', { n: 6 })}><StageTrendSection months={model.months} tr={tr} /></ErrorBoundary>}
               <ErrorBoundary label={tr('compareTitle', { label: prevLabel })}>
                 <Card>
                   <SectionTitle>{tr('compareTitle', { label: prevLabel })}</SectionTitle>
@@ -208,8 +210,8 @@ export default function ReportsTab() {
               </ErrorBoundary>
               <ErrorBoundary label={tr('costTitle')}><CostSection cost={model.cost} tr={tr} fmtMoney={fmtMoney} prevLabel={prevLabel} /></ErrorBoundary>
               {model.evaluation && <ErrorBoundary label={tr('evalTitle')}><EvaluationSection ev={model.evaluation} avatars={model.avatars} tr={tr} /></ErrorBoundary>}
-              {/* 완료한 일은 펼치면 수십 줄 — 다단 안에 두면 단 높이를 맞추느라 카드가 2단으로 몰린다. PC 폭에서는 3단 전체 폭을 쓴다 */}
-              <div className="desk:[column-span:all]"><ErrorBoundary label={tr('completedList')}><CompletedList items={model.completedList} tr={tr} /></ErrorBoundary></div>
+              {/* 완료한 일은 펼치면 수십 줄 — PC 폭에서는 목록이 카드 안에서 스크롤되어(CompletedList) 다단의 다른 카드를 밀어내지 않는다 */}
+              <ErrorBoundary label={tr('completedList')}><CompletedList items={model.completedList} tr={tr} /></ErrorBoundary>
               {model.type === 'weekly' && (
                 <button onClick={() => setType('monthly')} className="bg-ive-bg-card border border-ive-border-subtle rounded-lg min-h-12 px-4 flex items-center justify-between text-sm font-bold text-ive-text">
                   <span>{tr('evalTitle')}</span>

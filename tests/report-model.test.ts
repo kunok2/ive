@@ -443,3 +443,75 @@ describe('리뷰에서 찾은 결함 — 회귀 방지', () => {
     } finally { vi.useRealTimers() }
   })
 })
+
+describe('단계별 시간 — 어디서 시간이 걸렸나', () => {
+  const byStage = (m: ReturnType<typeof buildReportModel>) => Object.fromEntries(m.stageTime!.stages.map(s => [s.stage, s.avgH]))
+
+  it('접수 → 완료를 실행 기록으로 나누고, 단계 합은 처리 기간이다', () => {
+    seedWeek()
+    const m = buildReportModel('u-lead', 'weekly', '2026-10-02', NOW)
+    // #2: 접수 9/26 09 · 처리 10~11 · 검증 9/29 09~10 · 확인 완료 12:00 (직접 처리 #4 는 재지 않는다)
+    expect(m.stageTime!.n).toBe(1)
+    const h = byStage(m)
+    expect(h.waiting).toBeCloseTo(1)
+    expect(h.dev).toBeCloseTo(1)
+    expect(h.verify_waiting).toBeCloseTo(70)
+    expect(h.verifying).toBeCloseTo(1)
+    expect(h.confirm_waiting).toBeCloseTo(2)
+    expect(h.confirming).toBeCloseTo(0)
+    expect(m.stageTime!.avgH).toBeCloseTo(m.done.leadMedianH!)
+    expect(m.stageTime!.stages.reduce((s, x) => s + x.share, 0)).toBeCloseTo(1)
+  })
+
+  it('반려되면 처리 대기로 돌아가고, 확인 기록이 열린 동안은 확인이다', () => {
+    seedBase()
+    const t = (s: string) => iso(kst(`2026-09-30T${s}:00`))
+    stage('p1', 7, 'done', { scheduled_at: t('09:00'), confirmed_at: t('18:00') })
+    exec({ id: 'ex-7a', project_id: 'p1', agent_id: 'a1', assignee_type: 'agent', issue_iid: 7, status: 'success', started_at: t('10:00'), ended_at: t('11:00'), rejected_at: t('12:00') })
+    exec({ id: 'ex-verify-7a', project_id: 'p1', issue_iid: 7, assignee_type: 'user', user_id: 'u-lee', status: 'failed', started_at: t('11:30'), ended_at: t('12:00'), rejected_at: t('12:00') })
+    exec({ id: 'ex-7b', project_id: 'p1', agent_id: 'a1', assignee_type: 'agent', issue_iid: 7, status: 'success', started_at: t('13:00'), ended_at: t('14:00'), verified_at: t('15:00') })
+    exec({ id: 'ex-verify-7b', project_id: 'p1', issue_iid: 7, assignee_type: 'user', user_id: 'u-lee', status: 'success', started_at: t('14:00'), ended_at: t('15:00'), verified_at: t('15:00') })
+    exec({ id: 'ex-confirm-7', project_id: 'p1', issue_iid: 7, assignee_type: 'user', user_id: 'u-lead', status: 'success', started_at: t('17:00'), ended_at: t('18:00') })
+    const h = byStage(buildReportModel('u-lead', 'weekly', '2026-10-02', NOW))
+    expect(h.waiting).toBeCloseTo(2)          // 09~10 접수 대기 + 12~13 반려 후
+    expect(h.dev).toBeCloseTo(2)              // 10~11, 13~14
+    expect(h.verify_waiting).toBeCloseTo(0.5) // 11~11:30
+    expect(h.verifying).toBeCloseTo(1.5)      // 11:30~12, 14~15
+    expect(h.confirm_waiting).toBeCloseTo(2)  // 15~17
+    expect(h.confirming).toBeCloseTo(1)       // 17~18
+  })
+
+  it('지난 기간 값과 월별 비중을 함께 낸다', () => {
+    seedWeek()
+    const m = buildReportModel('u-lead', 'monthly', '2026-09-30', NOW)
+    expect(m.stageTime!.n).toBe(1) // #2 (9/29 완료)
+    const sep = m.months!.find(x => x.label === '2026-09')!
+    expect(sep.stageShares!.find(s => s.stage === 'verify_waiting')!.share).toBeCloseTo(70 / 75)
+    const next = buildReportModel('u-lead', 'monthly', '2026-10-02', NOW)
+    expect(next.stageTime!.prevN).toBe(1)
+    expect(next.stageTime!.prevStages!.find(s => s.stage === 'verify_waiting')!.avgH).toBeCloseTo(70)
+  })
+
+  it('메일의 단계별 숫자는 모델 값이다', () => {
+    seedWeek()
+    const now = buildReportModel('u-lead', 'weekly', '2026-10-02', NOW)
+    const { html } = renderReportMail({ kind: 'lead', closed: now, now, money: v => `$${v}`, baseUrl: '', recipient: { userId: 'u-lead', name: '정팀장', locale: 'ko' } })
+    const st = now.stageTime!
+    const i = st.stages.findIndex(s => s.stage === 'verify_waiting')
+    expect(html).toContain(`data-metric="closed.stageTime.stages.${i}.avgH" data-value="${st.stages[i].avgH}"`)
+    expect(html).toContain(`data-metric="closed.stageTime.stages.${i}.share" data-value="${st.stages[i].share}"`)
+    expect(html).toContain('가장 오래 머문 곳은 검증 대기')
+  })
+
+  it('단계별 시간이 생기기 전 확정본은 읽을 때 채운다', () => {
+    seedWeek()
+    const first = getReportModel('u-lead', 'weekly', '2026-09-29', new Date('2026-10-09T00:00:00Z'))
+    const row = db.prepare(`SELECT id, payload FROM report_snapshots`).get() as { id: string; payload: string }
+    const legacy = JSON.parse(row.payload)
+    delete legacy.stageTime
+    db.prepare(`UPDATE report_snapshots SET payload = ? WHERE id = ?`).run(JSON.stringify(legacy), row.id)
+    const again = getReportModel('u-lead', 'weekly', '2026-09-29', new Date('2026-10-09T00:00:00Z'))
+    expect(again.snapshotAt).toBe(first.snapshotAt)
+    expect(again.stageTime).toEqual(first.stageTime)
+  })
+})
