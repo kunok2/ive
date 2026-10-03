@@ -35,6 +35,8 @@ interface ProjectAgent {
 }
 
 interface BottomInputAreaProps {
+  /** 폭 제한 클래스 — 옆 칸이면 칸 전체 폭 */
+  widthCls?: string
   issue: IssueDetail
   mode: 'comment' | 'chat'
   canProgressStage: boolean
@@ -76,6 +78,7 @@ interface BottomInputAreaProps {
 }
 
 export default function BottomInputArea({
+  widthCls = 'max-w-lg desk:max-w-3xl',
   issue, mode, canProgressStage, projectId,
   comment, commentKey, posting, postingType,
   chatSessionId, chatHistoryOnly, chatStarting, chatSending, chatInput, chatImages, chatAgentName,
@@ -98,7 +101,7 @@ export default function BottomInputArea({
   }), [projectId, commentKey, onSetComment, onToast])
 
   return (
-    <div className="shrink-0 px-3 pb-20 pad:pb-4 pt-2 border-t border-ive-border-dark bg-ive-bg-deep max-w-lg desk:max-w-3xl mx-auto w-full">
+    <div className={`shrink-0 px-3 pb-20 pad:pb-4 pt-2 border-t border-ive-border-dark bg-ive-bg-deep ${widthCls} mx-auto w-full`}>
       {/* Mode tabs */}
       <ModeTabs
         issue={issue}

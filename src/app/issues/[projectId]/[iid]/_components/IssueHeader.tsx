@@ -84,7 +84,10 @@ interface IssueHeaderProps {
     preferredAgentAvatar: string | null
     preferredAgentCliName: string | null
   } | null
-  onBack: () => void
+  /** 없으면 ← 버튼을 그리지 않는다(넓은 화면 작업 탭의 옆 칸 — 목록이 옆에 있다) */
+  onBack?: () => void
+  /** 폭 제한 클래스 — 옆 칸이면 칸 전체 폭 */
+  widthCls?: string
   onStageAction: (action: string) => void
   onCloseIssue: () => void
   onStartEdit: () => void
@@ -109,7 +112,7 @@ export default function IssueHeader({
   issue, iterationCount,
   canEditAssignees, isClosing, editMode, editTitle, editDesc, saving, showDesc,
   projectId, gitMembers, confirmerMembers, roleAgents, preferredAgent,
-  onBack, onCloseIssue, onStartEdit, onSaveEdit, onCancelEdit,
+  onBack, widthCls = 'max-w-lg desk:max-w-3xl', onCloseIssue, onStartEdit, onSaveEdit, onCancelEdit,
   onSetEditTitle, onSetEditDesc, onSetShowDesc, onOpenAssigneePicker, onOpenAgentPicker,
   onPresetVerifierChange, onPresetConfirmerChange, onDueDateChange, isCreator, onToast,
 }: IssueHeaderProps) {
@@ -133,11 +136,13 @@ export default function IssueHeader({
   }), [projectId, onSetEditDesc, onToast])
 
   return (
-    <header className="sticky top-0 z-40 w-full max-w-lg desk:max-w-3xl mx-auto bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark shrink-0">
+    <header className={`sticky top-0 z-40 w-full ${widthCls} mx-auto bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark shrink-0`}>
       <div className="flex items-center gap-2 px-3 py-2">
-        <button onClick={onBack} className="text-ive-green font-bold p-1 hover:bg-ive-green/5 rounded shrink-0">
-          <i className="fa-solid fa-arrow-left" />
-        </button>
+        {onBack && (
+          <button onClick={onBack} className="text-ive-green font-bold p-1 hover:bg-ive-green/5 rounded shrink-0">
+            <i className="fa-solid fa-arrow-left" />
+          </button>
+        )}
         <span className="text-base font-bold text-ive-green shrink-0">#{issue.iid}</span>
         {iterationCount > 0 && (
           <span className="text-xs font-bold px-1.5 py-0.5 rounded border bg-ive-cyan/10 text-ive-cyan border-ive-cyan/20 shrink-0" title={tIssue('iterationCount', { count: iterationCount })}>

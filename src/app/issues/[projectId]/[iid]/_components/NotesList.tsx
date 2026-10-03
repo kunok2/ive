@@ -53,6 +53,8 @@ interface ChatMessage {
 }
 
 interface NotesListProps {
+  /** 폭 제한 클래스 — 옆 칸이면 칸 전체 폭 */
+  widthCls?: string
   issue: IssueDetail
   notes: Note[]
   notesLoading: boolean
@@ -82,6 +84,7 @@ interface NotesListProps {
 }
 
 export default function NotesList({
+  widthCls = 'max-w-lg desk:max-w-3xl',
   issue, notes, notesLoading, loading, showDesc, canProgressStage,
   projectId, iid,
   mode, chatSessionId, chatHistoryOnly, chatMessages, chatAgentName, chatAgentAvatar,
@@ -94,7 +97,7 @@ export default function NotesList({
   const tIssue = useTranslations('issue')
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 max-w-lg desk:max-w-3xl mx-auto w-full">
+    <div className={`flex-1 flex flex-col min-h-0 ${widthCls} mx-auto w-full`}>
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto pb-2 pl-3 pr-1">
         <PullToRefresh onRefresh={onRefreshAll} scrollContainerRef={scrollContainerRef}>
           {/* 이슈 본문 - 스크롤 영역 안에 배치 */}

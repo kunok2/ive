@@ -111,7 +111,9 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
   onClose?: () => void
 }) {
   const router = useRouter()
-  const goBack = () => { if (embedded) onClose?.(); else goBack() }
+  const goBack = () => { if (embedded) onClose?.(); else router.back() }
+  // 넓은 화면 작업 탭의 옆 칸이면 칸 전체 폭을 쓰고 ← 를 그리지 않는다(목록이 바로 옆에 있다)
+  const widthCls = embedded ? 'max-w-none' : 'max-w-lg desk:max-w-3xl'
   const { confirm } = useDialog()
   const { toast } = useToast()
   const { state } = useStore()
@@ -929,11 +931,13 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
   if (!loading && !issue) {
     return (
       <div className="h-full flex flex-col">
-        <header className="sticky top-0 z-40 w-full max-w-lg desk:max-w-3xl mx-auto bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark shrink-0">
+        <header className={`sticky top-0 z-40 w-full ${widthCls} mx-auto bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark shrink-0`}>
           <div className="flex items-center gap-2 px-3 py-2">
-            <button onClick={() => goBack()} className="text-ive-green font-bold p-1 hover:bg-ive-green/5 rounded shrink-0">
-              <i className="fa-solid fa-arrow-left" />
-            </button>
+            {!embedded && (
+              <button onClick={() => goBack()} className="text-ive-green font-bold p-1 hover:bg-ive-green/5 rounded shrink-0">
+                <i className="fa-solid fa-arrow-left" />
+              </button>
+            )}
             <span className="text-base font-bold text-ive-text-muted shrink-0">#{iid}</span>
           </div>
         </header>
@@ -986,7 +990,8 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
         confirmerMembers={confirmerMembers}
         roleAgents={roleAgents}
         preferredAgent={preferredAgent}
-        onBack={() => goBack()}
+        onBack={embedded ? undefined : () => goBack()}
+        widthCls={widthCls}
         onStageAction={handleStageAction}
         onCloseIssue={handleCloseIssue}
         onStartEdit={startEdit}
@@ -1051,7 +1056,7 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
       />
 
       {myStart && (
-        <div className="shrink-0 w-full max-w-lg desk:max-w-3xl mx-auto px-3 pt-2">
+        <div className={`shrink-0 w-full ${widthCls} mx-auto px-3 pt-2`}>
           <div className="flex items-center gap-3 rounded-lg bg-ive-bg-card border border-ive-border-subtle px-3 py-2">
             <i className={`fa-solid ${myStart.action === 'start_verification' ? 'fa-user-check text-ive-stage-verify' : 'fa-circle-check text-ive-stage-confirm'}`} />
             <span className="flex-1 min-w-0 text-sm font-bold text-ive-text-secondary">{myStart.text}</span>
@@ -1067,6 +1072,7 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
       )}
 
       <NotesList
+        widthCls={widthCls}
         issue={issue}
         notes={notes}
         notesLoading={notesLoading}
@@ -1100,6 +1106,7 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
       />
 
       <BottomInputArea
+        widthCls={widthCls}
         issue={issue}
         mode={mode}
         canProgressStage={canProgressStage}
