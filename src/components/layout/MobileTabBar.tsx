@@ -33,8 +33,8 @@ export function useMainTabs() {
 }
 
 /**
- * 하단 탭. 화면마다 붙인 것은 폰 폭 전용(PC 폭은 세로 메뉴가 대신한다).
- * deskOnly: 사용자가 메뉴 위치를 「아래」로 고른 경우 레이아웃(ClientLayout)이 PC 폭 전용으로 한 번 그린다 — 세로 메뉴처럼 모든 화면에 같이 보인다.
+ * 하단 탭. 화면마다 붙인 것은 폰 폭 전용(패드·PC 폭은 사용자 설정 위치의 메뉴가 대신한다).
+ * deskOnly: 사용자가 메뉴 위치를 「아래」로 고른 경우 레이아웃(ClientLayout)이 패드·PC 폭 전용으로 한 번 그린다 — 모든 화면에 같이 보인다.
  */
 export default function MobileTabBar({ deskOnly = false }: { deskOnly?: boolean }) {
   const { tabs, activeTab, go, navLabel } = useMainTabs()
@@ -42,7 +42,7 @@ export default function MobileTabBar({ deskOnly = false }: { deskOnly?: boolean 
   if (deskOnly && (!state.authChecked || !state.user)) return null
 
   return (
-    <nav className={`${deskOnly ? 'hidden desk:block ' : 'desk:hidden '}fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg z-40 bg-ive-bg-deep/95 backdrop-blur-sm border-t border-ive-border-dark min-[512px]:rounded-t-2xl`} aria-label={navLabel}>
+    <nav className={`${deskOnly ? 'hidden pad:block ' : 'pad:hidden '}fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg z-40 bg-ive-bg-deep/95 backdrop-blur-sm border-t border-ive-border-dark min-[512px]:rounded-t-2xl`} aria-label={navLabel}>
       <div className="flex justify-around items-start pt-2 h-16">
         {tabs.map(tab => (
           <button

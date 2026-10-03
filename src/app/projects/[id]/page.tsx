@@ -179,7 +179,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
       <div className="flex-1 min-h-0 w-full max-w-lg desk:max-w-6xl mx-auto flex flex-col overflow-hidden">
       <div className="flex-1 min-h-0 overflow-y-auto pl-3 pr-1">
-      <main className="pt-4 pb-20 desk:pb-6">
+      <main className="pt-4 pb-20 pad:pb-6">
         {/* 프로젝트 정보 헤더 */}
         <div
           className="bg-ive-bg-card rounded-lg p-5 border border-ive-border-subtle mb-6 relative overflow-hidden group"

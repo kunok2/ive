@@ -16,7 +16,8 @@ export function mapUser(r: any): User {
     allowedClis: parseAllowedClis(r.allowed_clis) as User['allowedClis'],
     locale: r.locale,
     timezone: r.timezone,
-    navPosition: r.nav_position === 'right' || r.nav_position === 'bottom' ? r.nav_position : 'left',
+    // 고른 적 없으면(NULL) 위(상단바 가운데)
+    navPosition: r.nav_position === 'left' || r.nav_position === 'right' || r.nav_position === 'bottom' ? r.nav_position : 'top',
     currency: r.currency ?? null,
     currencyRate: r.currency_rate ?? null,
     gitlabUsername: r.gitlab_username ?? null,

@@ -172,7 +172,7 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
 
       {/* 항상 보이는 하단 액션 바 — 스크롤과 무관 */}
       {!loading && !error && (
-        <div className="shrink-0 px-3 pt-3 pb-20 desk:pb-6 bg-ive-bg-deep border-t border-ive-border-dark">
+        <div className="shrink-0 px-3 pt-3 pb-20 pad:pb-6 bg-ive-bg-deep border-t border-ive-border-dark">
           {mergeError && (
             <div className="mb-3 text-sm text-ive-red bg-ive-red/10 rounded-lg px-3 py-2 border border-ive-red/20">
               <i className="fa-solid fa-circle-exclamation mr-1" />{mergeError}

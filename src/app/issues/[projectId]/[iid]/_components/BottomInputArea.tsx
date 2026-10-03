@@ -98,7 +98,7 @@ export default function BottomInputArea({
   }), [projectId, commentKey, onSetComment, onToast])
 
   return (
-    <div className="shrink-0 px-3 pb-20 desk:pb-4 pt-2 border-t border-ive-border-dark bg-ive-bg-deep max-w-lg desk:max-w-3xl mx-auto w-full">
+    <div className="shrink-0 px-3 pb-20 pad:pb-4 pt-2 border-t border-ive-border-dark bg-ive-bg-deep max-w-lg desk:max-w-3xl mx-auto w-full">
       {/* Mode tabs */}
       <ModeTabs
         issue={issue}

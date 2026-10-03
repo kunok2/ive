@@ -75,7 +75,7 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
   const [activeSection, setActiveSection] = useState<ActiveSection>('none')
   const [selectedLocale, setSelectedLocale] = useState<Locale>((userLocale || currentLocale) as Locale)
   const [selectedTimezone, setSelectedTimezone] = useState(userTimezone || 'Asia/Seoul')
-  const [selectedNav, setSelectedNav] = useState<NavPosition>(userNavPosition || 'left')
+  const [selectedNav, setSelectedNav] = useState<NavPosition>(userNavPosition || 'top')
   const [selectedCurrency, setSelectedCurrency] = useState(userCurrency || 'USD')
   const [manualRate, setManualRate] = useState<string>(userCurrencyRate != null ? String(userCurrencyRate) : '')
   const [autoRate, setAutoRate] = useState<{ rate: number; updatedAt: string | null } | null>(null)
@@ -817,7 +817,7 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
                         : 'bg-ive-bg-deep border border-ive-border-subtle text-ive-text-dim hover:border-ive-green/30'
                     }`}
                   >
-                    <i className={`fa-solid ${pos === 'left' ? 'fa-arrow-left' : pos === 'right' ? 'fa-arrow-right' : 'fa-arrow-down'} mr-1.5 text-xs`} />
+                    <i className={`fa-solid ${pos === 'top' ? 'fa-arrow-up' : pos === 'left' ? 'fa-arrow-left' : pos === 'right' ? 'fa-arrow-right' : 'fa-arrow-down'} mr-1.5 text-xs`} />
                     {t(`navPosition_${pos}`)}
                   </button>
                 ))}

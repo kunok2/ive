@@ -75,7 +75,7 @@ export default function ProjectsTab({ onAdd }: { onAdd?: () => void }) {
     <PullToRefresh onRefresh={refresh} className="w-full flex-1 flex flex-col max-w-lg mx-auto px-4 overflow-hidden">
       <div className="shrink-0 pt-4" />
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="pb-20 desk:pb-6">
+        <div className="pb-20 pad:pb-6">
           {state.loading ? loading : state.projects.length === 0 ? empty : (
             <div className="flex flex-col gap-3">
               {state.projects.map(project => (

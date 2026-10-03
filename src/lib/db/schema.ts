@@ -296,7 +296,7 @@ export function initSchema(db: Database.Database) {
     if (!tableInfo.some((col: any) => col.name === 'terms_agreed_at')) {
       db.exec("ALTER TABLE users ADD COLUMN terms_agreed_at TEXT")
     }
-    // PC 폭의 주 메뉴 위치 — 'left'(기본) | 'right' | 'bottom'. NULL = 왼쪽. 폰 폭은 늘 하단 탭
+    // 패드·PC 폭(768px~)의 주 메뉴 위치 — 'top'(기본) | 'bottom' | 'left' | 'right'. NULL = 위(상단바 가운데). 폰 폭은 늘 하단 탭
     if (!tableInfo.some((col: any) => col.name === 'nav_position')) {
       db.exec("ALTER TABLE users ADD COLUMN nav_position TEXT")
     }

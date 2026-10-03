@@ -107,7 +107,7 @@ export default function IssueList({
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar" data-scroll-container="issues-list">
-      <div className="pb-20 desk:pb-6">
+      <div className="pb-20 pad:pb-6">
         {headerSlot}
         {(isHistoryTab ? closedLoading : loading) && (isHistoryTab ? closedIssues : issues).length === 0 ? (
           <div className="text-center py-20 text-ive-text-muted">{tIssue('loadingIssues')}</div>

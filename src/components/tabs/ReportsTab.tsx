@@ -174,7 +174,7 @@ export default function ReportsTab() {
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="pb-20 desk:pb-6">
+        <div className="pb-20 pad:pb-6">
           {loading && <div className="flex flex-col items-center justify-center py-10 gap-3 text-ive-text-secondary"><i className="fa-solid fa-circle-notch fa-spin text-2xl" />{tr('loadingCompact')}</div>}
           {!loading && error && (
             <div className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-4 text-sm font-bold text-ive-text flex flex-col gap-2">
@@ -207,7 +207,8 @@ export default function ReportsTab() {
               </ErrorBoundary>
               <ErrorBoundary label={tr('costTitle')}><CostSection cost={model.cost} tr={tr} fmtMoney={fmtMoney} prevLabel={prevLabel} /></ErrorBoundary>
               {model.evaluation && <ErrorBoundary label={tr('evalTitle')}><EvaluationSection ev={model.evaluation} avatars={model.avatars} tr={tr} /></ErrorBoundary>}
-              <ErrorBoundary label={tr('completedList')}><CompletedList items={model.completedList} tr={tr} /></ErrorBoundary>
+              {/* 완료한 일은 펼치면 수십 줄 — 다단 안에 두면 단 높이를 맞추느라 카드가 2단으로 몰린다. PC 폭에서는 3단 전체 폭을 쓴다 */}
+              <div className="desk:[column-span:all]"><ErrorBoundary label={tr('completedList')}><CompletedList items={model.completedList} tr={tr} /></ErrorBoundary></div>
               {model.type === 'weekly' && (
                 <button onClick={() => setType('monthly')} className="bg-ive-bg-card border border-ive-border-subtle rounded-lg min-h-12 px-4 flex items-center justify-between text-sm font-bold text-ive-text">
                   <span>{tr('evalTitle')}</span>

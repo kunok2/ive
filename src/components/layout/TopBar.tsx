@@ -7,6 +7,7 @@ import { useTab, tabForPath } from '@/lib/tab-context'
 import { useDialog } from '@/components/ui/ConfirmDialog'
 import { useTranslations } from 'next-intl'
 import { DEFAULT_AVATARS } from '@/types'
+import { useMainTabs } from '@/components/layout/MobileTabBar'
 import UserProfileForm from '@/components/auth/UserProfileForm'
 import ProjectForm from '@/components/project/ProjectForm'
 import AgentForm from '@/components/agent/AgentForm'
@@ -21,6 +22,8 @@ export default function TopBar() {
   const pathname = usePathname()
   const { state, logout, refreshUser } = useStore()
   const { activeTab, setActiveTab, issuesProjectId } = useTab()
+  // 메뉴 위치 「위」(기본) — PC 폭에서 상단바 가운데에 주 메뉴. 탭 목록·이동은 하단 탭·세로 메뉴와 같은 것
+  const mainTabs = useMainTabs()
   const { alert: showAlert, confirm: showConfirm } = useDialog()
   const tn = useTranslations('nav')
   const tc = useTranslations('common')
@@ -82,8 +85,8 @@ export default function TopBar() {
 
   return (
     <>
-      <header className="shrink-0 z-40 w-full max-w-lg mx-auto bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark min-[512px]:rounded-b-2xl desk:max-w-none desk:rounded-none">
-        <div className="px-4 py-3 flex items-center justify-between">
+      <header className="shrink-0 z-40 w-full max-w-lg mx-auto bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark min-[512px]:rounded-b-2xl pad:max-w-none pad:rounded-none">
+        <div className="px-4 py-3 flex items-center justify-between gap-3">
           <button
             onClick={() => router.push('/')}
             className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity"
@@ -96,6 +99,27 @@ export default function TopBar() {
               <p className="text-xs text-ive-text-dim mt-0.5">{tn((isMainPage ? activeTab : (tabForPath(pathname) ?? activeTab)) as 'projects' | 'agents' | 'issues' | 'reports' | 'admin')}</p>
             </div>
           </button>
+          {/* 메뉴 위치 「위」(기본) — 패드·PC 폭에서 로고와 오른쪽 버튼 사이 남은 자리 가운데 */}
+          {(state.user.navPosition ?? 'top') === 'top' && (
+            <nav aria-label={mainTabs.navLabel} className="hidden pad:flex flex-1 min-w-0 justify-center items-center gap-1">
+              {mainTabs.tabs.map(tab => (
+                <button
+                  key={tab.key}
+                  onClick={() => mainTabs.go(tab.key)}
+                  aria-current={mainTabs.activeTab === tab.key ? 'page' : undefined}
+                  title={tab.label}
+                  aria-label={tab.label}
+                  className={`h-9 px-2.5 desk:px-3 rounded-lg flex items-center gap-1.5 text-sm font-bold whitespace-nowrap transition-colors ${
+                    mainTabs.activeTab === tab.key ? 'text-ive-green bg-ive-green/10' : 'text-ive-text-dim hover:text-ive-text-secondary hover:bg-white/[0.03]'
+                  }`}
+                >
+                  <i className={`${tab.icon} text-base`} />
+                  {/* 패드 세로(768~1023px)는 자리가 모자라(영어 5개 기준 9px 넘침) 아이콘만 — 이름은 title·로고 아래 현재 메뉴로 */}
+                  <span className="hidden lg:inline">{tab.label}</span>
+                </button>
+              ))}
+            </nav>
+          )}
           <div className="flex items-center gap-1.5">
             {/* 메인 페이지 탭별 추가 버튼 */}
             {isMainPage && activeTab === 'projects' && (

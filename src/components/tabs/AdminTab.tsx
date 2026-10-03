@@ -61,7 +61,7 @@ export default function AdminTab() {
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="pb-20 desk:pb-6 min-h-full flex flex-col">
+        <div className="pb-20 pad:pb-6 min-h-full flex flex-col">
           {subTab === 'users' && <UsersPanel key={refreshKey} />}
           {subTab === 'mail' && <MailPanel key={refreshKey} />}
           {subTab === 'settings' && <SettingsHubPanel key={refreshKey} />}
