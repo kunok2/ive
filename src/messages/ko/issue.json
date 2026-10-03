@@ -41,14 +41,10 @@
   "reopenToWaiting": "확인대기로",
   "cancelToWaiting": "대기로 (취소)",
   "startVerification": "검증시작",
-  "startVerificationPopupTitle": "검증 시작",
-  "startVerificationPopupMessage": "이 작업의 검증을 지금 시작하시겠습니까?",
   "verifyRequest": "검증 요청",
   "approveVerify": "확인",
   "rejectVerify": "처리대기로",
   "startConfirmation": "확인 시작",
-  "startConfirmationPopupTitle": "확인 시작",
-  "startConfirmationPopupMessage": "이 작업의 확인을 지금 시작하시겠습니까?",
   "acceptConfirm": "완료",
   "returnToDev": "검증대기로",
   "cancelConfirmWait": "대기로 (취소)",
@@ -186,5 +182,7 @@
   "pickerPeople": "사람",
   "roleModeAgent": "에이전트",
   "detailPaneLabel": "작업 상세",
-  "detailPanePlaceholder": "작업을 고르면 여기에 열립니다"
+  "detailPanePlaceholder": "작업을 고르면 여기에 열립니다",
+  "myTurnVerify": "검증할 차례입니다",
+  "myTurnConfirm": "확인할 차례입니다"
 }

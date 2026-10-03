@@ -156,8 +156,6 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
   const [saving, setSaving] = useState(false)
 
   // --- MR action modal state ---
-  const verifyPopupShownRef = useRef(false)
-  const confirmPopupShownRef = useRef(false)
   const [mrActionModal, setMrActionModal] = useState<{
     mr: { iid: number; title: string; web_url: string; has_conflicts?: boolean }
     finalApprove: () => Promise<void>
@@ -873,11 +871,6 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
     requestAnimationFrame(() => notesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }))
   }, [notes])
 
-  // 이슈가 바뀌면 popup 표시 플래그 리셋
-  useEffect(() => { verifyPopupShownRef.current = false; confirmPopupShownRef.current = false }, [iid])
-  // stage 가 바뀔 때마다 팝업 ref 리셋 — 검증대기/확인대기 로 재진입 시 팝업 다시 뜸
-  useEffect(() => { verifyPopupShownRef.current = false; confirmPopupShownRef.current = false }, [issue?.stage])
-
   // 단계 시작 권한 — 검증자/확인자가 지정되었으면 그 사용자에게만, 미지정이면 작성자에게.
   //   1) 관리자: 항상
   //   2) preset.specific: 그 userId 가 현재 유저여야 함
@@ -906,24 +899,15 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
   const canStartConfirmation  = !!issue && canStartFor(issue.presetConfirmer ?? null, issue.actualConfirmer ?? null)
 
   // Verify-waiting popup — 이슈당 1회 자동 트리거
-  useEffect(() => {
-    // 검증을 에이전트가 맡은 이슈는 사람에게 시작 팝업을 띄우지 않는다(버튼으로 직접 시작은 가능)
-    if (loading || !issue || issue.stage !== 'verify_waiting' || !canStartVerification || issue.presetVerifier?.mode === 'agent' || verifyPopupShownRef.current) return
-    verifyPopupShownRef.current = true
-    confirm({ title: tIssue('startVerificationPopupTitle'), message: tIssue('startVerificationPopupMessage'), confirmText: tIssue('startVerification'), cancelText: tc('cancel'), variant: 'info' })
-      .then(ok => { if (ok) handleStageAction('start_verification') })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [issue, loading, canStartVerification])
-
-  // Confirm-waiting popup — 이슈당 1회 자동 트리거
-  useEffect(() => {
-    // 확인을 에이전트가 맡은 이슈는 사람에게 시작 팝업을 띄우지 않는다(staging 배포 후 에이전트가 시작)
-    if (loading || !issue || issue.stage !== 'confirm_waiting' || !canStartConfirmation || issue.presetConfirmer?.mode === 'agent' || confirmPopupShownRef.current) return
-    confirmPopupShownRef.current = true
-    confirm({ title: tIssue('startConfirmationPopupTitle'), message: tIssue('startConfirmationPopupMessage'), confirmText: tIssue('startConfirmation'), cancelText: tc('cancel'), variant: 'info' })
-      .then(ok => { if (ok) handleStageAction('start_confirmation') })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [issue, loading, canStartConfirmation])
+  // 내가 시작할 차례인 단계 — 확인창을 자동으로 띄우지 않고 머리줄 아래 안내 줄로 알린다(목록을 넘겨 볼 때 방해되지 않게).
+  // 에이전트가 맡은 단계는 사람에게 권하지 않는다(버튼으로 직접 시작은 가능)
+  const myStart: { action: 'start_verification' | 'start_confirmation'; text: string; button: string } | null =
+    loading || !issue ? null
+    : issue.stage === 'verify_waiting' && canStartVerification && issue.presetVerifier?.mode !== 'agent'
+      ? { action: 'start_verification', text: tIssue('myTurnVerify'), button: tIssue('startVerification') }
+    : issue.stage === 'confirm_waiting' && canStartConfirmation && issue.presetConfirmer?.mode !== 'agent'
+      ? { action: 'start_confirmation', text: tIssue('myTurnConfirm'), button: tIssue('startConfirmation') }
+    : null
 
   // Force comment mode if not authorized
   useEffect(() => { if (!canProgressStage && mode === 'chat') setMode('comment') }, [canProgressStage, mode])
@@ -1065,6 +1049,22 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
         }}
         onToast={toast}
       />
+
+      {myStart && (
+        <div className="shrink-0 w-full max-w-lg desk:max-w-3xl mx-auto px-3 pt-2">
+          <div className="flex items-center gap-3 rounded-lg bg-ive-bg-card border border-ive-border-subtle px-3 py-2">
+            <i className={`fa-solid ${myStart.action === 'start_verification' ? 'fa-user-check text-ive-stage-verify' : 'fa-circle-check text-ive-stage-confirm'}`} />
+            <span className="flex-1 min-w-0 text-sm font-bold text-ive-text-secondary">{myStart.text}</span>
+            <button
+              onClick={() => handleStageAction(myStart.action)}
+              disabled={stageChanging}
+              className={`shrink-0 h-8 px-3 rounded-lg text-sm font-bold disabled:opacity-50 ${myStart.action === 'start_verification' ? 'bg-ive-stage-verify/15 text-ive-stage-verify hover:bg-ive-stage-verify/25' : 'bg-ive-stage-confirm/15 text-ive-stage-confirm hover:bg-ive-stage-confirm/25'}`}
+            >
+              {myStart.button}
+            </button>
+          </div>
+        </div>
+      )}
 
       <NotesList
         issue={issue}

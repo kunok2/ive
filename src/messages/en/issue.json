@@ -41,14 +41,10 @@
   "reopenToWaiting": "To confirm-wait",
   "cancelToWaiting": "Cancel (to Waiting)",
   "startVerification": "Start Verification",
-  "startVerificationPopupTitle": "Start Verification",
-  "startVerificationPopupMessage": "Would you like to start verification for this task now?",
   "verifyRequest": "Request Verification",
   "approveVerify": "Confirm",
   "rejectVerify": "To schedule",
   "startConfirmation": "Start Confirmation",
-  "startConfirmationPopupTitle": "Start Confirmation",
-  "startConfirmationPopupMessage": "Would you like to start confirmation for this task now?",
   "acceptConfirm": "Done",
   "returnToDev": "To verify-wait",
   "cancelConfirmWait": "Cancel (to Waiting)",
@@ -186,5 +182,7 @@
   "pickerPeople": "People",
   "roleModeAgent": "Agent",
   "detailPaneLabel": "Issue detail",
-  "detailPanePlaceholder": "Pick an issue to open it here"
+  "detailPanePlaceholder": "Pick an issue to open it here",
+  "myTurnVerify": "Your turn to verify",
+  "myTurnConfirm": "Your turn to confirm"
 }
