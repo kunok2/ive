@@ -51,6 +51,8 @@ export interface VerifyInput {
   targetBranch: string
   mrIid: number | null
   mrUrl: string | null
+  /** 코드 변경 없이 끝난 작업(MR 없음) — 코드 대신 작업자가 처리한 결과(마지막 보고)를 검증한다. 통과해도 머지할 것이 없다 */
+  noChange?: boolean
 }
 
 interface VerifyPrep {
@@ -64,6 +66,8 @@ interface VerifyPrep {
   startedAt: string
   /** 사람이 쓴 이슈 코멘트(요건 정정·재작업 지시) — 검증자가 요건을 빠짐없이 대조하도록 프롬프트에 싣는다 */
   comments: string
+  /** noChange: 작업자의 마지막 보고가 있었는가 */
+  hasReport: boolean
 }
 
 type Verdict = 'pass' | 'fail' | 'blocked'
@@ -204,8 +208,12 @@ async function buildComment(ctx: StageContext, input: VerifyInput, prep: VerifyP
     lines.push('')
   }
   if (input.mrUrl) lines.push(`- MR: ${maskSecrets(input.mrUrl)}`)
-  lines.push(`- ${t('검증한 커밋', 'Verified commit')}: \`${prep.sourceSha.slice(0, 12)}\` · ${t('대상', 'Target')}: \`${input.targetBranch}\` (${prep.behindTarget ? t('최신본 미포함 — 머지 때 최신본 위에 합쳐짐', 'behind — merged on top of the latest') : t('최신본 위', 'up to date')})`)
-  lines.push(`- ${t('바뀐 파일', 'Changed files')}: ${prep.changedFiles.length}`)
+  if (input.noChange) {
+    lines.push(`- ${t('검증 대상', 'Verified')}: ${t('작업자 보고 (코드 변경 없는 작업)', "the worker's report (no code change)")}${prep.hasReport ? '' : ` — ${t('보고 없음', 'no report')}`}`)
+  } else {
+    lines.push(`- ${t('검증한 커밋', 'Verified commit')}: \`${prep.sourceSha.slice(0, 12)}\` · ${t('대상', 'Target')}: \`${input.targetBranch}\` (${prep.behindTarget ? t('최신본 미포함 — 머지 때 최신본 위에 합쳐짐', 'behind — merged on top of the latest') : t('최신본 위', 'up to date')})`)
+    lines.push(`- ${t('바뀐 파일', 'Changed files')}: ${prep.changedFiles.length}`)
+  }
   lines.push(`- ${t('검증 에이전트', 'Verifier agent')}: ${agent.name}`)
   for (const c of result.commands.slice(0, 20)) lines.push(`- \`${c.replace(/`/g, "'")}\``)
   if (evidenceLink) lines.push(`- ${t('전체 증적', 'All evidence')}: ${evidenceLink}`)
@@ -224,6 +232,31 @@ async function buildComment(ctx: StageContext, input: VerifyInput, prep: VerifyP
   lines.push(`ended_at: ${kstIso(new Date().toISOString())}`)
   lines.push('-->')
   return lines.join('\n')
+}
+
+/**
+ * 이슈 코멘트에서 검증에 쓸 두 가지를 뽑는다.
+ *  - comments: 사람이 쓴 코멘트(요건 정정·재작업 지시가 본문이 아니라 여기 있다 — 봇·에이전트 코멘트 제외)
+ *  - report: 작업자(처리 에이전트)의 마지막 보고 — 코드 변경 없는 작업의 검증 대상. 검증·확인 결과 코멘트는 빼고 가장 최근 것
+ */
+async function issueThread(project: Project, iid: number, token: string, log: StageContext['log']): Promise<{ comments: string; report: string }> {
+  try {
+    const notes = (await fetchIssueNotes(project, iid, token)) as any[]
+    const comments = notes
+      .filter(n => !n.system && n.body && !n.body.includes('<!-- ive-bot -->') && !n.body.includes('<!-- ive-agent:') && !n.body.includes('IVE(봇)'))
+      .map(n => `- ${n.author?.name || n.author?.username || n.user?.login || '?'} (${String(n.created_at || '').slice(0, 16)}): ${String(n.body).trim()}`)
+      .join('\n')
+      .slice(-12000)
+    const isStageResult = (b: string) => /stage:\s*(verify|confirm)/.test(b) || b.includes(VERIFY_RESULT_MARKER)
+    const reports = notes
+      .filter(n => !n.system && typeof n.body === 'string' && n.body.includes('<!-- ive-agent:') && !isStageResult(n.body))
+      .sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')))
+    const report = reports.length ? String(reports[reports.length - 1].body).replace(/<!--[\s\S]*?-->/g, '').trim().slice(-20000) : ''
+    return { comments, report }
+  } catch (e) {
+    log(`이슈 코멘트 조회 실패 — 본문만으로 요건을 대조합니다: ${(e as Error).message}`, 'warn')
+    return { comments: '', report: '' }
+  }
 }
 
 function verifySpec(input: VerifyInput): StageKindSpec<VerifyPrep> {
@@ -255,6 +288,16 @@ function verifySpec(input: VerifyInput): StageKindSpec<VerifyPrep> {
       const target = input.targetBranch
       log(`저장소 클론 중... (${target})`, 'system')
       await execFile('git', ['clone', '--filter=blob:none', '--branch', target, authedRepoUrl(project, token), '.'], { cwd: workspacePath, maxBuffer: 16 * 1024 * 1024 })
+      if (input.noChange) {
+        // 코드 변경 없이 끝난 작업 — diff·시험 머지·검사 명령 대신 작업자의 마지막 보고를 검증 대상으로 둔다(저장소는 근거 확인용, 읽기만)
+        const sourceSha = (await git(workspacePath, ['rev-parse', 'HEAD'])).trim()
+        fs.mkdirSync(path.join(workspacePath, OUT_DIR), { recursive: true })
+        try { fs.appendFileSync(path.join(workspacePath, '.git', 'info', 'exclude'), `\n${OUT_DIR}/\n.mcp.json\n.agents/\n.octmp/\n`) } catch { /* ignore */ }
+        const { comments, report } = await issueThread(project, iid, token, log)
+        fs.writeFileSync(path.join(workspacePath, OUT_DIR, 'report.md'), report || '(작업자 보고 없음)')
+        log(`코드 변경 없는 작업 — 작업자 보고${report ? '' : '(없음)'}를 검증합니다`, 'system')
+        return { sourceSha, behindTarget: false, conflictFiles: [], changedFiles: [], checks: [], checkCommands: [], e2eScript: null, startedAt, comments, hasReport: !!report }
+      }
       await git(workspacePath, ['fetch', 'origin', `+refs/heads/dev-${iid}:refs/remotes/origin/dev-${iid}`])
       const sourceSha = (await git(workspacePath, ['rev-parse', `origin/dev-${iid}`])).trim()
       log(`검증할 커밋: dev-${iid} @ ${sourceSha}`, 'system')
@@ -298,18 +341,9 @@ function verifySpec(input: VerifyInput): StageKindSpec<VerifyPrep> {
       const script = `.ive/e2e/issue-${iid}.spec.ts`
       const e2eScript = fs.existsSync(path.join(workspacePath, script)) ? script : null
 
-      // 사람이 쓴 이슈 코멘트 — 요건 정정·재작업 지시가 본문이 아니라 여기 있다(봇·에이전트 코멘트 제외)
-      let comments = ''
-      try {
-        const notes = (await fetchIssueNotes(project, iid, token)) as any[]
-        comments = notes
-          .filter(n => !n.system && n.body && !n.body.includes('<!-- ive-bot -->') && !n.body.includes('<!-- ive-agent:') && !n.body.includes('IVE(봇)'))
-          .map(n => `- ${n.author?.name || n.author?.username || n.user?.login || '?'} (${String(n.created_at || '').slice(0, 16)}): ${String(n.body).trim()}`)
-          .join('\n')
-          .slice(-12000)
-      } catch (e) { log(`이슈 코멘트 조회 실패 — 본문만으로 요건을 대조합니다: ${(e as Error).message}`, 'warn') }
+      const { comments } = await issueThread(project, iid, token, log)
 
-      return { sourceSha, behindTarget, conflictFiles, changedFiles, checks, checkCommands, e2eScript, startedAt, comments }
+      return { sourceSha, behindTarget, conflictFiles, changedFiles, checks, checkCommands, e2eScript, startedAt, comments, hasReport: false }
     },
 
     buildPrompt(ctx, prep) {
@@ -321,6 +355,7 @@ function verifySpec(input: VerifyInput): StageKindSpec<VerifyPrep> {
         conflictFiles: prep.conflictFiles, changedFiles: prep.changedFiles, diffPath: `${OUT_DIR}/mr.diff`,
         checksSection: checksSection(prep.checks, prep.checkCommands, ctx.isKo), e2eScript: prep.e2eScript,
         outDir: OUT_DIR, maxRunMinutes: limits.verifyTimeoutMin,
+        noChange: !!input.noChange, reportPath: `${OUT_DIR}/report.md`,
       }, editable ?? VERIFY_EDITABLE_DEFAULT)
       return { prompt, promptVersion: version }
     },
@@ -394,8 +429,9 @@ function verifySpec(input: VerifyInput): StageKindSpec<VerifyPrep> {
         if (!(await move('approve', '단계: 검증 중 → 확인대기'))) return
         // 확인자 배정(사람이면 Git 담당자 교체, 에이전트면 배정 안내) — 화면 승인 경로와 같다
         try { await applyRoleAssignee(project, iid, token, '확인자', getPresetRoles(project.id, iid).confirmer) } catch (e) { log(`확인자 배정 실패: ${(e as Error).message}`, 'warn') }
-        // 바로 머지 — 실패·건너뜀은 노트·코멘트로 사람에게 넘긴다(다시 시도하지 않는다)
-        await mergeVerified({ project, token, iid, sourceSha: prep.sourceSha, targetBranch: input.targetBranch, isKo, log })
+        // 바로 머지 — 실패·건너뜀은 노트·코멘트로 사람에게 넘긴다(다시 시도하지 않는다). 코드 변경 없는 작업은 머지할 것이 없다
+        if (input.noChange) log('코드 변경 없는 작업 — 머지할 것이 없음', 'system')
+        else await mergeVerified({ project, token, iid, sourceSha: prep.sourceSha, targetBranch: input.targetBranch, isKo, log })
       } else if (result.verdict === 'fail') {
         // 반려 = 처리 재요청(스케줄). 결과 코멘트가 다음 처리의 피드백이 된다.
         if (await move('reject', '단계: 검증 중 → 스케줄 (재작업)')) resetIssueScheduledAt(project.id, iid)

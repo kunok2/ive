@@ -65,6 +65,8 @@ interface IssueAssignee {
 
 interface IssueDetail {
   iid: number
+  /** 단계 작업자(에이전트)가 기동하지 못한 사유 — 있으면 사람이 직접 시작할 수 있게 안내 줄에 보인다 */
+  stageWorkerNote?: string | null
   /** 0 보통 · 1 높음 · 2 긴급 (IVE 에만 저장) */
   priority?: 0 | 1 | 2
   canEditPriority?: boolean
@@ -926,10 +928,16 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
   // Verify-waiting popup — 이슈당 1회 자동 트리거
   // 내가 시작할 차례인 단계 — 확인창을 자동으로 띄우지 않고 머리줄 아래 안내 줄로 알린다(목록을 넘겨 볼 때 방해되지 않게).
   // 에이전트가 맡은 단계는 사람에게 권하지 않는다(버튼으로 직접 시작은 가능)
+  // 단, 에이전트가 맡을 수 없어 멈춘 경우(MR 없음 등 — 기동 못 한 사유가 남아 있음)에는 사유와 함께 사람이 직접 시작하게 한다
+  const agentBlocked = (preset: { mode?: string } | null | undefined) => preset?.mode === 'agent' && !!issue?.stageWorkerNote
   const myStart: { action: 'start_verification' | 'start_confirmation'; text: string; button: string } | null =
     loading || !issue ? null
+    : issue.stage === 'verify_waiting' && canStartVerification && agentBlocked(issue.presetVerifier)
+      ? { action: 'start_verification', text: tIssue('agentBlocked', { note: issue.stageWorkerNote! }), button: tIssue('startMyself') }
     : issue.stage === 'verify_waiting' && canStartVerification && issue.presetVerifier?.mode !== 'agent'
       ? { action: 'start_verification', text: tIssue('myTurnVerify'), button: tIssue('startVerification') }
+    : issue.stage === 'confirm_waiting' && canStartConfirmation && agentBlocked(issue.presetConfirmer)
+      ? { action: 'start_confirmation', text: tIssue('agentBlocked', { note: issue.stageWorkerNote! }), button: tIssue('startMyself') }
     : issue.stage === 'confirm_waiting' && canStartConfirmation && issue.presetConfirmer?.mode !== 'agent'
       ? { action: 'start_confirmation', text: tIssue('myTurnConfirm'), button: tIssue('startConfirmation') }
     : null

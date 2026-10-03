@@ -347,7 +347,8 @@ function CommentModeInput({
 
         {/* 전진 →: 다음 단계 진입 (검증완료/다음단계로) */}
         <div className="flex-1 flex justify-end">
-          {(preferredAgent?.assignMode === 'assignee' || issue.stage === 'none') && NEXT_STAGE[issue.stage] && canProgressStage && (
+          {/* 검증대기·확인대기는 늘 「검증 시작 →」·「확인 시작 →」 — 에이전트가 맡았어도 MR 없음 등으로 못 맡으면 사람이 진행한다 */}
+          {(preferredAgent?.assignMode === 'assignee' || issue.stage === 'none' || issue.stage === 'verify_waiting' || issue.stage === 'confirm_waiting') && NEXT_STAGE[issue.stage] && canProgressStage && (
             <button
               onClick={onCommentAndNextStage}
               disabled={posting}

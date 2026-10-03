@@ -47,6 +47,7 @@ import {
   getLatestBundleItem, getProjectAutomation, setIssuePriority, getAssignModeMap, byPriorityThenOldest,
 } from '@/lib/db'
 import { enforceVerifyVerdict, parseVerifyResult } from '@/lib/scanner/verify-worker'
+import { buildVerifyPrompt, VERIFY_EDITABLE_DEFAULT } from '@/lib/role-prompts'
 import { dispatchStageWorkers } from '@/lib/scanner/stage-dispatch'
 import { openAgentStageExecution, setStageVerdict } from '@/lib/scanner/stage-records'
 import { mergeVerified, handOffLegacyBundleQueue, reopenIfClosedBeforeConfirm } from '@/lib/scanner/auto-merge'
@@ -265,12 +266,25 @@ describe('V-2 검증 기동 판정', () => {
     expect(workerMock.runVerifyWorker).not.toHaveBeenCalled()
     expect(getStageWorkerNote(P, 22)).toMatch(/처리한 에이전트와 같습니다/)
   })
-  it('MR 이 없으면 띄우지 않는다', async () => {
+  it('MR 이 없으면(코드 변경 없는 작업) 작업자 보고를 검증하도록 띄운다', async () => {
     agentVerifier(23)
     providerMock.fetchMRByBranch.mockResolvedValue(null)
     await dispatchStageWorkers(project, [{ issue: issue(23), stage: 'verify_waiting' }], 'tok')
-    expect(workerMock.runVerifyWorker).not.toHaveBeenCalled()
-    expect(getStageWorkerNote(P, 23)).toMatch(/MR 이 없습니다/)
+    expect(workerMock.runVerifyWorker).toHaveBeenCalledTimes(1)
+    const [input] = workerMock.runVerifyWorker.mock.calls[0] as unknown as [any]
+    expect(input).toMatchObject({ noChange: true, mrIid: null, mrUrl: null })
+  })
+  it('코드 변경 없는 작업의 검증 프롬프트 — 작업자 보고가 대상이고, 「할 수 없다」는 방법을 적어 반려한다', () => {
+    const base = { iid: 91, title: '내일의 날씨는?', body: '내일 날씨 알려줘', isKo: true, mrUrl: null, targetBranch: 'main', sourceSha: 'abc', behindTarget: false,
+      conflictFiles: [], changedFiles: [], diffPath: '.ive-out/mr.diff', checksSection: '', e2eScript: null, outDir: '.ive-out', maxRunMinutes: 30 }
+    const p = buildVerifyPrompt({ ...base, noChange: true, reportPath: '.ive-out/report.md' }, VERIFY_EDITABLE_DEFAULT)
+    expect(p).toContain('코드 변경 없이')
+    expect(p).toContain('.ive-out/report.md')
+    expect(p).toContain('구체적인 방법')
+    expect(p).not.toContain('변경 전체 diff')
+    const code = buildVerifyPrompt(base, VERIFY_EDITABLE_DEFAULT)
+    expect(code).toContain('변경 전체 diff')
+    expect(code).toContain('할 수 없다')   // 코드 작업에도 같은 규칙
   })
   it('갖춰지면 기동 — staging 브랜치와 MR 을 넘긴다', async () => {
     agentVerifier(24)

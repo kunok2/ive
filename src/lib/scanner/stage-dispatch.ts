@@ -170,17 +170,17 @@ async function dispatchVerify(project: Project, verifyIssues: StageIssue[], toke
 
     let mr: any = null
     try { mr = await fetchMRByBranch(project, token, `dev-${iid}`) } catch (e) { slog.warn(`MR lookup failed #${iid}: ${(e as Error).message}`) }
-    if (!mr) { note(project.id, iid, `dev-${iid} MR 이 없습니다(변경 없이 끝난 처리 등) — 사람 검증 필요`); continue }
-    if (mr.state === 'closed') { note(project.id, iid, `dev-${iid} MR 이 닫혀 있습니다 — 사람 검증 필요`); continue }
+    // MR 이 없으면 코드 변경 없이 끝난 작업(질문·조사·보고 등) — 코드 대신 작업자가 처리한 결과(마지막 보고)를 검증한다
+    if (mr?.state === 'closed') { note(project.id, iid, `dev-${iid} MR 이 닫혀 있습니다 — 사람 검증 필요`); continue }
 
     target ??= await resolveStagingBranch(project, token)
     busy.add(agent.id)
     note(project.id, iid, null)
     const executionId = newStageExecutionId('verify')
-    slog.info(`[DISPATCH] verify ${project.name} #${iid} → ${agent.name} (target ${target})`)
+    slog.info(`[DISPATCH] verify ${project.name} #${iid} → ${agent.name} (${mr ? `target ${target}` : '코드 변경 없음 — 작업자 보고 검증'})`)
     runVerifyWorker({
       project, issue, agent, token, stage: stage as 'verify_waiting' | 'verifying', targetBranch: target,
-      mrIid: mr.iid ?? mr.number ?? null, mrUrl: mr.web_url || mr.html_url || null,
+      mrIid: mr ? (mr.iid ?? mr.number ?? null) : null, mrUrl: mr ? (mr.web_url || mr.html_url || null) : null, noChange: !mr,
     }, executionId).catch(err => slog.error({ err }, `[VERIFY] #${iid} failed`))
   }
 }
@@ -214,7 +214,7 @@ async function dispatchConfirm(project: Project, confirmIssues: StageIssue[], to
       // MR 의 머지 커밋이 기준 — 검증 통과 즉시 IVE 가 머지했거나 사람이 머지했다
       let mr: any = null
       try { mr = await fetchMRByBranch(project, token, `dev-${iid}`) } catch (e) { slog.warn(`MR lookup failed #${iid}: ${(e as Error).message}`) }
-      if (!mr) { note(project.id, iid, `dev-${iid} MR 을 찾지 못함 — 자동 확인 불가`); continue }
+      if (!mr) { note(project.id, iid, `코드 변경 없이 끝난 작업(dev-${iid} MR 없음) — 배포로 확인할 것이 없어 사람이 확인해 주세요`); continue }
       const merged = mr.state === 'merged' || !!mr.merged_at
       if (!merged) { note(project.id, iid, 'MR 이 아직 머지되지 않음 — 머지·배포 대기'); continue }
       // fast-forward 머지는 머지 커밋이 없다 — MR 머리 커밋이 그대로 대상 브랜치에 올라간다

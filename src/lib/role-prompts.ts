@@ -167,6 +167,10 @@ export interface VerifyPromptInput {
   e2eScript: string | null
   outDir: string
   maxRunMinutes: number
+  /** 코드 변경 없이 끝난 작업(MR 없음) — 검증 대상은 작업자가 처리한 결과(마지막 보고)다 */
+  noChange?: boolean
+  /** noChange 일 때 작업자 보고 파일(워크스페이스 상대 경로) */
+  reportPath?: string
 }
 
 export const VERIFY_RESULT_MARKER = 'IVE_VERIFY_RESULT:'
@@ -191,9 +195,14 @@ function verifyFixed(i: VerifyPromptInput): string {
 }
 \`\`\`
 - 마지막 줄에 정확히 \`${VERIFY_RESULT_MARKER} pass\` 또는 \`fail\` 또는 \`blocked\` 를 출력한다.
-- requirements 에는 이슈의 요건을 빠짐없이 적는다. 구현되지 않은 요건은 status missing 이고 findings 에도 kind missing 으로 적는다. 구현 오류는 kind defect 로 적는다.
+- 작업자가 「할 수 없다」「확인 불가」로 넘긴 요건은 그대로 받아들이지 않는다. 정말 불가능한지 네가 판단한다.
+  가능한 방법이 있으면(웹 검색·공개 API·저장소의 다른 코드 등) 그 요건은 누락이다 — findings 에 **구체적인 방법**(어디서 무엇을 어떻게)을 적어 재처리로 돌린다.
+  방법이 통하는지 직접 실행해 확인해도 되지만, 네가 대신 처리해 답을 채우지는 않는다(그건 작업자의 일이다). 실행한 것은 commands 에 남긴다.
+  정말 불가능한 경우(권한·비밀값·외부 승인이 필요 등)에만 그 이유가 맞는지 확인해 blocked 로 두고 reason 에 무엇이 필요한지 적는다.
+${i.noChange ? `- 이 작업은 코드 변경 없이 끝났다. requirements 의 where 에는 구현 위치 대신 **작업자 보고에서 그 요건에 답한 부분**(짧은 인용)을 적고, findings 의 file 은 "report", line 은 0 으로 둔다.
+` : ''}- requirements 에는 이슈의 요건을 빠짐없이 적는다. 구현되지 않은 요건은 status missing 이고 findings 에도 kind missing 으로 적는다. 구현 오류는 kind defect 로 적는다.
 - 판정 기준: 요건이 모두 done 이고 오류(defect)가 하나도 없으면 pass → 확인 단계로 넘어간다. 누락이나 오류가 하나라도 있으면 fail → 재처리로 돌아간다(findings 가 처리자에게 갈 지시다, 구체적으로).
-  blocked 는 diff·작업 공간을 읽을 수 없는 등 기술적으로 검증을 못 한 경우에만 쓴다(확신이 없다는 이유로 쓰지 않는다).
+  blocked 는 diff·작업 공간을 읽을 수 없는 등 기술적으로 검증을 못 한 경우, 또는 작업자가 할 수 없다고 한 이유가 맞아 사람이 풀어야 하는 경우에만 쓴다(확신이 없다는 이유로 쓰지 않는다).
   IVE 검사 명령이 실패했거나 staging 최신본과 충돌하면 IVE 가 fail 로 처리한다 — 너는 그 원인을 findings 에 짚어 준다.
   findings·requirements 와 verdict 가 어긋나면 IVE 가 fail 로 고친다.${i.maxRunMinutes > 0 ? `
 - 시간 예산: ${i.maxRunMinutes}분 뒤 강제 종료된다. 약 ${Math.max(5, Math.round(i.maxRunMinutes * 0.6))}분 안에 result.json 을 쓴다.` : ''}
@@ -201,6 +210,7 @@ function verifyFixed(i: VerifyPromptInput): string {
 }
 
 export function buildVerifyPrompt(i: VerifyPromptInput, editable: string): string {
+  if (i.noChange) return buildVerifyNoChangePrompt(i, editable)
   const files = i.changedFiles.length ? i.changedFiles.slice(0, 200).map(f => `- ${f}`).join('\n') : '- (없음)'
   return `너는 IVE 의 검증자 에이전트다. 처리자가 만든 MR 이 이슈를 제대로 해결했는지 사람 대신 코드 수준에서 검증한다.
 
@@ -225,6 +235,30 @@ ${i.checksSection}
 ## 검증 방법
 ${editable}
 
+${verifyFixed(i)}`
+}
+
+/**
+ * 코드 변경 없이 끝난 작업(질문·조사·보고 등 — MR 없음)의 검증. 검증 대상은 코드가 아니라 작업자가 처리한 결과(마지막 보고)다.
+ * 요건마다 보고가 답했는지(누락), 보고 내용이 맞는지(오류)를 본다. 저장소 코드를 근거로 든 답이면 코드에서 사실을 확인한다.
+ */
+function buildVerifyNoChangePrompt(i: VerifyPromptInput, editable: string): string {
+  return `너는 IVE 의 검증자 에이전트다. 이 작업은 **코드 변경 없이** 끝났다(질문·조사·보고 등 — MR 없음).
+검증 대상은 코드가 아니라 **작업자가 처리한 결과(아래 보고)** 다. 보고가 이슈를 제대로 처리했는지 사람 대신 검증한다.
+
+## 검증할 이슈 #${i.iid}: ${i.title}
+${i.body || '(본문 없음)'}
+${i.comments ? `\n### 이슈 코멘트 (사람이 쓴 것, 시간순 — 나중 정정이 우선)\n${i.comments}\n` : ''}
+## 작업자 보고 (IVE 가 준비함)
+- 작업자의 마지막 보고: ${i.reportPath ?? '(없음)'} — 이 파일이 검증 대상이다. 보고가 없으면 모든 요건이 누락이다.
+- 워크스페이스는 ${i.targetBranch} 최신본이다(읽기만). 보고가 저장소 코드·설정을 근거로 들었다면 여기서 사실을 확인한다.
+
+## 검증 방법
+- 검증은 두 가지다. 둘 다 완벽해야 통과다.
+  1. 요건 누락: 이슈 본문과 코멘트(나중 정정이 우선)에서 요건(물음·요청)을 하나씩 뽑아, 보고가 각각에 답했는지 찾는다. 답한 부분을 대지 못하는 요건은 누락이다.
+  2. 내용 오류: 보고의 답이 맞는지 본다 — 사실과 다른 내용, 근거 없는 단정, 질문과 어긋난 답, 저장소 코드와 맞지 않는 설명. 확인할 수 있는 것은 확인하고, 확인할 수 없는 단정은 오류로 적는다.
+- 취향·문체 차이는 오류가 아니다. 지적은 누락과 오류만 적는다.
+${editable.trim() ? `\n### 프로젝트 검증 지침 (코드 변경 작업용 — 이 작업에 맞는 것만 적용)\n${editable}\n` : ''}
 ${verifyFixed(i)}`
 }
 

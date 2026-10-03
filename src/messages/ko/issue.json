@@ -191,5 +191,7 @@
   "detailPaneLabel": "작업 상세",
   "detailPanePlaceholder": "작업을 고르면 여기에 열립니다",
   "myTurnVerify": "검증할 차례입니다",
-  "myTurnConfirm": "확인할 차례입니다"
+  "myTurnConfirm": "확인할 차례입니다",
+  "agentBlocked": "에이전트가 맡지 못했습니다 — {note}",
+  "startMyself": "직접 시작"
 }

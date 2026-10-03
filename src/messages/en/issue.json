@@ -191,5 +191,7 @@
   "detailPaneLabel": "Issue detail",
   "detailPanePlaceholder": "Pick an issue to open it here",
   "myTurnVerify": "Your turn to verify",
-  "myTurnConfirm": "Your turn to confirm"
+  "myTurnConfirm": "Your turn to confirm",
+  "agentBlocked": "The agent couldn't take this — {note}",
+  "startMyself": "Start myself"
 }
