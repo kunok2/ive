@@ -10,6 +10,7 @@ import type {
 } from '@/lib/report-model/types'
 import { fmtHours, pct, deltaTone, toneClass, agedCount, projectSwatchStyles, OTHERS_ID, type Tr } from './format'
 import AgentAvatar from '@/components/agent/AgentAvatar'
+import CountBump from '@/components/ui/CountBump'
 
 /** 보고서의 사람 줄 아바타 — 사람 키(u:<id>)면 그 사용자 아바타, 이름만 아는 사람(n:)은 기본 사람 아이콘 */
 export function PersonFace({ personKey, avatars }: { personKey: string; avatars?: Record<string, string> }) {
@@ -34,7 +35,8 @@ function Row({ label, value, strong }: { label: ReactNode; value: ReactNode; str
   return (
     <div className="flex items-center justify-between gap-2 text-sm">
       <span className={strong ? 'font-bold text-ive-text' : 'font-bold text-ive-text-secondary'}>{label}</span>
-      <span className="font-bold text-ive-text tabular-nums text-right">{value}</span>
+      {/* 자동 갱신으로 값이 바뀌면 한 번 튄다(글자 값만 — 요소 값은 매번 새로 만들어져 비교할 수 없다) */}
+      <span className="font-bold text-ive-text tabular-nums text-right">{typeof value === 'string' || typeof value === 'number' ? <CountBump value={value} /> : value}</span>
     </div>
   )
 }
@@ -82,7 +84,7 @@ export function HeldCard({ held, tr, prevLabel, tracking }: { held: Held; tr: Tr
       ) : (
         <>
           <div className="flex items-baseline gap-3 flex-wrap">
-            <span className="text-4xl font-bold text-ive-text tabular-nums leading-none">{held.end.toLocaleString()}<span className="text-lg ml-0.5">{tr('countUnit')}</span></span>
+            <span className="text-4xl font-bold text-ive-text tabular-nums leading-none"><CountBump value={held.end}>{held.end.toLocaleString()}</CountBump><span className="text-lg ml-0.5">{tr('countUnit')}</span></span>
             {held.start != null && <Delta cur={held.end} prev={held.start} goodWhenUp={false} text={tr('vsPrevEnd', { label: prevLabel, n: held.start })} />}
           </div>
           {held.live && (
@@ -333,7 +335,7 @@ export function DoneSection({ done, tr, prevLabel }: { done: Done; tr: Tr; prevL
   return (
     <Card>
       <SectionTitle right={<Delta cur={done.total} prev={done.prevTotal} goodWhenUp text={tr('vsPrev', { label: prevLabel, n: done.prevTotal })} />}>{tr('doneTitle')}</SectionTitle>
-      <span className="text-3xl font-bold text-ive-text tabular-nums leading-none">{done.total.toLocaleString()}<span className="text-base ml-0.5">{tr('countUnit')}</span></span>
+      <span className="text-3xl font-bold text-ive-text tabular-nums leading-none"><CountBump value={done.total}>{done.total.toLocaleString()}</CountBump><span className="text-base ml-0.5">{tr('countUnit')}</span></span>
       <div className="flex flex-col gap-1.5">
         <Row label={tr('form.agent')} value={tr('countN', { n: done.byForm.agent })} />
         <Row label={tr('form.human')} value={tr('countN', { n: done.byForm.human })} />

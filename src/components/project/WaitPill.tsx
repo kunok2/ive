@@ -1,6 +1,7 @@
 'use client'
 
 import { useTranslations } from 'next-intl'
+import CountBump from '@/components/ui/CountBump'
 
 /**
  * 그 단계에서 아직 아무도 잡지 않은 건수 — 진행 숫자 옆 「←n」(들어와 기다리는 n건).
@@ -12,7 +13,7 @@ export default function WaitPill({ n, title }: { n: number; title: string }) {
   if (n <= 0) return null
   return (
     <span title={title} aria-label={title} className="text-xs font-bold text-ive-text-secondary tabular-nums whitespace-nowrap">
-      {tp('waitShort', { n })}
+      <CountBump value={n}>{tp('waitShort', { n })}</CountBump>
     </span>
   )
 }

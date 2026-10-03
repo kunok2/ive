@@ -166,6 +166,20 @@ body::before {
   }
 }
 
+/* 숫자가 바뀌는 순간 한 번 — CountBump */
+@keyframes count-bump {
+  0% { transform: scale(1); }
+  30% { transform: scale(1.45); filter: brightness(1.6); }
+  100% { transform: scale(1); filter: none; }
+}
+.animate-count-bump {
+  animation: count-bump 0.6s ease-out;
+  transform-origin: center;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-count-bump { animation: none; }
+}
+
 @keyframes slide-up {
   from { transform: translateY(100%); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }

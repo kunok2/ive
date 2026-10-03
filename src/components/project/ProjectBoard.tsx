@@ -8,6 +8,7 @@ import type { TodayDoneIssue } from '@/lib/db/issues'
 import { useTab } from '@/lib/tab-context'
 import { execKind, ageOf, ageText, STAGE_TONE } from '@/lib/active-work'
 import WaitPill from '@/components/project/WaitPill'
+import CountBump from '@/components/ui/CountBump'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 import type { ToolActivity } from '@/lib/tool-activity'
 
@@ -145,7 +146,7 @@ export default function ProjectBoard({ project }: { project: Project }) {
         <div className="ml-auto flex items-center gap-2 shrink-0">
           {/* 1440px 아래에서는 완료 칸을 접고 오늘 완료 건수만 보인다 */}
           <span className="wide:hidden text-xs font-bold text-ive-text-secondary mr-1">
-            {tp('boardDoneToday')} <span className={cols.done.length ? 'text-ive-cyan' : 'text-ive-text-dim'}>{cols.done.length}</span>
+            {tp('boardDoneToday')} <span className={cols.done.length ? 'text-ive-cyan' : 'text-ive-text-dim'}><CountBump value={cols.done.length} /></span>
           </span>
           <button onClick={() => navigateToAddIssue(project.id)} className="h-9 px-3 rounded-lg text-sm font-bold bg-ive-bg-card border border-ive-border-subtle text-ive-text hover:border-ive-cyan/40">
             <i className="fa-solid fa-plus mr-1.5 text-xs" />{tp('addIssue')}
@@ -175,7 +176,7 @@ export default function ProjectBoard({ project }: { project: Project }) {
               <div className={`shrink-0 flex items-center gap-1.5 mx-3 pt-3 pb-2 border-b-2 ${calm ? 'border-ive-cyan' : STAGE_TONE[col as 'process' | 'verify' | 'confirm'].border}`}>
                 <span className="text-sm font-bold text-ive-text">{tp(COL_LABEL[col])}</span>
                 {/* 진행 중 건수 + 그 단계 대기(←n) — 카드의 단계 칸과 같은 표기 */}
-                <span className={`text-xl font-bold leading-none tabular-nums ${!activeN ? 'text-ive-text-dim' : calm ? 'text-ive-cyan' : STAGE_TONE[col as 'process' | 'verify' | 'confirm'].text}`}>{activeN}</span>
+                <span className={`text-xl font-bold leading-none tabular-nums ${!activeN ? 'text-ive-text-dim' : calm ? 'text-ive-cyan' : STAGE_TONE[col as 'process' | 'verify' | 'confirm'].text}`}><CountBump value={activeN} /></span>
                 <WaitPill n={waitN} title={tp('stageWaitingHint', { n: waitN })} />
                 {col === 'done' && <span className="ml-auto text-xs font-bold text-ive-text-dim">{tp('boardDoneSub')}</span>}
               </div>

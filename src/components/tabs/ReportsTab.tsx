@@ -185,7 +185,8 @@ export default function ReportsTab() {
           )}
           {/* PC 3단 — 카드 폭은 폰과 같게, 읽는 순서는 단마다 위에서 아래로(폰·패드는 1열 가운데) */}
           {!loading && model && (
-            <main className="flex flex-col gap-3 desk:block desk:columns-3 desk:gap-3 desk:*:mb-3 desk:*:break-inside-avoid">
+            // 기간을 바꾸면 새로 그린다 — 숫자 튐(CountBump)은 같은 기간의 자동 갱신에서만
+            <main key={`${model.type}:${model.period.start}`} className="flex flex-col gap-3 desk:block desk:columns-3 desk:gap-3 desk:*:mb-3 desk:*:break-inside-avoid">
               <ErrorBoundary label={tr('heldNow')}><HeldCard held={model.held} tr={tr} prevLabel={prevLabel} tracking={model.heldTrackingSince} /></ErrorBoundary>
               {model.actions && <ErrorBoundary label={tr('actTitle')}><ActionCards actions={model.actions} tr={tr} /></ErrorBoundary>}
               {model.mine && <div ref={mineRef} className="scroll-mt-2"><ErrorBoundary label={tr('mineTitle', { n: model.mine.length })}><MineSection mine={model.mine} tr={tr} highlight={!!linked?.mine} /></ErrorBoundary></div>}

@@ -13,6 +13,7 @@ import AgentAvatar from '@/components/agent/AgentAvatar'
 import MarqueeText from '@/components/ui/MarqueeText'
 import ActiveWorkList, { type ActiveItem } from '@/components/project/ActiveWorkList'
 import WaitPill from '@/components/project/WaitPill'
+import CountBump from '@/components/ui/CountBump'
 import { execKind, ageOf, ageText } from '@/lib/active-work'
 import ConflictResolutionPanel from '@/components/mr/ConflictResolutionPanel'
 import type { ToolActivity } from '@/lib/tool-activity'
@@ -516,7 +517,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
         >
           <div className="flex items-baseline gap-1">
             <span className={`text-lg font-bold leading-none ${agentWorkingCount > 0 ? 'text-ive-stage-process animate-pulse' : 'text-ive-text-dim'}`}>
-              {agentWorkingCount}
+              <CountBump value={agentWorkingCount} />
             </span>
             {waitTag(processWaitCount)}
           </div>
@@ -532,7 +533,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
         >
           <div className="flex items-baseline gap-1">
             <span className={`text-lg font-bold leading-none ${verifyingCount > 0 ? 'text-ive-stage-verify animate-pulse' : 'text-ive-text-dim'}`}>
-              {verifyingCount}
+              <CountBump value={verifyingCount} />
             </span>
             {waitTag(verifyWaitCount)}
           </div>
@@ -548,7 +549,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
         >
           <div className="flex items-baseline gap-1">
             <span className={`text-lg font-bold leading-none ${confirmingCount > 0 ? 'text-ive-stage-confirm animate-pulse' : 'text-ive-text-dim'}`}>
-              {confirmingCount}
+              <CountBump value={confirmingCount} />
             </span>
             {waitTag(confirmWaitCount)}
           </div>
@@ -564,11 +565,11 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
         >
           <div className="flex items-baseline gap-1">
             <span className={`text-lg font-bold leading-none ${totalDone > 0 ? 'text-ive-green' : 'text-ive-text-dim'}`}>
-              {totalDone}
+              <CountBump value={totalDone} />
             </span>
             {stats && yesterdayDiff !== 0 && (
               <span className={`text-xs font-bold ${yesterdayDiff > 0 ? 'text-ive-green' : 'text-ive-red'}`}>
-                {yesterdayDiff > 0 ? '+' : ''}{yesterdayDiff}
+                <CountBump value={yesterdayDiff}>{yesterdayDiff > 0 ? '+' : ''}{yesterdayDiff}</CountBump>
               </span>
             )}
           </div>
@@ -583,7 +584,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
           className={`flex-1 min-w-0 py-2.5 px-1 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'conflicts' ? 'bg-ive-amber/5' : 'hover:bg-white/[0.02]'}`}
         >
           <span className={`text-lg font-bold leading-none ${mergeCount === null ? 'text-ive-text-dim/40' : conflictCount > 0 ? 'text-ive-red animate-pulse' : mergeCount > 0 ? 'text-ive-amber' : 'text-ive-text-dim'}`}>
-            {mergeCount === null ? '–' : mergeCount}
+            <CountBump value={mergeCount}>{mergeCount === null ? '–' : mergeCount}</CountBump>
           </span>
           {/* Sparkline(40x12)과 동일 박스로 감싸야 <i> baseline 정렬이 위 숫자와 붙어 보이는 현상 방지 */}
           <div className="flex items-center justify-center" style={{ width: 40, height: 12 }}>
