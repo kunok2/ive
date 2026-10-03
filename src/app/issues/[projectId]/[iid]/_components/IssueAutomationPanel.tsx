@@ -18,7 +18,11 @@ interface EvidenceRun {
     engines?: { engine: string; status: string; note?: string }[]
     screenshots?: { file: string; caption?: string }[]
     newDefects?: string[]
-    findings?: { severity: string; file: string; line: number | null; note: string }[]
+    findings?: { kind?: 'missing' | 'defect' | null; severity: string; file: string; line: number | null; note: string }[]
+    /** 검증 — 이슈에서 뽑은 요건과 구현 여부 */
+    requirements?: { item: string; status: 'done' | 'missing'; where: string }[]
+    /** 확인 — 확인 항목과 증거 */
+    items?: { item: string; how: string; result: 'gone' | 'present' | 'unverified'; evidence: string[] }[]
     checks?: { command: string; ok: boolean; exitCode: number | null; timedOut: boolean; durationSec: number }[]
     behindTarget?: boolean
     conflictFiles?: string[]
@@ -187,13 +191,37 @@ export default function IssueAutomationPanel({
               </div>
             )}
             {run.result?.behindTarget && <p className="text-xs text-ive-text-dim"><i className="fa-solid fa-code-branch mr-1" />{t('behindTarget')}</p>}
+            {(run.result?.requirements?.length || 0) > 0 && (
+              <div className="text-xs text-ive-text-muted">
+                <b>{t('requirementsTitle', { done: run.result!.requirements!.filter(q => q.status === 'done').length, n: run.result!.requirements!.length })}</b>
+                <ul className="ml-1">
+                  {run.result!.requirements!.map((q, i) => (
+                    <li key={i}>{q.status === 'done' ? '✅' : '❌'} {q.item}{q.where && <span className="font-mono text-ive-text-dim"> {q.where}</span>}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {(run.result?.items?.length || 0) > 0 && (
+              <div className="text-xs text-ive-text-muted">
+                <b>{t('confirmItemsTitle', { done: run.result!.items!.filter(c => c.result === 'gone' && c.evidence?.length).length, n: run.result!.items!.length })}</b>
+                <ul className="ml-1">
+                  {run.result!.items!.map((c, i) => (
+                    <li key={i}>
+                      {c.result === 'gone' ? '✅' : c.result === 'present' ? '❌' : '⚠️'} {c.item}
+                      {c.how && <span className="text-ive-text-dim"> — {c.how}</span>}
+                      {c.evidence?.length > 0 && <span className="font-mono text-ive-text-dim"> ({c.evidence.join(', ')})</span>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {(run.result?.findings?.length || 0) > 0 && (
               <div className="text-xs text-ive-text-muted">
                 <b>{t('findings')}</b>
                 <ul className="list-disc ml-4">
                   {run.result!.findings!.map((f, i) => (
                     <li key={i}>
-                      <span className="font-bold">[{f.severity}]</span>
+                      <span className="font-bold">[{f.kind === 'missing' ? t('findingMissing') : f.kind === 'defect' ? t('findingDefect') : f.severity}]</span>
                       {f.file && <span className="font-mono text-ive-text-dim"> {f.file}{f.line ? `:${f.line}` : ''}</span>} {f.note}
                     </li>
                   ))}

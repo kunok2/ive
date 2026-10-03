@@ -38,12 +38,14 @@ export const DEV_FIXED_DESCRIPTION = `## Issue #<iid>: <title> / 반복 실행 �
 
 // ── 확인(confirm) ──
 
-export const CONFIRM_EDITABLE_DEFAULT = `- 이슈가 말한 화면·경로를 사람처럼 직접 열어 클릭해 가며 확인한다. 접근성 트리(스냅샷)만으로 판정하지 않는다.
-- 겹침·잘림·넘침·정렬 어긋남 같은 시각 결함은 트리에 보이지 않는다. 반드시 스크린샷을 찍어 눈으로 보고, 의심되면 요소 크기·위치를 재서(browser_evaluate 로 getBoundingClientRect 등) 수치로 확인한다.
+export const CONFIRM_EDITABLE_DEFAULT = `- 확인은 재현이다. 이슈가 말한 증상을 이슈가 말한 그대로(같은 화면·경로·데이터·계정·화면 크기·브라우저) 다시 밟아, 그 증상이 staging 에서 사라졌음을 증명한다.
+- 처리자가 고쳤다는 것과 검증자가 대조한 요건(아래 「처리·검증 결과」)이 화면에 그대로 구현됐는지도 하나씩 확인한다 — 이것이 확인 항목(items)이다.
+- 화면 문제는 화면을 직접 방문해 사람처럼 클릭해 가며 화면 수준에서 본다. 접근성 트리(스냅샷)만으로 판정하지 않는다.
+- 항목마다 증거를 남긴다: 증상이 있던 바로 그 상태의 스크린샷을 찍고, 겹침·잘림·넘침·정렬 같은 시각 결함은 요소 크기·위치를 재서(browser_evaluate 로 getBoundingClientRect 등) 수치로도 남긴다.
+- 이슈 첨부 이미지가 있으면 같은 구도로 찍어 수정 전·후를 비교할 수 있게 한다.
 - 이슈에 모바일·특정 브라우저 언급이 있으면 그 조건(뷰포트·기기)으로도 본다.
 - 증상과 무관한 새 결함을 보면 판정과 별개로 newDefects 에 적는다(단, 판정은 이 이슈의 증상 기준).
-- 판단이 서지 않으면 추측으로 통과시키지 말고 blocked 로 두고 이유를 적는다.
-- 결과 요약은 짧게: 무엇을 어디서 어떻게 확인했고 무엇을 봤는지.`
+- 증거로 보이지 못한 항목은 사라졌다고 하지 않는다 — 추측으로 통과시키지 않는다.`
 
 export interface ConfirmPromptInput {
   iid: number
@@ -56,6 +58,10 @@ export interface ConfirmPromptInput {
   mrUrl: string | null
   /** 프로젝트 설정의 staging 안내 (로그인 방법 등) */
   stagingNotes: string | null
+  /** 처리자의 결과 보고 + 검증자의 통과 노트(요건 대조) — 무엇이 구현됐어야 하는지 */
+  priorWork?: string
+  /** 사람이 쓴 이슈 코멘트(시간순) — 요건 정정·재작업 지시 */
+  comments?: string
   /** 재현 스크립트(.ive/e2e/issue-<iid>.spec.ts) 가 워크스페이스에 있으면 그 상대 경로 */
   e2eScript: string | null
   /** 테스트 계정 등 비밀값 환경변수 이름 (값은 넣지 않는다) */
@@ -82,6 +88,7 @@ function confirmFixed(i: ConfirmPromptInput): string {
   "verdict": "pass | fail | blocked",
   "summary": "결론 1~3문장 — 어디서 무엇을 확인했고 결과가 어떤지. 거친 과정·명령은 commands 에만 쓴다",
   "reason": "fail/blocked 일 때 이유 (pass 면 빈 문자열)",
+  "items": [{ "item": "확인 항목(이슈의 증상 하나 또는 처리·검증 결과의 요건 하나)", "how": "어디서 어떻게 재현했는지(경로·조건)", "result": "gone | present | unverified", "evidence": ["screens/after-xxx.png", "측정값 등"] }],
   "engines": [{ "engine": "chromium|firefox|webkit|mcp-chrome", "status": "pass|fail|skip", "note": "" }],
   "screenshots": [{ "file": "screens/after-xxx.png", "caption": "무엇을 보여 주는지" }],
   "commands": ["실행한 명령"],
@@ -89,7 +96,9 @@ function confirmFixed(i: ConfirmPromptInput): string {
 }
 \`\`\`
 - 마지막 줄에 정확히 \`${CONFIRM_RESULT_MARKER} pass\` 또는 \`fail\` 또는 \`blocked\` 를 출력한다.
-- 판정 기준: 이슈가 말한 증상이 staging 에서 **없어졌으면 pass**, 그대로거나 수정이 새 문제를 만들었으면 fail, 확인할 수 없으면(로그인 불가·경로 불명·staging 장애) blocked.${i.maxRunMinutes > 0 ? `
+- items 에는 이슈의 증상과 처리·검증 결과의 요건을 빠짐없이 적고, 항목마다 증거(스크린샷 파일·측정값)를 단다. 증거가 없는 항목은 unverified 다.
+- 판정 기준: 모든 확인 항목이 gone(증상이 사라짐)이고 증거가 있으면 **pass** → 완료. 하나라도 present(증상 그대로)이거나 수정이 새 문제를 만들었으면 fail → 재처리.
+  확인할 수 없으면(로그인 불가·경로 불명·staging 장애, 증거를 남기지 못함) blocked → 사람 확인. items 와 verdict 가 어긋나거나 증거 없는 pass 는 IVE 가 고친다.${i.maxRunMinutes > 0 ? `
 - 시간 예산: ${i.maxRunMinutes}분 뒤 강제 종료된다. 약 ${Math.max(5, Math.round(i.maxRunMinutes * 0.6))}분 안에 result.json 을 쓴다.` : ''}
 - ${lang}`
 }
@@ -97,15 +106,15 @@ function confirmFixed(i: ConfirmPromptInput): string {
 export function buildConfirmPrompt(i: ConfirmPromptInput, editable: string): string {
   const context = `## 확인할 이슈 #${i.iid}: ${i.title}
 ${i.body || '(본문 없음)'}
-${i.imagesSection}
-## 배포 상태 (IVE 가 확인함)
+${i.comments ? `\n### 이슈 코멘트 (사람이 쓴 것, 시간순 — 나중 정정이 우선)\n${i.comments}\n` : ''}${i.imagesSection}
+${i.priorWork ? `## 처리·검증 결과 (이것이 그대로 구현됐는지 화면에서 확인한다)\n${i.priorWork}\n\n` : ''}## 배포 상태 (IVE 가 확인함)
 - staging: ${i.stagingUrl}
 - staging 이 내보내는 커밋: ${i.deployedCommit}
 - 이 이슈의 머지 커밋: ${i.mergeCommit ?? '(알 수 없음)'} — 배포 커밋에 포함됨을 확인했다.${i.mrUrl ? `\n- MR: ${i.mrUrl}` : ''}
 - 워크스페이스는 배포 커밋으로 체크아웃되어 있다(코드는 읽기만).
 ${i.e2eScript ? `- 재현 스크립트: ${i.e2eScript}` : '- 재현 스크립트: 없음 (화면 탐색으로만 판정)'}`
 
-  return `너는 IVE 의 확인자 에이전트다. staging 에 배포된 수정이 이슈의 증상을 실제로 없앴는지 사람 대신 확인한다.
+  return `너는 IVE 의 확인자 에이전트다. 처리자·검증자가 작업한 내용이 staging 에 그대로 구현됐는지, 이슈의 증상을 재현해 사라졌음을 증명하고 증거를 남긴다.
 
 ${context}
 
@@ -131,16 +140,19 @@ export const REPRODUCE_EDITABLE_DEFAULT = `- 이슈 본문과 첨부 이미지�
 - 현재 staging 에서 그 스크립트가 실패하는 것을 확인하고, 수정 전 스크린샷을 남긴다.
 - 증상을 만들지 못하면 추측으로 스크립트를 맞추지 말고 이유를 적는다.`
 
-export const VERIFY_EDITABLE_DEFAULT = `- MR diff 를 라인 단위로 리뷰한다: 이슈 요건 대비 누락·축소, 범위 밖 변경, 명백한 결함(잘못된 조건·빠진 경우·깨지는 호출).
-- 바뀐 부분이 기존 코드와 어떻게 맞물리는지 주변 코드를 읽어 확인한다. diff 만 보고 판정하지 않는다.
+export const VERIFY_EDITABLE_DEFAULT = `- 검증은 두 가지다. 둘 다 완벽해야 통과다.
+  1. 요건 누락: 이슈 본문과 코멘트(나중 정정이 우선)에서 요건을 하나씩 뽑아, 각각이 코드에 구현됐는지 diff·주변 코드에서 찾는다. 구현 위치(파일:줄)를 대지 못하는 요건은 누락이다.
+  2. 구현 오류: 구현된 코드를 줄 단위로 읽어 오류를 찾는다 — 잘못된 조건·빠진 경우(빈 값·경계·오류 응답)·깨지는 호출·타입/이름 불일치·기존 동작 회귀. 바뀐 부분이 기존 코드와 어떻게 맞물리는지 호출하는 곳·불리는 곳까지 읽는다. diff 만 보고 판정하지 않는다.
 - 재현 스크립트가 MR 에 들어 있으면 수정이 그 스크립트가 재는 증상을 겨누는지 본다.
-- 취향·스타일 차이는 반려 사유가 아니다. 요건을 못 채우거나 결함이 있을 때만 fail 로 둔다.
-- 판단이 서지 않으면 추측으로 통과시키지 말고 blocked 로 두고 이유를 적는다.`
+- 취향·스타일 차이는 오류가 아니다. 지적은 누락과 오류만 적는다.
+- 확신이 없다고 통과시키지 않는다. 구현됐음을 코드로 보이지 못하면 누락, 맞는지 보이지 못하면 오류로 적는다.`
 
 export interface VerifyPromptInput {
   iid: number
   title: string
   body: string
+  /** 사람이 쓴 이슈 코멘트(시간순, IVE 봇·에이전트 코멘트 제외) — 재작업 지시·요건 정정이 여기 있다 */
+  comments?: string
   isKo: boolean
   mrUrl: string | null
   targetBranch: string
@@ -165,20 +177,25 @@ function verifyFixed(i: VerifyPromptInput): string {
     : 'All output (summary, reasons, findings) must be written in English.'
   return `## IVE 고정 규약 (반드시 지킨다)
 - 너는 **검증자**다. 코드를 고치지 않는다. 파일 수정·git commit·push·브랜치 생성·머지·라벨 변경·이슈/MR 코멘트 작성을 하지 않는다 (IVE 가 네 결과로 코멘트와 단계 이동을 한다).
-- 서버·브라우저를 띄우지 않는다. 검사 명령은 IVE 가 이미 돌렸다(아래 결과). 필요하면 읽기 전용 명령(git log/diff/grep 등)만 쓴다.
+- 검증은 코드 수준이다. 증상을 재현하거나 화면을 확인하지 않아도 된다(그건 확인자의 일이다). 검사 명령은 IVE 가 이미 돌렸다(아래 결과).
+  코드만으로는 판단이 불가피하게 안 될 때에만 그 부분을 직접 실행해 확인하고, 무엇을 왜 실행했는지 commands 에 남긴다. 저장소 파일은 바꾸지 않는다.
 - 끝나면 \`${i.outDir}/result.json\` 을 아래 형식 그대로 쓴다:
 \`\`\`json
 {
   "verdict": "pass | fail | blocked",
-  "summary": "결론 1~3문장 — 이슈 요건을 채웠는지, 핵심 근거 하나. 읽은 파일·grep 한 과정은 commands 에만 쓴다",
+  "summary": "결론 1~3문장 — 요건을 다 구현했는지, 오류가 있는지. 읽은 파일·grep 한 과정은 commands 에만 쓴다",
   "reason": "fail/blocked 일 때 이유 (pass 면 빈 문자열)",
-  "findings": [{ "severity": "blocker|major|minor", "file": "경로", "line": 0, "note": "무엇이 왜 문제인지, 어떻게 고치면 되는지" }],
+  "requirements": [{ "item": "이슈에서 뽑은 요건 하나", "status": "done | missing", "where": "구현 위치 파일:줄 (missing 이면 빈 문자열)" }],
+  "findings": [{ "kind": "missing | defect", "file": "경로", "line": 0, "note": "무엇이 왜 문제인지, 어떻게 고치면 되는지" }],
   "commands": ["실행한 명령"]
 }
 \`\`\`
 - 마지막 줄에 정확히 \`${VERIFY_RESULT_MARKER} pass\` 또는 \`fail\` 또는 \`blocked\` 를 출력한다.
-- 판정 기준: 이슈 요건을 채우고 결함이 없으면 pass, 요건 누락·결함·범위 밖 변경이 있으면 fail(고칠 점을 findings 에 구체적으로), 판단할 수 없으면 blocked.
-  IVE 검사 명령이 실패했거나 staging 최신본과 충돌하면 IVE 가 fail 로 처리한다 — 너는 그 원인을 findings 에 짚어 준다.${i.maxRunMinutes > 0 ? `
+- requirements 에는 이슈의 요건을 빠짐없이 적는다. 구현되지 않은 요건은 status missing 이고 findings 에도 kind missing 으로 적는다. 구현 오류는 kind defect 로 적는다.
+- 판정 기준: 요건이 모두 done 이고 오류(defect)가 하나도 없으면 pass → 확인 단계로 넘어간다. 누락이나 오류가 하나라도 있으면 fail → 재처리로 돌아간다(findings 가 처리자에게 갈 지시다, 구체적으로).
+  blocked 는 diff·작업 공간을 읽을 수 없는 등 기술적으로 검증을 못 한 경우에만 쓴다(확신이 없다는 이유로 쓰지 않는다).
+  IVE 검사 명령이 실패했거나 staging 최신본과 충돌하면 IVE 가 fail 로 처리한다 — 너는 그 원인을 findings 에 짚어 준다.
+  findings·requirements 와 verdict 가 어긋나면 IVE 가 fail 로 고친다.${i.maxRunMinutes > 0 ? `
 - 시간 예산: ${i.maxRunMinutes}분 뒤 강제 종료된다. 약 ${Math.max(5, Math.round(i.maxRunMinutes * 0.6))}분 안에 result.json 을 쓴다.` : ''}
 - ${lang}`
 }
@@ -189,7 +206,7 @@ export function buildVerifyPrompt(i: VerifyPromptInput, editable: string): strin
 
 ## 검증할 이슈 #${i.iid}: ${i.title}
 ${i.body || '(본문 없음)'}
-
+${i.comments ? `\n### 이슈 코멘트 (사람이 쓴 것, 시간순 — 나중 정정이 우선)\n${i.comments}\n` : ''}
 ## MR (IVE 가 준비함)
 - MR: ${i.mrUrl ?? '(알 수 없음)'}
 - 대상 브랜치: ${i.targetBranch} · 검증하는 커밋: ${i.sourceSha}

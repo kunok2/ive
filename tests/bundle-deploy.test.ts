@@ -315,12 +315,16 @@ describe('B-6 자동 머지 꺼짐', () => {
 describe('V-1 검증 판정', () => {
   const ok: CheckResult = { command: 'npm test', ok: true, exitCode: 0, timedOut: false, durationSec: 1, outputTail: '' }
   const bad: CheckResult = { ...ok, ok: false, exitCode: 1 }
-  const pass = { verdict: 'pass' as const, summary: 's', reason: '', findings: [], commands: [] }
+  const pass = { verdict: 'pass' as const, summary: 's', reason: '', requirements: [], findings: [], commands: [] }
   it('검사 실패·충돌이면 에이전트가 pass 라도 fail', () => {
     expect(enforceVerifyVerdict(pass, [ok], []).verdict).toBe('pass')
     expect(enforceVerifyVerdict(pass, [bad], [])).toMatchObject({ verdict: 'fail', reason: expect.stringMatching(/npm test/) })
     expect(enforceVerifyVerdict(pass, [ok], ['a.txt'])).toMatchObject({ verdict: 'fail', reason: expect.stringMatching(/a\.txt/) })
     expect(enforceVerifyVerdict({ ...pass, verdict: 'blocked' }, [bad], []).verdict).toBe('fail')
+    // 검증 기준(누락 0·오류 0)과 어긋난 통과는 반려로 — 요건 하나라도 missing, 지적 하나라도 있으면
+    expect(enforceVerifyVerdict({ ...pass, requirements: [{ item: 'x', status: 'missing', where: '' }] }, [ok], [])).toMatchObject({ verdict: 'fail', reason: expect.stringMatching(/구현되지 않은 요건 1개/) })
+    expect(enforceVerifyVerdict({ ...pass, findings: [{ kind: 'defect', severity: 'defect', file: 'a', line: null, note: 'n' }] }, [ok], [])).toMatchObject({ verdict: 'fail', reason: expect.stringMatching(/지적 1건/) })
+    expect(enforceVerifyVerdict({ ...pass, requirements: [{ item: 'x', status: 'done', where: 'a:1' }] }, [ok], []).verdict).toBe('pass')
   })
   it('결과 파일이 없으면 blocked, 있으면 그대로 읽는다', () => {
     const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'ive-v-'))
@@ -329,6 +333,12 @@ describe('V-1 검증 판정', () => {
     fs.mkdirSync(path.join(ws, '.ive-out'))
     fs.writeFileSync(path.join(ws, '.ive-out', 'result.json'), JSON.stringify({ verdict: 'fail', summary: 's', reason: 'r', findings: [{ severity: 'major', file: 'a.ts', line: 3, note: 'n' }, { note: '' }] }))
     expect(parseVerifyResult(ws, log)).toMatchObject({ verdict: 'fail', findings: [{ severity: 'major', file: 'a.ts', line: 3, note: 'n' }] })
+    // 새 형식 — 요건 대조와 누락/오류 두 종류
+    fs.writeFileSync(path.join(ws, '.ive-out', 'result.json'), JSON.stringify({ verdict: 'fail', summary: 's', requirements: [{ item: '요건1', status: 'done', where: 'a.ts:1' }, { item: '요건2', status: 'nope' }], findings: [{ kind: 'missing', file: 'b.ts', note: '요건2 없음' }, { kind: 'defect', file: 'a.ts', line: 2, note: '빈 값' }] }))
+    expect(parseVerifyResult(ws, log)).toMatchObject({
+      requirements: [{ item: '요건1', status: 'done', where: 'a.ts:1' }, { item: '요건2', status: 'missing' }],
+      findings: [{ kind: 'missing', severity: 'missing' }, { kind: 'defect', line: 2 }],
+    })
     fs.rmSync(ws, { recursive: true, force: true })
   })
 })

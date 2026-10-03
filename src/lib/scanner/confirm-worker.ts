@@ -20,7 +20,7 @@ import {
   getExecution, getSystemSetting, updateExecutionStatus, markIssueConfirmStarted, markIssueConfirmed,
   setStageWorkerNote, getProjectAutomation, stageFromLabels,
 } from '../db'
-import { addIssueComment, fetchSingleIssue } from '../provider'
+import { addIssueComment, fetchSingleIssue, fetchIssueNotes } from '../provider'
 import { applyStageAction } from '../stage-apply'
 import { agentActor } from '../event-actor'
 import { maskSecrets } from '../secret-mask'
@@ -54,6 +54,10 @@ export interface ConfirmInput {
 }
 
 interface ConfirmPrep {
+  /** 처리자의 결과 보고 + 검증 통과 노트(요건 대조) — 확인 항목의 근거 */
+  priorWork: string
+  /** 사람이 쓴 이슈 코멘트(요건 정정·재작업 지시) */
+  comments: string
   e2eScript: string | null
   imagesSection: string
   imagePaths: string[]
@@ -64,10 +68,14 @@ interface ConfirmPrep {
 
 type Verdict = 'pass' | 'fail' | 'blocked'
 
-interface ConfirmResult {
+/** 확인 항목 하나 — 이슈의 증상 또는 처리·검증 결과의 요건. 증거(스크린샷·측정값)가 있어야 증명된 것 */
+export interface ConfirmCheck { item: string; how: string; result: 'gone' | 'present' | 'unverified'; evidence: string[] }
+
+export interface ConfirmResult {
   verdict: Verdict
   summary: string
   reason: string
+  items: ConfirmCheck[]
   engines: { engine: string; status: string; note?: string }[]
   screenshots: { file: string; caption?: string }[]
   commands: string[]
@@ -148,7 +156,7 @@ function kstIso(iso: string): string {
 }
 
 export function parseResult(workspacePath: string, logPath: string): ConfirmResult {
-  const empty: ConfirmResult = { verdict: 'blocked', summary: '', reason: '', engines: [], screenshots: [], commands: [], newDefects: [] }
+  const empty: ConfirmResult = { verdict: 'blocked', summary: '', reason: '', items: [], engines: [], screenshots: [], commands: [], newDefects: [] }
   let raw: any = null
   try { raw = JSON.parse(fs.readFileSync(path.join(workspacePath, OUT_DIR, 'result.json'), 'utf8')) } catch { /* 없음 */ }
   let marker: Verdict | null = null
@@ -166,11 +174,39 @@ export function parseResult(workspacePath: string, logPath: string): ConfirmResu
     verdict,
     summary: String(raw.summary || ''),
     reason: String(raw.reason || (verdict === 'blocked' && !v ? '판정 값이 없습니다' : '')),
+    items: arr(raw.items).map((c: any) => {
+      const r = String(c?.result || '').toLowerCase()
+      return {
+        item: String(c?.item || ''), how: String(c?.how || ''),
+        result: (r === 'gone' || r === 'present' ? r : 'unverified') as ConfirmCheck['result'],
+        evidence: arr(c?.evidence).map(String).filter(Boolean),
+      }
+    }).filter(c => c.item),
     engines: arr(raw.engines).map((e: any) => ({ engine: String(e?.engine || ''), status: String(e?.status || ''), note: e?.note ? String(e.note) : '' })),
     screenshots: arr(raw.screenshots).map((s: any) => ({ file: String(s?.file || ''), caption: s?.caption ? String(s.caption) : '' })).filter(s => s.file),
     commands: arr(raw.commands).map(String),
     newDefects: arr(raw.newDefects).map(String),
   }
+}
+
+/**
+ * 에이전트 판정에 확인 규약을 덮는다 — 증상이 사라졌음을 증거로 보이지 못한 통과는 통과가 아니다.
+ *   - 증상이 남은 항목(present)이 있으면 fail(재처리)
+ *   - pass 인데 남은 스크린샷이 없거나, 증거 없는/확인 못 한 항목이 있으면 blocked(사람 확인) — 처리자 잘못이 아니라 증명이 안 된 것
+ */
+export function enforceConfirmVerdict(r: ConfirmResult, savedScreens: number, isKo = true): ConfirmResult {
+  const present = r.items.filter(c => c.result === 'present')
+  if (r.verdict !== 'fail' && present.length) {
+    return { ...r, verdict: 'fail', reason: [isKo ? `증상이 남은 항목 ${present.length}개` : `${present.length} item(s) still present`, r.reason].filter(Boolean).join(' — ') }
+  }
+  if (r.verdict !== 'pass') return r
+  const reasons: string[] = []
+  if (savedScreens === 0) reasons.push(isKo ? '증거 스크린샷이 없습니다' : 'no evidence screenshots')
+  if (!r.items.length) reasons.push(isKo ? '확인 항목(items)이 없습니다' : 'no items listed')
+  const unproven = r.items.filter(c => c.result !== 'gone' || !c.evidence.length)
+  if (unproven.length) reasons.push(isKo ? `증거로 보이지 못한 항목 ${unproven.length}개` : `${unproven.length} item(s) without evidence`)
+  if (!reasons.length) return r
+  return { ...r, verdict: 'blocked', reason: reasons.join(' / ') }
 }
 
 const VERDICT_TITLE: Record<Verdict, { ko: string; en: string }> = {
@@ -216,6 +252,15 @@ async function buildEvidenceComment(
   lines.push('')
   if (result.summary) lines.push(result.summary, '')
   if (result.reason && result.verdict !== 'pass') lines.push(`**${t('사유', 'Reason')}**: ${result.reason}`, '')
+  // 확인 항목 — 몇 개 중 몇 개 증상이 사라짐(증거 있음). 사라지지 않은·증명 못 한 항목만 줄로 보인다
+  if (result.items.length) {
+    const proven = result.items.filter(c => c.result === 'gone' && c.evidence.length).length
+    lines.push(`**${t('확인 항목', 'Checks')}**: ${t(`${result.items.length}개 중 ${proven}개 증상 사라짐(증거 있음)`, `${proven} of ${result.items.length} gone (with evidence)`)}`)
+    for (const c of result.items.filter(c => !(c.result === 'gone' && c.evidence.length)).slice(0, 15)) {
+      lines.push(`- ${c.result === 'present' ? t('❌ 증상 그대로', '❌ still present') : t('⚠️ 증명 못 함', '⚠️ not proven')}: ${c.item}${c.how ? ` — ${c.how}` : ''}`)
+    }
+    lines.push('')
+  }
 
   if (before.length && after.length) {
     lines.push(`| ${t('수정 전 (이슈 첨부)', 'Before (issue)')} | ${t('수정 후 (staging)', 'After (staging)')} |`)
@@ -243,7 +288,12 @@ async function buildEvidenceComment(
   }
   const mergeShort = input.mergeCommit ? input.mergeCommit.slice(0, 12) : '-'
   lines.push('<details>')
-  lines.push(`<summary>${t('확인 환경·실행 명령', 'Environment & commands')}</summary>`, '')
+  lines.push(`<summary>${t('확인 항목·환경·실행 명령', 'Checks, environment & commands')}</summary>`, '')
+  for (const c of result.items.slice(0, 30)) {
+    const mark = c.result === 'gone' ? '✅' : c.result === 'present' ? '❌' : '⚠️'
+    lines.push(`- ${mark} ${c.item}${c.how ? ` — ${c.how}` : ''}${c.evidence.length ? ` (${c.evidence.slice(0, 3).map(e => `\`${e.replace(/`/g, "'")}\``).join(', ')})` : ''}`)
+  }
+  if (result.items.length) lines.push('')
   // IVE 설정 값이라도 주소에 넣은 계정(user:pass@)은 가린다
   lines.push(`- staging: ${maskSecrets(input.staging.url)}`)
   lines.push(`- ${t('배포 커밋', 'Deployed commit')}: \`${input.deployedCommit.slice(0, 12)}\` · ${t('머지 커밋', 'Merge commit')}: \`${mergeShort}\` (${t('포함 확인', 'included')})`)
@@ -319,7 +369,27 @@ function confirmSpec(input: ConfirmInput): StageKindSpec<ConfirmPrep> {
       const { mcpServers, chromium } = buildConfirmMcpServers(path.join(workspacePath, OUT_DIR, 'screens'), secretsFile)
       log(`Playwright MCP: chromium ${chromium ? chromium.split(path.sep).find(seg => /^chromium-\d+$/.test(seg)) || chromium : '(기본)'}`, 'system')
 
-      return { e2eScript, imagesSection, imagePaths, secretsFile, mcpServers, startedAt }
+      // 처리·검증 결과와 사람 코멘트 — 확인자가 「무엇이 구현됐어야 하는지」를 알고 재현·대조하게 한다
+      let priorWork = '', comments = ''
+      try {
+        const notes = (await fetchIssueNotes(project, iid, token)) as any[]
+        const body = (n: any) => String(n?.body || '')
+        const lastOf = (re: RegExp) => [...notes].reverse().find(n => re.test(body(n)))
+        const stripMeta = (x: string) => x.replace(/<!--[\s\S]*?-->/g, '').trim()
+        const dev = lastOf(/^## ✅ 개발 완료/m)
+        const devReport = dev ? (body(dev).split(/^### 📝 (?:결과|수행 작업)\s*$/m)[1] || '') : ''
+        const ver = lastOf(/^## ✅ 검증 통과/m)
+        priorWork = [
+          devReport.trim() ? `### 처리자 결과 보고\n${stripMeta(devReport).slice(0, 4000)}` : '',
+          ver ? `### 검증 통과 노트(요건 대조)\n${stripMeta(body(ver)).replace(/^## .*$/m, '').trim().slice(0, 4000)}` : '',
+        ].filter(Boolean).join('\n\n')
+        comments = notes
+          .filter(n => !n.system && body(n) && !body(n).includes('<!-- ive-bot -->') && !body(n).includes('<!-- ive-agent:') && !body(n).includes('IVE(봇)'))
+          .map(n => `- ${n.author?.name || n.author?.username || n.user?.login || '?'} (${String(n.created_at || '').slice(0, 16)}): ${body(n).trim()}`)
+          .join('\n').slice(-8000)
+      } catch (e) { log(`이슈 코멘트 조회 실패 — 본문만으로 확인합니다: ${(e as Error).message}`, 'warn') }
+
+      return { e2eScript, imagesSection, imagePaths, secretsFile, mcpServers, startedAt, priorWork, comments }
     },
 
     buildPrompt(ctx, prep) {
@@ -327,6 +397,7 @@ function confirmSpec(input: ConfirmInput): StageKindSpec<ConfirmPrep> {
       const limits = getProjectAutomation(ctx.project.id).limits
       const prompt = buildConfirmPrompt({
         iid: ctx.iid, title: ctx.issue.title, body: ctx.issue.description || '', isKo: ctx.isKo,
+        priorWork: prep.priorWork, comments: prep.comments,
         stagingUrl: input.staging.url, deployedCommit: input.deployedCommit, mergeCommit: input.mergeCommit,
         mrUrl: input.mrUrl, stagingNotes: input.staging.notes,
         e2eScript: prep.e2eScript, secretEnvNames: Object.keys(input.secrets), outDir: OUT_DIR,
@@ -350,19 +421,24 @@ function confirmSpec(input: ConfirmInput): StageKindSpec<ConfirmPrep> {
       const raw = parseResult(workspacePath, logPath)
       // 에이전트가 쓴 칸만 가린다 — IVE 가 만든 줄(ive-meta 숫자·커밋 SHA)은 짧은 비밀값과 우연히 겹쳐도 그대로 둔다
       const m = (x: string) => maskSecrets(x, ctx.secrets)
-      const result: ConfirmResult = {
+      const masked: ConfirmResult = {
         ...raw,
         summary: m(raw.summary), reason: m(raw.reason), commands: raw.commands.map(m), newDefects: raw.newDefects.map(m),
         engines: raw.engines.map(e => ({ engine: m(e.engine), status: m(e.status), note: e.note ? m(e.note) : e.note })),
         screenshots: raw.screenshots.map(sh => ({ ...sh, caption: sh.caption ? m(sh.caption) : sh.caption })),
+        items: raw.items.map(c => ({ ...c, item: m(c.item), how: m(c.how), evidence: c.evidence.map(m) })),
       }
-      log(`판정: ${result.verdict}${result.reason ? ` — ${result.reason}` : ''}`, 'system')
 
       // 증적 보관 (원본) — 결과 JSON 은 IVE 가 정리한 형태로 덮어쓴다
       const stamp = evidenceStamp()
       const destDir = evidenceDir(project.id, iid, 'confirm', stamp)
       const saved = collectEvidence(path.join(workspacePath, OUT_DIR), destDir)
       fs.mkdirSync(destDir, { recursive: true })
+      // 증거로 남은 스크린샷 수 — 증거 없는 통과는 통과가 아니다(enforceConfirmVerdict)
+      const screensDir = path.join(destDir, 'screens')
+      const savedScreens = fs.existsSync(screensDir) ? fs.readdirSync(screensDir).filter(f => /\.(png|jpe?g|webp)$/i.test(f)).length : 0
+      const result = enforceConfirmVerdict(masked, savedScreens, isKo)
+      log(`판정: ${result.verdict}${result.reason ? ` — ${result.reason}` : ''}${result.verdict !== masked.verdict ? ` (에이전트 판정 ${masked.verdict} → IVE 규약으로 ${result.verdict})` : ''}`, 'system')
       fs.writeFileSync(path.join(destDir, 'result.json'), JSON.stringify({
         ...result, executionId, agent: agent.name, deployedCommit: input.deployedCommit, mergeCommit: input.mergeCommit,
         stagingUrl: input.staging.url,

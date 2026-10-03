@@ -22,7 +22,7 @@ import {
   getExecution, updateExecutionStatus, markIssueVerifyStarted, markIssueVerified, markIssueVerifyRejected,
   resetIssueScheduledAt, setStageWorkerNote, getProjectAutomation, stageFromLabels, getPresetRoles, enqueueBundleItem,
 } from '../db'
-import { addIssueComment, fetchSingleIssue } from '../provider'
+import { addIssueComment, fetchSingleIssue, fetchIssueNotes } from '../provider'
 import { applyStageAction } from '../stage-apply'
 import { agentActor } from '../event-actor'
 import { applyRoleAssignee } from '../role-assignee'
@@ -61,16 +61,26 @@ interface VerifyPrep {
   checkCommands: string[]
   e2eScript: string | null
   startedAt: string
+  /** 사람이 쓴 이슈 코멘트(요건 정정·재작업 지시) — 검증자가 요건을 빠짐없이 대조하도록 프롬프트에 싣는다 */
+  comments: string
 }
 
 type Verdict = 'pass' | 'fail' | 'blocked'
 
-export interface VerifyFinding { severity: string; file: string; line: number | null; note: string }
+/**
+ * 지적은 두 종류뿐이다 — missing(요건은 있는데 구현 안 됨), defect(구현했는데 틀림).
+ * severity 는 예전 결과(blocker/major/minor)와 근거 화면 호환용 — 새 결과는 kind 로 채운다.
+ */
+export interface VerifyFinding { kind: 'missing' | 'defect' | null; severity: string; file: string; line: number | null; note: string }
+
+/** 이슈에서 뽑은 요건 하나와 구현 여부 */
+export interface VerifyRequirement { item: string; status: 'done' | 'missing'; where: string }
 
 export interface VerifyResult {
   verdict: Verdict
   summary: string
   reason: string
+  requirements: VerifyRequirement[]
   findings: VerifyFinding[]
   commands: string[]
 }
@@ -90,7 +100,7 @@ export function parseVerifyResult(workspacePath: string, logPath: string): Verif
   } catch { /* ignore */ }
   if (!raw) {
     return {
-      verdict: 'blocked', summary: '', findings: [], commands: [],
+      verdict: 'blocked', summary: '', requirements: [], findings: [], commands: [],
       reason: marker ? `결과 파일(result.json)이 없습니다 (마지막 출력: ${marker})` : '검증 작업자가 결과 파일(result.json)을 남기지 않았습니다',
     }
   }
@@ -101,10 +111,17 @@ export function parseVerifyResult(workspacePath: string, logPath: string): Verif
     verdict,
     summary: String(raw.summary || ''),
     reason: String(raw.reason || (verdict === 'blocked' && !v ? '판정 값이 없습니다' : '')),
-    findings: arr(raw.findings).map((f: any) => ({
-      severity: String(f?.severity || 'minor'), file: String(f?.file || ''),
-      line: Number.isFinite(Number(f?.line)) && Number(f?.line) > 0 ? Number(f.line) : null, note: String(f?.note || ''),
-    })).filter(f => f.note),
+    requirements: arr(raw.requirements).map((q: any) => ({
+      item: String(q?.item || ''), status: String(q?.status || '').toLowerCase() === 'done' ? 'done' as const : 'missing' as const, where: String(q?.where || ''),
+    })).filter(q => q.item),
+    findings: arr(raw.findings).map((f: any) => {
+      const k = String(f?.kind || '').toLowerCase()
+      const kind: VerifyFinding['kind'] = k === 'missing' || k === 'defect' ? k : null
+      return {
+        kind, severity: String(f?.severity || kind || 'minor'), file: String(f?.file || ''),
+        line: Number.isFinite(Number(f?.line)) && Number(f?.line) > 0 ? Number(f.line) : null, note: String(f?.note || ''),
+      }
+    }).filter(f => f.note),
     commands: arr(raw.commands).map(String),
   }
 }
@@ -115,6 +132,12 @@ export function parseVerifyResult(workspacePath: string, logPath: string): Verif
  */
 export function enforceVerifyVerdict(r: VerifyResult, checks: CheckResult[], conflictFiles: string[], isKo = true): VerifyResult {
   const reasons: string[] = []
+  // 검증 기준(요건 누락 0 · 구현 오류 0)과 어긋난 통과는 통과가 아니다 — 에이전트 판정보다 그가 적은 사실을 믿는다
+  if (r.verdict === 'pass') {
+    const missing = r.requirements.filter(q => q.status === 'missing').length
+    if (missing) reasons.push(isKo ? `구현되지 않은 요건 ${missing}개` : `${missing} requirement(s) not implemented`)
+    if (r.findings.length) reasons.push(isKo ? `지적 ${r.findings.length}건` : `${r.findings.length} finding(s)`)
+  }
   const failed = checks.find(c => !c.ok)
   if (failed) reasons.push(isKo ? `검사 명령 실패: \`${failed.command}\`${failed.timedOut ? ' (시간 초과)' : ` (종료 코드 ${failed.exitCode})`}` : `Check failed: \`${failed.command}\``)
   if (conflictFiles.length) reasons.push(isKo ? `staging 최신본과 충돌: ${conflictFiles.join(', ')}` : `Conflicts with staging: ${conflictFiles.join(', ')}`)
@@ -149,11 +172,19 @@ async function buildComment(ctx: StageContext, input: VerifyInput, prep: VerifyP
   lines.push('')
   if (result.summary) lines.push(result.summary, '')
   if (result.reason && result.verdict !== 'pass') lines.push(`**${t('사유', 'Reason')}**: ${result.reason}`, '')
+  // 요건 대조 — 몇 개 중 몇 개 구현. 다 구현됐으면 한 줄, 아니면 누락만 지적 사항에서 보인다
+  const reqs = result.requirements
+  if (reqs.length) {
+    const done = reqs.filter(q => q.status === 'done').length
+    lines.push(`**${t('요건', 'Requirements')}**: ${t(`${reqs.length}개 중 ${done}개 구현`, `${done} of ${reqs.length} implemented`)}`, '')
+  }
+  // 지적 — 누락·오류로 나눠 보인다(예전 결과는 severity 그대로)
+  const kindLabel = (f: VerifyFinding) => f.kind === 'missing' ? t('누락', 'Missing') : f.kind === 'defect' ? t('오류', 'Defect') : f.severity
   if (result.findings.length) {
     lines.push(`**${t('지적 사항', 'Findings')}**`)
     for (const f of result.findings.slice(0, 30)) {
       const loc = f.file ? ` \`${f.file}${f.line ? `:${f.line}` : ''}\`` : ''
-      lines.push(`- [${f.severity}]${loc} ${f.note}`)
+      lines.push(`- [${kindLabel(f)}]${loc} ${f.note}`)
     }
     lines.push('')
   }
@@ -166,7 +197,11 @@ async function buildComment(ctx: StageContext, input: VerifyInput, prep: VerifyP
   const base = getIveBaseUrl()
   const evidenceLink = base ? `${base}/issues/${project.id}/${iid}?tab=evidence&run=${encodeURIComponent(runDir)}` : ''
   lines.push('<details>')
-  lines.push(`<summary>${t('검증 대상·실행 명령', 'Target & commands')}</summary>`, '')
+  lines.push(`<summary>${t('요건 대조·검증 대상·실행 명령', 'Requirements, target & commands')}</summary>`, '')
+  if (reqs.length) {
+    for (const q of reqs.slice(0, 40)) lines.push(`- ${q.status === 'done' ? '✅' : '❌'} ${q.item}${q.where ? ` — \`${q.where}\`` : ''}`)
+    lines.push('')
+  }
   if (input.mrUrl) lines.push(`- MR: ${maskSecrets(input.mrUrl)}`)
   lines.push(`- ${t('검증한 커밋', 'Verified commit')}: \`${prep.sourceSha.slice(0, 12)}\` · ${t('대상', 'Target')}: \`${input.targetBranch}\` (${prep.behindTarget ? t('최신본 미포함 — 묶음 때 위에 머지', 'behind — merged on top at bundle time') : t('최신본 위', 'up to date')})`)
   lines.push(`- ${t('바뀐 파일', 'Changed files')}: ${prep.changedFiles.length}`)
@@ -261,14 +296,26 @@ function verifySpec(input: VerifyInput): StageKindSpec<VerifyPrep> {
 
       const script = `.ive/e2e/issue-${iid}.spec.ts`
       const e2eScript = fs.existsSync(path.join(workspacePath, script)) ? script : null
-      return { sourceSha, behindTarget, conflictFiles, changedFiles, checks, checkCommands, e2eScript, startedAt }
+
+      // 사람이 쓴 이슈 코멘트 — 요건 정정·재작업 지시가 본문이 아니라 여기 있다(봇·에이전트 코멘트 제외)
+      let comments = ''
+      try {
+        const notes = (await fetchIssueNotes(project, iid, token)) as any[]
+        comments = notes
+          .filter(n => !n.system && n.body && !n.body.includes('<!-- ive-bot -->') && !n.body.includes('<!-- ive-agent:') && !n.body.includes('IVE(봇)'))
+          .map(n => `- ${n.author?.name || n.author?.username || n.user?.login || '?'} (${String(n.created_at || '').slice(0, 16)}): ${String(n.body).trim()}`)
+          .join('\n')
+          .slice(-12000)
+      } catch (e) { log(`이슈 코멘트 조회 실패 — 본문만으로 요건을 대조합니다: ${(e as Error).message}`, 'warn') }
+
+      return { sourceSha, behindTarget, conflictFiles, changedFiles, checks, checkCommands, e2eScript, startedAt, comments }
     },
 
     buildPrompt(ctx, prep) {
       const { editable, version } = resolveEditable(ctx.project.id, 'verify')
       const limits = getProjectAutomation(ctx.project.id).limits
       const prompt = buildVerifyPrompt({
-        iid: ctx.iid, title: ctx.issue.title, body: ctx.issue.description || ctx.issue.body || '', isKo: ctx.isKo,
+        iid: ctx.iid, title: ctx.issue.title, body: ctx.issue.description || ctx.issue.body || '', comments: prep.comments, isKo: ctx.isKo,
         mrUrl: input.mrUrl, targetBranch: input.targetBranch, sourceSha: prep.sourceSha, behindTarget: prep.behindTarget,
         conflictFiles: prep.conflictFiles, changedFiles: prep.changedFiles, diffPath: `${OUT_DIR}/mr.diff`,
         checksSection: checksSection(prep.checks, prep.checkCommands, ctx.isKo), e2eScript: prep.e2eScript,
@@ -289,6 +336,7 @@ function verifySpec(input: VerifyInput): StageKindSpec<VerifyPrep> {
       const result = enforceVerifyVerdict({
         ...raw, summary: m(raw.summary), reason: m(raw.reason), commands: raw.commands.map(m),
         findings: raw.findings.map(f => ({ ...f, note: m(f.note), file: m(f.file) })),
+        requirements: raw.requirements.map(q => ({ ...q, item: m(q.item), where: m(q.where) })),
       }, prep.checks, prep.conflictFiles, isKo)
       log(`판정: ${result.verdict}${result.reason ? ` — ${result.reason}` : ''}`, 'system')
 
