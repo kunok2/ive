@@ -249,6 +249,8 @@ export default function IssueHeader({
       {/* 진행막대 — 5단계 흐름 + 단계별 담당자 아바타를 한 줄로 표시 */}
       {!editMode && (
         <div className="px-3 pt-1 pb-3">
+          {/* 넓은 칸에서도 막대는 보기 좋은 폭(최대 768px)까지만, 가운데 */}
+          <div className="w-full max-w-3xl mx-auto">
           <StageProgress
             stage={issue.stage}
             createdAt={issue.createdAt}
@@ -289,6 +291,7 @@ export default function IssueHeader({
               confirmerAgents: roleAgents?.confirm,
             }}
           />
+          </div>
           {/* 마감일 진행 — 시작일시 → 마감일시 + 소진율. 작성자만 수정 가능.
               완료된 작업(closed/done)은 마감일 대비 조기/지연을 표시하므로 마감일이 있어야만 노출. */}
           {(() => {
