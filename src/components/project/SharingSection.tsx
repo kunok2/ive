@@ -3,12 +3,14 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Project, ShareRole } from '@/types'
 import { useTranslations } from 'next-intl'
+import AgentAvatar from '@/components/agent/AgentAvatar'
 
 interface Share {
   id: string
   userId: string
   userName: string
   userEmail: string
+  userAvatar?: string | null
   role: ShareRole
   createdAt: string
 }
@@ -17,6 +19,7 @@ interface Candidate {
   id: string
   name: string
   email: string
+  avatar?: string | null
 }
 
 export interface SharingSectionProps {
@@ -114,7 +117,7 @@ export default function SharingSection({ existing }: SharingSectionProps) {
             <div className="space-y-2">
               {shares.map(s => (
                 <div key={s.id} className="flex items-center gap-2 bg-ive-bg-deep rounded-lg px-3 py-2 border border-ive-border-dark">
-                  <i className="fa-solid fa-user-circle text-lg text-ive-text-dim" />
+                  <AgentAvatar avatar={s.userAvatar || 'person'} userId={s.userId} size="sm" />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-bold text-ive-text truncate">{s.userName}</div>
                     <div className="text-xs text-ive-text-dim truncate">{s.userEmail}</div>
@@ -168,7 +171,7 @@ export default function SharingSection({ existing }: SharingSectionProps) {
                     onClick={() => { setShareError(''); handleAddShare(u.id) }}
                     className="w-full text-left px-3 py-2.5 text-sm bg-ive-bg-deep rounded-lg border border-ive-border-dark hover:border-ive-cyan/40 hover:bg-ive-cyan/5 transition-all flex items-center gap-2 disabled:opacity-40"
                   >
-                    <i className="fa-solid fa-user-circle text-lg text-ive-text-dim" />
+                    <AgentAvatar avatar={u.avatar || 'person'} userId={u.id} size="sm" />
                     <div className="flex-1 min-w-0">
                       <span className="font-bold text-ive-text">{u.name}</span>
                       <span className="text-ive-text-dim text-xs ml-1.5">{u.email}</span>

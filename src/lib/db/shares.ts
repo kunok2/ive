@@ -5,9 +5,9 @@ import { getProject, mapProject, type ProjectRow } from './projects'
 import { fetchSingleIssue } from '@/lib/provider'
 import { extractIveAuthorId } from '@/lib/ive-author'
 
-export function getProjectShares(projectId: string): (ProjectShare & { userName: string; userEmail: string })[] {
+export function getProjectShares(projectId: string): (ProjectShare & { userName: string; userEmail: string; userAvatar: string | null })[] {
   const rows = getDb().prepare(`
-    SELECT ps.*, u.name as user_name, u.email as user_email
+    SELECT ps.*, u.name as user_name, u.email as user_email, u.avatar as user_avatar
     FROM project_shares ps JOIN users u ON ps.user_id = u.id
     WHERE ps.project_id = ?
     ORDER BY ps.created_at ASC
@@ -15,7 +15,7 @@ export function getProjectShares(projectId: string): (ProjectShare & { userName:
   return rows.map(r => ({
     id: r.id, projectId: r.project_id, userId: r.user_id,
     role: r.role as ShareRole, createdAt: r.created_at,
-    userName: r.user_name, userEmail: r.user_email,
+    userName: r.user_name, userEmail: r.user_email, userAvatar: r.user_avatar ?? null,
   }))
 }
 

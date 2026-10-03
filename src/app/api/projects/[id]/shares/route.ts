@@ -23,7 +23,7 @@ export async function GET(
   const sharedUserIds = new Set(shares.map(s => s.userId))
   const candidates = allUsers
     .filter(u => u.id !== user.id && !sharedUserIds.has(u.id))
-    .map(u => ({ id: u.id, name: u.name, email: u.email }))
+    .map(u => ({ id: u.id, name: u.name, email: u.email, avatar: u.avatar }))
   return NextResponse.json({ shares, candidates })
 }
 

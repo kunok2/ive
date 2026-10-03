@@ -7,10 +7,12 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 import CustomSelect from '@/components/ui/CustomSelect'
+import AgentAvatar from '@/components/agent/AgentAvatar'
+import { userToOption } from '@/lib/user-display'
 import { useToast } from '@/components/ui/Toast'
 
 interface Row { alias: string; kind: 'name' | 'gitlab' | 'github'; count?: number; userId?: string }
-interface Data { unresolved: Row[]; linked: Row[]; users: { id: string; name: string; email: string }[] }
+interface Data { unresolved: Row[]; linked: Row[]; users: { id: string; name: string; email: string; avatar: string }[] }
 
 export default function PersonAliasView() {
   const t = useTranslations('reportV2')
@@ -56,7 +58,7 @@ export default function PersonAliasView() {
   if (loadError) return <p className="text-xs font-bold text-ive-red">{t('people.loadFailed')}</p>
   if (!data) return null
   const userName = (id?: string) => data.users.find(u => u.id === id)?.name ?? id ?? ''
-  const options = data.users.map(u => ({ value: u.id, label: `${u.name} · ${u.email}` }))
+  const options = data.users.map(userToOption)
 
   return (
     <div className="bg-ive-bg-card border border-ive-border-subtle rounded-lg overflow-hidden">
@@ -91,7 +93,10 @@ export default function PersonAliasView() {
                 <span className="font-bold text-ive-text truncate">{r.alias}</span>
                 <span className="text-xs text-ive-text-dim shrink-0">{t(`people.kind.${r.kind}`)}</span>
                 <i className="fa-solid fa-arrow-right text-xs text-ive-text-dim" />
-                <span className="font-bold text-ive-text flex-1 truncate">{userName(r.userId)}</span>
+                <span className="flex-1 min-w-0 flex items-center gap-1.5">
+                  {(() => { const u = data.users.find(x => x.id === r.userId); return <AgentAvatar avatar={u?.avatar || 'person'} userId={u?.id} size="xs" /> })()}
+                  <span className="font-bold text-ive-text truncate">{userName(r.userId)}</span>
+                </span>
                 <button onClick={() => unlink(r)} disabled={busy === `${r.kind}:${r.alias}`} aria-label={t('people.unlink')} title={t('people.unlink')} className="w-8 h-8 rounded-lg flex items-center justify-center text-xs text-ive-text-dim hover:bg-white/5 disabled:opacity-40">
                   <i className="fa-solid fa-xmark" />
                 </button>

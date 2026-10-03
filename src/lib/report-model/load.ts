@@ -487,6 +487,14 @@ export function personOf(
 /** 테스트·요청 사이에 별칭이 바뀔 수 있으므로 요청마다 비운다 */
 export function resetPersonCache(): void { personCache.clear() }
 
+/** 사람 키(u:<id>)들의 아바타 — 보고서 화면이 사람 줄에 아바타를 그린다. 이름만 아는 사람(n:)은 없다 */
+export function avatarsOfPersonKeys(keys: Iterable<string>): Record<string, string> {
+  const ids = [...new Set([...keys].filter(k => k.startsWith('u:')).map(k => k.slice(2)))]
+  if (!ids.length) return {}
+  const rows = getDb().prepare(`SELECT id, avatar FROM users WHERE id IN (${ids.map(() => '?').join(',')})`).all(...ids) as { id: string; avatar: string | null }[]
+  return Object.fromEntries(rows.filter(r => r.avatar).map(r => [`u:${r.id}`, r.avatar as string]))
+}
+
 /** 기간 안에 검증 판정(승인·반려)을 내린 검증 실행 */
 export interface VerifyDecision {
   projectId: string; iid: number; userId: string | null; userName: string | null; username: string | null

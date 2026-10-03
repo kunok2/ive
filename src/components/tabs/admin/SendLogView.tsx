@@ -14,6 +14,7 @@ interface MailLogSummary {
   senderUserId: string | null
   senderName: string | null
   senderEmail: string | null
+  senderAvatar?: string | null
   subject: string
   bodyLength: number
   recipientEmails: string[]
@@ -175,7 +176,10 @@ export default function SendLogView({ onDuplicate }: { onDuplicate?: (draftId: s
                     </span>
                   </div>
                   <div className="flex items-center gap-2 mt-1 text-xs text-ive-text-dim">
-                    <span className="truncate flex-1">{log.senderName || log.senderEmail || '-'}</span>
+                    <span className="flex-1 min-w-0 flex items-center gap-1.5">
+                      <AgentAvatar avatar={log.senderAvatar || 'person'} userId={log.senderUserId} size="xs" />
+                      <span className="truncate">{log.senderName || log.senderEmail || '-'}</span>
+                    </span>
                     <span
                       role="button"
                       tabIndex={0}
@@ -225,7 +229,10 @@ export default function SendLogView({ onDuplicate }: { onDuplicate?: (draftId: s
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div>
                 <div className="text-ive-text-dim font-bold mb-1">{t('sender')}</div>
-                <div className="text-ive-text break-words">{detail.senderName || '-'}{detail.senderEmail && <span className="text-ive-text-dim ml-1">({detail.senderEmail})</span>}</div>
+                <div className="text-ive-text break-words flex items-start gap-1.5">
+                  <AgentAvatar avatar={detail.senderAvatar || 'person'} userId={detail.senderUserId} size="xs" />
+                  <span>{detail.senderName || '-'}{detail.senderEmail && <span className="text-ive-text-dim ml-1">({detail.senderEmail})</span>}</span>
+                </div>
               </div>
               <div>
                 <div className="text-ive-text-dim font-bold mb-1">{t('sentAt')}</div>

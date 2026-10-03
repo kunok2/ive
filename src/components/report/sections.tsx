@@ -9,6 +9,13 @@ import type {
   Held, ActionItems, HeldStage, HeldIssue, ProjectRow, Done, Cost, CompletedItem,
 } from '@/lib/report-model/types'
 import { fmtHours, pct, deltaTone, toneClass, agedCount, projectSwatchStyles, OTHERS_ID, type Tr } from './format'
+import AgentAvatar from '@/components/agent/AgentAvatar'
+
+/** 보고서의 사람 줄 아바타 — 사람 키(u:<id>)면 그 사용자 아바타, 이름만 아는 사람(n:)은 기본 사람 아이콘 */
+export function PersonFace({ personKey, avatars }: { personKey: string; avatars?: Record<string, string> }) {
+  const userId = personKey.startsWith('u:') ? personKey.slice(2) : null
+  return <AgentAvatar avatar={avatars?.[personKey] || 'person'} userId={userId} size="xs" />
+}
 
 export function Card({ children, highlight = false }: { children: ReactNode; highlight?: boolean }) {
   return <section className={`bg-ive-bg-card border ${highlight ? 'border-ive-cyan/50' : 'border-ive-border-subtle'} rounded-lg p-4 flex flex-col gap-3`}>{children}</section>
@@ -209,7 +216,7 @@ export function WhereSection({ held, tr }: { held: Held; tr: Tr }) {
 
 // ─── ④ 누구 손에 있나 ───
 
-export function PeopleSection({ held, tr }: { held: Held; tr: Tr }) {
+export function PeopleSection({ held, avatars, tr }: { held: Held; avatars?: Record<string, string>; tr: Tr }) {
   if (!held.people) return null
   const people = held.people
   const max = Math.max(1, ...people.map(p => p.count))
@@ -225,6 +232,7 @@ export function PeopleSection({ held, tr }: { held: Held; tr: Tr }) {
             <div key={`${p.key}|${p.role}`} className="flex flex-col gap-1">
               <div className="flex items-center justify-between gap-2 text-sm font-bold">
                 <span className="flex items-center gap-1.5 min-w-0">
+                  <PersonFace personKey={p.key} avatars={avatars} />
                   <span className="truncate text-ive-text">{p.name}</span>
                   <span className="px-2 py-0.5 rounded-lg text-xs font-bold bg-white/5 text-ive-text-secondary shrink-0">{tr(`role.${p.role}`)}</span>
                 </span>

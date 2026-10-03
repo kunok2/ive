@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import { TaskExecution } from '@/types'
 import LogViewer from '@/components/ui/LogViewer'
 import MarqueeText from '@/components/ui/MarqueeText'
+import AgentAvatar from '@/components/agent/AgentAvatar'
 import { useStore } from '@/lib/store'
 
 function formatDuration(startedAt: string, endedAt?: string): string {
@@ -117,12 +118,12 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
                   {(ex.agentName || ex.modelName || ex.assigneeType === 'user') && (
                     <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                       {ex.assigneeType === 'user' ? (
-                        <span className="text-sm font-bold text-ive-cyan/70 bg-ive-cyan/10 border border-ive-cyan/20 px-1.5 py-0.5 rounded">
-                          <i className="fa-solid fa-user mr-1 text-sm" />{ex.userName || ''}
+                        <span className="inline-flex items-center gap-1 text-sm font-bold text-ive-cyan/70 bg-ive-cyan/10 border border-ive-cyan/20 px-1.5 py-0.5 rounded">
+                          <AgentAvatar avatar={ex.userAvatar || 'person'} userId={ex.userId} size="xs" />{ex.userName || ''}
                         </span>
                       ) : ex.agentName && (
-                        <span className="text-sm font-bold text-ive-green/70 bg-ive-green/10 border border-ive-green/20 px-1.5 py-0.5 rounded">
-                          <i className="fa-solid fa-robot mr-1 text-sm" />{ex.agentName}
+                        <span className="inline-flex items-center gap-1 text-sm font-bold text-ive-green/70 bg-ive-green/10 border border-ive-green/20 px-1.5 py-0.5 rounded">
+                          <AgentAvatar avatar={ex.agentAvatar || 'av-01'} size="xs" />{ex.agentName}
                         </span>
                       )}
                       {ex.modelName && (

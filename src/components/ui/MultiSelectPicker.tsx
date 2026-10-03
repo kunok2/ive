@@ -123,6 +123,9 @@ export default function MultiSelectPicker({
     return `${labels[0]} ${morePattern.replace('{n}', String(labels.length - 1))}`
   }, [values, options, allLabel, morePattern])
 
+  // 첫 선택 항목의 아바타 — 목록 항목과 같은 모양으로 트리거에도 보인다
+  const firstSelected = values.length ? options.find(o => o.value === values[0]) : undefined
+
   const padding = size === 'sm' ? 'px-2.5 py-1.5 text-xs' : 'px-3 py-2 text-sm'
   const isAll = values.length === 0
   const dirty = useMemo(() => {
@@ -156,8 +159,9 @@ export default function MultiSelectPicker({
         onClick={() => !disabled && setOpen(o => !o)}
         className={`w-full bg-ive-bg-input border border-ive-border rounded-lg ${padding} text-left flex items-center justify-between focus:outline-none focus:border-ive-green/50 disabled:opacity-50 disabled:cursor-not-allowed`}
       >
-        <span className={`truncate ${isAll ? 'text-ive-text-dim' : 'text-ive-text'}`}>
-          {triggerLabel}
+        <span className={`min-w-0 flex items-center gap-1.5 ${isAll ? 'text-ive-text-dim' : 'text-ive-text'}`}>
+          {firstSelected?.avatar && <AgentAvatar avatar={firstSelected.avatar} userId={firstSelected.avatarUserId} size="xs" />}
+          <span className="truncate">{triggerLabel}</span>
         </span>
         <i className={`fa-solid fa-chevron-${open ? 'up' : 'down'} text-xs text-ive-text-dim ml-2 shrink-0`} />
       </button>

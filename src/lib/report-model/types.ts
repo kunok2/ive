@@ -201,4 +201,6 @@ export interface ReportModel {
   months?: MonthPoint[]
   risks?: Risks
   evaluation?: Evaluation
+  /** 사람 키(u:<id>) → 아바타(av-XX | 'photo' | URL). 사람 줄에 아바타를 그린다 */
+  avatars?: Record<string, string>
 }

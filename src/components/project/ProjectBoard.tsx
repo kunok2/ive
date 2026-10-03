@@ -8,6 +8,8 @@ import { useTab } from '@/lib/tab-context'
 import { getKSTTodayStartISO } from '@/lib/date-utils'
 import { execKind, ageOf, ageText, STAGE_TONE } from '@/lib/active-work'
 import WaitPill from '@/components/project/WaitPill'
+import AgentAvatar from '@/components/agent/AgentAvatar'
+import type { ToolActivity } from '@/lib/tool-activity'
 
 type Col = 'process' | 'verify' | 'confirm' | 'done'
 const COLS: Col[] = ['process', 'verify', 'confirm', 'done']
@@ -22,11 +24,14 @@ interface BoardIssue {
   stage: string
   createdAt?: string
   preferredAgentName?: string | null
-  actualVerifier?: { name?: string | null } | null
-  actualConfirmer?: { name?: string | null } | null
+  actualVerifier?: { name?: string | null; avatar?: string | null; userId?: string | null } | null
+  actualConfirmer?: { name?: string | null; avatar?: string | null; userId?: string | null } | null
 }
 
-interface BoardItem { key: string; iid: number; title: string; who: string | null; startedAt: string | null; href: string; waiting?: boolean }
+/** 맡은 사람·에이전트의 아바타 — 카드의 진행 중 목록과 같은 부품(AgentAvatar)으로 그린다 */
+interface Face { src: string; userId?: string | null; agentId?: string | null; human: boolean }
+
+interface BoardItem { key: string; iid: number; title: string; who: string | null; face?: Face | null; startedAt: string | null; href: string; waiting?: boolean }
 
 /**
  * PC 폭의 프로젝트 단계 보드 — 대기 | 처리 | 검증 | 확인 | 완료(오늘).
@@ -41,6 +46,8 @@ export default function ProjectBoard({ project }: { project: Project }) {
   const [execs, setExecs] = useState<TaskExecution[]>([])
   // 경과는 분 단위 — 30초마다 다시 그린다
   const [now, setNow] = useState(() => Date.now())
+  // 에이전트 도구 배지 — 카드와 같은 실시간 도구 활동
+  const [activities, setActivities] = useState<Record<string, ToolActivity>>({})
 
   useEffect(() => {
     // 프로젝트가 바뀌면 보드는 key 로 새로 마운트된다(ProjectsTab) — 여기서 비울 필요가 없다
@@ -57,6 +64,25 @@ export default function ProjectBoard({ project }: { project: Project }) {
   const running = execs.filter(e => e.status === 'running' || e.status === 'assigned')
   const execFor = (iid: number, kind: 'process' | 'verify' | 'confirm') => running.find(e => e.issueIid === iid && execKind(e.id) === kind)
   const execWho = (e?: TaskExecution) => e ? (e.assigneeType === 'user' ? (e.userName ?? null) : (e.agentName ?? null)) : null
+  const execFace = (e?: TaskExecution): Face | null => !e ? null
+    : e.assigneeType === 'user' ? { src: e.userAvatar || 'person', userId: e.userId, human: true }
+    : { src: e.agentAvatar || 'av-01', agentId: e.agentId, human: false }
+  const actorFace = (a?: { avatar?: string | null; userId?: string | null } | null): Face | null =>
+    a ? { src: a.avatar || 'person', userId: a.userId, human: true } : null
+  const liveAgents = running.filter(e => e.assigneeType !== 'user').length
+  useEffect(() => {
+    if (liveAgents === 0) return
+    let alive = true
+    const load = () => fetch('/api/activities').then(r => r.ok ? r.json() : []).then((list: ToolActivity[]) => {
+      if (!alive) return
+      const map: Record<string, ToolActivity> = {}
+      for (const a of list) map[a.agentId] = a
+      setActivities(map)
+    }).catch(() => {})
+    load()
+    const t = setInterval(load, 2000)
+    return () => { alive = false; clearInterval(t) }
+  }, [liveAgents])
   const issueHref = (iid: number) => `/issues/${project.id}/${iid}`
 
   const cols: Record<Col, BoardItem[]> = { process: [], verify: [], confirm: [], done: [] }
@@ -67,17 +93,17 @@ export default function ProjectBoard({ project }: { project: Project }) {
     } else if (i.stage === 'dev') {
       const e = execFor(i.iid, 'process')
       // 에이전트가 처리 중이면 실시간 실행 화면으로
-      cols.process.push({ ...base, who: execWho(e), startedAt: e?.startedAt ?? null, href: e && e.assigneeType !== 'user' ? `/executions/${e.id}` : base.href })
+      cols.process.push({ ...base, who: execWho(e), face: execFace(e), startedAt: e?.startedAt ?? null, href: e && e.assigneeType !== 'user' ? `/executions/${e.id}` : base.href })
     } else if (i.stage === 'verify_waiting') {
       cols.verify.push({ ...base, who: tp(WAIT_LABEL.verify), startedAt: null, waiting: true })
     } else if (i.stage === 'verifying') {
       const e = execFor(i.iid, 'verify')
-      cols.verify.push({ ...base, who: i.actualVerifier?.name ?? execWho(e), startedAt: e?.startedAt ?? null })
+      cols.verify.push({ ...base, who: i.actualVerifier?.name ?? execWho(e), face: i.actualVerifier?.name ? actorFace(i.actualVerifier) : execFace(e), startedAt: e?.startedAt ?? null })
     } else if (i.stage === 'confirm_waiting') {
       cols.confirm.push({ ...base, who: tp(WAIT_LABEL.confirm), startedAt: null, waiting: true })
     } else if (i.stage === 'confirming') {
       const e = execFor(i.iid, 'confirm')
-      cols.confirm.push({ ...base, who: i.actualConfirmer?.name ?? execWho(e), startedAt: e?.startedAt ?? null })
+      cols.confirm.push({ ...base, who: i.actualConfirmer?.name ?? execWho(e), face: i.actualConfirmer?.name ? actorFace(i.actualConfirmer) : execFace(e), startedAt: e?.startedAt ?? null })
     }
   }
   // 이슈 목록(Git 조회)에 없거나 아직 못 받은 진행 중 실행도 그 종류의 칸에 둔다 — 카드의 진행 중 목록과 같은 근거(실행 기록)
@@ -87,7 +113,7 @@ export default function ProjectBoard({ project }: { project: Project }) {
     const col: Col = kind
     if (cols[col].some(it => it.iid === e.issueIid)) continue
     cols[col].push({
-      key: `e-${e.id}`, iid: e.issueIid, title: e.issueTitle ?? '', who: execWho(e), startedAt: e.startedAt,
+      key: `e-${e.id}`, iid: e.issueIid, title: e.issueTitle ?? '', who: execWho(e), face: execFace(e), startedAt: e.startedAt,
       href: kind === 'process' && e.assigneeType !== 'user' ? `/executions/${e.id}` : issueHref(e.issueIid),
     })
   }
@@ -98,7 +124,7 @@ export default function ProjectBoard({ project }: { project: Project }) {
     if (e.status === 'running' || e.status === 'assigned' || e.startedAt < today || seen.has(e.issueIid)) continue
     if (!(e.verifiedAt != null || e.rejectedAt != null || !e.agentId)) continue
     seen.add(e.issueIid)
-    cols.done.push({ key: `d-${e.id}`, iid: e.issueIid, title: e.issueTitle ?? '', who: execWho(e), startedAt: null, href: issueHref(e.issueIid) })
+    cols.done.push({ key: `d-${e.id}`, iid: e.issueIid, title: e.issueTitle ?? '', who: execWho(e), face: execFace(e), startedAt: null, href: issueHref(e.issueIid) })
   }
 
   const color = project.color || '#4ade80'
@@ -132,7 +158,10 @@ export default function ProjectBoard({ project }: { project: Project }) {
           const items = cols[col]
           // 묶음: 그 단계의 대기 묶음이 맨 위, 그다음 맡은 사람(건수 많은 순)
           const groups = [...new Set(items.map(i => i.who ?? ''))]
-            .map(who => ({ who, waiting: items.some(i => i.waiting && (i.who ?? '') === who), items: items.filter(i => (i.who ?? '') === who) }))
+            .map(who => {
+              const mine = items.filter(i => (i.who ?? '') === who)
+              return { who, waiting: mine.some(i => i.waiting), face: mine.find(i => i.face)?.face ?? null, items: mine }
+            })
             .sort((a, b) => Number(b.waiting) - Number(a.waiting) || b.items.length - a.items.length)
           const waitN = items.filter(i => i.waiting).length
           const activeN = items.length - waitN
@@ -154,6 +183,15 @@ export default function ProjectBoard({ project }: { project: Project }) {
                   <div key={g.who || '-'} className="flex flex-col gap-1.5">
                     {g.who && (
                       <div className="flex items-center gap-1.5 px-1 text-xs font-bold text-ive-text-secondary">
+                        {/* 아바타 — 진행 중이면 카드와 같은 배지(사람: 작업 중, 에이전트: 지금 쓰는 도구). 완료 칸은 배지 없음 */}
+                        {!g.waiting && g.face && (
+                          <AgentAvatar
+                            avatar={g.face.src}
+                            userId={g.face.userId}
+                            size="sm"
+                            toolBadge={col === 'done' ? null : g.face.human ? 'human' : (g.face.agentId ? activities[g.face.agentId]?.category ?? null : null)}
+                          />
+                        )}
                         <span className="truncate">{g.who}</span>
                         <span className="ml-auto shrink-0 text-ive-text-dim tabular-nums">{g.items.length}</span>
                       </div>

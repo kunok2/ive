@@ -138,7 +138,7 @@ export default function VerifierCard({ verifier, role = 'verify' }: Props) {
         className={`p-3 flex items-start justify-between gap-2 cursor-pointer active:bg-white/[0.02] transition-colors ${collapsed ? '' : 'border-b border-ive-border-dark'}`}
       >
         <div className="flex items-start gap-2.5 min-w-0 flex-1">
-          <AgentAvatar avatar={verifier.avatar} size="md" />
+          <AgentAvatar avatar={verifier.avatar} userId={verifier.iveUser?.id} size="md" />
           <div className="min-w-0 flex-1">
             {/* 1줄: 이름 + 대기 건수·펼침 — 에이전트 카드와 같은 높이(h-7), 아래 줄들은 카드 폭을 다 쓴다 */}
             <div className="flex items-center gap-2 min-w-0 h-7">

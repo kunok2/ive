@@ -191,7 +191,7 @@ export default function ReportsTab() {
               {model.mine && <div ref={mineRef} className="scroll-mt-2"><ErrorBoundary label={tr('mineTitle', { n: model.mine.length })}><MineSection mine={model.mine} tr={tr} highlight={!!linked?.mine} /></ErrorBoundary></div>}
               {model.risks && <ErrorBoundary label={tr('riskTitle')}><RiskSection risks={model.risks} held={model.held} tr={tr} /></ErrorBoundary>}
               <ErrorBoundary label={tr('whereTitle')}><WhereSection held={model.held} tr={tr} /></ErrorBoundary>
-              <ErrorBoundary label={tr('peopleTitle')}><PeopleSection held={model.held} tr={tr} /></ErrorBoundary>
+              <ErrorBoundary label={tr('peopleTitle')}><PeopleSection held={model.held} avatars={model.avatars} tr={tr} /></ErrorBoundary>
               {model.months && <ErrorBoundary label={tr('monthsTitle', { n: 6 })}><MonthsSection months={model.months} tr={tr} /></ErrorBoundary>}
               <ErrorBoundary label={tr('projectsTitle')}><ProjectsSection projects={model.projects} cost={model.cost} tr={tr} prevLabel={prevLabel} /></ErrorBoundary>
               {model.months && <ErrorBoundary label={tr('shareTrendTitle', { n: 6 })}><ShareTrendSection months={model.months} tr={tr} /></ErrorBoundary>}
@@ -206,7 +206,7 @@ export default function ReportsTab() {
                 </Card>
               </ErrorBoundary>
               <ErrorBoundary label={tr('costTitle')}><CostSection cost={model.cost} tr={tr} fmtMoney={fmtMoney} prevLabel={prevLabel} /></ErrorBoundary>
-              {model.evaluation && <ErrorBoundary label={tr('evalTitle')}><EvaluationSection ev={model.evaluation} tr={tr} /></ErrorBoundary>}
+              {model.evaluation && <ErrorBoundary label={tr('evalTitle')}><EvaluationSection ev={model.evaluation} avatars={model.avatars} tr={tr} /></ErrorBoundary>}
               <ErrorBoundary label={tr('completedList')}><CompletedList items={model.completedList} tr={tr} /></ErrorBoundary>
               {model.type === 'weekly' && (
                 <button onClick={() => setType('monthly')} className="bg-ive-bg-card border border-ive-border-subtle rounded-lg min-h-12 px-4 flex items-center justify-between text-sm font-bold text-ive-text">

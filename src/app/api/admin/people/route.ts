@@ -15,7 +15,7 @@ export async function GET() {
   return NextResponse.json({
     unresolved: unresolvedPersonNames(),
     linked: getPersonAliases().filter(a => a.source === 'manual'),
-    users: getAllUsers().map(u => ({ id: u.id, name: u.name, email: u.email })),
+    users: getAllUsers().map(u => ({ id: u.id, name: u.name, email: u.email, avatar: u.avatar })),
   })
 }
 

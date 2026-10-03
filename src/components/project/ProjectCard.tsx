@@ -243,7 +243,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
 
   // 대기 이슈가 무엇을 기다리는지 — 처리대기는 스캐너가 남긴 배정 대기 사유,
   // 검증·확인대기는 작업자를 못 띄운 사유(stageWorkerNote)가 있으면 그것, 없으면 기다리는 사람
-  const waitTarget = (issue: any): { icon: string; text: string } | null => {
+  const waitTarget = (issue: any): { icon: string; text: string; face?: { src: string; userId?: string | null } } | null => {
     if (issue.stage === 'waiting') {
       return issue.waitReason && WAIT_REASONS.has(issue.waitReason)
         ? { icon: 'fa-circle-info', text: tp(`waitReason.${issue.waitReason}`) }
@@ -257,7 +257,12 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
       ?? (preset?.mode === 'agent' ? preset.agentName : preset?.username)
       ?? (preset?.mode === 'creator' || !preset ? issue.author?.name : null)
     if (!name) return null
-    return { icon: preset?.mode === 'agent' && !actual ? 'fa-robot' : 'fa-user', text: tp(verify ? 'waitForVerifier' : 'waitForConfirmer', { name }) }
+    // 기다리는 사람·에이전트의 아바타 — 실제 수행자 > 사전 배정(에이전트) > 생성자
+    const face = actual?.name ? { src: actual.avatar || 'person', userId: actual.userId }
+      : preset?.mode === 'agent' ? { src: preset.agentAvatar || 'av-01' }
+      : (preset?.mode === 'creator' || !preset) && issue.author?.name ? { src: issue.author.avatar || 'person' }
+      : { src: 'person' }
+    return { icon: preset?.mode === 'agent' && !actual ? 'fa-robot' : 'fa-user', text: tp(verify ? 'waitForVerifier' : 'waitForConfirmer', { name }), face }
   }
 
   // 단계 칸의 진행 중 숫자 옆에 붙는 그 단계 대기 건수 — 점선 숫자(보드의 대기 카드와 같은 표시)
@@ -359,7 +364,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
                 <div className="flex items-center gap-3 text-xs text-ive-text-secondary mt-1 min-w-0">
                   {target ? (
                     <span className="flex items-center gap-1 min-w-0">
-                      <i className={`fa-solid ${target.icon} shrink-0`} />
+                      {target.face ? <AgentAvatar avatar={target.face.src} userId={target.face.userId} size="xs" /> : <i className={`fa-solid ${target.icon} shrink-0`} />}
                       <span className="truncate">{target.text}</span>
                     </span>
                   ) : issue.author?.name && (
@@ -617,7 +622,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
                 const actor = kind === 'verify' ? i.actualVerifier : i.actualConfirmer
                 return {
                   key: `${kind}-${i.iid}`, kind, iid: i.iid, title: i.title,
-                  who: actor?.name ?? null, avatar: userAvatar(actor?.avatar),
+                  who: actor?.name ?? null, avatar: userAvatar(actor?.avatar, actor?.userId),
                   startedAt: null,
                   onClick: () => router.push(`/issues/${project.id}/${i.iid}`),
                 }

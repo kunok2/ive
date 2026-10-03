@@ -6,7 +6,7 @@
 import type { ReactNode } from 'react'
 import type { MonthPoint, Risks, Held, Evaluation, Grade } from '@/lib/report-model/types'
 import { GRADES } from '@/lib/report-model/types'
-import { Card, SectionTitle } from './sections'
+import { Card, SectionTitle, PersonFace } from './sections'
 import { MonthBars } from './charts'
 import { fmtHours, pct, MIN_SAMPLE, projectSwatchStyles, OTHERS_ID, type Tr } from './format'
 
@@ -156,7 +156,7 @@ function GradeBar({ grades }: { grades: Record<Grade, number> }) {
   )
 }
 
-export function EvaluationSection({ ev, tr }: { ev: Evaluation; tr: Tr }) {
+export function EvaluationSection({ ev, avatars, tr }: { ev: Evaluation; avatars?: Record<string, string>; tr: Tr }) {
   const groups = ev.groups.filter(g => g.n > 0)
   return (
     <Card>
@@ -189,6 +189,7 @@ export function EvaluationSection({ ev, tr }: { ev: Evaluation; tr: Tr }) {
               <div key={w.key} className="flex flex-col gap-1">
                 <div className="flex items-center justify-between gap-2 text-sm font-bold">
                   <span className="flex items-center gap-1.5 min-w-0">
+                    {w.kind === 'person' && <PersonFace personKey={w.key} avatars={avatars} />}
                     <span className="truncate text-ive-text">{w.modelUnknown ? tr('modelUnknown', { cli: w.name }) : w.name}</span>
                     <span className="px-2 py-0.5 rounded-lg text-xs font-bold bg-white/5 text-ive-text-secondary shrink-0">{tr(`evalKind.${w.kind}`)}</span>
                   </span>
@@ -212,7 +213,11 @@ export function EvaluationSection({ ev, tr }: { ev: Evaluation; tr: Tr }) {
               <span className="text-xs font-bold text-ive-text-secondary">{tr('evalVerifiers')}</span>
               {ev.verifiers.map(v => (
                 <div key={v.key} className="flex items-center justify-between gap-2 text-sm font-bold">
-                  <span className="text-ive-text truncate">{v.modelUnknown ? tr('modelUnknown', { cli: v.name }) : v.name}</span>
+                  <span className="flex items-center gap-1.5 min-w-0">
+                    {/* 모델(m:) 줄은 사람이 아니다 — 사람 줄에만 아바타 */}
+                    {!v.key.startsWith('m:') && <PersonFace personKey={v.key} avatars={avatars} />}
+                    <span className="text-ive-text truncate">{v.modelUnknown ? tr('modelUnknown', { cli: v.name }) : v.name}</span>
+                  </span>
                   {v.state === 'ok'
                     ? <span className="text-ive-text tabular-nums">{tr('verifierLine', { v: pct(v.rate), n: v.approved, r: v.laterRejected })}</span>
                     : <span className="px-2 py-0.5 rounded-lg text-xs font-bold bg-white/5 text-ive-text-secondary">{tr('collecting', { n: v.approved, min: MIN_SAMPLE })}</span>}

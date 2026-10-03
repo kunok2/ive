@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { TaskExecution } from '@/types'
 import MarqueeText from '@/components/ui/MarqueeText'
+import AgentAvatar from '@/components/agent/AgentAvatar'
 import { useTranslations } from 'next-intl'
 import { useStore } from '@/lib/store'
 import { formatDateShort, formatTimeWithSeconds } from '@/lib/format-date'
@@ -79,12 +80,12 @@ export default function ExecutionList({ executions, showAgent = true, onKill, ki
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-2 min-w-0">
               {ex.assigneeType === 'user' ? (
-                <span className="text-xs font-bold text-ive-text-muted bg-white/5 border border-ive-border-subtle px-1.5 py-0.5 rounded shrink-0">
-                  <i className="fa-solid fa-user mr-0.5" />{ex.userName || ''}
+                <span className="inline-flex items-center gap-1 text-xs font-bold text-ive-text-muted bg-white/5 border border-ive-border-subtle px-1.5 py-0.5 rounded shrink-0">
+                  <AgentAvatar avatar={ex.userAvatar || 'person'} userId={ex.userId} size="xs" />{ex.userName || ''}
                 </span>
               ) : showAgent && ex.agentName && (
-                <span className="text-xs font-bold text-ive-text-muted bg-white/5 border border-ive-border-subtle px-1.5 py-0.5 rounded shrink-0">
-                  <i className="fa-solid fa-robot mr-0.5" />{ex.agentName}
+                <span className="inline-flex items-center gap-1 text-xs font-bold text-ive-text-muted bg-white/5 border border-ive-border-subtle px-1.5 py-0.5 rounded shrink-0">
+                  <AgentAvatar avatar={ex.agentAvatar || 'av-01'} size="xs" />{ex.agentName}
                 </span>
               )}
               <span className="text-sm font-bold text-ive-text-muted">#{ex.issueIid}</span>

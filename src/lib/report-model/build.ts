@@ -10,7 +10,7 @@ import {
 } from './period'
 import {
   scopedProjects, execsInRange, completedInRange, issueFacts, heldNow, heldDaily, heldTrackingSince,
-  overturnedKeys, personOf, resetPersonCache, receivedInRange, verifyDecisions, confirmRejections,
+  overturnedKeys, personOf, resetPersonCache, avatarsOfPersonKeys, receivedInRange, verifyDecisions, confirmRejections,
   loadIssueHistory, heldReceipts, receiptBefore, isExternalRow, byIssue,
   type Scope, type IssueFacts, type IssueExec, type HeldRow, type ScopedProject, type IssueHistory, type CycleEvent,
 } from './load'
@@ -608,6 +608,11 @@ export function buildReportModel(scope: Scope, type: ReportType, day: string, no
     model.risks = risksOf(c, period, prev, completed, facts)
     model.evaluation = evaluationOf(c, period.end)
   }
+  model.avatars = avatarsOfPersonKeys([
+    ...(model.held.people ?? []).map(p => p.key),
+    ...(model.evaluation?.workers ?? []).filter(w => w.kind === 'person').map(w => w.key),
+    ...(model.evaluation?.verifiers ?? []).map(v => v.key),
+  ])
   return model
 }
 

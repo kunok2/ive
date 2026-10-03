@@ -8,6 +8,7 @@ import { formatDateWithSeconds } from '@/lib/format-date'
 import MultiSelectPicker from '@/components/ui/MultiSelectPicker'
 import CustomSelect from '@/components/ui/CustomSelect'
 import { userToOption } from '@/lib/user-display'
+import AgentAvatar from '@/components/agent/AgentAvatar'
 
 // 카테고리는 아이콘으로 구분, 색은 의미가 있을 때만 (위험 admin / 정보 auth)
 const CATEGORY_META: Record<string, { labelKey: string; icon: string; color: string }> = {
@@ -228,7 +229,11 @@ export default function ActivityContent() {
         )}
         {filterUserIds.length > 0 && (
           <span className="inline-flex items-center gap-1 h-7 pl-2 pr-1 rounded-lg text-xs font-bold bg-ive-green/10 text-ive-green border border-ive-green/30">
-            <i className="fa-solid fa-user text-[10px]" />
+            {(() => {
+              // 한 사람만 고르면 그 사람 아바타, 여럿이면 사람 아이콘
+              const one = filterUserIds.length === 1 ? users.find(u => u.id === filterUserIds[0]) : null
+              return one ? <AgentAvatar avatar={one.avatar || 'person'} userId={one.id} size="xs" /> : <i className="fa-solid fa-user text-[10px]" />
+            })()}
             <span className="truncate max-w-[140px]">{userChipLabel}</span>
             <button
               onClick={() => setFilterUserIds([])}
@@ -355,8 +360,12 @@ export default function ActivityContent() {
                   </div>
                   <div className="text-xs text-ive-text leading-relaxed">{log.detail}</div>
                   <div className="flex items-center gap-2 mt-1">
-                    <span className="text-xs text-ive-text-muted">
-                      <i className="fa-solid fa-user mr-0.5" />{log.userName || t('unknown')}
+                    <span className="inline-flex items-center gap-1 text-xs text-ive-text-muted">
+                      {(() => {
+                        const u = log.userId ? users.find(x => x.id === log.userId) : null
+                        return <AgentAvatar avatar={u?.avatar || 'person'} userId={u?.id} size="xs" />
+                      })()}
+                      {log.userName || t('unknown')}
                     </span>
                     {log.ipAddress && log.ipAddress !== '0.0.0.0' && (
                       <span className="text-xs text-ive-text-dim">

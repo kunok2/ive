@@ -33,13 +33,15 @@ function ChatViewer({ projectId, execution, agent }: { projectId: string; execut
   const [messages, setMessages] = useState<ChatMsg[]>([])
   const [agentProcessing, setAgentProcessing] = useState(false)
   const [userAvatar, setUserAvatar] = useState<string>('av-01')
+  // 'photo' 아바타는 사용자 id 가 있어야 사진으로 그린다
+  const [userAvatarId, setUserAvatarId] = useState<string | null>(null)
   const scrollRef = useCallback((node: HTMLDivElement | null) => {
     if (node) node.scrollTop = node.scrollHeight
   }, [])
 
   // Fetch user avatar once
   useEffect(() => {
-    fetch('/api/auth/me').then(r => r.json()).then(d => { if (d.avatar) setUserAvatar(d.avatar) }).catch(() => {})
+    fetch('/api/auth/me').then(r => r.json()).then(d => { if (d.avatar) setUserAvatar(d.avatar); if (d.id) setUserAvatarId(d.id) }).catch(() => {})
   }, [])
 
   const fetchMessages = useCallback(async () => {
@@ -74,7 +76,7 @@ function ChatViewer({ projectId, execution, agent }: { projectId: string; execut
       {messages.map(msg => (
         <div key={msg.id} className={`flex ${msg.role === 'user' ? 'flex-row-reverse' : ''} items-start gap-1.5`}>
           <div className="shrink-0 mt-0.5">
-            <AgentAvatar avatar={msg.role === 'user' ? userAvatar : agent.avatar} size="sm" />
+            <AgentAvatar avatar={msg.role === 'user' ? userAvatar : agent.avatar} userId={msg.role === 'user' ? userAvatarId : null} size="sm" />
           </div>
           <div className={`rounded-lg px-2.5 py-1.5 text-xs ${msg.role === 'user' ? 'max-w-[80%]' : 'flex-1'} ${
             msg.role === 'user'

@@ -100,7 +100,7 @@ export default function AgentAvatar({ avatar, userId, size = 'md', className = '
     return (
       <div className={`relative shrink-0 ${wh} ${className}`}>
         <div className="w-full h-full rounded-lg flex items-center justify-center bg-ive-bg-deep border border-ive-border-subtle">
-          <i className="fa-solid fa-user text-[10px] text-ive-text-dim" />
+          <i className={`fa-solid fa-user ${size === 'xs' ? 'text-[8px]' : 'text-[10px]'} text-ive-text-dim`} />
         </div>
         {toolBadge && <ToolBadge category={toolBadge} size={size} />}
       </div>

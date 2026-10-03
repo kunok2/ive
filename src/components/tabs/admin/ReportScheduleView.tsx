@@ -316,9 +316,10 @@ export default function ReportScheduleView() {
               size="sm"
               value={preview.email}
               onChange={v => setPreview(p => (p ? { ...p, email: v } : p))}
-              options={(schedules.find(s => s.reportType === preview.type)?.recipients || []).map(e => ({
-                value: e, label: users.find(u => u.email === e)?.name ? `${users.find(u => u.email === e)!.name} · ${e}` : e,
-              }))}
+              options={(schedules.find(s => s.reportType === preview.type)?.recipients || []).map(e => {
+                const u = users.find(x => x.email === e)
+                return u ? { value: e, label: u.name, hint: e, avatar: u.avatar, avatarUserId: u.id } : { value: e, label: e, avatar: 'person' }
+              })}
             />
             {!previewMail && <div className="text-center py-6 text-ive-text-dim text-sm"><i className="fa-solid fa-circle-notch fa-spin" /></div>}
             {previewMail?.error && <div className="text-sm font-bold text-ive-red">{previewMail.error}</div>}

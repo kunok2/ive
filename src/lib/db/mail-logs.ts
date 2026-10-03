@@ -5,6 +5,8 @@ export interface MailBroadcastLog {
   senderUserId: string | null
   senderName: string | null
   senderEmail: string | null
+  /** 보낸 사람 아바타 (users 조인 — 탈퇴했으면 null) */
+  senderAvatar: string | null
   subject: string
   body: string
   recipientEmails: string[]
@@ -38,6 +40,7 @@ function mapRow(r: any, includeBody: boolean): any {
     senderUserId: r.sender_user_id ?? null,
     senderName: r.sender_name ?? null,
     senderEmail: r.sender_email ?? null,
+    senderAvatar: r.sender_avatar ?? null,
     subject: r.subject,
     recipientEmails: safeParseArr(r.recipient_emails),
     totalCount: r.total_count ?? 0,
@@ -60,7 +63,7 @@ function safeParseArr(s: any): any[] {
   }
 }
 
-export function createMailBroadcastLog(log: Omit<MailBroadcastLog, 'id' | 'sentAt'> & { id?: string; sentAt?: string }): MailBroadcastLog {
+export function createMailBroadcastLog(log: Omit<MailBroadcastLog, 'id' | 'sentAt' | 'senderAvatar'> & { id?: string; sentAt?: string }): MailBroadcastLog {
   const id = log.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `mbl-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
   const sentAt = log.sentAt || new Date().toISOString()
   getDb().prepare(`
@@ -84,7 +87,7 @@ export function createMailBroadcastLog(log: Omit<MailBroadcastLog, 'id' | 'sentA
 }
 
 export function getMailBroadcastLogs(limit: number = 50, offset: number = 0): MailBroadcastLogSummary[] {
-  const rows = getDb().prepare('SELECT * FROM mail_broadcast_logs ORDER BY sent_at DESC LIMIT ? OFFSET ?').all(limit, offset) as any[]
+  const rows = getDb().prepare('SELECT l.*, u.avatar AS sender_avatar FROM mail_broadcast_logs l LEFT JOIN users u ON u.id = l.sender_user_id ORDER BY l.sent_at DESC LIMIT ? OFFSET ?').all(limit, offset) as any[]
   const summaries = rows.map(r => mapRow(r, false)) as MailBroadcastLogSummary[]
   // 발송별 접속 횟수/고유 사용자 수를 한 번에 채운다.
   const counts = getMailClickCountsBulk(summaries.map(s => s.id))
@@ -152,7 +155,7 @@ export function getMailBroadcastLogCount(): number {
 }
 
 export function getMailBroadcastLog(id: string): MailBroadcastLog | null {
-  const r = getDb().prepare('SELECT * FROM mail_broadcast_logs WHERE id = ?').get(id) as any
+  const r = getDb().prepare('SELECT l.*, u.avatar AS sender_avatar FROM mail_broadcast_logs l LEFT JOIN users u ON u.id = l.sender_user_id WHERE l.id = ?').get(id) as any
   return r ? (mapRow(r, true) as MailBroadcastLog) : null
 }
 
