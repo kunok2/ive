@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useStore } from '@/lib/store'
 import ProjectCard from '@/components/project/ProjectCard'
 import ProjectBoard from '@/components/project/ProjectBoard'
+import ExecutionTraceView from '@/components/execution/ExecutionTraceView'
 import PullToRefresh from '@/components/ui/PullToRefresh'
 import { useTranslations } from 'next-intl'
 import { useIsDesk } from '@/lib/use-media'
@@ -14,6 +15,7 @@ export default function ProjectsTab({ onAdd }: { onAdd?: () => void }) {
   const { state, refresh } = useStore()
   const t = useTranslations('project')
   const isDesk = useIsDesk()
+  const [traceId, setTraceId] = useState<string | null>(null)
   // 보드는 PC 폭(마운트 후)에만 그리므로 첫 렌더에서 저장소를 읽어도 서버 렌더와 어긋나지 않는다
   const [boardId, setBoardId] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null
@@ -59,13 +61,16 @@ export default function ProjectsTab({ onAdd }: { onAdd?: () => void }) {
                 key={project.id}
                 project={project}
                 selected={project.id === board.id}
-                onSelect={() => pickBoard(project.id)}
+                onSelect={() => { setTraceId(null); pickBoard(project.id) }}
                 hideActiveList
               />
             ))}
           </div>
         </aside>
-        <ProjectBoard key={board.id} project={board} />
+        {/* 에이전트 실행은 오른쪽 칸에 트레이스로 — 닫으면 보드로 돌아간다(왼쪽 목록은 그대로) */}
+        {traceId
+          ? <ExecutionTraceView key={traceId} id={traceId} embedded onClose={() => setTraceId(null)} />
+          : <ProjectBoard key={board.id} project={board} onOpenTrace={setTraceId} />}
       </div>
     )
   }

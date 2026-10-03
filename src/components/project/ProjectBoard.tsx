@@ -39,7 +39,8 @@ interface BoardItem { key: string; iid: number; title: string; who: string | nul
  * 어느 칸에 있느냐가 곧 그 일의 종류다. 칸 안에서는 맡은 사람으로 묶고(이름은 한 번), 칸마다 따로 스크롤한다.
  * 데이터는 프로젝트 카드와 같은 API(열린 이슈의 단계 + 실행 기록)를 쓴다.
  */
-export default function ProjectBoard({ project }: { project: Project }) {
+/** onOpenTrace — 넓은 화면에서 에이전트 실행을 누르면 페이지를 넘기지 않고 오른쪽 칸에 트레이스를 띄운다(ProjectsTab) */
+export default function ProjectBoard({ project, onOpenTrace }: { project: Project; onOpenTrace?: (executionId: string) => void }) {
   const tp = useTranslations('project')
   const router = useRouter()
   const { navigateToAddIssue } = useTab()
@@ -206,7 +207,7 @@ export default function ProjectBoard({ project }: { project: Project }) {
                         <button
                           key={it.key}
                           type="button"
-                          onClick={() => router.push(it.href)}
+                          onClick={() => (onOpenTrace && it.href.startsWith('/executions/') ? onOpenTrace(it.href.slice('/executions/'.length)) : router.push(it.href))}
                           className="text-left flex flex-col gap-1.5 p-2.5 rounded-lg bg-ive-bg-card border border-ive-border-subtle hover:border-ive-cyan/40 transition-colors"
                         >
                           {/* 대기 건은 한 단계 낮은 글자색 — 손에 있는(진행 중) 건이 먼저 읽히게. 흐린색(dim)은 정보 글씨에 쓰지 않는다 */}

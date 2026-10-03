@@ -12,6 +12,7 @@
   "completed": "Completed",
   "assigned": "Assigned",
   "forceStop": "Force Stop",
+  "openFullPage": "Open full page",
   "completeTask": "Complete task",
   "markFailed": "Mark as failed",
   "assignedToUser": "Assigned to user",
