@@ -13,6 +13,7 @@ import Database from 'better-sqlite3'
 const providerMock = vi.hoisted(() => ({
   addIssueLabels: vi.fn(async () => undefined),
   removeIssueLabels: vi.fn(async () => undefined),
+  swapIssueLabels: vi.fn(async () => undefined),
   fetchSingleIssue: vi.fn(),
 }))
 vi.mock('@/lib/provider', () => providerMock)

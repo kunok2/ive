@@ -8,7 +8,7 @@ import { promisify } from "util";
 import { Project, Agent } from "@/types";
 import { updateExecutionStatus, updateAgentStatus, getAssigneeAuto, getPresetRoles, getProjectAutomation, recordStageEvent } from "../db";
 import { agentActor, executionPromptVersion } from "../event-actor";
-import { addIssueLabels, removeIssueLabels } from "../provider";
+import { addIssueLabels, removeIssueLabels, swapIssueLabels } from "../provider";
 import { notifyStageTransition } from "../slack-notify";
 import { runAutoAssign } from "./auto-assign";
 import type { PreservedChanges } from "./git-ops";
@@ -185,8 +185,7 @@ export async function commitPushAndCreateMR(params: {
 
     // 레이블 전환: IVE-D 제거, IVE-W 부착 (검증대기)
     try {
-      await removeIssueLabels(project, iid, token, [project.labelDev || 'IVE-D']);
-      await addIssueLabels(project, iid, token, [project.labelVerifyWait || 'IVE-W']);
+      await swapIssueLabels(project, iid, token, [project.labelVerifyWait || 'IVE-W'], [project.labelDev || 'IVE-D']);
       // 사건 로그 — 에이전트 처리 완료(처리 → 검증대기). 다음 스캔이 같은 전이를 감지해도 중복 기록하지 않는다
       recordStageEvent({
         projectId: project.id, issueIid: iid, fromStage: 'dev', toStage: 'verify_waiting', action: 'complete',
@@ -225,8 +224,7 @@ export async function commitPushAndCreateMR(params: {
     } catch (e) { slog.warn({ err: e }, `Remote comment failed:`); }
     // 레이블 전환: IVE-D 제거, IVE-W 부착 (검증대기)
     try {
-      await removeIssueLabels(project, iid, token, [project.labelDev || 'IVE-D']);
-      await addIssueLabels(project, iid, token, [project.labelVerifyWait || 'IVE-W']);
+      await swapIssueLabels(project, iid, token, [project.labelVerifyWait || 'IVE-W'], [project.labelDev || 'IVE-D']);
       // 사건 로그 — 에이전트 처리 완료(처리 → 검증대기). 다음 스캔이 같은 전이를 감지해도 중복 기록하지 않는다
       recordStageEvent({
         projectId: project.id, issueIid: iid, fromStage: 'dev', toStage: 'verify_waiting', action: 'complete',

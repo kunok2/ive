@@ -7,7 +7,7 @@
  */
 import { Project } from '@/types'
 import { TRANSITIONS, staleStageLabelsToRemove } from './stage-transitions'
-import { addIssueLabels, removeIssueLabels, fetchSingleIssue } from './provider'
+import { addIssueLabels, removeIssueLabels, fetchSingleIssue, swapIssueLabels } from './provider'
 import { stageFromLabels, hasActiveExecution, upsertIssueStageSnapshot, recordStageEvent, SYSTEM_ACTOR, type EventActor, type EventSource } from './db'
 import { executionPromptVersion } from './event-actor'
 
@@ -33,8 +33,8 @@ export async function applyStageAction(
   const remove = keepLabel
     ? Array.from(new Set([...explicitRemove, ...staleStageLabelsToRemove(project, keepLabel)]))
     : explicitRemove
-  if (remove.length > 0) await removeIssueLabels(project, iid, token, remove)
-  if (labelsToAdd.length > 0) await addIssueLabels(project, iid, token, labelsToAdd)
+  // 한 번에 바꾼다 — 떼고 붙이는 사이에 스캐너가 「단계 없음」을 읽지 않게(swapIssueLabels)
+  await swapIssueLabels(project, iid, token, labelsToAdd, remove)
 
   const issue = await fetchSingleIssue(project, iid, token)
   const newStage = stageFromLabels(issue?.labels || [], project, { hasActiveExec: hasActiveExecution(project.id, iid) })

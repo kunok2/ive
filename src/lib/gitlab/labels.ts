@@ -81,6 +81,17 @@ export async function removeGitLabIssueLabels(project: Project, issueIid: number
   return res.ok;
 }
 
+/** 붙이기·떼기를 한 번의 요청으로 — 중간에 단계 라벨이 비는 순간이 없다(스캐너가 그 순간을 「단계 없음」으로 읽지 않게) */
+export async function swapGitLabIssueLabels(project: Project, issueIid: number, decryptedToken: string, add: string[], remove: string[]) {
+  const headers = getAuthHeaders(project, decryptedToken);
+  const res = await fetch(apiUrl(project, `/issues/${issueIid}`), {
+    method: 'PUT',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...(add.length ? { add_labels: add.join(',') } : {}), ...(remove.length ? { remove_labels: remove.join(',') } : {}) }),
+  });
+  return res.ok;
+}
+
 export interface IssueLabelEvent {
   action: 'add' | 'remove'
   label: string

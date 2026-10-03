@@ -12,6 +12,7 @@ const labels = vi.hoisted(() => ({ current: [] as string[] }))
 const providerMock = vi.hoisted(() => ({
   addIssueLabels: vi.fn(async (_p: unknown, _i: number, _t: string, add: string[]) => { labels.current = [...new Set([...labels.current, ...add])] }),
   removeIssueLabels: vi.fn(async (_p: unknown, _i: number, _t: string, rm: string[]) => { labels.current = labels.current.filter(l => !rm.includes(l)) }),
+  swapIssueLabels: vi.fn(async (_p: unknown, _i: number, _t: string, add: string[], rm: string[]) => { labels.current = [...new Set([...labels.current.filter(l => !rm.includes(l) || add.includes(l)), ...add])] }),
   fetchSingleIssue: vi.fn(async () => ({ iid: 42, labels: labels.current, assignees: [], title: 't' })),
   addIssueComment: vi.fn(async () => undefined),
 }))
@@ -74,12 +75,12 @@ describe('재기동 재처리 흐름', () => {
                 VALUES ('ex-1', 'p1', 'ag1', ?, 'failed', '2026-10-03T09:00:00Z', 'agent')`).run(IID)
     expect(await requeueRestartInterrupted(project, IID, 'tok')).toBeNull()
     expect(labels.current).toEqual(['IVE', 'IVE-D'])
-    expect(providerMock.removeIssueLabels).not.toHaveBeenCalled()
+    expect(providerMock.swapIssueLabels).not.toHaveBeenCalled()
   })
 
   it('Git 전이가 실패하면 기록을 그대로 두어 다음 스캔에 다시 시도한다', async () => {
     runningDevExec('ex-1'); resetStuckExecutions()
-    providerMock.removeIssueLabels.mockRejectedValueOnce(new Error('502'))
+    providerMock.swapIssueLabels.mockRejectedValueOnce(new Error('502'))
     expect(await requeueRestartInterrupted(project, IID, 'tok')).toBe('failed')
     expect(endReason('ex-1')).toBe('restart')
     expect(await requeueRestartInterrupted(project, IID, 'tok')).toBe('requeued')

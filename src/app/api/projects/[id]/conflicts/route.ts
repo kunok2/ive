@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { getProject, getProjectAuthToken, getProjectAccess, updateProjectConflictCount, markIssueVerified, touchProjectActivity, getDb, updateExecutionStatus, upsertIssueStageSnapshot, recordStageEvent } from '@/lib/db'
 import { userActor } from '@/lib/event-actor'
-import { fetchOpenMRs, mergeMR, closeMR, fetchSingleIssue, addIssueLabels, removeIssueLabels } from '@/lib/provider'
+import { fetchOpenMRs, mergeMR, closeMR, fetchSingleIssue, addIssueLabels, removeIssueLabels, swapIssueLabels } from '@/lib/provider'
 import { logActivity } from '@/lib/activity'
 
 export async function GET(
@@ -106,10 +106,7 @@ export async function POST(
         const labels: string[] = issue.labels || []
         if (!labels.includes(labelE)) {
           const labelsToRemove = [labelD, labelW, labelV].filter(l => labels.includes(l))
-          if (labelsToRemove.length > 0) {
-            await removeIssueLabels(project, issueIid, decryptedToken, labelsToRemove)
-          }
-          await addIssueLabels(project, issueIid, decryptedToken, [labelE])
+          await swapIssueLabels(project, issueIid, decryptedToken, [labelE], labelsToRemove)
         }
 
         // 활성 실행(running/assigned) 모두 success로 닫기

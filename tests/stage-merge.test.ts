@@ -404,3 +404,22 @@ describe('C-2 코드 변경 없는 작업의 확인', () => {
     expect(p).not.toContain('staging 이 내보내는 커밋')
   })
 })
+
+describe('I-1 진행 막대 되돌림 — 라벨 교체 도중의 순간은 이동이 아니다', async () => {
+  const { getIssueRetryCounts, getIssueForwardCounts } = await import('@/lib/db/activity-logs')
+  const ev = (at: string, from: string | null, to: string | null, source: string, action: string | null = null) =>
+    db.prepare(`INSERT INTO issue_events (occurred_at, project_id, issue_iid, event, from_stage, to_stage, action, actor_type, source) VALUES (?, ?, 92, 'stage', ?, ?, ?, 'system', ?)`).run(at, P, from, to, action, source)
+  it('스캐너가 본 「확인 중 → 단계 없음」 직후 IVE 가 확인 중에서 완료로 옮겼으면 되돌림으로 세지 않는다 (#92)', () => {
+    ev('2026-10-03T15:26:19.498Z', 'verifying', 'confirm_waiting', 'worker', 'approve')
+    ev('2026-10-03T15:27:36.061Z', 'confirm_waiting', 'confirming', 'worker', 'start_confirmation')
+    ev('2026-10-03T15:30:33.164Z', 'confirming', null, 'scanner')
+    ev('2026-10-03T15:30:34.770Z', 'confirming', 'done', 'worker', 'accept')
+    expect(getIssueRetryCounts(P, 92)).toEqual([])
+    expect(getIssueForwardCounts(P, 92).toDone).toBe(1)
+  })
+  it('사람이 실제로 라벨을 떼어 단계 없음이 된 것(뒤따르는 IVE 이동 없음)은 그대로 센다', () => {
+    ev('2026-10-03T15:27:36.061Z', 'confirm_waiting', 'confirming', 'worker', 'start_confirmation')
+    ev('2026-10-03T15:30:33.164Z', 'confirming', null, 'scanner')
+    expect(getIssueRetryCounts(P, 92).length).toBe(1)
+  })
+})

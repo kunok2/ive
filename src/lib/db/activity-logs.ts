@@ -143,11 +143,18 @@ function getIterationCounts(projectId: string, issueIid?: number): Map<number, I
   const iidParam = issueIid != null ? [issueIid] : []
 
   const moves = db.prepare(
-    `SELECT issue_iid, from_stage, to_stage, COUNT(*) AS cnt FROM issue_events
+    `SELECT issue_iid, from_stage, to_stage, source, occurred_at FROM issue_events
      WHERE project_id = ? ${iidFilter} AND event = 'stage'
-     GROUP BY issue_iid, from_stage, to_stage`
-  ).all(projectId, ...iidParam) as Array<{ issue_iid: number; from_stage: string | null; to_stage: string | null; cnt: number }>
-  for (const r of moves) addMove(entry(r.issue_iid), macroOf(r.from_stage), macroOf(r.to_stage), r.cnt)
+     ORDER BY issue_iid, id`
+  ).all(projectId, ...iidParam) as Array<{ issue_iid: number; from_stage: string | null; to_stage: string | null; source: string; occurred_at: string }>
+  for (let i = 0; i < moves.length; i++) {
+    const r = moves[i], next = moves[i + 1]
+    // 라벨 교체 도중의 순간 — 스캐너가 단계 라벨이 빈 이슈를 「단계 없음」으로 읽었고, 곧바로(1분 안에) IVE 가 같은 출발 단계에서
+    // 옮긴 기록이 뒤따른다. 실제 이동이 아니므로 세지 않는다(예전에 떼기·붙이기를 따로 하던 때 남은 기록 — swapIssueLabels 로 막음)
+    if (r.source === 'scanner' && r.to_stage == null && r.from_stage != null && next && next.issue_iid === r.issue_iid
+      && next.from_stage === r.from_stage && new Date(next.occurred_at).getTime() - new Date(r.occurred_at).getTime() < 60_000) continue
+    addMove(entry(r.issue_iid), macroOf(r.from_stage), macroOf(r.to_stage), 1)
+  }
 
   const prefix = `${projectId}:`
   const legacy = db.prepare(

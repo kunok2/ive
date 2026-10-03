@@ -7,7 +7,7 @@ import { notifyStageTransition } from '@/lib/slack-notify';
 import { notifyConfirmerOnApprove } from '@/lib/merge-watcher';
 import type { TaskExecution } from '@/types';
 import { getCurrentUser } from '@/lib/auth';
-import { reopenIssue, fetchSingleIssue, addIssueLabels, removeIssueLabels, addIssueComment, createBranch, getDefaultBranch } from '@/lib/provider';
+import { reopenIssue, fetchSingleIssue, addIssueLabels, removeIssueLabels, addIssueComment, createBranch, getDefaultBranch, swapIssueLabels } from '@/lib/provider';
 import { logActivity } from '@/lib/activity';
 import { TRANSITIONS, staleStageLabelsToRemove } from '@/lib/stage-transitions';
 import fs from 'fs';
@@ -90,12 +90,8 @@ export async function POST(
       ? Array.from(new Set([...explicitRemove, ...staleStageLabelsToRemove(project, keepLabel)]))
       : explicitRemove;
 
-    if (sanitizedRemove.length > 0) {
-      await removeIssueLabels(project, Number(iid), token, sanitizedRemove);
-    }
-    if (labelsToAdd.length > 0) {
-      await addIssueLabels(project, Number(iid), token, labelsToAdd);
-    }
+    // 한 번에 바꾼다 — 떼고 붙이는 사이에 스캐너가 「단계 없음」을 읽지 않게(swapIssueLabels)
+    await swapIssueLabels(project, Number(iid), token, labelsToAdd, sanitizedRemove);
 
     // 종료 라벨(IVE-E) 외 단계로 되돌리는 액션은 닫힌 이슈를 다시 열어준다.
     //   - 스케줄(IVE-S)로 되돌리는 retry/cancel

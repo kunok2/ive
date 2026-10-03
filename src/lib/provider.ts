@@ -182,6 +182,23 @@ export async function addIssueLabels(project: Project, iid: number, token: strin
     : gitlab.addGitLabIssueLabels(project, iid, token, labels);
 }
 
+/**
+ * 단계 라벨 바꾸기 — 떼고 붙이는 사이에 단계 라벨이 하나도 없는 순간이 생기면, 그때 이슈를 읽은 스캐너가
+ * 「단계 없음(유입)」으로 이동했다고 기록한다(진행 막대에 없던 되돌림이 그려진다). 그래서
+ *  - GitLab: 붙이기·떼기를 한 번의 요청으로
+ *  - GitHub: 붙이기 먼저, 떼기 나중(잠깐 두 라벨이 함께 있을 뿐 단계가 비지 않는다)
+ * 붙일 라벨은 뗄 목록에서 뺀다.
+ */
+export async function swapIssueLabels(project: Project, iid: number, token: string, add: string[], remove: string[]) {
+  const rm = remove.filter(l => !add.includes(l));
+  if (project.provider === 'github') {
+    if (add.length) await github.addGitHubIssueLabels(project, iid, token, add);
+    if (rm.length) await Promise.allSettled(rm.map(label => github.removeGitHubIssueLabels(project, iid, token, label)));
+  } else if (add.length || rm.length) {
+    await gitlab.swapGitLabIssueLabels(project, iid, token, add, rm);
+  }
+}
+
 export async function removeIssueLabels(project: Project, iid: number, token: string, labels: string[]) {
   if (project.provider === 'github') {
     await Promise.allSettled(labels.map(label => github.removeGitHubIssueLabels(project, iid, token, label)));

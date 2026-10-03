@@ -23,7 +23,7 @@ import {
   recordStageEvent,
 } from "../db";
 import { agentActor } from "../event-actor";
-import { addIssueLabels, removeIssueLabels } from "../provider";
+import { addIssueLabels, removeIssueLabels, swapIssueLabels } from "../provider";
 import { fetchGitLabIssueNotes } from "../gitlab";
 import { fetchGitHubIssueNotes } from "../github";
 import { Project, Agent } from "@/types";
@@ -115,8 +115,7 @@ function devStageSpec(waitingSince?: string | null): StageKindSpec<DevPrep> {
 
         // 레이블 전환: IVE-S 제거, IVE-D 부착 (개발 시작)
         try {
-          await removeIssueLabels(project, iid, token, [project.labelSchedule || 'IVE-S']);
-          await addIssueLabels(project, iid, token, [project.labelDev || 'IVE-D']);
+          await swapIssueLabels(project, iid, token, [project.labelDev || 'IVE-D'], [project.labelSchedule || 'IVE-S']);
         } catch (e) { slog.warn({ err: e }, `Failed to switch labels on #${iid}:`); }
 
         // 작업 등록 활동 로그
