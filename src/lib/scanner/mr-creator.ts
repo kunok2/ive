@@ -36,13 +36,16 @@ function agentAttemptedEdits(conversationParts: string[]): boolean {
   return conversationParts.some((p) => EDIT_TOOL_RE.test(p));
 }
 
-// 이슈 노트에 실을 「수행 작업」 요약을 만든다.
-// ⛔ 도구 호출 줄(`> **🔧 Bash** `$ grep …``)은 싣지 않는다 — 사람이 읽을 것이 못 되고,
-//    수백 줄이 붙어 정작 무엇을 왜 고쳤는지가 묻힌다(사용자 지적 2026-09-02).
-//    판정에 쓰는 원본(conversationParts)은 그대로 두고, **노트에 실을 때만** 걷어낸다.
+// 이슈 노트에 실을 「결과」를 만든다 — 에이전트의 **마지막 보고(최종 메시지)만** 싣는다.
+// ⛔ 처리 중 말한 것(「~확인 중입니다」「Now read …」, 조사 표, 하위 에이전트 출력)은 싣지 않는다.
+//    전부 이어 붙이면 노트가 수백 줄이 되어 아무도 읽지 않는다(사용자 지적 2026-09-02, 2026-10-03).
+//    마지막 도구 호출 뒤에 남긴 문장 = 최종 보고. 최종 보고 뒤에 도구를 더 불렀으면 그 앞 마지막 문장 덩어리를 쓴다.
+//    판정에 쓰는 원본(conversationParts)은 그대로 두고, **노트에 실을 때만** 고른다.
 const TOOL_LINE_RE = /^\s*>\s*\*\*🔧/;
+const RUN_FOOTER_RE = /^\s*(---|\*\*📊 실행 결과\*\*.*)\s*$/;
 export function buildWorkSummary(conversationParts: string[]): string {
-  const kept: string[] = [];
+  // 도구 호출 줄을 경계로 문장 덩어리를 나눈다.
+  const segments: string[][] = [[]];
   // 여러 줄짜리 명령(heredoc·python3 -c "…")은 첫 줄만 🔧 로 시작하고 나머지 줄은 맨몸으로 따라온다.
   // 그 꼬리까지 걷어내려고, 백틱이 닫히지 않은 도구 줄을 만나면 닫힐 때까지 계속 버린다.
   let skipping = false;
@@ -53,13 +56,16 @@ export function buildWorkSummary(conversationParts: string[]): string {
     }
     if (TOOL_LINE_RE.test(line)) {
       if (!line.trimEnd().endsWith('`')) skipping = true;
+      if (segments[segments.length - 1].length) segments.push([]);
       continue;
     }
-    // 도구 줄 사이에 남는 빈 인용줄(`>`)도 버린다.
-    if (line.trim() && !/^\s*>\s*$/.test(line)) kept.push(line);
+    // 도구 줄 사이에 남는 빈 인용줄(`>`)과 실행 결과 꼬리줄(토큰·턴 — IVE 가 따로 집계)은 버린다.
+    if (/^\s*>\s*$/.test(line) || RUN_FOOTER_RE.test(line)) continue;
+    segments[segments.length - 1].push(line);
   }
-  const prose = kept.join('\n').trim();
-  return prose ? `\n\n### 📝 수행 작업\n${prose}` : '';
+  const last = [...segments].reverse().find((s) => s.some((l) => l.trim()));
+  const report = (last ?? []).join('\n').trim();
+  return report ? `\n\n### 📝 결과\n${report}` : '';
 }
 
 /**

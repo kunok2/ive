@@ -84,6 +84,20 @@ describe('buildPrompt — agent 마커 지시', () => {
   })
 })
 
+// 2026-10-03: 실행마다 시작 코멘트 + 에이전트 결과 코멘트 + IVE 완료 노트가 겹쳐 붙고, 완료 노트엔 처리 중 말까지 실렸다.
+//   P-8: 시작·진행 코멘트 지시가 없고, 최종 메시지를 짧은 보고서로 쓰라는 규약이 기본·덮어쓰기 양쪽에 있다
+describe('buildPrompt — 결과 노트 규약', () => {
+  it('P-8: 시작 코멘트 지시 없음 + 보고서 규약 포함 (기본·덮어쓰기)', () => {
+    const base = buildPrompt(makeProject(), issue, 1, false, false, true, 1, '', '', false, 'agent-1')
+    const over = buildPrompt(makeProject(), issue, 1, false, false, true, 1, '', '', false, 'agent-1', 0, '- 내 지침')
+    for (const p of [base, over]) {
+      expect(p).not.toContain('start comment on the issue when you begin')
+      expect(p).toContain('do NOT post start, progress or result comments')
+      expect(p).toContain('**원인** / **수정** / **검증**')
+    }
+  })
+})
+
 describe('buildPrompt — 언어 지시', () => {
   it('한국어: isKo=true 면 한국어 지시 포함', () => {
     const p = buildPrompt(makeProject(), issue, 1, false, false, true, 1, '', '', false, 'agent-1')

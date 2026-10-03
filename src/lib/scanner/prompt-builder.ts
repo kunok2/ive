@@ -118,8 +118,18 @@ curl -s ${authHeader} "${gitlabBaseUrl}/api/v4/projects/${encodedProjectPath}/is
   // IVE UI 에서 에이전트가 작성한 코멘트로 표시되려면 매 코멘트 본문 최상단에 아래 마커를 붙여야 함.
   // Git UI 상으로는 HTML 주석이라 보이지 않고, IVE UI 가 이 마커로 에이전트 이름/아바타를 복원함.
   const agentMarkerHint = agentId
-    ? `\n- IMPORTANT: When posting any comment on the issue, ALWAYS prepend this exact HTML comment at the very top of the comment body, on its own line: \`<!-- ive-agent:${agentId} -->\`. It is invisible in Git UI but lets IVE show the correct agent name/avatar. Example comment body:\n\n    \`\`\`\n    <!-- ive-agent:${agentId} -->\n    작업 시작합니다.\n    \`\`\``
+    ? `\n- IMPORTANT: When posting any comment on the issue, ALWAYS prepend this exact HTML comment at the very top of the comment body, on its own line: \`<!-- ive-agent:${agentId} -->\`. It is invisible in Git UI but lets IVE show the correct agent name/avatar. Example comment body:\n\n    \`\`\`\n    <!-- ive-agent:${agentId} -->\n    진행하려면 결정이 필요합니다: …\n    \`\`\``
     : '';
+
+  // 결과 노트 규약 — IVE 가 최종 메시지를 이슈 결과 노트로 올린다(mr-creator.buildWorkSummary).
+  // 시작·진행·결과 코멘트를 에이전트가 따로 쓰면 같은 내용이 노트 2~3개로 겹치고, 처리 중 말까지 실려 아무도 읽지 않는다.
+  const reportSections = isKo
+    ? '**원인** / **수정** / **검증** / **확인 못 한 것**(있을 때만) / **결정 필요**(있을 때만)'
+    : '**Cause** / **Fix** / **Verified** / **Not verified** (only if any) / **Decision needed** (only if any)';
+  const reportRule = `- Issue comments: do NOT post start, progress or result comments — IVE posts your final message on the issue as the result note. Post a comment only when you need the issue author's decision to continue.${agentMarkerHint}
+- Your FINAL message is that result note, and people only read short ones. Write it as a brief report, not a work log — at most ~15 lines:
+  ${reportSections} — 1–3 short bullets each; name the changed files once.
+  No progress narration ("checking…", "now I will…"), no lists or tables of places you inspected, no repetition, no remarks about git add/commit status.`;
 
   const timeBudget = maxRunMinutes > 0 ? `
 - Time budget: this run is force-stopped after ${maxRunMinutes} minutes. Aim to finish well within ~${Math.max(5, Math.round(maxRunMinutes * 0.6))} minutes. Stage your changes (git add) as soon as the fix is in place, then verify. If verification is taking long, stop and report what remains unverified rather than pushing on.` : '';
@@ -132,8 +142,7 @@ curl -s ${authHeader} "${gitlabBaseUrl}/api/v4/projects/${encodedProjectPath}/is
 ${instructionsOverride.trim()}
 - After completing changes, stage them with git add.
 - Do NOT git commit or push.
-- If you find important discoveries or have questions during work, leave a comment on the issue.
-- Leave a brief start comment on the issue when you begin work.${agentMarkerHint}${timeBudget}
+${reportRule}${timeBudget}
 - IMPORTANT: ${langInstruction}`;
     return prompt;
   }
@@ -146,8 +155,7 @@ ${instructionsOverride.trim()}
 - Understand the project structure and style, then modify the relevant code.
 - After completing changes, stage them with git add.
 - Do NOT git commit or push.
-- If you find important discoveries or have questions during work, leave a comment on the issue.
-- Leave a brief start comment on the issue when you begin work.${agentMarkerHint}
+${reportRule}
 - Resolve the problem precisely — no superficial fixes — and review your change until you are confident it works.
 - Scope: change only what this issue asks for. Do NOT create or modify shared lint/check scripts, CI config, test harnesses or unrelated files unless the issue explicitly asks. If you think such follow-up work is needed, propose it in your final summary instead of doing it.
 - Verification environment: use only what this container already provides. Playwright browsers (chromium, webkit, firefox) are preinstalled under $PLAYWRIGHT_BROWSERS_PATH; if the project pins a different Playwright version, \`npx playwright install <browser>\` (no --with-deps) into that same path. Do NOT install system packages, download .deb files, patch LD_LIBRARY_PATH, or debug browser/tool startup — you have no root. If a required verification step cannot run here, skip it and say plainly in your summary what was not verified and why (e.g. "확인 못 했다: WebKit — 컨테이너에서 기동 불가").

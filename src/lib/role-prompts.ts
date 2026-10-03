@@ -31,8 +31,8 @@ export const DEV_FIXED_DESCRIPTION = `## Issue #<iid>: <title> / 반복 실행 �
 ## Instructions (고정 줄):
 - After completing changes, stage them with git add.
 - Do NOT git commit or push.
-- If you find important discoveries or have questions during work, leave a comment on the issue.
-- Leave a brief start comment on the issue when you begin work. (+ 코멘트 첫 줄 <!-- ive-agent:<id> --> 마커)
+- 이슈 코멘트: 시작·진행·결과 코멘트를 쓰지 않는다(IVE 가 최종 메시지를 결과 노트로 올림). 결정이 필요할 때만 질문 코멘트. (+ 코멘트 첫 줄 <!-- ive-agent:<id> --> 마커)
+- 최종 메시지 = 결과 노트: 원인 / 수정 / 검증 / 확인 못 한 것·결정 필요(있을 때만), 15줄 이내. 진행 서술·조사 목록·반복 금지
 - Time budget: this run is force-stopped after N minutes …
 - IMPORTANT: <언어 지시>`
 
@@ -80,7 +80,7 @@ function confirmFixed(i: ConfirmPromptInput): string {
 \`\`\`json
 {
   "verdict": "pass | fail | blocked",
-  "summary": "무엇을 어디서 어떻게 확인했고 무엇을 봤는지 (3~6줄)",
+  "summary": "결론 1~3문장 — 어디서 무엇을 확인했고 결과가 어떤지. 거친 과정·명령은 commands 에만 쓴다",
   "reason": "fail/blocked 일 때 이유 (pass 면 빈 문자열)",
   "engines": [{ "engine": "chromium|firefox|webkit|mcp-chrome", "status": "pass|fail|skip", "note": "" }],
   "screenshots": [{ "file": "screens/after-xxx.png", "caption": "무엇을 보여 주는지" }],
@@ -170,7 +170,7 @@ function verifyFixed(i: VerifyPromptInput): string {
 \`\`\`json
 {
   "verdict": "pass | fail | blocked",
-  "summary": "무엇을 어떻게 리뷰했고 무엇을 봤는지 (3~6줄)",
+  "summary": "결론 1~3문장 — 이슈 요건을 채웠는지, 핵심 근거 하나. 읽은 파일·grep 한 과정은 commands 에만 쓴다",
   "reason": "fail/blocked 일 때 이유 (pass 면 빈 문자열)",
   "findings": [{ "severity": "blocker|major|minor", "file": "경로", "line": 0, "note": "무엇이 왜 문제인지, 어떻게 고치면 되는지" }],
   "commands": ["실행한 명령"]

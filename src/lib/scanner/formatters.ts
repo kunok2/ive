@@ -454,9 +454,11 @@ export function formatStreamEventMarkdown(event: any): string | null {
     case 'assistant': {
       const parts = event.message?.content || [];
       const lines: string[] = [];
+      // 하위 에이전트(Agent 도구) 안에서 나온 말은 노트 재료가 아니다 — 도구 줄만 남긴다(수정 흔적 판정용).
+      const isSubagent = !!event.parent_tool_use_id;
       for (const part of parts) {
         if (part.type === 'text' && part.text?.trim()) {
-          lines.push(part.text);
+          if (!isSubagent) lines.push(part.text);
         } else if (part.type === 'tool_use') {
           const summary = formatToolInputMarkdown(part.name, part.input || {});
           lines.push(`> **🔧 ${part.name}** ${summary}`);
