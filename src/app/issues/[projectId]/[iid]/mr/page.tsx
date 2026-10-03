@@ -32,6 +32,7 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
   const { projectId, iid } = use(params)
   const router = useRouter()
   const t = useTranslations('mr')
+  const tc = useTranslations('common')
   const { state } = useStore()
   const slackConnected = !!state.user?.slackUserId
   const [notifyOnComplete, setNotifyOnComplete] = useState(true)
@@ -54,7 +55,7 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
       setMr(data.mr)
       setChanges(data.changes)
     } catch {
-      setError('MR 변경사항을 불러올 수 없습니다')
+      setError(t('loadChangesFailed'))
     } finally {
       setLoading(false)
     }
@@ -78,7 +79,7 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
       }
       router.back()
     } catch (err) {
-      setMergeError(err instanceof Error ? err.message : '머지 실패')
+      setMergeError(err instanceof Error ? err.message : t('mergeFailed'))
     } finally {
       setMerging(false)
     }
@@ -100,7 +101,7 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
       }
       router.back()
     } catch (err) {
-      setMergeError(err instanceof Error ? err.message : 'MR 닫기 실패')
+      setMergeError(err instanceof Error ? err.message : t('closeFailed'))
     } finally {
       setClosing(false)
     }
@@ -121,15 +122,15 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
 
   return (
     <div className="h-full flex flex-col">
-      <header className="shrink-0 z-40 w-full max-w-lg mx-auto bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark">
+      <header className="shrink-0 z-40 w-full max-w-lg desk:max-w-6xl mx-auto bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark">
         <div className="px-3 py-3">
           <div className="flex items-center gap-3">
             <button onClick={() => router.back()} className="text-ive-green text-base font-bold p-1 hover:bg-ive-green/5 rounded">
-              <i className="fa-solid fa-arrow-left mr-1" />뒤로
+              <i className="fa-solid fa-arrow-left mr-1" />{tc('back')}
             </button>
             <div className="flex-1 min-w-0">
               <h1 className="text-base font-bold text-ive-green-pale truncate">
-                {mr ? `MR !${mr.iid} 코드 리뷰` : '코드 리뷰'}
+                {mr ? t('reviewTitle', { iid: mr.iid }) : t('reviewTitleNoId')}
               </h1>
               {mr && (
                 <div className="text-xs text-ive-text-muted flex items-center gap-1 mt-0.5">
@@ -145,7 +146,7 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
         </div>
       </header>
 
-      <div className="flex-1 min-h-0 w-full max-w-lg mx-auto flex flex-col overflow-hidden">
+      <div className="flex-1 min-h-0 w-full max-w-lg desk:max-w-6xl mx-auto flex flex-col overflow-hidden">
       <div className="flex-1 min-h-0 overflow-y-auto pl-3 pr-1">
       <main className="pt-4 pb-4">
         {loading ? (
@@ -160,7 +161,7 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
         ) : (
           <>
             <div className="text-xs text-ive-text-dim mb-3 px-1">
-              변경 파일 {changes.length}개
+              {t('changedFiles', { count: changes.length })}
             </div>
 
             <DiffViewer changes={changes} />
@@ -171,7 +172,7 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
 
       {/* 항상 보이는 하단 액션 바 — 스크롤과 무관 */}
       {!loading && !error && (
-        <div className="shrink-0 px-3 pt-3 pb-20 bg-ive-bg-deep border-t border-ive-border-dark">
+        <div className="shrink-0 px-3 pt-3 pb-20 desk:pb-6 bg-ive-bg-deep border-t border-ive-border-dark">
           {mergeError && (
             <div className="mb-3 text-sm text-ive-red bg-ive-red/10 rounded-lg px-3 py-2 border border-ive-red/20">
               <i className="fa-solid fa-circle-exclamation mr-1" />{mergeError}
@@ -189,11 +190,11 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
                 }`}
               >
                 {merging ? (
-                  <><i className="fa-solid fa-spinner fa-spin mr-1.5" />머지 중...</>
+                  <><i className="fa-solid fa-spinner fa-spin mr-1.5" />{t('merging')}</>
                 ) : mr?.has_conflicts ? (
-                  <><i className="fa-solid fa-ban mr-1.5" />충돌로 머지 불가</>
+                  <><i className="fa-solid fa-ban mr-1.5" />{t('conflictCannotMerge')}</>
                 ) : (
-                  <><i className="fa-solid fa-code-merge mr-1.5" />머지</>
+                  <><i className="fa-solid fa-code-merge mr-1.5" />{t('mergeAction')}</>
                 )}
               </button>
               <button
@@ -204,14 +205,14 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
                 {closing ? (
                   <i className="fa-solid fa-spinner fa-spin" />
                 ) : (
-                  <><i className="fa-solid fa-xmark mr-1.5" />버림</>
+                  <><i className="fa-solid fa-xmark mr-1.5" />{t('discardAction')}</>
                 )}
               </button>
             </div>
           ) : (
             <div className="text-center py-3 bg-ive-cyan/10 rounded-lg border border-ive-cyan/20">
               <i className="fa-solid fa-code-merge text-ive-cyan mr-1.5" />
-              <span className="text-sm font-bold text-ive-cyan">이미 머지된 MR입니다</span>
+              <span className="text-sm font-bold text-ive-cyan">{t('alreadyMerged')}</span>
             </div>
           )}
         </div>
@@ -222,9 +223,9 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
         open={showMergeConfirm}
         onClose={() => setShowMergeConfirm(false)}
         onConfirm={handleMerge}
-        title="MR 머지 확인"
-        message={`!${mr?.iid} ${mr?.source_branch} → ${mr?.target_branch}\n\n이 MR을 머지할까요?`}
-        confirmLabel="머지"
+        title={t('confirmMergeTitle')}
+        message={`!${mr?.iid} ${mr?.source_branch} → ${mr?.target_branch}\n\n${t('confirmMergeAsk')}`}
+        confirmLabel={t('mergeAction')}
         extra={
           slackConnected ? (
             <label className="flex items-start gap-2.5 cursor-pointer select-none">
@@ -249,9 +250,9 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
         open={showCloseConfirm}
         onClose={() => setShowCloseConfirm(false)}
         onConfirm={handleCloseMR}
-        title="MR 버림"
-        message={`!${mr?.iid} ${mr?.source_branch}\n\n머지하지 않고 이 MR을 버릴까요?`}
-        confirmLabel="버림"
+        title={t('discardTitle')}
+        message={`!${mr?.iid} ${mr?.source_branch}\n\n${t('confirmDiscardAsk')}`}
+        confirmLabel={t('discardAction')}
         danger
       />
 

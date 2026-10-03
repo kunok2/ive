@@ -24,6 +24,7 @@ export default function ProjectHeader({
   isHistoryTab,
   loading,
   closedLoading,
+  showAddForm,
   onToggleAddForm,
   onEnterBulkMode,
   onRefresh,
@@ -49,7 +50,10 @@ export default function ProjectHeader({
         {canEdit && !bulkMode && (
           <button
             onClick={onToggleAddForm}
-            className="w-9 h-9 rounded-lg bg-ive-green/20 border border-ive-green/30 flex items-center justify-center text-ive-green hover:bg-ive-green/30 hover:scale-105 transition-all"
+            // 입력 폼이 열려 있으면 눌린 모양 — 다시 누르면 닫힌다
+            aria-pressed={showAddForm}
+            aria-label={tIssue('addNewIssue')}
+            className={`w-9 h-9 rounded-lg border flex items-center justify-center hover:scale-105 transition-all ${showAddForm ? 'bg-ive-green text-ive-bg-deep border-ive-green' : 'bg-ive-green/20 border-ive-green/30 text-ive-green hover:bg-ive-green/30'}`}
             title={tIssue('addNewIssue')}
           >
             <i className="fa-solid fa-plus text-sm" />

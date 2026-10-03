@@ -11,5 +11,18 @@
   "merge": "머지",
   "closeMR": "버림",
   "notifyWhenDone": "머지·CI가 끝나면 Slack으로 알림 받기 (폰)",
-  "slackNotConnected": "Slack 미연결 — 설정에서 연결하면 완료 시 알림을 받을 수 있어요"
+  "slackNotConnected": "Slack 미연결 — 설정에서 연결하면 완료 시 알림을 받을 수 있어요",
+  "alreadyMerged": "이미 머지된 MR입니다",
+  "loadChangesFailed": "MR 변경사항을 불러올 수 없습니다",
+  "conflictCannotMerge": "충돌로 머지 불가",
+  "confirmMergeAsk": "이 MR을 머지할까요?",
+  "confirmDiscardAsk": "머지하지 않고 이 MR을 버릴까요?",
+  "mergeFailed": "머지 실패",
+  "closeFailed": "MR 닫기 실패",
+  "reviewTitle": "MR !{iid} 코드 리뷰",
+  "reviewTitleNoId": "코드 리뷰",
+  "mergeAction": "머지",
+  "discardAction": "버림",
+  "confirmMergeTitle": "MR 머지 확인",
+  "discardTitle": "MR 버림"
 }

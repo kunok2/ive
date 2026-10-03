@@ -55,7 +55,9 @@ export default function LogsPanel() {
   const totalSize = useMemo(() => files.reduce((s, f) => s + f.size, 0), [files])
 
   return (
-    <main className="space-y-3">
+    // PC 폭: 왼쪽(설정·파일 목록) + 오른쪽(로그 보기). 그보다 좁으면 위아래로 쌓는다
+    <main className="space-y-3 desk:space-y-0 desk:grid desk:grid-cols-[360px_minmax(0,1fr)] desk:gap-4 desk:items-start">
+      <div className="space-y-3 min-w-0">
       {config && (
         <div className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-3 text-xs space-y-1">
           <div className="font-bold text-ive-text-muted mb-1">{t('log.currentConfig')}</div>
@@ -111,14 +113,15 @@ export default function LogsPanel() {
           ))}
         </div>
       )}
+      </div>
 
       {selected && (
-        <div className="bg-ive-bg-deep border border-ive-border-subtle rounded-lg overflow-hidden">
+        <div className="bg-ive-bg-deep border border-ive-border-subtle rounded-lg overflow-hidden min-w-0">
           <div className="px-3 py-2 border-b border-ive-border-subtle flex items-center justify-between">
             <div className="text-xs font-bold text-ive-text truncate">{selected}</div>
             <div className="text-[11px] text-ive-text-dim">{t('log.tailLines', { n: TAIL })}</div>
           </div>
-          <pre className="text-[11px] leading-relaxed p-3 max-h-[60vh] overflow-auto whitespace-pre-wrap break-all text-ive-text font-mono">
+          <pre className="text-[11px] leading-relaxed p-3 max-h-[60vh] desk:max-h-[calc(100vh-200px)] overflow-auto whitespace-pre-wrap break-all text-ive-text font-mono">
             {loading ? t('log.loading') : (content || t('log.selectFile'))}
           </pre>
         </div>

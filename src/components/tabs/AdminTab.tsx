@@ -40,10 +40,10 @@ export default function AdminTab() {
   ]
 
   return (
-    <PullToRefresh onRefresh={handleRefresh} className="w-full flex-1 flex flex-col max-w-lg mx-auto px-4 overflow-hidden">
+    <PullToRefresh onRefresh={handleRefresh} className="w-full flex-1 flex flex-col max-w-lg desk:max-w-5xl mx-auto px-4 desk:px-6 overflow-hidden">
       {/* 서브 탭 바 — 버튼이 투명 배경이라 pt-4면 아이콘이 색박스 토글 탭들보다 더 내려가 보임. pt-1로 시각 정렬 */}
       <div className="shrink-0 pt-1 pb-3">
-        <div data-tour="admin-sub-tabs" className="flex">
+        <div data-tour="admin-sub-tabs" className="flex desk:max-w-xl desk:mx-auto">
           {subTabs.map(t => (
             <button
               key={t.key}
@@ -61,7 +61,7 @@ export default function AdminTab() {
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="pb-20 min-h-full flex flex-col">
+        <div className="pb-20 desk:pb-6 min-h-full flex flex-col">
           {subTab === 'users' && <UsersPanel key={refreshKey} />}
           {subTab === 'mail' && <MailPanel key={refreshKey} />}
           {subTab === 'settings' && <SettingsHubPanel key={refreshKey} />}

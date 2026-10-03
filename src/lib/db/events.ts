@@ -99,6 +99,28 @@ export function getLastStageEvent(projectId: string, issueIid: number): { to: st
 }
 
 /**
+ * 프로젝트 이슈별 「지금 단계에 들어온 시각」과 「지금 대기 사유」 — 카드 대기 목록용(한 번의 쿼리).
+ * 대기 사유는 마지막 단계 사건 뒤에 남은 것만 지금 사유로 본다(단계가 바뀌면 이전 사유는 끝난 것).
+ */
+export function getIssueStageSinceMap(projectId: string): Map<number, { stage: string | null; since: string; waitReason: string | null }> {
+  const rows = getDb().prepare(`
+    SELECT id, issue_iid, event, to_stage, occurred_at, reason FROM issue_events
+    WHERE id IN (
+      SELECT MAX(id) FROM issue_events WHERE project_id = ? AND event IN ('stage', 'wait') GROUP BY issue_iid, event
+    )
+  `).all(projectId) as { id: number; issue_iid: number; event: string; to_stage: string | null; occurred_at: string; reason: string | null }[]
+  const stageRows = new Map<number, typeof rows[number]>()
+  const waitRows = new Map<number, typeof rows[number]>()
+  for (const r of rows) (r.event === 'stage' ? stageRows : waitRows).set(r.issue_iid, r)
+  const out = new Map<number, { stage: string | null; since: string; waitReason: string | null }>()
+  for (const [iid, st] of stageRows) {
+    const w = waitRows.get(iid)
+    out.set(iid, { stage: st.to_stage, since: st.occurred_at, waitReason: w && w.id > st.id ? w.reason : null })
+  }
+  return out
+}
+
+/**
  * 배정 대기 사유 기록. 스캔마다 같은 사유가 반복되므로 "사유가 바뀌었을 때"만 남긴다.
  * 마지막 대기 사건 이후 단계가 바뀌었다면(대기가 끝났다가 다시 대기) 같은 사유라도 새로 남긴다.
  */

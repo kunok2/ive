@@ -184,5 +184,7 @@
   "completedOnTime": "정시 완료",
   "pickerAgents": "에이전트",
   "pickerPeople": "사람",
-  "roleModeAgent": "에이전트"
+  "roleModeAgent": "에이전트",
+  "detailPaneLabel": "작업 상세",
+  "detailPanePlaceholder": "작업을 고르면 여기에 열립니다"
 }

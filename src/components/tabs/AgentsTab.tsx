@@ -97,7 +97,7 @@ export default function AgentsTab({ onAdd }: { onAdd?: () => void }) {
   const empty = state.agents.length === 0 && (verifiersLoaded && verifiers.length === 0 && confirmers.length === 0 && processors.length === 0)
 
   return (
-    <PullToRefresh onRefresh={onRefresh} className="w-full flex-1 flex flex-col max-w-lg mx-auto px-4 overflow-hidden">
+    <PullToRefresh onRefresh={onRefresh} className="w-full flex-1 flex flex-col max-w-lg desk:max-w-[1360px] mx-auto px-4 desk:px-6 overflow-hidden">
       <div className="pt-4 shrink-0">
         {state.loading ? (
           <div className="flex flex-col items-center justify-center py-20 gap-3 text-ive-text-muted text-base">
@@ -122,7 +122,7 @@ export default function AgentsTab({ onAdd }: { onAdd?: () => void }) {
         ) : (
           <>
             {/* 필터 탭 — ReportsTab과 동일 스타일 */}
-            <div data-tour="agents-filter" className="flex gap-1 mb-3">
+            <div data-tour="agents-filter" className="flex gap-1 mb-3 desk:max-w-xl desk:mx-auto">
               {([
                 { key: 'all', icon: '', label: t('filterAll'), count: allCount, backlog: 0 },
                 { key: 'process', icon: 'fa-robot', label: ta('role_process'), count: processCount, backlog: processBacklog },
@@ -144,7 +144,7 @@ export default function AgentsTab({ onAdd }: { onAdd?: () => void }) {
             {allCount > 8 && (
               <input type="text" value={query} onChange={e => { setQuery(e.target.value); setShown(30) }}
                 placeholder={tIssue('searchMember')}
-                className="w-full mb-3 bg-ive-bg-deep border border-ive-border-dark rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim focus:outline-none focus:border-ive-green/50" />
+                className="w-full mb-3 desk:max-w-xl desk:mx-auto desk:block bg-ive-bg-deep border border-ive-border-dark rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim focus:outline-none focus:border-ive-green/50" />
             )}
           </>
         )}
@@ -152,7 +152,7 @@ export default function AgentsTab({ onAdd }: { onAdd?: () => void }) {
 
       {!state.loading && !empty && (
         <div className="flex-1 min-h-0 overflow-y-auto">
-          <div className="pb-20">
+          <div className="pb-20 desk:pb-6">
           {(() => {
               // 정렬: 특이사항(대기/진행 중) 많은 순 → 이름순
               // Worker priority: pendingCount * 100 + (busy ? 10 : 0) + (offline ? -1000 : 0)
@@ -193,7 +193,8 @@ export default function AgentsTab({ onAdd }: { onAdd?: () => void }) {
               })
 
               return (
-                <div className="flex flex-col gap-3">
+                // PC 3열 — 카드 폭은 폰과 같게 두고 칸 수만 늘린다(폰·패드는 1열 가운데)
+                <div className="flex flex-col gap-3 desk:grid desk:grid-cols-3 desk:items-start">
                   {shownItems.slice(0, shown).map(item => item.kind === 'worker' ? (
                     <AgentCard
                       key={`w-${item.agent.id}`}
@@ -210,24 +211,24 @@ export default function AgentsTab({ onAdd }: { onAdd?: () => void }) {
                   ))}
                   {shownItems.length > shown && (
                     <button type="button" onClick={() => setShown(n => n + 30)}
-                      className="w-full py-2 text-sm font-bold text-ive-cyan border border-ive-cyan/30 rounded-lg hover:bg-ive-cyan/10 transition-all">
+                      className="w-full desk:col-span-full py-2 text-sm font-bold text-ive-cyan border border-ive-cyan/30 rounded-lg hover:bg-ive-cyan/10 transition-all">
                       {ta('showMore', { count: shownItems.length - shown })}
                     </button>
                   )}
                   {filter === 'verify' && verifiersLoaded && verifyCount === 0 && (
-                    <div className="text-center py-8 text-sm font-bold text-ive-text-dim">
+                    <div className="desk:col-span-full text-center py-8 text-sm font-bold text-ive-text-dim">
                       <i className="fa-solid fa-user-check text-2xl text-ive-text-dim mb-2 block" />
                       {t('noVerifiers')}
                     </div>
                   )}
                   {filter === 'confirm' && verifiersLoaded && confirmCount === 0 && (
-                    <div className="text-center py-8 text-sm font-bold text-ive-text-dim">
+                    <div className="desk:col-span-full text-center py-8 text-sm font-bold text-ive-text-dim">
                       <i className="fa-solid fa-circle-check text-2xl text-ive-text-dim mb-2 block" />
                       {ta('noConfirmers')}
                     </div>
                   )}
                   {filter === 'process' && processCount === 0 && (
-                    <div className="text-center py-8 text-sm font-bold text-ive-text-dim">
+                    <div className="desk:col-span-full text-center py-8 text-sm font-bold text-ive-text-dim">
                       <i className="fa-solid fa-robot text-2xl text-ive-text-dim mb-2 block" />
                       {t('noAgents')}
                     </div>

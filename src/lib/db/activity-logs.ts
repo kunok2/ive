@@ -75,127 +75,137 @@ export function getActivityLogs(opts: {
   return { logs: rows.map(mapActivityLog), total: countRow.cnt }
 }
 
-export interface IssueRetryCounts {
-  fromVerify: number          // 검증→처리 (반려)
-  fromVerifyToInflow: number  // 검증/검증대기→유입 (유입 전환)
-  fromConfirm: number         // 확인→처리 (재작업 요청)
-  fromDone: number            // 완료→재오픈
-}
+/**
+ * 되돌림 — 진행 막대 칸(1 유입 · 2 처리 · 3 검증 · 4 확인 · 5 완료) 사이를 뒤로 간 이동과 횟수.
+ * 예: 검증 반려 3→2, 유입 전환 3→1, 확인 실패(에이전트) 4→2, 재검증 요청 4→3, 재오픈 5→4
+ */
+export interface IssueBackMove { from: number; to: number; count: number }
+export type IssueRetryCounts = IssueBackMove[]
 
 export interface IssueForwardCounts {
   toProcess: number   // 유입→처리 진입 횟수 (execution 행 수로 집계)
   toVerify: number    // 처리→검증 (task_complete)
-  toConfirm: number   // 검증→확인 (task_approve)
-  toDone: number      // 확인→완료 (task_accept)
+  toConfirm: number   // 검증→확인
+  toDone: number      // 확인→완료
+}
+
+type IterationCounts = { forward: IssueForwardCounts; retry: IssueRetryCounts }
+
+const emptyCounts = (): IterationCounts => ({
+  forward: { toProcess: 0, toVerify: 0, toConfirm: 0, toDone: 0 },
+  retry: [],
+})
+
+/** 단계 → 진행 막대의 칸(1 유입 · 2 처리 · 3 검증 · 4 확인 · 5 완료). StageProgress 의 STAGE_TO_MACRO 와 같다. */
+const STAGE_MACRO: Record<string, number> = {
+  waiting: 2, dev: 2, dev_fail: 2,
+  verify_waiting: 3, verifying: 3,
+  confirm_waiting: 4, confirming: 4,
+  done: 5, closed: 5,
+}
+const macroOf = (s: string | null) => (s ? STAGE_MACRO[s] ?? 0 : 1)
+
+/** 칸 이동(from → to)을 정/역방향 횟수에 더한다. 같은 칸 안의 이동(처리 중 ↔ 처리 실패 등)은 세지 않는다. */
+function addMove(c: IterationCounts, from: number, to: number, n: number) {
+  if (!from || !to || from === to) return
+  if (from === 3 && to === 4) c.forward.toConfirm += n
+  else if (from === 4 && to === 5) c.forward.toDone += n
+  else if (to < from) {
+    const m = c.retry.find(x => x.from === from && x.to === to)
+    if (m) m.count += n
+    else c.retry.push({ from, to, count: n })
+  }
+}
+
+/** 사건 로그가 생기기 전 활동 로그 action → 칸 이동 */
+const LEGACY_ACTION_MOVE: Record<string, [number, number]> = {
+  task_approve: [3, 4], task_accept: [4, 5],
+  task_reject: [3, 2], task_to_inflow: [3, 1], task_return_to_dev: [4, 3], task_reopen: [5, 4],
+}
+
+/**
+ * 이슈별 정/역방향 횟수 — 진행 막대의 커넥터·되돌림 화살표.
+ *
+ * 단계 이동은 사건 로그(issue_events)의 단계 전이(출발 → 도착 단계)로 센다. 화면 버튼·단계 작업자(에이전트 검증·확인)·
+ * 스캐너가 감지한 라벨 이동이 모두 여기에 남기 때문이다(활동 로그는 화면 버튼만 남겨 에이전트 반려가 빠졌다).
+ * 사건 로그가 생기기 전 기록은 그 이슈의 첫 단계 사건 이전 활동 로그로 보충한다 — 이후 구간은 화면 버튼이 양쪽에 남기므로 세지 않는다.
+ * 처리 진입(toProcess)·검증 진입(toVerify)은 처리 실행 행으로 센다.
+ */
+function getIterationCounts(projectId: string, issueIid?: number): Map<number, IterationCounts> {
+  const db = getDb()
+  const result = new Map<number, IterationCounts>()
+  const entry = (iid: number) => {
+    let e = result.get(iid)
+    if (!e) { e = emptyCounts(); result.set(iid, e) }
+    return e
+  }
+  const iidFilter = issueIid != null ? 'AND issue_iid = ?' : ''
+  const iidParam = issueIid != null ? [issueIid] : []
+
+  const moves = db.prepare(
+    `SELECT issue_iid, from_stage, to_stage, COUNT(*) AS cnt FROM issue_events
+     WHERE project_id = ? ${iidFilter} AND event = 'stage'
+     GROUP BY issue_iid, from_stage, to_stage`
+  ).all(projectId, ...iidParam) as Array<{ issue_iid: number; from_stage: string | null; to_stage: string | null; cnt: number }>
+  for (const r of moves) addMove(entry(r.issue_iid), macroOf(r.from_stage), macroOf(r.to_stage), r.cnt)
+
+  const prefix = `${projectId}:`
+  const legacy = db.prepare(
+    `SELECT al.target_id, al.action, COUNT(*) AS cnt FROM user_activity_logs al
+     WHERE al.target_type = 'issue' AND ${issueIid != null ? 'al.target_id = ?' : 'al.target_id LIKE ?'}
+       AND al.action IN (${Object.keys(LEGACY_ACTION_MOVE).map(() => '?').join(', ')})
+       AND al.created_at < COALESCE((
+         SELECT datetime(MIN(e.occurred_at)) FROM issue_events e
+         WHERE e.project_id = ? AND e.event = 'stage'
+           AND e.issue_iid = CAST(substr(al.target_id, ?) AS INTEGER)
+       ), '9999')
+     GROUP BY al.target_id, al.action`
+  ).all(
+    issueIid != null ? `${prefix}${issueIid}` : `${prefix}%`, ...Object.keys(LEGACY_ACTION_MOVE),
+    projectId, prefix.length + 1,
+  ) as Array<{ target_id: string; action: string; cnt: number }>
+  for (const r of legacy) {
+    const iid = Number(r.target_id.slice(prefix.length))
+    const move = LEGACY_ACTION_MOVE[r.action]
+    if (!Number.isFinite(iid) || !move) continue
+    addMove(entry(iid), move[0], move[1], r.cnt)
+  }
+
+  // toProcess: 전체 dev execution 수
+  // toVerify: 검증 단계로 넘어간 dev execution 수 (verify_started_at 가 채워진 것)
+  const DEV_FILTER = "id NOT LIKE 'ex-verify-%' AND id NOT LIKE 'ex-confirm-%'"
+  const execRows = db.prepare(
+    `SELECT issue_iid,
+            COUNT(*) AS total,
+            SUM(CASE WHEN verify_started_at IS NOT NULL THEN 1 ELSE 0 END) AS verified
+     FROM task_executions
+     WHERE project_id = ? ${iidFilter} AND ${DEV_FILTER}
+     GROUP BY issue_iid`
+  ).all(projectId, ...iidParam) as Array<{ issue_iid: number; total: number; verified: number }>
+  for (const r of execRows) {
+    const e = entry(r.issue_iid)
+    e.forward.toProcess = r.total ?? 0
+    e.forward.toVerify = r.verified ?? 0
+  }
+  return result
 }
 
 /** 각 단계로 진입한 횟수 — 정방향 화살표에 표시. */
 export function getIssueForwardCounts(projectId: string, issueIid: number): IssueForwardCounts {
-  const targetId = `${projectId}:${issueIid}`
-  // toConfirm(task_approve)/toDone(task_accept) 는 사람 액션이라 활동 로그로 집계.
-  const rows = getDb().prepare(
-    `SELECT action, COUNT(*) as cnt FROM user_activity_logs
-     WHERE target_type = 'issue' AND target_id = ?
-       AND action IN ('task_approve', 'task_accept')
-     GROUP BY action`
-  ).all(targetId) as Array<{ action: string; cnt: number }>
-  let toConfirm = 0, toDone = 0
-  for (const r of rows) {
-    if (r.action === 'task_approve') toConfirm = r.cnt
-    else if (r.action === 'task_accept') toDone = r.cnt
-  }
-  // toProcess: 전체 dev execution 수
-  // toVerify: 검증 단계로 넘어간 dev execution 수 (verify_started_at 가 채워진 것)
-  //   — agent 자동 플로우는 task_complete 활동 로그를 안 남기므로 execution 데이터로 집계.
-  const DEV_FILTER = "id NOT LIKE 'ex-verify-%' AND id NOT LIKE 'ex-confirm-%'"
-  const execRow = getDb().prepare(
-    `SELECT
-       COUNT(*) AS total,
-       SUM(CASE WHEN verify_started_at IS NOT NULL THEN 1 ELSE 0 END) AS verified
-     FROM task_executions
-     WHERE project_id = ? AND issue_iid = ? AND ${DEV_FILTER}`
-  ).get(projectId, issueIid) as { total: number; verified: number } | undefined
-  return {
-    toProcess: execRow?.total ?? 0,
-    toVerify: execRow?.verified ?? 0,
-    toConfirm,
-    toDone,
-  }
+  return (getIterationCounts(projectId, issueIid).get(issueIid) ?? emptyCounts()).forward
 }
 
-/** 이슈의 단계별 재실행 횟수를 user_activity_logs 에서 집계한다. */
+/** 이슈의 단계별 되돌림 횟수 — 되돌림 화살표에 표시. */
 export function getIssueRetryCounts(projectId: string, issueIid: number): IssueRetryCounts {
-  const targetId = `${projectId}:${issueIid}`
-  const rows = getDb().prepare(
-    `SELECT action, COUNT(*) as cnt FROM user_activity_logs
-     WHERE target_type = 'issue' AND target_id = ?
-       AND action IN ('task_reject', 'task_return_to_dev', 'task_reopen', 'task_to_inflow')
-     GROUP BY action`
-  ).all(targetId) as Array<{ action: string; cnt: number }>
-  let fromVerify = 0, fromConfirm = 0, fromDone = 0, fromVerifyToInflow = 0
-  for (const r of rows) {
-    if (r.action === 'task_reject') fromVerify = r.cnt
-    else if (r.action === 'task_return_to_dev') fromConfirm = r.cnt
-    else if (r.action === 'task_reopen') fromDone = r.cnt
-    else if (r.action === 'task_to_inflow') fromVerifyToInflow = r.cnt
-  }
-  return { fromVerify, fromVerifyToInflow, fromConfirm, fromDone }
+  return (getIterationCounts(projectId, issueIid).get(issueIid) ?? emptyCounts()).retry
 }
 
 /**
  * 프로젝트 전체 이슈에 대한 정/역방향 카운트를 한 번에 가져온다 (목록 화면용).
  * 개별 호출(getIssueForwardCounts/getIssueRetryCounts)은 N+1 문제를 일으키므로 사용 금지.
  */
-export function getIssueIterationCountsMap(projectId: string): Map<number, { forward: IssueForwardCounts; retry: IssueRetryCounts }> {
-  const result = new Map<number, { forward: IssueForwardCounts; retry: IssueRetryCounts }>()
-  const prefix = `${projectId}:`
-
-  // 활동 로그 기반: task_approve/task_accept (forward), task_reject/task_return_to_dev/task_reopen/task_to_inflow (retry)
-  const logRows = getDb().prepare(
-    `SELECT target_id, action, COUNT(*) as cnt FROM user_activity_logs
-     WHERE target_type = 'issue' AND target_id LIKE ?
-       AND action IN ('task_approve', 'task_accept', 'task_reject', 'task_return_to_dev', 'task_reopen', 'task_to_inflow')
-     GROUP BY target_id, action`
-  ).all(`${prefix}%`) as Array<{ target_id: string; action: string; cnt: number }>
-
-  for (const r of logRows) {
-    const iid = Number(r.target_id.slice(prefix.length))
-    if (!Number.isFinite(iid)) continue
-    let entry = result.get(iid)
-    if (!entry) {
-      entry = { forward: { toProcess: 0, toVerify: 0, toConfirm: 0, toDone: 0 }, retry: { fromVerify: 0, fromVerifyToInflow: 0, fromConfirm: 0, fromDone: 0 } }
-      result.set(iid, entry)
-    }
-    if (r.action === 'task_approve') entry.forward.toConfirm = r.cnt
-    else if (r.action === 'task_accept') entry.forward.toDone = r.cnt
-    else if (r.action === 'task_reject') entry.retry.fromVerify = r.cnt
-    else if (r.action === 'task_return_to_dev') entry.retry.fromConfirm = r.cnt
-    else if (r.action === 'task_reopen') entry.retry.fromDone = r.cnt
-    else if (r.action === 'task_to_inflow') entry.retry.fromVerifyToInflow = r.cnt
-  }
-
-  // execution 기반: toProcess(전체 dev exec), toVerify(verify_started_at 채워진 것)
-  const DEV_FILTER = "id NOT LIKE 'ex-verify-%' AND id NOT LIKE 'ex-confirm-%'"
-  const execRows = getDb().prepare(
-    `SELECT issue_iid,
-            COUNT(*) AS total,
-            SUM(CASE WHEN verify_started_at IS NOT NULL THEN 1 ELSE 0 END) AS verified
-     FROM task_executions
-     WHERE project_id = ? AND ${DEV_FILTER}
-     GROUP BY issue_iid`
-  ).all(projectId) as Array<{ issue_iid: number; total: number; verified: number }>
-
-  for (const r of execRows) {
-    let entry = result.get(r.issue_iid)
-    if (!entry) {
-      entry = { forward: { toProcess: 0, toVerify: 0, toConfirm: 0, toDone: 0 }, retry: { fromVerify: 0, fromVerifyToInflow: 0, fromConfirm: 0, fromDone: 0 } }
-      result.set(r.issue_iid, entry)
-    }
-    entry.forward.toProcess = r.total ?? 0
-    entry.forward.toVerify = r.verified ?? 0
-  }
-
-  return result
+export function getIssueIterationCountsMap(projectId: string): Map<number, IterationCounts> {
+  return getIterationCounts(projectId)
 }
 
 export function cleanOldActivityLogs(retentionDays: number = 90) {

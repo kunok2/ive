@@ -20,6 +20,8 @@ import BulkActionBar from '@/components/tabs/issues/BulkActionBar'
 import AssigneePickerModal from '@/components/tabs/issues/AssigneePickerModal'
 import AgentPickerModal from '@/components/tabs/issues/AgentPickerModal'
 import LabelCheckModal from '@/components/tabs/issues/LabelCheckModal'
+import IssueDetailView from '@/app/issues/[projectId]/[iid]/_components/IssueDetailView'
+import { useIsDesk } from '@/lib/use-media'
 
 export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   const router = useRouter()
@@ -112,6 +114,12 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
 
   // --- Core state ---
   const selectedProjectId = issuesProjectId ?? ''
+  // PC 폭: 이슈를 누르면 페이지를 옮기지 않고 오른쪽 칸에 상세를 연다
+  const isDesk = useIsDesk()
+  // 프로젝트와 짝지어 둔다 — 프로젝트를 바꾸면 열려 있던 상세는 저절로 닫힌다.
+  // 탭 공용 상태라 다른 화면(보드·이슈 주소)에서도 여기에 열 수 있다(openIssueInTab)
+  const { issuesOpened: opened, setIssuesOpened: setOpened } = useTab()
+  const openIid = opened && opened.projectId === selectedProjectId ? opened.iid : null
   const filter = issuesFilter
   const sortOrder = issuesSort as 'newest' | 'oldest'
   const setSelectedProjectId = (id: string) => setIssuesProjectId(id)
@@ -622,6 +630,8 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
         }
         setIssues(prev => prev.some(i => i.iid === created.iid) ? prev : [newIssue, ...prev])
         toast(tIssue('issueCreated'), 'success')
+        // PC 폭: 오른쪽 칸에서 쓰던 그 자리에 방금 만든 이슈를 연다
+        if (isDesk && selectedProjectId) setOpened({ projectId: selectedProjectId, iid: created.iid })
         if (newIssue.stage === 'waiting' && projectAgents.length === 0) {
           showAlert({ title: tIssue('noAgentWarningTitle'), message: tIssue('noAgentWarningDesc'), variant: 'error' })
         }
@@ -666,6 +676,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
 
   // --- Navigate to issue detail ---
   const handleNavigate = useCallback(async (issue: IveIssue) => {
+    if (isDesk) { setShowAddForm(false); setOpened({ projectId: selectedProjectId, iid: issue.iid }); return }
     if (navigatingIid) return
     const el = document.querySelector('[data-scroll-container="issues-list"]')
     if (el) sessionStorage.setItem('issues-scroll', String(el.scrollTop))
@@ -679,7 +690,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
       if (notesRes.ok) sessionStorage.setItem(`issue-notes-${selectedProjectId}-${issue.iid}`, JSON.stringify(await notesRes.json()))
     } catch { /* proceed anyway */ }
     router.push(`/issues/${selectedProjectId}/${issue.iid}`)
-  }, [navigatingIid, selectedProjectId, router])
+  }, [isDesk, navigatingIid, selectedProjectId, router])
 
   // --- Derived data ---
   const isHistoryTab = filter === 'history'
@@ -711,8 +722,58 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   })
 
   // --- Render ---
-  return (
-    <PullToRefresh onRefresh={isHistoryTab ? fetchClosedIssues : fetchIssues} className="w-full flex-1 flex flex-col max-w-lg mx-auto px-4 overflow-hidden">
+  // 새 작업 입력 폼 — 폰·패드는 목록 위(headerSlot), PC 폭은 오른쪽 칸에 같은 폼을 띄운다
+  const addForm = selectedProjectId ? (
+    <IssueAddForm
+      selectedProjectId={selectedProjectId}
+      newBody={newBody}
+      onBodyChange={handleBodyChange}
+      creating={creating}
+      creatingMode={creatingMode}
+      onCreateIssue={handleCreateIssue}
+      onCancel={() => { setShowAddForm(false); handleBodyChange('') }}
+      preferredAgentId={preferredAgentId}
+      onPreferredAgentIdChange={(id) => { setPreferredAgentId(id); setRolesTouched(true) }}
+      projectAgents={projectAgents}
+      gitMembers={gitMembers}
+      confirmerMembers={confirmerMembers}
+      selectedAssignees={selectedAssignees}
+      autoAssign={autoAssign}
+      onOpenAssigneeModal={openAssigneeModal}
+      verifierMode={verifierMode}
+      verifierUserId={verifierUserId}
+      verifierUsername={verifierUsername}
+      onVerifierChange={(mode, userId, username, agentId) => {
+        setVerifierMode(mode)
+        setVerifierUserId(userId)
+        setVerifierUsername(username)
+        setVerifierAgentId(agentId ?? null)
+        setRolesTouched(true)
+      }}
+      verifierAgentId={verifierAgentId}
+      confirmerMode={confirmerMode}
+      confirmerUserId={confirmerUserId}
+      confirmerUsername={confirmerUsername}
+      onConfirmerChange={(mode, userId, username, agentId) => {
+        setConfirmerMode(mode)
+        setConfirmerUserId(userId)
+        setConfirmerUsername(username)
+        setConfirmerAgentId(agentId ?? null)
+        setRolesTouched(true)
+      }}
+      confirmerAgentId={confirmerAgentId}
+      roleAgents={roleAgents}
+      autoAllAgents={autoAllAgents}
+      onAutoAllAgentsChange={(roleAgents.process.length + roleAgents.confirm.length) > 0 ? setAutoAllAgents : undefined}
+      dueDate={newDueDate}
+      onDueDateChange={setNewDueDate}
+      notify={notifyOnDone}
+      onNotifyChange={setNotifyOnDone}
+    />
+  ) : null
+
+  const list = (
+    <PullToRefresh onRefresh={isHistoryTab ? fetchClosedIssues : fetchIssues} className="w-full flex-1 flex flex-col max-w-lg mx-auto px-4 overflow-hidden desk:w-[460px] desk:flex-none desk:mx-0 desk:border-r desk:border-ive-border-dark">
       <div className="pt-4 shrink-0">
         <ProjectSelector
           projects={state.projects}
@@ -824,56 +885,12 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
           roleAgents={roleAgents}
           locale={state.user?.locale}
           timezone={state.user?.timezone}
-          headerSlot={showAddForm ? (
-            <IssueAddForm
-              selectedProjectId={selectedProjectId}
-              newBody={newBody}
-              onBodyChange={handleBodyChange}
-              creating={creating}
-              creatingMode={creatingMode}
-              onCreateIssue={handleCreateIssue}
-              onCancel={() => { setShowAddForm(false); handleBodyChange('') }}
-              preferredAgentId={preferredAgentId}
-              onPreferredAgentIdChange={(id) => { setPreferredAgentId(id); setRolesTouched(true) }}
-              projectAgents={projectAgents}
-              gitMembers={gitMembers}
-              confirmerMembers={confirmerMembers}
-              selectedAssignees={selectedAssignees}
-              autoAssign={autoAssign}
-              onOpenAssigneeModal={openAssigneeModal}
-              verifierMode={verifierMode}
-              verifierUserId={verifierUserId}
-              verifierUsername={verifierUsername}
-              onVerifierChange={(mode, userId, username, agentId) => {
-                setVerifierMode(mode)
-                setVerifierUserId(userId)
-                setVerifierUsername(username)
-                setVerifierAgentId(agentId ?? null)
-                setRolesTouched(true)
-              }}
-              verifierAgentId={verifierAgentId}
-              confirmerMode={confirmerMode}
-              confirmerUserId={confirmerUserId}
-              confirmerUsername={confirmerUsername}
-              onConfirmerChange={(mode, userId, username, agentId) => {
-                setConfirmerMode(mode)
-                setConfirmerUserId(userId)
-                setConfirmerUsername(username)
-                setConfirmerAgentId(agentId ?? null)
-                setRolesTouched(true)
-              }}
-              confirmerAgentId={confirmerAgentId}
-              roleAgents={roleAgents}
-              autoAllAgents={autoAllAgents}
-              onAutoAllAgentsChange={(roleAgents.process.length + roleAgents.confirm.length) > 0 ? setAutoAllAgents : undefined}
-              dueDate={newDueDate}
-              onDueDateChange={setNewDueDate}
-              notify={notifyOnDone}
-              onNotifyChange={setNotifyOnDone}
-            />
-          ) : null}
+          // 새 작업 입력: 폰·패드는 목록 위, PC 폭은 오른쪽 칸(아래 desk 배치)
+          headerSlot={showAddForm && !isDesk ? addForm : null}
           onToggleSelect={toggleSelect}
           onNavigate={handleNavigate}
+          // 오른쪽 칸이 입력 폼을 보이는 동안에는 목록에서 열린 이슈를 강조하지 않는다
+          openIid={isDesk && !showAddForm ? openIid : null}
           onOpenAgentPicker={setAgentPickerIid}
           onOpenAssigneeModal={openAssigneeModal}
           onCloseIssue={handleCloseIssue}
@@ -969,5 +986,33 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
         onAutoCreate={handleAutoCreateLabels}
       />
     </PullToRefresh>
+  )
+  if (!isDesk) return list
+
+  // PC 폭: 왼쪽 목록(폰과 같은 폭) + 오른쪽 상세
+  return (
+    <div className="w-full flex-1 flex min-h-0">
+      {list}
+      <section className="flex-1 min-w-0 flex flex-col" aria-label={tIssue('detailPaneLabel')}>
+        {showAddForm && addForm ? (
+          <div className="flex-1 min-h-0 overflow-y-auto px-6 pt-5 pb-6">
+            <div className="max-w-3xl mx-auto">{addForm}</div>
+          </div>
+        ) : openIid != null && selectedProjectId ? (
+          <IssueDetailView
+            key={`${selectedProjectId}-${openIid}`}
+            projectId={selectedProjectId}
+            iid={String(openIid)}
+            embedded
+            onClose={() => { setOpened(null); fetchIssues() }}
+          />
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center gap-3 text-ive-text-dim">
+            <i className="fa-solid fa-list-check text-3xl" />
+            <span className="text-sm font-bold">{tIssue('detailPanePlaceholder')}</span>
+          </div>
+        )}
+      </section>
+    </div>
   )
 }

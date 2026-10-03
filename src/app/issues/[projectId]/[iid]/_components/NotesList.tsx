@@ -94,7 +94,7 @@ export default function NotesList({
   const tIssue = useTranslations('issue')
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 max-w-lg mx-auto w-full">
+    <div className="flex-1 flex flex-col min-h-0 max-w-lg desk:max-w-3xl mx-auto w-full">
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto pb-2 pl-3 pr-1">
         <PullToRefresh onRefresh={onRefreshAll} scrollContainerRef={scrollContainerRef}>
           {/* 이슈 본문 - 스크롤 영역 안에 배치 */}

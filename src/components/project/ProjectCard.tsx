@@ -12,21 +12,21 @@ import ExecutionList from '@/components/execution/ExecutionList'
 import LiveTracePanel from '@/components/execution/LiveTracePanel'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 import MarqueeText from '@/components/ui/MarqueeText'
+import ActiveWorkList, { type ActiveItem } from '@/components/project/ActiveWorkList'
+import WaitPill from '@/components/project/WaitPill'
+import { execKind, ageOf, ageText } from '@/lib/active-work'
 import ConflictResolutionPanel from '@/components/mr/ConflictResolutionPanel'
 import type { ToolActivity } from '@/lib/tool-activity'
 import { useTranslations } from 'next-intl'
 import { useTab } from '@/lib/tab-context'
 
-function formatDuration(startedAt: string): string {
-  const s = Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000)
-  if (s < 60) return `${s}s`
-  if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`
-  return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`
-}
-
-
 interface Props {
   project: Project & { shareRole?: string | null; chatActive?: boolean; chatProcessing?: boolean }
+  /** PC 보드 배치: 카드를 누르면 프로젝트 페이지로 가지 않고 이 프로젝트를 고른다 */
+  onSelect?: () => void
+  selected?: boolean
+  /** PC 보드 배치: 오른쪽 보드가 진행 중 일을 보여 주므로 카드의 진행 중 목록을 숨긴다 */
+  hideActiveList?: boolean
 }
 
 interface ProjectStats {
@@ -45,7 +45,16 @@ interface ProjectStats {
   tasksPerHour: number
 }
 
-export default function ProjectCard({ project }: Props) {
+// 대기 패널의 묶음 순서 — 흐름 순서대로
+const WAIT_GROUPS = [
+  { stage: 'waiting', label: 'waitGroupProcess' },
+  { stage: 'verify_waiting', label: 'waitGroupVerify' },
+  { stage: 'confirm_waiting', label: 'waitGroupConfirm' },
+] as const
+// 스캐너 배정 대기 사유(recordWaitIfChanged) 중 화면 문구가 있는 것
+const WAIT_REASONS = new Set(['assignee_mode', 'requester_unknown', 'preferred_not_in_pool', 'preferred_paused', 'preferred_busy', 'no_agent'])
+
+export default function ProjectCard({ project, onSelect, selected, hideActiveList }: Props) {
   const isOwner = !project.shareRole
   const canEdit = isOwner || project.shareRole === 'editor'
   const router = useRouter()
@@ -57,7 +66,8 @@ export default function ProjectCard({ project }: Props) {
   const [expandedPanel, _setExpandedPanel] = useState<'running' | 'done' | 'waiting' | 'verifying' | 'confirming' | 'conflicts' | null>(() => {
     if (typeof window === 'undefined') return null
     const saved = sessionStorage.getItem(`pc-panel-${project.id}`)
-    return (saved === 'running' || saved === 'done' || saved === 'waiting' || saved === 'verifying' || saved === 'confirming' || saved === 'conflicts') ? saved as any : null
+    // 「대기」 패널은 없어졌다 — 대기 건은 각 단계 패널 맨 위에 보인다
+    return (saved === 'running' || saved === 'done' || saved === 'verifying' || saved === 'confirming' || saved === 'conflicts') ? saved as any : null
   })
   const setExpandedPanel = (v: 'running' | 'done' | 'waiting' | 'verifying' | 'confirming' | 'conflicts' | null) => {
     if (v) sessionStorage.removeItem(`pc-panel-count-${project.id}-${v}`)
@@ -75,7 +85,6 @@ export default function ProjectCard({ project }: Props) {
   const [activities, setActivities] = useState<Record<string, ToolActivity>>({})
   const [liveMRCount, setLiveMRCount] = useState<number | null>(null)
   const [liveConflictCount, setLiveConflictCount] = useState<number | null>(null)
-  const [tick, setTick] = useState(0)
 
   const fetchStats = useCallback(async () => {
     try {
@@ -98,15 +107,6 @@ export default function ProjectCard({ project }: Props) {
     return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVisible) }
   }, [fetchStats, stats?.agentWorking, stats?.verifying, stats?.confirming])
 
-  // 경과 시간 실시간 업데이트 (진행 중 작업 요약에 표시)
-  useEffect(() => {
-    const totalActive = (stats?.agentWorking ?? 0) + (stats?.verifying ?? 0) + (stats?.confirming ?? 0)
-    if (totalActive > 0 && !expandedPanel) {
-      const timer = setInterval(() => setTick(t => t + 1), 1000)
-      return () => clearInterval(timer)
-    }
-  }, [stats?.agentWorking, stats?.verifying, stats?.confirming, expandedPanel])
-
   // 실행 목록 로드: 패널 열렸을 때 또는 진행 중 건이 있을 때
   useEffect(() => {
     const needForPanel = expandedPanel === 'running' || expandedPanel === 'done' || expandedPanel === 'verifying' || expandedPanel === 'confirming'
@@ -127,9 +127,9 @@ export default function ProjectCard({ project }: Props) {
     return () => clearInterval(timer)
   }, [expandedPanel, project.id, stats?.agentWorking, stats?.verifying, stats?.confirming])
 
-  // 대기 패널 열릴 때 대기 이슈 목록 로드
+  // 단계 패널(처리·검증·확인)이 열리면 그 단계의 대기 건을 함께 보이려고 대기 이슈 목록을 불러온다
   useEffect(() => {
-    if (expandedPanel !== 'waiting') return
+    if (expandedPanel !== 'running' && expandedPanel !== 'verifying' && expandedPanel !== 'confirming') return
     const fetchWaiting = async () => {
       try {
         const res = await fetch(`/api/projects/${project.id}/issues`)
@@ -233,9 +233,35 @@ export default function ProjectCard({ project }: Props) {
   const verifyingCount = stats?.verifying ?? 0
   const confirmingCount = stats?.confirming ?? 0
   const completedCount = stats?.completed ?? 0
+  // 대기 — 처리대기·검증대기·확인대기. 대기 칸은 합계, 각 단계 칸에는 그 단계 몫을 붙인다
+  const processWaitCount = stats?.waiting ?? 0
+  const verifyWaitCount = stats?.verifyWaiting ?? 0
+  const confirmWaitCount = stats?.confirmWaiting ?? 0
   const failedCount = stats?.failed ?? 0
   const totalDone = completedCount + failedCount
   const yesterdayDiff = stats ? totalDone - stats.yesterdayCompleted : 0
+
+  // 대기 이슈가 무엇을 기다리는지 — 처리대기는 스캐너가 남긴 배정 대기 사유,
+  // 검증·확인대기는 작업자를 못 띄운 사유(stageWorkerNote)가 있으면 그것, 없으면 기다리는 사람
+  const waitTarget = (issue: any): { icon: string; text: string } | null => {
+    if (issue.stage === 'waiting') {
+      return issue.waitReason && WAIT_REASONS.has(issue.waitReason)
+        ? { icon: 'fa-circle-info', text: tp(`waitReason.${issue.waitReason}`) }
+        : null
+    }
+    if (issue.stageWorkerNote) return { icon: 'fa-circle-info', text: issue.stageWorkerNote }
+    const verify = issue.stage === 'verify_waiting'
+    const actual = verify ? issue.actualVerifier : issue.actualConfirmer
+    const preset = verify ? issue.presetVerifier : issue.presetConfirmer
+    const name = actual?.name
+      ?? (preset?.mode === 'agent' ? preset.agentName : preset?.username)
+      ?? (preset?.mode === 'creator' || !preset ? issue.author?.name : null)
+    if (!name) return null
+    return { icon: preset?.mode === 'agent' && !actual ? 'fa-robot' : 'fa-user', text: tp(verify ? 'waitForVerifier' : 'waitForConfirmer', { name }) }
+  }
+
+  // 단계 칸의 진행 중 숫자 옆에 붙는 그 단계 대기 건수 — 점선 숫자(보드의 대기 카드와 같은 표시)
+  const waitTag = (n: number) => <WaitPill n={n} title={tp('stageWaitingHint', { n })} />
 
   // 펼친 패널의 건수가 1건 이상이었다가 0이 되면(작업이 처리되어 비워짐) 패널을 닫는다.
   // 처음부터 0건인 패널을 사용자가 직접 연 경우는 그대로 둔다.
@@ -244,10 +270,9 @@ export default function ProjectCard({ project }: Props) {
     !expandedPanel || expandedPanel === 'done' ? null
     : expandedPanel === 'conflicts' ? mergeCount
     : !stats ? null
-    : expandedPanel === 'waiting' ? stats.waiting + (stats.verifyWaiting ?? 0) + (stats.confirmWaiting ?? 0)
-    : expandedPanel === 'running' ? agentWorkingCount
-    : expandedPanel === 'verifying' ? verifyingCount
-    : confirmingCount
+    : expandedPanel === 'running' ? agentWorkingCount + processWaitCount
+    : expandedPanel === 'verifying' ? verifyingCount + verifyWaitCount
+    : confirmingCount + confirmWaitCount
   useEffect(() => {
     if (!expandedPanel || expandedCount === null) return
     const key = `pc-panel-count-${project.id}-${expandedPanel}`
@@ -296,12 +321,79 @@ export default function ProjectCard({ project }: Props) {
     return () => clearInterval(timer)
   }, [liveAgentCount])
 
+  // 그 단계의 대기 건 묶음(처리 대기·검증 대기·확인 대기) — 각 단계 패널 맨 위에 보인다. 없으면 null
+  const renderWaitGroup = (stage: typeof WAIT_GROUPS[number]['stage']) => {
+    const g = WAIT_GROUPS.find(w => w.stage === stage)!
+
+    // 오래 기다린 것부터. 들어온 시각을 모르면(사건 로그 이전) 맨 뒤
+    const list = waitingIssues
+      .filter((i: any) => i.stage === g.stage)
+      .sort((a: any, b: any) => (a.stageSince ?? '\uffff').localeCompare(b.stageSince ?? '\uffff'))
+    if (list.length === 0) return null
+    return (
+      <div key={g.stage}>
+        <div className="px-3 py-2 bg-ive-bg-deep/50 border-b border-ive-border-dark">
+          <span className="text-xs font-bold uppercase tracking-widest text-ive-text-secondary">
+            {tp(g.label)} {list.length}
+          </span>
+        </div>
+        <div className="space-y-2 p-3">
+          {list.map((issue: any) => {
+            const age = issue.stageSince ? ageOf(issue.stageSince) : null
+            const target = waitTarget(issue)
+            return (
+              <div
+                key={issue.iid}
+                onClick={() => router.push(`/issues/${project.id}/${issue.iid}`)}
+                className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-3 hover:border-ive-cyan/40 transition-all cursor-pointer active:scale-[0.98]"
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-sm font-bold text-ive-text-muted">#{issue.iid}</span>
+                  {age && (
+                    <span className={`ml-auto shrink-0 text-xs font-bold tabular-nums ${age.aged ? 'px-1.5 py-0.5 rounded-lg bg-ive-red/15 text-ive-red' : 'text-ive-text-secondary'}`}>
+                      {tp('waitedFor', { t: ageText(tp, age) })}
+                    </span>
+                  )}
+                </div>
+                <MarqueeText className="text-sm text-ive-text font-bold">{issue.title}</MarqueeText>
+                <div className="flex items-center gap-3 text-xs text-ive-text-dim mt-1 min-w-0">
+                  {target ? (
+                    <span className="flex items-center gap-1 min-w-0">
+                      <i className={`fa-solid ${target.icon} shrink-0`} />
+                      <span className="truncate">{target.text}</span>
+                    </span>
+                  ) : issue.author?.name && (
+                    <span className="flex items-center gap-1">
+                      {issue.author.avatar ? (
+                        <AgentAvatar avatar={issue.author.avatar} size="xs" />
+                      ) : issue.author.avatarUrl ? (
+                        <img src={issue.author.avatarUrl} className="w-4 h-4 rounded-lg object-cover bg-ive-bg-deep" alt="" />
+                      ) : (
+                        <i className="fa-solid fa-user" />
+                      )}
+                      {issue.author.name}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div
-      className={`bg-ive-bg-card rounded-lg border overflow-hidden transition-colors duration-200 flex flex-col ${expandedPanel ? 'border-ive-cyan/30 h-[calc(100vh-160px)]' : 'border-ive-border-subtle hover:border-ive-green/30'}`}
+      className={`bg-ive-bg-card rounded-lg border overflow-hidden transition-colors duration-200 flex flex-col ${expandedPanel ? 'border-ive-cyan/30 h-[calc(100vh-160px)]' : selected ? 'border-ive-cyan/60' : 'border-ive-border-subtle hover:border-ive-green/30'}`}
       style={{ background: `linear-gradient(135deg, ${project.color || '#4ade80'}08 0%, transparent 40%), var(--color-ive-bg-card, #121e14)` }}
     >
-      <Link href={`/projects/${project.id}`} className="block p-4 active:bg-white/[0.03] transition-colors group">
+      <Link
+        href={`/projects/${project.id}`}
+        onClick={onSelect ? e => { e.preventDefault(); onSelect() } : undefined}
+        aria-current={selected ? 'true' : undefined}
+        className="block p-4 active:bg-white/[0.03] transition-colors group"
+      >
         <div className="flex items-start gap-3">
           {project.avatarUrl ? (
             <img src={project.avatarUrl} alt="" className="w-10 h-10 rounded-lg object-cover border border-ive-border-subtle shrink-0 mt-0.5" style={{ borderColor: `${project.color || '#4ade80'}40` }} />
@@ -327,8 +419,9 @@ export default function ProjectCard({ project }: Props) {
                 </span>
               )}
             </div>
-            <span className="text-sm text-ive-text-muted font-mono opacity-60 mb-1 break-all leading-tight inline-block">
-              {project.repoUrl}<i onClick={e => { e.preventDefault(); e.stopPropagation(); window.open(project.repoUrl.replace(/\.git$/, ''), '_blank') }} className="fa-solid fa-arrow-up-right-from-square text-xs ml-1 opacity-50 cursor-pointer hover:text-ive-green hover:opacity-100 transition-colors p-1" />
+            {/* 주소는 한 줄 — 넘치면 말줄임(전체는 title), 바깥 링크 아이콘은 늘 보인다. 단어 중간에서 줄이 끊기지 않게 */}
+            <span className="text-sm text-ive-text-muted font-mono opacity-60 mb-1 leading-tight flex items-center min-w-0" title={project.repoUrl}>
+              <span className="truncate">{project.repoUrl}</span><i onClick={e => { e.preventDefault(); e.stopPropagation(); window.open(project.repoUrl.replace(/\.git$/, ''), '_blank') }} className="fa-solid fa-arrow-up-right-from-square text-xs ml-1 shrink-0 opacity-50 cursor-pointer hover:text-ive-green hover:opacity-100 transition-colors p-1" />
             </span>
             <div className="flex items-center gap-2 mt-1">
               {project.lastCheckedAt && (
@@ -405,65 +498,59 @@ export default function ProjectCard({ project }: Props) {
 
       {/* 대시보드 통계 바 */}
       <div data-tour="project-card-stats" className="flex items-stretch border-t border-ive-border-dark">
-        {/* 대기 */}
-        <button
-          onClick={() => setExpandedPanel(expandedPanel === 'waiting' ? null : 'waiting')}
-          title={tp('waitingTooltip')}
-          className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'waiting' ? 'bg-ive-cyan/5' : 'hover:bg-white/[0.02]'}`}
-        >
-          <span className={`text-lg font-bold leading-none ${((stats?.waiting ?? 0) + (stats?.verifyWaiting ?? 0) + (stats?.confirmWaiting ?? 0)) > 0 ? 'text-ive-cyan' : 'text-ive-text-dim'}`}>
-            {(stats?.waiting ?? 0) + (stats?.verifyWaiting ?? 0) + (stats?.confirmWaiting ?? 0)}
-          </span>
-          <Sparkline data={snapshots.map(s => s.waiting)} width={40} height={12} color="cyan" />
-          <span className="text-xs text-ive-text-dim font-bold">{tp('waitingLabel')}</span>
-        </button>
-
         {/* 처리 (AI 에이전트) */}
         <button
           onClick={() => setExpandedPanel(expandedPanel === 'running' ? null : 'running')}
           title={tp('workingTooltip')}
-          className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'running' ? 'bg-ive-amber/5' : 'hover:bg-white/[0.02]'}`}
+          className={`flex-1 min-w-0 py-2.5 px-1 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'running' ? 'bg-ive-stage-process/5' : 'hover:bg-white/[0.02]'}`}
         >
-          <div className="flex items-baseline gap-0.5">
-            <span className={`text-lg font-bold leading-none ${agentWorkingCount > 0 ? 'text-ive-amber animate-pulse' : 'text-ive-text-dim'}`}>
+          <div className="flex items-center gap-1">
+            <span className={`text-lg font-bold leading-none ${agentWorkingCount > 0 ? 'text-ive-stage-process animate-pulse' : 'text-ive-text-dim'}`}>
               {agentWorkingCount}
             </span>
+            {waitTag(processWaitCount)}
           </div>
           <Sparkline data={snapshots.map(s => s.running)} width={40} height={12} color="amber" />
-          <span className="text-xs text-ive-text-dim font-bold">{tp('workingLabel')}</span>
+          <span className="max-w-full truncate text-xs text-ive-text-dim font-bold">{tp('workingLabel')}</span>
         </button>
 
-        {/* 검증 (사람) — 검증중은 행동/주의 필요 신호이므로 amber */}
+        {/* 검증 — 단계색(보라) */}
         <button
           onClick={() => setExpandedPanel(expandedPanel === 'verifying' ? null : 'verifying')}
           title={tp('verifyingTooltip')}
-          className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'verifying' ? 'bg-ive-amber/5' : 'hover:bg-white/[0.02]'}`}
+          className={`flex-1 min-w-0 py-2.5 px-1 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'verifying' ? 'bg-ive-stage-verify/5' : 'hover:bg-white/[0.02]'}`}
         >
-          <span className={`text-lg font-bold leading-none ${verifyingCount > 0 ? 'text-ive-amber animate-pulse' : 'text-ive-text-dim'}`}>
-            {verifyingCount}
-          </span>
-          <Sparkline data={snapshots.map(s => s.running)} width={40} height={12} color="amber" />
-          <span className="text-xs text-ive-text-dim font-bold">{tp('verifyingLabel')}</span>
+          <div className="flex items-center gap-1">
+            <span className={`text-lg font-bold leading-none ${verifyingCount > 0 ? 'text-ive-stage-verify animate-pulse' : 'text-ive-text-dim'}`}>
+              {verifyingCount}
+            </span>
+            {waitTag(verifyWaitCount)}
+          </div>
+          <Sparkline data={snapshots.map(s => s.running)} width={40} height={12} color="verify" />
+          <span className="max-w-full truncate text-xs text-ive-text-dim font-bold">{tp('verifyingLabel')}</span>
         </button>
 
-        {/* 확인 (사람) — 검증과 동일한 amber 톤 */}
+        {/* 확인 — 단계색(분홍) */}
         <button
           onClick={() => setExpandedPanel(expandedPanel === 'confirming' ? null : 'confirming')}
           title={tp('confirmingTooltip')}
-          className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'confirming' ? 'bg-ive-amber/5' : 'hover:bg-white/[0.02]'}`}
+          className={`flex-1 min-w-0 py-2.5 px-1 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'confirming' ? 'bg-ive-stage-confirm/5' : 'hover:bg-white/[0.02]'}`}
         >
-          <span className={`text-lg font-bold leading-none ${confirmingCount > 0 ? 'text-ive-amber animate-pulse' : 'text-ive-text-dim'}`}>
-            {confirmingCount}
-          </span>
-          <Sparkline data={snapshots.map(s => s.running)} width={40} height={12} color="amber" />
-          <span className="text-xs text-ive-text-dim font-bold">{tp('confirmingLabel')}</span>
+          <div className="flex items-center gap-1">
+            <span className={`text-lg font-bold leading-none ${confirmingCount > 0 ? 'text-ive-stage-confirm animate-pulse' : 'text-ive-text-dim'}`}>
+              {confirmingCount}
+            </span>
+            {waitTag(confirmWaitCount)}
+          </div>
+          <Sparkline data={snapshots.map(s => s.running)} width={40} height={12} color="confirm" />
+          <span className="max-w-full truncate text-xs text-ive-text-dim font-bold">{tp('confirmingLabel')}</span>
         </button>
 
         {/* 완료 (금일) */}
         <button
           onClick={() => setExpandedPanel(expandedPanel === 'done' ? null : 'done')}
           title={tp('completedTooltip')}
-          className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'done' ? 'bg-ive-green/5' : 'hover:bg-white/[0.02]'}`}
+          className={`flex-1 min-w-0 py-2.5 px-1 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'done' ? 'bg-ive-green/5' : 'hover:bg-white/[0.02]'}`}
         >
           <div className="flex items-baseline gap-1">
             <span className={`text-lg font-bold leading-none ${totalDone > 0 ? 'text-ive-green' : 'text-ive-text-dim'}`}>
@@ -476,14 +563,14 @@ export default function ProjectCard({ project }: Props) {
             )}
           </div>
           <Sparkline data={snapshots.map(s => s.completed + s.failed)} width={40} height={12} />
-          <span className="text-xs text-ive-text-dim font-bold">{tp('completedLabel')}</span>
+          <span className="max-w-full truncate text-xs text-ive-text-dim font-bold">{tp('completedLabel')}</span>
         </button>
 
         {/* 취합 */}
         <button
           onClick={() => setExpandedPanel(expandedPanel === 'conflicts' ? null : 'conflicts')}
           title={tp('conflictTooltip')}
-          className={`flex-1 py-2.5 px-2 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'conflicts' ? 'bg-ive-amber/5' : 'hover:bg-white/[0.02]'}`}
+          className={`flex-1 min-w-0 py-2.5 px-1 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'conflicts' ? 'bg-ive-amber/5' : 'hover:bg-white/[0.02]'}`}
         >
           <span className={`text-lg font-bold leading-none ${mergeCount === null ? 'text-ive-text-dim/40' : conflictCount > 0 ? 'text-ive-red animate-pulse' : mergeCount > 0 ? 'text-ive-amber' : 'text-ive-text-dim'}`}>
             {mergeCount === null ? '–' : mergeCount}
@@ -496,118 +583,74 @@ export default function ProjectCard({ project }: Props) {
         </button>
       </div>
 
-      {/* 진행 중 작업 요약 (패널 펼치지 않았을 때).
+      {/* 진행 중 작업 요약 (패널 펼치지 않았을 때) — 종류(처리·검증·확인)로 묶는다.
           runningExecs(=task_executions 기반) 외에 라벨만 verifying/confirming 인 이슈도 표시.
-          GitLab UI 등 외부에서 라벨을 직접 바꾼 경우 exec 가 없어도 한줄 표시되도록 보강. */}
-      {(() => {
-        if (expandedPanel) return null
+          GitLab UI 등 외부에서 라벨을 직접 바꾼 경우 exec 가 없어도 한 줄 표시되도록 보강.
+          PC 보드 배치(hideActiveList)에서는 오른쪽 보드가 같은 내용을 보여 주므로 숨긴다. */}
+      {!expandedPanel && !hideActiveList && (() => {
         const activeIids = new Set(runningExecs.map(ex => ex.issueIid))
-        const labelOnlyVerify = verifyingIssues.filter((i: any) => !activeIids.has(i.iid))
-        const labelOnlyConfirm = confirmingIssues.filter((i: any) => !activeIids.has(i.iid))
-        if (runningExecs.length === 0 && labelOnlyVerify.length === 0 && labelOnlyConfirm.length === 0) return null
-
-        const renderLabelRow = (issue: any, kind: 'verify' | 'confirm') => {
-          const actor = kind === 'verify' ? issue.actualVerifier : issue.actualConfirmer
-          const badge = kind === 'verify' ? tp('verifyingBadge') : tp('confirmingBadge')
-          const avatarSrc = actor?.avatar
-          const isPhotoUrl = typeof avatarSrc === 'string' && (avatarSrc.startsWith('/') || avatarSrc.startsWith('http'))
-          return (
-            <div
-              key={`${kind}-${issue.iid}`}
-              onClick={() => router.push(`/issues/${project.id}/${issue.iid}`)}
-              className="flex items-center gap-1.5 text-xs cursor-pointer rounded-lg -mx-1 px-1 py-0.5 hover:bg-ive-amber/5 transition-colors"
-            >
-              {avatarSrc ? (
-                isPhotoUrl ? (
-                  <img src={avatarSrc} alt="" className="w-7 h-7 rounded-lg object-cover shrink-0 border border-ive-border" />
-                ) : (
-                  <AgentAvatar avatar={avatarSrc} size="sm" />
-                )
-              ) : (
-                <div className="w-7 h-7 rounded-lg bg-ive-bg-deep border border-ive-border-subtle flex items-center justify-center shrink-0">
-                  <i className="fa-solid fa-user text-[10px] text-ive-text-dim" />
-                </div>
-              )}
-              {actor?.name && <span className="font-bold shrink-0 text-ive-amber/70">{actor.name}</span>}
-              <MarqueeText className="text-ive-text-muted">
-                {`#${issue.iid} `}{issue.title}
-              </MarqueeText>
-              <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-ive-amber/70 ml-auto">
-                {badge}
-              </span>
-            </div>
-          )
-        }
-
+        const userAvatar = (src: string | null | undefined, userId?: string | null) =>
+          src === 'photo' && userId ? <img src={`/api/auth/avatar/image?id=${userId}`} alt="" className="w-6 h-6 rounded-lg object-cover shrink-0 border border-ive-border" />
+          : src && (src.startsWith('/') || src.startsWith('http')) ? <img src={src} alt="" className="w-6 h-6 rounded-lg object-cover shrink-0 border border-ive-border" />
+          : src ? <AgentAvatar avatar={src} size="sm" /> : null
+        const items: ActiveItem[] = [
+          ...runningExecs.map((ex): ActiveItem => {
+            const kind = execKind(ex.id)
+            const isUser = ex.assigneeType === 'user'
+            const activity = ex.agentId ? activities[ex.agentId] : undefined
+            return {
+              key: ex.id,
+              kind,
+              iid: ex.issueIid,
+              title: kind === 'chat' ? tp('chatLabel') : (ex.issueTitle ?? ''),
+              who: isUser ? ex.userName : (ex.agentName ?? null),
+              avatar: isUser ? userAvatar(ex.userAvatar, ex.userId)
+                : <AgentAvatar avatar={ex.agentAvatar ?? 'av-01'} size="sm" toolBadge={kind === 'chat' ? null : (activity?.category ?? null)} />,
+              startedAt: ex.startedAt,
+              // 에이전트 → 실시간 실행 화면(LiveTracePanel 「전체화면」과 같은 곳), 사람·채팅 → 이슈 상세(검증·확인 버튼이 있는 곳)
+              onClick: () => router.push(isUser || kind === 'chat' ? `/issues/${project.id}/${ex.issueIid}` : `/executions/${ex.id}`),
+            }
+          }),
+          ...(['verify', 'confirm'] as const).flatMap(kind =>
+            (kind === 'verify' ? verifyingIssues : confirmingIssues)
+              .filter((i: any) => !activeIids.has(i.iid))
+              .map((i: any): ActiveItem => {
+                const actor = kind === 'verify' ? i.actualVerifier : i.actualConfirmer
+                return {
+                  key: `${kind}-${i.iid}`, kind, iid: i.iid, title: i.title,
+                  who: actor?.name ?? null, avatar: userAvatar(actor?.avatar),
+                  startedAt: null,
+                  onClick: () => router.push(`/issues/${project.id}/${i.iid}`),
+                }
+              })),
+        ]
         return (
-          <div className="border-t border-ive-amber/15 px-3 py-1.5 space-y-1">
-            {runningExecs.map(ex => {
-              const isChat = ex.id.startsWith('exec-chat-')
-              const isVerify = ex.assigneeType === 'user'
-              // 에이전트 풀이 전역화되어 어느 사용자의 에이전트인지 모르므로
-              // execution row에 inline JOIN된 agent_name/agent_avatar를 우선 사용.
-              const agentName = isVerify ? null : (ex.agentName ?? null)
-              const agentAvatar = isVerify ? null : (ex.agentAvatar ?? 'av-01')
-              const activity = ex.agentId ? activities[ex.agentId] : undefined
-              const displayName = isVerify ? ex.userName : agentName
-              return (
-                <div
-                  key={ex.id}
-                  // LiveTracePanel 의 「전체화면」 버튼과 동일한 이동 (채팅 세션은 이슈 상세로)
-                  onClick={() => router.push(isChat ? `/issues/${project.id}/${ex.issueIid}` : `/executions/${ex.id}`)}
-                  className="flex items-center gap-1.5 text-xs cursor-pointer rounded-lg -mx-1 px-1 py-0.5 hover:bg-ive-amber/5 transition-colors"
-                >
-                  {isVerify ? (
-                    ex.userAvatar === 'photo' && ex.userId ? (
-                      <img src={`/api/auth/avatar/image?id=${ex.userId}`} alt="" className="w-7 h-7 rounded-lg object-cover shrink-0 border border-ive-border" />
-                    ) : ex.userAvatar ? (
-                      <AgentAvatar avatar={ex.userAvatar} size="sm" />
-                    ) : null
-                  ) : agentAvatar ? (
-                    <AgentAvatar
-                      avatar={agentAvatar}
-                      size="sm"
-                      toolBadge={isChat ? null : (activity?.category ?? null)}
-                    />
-                  ) : null}
-                  {displayName && <span className={`font-bold shrink-0 ${'text-ive-amber/70'}`}>{displayName}</span>}
-                  <MarqueeText className="text-ive-text-muted">
-                    {isChat ? `💬 #${ex.issueIid} ${tp('chatLabel')}` : `#${ex.issueIid} `}
-                    {!isChat && ex.issueTitle && `${ex.issueTitle}`}
-                  </MarqueeText>
-                  {!isVerify && stageKindOf(ex.id) && (
-                    <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-ive-amber/70 ml-auto">
-                      {tp(stageKindOf(ex.id) === 'verify' ? 'verifyingBadge' : 'confirmingBadge')}
-                    </span>
-                  )}
-                  <span className={`shrink-0 text-xs font-mono font-bold tabular-nums ${!isVerify && stageKindOf(ex.id) ? '' : 'ml-auto'} ${'text-ive-amber/70'}`}>
-                    {formatDuration(ex.startedAt)}
-                    {tick >= 0 ? '' : ''}
-                  </span>
-                </div>
-              )
-            })}
-            {labelOnlyVerify.map((i: any) => renderLabelRow(i, 'verify'))}
-            {labelOnlyConfirm.map((i: any) => renderLabelRow(i, 'confirm'))}
-          </div>
+          <ActiveWorkList
+            items={items}
+            onMore={kind => setExpandedPanel(kind === 'verify' ? 'verifying' : kind === 'confirm' ? 'confirming' : 'running')}
+          />
         )
       })()}
 
       {/* 작업 현황 패널 (AI 에이전트만) — 처리 */}
       {expandedPanel === 'running' && (
         <div className="flex-1 flex flex-col min-h-0">
+          {processWaitCount > 0 && <div className="shrink-0 max-h-[45%] overflow-y-auto border-t border-ive-cyan/20">{renderWaitGroup('waiting')}</div>}
           <LiveTracePanel
             agents={toAgentTabs(runningExecs.filter(e => e.assigneeType !== 'user' && !stageKindOf(e.id)))}
             projectId={project.id}
             onKill={handleKill}
-            onAllCompleted={() => setExpandedPanel(null)}
+            // 처리 대기가 남아 있으면 진행이 끝나도 패널을 닫지 않는다(대기 목록을 계속 보인다)
+            onAllCompleted={processWaitCount > 0 ? undefined : () => setExpandedPanel(null)}
           />
         </div>
       )}
 
       {/* 검증 중 패널 — IVE-V 라벨 단계 이슈 목록 (라벨 기반, task_execution 없어도 표시) */}
       {expandedPanel === 'verifying' && (
-        <div className="flex-1 flex flex-col min-h-0 border-t border-ive-amber/20">
+        <div className="flex-1 flex flex-col min-h-0 border-t border-ive-stage-verify/30">
+          {/* 이 단계에서 기다리는 건이 먼저 */}
+          {renderWaitGroup('verify_waiting') && <div className="shrink-0 max-h-[45%] overflow-y-auto">{renderWaitGroup('verify_waiting')}</div>}
           {/* 에이전트가 이 단계를 돌리는 중이면 처리 패널과 같은 실시간 화면 */}
           {liveStageExecs('verify').length > 0 && (
             <div className="flex-1 flex flex-col min-h-0">
@@ -618,22 +661,29 @@ export default function ProjectCard({ project }: Props) {
               />
             </div>
           )}
-          {liveStageExecs('verify').length > 0 && verifyingIssues.every((i: any) => liveStageExecs('verify').some(e => e.issueIid === i.iid)) ? null : verifyingIssues.length === 0 ? (
+          {liveStageExecs('verify').length > 0 && verifyingIssues.every((i: any) => liveStageExecs('verify').some(e => e.issueIid === i.iid)) ? null : verifyingIssues.length === 0 ? (verifyWaitCount > 0 ? null : (
             <div className="flex-1 flex flex-col items-center justify-center gap-2 text-ive-text-dim text-sm">
               <i className="fa-solid fa-inbox text-2xl" />
               <span>{tp('noVerifying')}</span>
             </div>
-          ) : (
-            <div className="flex-1 overflow-y-auto space-y-2 p-3">
+          )) : (
+            <div className="flex-1 overflow-y-auto">
+              {/* 대기 묶음과 나란히 놓일 때 구분되도록 진행 중 머리줄 */}
+              <div className="px-3 py-2 bg-ive-bg-deep/50 border-y border-ive-border-dark">
+                <span className="text-xs font-bold uppercase tracking-widest text-ive-stage-verify">
+                  {tp('activeVerifyingHeader', { n: verifyingIssues.length })}
+                </span>
+              </div>
+              <div className="space-y-2 p-3">
               {verifyingIssues.map((issue: any) => (
                 <div
                   key={issue.iid}
                   onClick={() => router.push(`/issues/${project.id}/${issue.iid}`)}
-                  className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-3 hover:border-ive-amber/40 transition-all cursor-pointer active:scale-[0.98]"
+                  className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-3 hover:border-ive-text-dim transition-all cursor-pointer active:scale-[0.98]"
                 >
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-sm font-bold text-ive-text-muted">#{issue.iid}</span>
-                    <span className="text-xs font-bold px-1.5 py-0.5 rounded shrink-0 border text-ive-amber bg-ive-amber/10 border-ive-amber/20">
+                    <span className="text-xs font-bold px-1.5 py-0.5 rounded-lg shrink-0 border text-ive-stage-verify bg-ive-stage-verify/10 border-ive-stage-verify/20">
                       {tp('verifyingBadge')}
                     </span>
                   </div>
@@ -655,6 +705,7 @@ export default function ProjectCard({ project }: Props) {
                   </div>
                 </div>
               ))}
+              </div>
             </div>
           )}
         </div>
@@ -662,7 +713,9 @@ export default function ProjectCard({ project }: Props) {
 
       {/* 확인 중 패널 — IVE-C 라벨 단계 이슈 목록 (검증 패널과 동일 구조) */}
       {expandedPanel === 'confirming' && (
-        <div className="flex-1 flex flex-col min-h-0 border-t border-ive-amber/20">
+        <div className="flex-1 flex flex-col min-h-0 border-t border-ive-stage-confirm/30">
+          {/* 이 단계에서 기다리는 건이 먼저 */}
+          {renderWaitGroup('confirm_waiting') && <div className="shrink-0 max-h-[45%] overflow-y-auto">{renderWaitGroup('confirm_waiting')}</div>}
           {/* 에이전트가 이 단계를 돌리는 중이면 처리 패널과 같은 실시간 화면 */}
           {liveStageExecs('confirm').length > 0 && (
             <div className="flex-1 flex flex-col min-h-0">
@@ -673,22 +726,29 @@ export default function ProjectCard({ project }: Props) {
               />
             </div>
           )}
-          {liveStageExecs('confirm').length > 0 && confirmingIssues.every((i: any) => liveStageExecs('confirm').some(e => e.issueIid === i.iid)) ? null : confirmingIssues.length === 0 ? (
+          {liveStageExecs('confirm').length > 0 && confirmingIssues.every((i: any) => liveStageExecs('confirm').some(e => e.issueIid === i.iid)) ? null : confirmingIssues.length === 0 ? (confirmWaitCount > 0 ? null : (
             <div className="flex-1 flex flex-col items-center justify-center gap-2 text-ive-text-dim text-sm">
               <i className="fa-solid fa-inbox text-2xl" />
               <span>{tp('noConfirming')}</span>
             </div>
-          ) : (
-            <div className="flex-1 overflow-y-auto space-y-2 p-3">
+          )) : (
+            <div className="flex-1 overflow-y-auto">
+              {/* 대기 묶음과 나란히 놓일 때 구분되도록 진행 중 머리줄 */}
+              <div className="px-3 py-2 bg-ive-bg-deep/50 border-y border-ive-border-dark">
+                <span className="text-xs font-bold uppercase tracking-widest text-ive-stage-confirm">
+                  {tp('activeConfirmingHeader', { n: confirmingIssues.length })}
+                </span>
+              </div>
+              <div className="space-y-2 p-3">
               {confirmingIssues.map((issue: any) => (
                 <div
                   key={issue.iid}
                   onClick={() => router.push(`/issues/${project.id}/${issue.iid}`)}
-                  className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-3 hover:border-ive-amber/40 transition-all cursor-pointer active:scale-[0.98]"
+                  className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-3 hover:border-ive-text-dim transition-all cursor-pointer active:scale-[0.98]"
                 >
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-sm font-bold text-ive-text-muted">#{issue.iid}</span>
-                    <span className="text-xs font-bold px-1.5 py-0.5 rounded shrink-0 border text-ive-amber bg-ive-amber/10 border-ive-amber/20">
+                    <span className="text-xs font-bold px-1.5 py-0.5 rounded-lg shrink-0 border text-ive-stage-confirm bg-ive-stage-confirm/10 border-ive-stage-confirm/20">
                       {tp('confirmingBadge')}
                     </span>
                   </div>
@@ -710,68 +770,9 @@ export default function ProjectCard({ project }: Props) {
                   </div>
                 </div>
               ))}
+              </div>
             </div>
           )}
-        </div>
-      )}
-
-      {/* 대기 이슈 패널 */}
-      {expandedPanel === 'waiting' && (
-        <div className="flex-1 flex flex-col min-h-0 border-t border-ive-cyan/20">
-          {waitingIssues.length > 0 && (
-            <div className="px-3 py-2 bg-ive-bg-deep/50 border-b border-ive-border-dark shrink-0">
-              <span className="text-xs font-bold text-ive-cyan uppercase tracking-widest">
-                <i className="fa-solid fa-clock mr-1" />{tp('waitingIssuesTitle', { count: waitingIssues.length })}
-              </span>
-            </div>
-          )}
-          <div className="flex-1 flex flex-col overflow-y-auto">
-            {waitingIssues.length === 0 ? (
-              <div className="flex-1 flex flex-col items-center justify-center gap-2 text-ive-text-dim text-sm">
-                <i className="fa-solid fa-inbox text-2xl" />
-                <span>{tp('noWaitingIssues')}</span>
-              </div>
-            ) : (
-              <div className="space-y-2 p-3">
-                {waitingIssues.map((issue: any) => (
-                  <div
-                    key={issue.iid}
-                    onClick={() => router.push(`/issues/${project.id}/${issue.iid}`)}
-                    className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-3 hover:border-ive-cyan/40 transition-all cursor-pointer active:scale-[0.98]"
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-sm font-bold text-ive-text-muted">#{issue.iid}</span>
-                      <span className={`text-xs font-bold px-1.5 py-0.5 rounded shrink-0 border ${
-                        issue.stage === 'verify_waiting' || issue.stage === 'confirm_waiting'
-                          ? 'text-ive-amber bg-ive-amber/10 border-ive-amber/20'
-                          : 'text-ive-cyan/70 bg-ive-cyan/10 border-ive-cyan/20'
-                      }`}>
-                        {tp(issue.stage === 'verify_waiting' ? 'verifyWaitBadge' : issue.stage === 'confirm_waiting' ? 'confirmWaitBadge' : 'waitingBadge')}
-                      </span>
-                    </div>
-                    <MarqueeText className="text-sm text-ive-text font-bold">{issue.title}</MarqueeText>
-                    <div className="flex items-center gap-3 text-xs text-ive-text-dim mt-1">
-                      {issue.author?.name && (
-                        <span className="flex items-center gap-1">
-                          {issue.author.avatar ? (
-                            <AgentAvatar avatar={issue.author.avatar} size="xs" />
-                          ) : issue.author.avatarUrl ? (
-                            <img src={issue.author.avatarUrl} className="w-4 h-4 rounded-lg object-cover bg-ive-bg-deep" alt="" />
-                          ) : (
-                            <i className="fa-solid fa-user" />
-                          )}
-                          {issue.author.name}
-                        </span>
-                      )}
-                      <span>
-                        {formatDateShort(issue.createdAt, userLocale, userTz)}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
       )}
 

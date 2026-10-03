@@ -47,6 +47,8 @@ interface IssueListProps {
   headerSlot?: ReactNode
   onToggleSelect: (iid: number) => void
   onNavigate: (issue: IveIssue) => void
+  /** PC 폭에서 오른쪽 칸에 열려 있는 이슈 */
+  openIid?: number | null
   onOpenAgentPicker: (iid: number) => void
   onOpenAssigneeModal: (iids: number[]) => void
   onCloseIssue: (e: React.MouseEvent, iid: number) => void
@@ -80,6 +82,7 @@ export default function IssueList({
   timezone,
   onToggleSelect,
   onNavigate,
+  openIid = null,
   onOpenAgentPicker,
   onOpenAssigneeModal,
   onCloseIssue,
@@ -104,7 +107,7 @@ export default function IssueList({
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar" data-scroll-container="issues-list">
-      <div className="pb-20">
+      <div className="pb-20 desk:pb-6">
         {headerSlot}
         {(isHistoryTab ? closedLoading : loading) && (isHistoryTab ? closedIssues : issues).length === 0 ? (
           <div className="text-center py-20 text-ive-text-muted">{tIssue('loadingIssues')}</div>
@@ -129,6 +132,7 @@ export default function IssueList({
                 issue={issue}
                 stageInfo={stageInfo}
                 isSelected={selected.has(issue.iid)}
+                isOpen={openIid === issue.iid}
                 bulkMode={bulkMode}
                 navigatingIid={navigatingIid}
                 canEdit={canEdit}

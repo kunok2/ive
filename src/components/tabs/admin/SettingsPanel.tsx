@@ -282,8 +282,9 @@ export default function SettingsPanel() {
   if (loading) return <div className="text-center py-10 text-ive-text-dim">{tc('loading')}</div>
 
   return (
-    <main className="space-y-3">
-      <div className="text-xs text-ive-text-dim mb-1">
+    // PC 폭: 설정 묶음을 2단으로 흘린다(펼친 묶음은 단 안에서 길어진다)
+    <main className="space-y-3 desk:space-y-0 desk:columns-2 desk:gap-3 desk:*:mb-3 desk:*:break-inside-avoid">
+      <div className="text-xs text-ive-text-dim mb-1 desk:[column-span:all]">
         {t('systemSettingsDesc')}
       </div>
 

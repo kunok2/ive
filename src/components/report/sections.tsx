@@ -47,17 +47,17 @@ function Delta({ cur, prev, goodWhenUp, text }: { cur: number; prev: number | nu
 
 const STAGE_BADGE: Record<HeldStage, string> = {
   waiting: 'bg-ive-cyan/20 text-ive-cyan',
-  dev: 'bg-ive-amber/20 text-ive-amber',
+  dev: 'bg-ive-stage-process/20 text-ive-stage-process',
   dev_fail: 'bg-ive-red/20 text-ive-red',
-  verify_waiting: 'bg-ive-amber/20 text-ive-amber',
-  verifying: 'bg-ive-amber/20 text-ive-amber',
-  confirm_waiting: 'bg-ive-amber/20 text-ive-amber',
-  confirming: 'bg-ive-amber/20 text-ive-amber',
+  verify_waiting: 'bg-ive-stage-verify/10 text-ive-stage-verify/80',
+  verifying: 'bg-ive-stage-verify/20 text-ive-stage-verify',
+  confirm_waiting: 'bg-ive-stage-confirm/10 text-ive-stage-confirm/80',
+  confirming: 'bg-ive-stage-confirm/20 text-ive-stage-confirm',
 }
-// 막대 조각 색 = 각 줄 앞 견본 점 색(범례 1:1). 배지와 같은 의미 계열: 대기=시안, 진행·사람 단계=주황 농도, 실패=빨강
+// 막대 조각 색 = 각 줄 앞 견본 점 색(범례 1:1). 단계색(처리 노랑·검증 보라·확인 분홍), 그 단계 대기는 옅게, 처리 대기=시안, 실패=빨강
 const STAGE_BAR: Record<HeldStage, string> = {
-  waiting: 'bg-ive-cyan', dev: 'bg-ive-amber', dev_fail: 'bg-ive-red',
-  verify_waiting: 'bg-ive-amber/80', verifying: 'bg-ive-amber/60', confirm_waiting: 'bg-ive-amber/45', confirming: 'bg-ive-amber/30',
+  waiting: 'bg-ive-cyan', dev: 'bg-ive-stage-process', dev_fail: 'bg-ive-red',
+  verify_waiting: 'bg-ive-stage-verify/45', verifying: 'bg-ive-stage-verify', confirm_waiting: 'bg-ive-stage-confirm/45', confirming: 'bg-ive-stage-confirm',
 }
 
 // ─── ① 지금 안고 있는 일 ───

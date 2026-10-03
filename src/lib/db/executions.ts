@@ -379,15 +379,20 @@ export function hasPastExecution(projectId: string, issueIid: number): boolean {
   return !!r
 }
 
+/**
+ * 프로젝트의 최근 실행 limit 건 + 진행 중(running·assigned)인 실행 전부.
+ * 진행 중인 실행은 오래됐어도(예: 몇 주째 열린 검증) 최근 건에 밀려 화면에서 사라지면 안 된다.
+ */
 export function getLatestExecutionsByProject(projectId: string, limit: number = 20): TaskExecution[] {
   const rows = getDb().prepare(`
     SELECT te.*, a.name AS agent_name, a.avatar AS agent_avatar
     FROM task_executions te
     LEFT JOIN agents a ON a.id = te.agent_id
     WHERE te.project_id = ?
+      AND (te.status IN ('running', 'assigned')
+        OR te.id IN (SELECT id FROM task_executions WHERE project_id = ? ORDER BY started_at DESC LIMIT ?))
     ORDER BY te.started_at DESC
-    LIMIT ?
-  `).all(projectId, limit) as any[]
+  `).all(projectId, projectId, limit) as any[]
   return rows.map(mapExecution)
 }
 

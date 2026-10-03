@@ -1,5 +1,6 @@
 'use client'
 
+import { STAGE_TONE } from '@/lib/active-work'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Agent, CliName, TaskExecution, StatSnapshot, isAgentAvailableNow } from '@/types'
 import { useStore } from '@/lib/store'
@@ -331,37 +332,65 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
       <div
         data-tour="agent-card-header"
         onClick={toggleCollapsed}
-        className={`p-3 flex items-center justify-between cursor-pointer active:bg-white/[0.02] transition-colors ${collapsed ? '' : 'border-b border-ive-border-dark'}`}
+        className={`p-3 flex items-start justify-between gap-2 cursor-pointer active:bg-white/[0.02] transition-colors ${collapsed ? '' : 'border-b border-ive-border-dark'}`}
       >
-        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+        {/* 머리줄 — 1줄 이름(공간 우선)·상태, 2줄 CLI·모델, 3줄 역할 배지. 사람 카드(VerifierCard)와 같은 구조 */}
+        <div className="flex items-start gap-2.5 min-w-0 flex-1">
           <AgentAvatar avatar={agent.avatar} size="md" toolBadge={toolBadge} />
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <span className="text-base font-bold text-ive-text truncate">{agent.name}</span>
-              <span className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold bg-ive-cyan/20 text-ive-cyan">
+            {/* 1줄: 이름 + 상태·사용/휴가 토글·펼침(동작 확인·삭제는 펼친 카드 아래 버튼줄) — 아래 줄들은 카드 폭을 다 쓴다 */}
+            <div className="flex items-center gap-2 min-w-0 h-7">
+              <span className="text-base font-bold text-ive-text truncate leading-tight">{agent.name}</span>
+              <div className="ml-auto flex items-center gap-2 shrink-0">
+                {!onVacation && (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-ive-text-muted">
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${status.dot}`} />{status.label}
+                  </span>
+                )}
+                <div onClick={e => e.stopPropagation()}>
+                  <button
+                    onClick={toggleVacation}
+                    aria-label={onVacation ? t('resumeAgent') : t('pauseAgent')}
+                    className={`w-7 h-7 rounded-lg border flex items-center justify-center transition-all ${
+                      onVacation
+                        ? 'bg-ive-amber/10 border-ive-amber/30 text-ive-amber hover:bg-ive-amber/20'
+                        : 'bg-ive-bg-deep border-ive-border-dark text-ive-text-dim hover:text-ive-green hover:border-ive-green/30'
+                    }`}
+                    title={onVacation ? t('resumeAgent') : t('pauseAgent')}
+                  >
+                    <i className={`fa-solid ${onVacation ? 'fa-play' : 'fa-power-off'} text-xs`} />
+                  </button>
+                </div>
+                <i className={`fa-solid fa-chevron-down text-xs text-ive-text-dim transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`} />
+              </div>
+            </div>
+            <div className="text-sm text-ive-text-muted truncate">{cli.label} · {agent.modelName || cli.desc}</div>
+            <div className="flex flex-wrap items-center gap-1 mt-1.5">
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-lg text-xs font-bold bg-white/5 text-ive-text-secondary border border-ive-border-subtle">
                 <i className="fa-solid fa-robot" />{t('workerBadge')}
               </span>
-              {/* 역할 명부에서 맡은 검증·확인 역할 — 대기·진행 건수가 있으면 행동 필요(amber) */}
+              {/* 역할 명부에서 맡은 역할 — 단계색(처리·검증·확인), 뒤 숫자는 그 역할의 대기·진행 건수 */}
               {([
+                { key: 'process', icon: 'fa-gears', n: agent.roleSummary?.roles.process || 0, backlog: 0 },
                 { key: 'verify', icon: 'fa-user-check', n: agent.roleSummary?.roles.verify || 0, backlog: (agent.roleSummary?.verifyWaiting || 0) + (agent.roleSummary?.verifying || 0) },
                 { key: 'confirm', icon: 'fa-circle-check', n: agent.roleSummary?.roles.confirm || 0, backlog: (agent.roleSummary?.confirmWaiting || 0) + (agent.roleSummary?.confirming || 0) },
               ]).filter(r => r.n > 0).map(r => (
-                <span key={r.key} className={`shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold ${r.backlog > 0 ? 'bg-ive-amber/20 text-ive-amber' : 'bg-ive-cyan/20 text-ive-cyan'}`}>
+                <span key={r.key} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-lg text-xs font-bold ${STAGE_TONE[r.key as 'process' | 'verify' | 'confirm'].chip}`}>
                   <i className={`fa-solid ${r.icon}`} />{ta(`role_${r.key}`)}{r.backlog > 0 ? ` ${r.backlog}` : ''}
                 </span>
               ))}
             </div>
-            <div className="text-sm text-ive-text-muted truncate">{cli.label} · {agent.modelName || cli.desc}</div>
-            {collapsed && assignedProjects && assignedProjects.length > 0 && (
-              <div className="text-xs text-ive-text-dim mt-0.5 truncate">
-                {assignedProjects.map(p => p.name).join(', ')}
+            {/* 맡은 프로젝트 줄은 늘 둔다 — 사람 카드와 높이가 같게(없으면 「미배정」) */}
+            {collapsed && (
+              <div className="text-xs text-ive-text-dim mt-1 truncate">
+                {assignedProjects && assignedProjects.length > 0 ? assignedProjects.map(p => p.name).join(', ') : t('notAssigned')}
               </div>
             )}
-            {/* 휴가 배지 — 이름 아래 왼쪽에 배치하여 오른쪽 열 압박 제거 */}
+            {/* 휴가 배지 — 누르면 복귀 시각을 바로 고친다 */}
             {onVacation && !vacEditing && (
               <button
                 onClick={e => { e.stopPropagation(); openVacEditor() }}
-                className="mt-0.5 inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-xs font-bold bg-ive-amber/15 text-ive-amber hover:bg-ive-amber/25 transition-colors max-w-full"
+                className="mt-1 inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-xs font-bold bg-ive-amber/15 text-ive-amber hover:bg-ive-amber/25 transition-colors max-w-full"
                 title={t('editPausedUntil')}
               >
                 <i className="fa-solid fa-power-off shrink-0" />
@@ -370,50 +399,6 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
               </button>
             )}
           </div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {!onVacation && (
-            <div className="flex items-center gap-1.5">
-              <div className={`w-2 h-2 rounded-full shrink-0 ${status.dot}`} />
-              <span className="hidden sm:inline text-sm text-ive-text-muted">{status.label}</span>
-            </div>
-          )}
-          {/* 사용 ↔ 휴가 토글 */}
-          <div onClick={e => e.stopPropagation()}>
-            <button
-              onClick={toggleVacation}
-              className={`w-7 h-7 rounded-lg border flex items-center justify-center transition-all ${
-                onVacation
-                  ? 'bg-ive-amber/10 border-ive-amber/30 text-ive-amber hover:bg-ive-amber/20'
-                  : 'bg-ive-bg-deep border-ive-border-dark text-ive-text-dim hover:text-ive-green hover:border-ive-green/30'
-              }`}
-              title={onVacation ? t('resumeAgent') : t('pauseAgent')}
-            >
-              <i className={`fa-solid ${onVacation ? 'fa-play' : 'fa-power-off'} text-xs`} />
-            </button>
-          </div>
-          {collapsed && (
-            <div className="hidden sm:flex items-center gap-1" onClick={e => e.stopPropagation()}>
-              <button
-                onClick={handleTest}
-                disabled={testing}
-                className="w-7 h-7 rounded-lg bg-ive-bg-deep border border-ive-border-dark flex items-center justify-center text-ive-text-dim hover:text-ive-text hover:border-ive-green/30 transition-all disabled:opacity-50"
-                title={t('checkOperation')}
-              >
-                {testing ? <i className="fa-solid fa-spinner fa-spin text-xs" /> : <i className="fa-solid fa-stethoscope text-xs" />}
-              </button>
-              {onDelete && (
-                <button
-                  onClick={() => onDelete(agent.id)}
-                  className="w-7 h-7 rounded-lg bg-ive-bg-deep border border-ive-red/20 flex items-center justify-center text-ive-red/40 hover:text-ive-red hover:bg-ive-red/10 hover:border-ive-red/40 transition-all"
-                  title={tc('remove')}
-                >
-                  <i className="fa-solid fa-trash-can text-xs" />
-                </button>
-              )}
-            </div>
-          )}
-          <i className={`fa-solid fa-chevron-down text-xs text-ive-text-dim transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`} />
         </div>
       </div>
 

@@ -39,7 +39,7 @@ export default function MailPanel() {
     <main className="flex-1 flex flex-col min-h-0">
       {/* 서브뷰 토글 */}
       <div className="pb-2 shrink-0">
-        <div className="flex gap-1.5">
+        <div className="flex gap-1.5 desk:max-w-xl desk:mx-auto">
           {views.map(v => (
             <button
               key={v.key}
@@ -57,7 +57,8 @@ export default function MailPanel() {
         </div>
       </div>
 
-      {view === 'broadcast' && <BroadcastView loadDraftId={loadDraftId} onDraftConsumed={() => setLoadDraftId(null)} />}
+      {/* 메일 쓰기는 폼이라 너무 넓히지 않는다 */}
+      {view === 'broadcast' && <div className="desk:max-w-3xl desk:mx-auto desk:w-full"><BroadcastView loadDraftId={loadDraftId} onDraftConsumed={() => setLoadDraftId(null)} /></div>}
       {view === 'social' && <SocialView />}
       {view === 'performance' && <PerformanceView />}
       {view === 'logs' && <SendLogView onDuplicate={(id) => { setLoadDraftId(id); handleSetView('broadcast') }} />}

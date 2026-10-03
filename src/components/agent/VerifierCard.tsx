@@ -1,5 +1,6 @@
 'use client'
 
+import { STAGE_TONE } from '@/lib/active-work'
 import { useState, useEffect, useCallback } from 'react'
 import Sparkline from '@/components/ui/Sparkline'
 import AgentAvatar from '@/components/agent/AgentAvatar'
@@ -131,54 +132,62 @@ export default function VerifierCard({ verifier, role = 'verify' }: Props) {
   return (
     <div className={`bg-ive-bg-card rounded-lg border overflow-hidden transition-colors duration-200 ${cardBorder}`}>
       {/* 헤더 */}
+      {/* 머리줄 — 에이전트 카드(AgentCard)와 같은 구조: 1줄 이름·대기 건수, 2줄 Git 아이디·메일, 3줄 역할·계정 배지 */}
       <div
         onClick={toggleCollapsed}
-        className={`p-3 flex items-center justify-between cursor-pointer active:bg-white/[0.02] transition-colors ${collapsed ? '' : 'border-b border-ive-border-dark'}`}
+        className={`p-3 flex items-start justify-between gap-2 cursor-pointer active:bg-white/[0.02] transition-colors ${collapsed ? '' : 'border-b border-ive-border-dark'}`}
       >
-        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+        <div className="flex items-start gap-2.5 min-w-0 flex-1">
           <AgentAvatar avatar={verifier.avatar} size="md" />
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
-              <span className="text-base font-bold text-ive-text truncate">{verifier.name}</span>
-              <span className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold bg-ive-cyan/20 text-ive-cyan">
-                <i className={`fa-solid ${L.icon}`} />{L.badge}
+          <div className="min-w-0 flex-1">
+            {/* 1줄: 이름 + 대기 건수·펼침 — 에이전트 카드와 같은 높이(h-7), 아래 줄들은 카드 폭을 다 쓴다 */}
+            <div className="flex items-center gap-2 min-w-0 h-7">
+              <span className="text-base font-bold text-ive-text truncate leading-tight">{verifier.name}</span>
+              <div className="ml-auto flex items-center gap-2 shrink-0">
+                {totalBacklog > 0 && (
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold ${
+                    isOverloaded ? 'bg-ive-red/20 text-ive-red' : isTight ? 'bg-ive-amber/20 text-ive-amber' : 'bg-ive-cyan/20 text-ive-cyan'
+                  }`} title={t('backlogTitle', { n: totalBacklog })}>
+                    <i className="fa-solid fa-clock" />{totalBacklog}
+                  </span>
+                )}
+                <i className={`fa-solid fa-chevron-down text-xs text-ive-text-dim transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`} />
+              </div>
+            </div>
+            <div className="text-sm text-ive-text-muted truncate">
+              <i className={`fa-brands ${providerIcon} mr-1`} />@{verifier.username}
+              {verifier.iveUser?.email && <span className="text-ive-text-dim"> · {verifier.iveUser.email}</span>}
+            </div>
+            <div className="flex flex-wrap items-center gap-1 mt-1.5">
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-lg text-xs font-bold bg-white/5 text-ive-text-secondary border border-ive-border-subtle">
+                <i className="fa-solid fa-user" />{t('personBadge')}
+              </span>
+              <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-lg text-xs font-bold ${STAGE_TONE[isProcess ? 'process' : isConfirm ? 'confirm' : 'verify'].chip}`}>
+                {/* 역할 이름은 에이전트 카드 배지와 같은 말(처리·검증·확인) */}
+                <i className={`fa-solid ${L.icon}`} />{ta(`role_${isProcess ? 'process' : isConfirm ? 'confirm' : 'verify'}`)}
               </span>
               {verifier.iveUser ? (
                 <span
-                  className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold bg-ive-green/15 text-ive-green border border-ive-green/30"
-                  title={`IVE 사용자: ${verifier.iveUser.name} (${verifier.iveUser.email})`}
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-lg text-xs font-bold bg-ive-green/10 text-ive-green"
+                  title={t('iveUserTitle', { name: verifier.iveUser.name, email: verifier.iveUser.email })}
                 >
                   <i className="fa-solid fa-circle-check" />IVE
                 </span>
               ) : (
                 <span
-                  className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold bg-ive-text-dim/10 text-ive-text-dim border border-ive-text-dim/20"
-                  title="IVE에 가입하지 않은 Git 사용자"
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-lg text-xs font-bold bg-white/5 text-ive-text-dim"
+                  title={t('gitOnlyTitle')}
                 >
-                  <i className="fa-solid fa-user-slash" />Git 전용
+                  <i className="fa-solid fa-user-slash" />{t('gitOnlyBadge')}
                 </span>
               )}
             </div>
-            <div className="text-sm font-bold text-ive-text-muted truncate">
-              <i className={`fa-brands ${providerIcon} mr-1`} />@{verifier.username}
-              {verifier.iveUser?.email && (
-                <span className="text-ive-text-dim"> · {verifier.iveUser.email}</span>
-              )}
-              {collapsed && verifier.assignedProjects.length > 0 && (
-                <span className="text-ive-text-dim"> · {verifier.assignedProjects.map(p => p.name).join(', ')}</span>
-              )}
-            </div>
+            {collapsed && (
+              <div className="text-xs text-ive-text-dim mt-1 truncate">
+                {verifier.assignedProjects.length > 0 ? verifier.assignedProjects.map(p => p.name).join(', ') : t('notAssigned')}
+              </div>
+            )}
           </div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {totalBacklog > 0 && (
-            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold ${
-              isOverloaded ? 'bg-ive-red/20 text-ive-red' : isTight ? 'bg-ive-amber/20 text-ive-amber' : 'bg-ive-cyan/20 text-ive-cyan'
-            }`}>
-              <i className="fa-solid fa-clock" />{totalBacklog}
-            </span>
-          )}
-          <i className={`fa-solid fa-chevron-down text-sm text-ive-text-dim transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`} />
         </div>
       </div>
 

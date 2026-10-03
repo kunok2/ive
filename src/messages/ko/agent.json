@@ -87,5 +87,10 @@
   "oldestWait": "가장 오래된 대기",
   "approvedToday": "금일 승인",
   "rejectedToday": "금일 반려",
-  "last7Days": "최근 7일"
+  "last7Days": "최근 7일",
+  "personBadge": "사람",
+  "iveUserTitle": "IVE 사용자: {name} ({email})",
+  "gitOnlyBadge": "Git 전용",
+  "gitOnlyTitle": "IVE에 가입하지 않은 Git 사용자",
+  "backlogTitle": "대기·진행 {n}건"
 }

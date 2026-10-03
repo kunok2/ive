@@ -115,8 +115,8 @@ export default function ReportsTab() {
   }, [linked, model])
 
   return (
-    <PullToRefresh onRefresh={fetchReport} className="w-full flex-1 flex flex-col max-w-lg mx-auto px-4 overflow-hidden">
-      <div className="shrink-0 pt-4 pb-2" data-tour="reports-period">
+    <PullToRefresh onRefresh={fetchReport} className="w-full flex-1 flex flex-col max-w-lg desk:max-w-[1360px] mx-auto px-4 desk:px-6 overflow-hidden">
+      <div className="shrink-0 pt-4 pb-2 w-full desk:max-w-lg desk:mx-auto" data-tour="reports-period">
         <div className="flex gap-1 mb-2">
           {(['weekly', 'monthly', 'yearly'] as const).map(rt => (
             <button key={rt} onClick={() => setType(rt)} className={`flex-1 min-h-11 text-sm font-bold rounded-lg transition-all ${type === rt ? 'bg-ive-green text-ive-bg-deep' : 'bg-ive-bg-card text-ive-text-secondary'}`}>
@@ -153,7 +153,7 @@ export default function ReportsTab() {
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="pb-20">
+        <div className="pb-20 desk:pb-6">
           {loading && <div className="flex flex-col items-center justify-center py-10 gap-3 text-ive-text-secondary"><i className="fa-solid fa-circle-notch fa-spin text-2xl" />{tr('loadingCompact')}</div>}
           {!loading && error && (
             <div className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-4 text-sm font-bold text-ive-text flex flex-col gap-2">
@@ -162,8 +162,9 @@ export default function ReportsTab() {
               <button onClick={fetchReport} className="self-start px-3 py-2 rounded-lg bg-white/5 border border-ive-border-subtle text-sm font-bold text-ive-text-muted">{tr('retry')}</button>
             </div>
           )}
+          {/* PC 3단 — 카드 폭은 폰과 같게, 읽는 순서는 단마다 위에서 아래로(폰·패드는 1열 가운데) */}
           {!loading && model && (
-            <main className="flex flex-col gap-3">
+            <main className="flex flex-col gap-3 desk:block desk:columns-3 desk:gap-3 desk:*:mb-3 desk:*:break-inside-avoid">
               <ErrorBoundary label={tr('heldNow')}><HeldCard held={model.held} tr={tr} prevLabel={prevLabel} tracking={model.heldTrackingSince} /></ErrorBoundary>
               {model.actions && <ErrorBoundary label={tr('actTitle')}><ActionCards actions={model.actions} tr={tr} /></ErrorBoundary>}
               {model.mine && <div ref={mineRef} className="scroll-mt-2"><ErrorBoundary label={tr('mineTitle', { n: model.mine.length })}><MineSection mine={model.mine} tr={tr} highlight={!!linked?.mine} /></ErrorBoundary></div>}

@@ -1,0 +1,190 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
+import type { Project, TaskExecution } from '@/types'
+import { useTab } from '@/lib/tab-context'
+import { getKSTTodayStartISO } from '@/lib/date-utils'
+import { execKind, ageOf, ageText, STAGE_TONE } from '@/lib/active-work'
+import WaitPill from '@/components/project/WaitPill'
+
+type Col = 'process' | 'verify' | 'confirm' | 'done'
+const COLS: Col[] = ['process', 'verify', 'confirm', 'done']
+const COL_LABEL: Record<Col, string> = { process: 'boardProcess', verify: 'boardVerify', confirm: 'boardConfirm', done: 'boardDone' }
+/** 단계 칸 안의 대기 묶음 — 그 단계에서 아직 아무도 잡지 않은 건. 칸 맨 위에 둔다 */
+const WAIT_LABEL: Record<Exclude<Col, 'done'>, string> = { process: 'waitGroupProcess', verify: 'waitGroupVerify', confirm: 'waitGroupConfirm' }
+
+/** /api/projects/[id]/issues 에서 보드가 쓰는 필드 */
+interface BoardIssue {
+  iid: number
+  title: string
+  stage: string
+  createdAt?: string
+  preferredAgentName?: string | null
+  actualVerifier?: { name?: string | null } | null
+  actualConfirmer?: { name?: string | null } | null
+}
+
+interface BoardItem { key: string; iid: number; title: string; who: string | null; startedAt: string | null; href: string; waiting?: boolean }
+
+/**
+ * PC 폭의 프로젝트 단계 보드 — 대기 | 처리 | 검증 | 확인 | 완료(오늘).
+ * 어느 칸에 있느냐가 곧 그 일의 종류다. 칸 안에서는 맡은 사람으로 묶고(이름은 한 번), 칸마다 따로 스크롤한다.
+ * 데이터는 프로젝트 카드와 같은 API(열린 이슈의 단계 + 실행 기록)를 쓴다.
+ */
+export default function ProjectBoard({ project }: { project: Project }) {
+  const tp = useTranslations('project')
+  const router = useRouter()
+  const { navigateToAddIssue } = useTab()
+  const [issues, setIssues] = useState<BoardIssue[] | null>(null)
+  const [execs, setExecs] = useState<TaskExecution[]>([])
+  // 경과는 분 단위 — 30초마다 다시 그린다
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    // 프로젝트가 바뀌면 보드는 key 로 새로 마운트된다(ProjectsTab) — 여기서 비울 필요가 없다
+    let alive = true
+    const loadIssues = () => fetch(`/api/projects/${project.id}/issues`).then(r => r.ok ? r.json() : []).then(d => { if (alive) setIssues(Array.isArray(d) ? d : []) }).catch(() => {})
+    const loadExecs = () => fetch(`/api/projects/${project.id}/executions`).then(r => r.ok ? r.json() : []).then(d => { if (alive) setExecs(Array.isArray(d) ? d : []) }).catch(() => {})
+    loadIssues(); loadExecs()
+    const t1 = setInterval(loadIssues, 10_000)
+    const t2 = setInterval(loadExecs, 5_000)
+    const t3 = setInterval(() => setNow(Date.now()), 30_000)
+    return () => { alive = false; clearInterval(t1); clearInterval(t2); clearInterval(t3) }
+  }, [project.id])
+
+  const running = execs.filter(e => e.status === 'running' || e.status === 'assigned')
+  const execFor = (iid: number, kind: 'process' | 'verify' | 'confirm') => running.find(e => e.issueIid === iid && execKind(e.id) === kind)
+  const execWho = (e?: TaskExecution) => e ? (e.assigneeType === 'user' ? (e.userName ?? null) : (e.agentName ?? null)) : null
+  const issueHref = (iid: number) => `/issues/${project.id}/${iid}`
+
+  const cols: Record<Col, BoardItem[]> = { process: [], verify: [], confirm: [], done: [] }
+  for (const i of issues ?? []) {
+    const base = { key: `i-${i.iid}`, iid: i.iid, title: i.title, href: issueHref(i.iid) }
+    if (i.stage === 'waiting') {
+      cols.process.push({ ...base, who: tp(WAIT_LABEL.process), startedAt: i.createdAt ?? null, waiting: true })
+    } else if (i.stage === 'dev') {
+      const e = execFor(i.iid, 'process')
+      // 에이전트가 처리 중이면 실시간 실행 화면으로
+      cols.process.push({ ...base, who: execWho(e), startedAt: e?.startedAt ?? null, href: e && e.assigneeType !== 'user' ? `/executions/${e.id}` : base.href })
+    } else if (i.stage === 'verify_waiting') {
+      cols.verify.push({ ...base, who: tp(WAIT_LABEL.verify), startedAt: null, waiting: true })
+    } else if (i.stage === 'verifying') {
+      const e = execFor(i.iid, 'verify')
+      cols.verify.push({ ...base, who: i.actualVerifier?.name ?? execWho(e), startedAt: e?.startedAt ?? null })
+    } else if (i.stage === 'confirm_waiting') {
+      cols.confirm.push({ ...base, who: tp(WAIT_LABEL.confirm), startedAt: null, waiting: true })
+    } else if (i.stage === 'confirming') {
+      const e = execFor(i.iid, 'confirm')
+      cols.confirm.push({ ...base, who: i.actualConfirmer?.name ?? execWho(e), startedAt: e?.startedAt ?? null })
+    }
+  }
+  // 이슈 목록(Git 조회)에 없거나 아직 못 받은 진행 중 실행도 그 종류의 칸에 둔다 — 카드의 진행 중 목록과 같은 근거(실행 기록)
+  for (const e of running) {
+    const kind = execKind(e.id)
+    if (kind === 'chat') continue
+    const col: Col = kind
+    if (cols[col].some(it => it.iid === e.issueIid)) continue
+    cols[col].push({
+      key: `e-${e.id}`, iid: e.issueIid, title: e.issueTitle ?? '', who: execWho(e), startedAt: e.startedAt,
+      href: kind === 'process' && e.assigneeType !== 'user' ? `/executions/${e.id}` : issueHref(e.issueIid),
+    })
+  }
+  // 완료(오늘) — 카드의 「완료」 칸과 같은 기준(오늘 시작해 끝난 사람 판정·외부 도구 기록), 이슈마다 한 줄
+  const today = getKSTTodayStartISO()
+  const seen = new Set<number>()
+  for (const e of execs) {
+    if (e.status === 'running' || e.status === 'assigned' || e.startedAt < today || seen.has(e.issueIid)) continue
+    if (!(e.verifiedAt != null || e.rejectedAt != null || !e.agentId)) continue
+    seen.add(e.issueIid)
+    cols.done.push({ key: `d-${e.id}`, iid: e.issueIid, title: e.issueTitle ?? '', who: execWho(e), startedAt: null, href: issueHref(e.issueIid) })
+  }
+
+  const color = project.color || '#4ade80'
+
+  return (
+    <section className="flex-1 min-w-0 flex flex-col gap-4 p-5 overflow-hidden">
+      <header className="flex items-center gap-3 shrink-0">
+        <div className="w-9 h-9 rounded-lg bg-ive-bg-deep border flex items-center justify-center shrink-0" style={{ borderColor: `${color}66` }}>
+          <i className={`fa-brands ${project.provider === 'github' ? 'fa-github' : 'fa-gitlab'} text-lg`} style={{ color }} />
+        </div>
+        <div className="min-w-0 flex flex-col">
+          <h2 className="text-lg font-bold leading-tight truncate" style={{ color }}>{project.name}</h2>
+          <span className="text-xs font-bold text-ive-text-dim font-mono truncate">{project.repoUrl.replace(/^https?:\/\//, '').replace(/\.git$/, '')}</span>
+        </div>
+        <div className="ml-auto flex items-center gap-2 shrink-0">
+          {/* 1440px 아래에서는 완료 칸을 접고 오늘 완료 건수만 보인다 */}
+          <span className="wide:hidden text-xs font-bold text-ive-text-secondary mr-1">
+            {tp('boardDoneToday')} <span className={cols.done.length ? 'text-ive-cyan' : 'text-ive-text-dim'}>{cols.done.length}</span>
+          </span>
+          <button onClick={() => navigateToAddIssue(project.id)} className="h-9 px-3 rounded-lg text-sm font-bold bg-ive-bg-card border border-ive-border-subtle text-ive-text hover:border-ive-cyan/40">
+            <i className="fa-solid fa-plus mr-1.5 text-xs" />{tp('addIssue')}
+          </button>
+          <button onClick={() => router.push(`/projects/${project.id}`)} aria-label={tp('boardOpenProject')} title={tp('boardOpenProject')} className="w-9 h-9 rounded-lg bg-ive-bg-card border border-ive-border-subtle text-ive-text-dim hover:text-ive-text">
+            <i className="fa-solid fa-ellipsis" />
+          </button>
+        </div>
+      </header>
+
+      <div className="flex-1 min-h-0 grid grid-cols-3 wide:grid-cols-4 gap-3">
+        {COLS.map(col => {
+          const items = cols[col]
+          // 묶음: 그 단계의 대기 묶음이 맨 위, 그다음 맡은 사람(건수 많은 순)
+          const groups = [...new Set(items.map(i => i.who ?? ''))]
+            .map(who => ({ who, waiting: items.some(i => i.waiting && (i.who ?? '') === who), items: items.filter(i => (i.who ?? '') === who) }))
+            .sort((a, b) => Number(b.waiting) - Number(a.waiting) || b.items.length - a.items.length)
+          const waitN = items.filter(i => i.waiting).length
+          const activeN = items.length - waitN
+          // 완료는 브랜드색, 사람·에이전트 손에 있는 칸은 진행색(카드 숫자 칸과 같은 규칙)
+          const calm = col === 'done'
+          return (
+            <div key={col} className={`min-h-0 flex-col rounded-lg bg-ive-bg-card/60 border border-ive-border-subtle ${col === 'done' ? 'hidden wide:flex' : 'flex'}`}>
+              <div className={`shrink-0 flex items-center gap-1.5 mx-3 pt-3 pb-2 border-b-2 ${calm ? 'border-ive-cyan' : STAGE_TONE[col as 'process' | 'verify' | 'confirm'].border}`}>
+                <span className="text-sm font-bold text-ive-text">{tp(COL_LABEL[col])}</span>
+                {/* 진행 중 건수 + 그 단계 대기(⏱n) — 카드의 단계 칸과 같은 표기 */}
+                <span className={`text-xl font-bold leading-none tabular-nums ${!activeN ? 'text-ive-text-dim' : calm ? 'text-ive-cyan' : STAGE_TONE[col as 'process' | 'verify' | 'confirm'].text}`}>{activeN}</span>
+                <WaitPill n={waitN} title={tp('stageWaitingHint', { n: waitN })} />
+                {col === 'done' && <span className="ml-auto text-xs font-bold text-ive-text-dim">{tp('boardDoneSub')}</span>}
+              </div>
+              <div className="flex-1 min-h-0 overflow-y-auto p-2.5 flex flex-col gap-3">
+                {issues === null && items.length === 0 && <span className="text-xs font-bold text-ive-text-dim px-1">{tp('boardLoading')}</span>}
+                {issues !== null && items.length === 0 && <span className="text-xs font-bold text-ive-text-dim px-1">{tp('boardEmpty')}</span>}
+                {groups.map(g => (
+                  <div key={g.who || '-'} className="flex flex-col gap-1.5">
+                    {g.who && (
+                      <div className="flex items-center gap-1.5 px-1 text-xs font-bold text-ive-text-secondary">
+                        <span className="truncate">{g.who}</span>
+                        <span className="ml-auto shrink-0 text-ive-text-dim tabular-nums">{g.items.length}</span>
+                      </div>
+                    )}
+                    {g.items.map(it => {
+                      const age = it.startedAt ? ageOf(it.startedAt, now) : null
+                      return (
+                        <button
+                          key={it.key}
+                          type="button"
+                          onClick={() => router.push(it.href)}
+                          className="text-left flex flex-col gap-1.5 p-2.5 rounded-lg bg-ive-bg-card border border-ive-border-subtle hover:border-ive-cyan/40 transition-colors"
+                        >
+                          <span className="text-xs font-bold leading-snug text-ive-text line-clamp-2">
+                            <span className="text-ive-text-dim">#{it.iid}</span> {it.title}
+                          </span>
+                          {age && (
+                            <span className={`self-end text-xs font-bold tabular-nums ${age.aged ? 'px-1.5 py-0.5 rounded-lg bg-ive-red/15 text-ive-red' : 'text-ive-text-secondary'}`}>
+                              {ageText(tp, age)}
+                            </span>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </section>
+  )
+}

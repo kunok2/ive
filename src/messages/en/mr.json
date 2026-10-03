@@ -3,7 +3,7 @@
   "mergeComplete": "Merged",
   "conflict": "Conflict",
   "readyToMerge": "Ready to Merge",
-  "changedFiles": "{count} changed files",
+  "changedFiles": "Changed files: {count}",
   "mergedBy": "Merged by {name} on {date}",
   "codeReview": "Code Review",
   "merging": "Merging...",
@@ -11,5 +11,18 @@
   "merge": "Merge",
   "closeMR": "Discard",
   "notifyWhenDone": "Notify me on Slack when merge & CI finish (phone)",
-  "slackNotConnected": "Slack not connected — connect it in settings to get notified when done"
+  "slackNotConnected": "Slack not connected — connect it in settings to get notified when done",
+  "alreadyMerged": "This MR is already merged",
+  "loadChangesFailed": "Could not load MR changes",
+  "conflictCannotMerge": "Cannot merge (conflicts)",
+  "confirmMergeAsk": "Merge this MR?",
+  "confirmDiscardAsk": "Discard this MR without merging?",
+  "mergeFailed": "Merge failed",
+  "closeFailed": "Failed to close MR",
+  "reviewTitle": "MR !{iid} code review",
+  "reviewTitleNoId": "Code review",
+  "mergeAction": "Merge",
+  "discardAction": "Discard",
+  "confirmMergeTitle": "Confirm MR merge",
+  "discardTitle": "Discard MR"
 }

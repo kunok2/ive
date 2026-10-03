@@ -356,7 +356,7 @@ export default function IssueAddForm({
           onDragOver={pasteHandlers.onDragOver}
           placeholder={`${tIssue('titlePlaceholder')}\n\n${tIssue('bodyPlaceholder')}`}
           rows={4}
-          className="flex-1 bg-ive-bg-deep border border-ive-border-dark rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-green/50"
+          className="flex-1 desk:min-h-60 bg-ive-bg-deep border border-ive-border-dark rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-green/50"
           autoFocus
         />
       </div>

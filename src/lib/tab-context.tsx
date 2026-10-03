@@ -17,6 +17,11 @@ const TabContext = createContext<{
   navigateToIssues: (projectId: string) => void
   issueAddTrigger: number
   navigateToAddIssue: (projectId: string) => void
+  /** PC 폭 작업 탭의 오른쪽 칸에 열린 이슈 */
+  issuesOpened: { projectId: string; iid: number } | null
+  setIssuesOpened: (v: { projectId: string; iid: number } | null) => void
+  /** 작업 탭으로 가서 그 이슈를 오른쪽 칸에 연다(PC 폭) */
+  openIssueInTab: (projectId: string, iid: number) => void
 }>({
   activeTab: 'projects',
   setActiveTab: () => {},
@@ -29,7 +34,22 @@ const TabContext = createContext<{
   navigateToIssues: () => {},
   issueAddTrigger: 0,
   navigateToAddIssue: () => {},
+  issuesOpened: null,
+  setIssuesOpened: () => {},
+  openIssueInTab: () => {},
 })
+
+/**
+ * 메인(/)이 아닌 화면이 어느 메뉴에 속하는가 — 세로 메뉴·상단바 제목이 마지막으로 연 탭 대신 이것을 보인다.
+ * 프로젝트 설정·실행 화면은 프로젝트, 이슈·MR 화면은 작업. 해당 없으면 null(마지막 탭 그대로).
+ */
+export function tabForPath(pathname: string | null | undefined): TabKey | null {
+  if (!pathname) return null
+  if (pathname.startsWith('/projects') || pathname.startsWith('/executions')) return 'projects'
+  if (pathname.startsWith('/issues')) return 'issues'
+  if (pathname.startsWith('/agents')) return 'agents'
+  return null
+}
 
 /** 메일 링크 매개변수 — 메인 화면(/)에서만 쓰고 지운다(다른 화면의 ?tab= 은 건드리지 않는다) */
 const LINK_PARAMS = ['tab', 'mine', 'rtype', 'rdate']
@@ -165,6 +185,13 @@ export function TabProvider({ children }: { children: ReactNode }) {
     setIssueAddTrigger(t => t + 1)
   }, [setIssuesProjectId, setActiveTab])
 
+  const [issuesOpened, setIssuesOpened] = useState<{ projectId: string; iid: number } | null>(null)
+  const openIssueInTab = useCallback((projectId: string, iid: number) => {
+    setIssuesProjectId(projectId)
+    setIssuesOpened({ projectId, iid })
+    setActiveTab('issues')
+  }, [setIssuesProjectId, setActiveTab])
+
   return (
     <TabContext.Provider value={{
       activeTab, setActiveTab,
@@ -173,6 +200,7 @@ export function TabProvider({ children }: { children: ReactNode }) {
       issuesSort, setIssuesSort,
       navigateToIssues,
       issueAddTrigger, navigateToAddIssue,
+      issuesOpened, setIssuesOpened, openIssueInTab,
     }}>
       {children}
     </TabContext.Provider>

@@ -15,7 +15,7 @@ interface Props {
    *   - 'gray': 비교용 보조 시리즈
    *   - 'auto': 추세 의미가 명확할 때만 (긍정 맥락: 증가↑=cyan, 감소↓=red)
    */
-  color?: 'cyan' | 'amber' | 'red' | 'gray' | 'auto'
+  color?: 'cyan' | 'amber' | 'red' | 'gray' | 'verify' | 'confirm' | 'auto'
   className?: string
 }
 
@@ -25,6 +25,8 @@ const COLORS = {
   amber: 'var(--color-ive-amber)',
   red:   'var(--color-ive-red)',
   gray:  'var(--color-ive-text-muted)',
+  verify: 'var(--color-ive-stage-verify)',
+  confirm: 'var(--color-ive-stage-confirm)',
 }
 
 function buildSegments(

@@ -37,12 +37,8 @@ interface IssueDetail {
     verifyEndedAt: string | null
     confirmedAt: string | null
   }
-  retryCounts?: {
-    fromVerify: number
-    fromVerifyToInflow: number
-    fromConfirm: number
-    fromDone: number
-  }
+  /** 되돌림 — 진행 막대 칸(1 유입 … 5 완료) 사이를 뒤로 간 이동과 횟수 */
+  retryCounts?: { from: number; to: number; count: number }[]
   forwardCounts?: {
     toProcess: number
     toVerify: number
@@ -137,7 +133,7 @@ export default function IssueHeader({
   }), [projectId, onSetEditDesc, onToast])
 
   return (
-    <header className="sticky top-0 z-40 w-full max-w-lg mx-auto bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark shrink-0">
+    <header className="sticky top-0 z-40 w-full max-w-lg desk:max-w-3xl mx-auto bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark shrink-0">
       <div className="flex items-center gap-2 px-3 py-2">
         <button onClick={onBack} className="text-ive-green font-bold p-1 hover:bg-ive-green/5 rounded shrink-0">
           <i className="fa-solid fa-arrow-left" />

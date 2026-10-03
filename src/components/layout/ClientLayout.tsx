@@ -2,6 +2,7 @@
 
 import { usePathname, useSearchParams } from 'next/navigation'
 import TopBar from '@/components/layout/TopBar'
+import NavRail from '@/components/layout/NavRail'
 
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
@@ -19,10 +20,14 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     )
   }
 
+  // PC 폭(desk)에서는 왼쪽 세로 메뉴 + (상단바 · 본문). 그보다 좁으면 세로 메뉴가 숨고 종전 배치 그대로다.
   return (
-    <>
-      <TopBar />
-      <div className="flex-1 min-h-0 overflow-hidden">{children}</div>
-    </>
+    <div className="flex-1 min-h-0 flex">
+      <NavRail />
+      <div className="flex-1 min-w-0 flex flex-col">
+        <TopBar />
+        <div className="flex-1 min-h-0 overflow-hidden">{children}</div>
+      </div>
+    </div>
   )
 }

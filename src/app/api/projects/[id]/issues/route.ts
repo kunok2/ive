@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAccess, getProjectAuthToken, getAssignModeMap, setAssignMode, setAssigneeAuto, setPresetRoles, getPresetRoles, getActualRoleAssigneesMap, getAgent, hasActiveExecution, stageFromLabels, touchProjectActivity, getIssueIterationCountsMap, getActiveChatSessionsByProject, findIssueIidsByTitle, hasRole, markRolesInitialized, setStageWorkerNote, getStageWorkerNote, setIssueIntakeChannel, type RoleMode } from '@/lib/db';
+import { getProject, getProjectAccess, getProjectAuthToken, getAssignModeMap, setAssignMode, setAssigneeAuto, setPresetRoles, getPresetRoles, getActualRoleAssigneesMap, getAgent, hasActiveExecution, stageFromLabels, touchProjectActivity, getIssueIterationCountsMap, getActiveChatSessionsByProject, findIssueIidsByTitle, getIssueStageSinceMap, hasRole, markRolesInitialized, setStageWorkerNote, getStageWorkerNote, setIssueIntakeChannel, type RoleMode } from '@/lib/db';
 import { autoAssignAllAgents, agentRoleAvailable } from '@/lib/role-assignment';
 import { isChatAgentRunning } from '@/lib/chat-agent';
 import { triggerScan } from '@/lib/scanner';
@@ -46,6 +46,8 @@ export async function GET(
     const assignModeMap = getAssignModeMap(projectId);
     const actualRolesMap = getActualRoleAssigneesMap(projectId);
     const iterationMap = getIssueIterationCountsMap(projectId);
+    // 지금 단계에 들어온 시각·대기 사유(사건 로그) — 카드 대기 목록의 「n시간째」·사유 표시용
+    const stageSinceMap = stateParam === 'closed' ? null : getIssueStageSinceMap(projectId);
     // 진행 중인 AI 채팅(이슈별) — 카드 "대화중"/"생각중" 표시용
     const activeChatMap = new Map<number, string>();
     for (const s of getActiveChatSessionsByProject(projectId)) activeChatMap.set(s.issueIid, s.id);
@@ -107,6 +109,10 @@ export async function GET(
               avatarUrl: issue.author?.avatar_url ?? null,
             };
 
+        // 사건 로그의 마지막 단계가 지금 단계와 같을 때만 그 시각을 믿는다(라벨만 바뀌고 아직 기록 전이면 모름)
+        const logged = stageSinceMap?.get(issue.iid);
+        const stageLog = logged && (logged.stage ?? 'none') === stage ? logged : null;
+
         // 검증자/확인자 사전 배정 + 실제 수행자 (이슈 #271)
         const presetRoles = getPresetRoles(projectId, issue.iid);
         const actuals = { ...(actualRolesMap.get(issue.iid) || { processor: null, verifier: null, confirmer: null }) };
@@ -156,6 +162,8 @@ export async function GET(
           authorId: issue.author?.id ?? null,
           presetVerifier: presetRoles.verifier,
           presetConfirmer: presetRoles.confirmer,
+          stageSince: stageLog?.since ?? null,
+          waitReason: stageLog?.waitReason ?? null,
           stageWorkerNote: (stage === 'done' || issue.state === 'closed') ? null : getStageWorkerNote(projectId, issue.iid),
           actualProcessor: actuals.processor,
           actualVerifier: actuals.verifier,
@@ -164,10 +172,9 @@ export async function GET(
           iterationCounts: (() => {
             const c = iterationMap.get(issue.iid);
             const fwd = c?.forward ?? { toProcess: 0, toVerify: 0, toConfirm: 0, toDone: 0 };
-            const ret = c?.retry ?? { fromVerify: 0, fromVerifyToInflow: 0, fromConfirm: 0, fromDone: 0 };
             return {
               processCount: fwd.toProcess,                                          // 처리 진입 횟수
-              retryTotal: ret.fromVerify + ret.fromVerifyToInflow + ret.fromConfirm + ret.fromDone,  // 총 되돌리기 횟수
+              retryTotal: (c?.retry ?? []).reduce((n, m) => n + m.count, 0),      // 총 되돌리기 횟수
             };
           })(),
         };

@@ -184,5 +184,7 @@
   "completedOnTime": "Completed on time",
   "pickerAgents": "Agents",
   "pickerPeople": "People",
-  "roleModeAgent": "Agent"
+  "roleModeAgent": "Agent",
+  "detailPaneLabel": "Issue detail",
+  "detailPanePlaceholder": "Pick an issue to open it here"
 }

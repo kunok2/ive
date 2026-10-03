@@ -35,7 +35,7 @@ export default function SettingsHubPanel() {
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <div className="pb-2 shrink-0">
-        <div className="flex gap-1.5">
+        <div className="flex gap-1.5 desk:max-w-xl desk:mx-auto">
           {views.map(v => (
             <button
               key={v.key}

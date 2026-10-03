@@ -53,12 +53,8 @@ interface StageTimes {
   confirmedAt: string | null
 }
 
-interface RetryCounts {
-  fromVerify: number
-  fromVerifyToInflow: number
-  fromConfirm: number
-  fromDone: number
-}
+/** 되돌림 — 칸(1 유입 … 5 완료) 사이를 뒤로 간 이동과 횟수 */
+type RetryCounts = { from: number; to: number; count: number }[]
 interface ForwardCounts {
   toProcess: number
   toVerify: number
@@ -74,7 +70,7 @@ interface StageProgressProps {
   closedAt?: string | null
   /** 단계별 타임스탬프 — 마지막 execution 기준 */
   stageTimes?: StageTimes | null
-  /** 재실행 횟수 — 검증/확인/완료에서 처리로 되돌아간 횟수 */
+  /** 되돌림 — 검증 반려·확인 실패·재검증 요청·재오픈 등 뒤 칸으로 간 이동 (사람·에이전트 모두) */
   retryCounts?: RetryCounts | null
   /** 정방향 진입 횟수 — 각 단계로 들어간 횟수 */
   forwardCounts?: ForwardCounts | null
@@ -162,53 +158,53 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
   const containerRef = useRef<HTMLDivElement>(null)
   const pillRefs = useRef<Record<number, HTMLDivElement | null>>({})
   const [pillCenters, setPillCenters] = useState<Record<number, number>>({})
-  // 재실행 화살표 — 각 step-back 은 이전 macro 로 보낸다.
-  //   - 검증 reject → 스케줄(처리 재요청): macro 3 → macro 2 (처리)
-  //   - 검증/검증대기 to_inflow → 유입 초기화: macro 3 → macro 1 (유입)
-  //   - 확인 return_to_dev → 검증대기 (검증 재요청): macro 4 → macro 3
-  //   - 완료 reopen → 확인대기 (확인 재요청): macro 5 → macro 4
-  // 재실행 화살표는 정방향 ─→ 화살표와 비슷한 정도로 절제. 색상은 라벨 식별용으로만
-  // 살짝 톤만 다르게 두고, stroke 자체는 단일 dim gray 로 통일.
+  // 되돌림 화살표 — 뒤 칸(source)에서 앞 칸(target)으로 간 이동마다 하나씩.
+  //   예: 검증 반려 3→2, 유입 전환 3→1, 확인 실패(에이전트) 4→2, 재검증 요청 4→3, 재오픈 5→4
+  // 정방향 ─→ 화살표와 비슷한 정도로 절제 — stroke 는 단일 dim gray.
   const ARROW_STROKE = '#6b7280'  // gray-500
-  const arrows: { sourceIdx: number; targetIdx: number; count: number; color: string }[] = []
-  const rc = retryCounts || { fromVerify: 0, fromVerifyToInflow: 0, fromConfirm: 0, fromDone: 0 }
   const fc = forwardCounts || { toProcess: 0, toVerify: 0, toConfirm: 0, toDone: 0 }
-  // 칩별 진입 횟수 (정방향 + step-back 진입 모두 합산)
+  const arrows = (retryCounts || [])
+    .filter(m => m.count > 0 && m.to >= 1 && m.from <= 5 && m.to < m.from)
+    .map(m => ({ sourceIdx: m.from, targetIdx: m.to, count: m.count }))
+    // 짧은 화살표가 안쪽(낮은 줄), 긴 화살표가 바깥쪽(높은 줄)
+    .sort((a, b) => (a.sourceIdx - a.targetIdx) - (b.sourceIdx - b.targetIdx) || a.targetIdx - b.targetIdx)
+  const backInto = (idx: number) => arrows.reduce((n, a) => n + (a.targetIdx === idx ? a.count : 0), 0)
+  // 칩별 진입 횟수 (정방향 + 되돌림 진입 합산). 처리(2)는 처리 실행 수가 이미 되돌림 뒤 재처리를 포함한다.
   const stageCount: Record<MacroIndex, number> = {
     0: 0,
     1: 0,
     2: fc.toProcess,
-    3: fc.toVerify + rc.fromConfirm,
-    4: fc.toConfirm + rc.fromDone,
+    3: fc.toVerify + backInto(3),
+    4: fc.toConfirm + backInto(4),
     5: fc.toDone,
   }
   // 커넥터(정방향) 횟수.
-  // 유입은 이슈 생성 시 1회 일어나는 이벤트라 1로 고정 (이후 처리 진입은 step-back 화살표가 따로 표시).
+  // 유입은 이슈 생성 시 1회 일어나는 이벤트라 1로 고정 (이후 처리 진입은 되돌림 화살표가 따로 표시).
   const connectorCount: Record<number, number> = {
     1: 1,
     2: fc.toVerify,
     3: fc.toConfirm,
     4: fc.toDone,
   }
-  if (rc.fromVerify > 0) arrows.push({ sourceIdx: 3, targetIdx: 2, count: rc.fromVerify, color: '#fbbf24' })
-  if (rc.fromVerifyToInflow > 0) arrows.push({ sourceIdx: 3, targetIdx: 1, count: rc.fromVerifyToInflow, color: '#ef4444' })
-  if (rc.fromConfirm > 0) arrows.push({ sourceIdx: 4, targetIdx: 3, count: rc.fromConfirm, color: '#fb923c' })
-  if (rc.fromDone > 0) arrows.push({ sourceIdx: 5, targetIdx: 4, count: rc.fromDone, color: '#f87171' })
-  // 같은 source 에서 여러 화살표가 나갈 때 수직선·가로선이 겹치지 않도록 push 순서대로 어긋나게 한다.
-  // (push 순서: 더 짧은 거리 화살표가 먼저 → shift 0, 더 먼 거리 화살표가 나중 → shift 양수)
-  //   - 수직선(source x): 오른쪽으로 8px 씩
-  //   - 가로선·라벨(y): 위쪽으로 12px 씩 (텍스트 한 줄 높이) — 라벨이 서로 겹치지 않게.
-  const { sourceShifts, yShifts } = (() => {
-    const counter = new Map<number, number>()
-    const sx: number[] = []
-    const sy: number[] = []
-    for (const a of arrows) {
-      const n = counter.get(a.sourceIdx) ?? 0
-      counter.set(a.sourceIdx, n + 1)
-      sx.push(n * 8)
-      sy.push(n * 16)
-    }
-    return { sourceShifts: sx, yShifts: sy }
+  // 화살표가 가로로 겹치지 않도록 줄(높이)을 나눈다 — 두 화살표가 같은 칸 사이 간격을 지나면 다른 줄.
+  // 같은 칸에서 나가거나 들어오는 화살표가 여럿이면 수직선도 8px 씩 어긋나게 한다.
+  const { sourceShifts, targetShifts, yShifts } = (() => {
+    const lanes: number[] = []
+    const outN = new Map<number, number>()
+    const inN = new Map<number, number>()
+    const sx: number[] = [], tx: number[] = [], sy: number[] = []
+    arrows.forEach((a, i) => {
+      let lane = 0
+      while (arrows.some((b, j) => j < i && lanes[j] === lane
+        && Math.max(a.targetIdx, b.targetIdx) < Math.min(a.sourceIdx, b.sourceIdx))) lane++
+      lanes.push(lane)
+      const o = outN.get(a.sourceIdx) ?? 0; outN.set(a.sourceIdx, o + 1)
+      const n = inN.get(a.targetIdx) ?? 0; inN.set(a.targetIdx, n + 1)
+      sx.push(o * 8)
+      tx.push(-n * 8)
+      sy.push(lane * 16)
+    })
+    return { sourceShifts: sx, targetShifts: tx, yShifts: sy }
   })()
   const maxYShift = arrows.length > 0 ? Math.max(0, ...yShifts) : 0
   const overhead = arrows.length > 0 ? 24 + maxYShift : 0
@@ -346,19 +342,16 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
               const sxCenter = pillCenters[a.sourceIdx]
               const txCenter = pillCenters[a.targetIdx]
               if (sxCenter == null || txCenter == null) return null
-              // 모든 step-back 화살표가 자기 source/target gap 안에 머물러 겹치지 않으므로
-              // 모두 같은 높이로 그려도 무방.
+              // 줄(yShifts)이 다른 화살표는 높이를 달리해 가로선이 겹치지 않는다.
               const ty = overhead - 14 - (yShifts[i] || 0)
               const by = overhead
-              // 모든 step-back 화살표는 오른쪽 source pill → 왼쪽 target pill 로 향한다.
-              // 인접한 두 pill(예: 검증) 이 한 화살표의 source 이면서 다른 화살표의 target 일 때
-              // 같은 자리에 수직선이 겹치지 않도록, 수직선을 다음과 같이 배치:
-              //   - source(오른쪽 pill) 의 수직선은 pill 의 왼쪽 가장자리쪽 (-offset)  → 가로선이 가까운 gap 안에서 출발
-              //   - target(왼쪽 pill) 의 수직선은 pill 의 오른쪽 가장자리쪽 (+offset) → 같은 gap 안에 도착
-              // → 각 화살표가 자기 source/target 사이의 gap 안에 머물러 인접 화살표와 겹치지 않는다.
+              // 되돌림 화살표는 오른쪽 source pill → 왼쪽 target pill 로 향한다.
+              // 한 pill 이 어떤 화살표의 source 이면서 다른 화살표의 target 일 때 수직선이 겹치지 않도록:
+              //   - source 의 수직선은 pill 의 왼쪽 가장자리쪽 (-offset), 여럿이면 오른쪽으로 어긋남
+              //   - target 의 수직선은 pill 의 오른쪽 가장자리쪽 (+offset), 여럿이면 왼쪽으로 어긋남
               const offset = 9
               const sx = sxCenter - offset + (sourceShifts[i] || 0)
-              const txEnd = txCenter + offset
+              const txEnd = txCenter + offset + (targetShifts[i] || 0)
               // 모서리를 라운딩한 꺾은선 (╭──╮) — source 가 항상 처리 오른쪽이라 좌측 진행
               const r = 5
               const dir = sx > txEnd ? -1 : 1   // 가로선 진행 방향
@@ -387,9 +380,9 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
           // (이미 지나간 단계 isPast 와 별개로, 미래 idx 인데 흔적이 남아 있는 단계만 별색 처리)
           const visitedAhead = !isCurrent && !isPast && !isError && (
             (m.idx === 2 && !!stageTimes?.devStartedAt)
-            || (m.idx === 3 && (rc.fromVerify > 0 || rc.fromVerifyToInflow > 0 || !!stageTimes?.verifyStartedAt))
-            || (m.idx === 4 && (rc.fromConfirm > 0 || !!stageTimes?.confirmedAt))
-            || (m.idx === 5 && rc.fromDone > 0)
+            || (m.idx === 3 && (arrows.some(a => a.sourceIdx === 3) || !!stageTimes?.verifyStartedAt))
+            || (m.idx === 4 && (arrows.some(a => a.sourceIdx === 4) || !!stageTimes?.confirmedAt))
+            || (m.idx === 5 && arrows.some(a => a.sourceIdx === 5))
           )
 
           let chipCls = ''

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { useStore } from '@/lib/store'
-import { useTab } from '@/lib/tab-context'
+import { useTab, tabForPath } from '@/lib/tab-context'
 import { useDialog } from '@/components/ui/ConfirmDialog'
 import { useTranslations } from 'next-intl'
 import { DEFAULT_AVATARS } from '@/types'
@@ -82,7 +82,7 @@ export default function TopBar() {
 
   return (
     <>
-      <header className="shrink-0 z-40 w-full max-w-lg mx-auto bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark min-[512px]:rounded-b-2xl">
+      <header className="shrink-0 z-40 w-full max-w-lg mx-auto bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark min-[512px]:rounded-b-2xl desk:max-w-none desk:rounded-none">
         <div className="px-4 py-3 flex items-center justify-between">
           <button
             onClick={() => router.push('/')}
@@ -93,7 +93,7 @@ export default function TopBar() {
                 <span className="text-[#22c55e]">Spring</span><span className="text-ive-amber">ware</span>{' '}
                 <span className="text-ive-cyan">IVE</span>
               </h1>
-              <p className="text-xs text-ive-text-dim mt-0.5">{tn(activeTab as 'projects' | 'agents' | 'issues' | 'reports' | 'admin')}</p>
+              <p className="text-xs text-ive-text-dim mt-0.5">{tn((isMainPage ? activeTab : (tabForPath(pathname) ?? activeTab)) as 'projects' | 'agents' | 'issues' | 'reports' | 'admin')}</p>
             </div>
           </button>
           <div className="flex items-center gap-1.5">

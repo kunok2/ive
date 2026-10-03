@@ -20,6 +20,8 @@ interface IssueCardProps {
   issue: IveIssue
   stageInfo: Record<string, StageInfo>
   isSelected: boolean
+  /** PC 폭에서 오른쪽 칸에 열려 있음 */
+  isOpen?: boolean
   bulkMode: boolean
   navigatingIid: number | null
   canEdit: boolean
@@ -47,6 +49,7 @@ export default function IssueCard({
   issue,
   stageInfo,
   isSelected,
+  isOpen = false,
   bulkMode,
   navigatingIid,
   canEdit,
@@ -80,6 +83,7 @@ export default function IssueCard({
       className={`bg-ive-bg-card border rounded-lg p-4 transition-all cursor-pointer active:scale-[0.98] ${
         isSelected
           ? 'border-ive-green/50 bg-ive-green/5'
+          : isOpen ? 'border-ive-cyan/60'
           : 'border-ive-border-subtle hover:border-ive-green/40'
       }`}
     >

@@ -1,6 +1,11 @@
 @import "tailwindcss";
 
 @theme {
+  /* 넓은 화면(PC) 기준선 — 이 폭부터 왼쪽 세로 메뉴와 칸 나눔 배치를 쓴다. `desk:` 변형으로 쓴다 */
+  --breakpoint-desk: 75rem;
+  /* 넓은 PC(1440px~) — 칸을 하나 더 놓을 여유가 생기는 폭. `wide:` 변형 */
+  --breakpoint-wide: 90rem;
+
   /* ──────────────────────────────────────────────────────────────
    * IVE 디자인 토큰 (minimal / semantic)
    *
@@ -27,6 +32,12 @@
   --color-ive-green-pale: #cffafe;
   --color-ive-cyan: #22d3ee;
   --color-ive-spring: #22c55e;  /* Spring 로고 전용 초록 */
+
+  /* 단계색 — 처리·검증·확인을 한눈에 가른다(카드·보드·진행 중 목록·단계 배지·보고서가 같은 색).
+     대기는 단계색이 아니라 시안 + 점선으로 표시한다(DESIGN_GUIDE 「단계색」) */
+  --color-ive-stage-process: #f59e0b;
+  --color-ive-stage-verify: #a78bfa;
+  --color-ive-stage-confirm: #f472b6;
 
   /* 의미색 */
   --color-ive-amber: #f59e0b;   /* 경고 / 진행중 / 대기 */
