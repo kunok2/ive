@@ -209,7 +209,8 @@ export default function ProjectBoard({ project }: { project: Project }) {
                           onClick={() => router.push(it.href)}
                           className="text-left flex flex-col gap-1.5 p-2.5 rounded-lg bg-ive-bg-card border border-ive-border-subtle hover:border-ive-cyan/40 transition-colors"
                         >
-                          <span className="text-xs font-bold leading-snug text-ive-text line-clamp-2">
+                          {/* 대기 건은 한 단계 낮은 글자색 — 손에 있는(진행 중) 건이 먼저 읽히게. 흐린색(dim)은 정보 글씨에 쓰지 않는다 */}
+                          <span className={`text-xs font-bold leading-snug line-clamp-2 ${it.waiting ? 'text-ive-text-secondary' : 'text-ive-text'}`}>
                             <span className="text-ive-text-dim">#{it.iid}</span> {it.title}
                           </span>
                           {age && (
