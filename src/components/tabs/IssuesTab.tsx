@@ -1,5 +1,6 @@
 'use client'
 
+import type { Priority } from './issues/Priority'
 import type { RoleAgentCandidate, PresetRole } from '@/components/issue/RoleAvatarBar'
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
@@ -208,6 +209,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   const [confirmerUsername, setConfirmerUsername] = useState<string | null>(null)
   // 마감일 (YYYY-MM-DD). 빈 문자열이면 미설정.
   const [newDueDate, setNewDueDate] = useState<string>('')
+  const [newPriority, setNewPriority] = useState<Priority>(0)
   const [notifyOnDone, setNotifyOnDone] = useState(false)
   const [assigneeModalIids, setAssigneeModalIids] = useState<number[]>([])
   const [assigneeModalSearch, setAssigneeModalSearch] = useState('')
@@ -606,6 +608,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
           autoAllAgents: autoAllAgents || undefined,
           rolesExplicit: rolesTouched || undefined,
           dueDate: newDueDate || undefined,
+          priority: newPriority || undefined,
           notify: notifyOnDone || undefined,
         }),
       })
@@ -615,7 +618,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
         setVerifierMode('creator'); setVerifierUserId(null); setVerifierUsername(null); setVerifierAgentId(null)
         setConfirmerMode('creator'); setConfirmerUserId(null); setConfirmerUsername(null); setConfirmerAgentId(null)
         setAutoAllAgents(false); setRolesTouched(false)
-        setNewDueDate(''); setNotifyOnDone(false)
+        setNewDueDate(''); setNewPriority(0); setNotifyOnDone(false)
         const selectedAgent = preferredAgentId ? projectAgents.find(a => a.agentId === preferredAgentId) : null
         const newIssue: IveIssue = {
           iid: created.iid, title: created.title, state: created.state || 'opened',
@@ -769,6 +772,8 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
       onDueDateChange={setNewDueDate}
       notify={notifyOnDone}
       onNotifyChange={setNotifyOnDone}
+      priority={newPriority}
+      onPriorityChange={setNewPriority}
     />
   ) : null
 

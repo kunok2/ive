@@ -24,6 +24,7 @@ import {
   getLastCompletedAt,
   stageFromLabels,
   getAssignModeMap,
+  byPriorityThenOldest,
   assignIssueAtomically,
   createActivityLog,
   touchProjectActivity,
@@ -754,8 +755,10 @@ async function scanProject(project: Project, force: boolean = false) {
     }
 
     if (waitingIssues.length > 0) {
-      // 먼저 생성된 이슈부터 배정 (created_at 오름차순)
-      waitingIssues.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      // 우선순위(긴급 → 높음 → 보통) 높은 것부터, 같으면 먼저 생성된 이슈부터 배정 — 우선순위는 IVE DB 값(issue_stages.priority)
+      const priorityMap = getAssignModeMap(project.id);
+      const ordered = byPriorityThenOldest(waitingIssues, iid => priorityMap.get(iid)?.priority ?? 0);
+      waitingIssues.splice(0, waitingIssues.length, ...ordered);
       slog.info(`Found ${waitingIssues.length} waiting issues for ${project.name}`);
       const { waiting } = await processIssues(project, waitingIssues, decryptedToken);
       issueCount += waiting;

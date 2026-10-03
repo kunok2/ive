@@ -130,26 +130,48 @@ export interface AssignModeInfo {
   mode: 'auto' | 'assignee' | 'agent'
   agentId: string | null
   assigneeAuto: boolean
+  /** 0 보통 · 1 높음 · 2 긴급 */
+  priority: IssuePriority
+}
+
+/** 작업 우선순위 — 0 보통 · 1 높음 · 2 긴급 */
+export type IssuePriority = 0 | 1 | 2
+export const normalizePriority = (v: unknown): IssuePriority => (v === 2 || v === 1 ? v : Number(v) === 2 ? 2 : Number(v) === 1 ? 1 : 0)
+
+export function setIssuePriority(projectId: string, issueIid: number, priority: IssuePriority) {
+  getDb().prepare(`
+    INSERT INTO issue_stages (project_id, issue_iid, stage, priority, updated_at)
+    VALUES (?, ?, '', ?, datetime('now'))
+    ON CONFLICT(project_id, issue_iid) DO UPDATE SET priority = excluded.priority, updated_at = datetime('now')
+  `).run(projectId, issueIid, priority)
+}
+
+/** 우선순위 높은 것 먼저, 같으면 먼저 들어온(작성) 것 먼저 — 에이전트가 대기 작업을 집는 순서 */
+export function byPriorityThenOldest<T extends { iid: number; created_at?: string }>(issues: T[], priorityOf: (iid: number) => number): T[] {
+  return [...issues].sort((a, b) => (priorityOf(b.iid) - priorityOf(a.iid))
+    || (new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()))
 }
 
 export function getAssignMode(projectId: string, issueIid: number): AssignModeInfo {
-  const r = getDb().prepare('SELECT assign_mode, preferred_agent_id, assignee_auto FROM issue_stages WHERE project_id = ? AND issue_iid = ?').get(projectId, issueIid) as any
+  const r = getDb().prepare('SELECT assign_mode, preferred_agent_id, assignee_auto, priority FROM issue_stages WHERE project_id = ? AND issue_iid = ?').get(projectId, issueIid) as any
   return {
     mode: (r?.assign_mode as 'auto' | 'assignee' | 'agent') || 'auto',
     agentId: r?.preferred_agent_id || null,
     assigneeAuto: !!r?.assignee_auto,
+    priority: normalizePriority(r?.priority),
   }
 }
 
 export function getAssignModeMap(projectId: string): Map<number, AssignModeInfo> {
   const rows = getDb().prepare(
-    'SELECT issue_iid, assign_mode, preferred_agent_id, assignee_auto FROM issue_stages WHERE project_id = ?'
+    'SELECT issue_iid, assign_mode, preferred_agent_id, assignee_auto, priority FROM issue_stages WHERE project_id = ?'
   ).all(projectId) as any[]
   const map = new Map<number, AssignModeInfo>()
   for (const r of rows) map.set(r.issue_iid, {
     mode: r.assign_mode || 'auto',
     agentId: r.preferred_agent_id || null,
     assigneeAuto: !!r.assignee_auto,
+    priority: normalizePriority(r.priority),
   })
   return map
 }

@@ -6,6 +6,7 @@ import { formatDateMedium } from '@/lib/format-date'
 import { type StageAction } from './StageActions'
 import StageProgress from './StageProgress'
 import DeadlineProgress from './DeadlineProgress'
+import { PriorityBadge, PriorityPicker, type Priority } from '@/components/tabs/issues/Priority'
 import { type PresetRole, type RoleAgentCandidate } from '@/components/issue/RoleAvatarBar'
 import { createImagePasteHandlers } from '@/lib/paste-upload'
 import { useMemo, useRef, useEffect } from 'react'
@@ -28,6 +29,8 @@ interface IssueDetail {
   updatedAt: string
   closedAt?: string | null
   dueDate?: string | null
+  /** 0 보통 · 1 높음 · 2 긴급 (IVE 에만 저장) */
+  priority?: 0 | 1 | 2
   stageTimes?: {
     scheduledAt: string | null
     firstDevStartedAt: string | null
@@ -103,6 +106,8 @@ interface IssueHeaderProps {
   onPresetConfirmerChange: (preset: PresetRole) => Promise<void> | void
   /** 작성자 또는 관리자만 호출됨. null 이면 마감일 해제. */
   onDueDateChange: (next: string | null) => Promise<void> | void
+  /** 우선순위 변경 — 없으면 고르는 칸을 그리지 않는다(배지만) */
+  onPriorityChange?: (next: Priority) => Promise<void> | void
   /** 작성자(생성자) 권한 — DeadlineProgress 노출/편집 제어. */
   isCreator: boolean
   onToast: (msg: string, type: 'success' | 'error') => void
@@ -114,7 +119,7 @@ export default function IssueHeader({
   projectId, gitMembers, confirmerMembers, roleAgents, preferredAgent,
   onBack, widthCls = 'max-w-lg desk:max-w-3xl', onCloseIssue, onStartEdit, onSaveEdit, onCancelEdit,
   onSetEditTitle, onSetEditDesc, onSetShowDesc, onOpenAssigneePicker, onOpenAgentPicker,
-  onPresetVerifierChange, onPresetConfirmerChange, onDueDateChange, isCreator, onToast,
+  onPresetVerifierChange, onPresetConfirmerChange, onDueDateChange, onPriorityChange, isCreator, onToast,
 }: IssueHeaderProps) {
   const { state } = useStore()
   const tc = useTranslations('common')
@@ -144,6 +149,7 @@ export default function IssueHeader({
           </button>
         )}
         <span className="text-base font-bold text-ive-green shrink-0">#{issue.iid}</span>
+        <PriorityBadge priority={issue.priority} />
         {iterationCount > 0 && (
           <span className="text-xs font-bold px-1.5 py-0.5 rounded border bg-ive-cyan/10 text-ive-cyan border-ive-cyan/20 shrink-0" title={tIssue('iterationCount', { count: iterationCount })}>
             <i className="fa-solid fa-repeat mr-0.5" />{tIssue('iterationLabel', { count: iterationCount })}
@@ -304,6 +310,12 @@ export default function IssueHeader({
               </div>
             )
           })()}
+          {/* 우선순위 — 에이전트가 대기 작업을 높은 것부터 집는다. 완료된 작업은 바꾸지 않는다 */}
+          {onPriorityChange && issue.state !== 'closed' && issue.stage !== 'done' && (
+            <div className="mt-2">
+              <PriorityPicker value={issue.priority ?? 0} onChange={onPriorityChange} />
+            </div>
+          )}
         </div>
       )}
     </header>

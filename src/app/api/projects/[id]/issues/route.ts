@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAccess, getProjectAuthToken, getAssignModeMap, setAssignMode, setAssigneeAuto, setPresetRoles, getPresetRoles, getActualRoleAssigneesMap, getAgent, hasActiveExecution, stageFromLabels, touchProjectActivity, getIssueIterationCountsMap, getActiveChatSessionsByProject, findIssueIidsByTitle, getIssueStageSinceMap, hasRole, markRolesInitialized, setStageWorkerNote, getStageWorkerNote, setIssueIntakeChannel, type RoleMode } from '@/lib/db';
+import { getProject, getProjectAccess, getProjectAuthToken, getAssignModeMap, setAssignMode, setAssigneeAuto, setIssuePriority, normalizePriority, setPresetRoles, getPresetRoles, getActualRoleAssigneesMap, getAgent, hasActiveExecution, stageFromLabels, touchProjectActivity, getIssueIterationCountsMap, getActiveChatSessionsByProject, findIssueIidsByTitle, getIssueStageSinceMap, hasRole, markRolesInitialized, setStageWorkerNote, getStageWorkerNote, setIssueIntakeChannel, type RoleMode } from '@/lib/db';
 import { autoAssignAllAgents, agentRoleAvailable } from '@/lib/role-assignment';
 import { isChatAgentRunning } from '@/lib/chat-agent';
 import { triggerScan } from '@/lib/scanner';
@@ -22,7 +22,8 @@ export async function GET(
   const project = getProject(projectId);
   if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 });
 
-  if (!getProjectAccess(projectId, user.id)) {
+  const listAccess = getProjectAccess(projectId, user.id);
+  if (!listAccess) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
@@ -66,7 +67,7 @@ export async function GET(
           || (isClosed ? 'done' : 'none');
 
         // 배정 모드 + 선호 에이전트 정보 조회
-        const assignInfo = assignModeMap.get(issue.iid) || { mode: 'auto' as const, agentId: null, assigneeAuto: false };
+        const assignInfo = assignModeMap.get(issue.iid) || { mode: 'auto' as const, agentId: null, assigneeAuto: false, priority: 0 as const };
         let preferredAgentId = assignInfo.mode === 'agent' ? assignInfo.agentId : null;
         let preferredAgentName: string | null = null;
         let preferredAgentAvatar: string | null = null;
@@ -151,6 +152,9 @@ export async function GET(
           preferredAgentAvatar,
           preferredAgentCliName,
           assigneeAuto: assignInfo.assigneeAuto,
+          priority: assignInfo.priority,
+          // 우선순위는 편집 권한자(뷰어 제외) 누구나 — priority 라우트와 같은 기준
+          canEditPriority: listAccess !== 'viewer',
           assignees,
           labels: issue.labels,
           createdAt: issue.created_at,
@@ -206,7 +210,7 @@ export async function POST(
     return NextResponse.json({ error: '작업 생성 권한이 없습니다.' }, { status: 403 });
   }
 
-  const { title, description, asDev, preferredAgentId, assignMode: reqAssignMode, assigneeIds, assigneeUsernames, assigneeAuto, verifierMode, verifierUserId, verifierUsername, verifierAgentId, confirmerMode, confirmerUserId, confirmerUsername, confirmerAgentId, autoAllAgents, rolesExplicit, dueDate, notify } = await req.json();
+  const { title, description, asDev, preferredAgentId, assignMode: reqAssignMode, assigneeIds, assigneeUsernames, assigneeAuto, verifierMode, verifierUserId, verifierUsername, verifierAgentId, confirmerMode, confirmerUserId, confirmerUsername, confirmerAgentId, autoAllAgents, rolesExplicit, dueDate, notify, priority } = await req.json();
   if (!title?.trim()) return NextResponse.json({ error: '제목을 입력하세요.' }, { status: 400 });
   // 에이전트 검증자·확인자는 역할 명부에서 그 역할을 가진 것만, 처리자 ≠ 검증자. (「모든 단계 자동배정」이어도 같은 검사)
   {
@@ -286,6 +290,9 @@ export async function POST(
       if (assigneeAuto) {
         setAssigneeAuto(projectId, issue.iid, true);
       }
+      // 우선순위 — 보통(0)이 기본이라 높음·긴급일 때만 남긴다
+      const pr = normalizePriority(priority);
+      if (pr > 0) setIssuePriority(projectId, issue.iid, pr);
       // 검증자/확인자 사전 배정 — 'creator' / 'auto' / 'specific' / 'agent'
       if (verifierMode || confirmerMode) {
         setPresetRoles(projectId, issue.iid, {

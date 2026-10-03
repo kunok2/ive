@@ -15,6 +15,8 @@ export interface IveIssue {
   createdAt: string
   updatedAt: string
   dueDate?: string | null
+  /** 0 보통 · 1 높음 · 2 긴급 (IVE 에만 저장) */
+  priority?: 0 | 1 | 2
   author: { name: string; avatar?: string; avatarUrl?: string }
   iveAuthorId?: string | null
   authorId?: number | null

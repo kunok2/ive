@@ -15,7 +15,7 @@ import { Project, Agent, isAgentAvailableNow } from '@/types'
 import {
   getPresetRoles, getAgent, countActiveExecutionsByAgent, getProjectAutomation, getStagingSecrets,
   getSystemSetting, setStageWorkerNote, getStageWorkerNote, getIssueAutomationApproval, getRoster, getDb, hasRole,
-  getLatestBundleItem, getUserById, getProjectAccess, getIssueIntakeChannel, recordWaitIfChanged,
+  getLatestBundleItem, getAssignModeMap, byPriorityThenOldest, getUserById, getProjectAccess, getIssueIntakeChannel, recordWaitIfChanged,
 } from '../db'
 import { isBotName } from '../git-bot'
 import { extractIveAuthorId } from '../ive-author'
@@ -144,6 +144,10 @@ function passGate(
 
 export async function dispatchStageWorkers(project: Project, issues: StageIssue[], token: string): Promise<void> {
   const busy = new Set<string>()
+  // 우선순위(긴급 → 높음 → 보통) 높은 것부터, 같으면 먼저 생성된 것부터 — 에이전트가 하나씩 집으므로 순서가 곧 처리 순서다
+  const priorityMap = getAssignModeMap(project.id)
+  const order = new Map(byPriorityThenOldest(issues.map(i => ({ iid: i.issue.iid as number, created_at: i.issue.created_at as string | undefined })), iid => priorityMap.get(iid)?.priority ?? 0).map((x, n) => [x.iid, n]))
+  issues = [...issues].sort((a, b) => (order.get(a.issue.iid) ?? 0) - (order.get(b.issue.iid) ?? 0))
   await dispatchVerify(project, issues.filter(i => i.stage === 'verify_waiting' || i.stage === 'verifying'), token, busy)
   await dispatchConfirm(project, issues.filter(i => i.stage === 'confirm_waiting' || i.stage === 'confirming'), token, busy)
 }

@@ -1,5 +1,6 @@
 'use client'
 
+import { PriorityPicker, type Priority } from './Priority'
 import { useState, useRef, useEffect, useMemo } from 'react'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 import CliLogo from '@/components/ui/CliLogo'
@@ -60,6 +61,8 @@ interface IssueAddFormProps {
   onDueDateChange: (v: string) => void
   notify: boolean
   onNotifyChange: (v: boolean) => void
+  priority: Priority
+  onPriorityChange: (p: Priority) => void
 }
 
 interface RoleTriggerProps {
@@ -287,6 +290,8 @@ export default function IssueAddForm({
   onDueDateChange,
   notify,
   onNotifyChange,
+  priority,
+  onPriorityChange,
 }: IssueAddFormProps) {
   const tIssue = useTranslations('issue')
   const tCommon = useTranslations('common')
@@ -396,6 +401,8 @@ export default function IssueAddForm({
           {tIssue('dueDateNextWeek')}
         </button>
       </div>
+      {/* 우선순위 (선택) — 에이전트가 대기 작업을 높은 것부터 집는다 */}
+      <div className="mb-2"><PriorityPicker value={priority} onChange={onPriorityChange} /></div>
       {/* 완료 알림 (선택) — 켜면 IVE-N 라벨이 부착되어 완료/실패 시 담당자에게 Slack 알림 */}
       <button
         type="button"

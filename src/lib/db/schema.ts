@@ -1374,6 +1374,8 @@ function migrateStageAutomation(db: Database.Database) {
   try { db.exec(`ALTER TABLE issue_stages ADD COLUMN stage_worker_note TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
   // 이슈가 들어온 경로 — 'ive'(IVE 등록 폼) | 'report'(작업 접수 페이지). NULL = Git 직접·API 등 IVE 밖. 경로별 기본 배정·자동 실행 허용에 쓴다
   try { db.exec(`ALTER TABLE issue_stages ADD COLUMN intake_channel TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
+  // 작업 우선순위 — 0 보통 · 1 높음 · 2 긴급. 에이전트가 대기 작업을 집는 순서(높은 것 먼저, 같으면 먼저 들어온 것)
+  try { db.exec(`ALTER TABLE issue_stages ADD COLUMN priority INTEGER NOT NULL DEFAULT 0`) } catch { /* 이미 존재 */ }
   try { db.exec(`ALTER TABLE task_executions ADD COLUMN prompt_version TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
   try { db.exec(`ALTER TABLE task_executions ADD COLUMN stage_kind TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
   // 단계 작업자 판정 (확인: pass | fail | blocked). 순환 상한·재기동 판단에 쓴다.

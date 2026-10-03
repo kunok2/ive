@@ -65,6 +65,9 @@ interface IssueAssignee {
 
 interface IssueDetail {
   iid: number
+  /** 0 보통 · 1 높음 · 2 긴급 (IVE 에만 저장) */
+  priority?: 0 | 1 | 2
+  canEditPriority?: boolean
   title: string
   description: string
   stage: string
@@ -690,6 +693,26 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
     }
   }
 
+  async function handlePriorityChange(next: 0 | 1 | 2) {
+    // 낙관적 갱신 — 즉시 UI 반영, 실패 시 롤백
+    const prev = issue?.priority ?? 0
+    setIssue(curr => curr ? { ...curr, priority: next } : curr)
+    try {
+      const res = await fetch(`/api/projects/${projectId}/issues/${iid}/priority`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ priority: next }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        toast(data.error || tIssue('priorityChangeFailed'), 'error')
+        setIssue(curr => curr ? { ...curr, priority: prev } : curr)
+      }
+    } catch (e: any) {
+      toast(e?.message || tc('networkError'), 'error')
+      setIssue(curr => curr ? { ...curr, priority: prev } : curr)
+    }
+  }
+
   // ===================== Chat logic =====================
 
   useEffect(() => { chatSessionRef.current = chatSessionId }, [chatSessionId])
@@ -979,6 +1002,7 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
         canEditAssignees={canEditAssignees}
         isCreator={isCreator}
         onDueDateChange={handleDueDateChange}
+        onPriorityChange={issue.canEditPriority ? handlePriorityChange : undefined}
         isClosing={isClosing}
         editMode={editMode}
         editTitle={editTitle}

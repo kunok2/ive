@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getProject, getProjectAccess, getProjectAuthToken, hasActiveExecution, stageFromLabels, getPresetRoles, getAssigneeAuto, getActualRoleAssignees, getIssueStageTimes, getIssueRetryCounts, getIssueForwardCounts, getStageWorkerNote } from '@/lib/db'
+import { getProject, getProjectAccess, getProjectAuthToken, hasActiveExecution, stageFromLabels, getPresetRoles, getAssigneeAuto, getAssignMode, getActualRoleAssignees, getIssueStageTimes, getIssueRetryCounts, getIssueForwardCounts, getStageWorkerNote } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { logActivity } from '@/lib/activity'
 import { updateIssue, fetchSingleIssue } from '@/lib/provider'
@@ -212,6 +212,9 @@ export async function GET(
       authorAvatarUrl,
       iveAuthorAvatar,
       assigneeAuto,
+      priority: getAssignMode(projectId, Number(iid)).priority,
+      // 우선순위는 편집 권한자(뷰어 제외) 누구나 — priority 라우트와 같은 기준
+      canEditPriority: (() => { const a = getProjectAccess(projectId, user.id); return !!a && a !== 'viewer' })(),
       presetVerifier: presetRoles.verifier,
       presetConfirmer: presetRoles.confirmer,
       stageWorkerNote: (stage === 'done' || issue.state === 'closed') ? null : getStageWorkerNote(projectId, Number(iid)),

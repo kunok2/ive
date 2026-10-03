@@ -1,5 +1,6 @@
 'use client'
 
+import { PriorityBadge } from './Priority'
 import type { PresetRole, RoleAgentCandidate } from '@/components/issue/RoleAvatarBar'
 import { useTranslations } from 'next-intl'
 import RoleAvatarBar from '@/components/issue/RoleAvatarBar'
@@ -100,6 +101,7 @@ export default function IssueCard({
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <span className="text-sm font-bold text-ive-green">#{issue.iid}</span>
+              <PriorityBadge priority={issue.priority} />
               <span className="text-xs text-ive-text-dim">
                 <i className="fa-solid fa-calendar-day mr-1" />
                 {formatDateMedium(issue.updatedAt, locale, timezone)}

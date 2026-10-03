@@ -44,7 +44,7 @@ vi.mock('@/lib/scanner/confirm-worker', () => ({ runConfirmWorker: workerMock.ru
 import { initSchema } from '@/lib/db/schema'
 import {
   updateProjectAutomation, setPresetRoles, setRosterEntry, getStageWorkerNote, createExecution, replaceProjectMembers,
-  getLatestBundleItem, getProjectAutomation,
+  getLatestBundleItem, getProjectAutomation, setIssuePriority, getAssignModeMap, byPriorityThenOldest,
 } from '@/lib/db'
 import { enforceVerifyVerdict, parseVerifyResult } from '@/lib/scanner/verify-worker'
 import { dispatchStageWorkers } from '@/lib/scanner/stage-dispatch'
@@ -312,3 +312,33 @@ describe('S-1 배포 커밋 — 브랜치 파이프라인', () => {
   })
 })
 
+
+describe('P-1 우선순위', () => {
+  it('높은 것 먼저, 같으면 먼저 들어온 것 먼저 — 값은 IVE DB(issue_stages.priority)', () => {
+    setIssuePriority(P, 3, 1)
+    setIssuePriority(P, 4, 2)
+    setIssuePriority(P, 5, 0)
+    const m = getAssignModeMap(P)
+    expect([3, 4, 5].map(i => m.get(i)?.priority)).toEqual([1, 2, 0])
+    const issues = [
+      { iid: 1, created_at: '2026-10-01T00:00:00Z' }, { iid: 2, created_at: '2026-09-01T00:00:00Z' },
+      { iid: 3, created_at: '2026-10-02T00:00:00Z' }, { iid: 4, created_at: '2026-10-03T00:00:00Z' },
+    ]
+    expect(byPriorityThenOldest(issues, i => m.get(i)?.priority ?? 0).map(i => i.iid)).toEqual([4, 3, 2, 1])
+  })
+  it('검증 에이전트가 하나뿐이면 긴급 작업을 먼저 집는다', async () => {
+    replaceProjectMembers(P, [{ username: 'kim', name: 'Kim', avatarUrl: '', provider: 'gitlab', gitUserId: '1' }])
+    setRosterEntry(P, { subjectType: 'agent', subjectId: 'a2', roles: { process: false, verify: true, confirm: false } }, 'owner')
+    providerMock.fetchMRByBranch.mockResolvedValue({ iid: 5, state: 'opened', web_url: 'https://gl/mr/5' })
+    for (const iid of [61, 62]) setPresetRoles(P, iid, { verifier: { mode: 'agent', userId: null, username: null, agentId: 'a2' } })
+    setIssuePriority(P, 62, 2)
+    const issue = (iid: number, created: string) => ({ iid, title: `t${iid}`, author: { username: 'kim' }, created_at: created })
+    await dispatchStageWorkers(project, [
+      { issue: issue(61, '2026-09-01T00:00:00Z'), stage: 'verify_waiting' },
+      { issue: issue(62, '2026-10-01T00:00:00Z'), stage: 'verify_waiting' },
+    ], 'tok')
+    expect(workerMock.runVerifyWorker).toHaveBeenCalledTimes(1)
+    const [input] = workerMock.runVerifyWorker.mock.calls[0] as unknown as [any]
+    expect(input.issue.iid).toBe(62)
+  })
+})
