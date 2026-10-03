@@ -201,6 +201,7 @@ export default function TopBar() {
           avatar={state.user.avatar}
           locale={state.user.locale}
           timezone={state.user.timezone}
+          navPosition={state.user.navPosition}
           currency={state.user.currency}
           currencyRate={state.user.currencyRate}
           slackUserId={state.user.slackUserId}

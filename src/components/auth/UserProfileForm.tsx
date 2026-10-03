@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useTranslations, useLocale } from 'next-intl'
 import { useRouter } from 'next/navigation'
-import { DEFAULT_AVATARS } from '@/types'
+import { DEFAULT_AVATARS, NAV_POSITIONS, type NavPosition } from '@/types'
 import { locales, localeNames, Locale } from '@/i18n/config'
 import { SUPPORTED_CURRENCIES } from '@/lib/currency'
 import AvatarCropEditor from './AvatarCropEditor'
@@ -37,6 +37,7 @@ interface Props {
   avatar: string
   locale?: string
   timezone?: string
+  navPosition?: NavPosition
   currency?: string | null
   currencyRate?: number | null
   slackUserId?: string
@@ -62,7 +63,7 @@ type SlackWorkspaceRow = {
   enabled: boolean
 }
 
-export default function UserProfileForm({ userId, email, name, avatar, locale: userLocale, timezone: userTimezone, currency: userCurrency, currencyRate: userCurrencyRate, slackUserId: userSlackUserId, slackNotify: userSlackNotify, gitlabUsername: userGitlabUsername, githubUsername: userGithubUsername, mailUnsubscribed: userMailUnsubscribed, reportMailUnsubscribed: userReportMailUnsubscribed, onSuccess, onCancel, onEmailChanged, onAvatarChanged, onSettingsChanged }: Props) {
+export default function UserProfileForm({ userId, email, name, avatar, locale: userLocale, timezone: userTimezone, navPosition: userNavPosition, currency: userCurrency, currencyRate: userCurrencyRate, slackUserId: userSlackUserId, slackNotify: userSlackNotify, gitlabUsername: userGitlabUsername, githubUsername: userGithubUsername, mailUnsubscribed: userMailUnsubscribed, reportMailUnsubscribed: userReportMailUnsubscribed, onSuccess, onCancel, onEmailChanged, onAvatarChanged, onSettingsChanged }: Props) {
   const t = useTranslations('auth')
   const tc = useTranslations('common')
   const currentLocale = useLocale()
@@ -74,6 +75,7 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
   const [activeSection, setActiveSection] = useState<ActiveSection>('none')
   const [selectedLocale, setSelectedLocale] = useState<Locale>((userLocale || currentLocale) as Locale)
   const [selectedTimezone, setSelectedTimezone] = useState(userTimezone || 'Asia/Seoul')
+  const [selectedNav, setSelectedNav] = useState<NavPosition>(userNavPosition || 'left')
   const [selectedCurrency, setSelectedCurrency] = useState(userCurrency || 'USD')
   const [manualRate, setManualRate] = useState<string>(userCurrencyRate != null ? String(userCurrencyRate) : '')
   const [autoRate, setAutoRate] = useState<{ rate: number; updatedAt: string | null } | null>(null)
@@ -247,6 +249,27 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
       setTimeout(() => setPrefsSaved(false), 2000)
       if (locale !== currentLocale) {
         router.refresh()
+      }
+    } catch { /* ignore */ } finally {
+      setPrefsSaving(false)
+    }
+  }
+
+  // 메뉴 위치 저장 — 누르는 즉시 저장하고 화면 배치를 바로 바꾼다(refreshUser)
+  async function saveNavPosition(position: NavPosition) {
+    setSelectedNav(position)
+    setPrefsSaving(true)
+    setPrefsSaved(false)
+    try {
+      const res = await fetch('/api/settings/layout', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ navPosition: position }),
+      })
+      if (res.ok) {
+        onSettingsChanged?.()
+        setPrefsSaved(true)
+        setTimeout(() => setPrefsSaved(false), 2000)
       }
     } catch { /* ignore */ } finally {
       setPrefsSaving(false)
@@ -775,6 +798,31 @@ export default function UserProfileForm({ userId, email, name, avatar, locale: u
                 options={TIMEZONE_OPTIONS.map((tz) => ({ value: tz.value, label: tz.label }))}
               />
               <p className="text-xs text-ive-text-dim mt-1">{t('timezoneDescription')}</p>
+            </div>
+            {/* 메뉴 위치 (PC 폭) */}
+            <div>
+              <label className="block text-sm font-bold text-ive-text-muted mb-1">
+                <i className="fa-solid fa-table-columns mr-1 text-xs" />{t('navPosition')}
+              </label>
+              <div className="flex gap-2">
+                {NAV_POSITIONS.map((pos) => (
+                  <button
+                    key={pos}
+                    type="button"
+                    disabled={prefsSaving}
+                    onClick={() => { if (pos !== selectedNav) saveNavPosition(pos) }}
+                    className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${
+                      selectedNav === pos
+                        ? 'bg-ive-green/15 text-ive-green border border-ive-green/30'
+                        : 'bg-ive-bg-deep border border-ive-border-subtle text-ive-text-dim hover:border-ive-green/30'
+                    }`}
+                  >
+                    <i className={`fa-solid ${pos === 'left' ? 'fa-arrow-left' : pos === 'right' ? 'fa-arrow-right' : 'fa-arrow-down'} mr-1.5 text-xs`} />
+                    {t(`navPosition_${pos}`)}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-ive-text-dim mt-1">{t('navPositionDescription')}</p>
             </div>
             {/* 표시 통화 선택 */}
             <div>

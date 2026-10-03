@@ -1,3 +1,7 @@
+/** PC 폭의 주 메뉴 위치 — 왼쪽·오른쪽 세로 메뉴 또는 하단 탭 */
+export type NavPosition = 'left' | 'right' | 'bottom'
+export const NAV_POSITIONS: NavPosition[] = ['left', 'right', 'bottom']
+
 export interface User {
   id: string
   email: string
@@ -10,6 +14,7 @@ export interface User {
   allowedClis: CliName[]  // 사용 가능한 CLI 도구 목록
   locale?: string      // 사용자 지정 언어
   timezone?: string    // 사용자 지정 타임존 (예: 'Asia/Seoul')
+  navPosition?: NavPosition  // PC 폭(1200px~)의 주 메뉴 위치. 없으면 왼쪽. 폰 폭은 늘 하단 탭
   currency?: string | null     // 표시 통화 코드 (ISO 4217, 예: 'KRW'). null/'USD' = 환산 안 함
   currencyRate?: number | null // 수동 고정 환율 (USD→통화). null = 자동 글로벌 환율 사용 (있으면 자동보다 우선)
   gitlabUsername?: string | null  // 본인 GitLab username. 확인자/담당자→IVE 계정 매핑 fallback(oauth id 매칭 실패 시). 로그인 시 자동 저장 + 직접 입력

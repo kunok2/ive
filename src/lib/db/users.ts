@@ -1,5 +1,5 @@
 import { clearPreferredAgentRefs } from './issues'
-import { User } from '@/types'
+import { User, type NavPosition } from '@/types'
 import { getDb } from './connection'
 import { deleteSlackWorkspace } from './slack'
 
@@ -16,6 +16,7 @@ export function mapUser(r: any): User {
     allowedClis: parseAllowedClis(r.allowed_clis) as User['allowedClis'],
     locale: r.locale,
     timezone: r.timezone,
+    navPosition: r.nav_position === 'right' || r.nav_position === 'bottom' ? r.nav_position : 'left',
     currency: r.currency ?? null,
     currencyRate: r.currency_rate ?? null,
     gitlabUsername: r.gitlab_username ?? null,
@@ -148,6 +149,10 @@ export function updateUserAvatar(id: string, avatar: string, source?: 'upload' |
 
 export function updateUserLocale(id: string, locale: string) {
   getDb().prepare('UPDATE users SET locale = ? WHERE id = ?').run(locale, id)
+}
+
+export function updateUserNavPosition(id: string, position: NavPosition) {
+  getDb().prepare('UPDATE users SET nav_position = ? WHERE id = ?').run(position, id)
 }
 
 export function updateUserTimezone(id: string, timezone: string) {
