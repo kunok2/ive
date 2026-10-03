@@ -356,7 +356,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
                   )}
                 </div>
                 <MarqueeText className="text-sm text-ive-text font-bold">{issue.title}</MarqueeText>
-                <div className="flex items-center gap-3 text-xs text-ive-text-dim mt-1 min-w-0">
+                <div className="flex items-center gap-3 text-xs text-ive-text-secondary mt-1 min-w-0">
                   {target ? (
                     <span className="flex items-center gap-1 min-w-0">
                       <i className={`fa-solid ${target.icon} shrink-0`} />
