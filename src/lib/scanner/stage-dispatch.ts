@@ -201,7 +201,20 @@ async function dispatchConfirm(project: Project, confirmIssues: StageIssue[], to
     if (!agent) continue
 
     staging ??= resolveStagingConfig(project)
-    if (!staging.ok) { note(project.id, iid, `${staging.reason} — 자동 확인 불가, 사람 확인 필요`); continue }
+    // 프로젝트 설정에 저장된 staging 비밀값(테스트 계정 등)을 환경변수로 넘긴다
+    const secrets = getStagingSecrets(project.id)
+    const launch = (args: { deployedCommit: string; mergeCommit: string | null; mrUrl: string | null; noChange?: boolean; desc: string }) => {
+      busy.add(agent.id)
+      note(project.id, iid, null)
+      const executionId = newStageExecutionId('confirm')
+      slog.info(`[DISPATCH] confirm ${project.name} #${iid} → ${agent.name} (${args.desc})`)
+      const st: StagingConfig = staging!.ok ? staging!.value : { url: '', versionSource: 'url', versionUrl: '', commitField: '', branch: null, notes: null }
+      runConfirmWorker({
+        project, issue, agent, token, stage: stage as 'confirm_waiting' | 'confirming',
+        staging: st, deployedCommit: args.deployedCommit, mergeCommit: args.mergeCommit,
+        mrUrl: args.mrUrl, secrets, noChange: args.noChange,
+      }, executionId).catch(err => slog.error({ err }, `[CONFIRM] #${iid} failed`))
+    }
 
     let mergeCommit: string | null = null
     let mrUrl: string | null = null
@@ -213,8 +226,9 @@ async function dispatchConfirm(project: Project, confirmIssues: StageIssue[], to
     } else {
       // MR 의 머지 커밋이 기준 — 검증 통과 즉시 IVE 가 머지했거나 사람이 머지했다
       let mr: any = null
-      try { mr = await fetchMRByBranch(project, token, `dev-${iid}`) } catch (e) { slog.warn(`MR lookup failed #${iid}: ${(e as Error).message}`) }
-      if (!mr) { note(project.id, iid, `코드 변경 없이 끝난 작업(dev-${iid} MR 없음) — 배포로 확인할 것이 없어 사람이 확인해 주세요`); continue }
+      try { mr = await fetchMRByBranch(project, token, `dev-${iid}`) } catch (e) { slog.warn(`MR lookup failed #${iid}: ${(e as Error).message}`); continue }
+      // MR 이 없으면 코드 변경 없이 끝난 작업(질문·조사·보고 등) — 배포를 기다리지 않고 처리 결과가 요건을 충족했는지 확인한다
+      if (!mr) { launch({ deployedCommit: '', mergeCommit: null, mrUrl: null, noChange: true, desc: '코드 변경 없음 — 처리 결과 확인' }); continue }
       const merged = mr.state === 'merged' || !!mr.merged_at
       if (!merged) { note(project.id, iid, 'MR 이 아직 머지되지 않음 — 머지·배포 대기'); continue }
       // fast-forward 머지는 머지 커밋이 없다 — MR 머리 커밋이 그대로 대상 브랜치에 올라간다
@@ -223,23 +237,14 @@ async function dispatchConfirm(project: Project, confirmIssues: StageIssue[], to
       if (!mergeCommit) { note(project.id, iid, '머지 커밋을 알 수 없음 — 자동 확인 불가'); continue }
     }
 
+    // 코드 변경이 있는 작업은 staging 에 배포된 뒤 확인한다
+    if (!staging.ok) { note(project.id, iid, `${staging.reason} — 자동 확인 불가, 사람 확인 필요`); continue }
     deployed ??= await fetchDeployedCommit(staging.value, project, token)
     if (!deployed.ok) { note(project.id, iid, `staging 배포 커밋 확인 실패: ${deployed.reason}`); continue }
     const included = await isAncestorCommit(project, token, mergeCommit, deployed.value)
     if (included === null) { note(project.id, iid, `배포 커밋(${deployed.value.slice(0, 8)}) 포함 여부 판정 불가 — 대기`); continue }
     if (!included) { note(project.id, iid, `staging 배포 대기 (현재 ${deployed.value.slice(0, 8)}, 머지 ${mergeCommit.slice(0, 8)} 미포함)`); continue }
 
-    // 프로젝트 설정에 저장된 staging 비밀값(테스트 계정 등)을 환경변수로 넘긴다
-    const secrets = getStagingSecrets(project.id)
-
-    busy.add(agent.id)
-    note(project.id, iid, null)
-    const executionId = newStageExecutionId('confirm')
-    slog.info(`[DISPATCH] confirm ${project.name} #${iid} → ${agent.name} (deployed ${deployed.value.slice(0, 8)} ⊇ merge ${mergeCommit.slice(0, 8)})`)
-    runConfirmWorker({
-      project, issue, agent, token, stage: stage as 'confirm_waiting' | 'confirming',
-      staging: staging.value, deployedCommit: deployed.value, mergeCommit,
-      mrUrl, secrets,
-    }, executionId).catch(err => slog.error({ err }, `[CONFIRM] #${iid} failed`))
+    launch({ deployedCommit: deployed.value, mergeCommit, mrUrl, desc: `deployed ${deployed.value.slice(0, 8)} ⊇ merge ${mergeCommit.slice(0, 8)}` })
   }
 }

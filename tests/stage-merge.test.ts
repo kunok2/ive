@@ -39,7 +39,7 @@ vi.mock('@/lib/stage-apply', () => applyMock)
 vi.mock('@/lib/merge-watcher', () => watcherMock)
 vi.mock('@/lib/slack-notify', () => ({ notifyStageTransition: vi.fn(async () => undefined), getIveBaseUrl: () => '' }))
 vi.mock('@/lib/scanner/verify-worker', async (orig) => ({ ...(await orig<typeof import('@/lib/scanner/verify-worker')>()), runVerifyWorker: workerMock.runVerifyWorker }))
-vi.mock('@/lib/scanner/confirm-worker', () => ({ runConfirmWorker: workerMock.runConfirmWorker }))
+vi.mock('@/lib/scanner/confirm-worker', async (orig) => ({ ...(await orig<typeof import('@/lib/scanner/confirm-worker')>()), runConfirmWorker: workerMock.runConfirmWorker }))
 
 import { initSchema } from '@/lib/db/schema'
 import {
@@ -47,7 +47,8 @@ import {
   getLatestBundleItem, getProjectAutomation, setIssuePriority, getAssignModeMap, byPriorityThenOldest,
 } from '@/lib/db'
 import { enforceVerifyVerdict, parseVerifyResult } from '@/lib/scanner/verify-worker'
-import { buildVerifyPrompt, VERIFY_EDITABLE_DEFAULT } from '@/lib/role-prompts'
+import { buildVerifyPrompt, VERIFY_EDITABLE_DEFAULT, buildConfirmPrompt, CONFIRM_EDITABLE_DEFAULT } from '@/lib/role-prompts'
+import { enforceConfirmVerdict } from '@/lib/scanner/confirm-worker'
 import { dispatchStageWorkers } from '@/lib/scanner/stage-dispatch'
 import { openAgentStageExecution, setStageVerdict } from '@/lib/scanner/stage-records'
 import { mergeVerified, handOffLegacyBundleQueue, reopenIfClosedBeforeConfirm } from '@/lib/scanner/auto-merge'
@@ -365,5 +366,41 @@ describe('W-1 진행 중 실행을 눌렀을 때 갈 곳', async () => {
     expect(execHref({ id: 'ex-confirm-3', assigneeType: 'agent', issueIid: 9 }, P)).toBe('/executions/ex-confirm-3')
     expect(execHref({ id: 'ex-verify-4', assigneeType: 'user', issueIid: 9 }, P)).toBe(`/issues/${P}/9`)
     expect(execHref({ id: 'exec-chat-5', assigneeType: 'agent', issueIid: 9 }, P)).toBe(`/issues/${P}/9`)
+  })
+})
+
+describe('C-2 코드 변경 없는 작업의 확인', () => {
+  const issue = (iid: number) => ({ iid, title: `t${iid}`, author: { username: 'kim' }, created_at: '2026-10-01T00:00:00Z' })
+  beforeEach(() => {
+    replaceProjectMembers(P, [{ username: 'kim', name: 'Kim', avatarUrl: '', provider: 'gitlab', gitUserId: '1' }])
+    setRosterEntry(P, { subjectType: 'agent', subjectId: 'a1', roles: { process: false, verify: false, confirm: true } }, 'owner')
+    setPresetRoles(P, 71, { confirmer: { mode: 'agent', userId: null, username: null, agentId: 'a1' } })
+  })
+  it('MR 이 없으면 배포를 기다리지 않고 처리 결과 확인으로 기동한다 — staging 설정이 없어도', async () => {
+    providerMock.fetchMRByBranch.mockResolvedValue(null)
+    await dispatchStageWorkers(project, [{ issue: issue(71), stage: 'confirm_waiting' }], 'tok')
+    expect(workerMock.runConfirmWorker).toHaveBeenCalledTimes(1)
+    const [input] = workerMock.runConfirmWorker.mock.calls[0] as unknown as [any]
+    expect(input).toMatchObject({ noChange: true, deployedCommit: '', mergeCommit: null })
+    expect(providerMock.fetchBranchPipelines).not.toHaveBeenCalled()
+  })
+  it('MR 조회가 실패하면 코드 변경 없는 작업으로 오인하지 않는다', async () => {
+    providerMock.fetchMRByBranch.mockRejectedValue(new Error('502'))
+    await dispatchStageWorkers(project, [{ issue: issue(71), stage: 'confirm_waiting' }], 'tok')
+    expect(workerMock.runConfirmWorker).not.toHaveBeenCalled()
+  })
+  it('증거는 스크린샷이 아니어도 되지만 항목마다 있어야 한다', () => {
+    const r = { verdict: 'pass' as const, summary: '', reason: '', engines: [], screenshots: [], commands: [], newDefects: [],
+      items: [{ item: '내일 날씨', how: '기상청 단기예보', result: 'gone' as const, evidence: ['https://www.weather.go.kr … 맑음 18℃'] }] }
+    expect(enforceConfirmVerdict(r, 0, true, false).verdict).toBe('pass')
+    expect(enforceConfirmVerdict(r, 0, true, true).verdict).toBe('blocked')
+    expect(enforceConfirmVerdict({ ...r, items: [{ ...r.items[0], evidence: [] }] }, 0, true, false).verdict).toBe('blocked')
+  })
+  it('프롬프트 — 처리 결과를 독립된 근거로 대조한다', () => {
+    const p = buildConfirmPrompt({ iid: 91, title: '내일의 날씨는?', body: '', isKo: true, stagingUrl: '', deployedCommit: '', mergeCommit: null, mrUrl: null,
+      stagingNotes: null, e2eScript: null, secretEnvNames: [], outDir: '.ive-out', imagesSection: '', maxRunMinutes: 30, noChange: true, priorWork: '### 처리자 결과 보고\n맑음' }, CONFIRM_EDITABLE_DEFAULT)
+    expect(p).toContain('코드 변경 없이')
+    expect(p).toContain('독립된 근거')
+    expect(p).not.toContain('staging 이 내보내는 커밋')
   })
 })

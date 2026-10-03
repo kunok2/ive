@@ -47,10 +47,16 @@ export interface ConfirmInput {
   /** 기동 시점 단계: confirm_waiting(P) 이면 C 로 옮기고 시작, confirming(C) 이면 이어서 */
   stage: 'confirm_waiting' | 'confirming'
   staging: StagingConfig
+  /** 코드 변경 없는 작업이면 '' — 워크스페이스는 대상 브랜치 최신본 */
   deployedCommit: string
   mergeCommit: string | null
   mrUrl: string | null
   secrets: Record<string, string>
+  /**
+   * 코드 변경 없이 끝난 작업(질문·조사·보고 등 — MR 없음). 배포를 기다리지 않고 처리 결과(처리자 보고·검증 노트)가
+   * 이슈 요건을 실제로 충족했는지 확인한다. 증거는 스크린샷이 아니어도 된다(출처·측정값) — 항목마다 증거는 있어야 한다.
+   */
+  noChange?: boolean
 }
 
 interface ConfirmPrep {
@@ -194,14 +200,14 @@ export function parseResult(workspacePath: string, logPath: string): ConfirmResu
  *   - 증상이 남은 항목(present)이 있으면 fail(재처리)
  *   - pass 인데 남은 스크린샷이 없거나, 증거 없는/확인 못 한 항목이 있으면 blocked(사람 확인) — 처리자 잘못이 아니라 증명이 안 된 것
  */
-export function enforceConfirmVerdict(r: ConfirmResult, savedScreens: number, isKo = true): ConfirmResult {
+export function enforceConfirmVerdict(r: ConfirmResult, savedScreens: number, isKo = true, requireScreens = true): ConfirmResult {
   const present = r.items.filter(c => c.result === 'present')
   if (r.verdict !== 'fail' && present.length) {
     return { ...r, verdict: 'fail', reason: [isKo ? `증상이 남은 항목 ${present.length}개` : `${present.length} item(s) still present`, r.reason].filter(Boolean).join(' — ') }
   }
   if (r.verdict !== 'pass') return r
   const reasons: string[] = []
-  if (savedScreens === 0) reasons.push(isKo ? '증거 스크린샷이 없습니다' : 'no evidence screenshots')
+  if (requireScreens && savedScreens === 0) reasons.push(isKo ? '증거 스크린샷이 없습니다' : 'no evidence screenshots')
   if (!r.items.length) reasons.push(isKo ? '확인 항목(items)이 없습니다' : 'no items listed')
   const unproven = r.items.filter(c => c.result !== 'gone' || !c.evidence.length)
   if (unproven.length) reasons.push(isKo ? `증거로 보이지 못한 항목 ${unproven.length}개` : `${unproven.length} item(s) without evidence`)
@@ -295,8 +301,9 @@ async function buildEvidenceComment(
   }
   if (result.items.length) lines.push('')
   // IVE 설정 값이라도 주소에 넣은 계정(user:pass@)은 가린다
-  lines.push(`- staging: ${maskSecrets(input.staging.url)}`)
-  lines.push(`- ${t('배포 커밋', 'Deployed commit')}: \`${input.deployedCommit.slice(0, 12)}\` · ${t('머지 커밋', 'Merge commit')}: \`${mergeShort}\` (${t('포함 확인', 'included')})`)
+  if (input.staging.url) lines.push(`- staging: ${maskSecrets(input.staging.url)}`)
+  if (input.noChange) lines.push(`- ${t('확인 대상', 'Confirmed')}: ${t('처리 결과 (코드 변경 없는 작업 — 배포 없음)', 'the work result (no code change — nothing deployed)')}`)
+  else lines.push(`- ${t('배포 커밋', 'Deployed commit')}: \`${input.deployedCommit.slice(0, 12)}\` · ${t('머지 커밋', 'Merge commit')}: \`${mergeShort}\` (${t('포함 확인', 'included')})`)
   if (input.mrUrl) lines.push(`- MR: ${maskSecrets(input.mrUrl)}`)
   lines.push(`- ${t('확인 에이전트', 'Confirmer agent')}: ${agent.name} · ${t('재현 스크립트', 'Repro script')}: ${prep.e2eScript || t('없음', 'none')}`)
   for (const c of result.commands.slice(0, 20)) lines.push(`- \`${c.replace(/`/g, "'")}\``)
@@ -341,10 +348,12 @@ function confirmSpec(input: ConfirmInput): StageKindSpec<ConfirmPrep> {
         markIssueConfirmStarted(project.id, iid)
         log(`단계: 확인대기 → ${next === 'confirming' ? '확인 중' : next}`, 'system')
       }
-      log(`staging: ${input.staging.url}`, 'system')
-      log(`배포 커밋: ${input.deployedCommit} (머지 커밋 ${input.mergeCommit ?? '?'} 포함 확인됨)`, 'system')
+      if (input.staging.url) log(`staging: ${input.staging.url}`, 'system')
+      if (input.noChange) log('코드 변경 없는 작업 — 배포를 기다리지 않고 처리 결과(처리자 보고·검증 노트)를 확인합니다', 'system')
+      else log(`배포 커밋: ${input.deployedCommit} (머지 커밋 ${input.mergeCommit ?? '?'} 포함 확인됨)`, 'system')
 
-      await cloneAtCommit(project, workspacePath, token, input.staging.branch || project.baseBranch || null, input.deployedCommit, log)
+      // 코드 변경 없는 작업은 대상 브랜치 최신본(근거 확인용, 읽기만)
+      await cloneAtCommit(project, workspacePath, token, input.staging.branch || project.baseBranch || null, input.noChange ? 'HEAD' : input.deployedCommit, log)
       fs.mkdirSync(path.join(workspacePath, OUT_DIR, 'screens'), { recursive: true })
       excludeFromGit(workspacePath, [`${OUT_DIR}/`, '.mcp.json', '.issue-attachments/', '.agents/', '.octmp/'])
 
@@ -376,8 +385,9 @@ function confirmSpec(input: ConfirmInput): StageKindSpec<ConfirmPrep> {
         const body = (n: any) => String(n?.body || '')
         const lastOf = (re: RegExp) => [...notes].reverse().find(n => re.test(body(n)))
         const stripMeta = (x: string) => x.replace(/<!--[\s\S]*?-->/g, '').trim()
-        const dev = lastOf(/^## ✅ 개발 완료/m)
-        const devReport = dev ? (body(dev).split(/^### 📝 (?:결과|수행 작업)\s*$/m)[1] || '') : ''
+        const dev = lastOf(/^## (?:✅ 개발 완료|⚠️ 변경사항 없음)/m)
+        // 결과 절이 없으면(코드 변경 없는 처리 등) 보고 전체
+        const devReport = dev ? (body(dev).split(/^### 📝 (?:결과|수행 작업)\s*$/m)[1] || body(dev)) : ''
         const ver = lastOf(/^## ✅ 검증 통과/m)
         priorWork = [
           devReport.trim() ? `### 처리자 결과 보고\n${stripMeta(devReport).slice(0, 4000)}` : '',
@@ -399,7 +409,7 @@ function confirmSpec(input: ConfirmInput): StageKindSpec<ConfirmPrep> {
         iid: ctx.iid, title: ctx.issue.title, body: ctx.issue.description || '', isKo: ctx.isKo,
         priorWork: prep.priorWork, comments: prep.comments,
         stagingUrl: input.staging.url, deployedCommit: input.deployedCommit, mergeCommit: input.mergeCommit,
-        mrUrl: input.mrUrl, stagingNotes: input.staging.notes,
+        mrUrl: input.mrUrl, stagingNotes: input.staging.notes, noChange: !!input.noChange,
         e2eScript: prep.e2eScript, secretEnvNames: Object.keys(input.secrets), outDir: OUT_DIR,
         imagesSection: prep.imagesSection, maxRunMinutes: limits.confirmTimeoutMin,
       }, editable ?? CONFIRM_EDITABLE_DEFAULT)
@@ -437,7 +447,7 @@ function confirmSpec(input: ConfirmInput): StageKindSpec<ConfirmPrep> {
       // 증거로 남은 스크린샷 수 — 증거 없는 통과는 통과가 아니다(enforceConfirmVerdict)
       const screensDir = path.join(destDir, 'screens')
       const savedScreens = fs.existsSync(screensDir) ? fs.readdirSync(screensDir).filter(f => /\.(png|jpe?g|webp)$/i.test(f)).length : 0
-      const result = enforceConfirmVerdict(masked, savedScreens, isKo)
+      const result = enforceConfirmVerdict(masked, savedScreens, isKo, !input.noChange)
       log(`판정: ${result.verdict}${result.reason ? ` — ${result.reason}` : ''}${result.verdict !== masked.verdict ? ` (에이전트 판정 ${masked.verdict} → IVE 규약으로 ${result.verdict})` : ''}`, 'system')
       fs.writeFileSync(path.join(destDir, 'result.json'), JSON.stringify({
         ...result, executionId, agent: agent.name, deployedCommit: input.deployedCommit, mergeCommit: input.mergeCommit,
@@ -504,7 +514,7 @@ function confirmSpec(input: ConfirmInput): StageKindSpec<ConfirmPrep> {
 
 export async function runConfirmWorker(input: ConfirmInput, executionId: string): Promise<void> {
   const workspacePath = path.join(process.cwd(), 'workspaces', input.project.id, `issue-${input.issue.iid}-confirm`)
-  slog.info(`[CONFIRM] ${input.project.name} #${input.issue.iid} agent=${input.agent.name} deployed=${input.deployedCommit.slice(0, 12)}`)
+  slog.info(`[CONFIRM] ${input.project.name} #${input.issue.iid} agent=${input.agent.name} ${input.noChange ? 'no-change' : `deployed=${input.deployedCommit.slice(0, 12)}`}`)
   await runStageWorker(confirmSpec(input), {
     project: input.project, issue: input.issue, agent: input.agent, token: input.token,
     executionId, workspacePath, extraSecrets: Object.values(input.secrets),

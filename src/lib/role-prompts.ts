@@ -58,6 +58,8 @@ export interface ConfirmPromptInput {
   mrUrl: string | null
   /** 프로젝트 설정의 staging 안내 (로그인 방법 등) */
   stagingNotes: string | null
+  /** 코드 변경 없이 끝난 작업(MR 없음) — 배포 대신 처리 결과가 요건을 충족했는지 확인한다 */
+  noChange?: boolean
   /** 처리자의 결과 보고 + 검증자의 통과 노트(요건 대조) — 무엇이 구현됐어야 하는지 */
   priorWork?: string
   /** 사람이 쓴 이슈 코멘트(시간순) — 요건 정정·재작업 지시 */
@@ -104,6 +106,7 @@ function confirmFixed(i: ConfirmPromptInput): string {
 }
 
 export function buildConfirmPrompt(i: ConfirmPromptInput, editable: string): string {
+  if (i.noChange) return buildConfirmNoChangePrompt(i, editable)
   const context = `## 확인할 이슈 #${i.iid}: ${i.title}
 ${i.body || '(본문 없음)'}
 ${i.comments ? `\n### 이슈 코멘트 (사람이 쓴 것, 시간순 — 나중 정정이 우선)\n${i.comments}\n` : ''}${i.imagesSection}
@@ -121,6 +124,29 @@ ${context}
 ## 확인 방법
 ${editable}
 ${i.stagingNotes ? `\n## staging 안내\n${i.stagingNotes}\n` : ''}
+${confirmFixed(i)}`
+}
+
+/**
+ * 코드 변경 없이 끝난 작업(질문·조사·보고 등 — MR 없음)의 확인. 배포된 것이 없으니 처리 결과(처리자 보고·검증 노트)가
+ * 이슈 요건을 실제로 충족했는지 증거로 증명한다 — 답·조사 결과는 독립된 출처로 대조하고, 화면·소스가 걸린 작업이면 staging·저장소에서 본다.
+ */
+function buildConfirmNoChangePrompt(i: ConfirmPromptInput, editable: string): string {
+  return `너는 IVE 의 확인자 에이전트다. 이 작업은 **코드 변경 없이** 끝났다(질문·조사·보고 등 — 배포된 것 없음).
+처리자가 처리하고 검증자가 통과시킨 결과가 이슈의 요건을 **실제로** 충족하는지 증명하고 증거를 남긴다.
+
+## 확인할 이슈 #${i.iid}: ${i.title}
+${i.body || '(본문 없음)'}
+${i.comments ? `\n### 이슈 코멘트 (사람이 쓴 것, 시간순 — 나중 정정이 우선)\n${i.comments}\n` : ''}${i.imagesSection}
+${i.priorWork ? `## 처리·검증 결과 (확인 대상)\n${i.priorWork}\n` : '## 처리·검증 결과\n(보고를 찾지 못했다 — 이슈 요건을 기준으로 확인한다)\n'}
+## 확인 방법
+- 이슈 요건(물음·요청)을 하나씩 확인 항목으로 세우고, 처리 결과가 그 요건을 충족하는지 **독립된 근거**로 확인한다.
+  - 답·조사 결과는 처리자의 말을 그대로 믿지 않고 직접 대조한다(웹·공개 API·공식 문서 등). 어디서 무엇을 봤는지(주소·값)를 증거로 남긴다.
+  - 저장소 코드·설정에 관한 것이면 워크스페이스(대상 브랜치 최신본, 읽기만)에서 확인하고 파일:줄을 증거로 남긴다.
+  - 화면에 관한 것이면 ${i.stagingUrl ? `staging(${i.stagingUrl})을` : '해당 화면을'} Playwright MCP 로 열어 보고 스크린샷을 남긴다.
+- 처리 결과가 요건을 충족하지 못했거나 틀렸으면 그 항목은 present(재처리) — 무엇이 틀렸고 어떻게 고쳐야 하는지 적는다.
+- 증거 없는 항목은 unverified 다. 스크린샷이 아니어도 된다(출처 주소·확인한 값·파일:줄).
+${editable.trim() ? `\n### 프로젝트 확인 지침 (배포 작업용 — 이 작업에 맞는 것만 적용)\n${editable}\n` : ''}${i.stagingNotes ? `\n## staging 안내\n${i.stagingNotes}\n` : ''}
 ${confirmFixed(i)}`
 }
 
