@@ -38,6 +38,8 @@ interface IssueDetail {
     devEndedAt: string | null
     verifyStartedAt: string | null
     verifyEndedAt: string | null
+    /** 확인 시작(확인대기 → 확인 중) — 확인 시간·확인 대기의 경계 */
+    confirmStartedAt?: string | null
     confirmedAt: string | null
   }
   /** 되돌림 — 진행 막대 칸(1 유입 … 5 완료) 사이를 뒤로 간 이동과 횟수 */
@@ -150,7 +152,8 @@ export default function IssueHeader({
         )}
         <span className="text-base font-bold text-ive-green shrink-0">#{issue.iid}</span>
         <PriorityBadge priority={issue.priority} />
-        {iterationCount > 0 && (
+        {/* 처리가 2회 이상일 때만 — 1회는 평범하다(카드와 같은 규칙) */}
+        {iterationCount >= 2 && (
           <span className="text-xs font-bold px-1.5 py-0.5 rounded border bg-ive-cyan/10 text-ive-cyan border-ive-cyan/20 shrink-0" title={tIssue('iterationCount', { count: iterationCount })}>
             <i className="fa-solid fa-repeat mr-0.5" />{tIssue('iterationLabel', { count: iterationCount })}
           </span>

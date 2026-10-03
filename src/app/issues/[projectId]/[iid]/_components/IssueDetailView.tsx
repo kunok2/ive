@@ -65,6 +65,8 @@ interface IssueAssignee {
 
 interface IssueDetail {
   iid: number
+  /** 단계별 진입 횟수 — toProcess 는 처리 실행 수 */
+  forwardCounts?: { toProcess: number; toVerify: number; toConfirm: number; toDone: number }
   /** 단계 작업자(에이전트)가 기동하지 못한 사유 — 있으면 사람이 직접 시작할 수 있게 안내 줄에 보인다 */
   stageWorkerNote?: string | null
   /** 0 보통 · 1 높음 · 2 긴급 (IVE 에만 저장) */
@@ -996,7 +998,8 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
   const displayStage = issue.state === 'closed' ? 'closed' : issue.stage
   const stageInfo = STAGE_INFO[displayStage] || STAGE_INFO.unknown
   const actions = issue.state === 'closed' ? [] : (STAGE_ACTIONS[issue.stage] || [])
-  const iterationCount = notes.filter(n => n.body.includes('<!-- ive-bot -->') || n.body.includes('IVE(봇)')).length
+  // 처리 횟수 — 실제 처리 실행 수(카드의 ↻ 와 같은 근거). 봇 코멘트 수를 세면 검증·확인 결과까지 더해져 한 번에 통과해도 「4차」가 된다
+  const iterationCount = issue.forwardCounts?.toProcess ?? 0
 
   return (
     <div className="h-full flex flex-col">

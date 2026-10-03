@@ -162,11 +162,15 @@ export default function IssueAutomationPanel({
             {run.result?.summary && <p className="text-xs text-ive-text whitespace-pre-wrap leading-relaxed">{run.result.summary}</p>}
             {run.result?.reason && v !== 'pass' && <p className="text-xs text-ive-text-muted"><b>{t('reason')}</b>: {run.result.reason}</p>}
             {run.images.length > 0 && (
-              <div className="grid grid-cols-2 gap-2">
+              // 증적은 버튼·라벨만 잘라 찍은 작은 이미지가 많다 — 칸 폭에 맞춰 키우면 흐릿하게 커진다.
+              // 고정 높이 칸 안에 원본 크기 이하로(비율 유지) 보이고, 누르면 원본을 연다
+              <div className="grid grid-cols-2 desk:grid-cols-4 gap-2">
                 {run.images.map(img => (
-                  <a key={img} href={fileUrl(run, img)} target="_blank" rel="noreferrer" className="block">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={fileUrl(run, img)} alt={img} className="w-full rounded-lg border border-ive-border-dark" />
+                  <a key={img} href={fileUrl(run, img)} target="_blank" rel="noreferrer" className="block min-w-0">
+                    <span className="h-36 flex items-center justify-center rounded-lg border border-ive-border-dark bg-ive-bg-deep overflow-hidden p-1">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={fileUrl(run, img)} alt={img} className="max-w-full max-h-full object-contain" />
+                    </span>
                     <span className="block text-xs text-ive-text-dim mt-0.5 truncate">{captions.get(img) || img.split('/').pop()}</span>
                   </a>
                 ))}

@@ -50,6 +50,8 @@ interface StageTimes {
   devEndedAt: string | null
   verifyStartedAt: string | null
   verifyEndedAt: string | null
+  /** 확인 시작(확인대기 → 확인 중) — 확인 시간·확인 대기의 경계 */
+  confirmStartedAt?: string | null
   confirmedAt: string | null
 }
 
@@ -128,15 +130,20 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
     1: null,
     2: stageTimes?.devStartedAt ? (current === 2 ? stageEnd - new Date(stageTimes.devStartedAt).getTime() : ms(stageTimes.devStartedAt, stageTimes?.devEndedAt)) : null,
     3: stageTimes?.verifyStartedAt ? (current === 3 ? stageEnd - new Date(stageTimes.verifyStartedAt).getTime() : ms(stageTimes.verifyStartedAt, stageTimes?.verifyEndedAt)) : null,
-    4: stageTimes?.verifyEndedAt ? (current === 4 ? stageEnd - new Date(stageTimes.verifyEndedAt).getTime() : ms(stageTimes.verifyEndedAt, stageTimes?.confirmedAt)) : null,
+    // 확인: 확인 시작 → 확인 완료(확인을 기다린 시간은 3→4 커넥터에). 시작 기록이 없는 옛 이슈는 검증 끝 → 확인 완료
+    4: (() => {
+      const from = stageTimes?.confirmStartedAt ?? (stage === 'confirm_waiting' ? null : stageTimes?.verifyEndedAt)
+      if (!from) return null
+      return current === 4 && stage !== 'confirm_waiting' && !stageTimes?.confirmedAt ? stageEnd - new Date(from).getTime() : ms(from, stageTimes?.confirmedAt)
+    })(),
     5: null,
   }
   // 커넥터 대기시간 (i 번째 → i+1 번째 사이)
   //   1→2: scheduledAt → firstDevStartedAt (처리대기 진입 후 픽업까지) — 진행 중이면 elapsed
   //         stage='none'(IVE-S 미부착) 일 때는 시간 카운트 안 함.
   //   2→3: devEndedAt → verifyStartedAt (처리 완료 후 검증 대기) — 진행 중이면 elapsed
-  //   3→4: 검증→확인은 시작 시각이 verifyEndedAt 과 동일 (대기 0)
-  //   4→5: confirmedAt → closedAt
+  //   3→4: verifyEndedAt → confirmStartedAt (검증 통과 후 확인 대기) — 확인대기 중이면 elapsed
+  //   4→5: 없음 — 완료는 확인 완료 시점이다(그 뒤 Git 이 이슈를 닫기까지의 지연은 작업 시간이 아니다)
   const elapsedFrom = (t: string | null | undefined): number | null => t ? Math.max(0, now - new Date(t).getTime()) : null
   const waitDur: Record<number, number | null> = {
     // 처리대기 → 처리 픽업: scheduledAt 기준. stage='none' 이면 scheduledAt=null → 표시 안 함.
@@ -146,8 +153,10 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
     2: stageTimes?.verifyStartedAt
       ? ms(stageTimes?.devEndedAt, stageTimes.verifyStartedAt)
       : (stage === 'verify_waiting' ? elapsedFrom(stageTimes?.devEndedAt) : null),
-    3: null,
-    4: ms(stageTimes?.confirmedAt, closedAt),
+    3: stageTimes?.confirmStartedAt
+      ? ms(stageTimes?.verifyEndedAt, stageTimes.confirmStartedAt)
+      : (stage === 'confirm_waiting' ? elapsedFrom(stageTimes?.verifyEndedAt) : null),
+    4: null,
   }
 
   // 검증자/확인자 모달 — 로컬 AssigneePickerModal 통일 사용

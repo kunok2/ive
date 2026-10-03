@@ -180,7 +180,8 @@ function getIterationCounts(projectId: string, issueIid?: number): Map<number, I
 
   // toProcess: 전체 dev execution 수
   // toVerify: 검증 단계로 넘어간 dev execution 수 (verify_started_at 가 채워진 것)
-  const DEV_FILTER = "id NOT LIKE 'ex-verify-%' AND id NOT LIKE 'ex-confirm-%'"
+  // 처리 실행만 — 검증·확인 기록, AI 채팅, 충돌 해결, 재현 실행은 처리 횟수가 아니다(보고서의 처리 실행 판정과 같다)
+  const DEV_FILTER = "id NOT LIKE 'ex-verify-%' AND id NOT LIKE 'ex-confirm-%' AND id NOT LIKE 'exec-chat-%' AND id NOT LIKE 'ex-conflict%' AND id NOT LIKE 'ex-reproduce-%'"
   const execRows = db.prepare(
     `SELECT issue_iid,
             COUNT(*) AS total,
