@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl'
 import type { Project, TaskExecution } from '@/types'
 import type { TodayDoneIssue } from '@/lib/db/issues'
 import { useTab } from '@/lib/tab-context'
-import { execKind, ageOf, ageText, STAGE_TONE } from '@/lib/active-work'
+import { execKind, execHref, ageOf, ageText, STAGE_TONE } from '@/lib/active-work'
 import WaitPill from '@/components/project/WaitPill'
 import CountBump from '@/components/ui/CountBump'
 import AgentAvatar from '@/components/agent/AgentAvatar'
@@ -96,18 +96,18 @@ export default function ProjectBoard({ project }: { project: Project }) {
       cols.process.push({ ...base, who: tp(WAIT_LABEL.process), startedAt: i.createdAt ?? null, waiting: true })
     } else if (i.stage === 'dev') {
       const e = execFor(i.iid, 'process')
-      // 에이전트가 처리 중이면 실시간 실행 화면으로
-      cols.process.push({ ...base, who: execWho(e), face: execFace(e), startedAt: e?.startedAt ?? null, href: e && e.assigneeType !== 'user' ? `/executions/${e.id}` : base.href })
+      // 에이전트가 처리 중이면 실시간 실행 화면으로(검증·확인도 같다 — execHref)
+      cols.process.push({ ...base, who: execWho(e), face: execFace(e), startedAt: e?.startedAt ?? null, href: e ? execHref(e, project.id) : base.href })
     } else if (i.stage === 'verify_waiting') {
       cols.verify.push({ ...base, who: tp(WAIT_LABEL.verify), startedAt: null, waiting: true })
     } else if (i.stage === 'verifying') {
       const e = execFor(i.iid, 'verify')
-      cols.verify.push({ ...base, who: i.actualVerifier?.name ?? execWho(e), face: i.actualVerifier?.name ? actorFace(i.actualVerifier) : execFace(e), startedAt: e?.startedAt ?? null })
+      cols.verify.push({ ...base, who: i.actualVerifier?.name ?? execWho(e), face: i.actualVerifier?.name ? actorFace(i.actualVerifier) : execFace(e), startedAt: e?.startedAt ?? null, href: e ? execHref(e, project.id) : base.href })
     } else if (i.stage === 'confirm_waiting') {
       cols.confirm.push({ ...base, who: tp(WAIT_LABEL.confirm), startedAt: null, waiting: true })
     } else if (i.stage === 'confirming') {
       const e = execFor(i.iid, 'confirm')
-      cols.confirm.push({ ...base, who: i.actualConfirmer?.name ?? execWho(e), face: i.actualConfirmer?.name ? actorFace(i.actualConfirmer) : execFace(e), startedAt: e?.startedAt ?? null })
+      cols.confirm.push({ ...base, who: i.actualConfirmer?.name ?? execWho(e), face: i.actualConfirmer?.name ? actorFace(i.actualConfirmer) : execFace(e), startedAt: e?.startedAt ?? null, href: e ? execHref(e, project.id) : base.href })
     }
   }
   // 이슈 목록(Git 조회)에 없거나 아직 못 받은 진행 중 실행도 그 종류의 칸에 둔다 — 카드의 진행 중 목록과 같은 근거(실행 기록)
@@ -118,7 +118,7 @@ export default function ProjectBoard({ project }: { project: Project }) {
     if (cols[col].some(it => it.iid === e.issueIid)) continue
     cols[col].push({
       key: `e-${e.id}`, iid: e.issueIid, title: e.issueTitle ?? '', who: execWho(e), face: execFace(e), startedAt: e.startedAt,
-      href: kind === 'process' && e.assigneeType !== 'user' ? `/executions/${e.id}` : issueHref(e.issueIid),
+      href: execHref(e, project.id),
     })
   }
   // 완료(오늘) — 카드의 「완료」 숫자와 같은 근거: 오늘 완료·반려로 바뀐 이슈(issue_stages).

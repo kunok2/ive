@@ -26,6 +26,14 @@ export function execKind(id: string): WorkKind {
   return 'process'
 }
 
+/**
+ * 진행 중인 실행을 눌렀을 때 갈 곳 — 에이전트가 돌린 실행(처리·검증·확인)은 실시간 실행 화면(트레이스),
+ * 사람이 맡은 일과 AI 채팅은 이슈 상세(검증·확인 버튼·대화가 있는 곳). 카드·PC 단계 보드·실행 목록이 같은 규칙을 쓴다.
+ */
+export function execHref(e: { id: string; assigneeType?: string | null; issueIid: number }, projectId: string): string {
+  return e.assigneeType === 'user' || execKind(e.id) === 'chat' ? `/issues/${projectId}/${e.issueIid}` : `/executions/${e.id}`
+}
+
 export interface Age { unit: 'now' | 'min' | 'hour' | 'day'; n: number; aged: boolean }
 
 /**

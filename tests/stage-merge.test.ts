@@ -356,3 +356,14 @@ describe('P-1 우선순위', () => {
     expect(input.issue.iid).toBe(62)
   })
 })
+
+describe('W-1 진행 중 실행을 눌렀을 때 갈 곳', async () => {
+  const { execHref } = await import('@/lib/active-work')
+  it('에이전트 실행은 처리·검증·확인 모두 트레이스, 사람 작업·채팅은 이슈 상세', () => {
+    expect(execHref({ id: 'ex-1', assigneeType: 'agent', issueIid: 9 }, P)).toBe('/executions/ex-1')
+    expect(execHref({ id: 'ex-verify-2', assigneeType: 'agent', issueIid: 9 }, P)).toBe('/executions/ex-verify-2')
+    expect(execHref({ id: 'ex-confirm-3', assigneeType: 'agent', issueIid: 9 }, P)).toBe('/executions/ex-confirm-3')
+    expect(execHref({ id: 'ex-verify-4', assigneeType: 'user', issueIid: 9 }, P)).toBe(`/issues/${P}/9`)
+    expect(execHref({ id: 'exec-chat-5', assigneeType: 'agent', issueIid: 9 }, P)).toBe(`/issues/${P}/9`)
+  })
+})

@@ -14,7 +14,7 @@ import MarqueeText from '@/components/ui/MarqueeText'
 import ActiveWorkList, { type ActiveItem } from '@/components/project/ActiveWorkList'
 import WaitPill from '@/components/project/WaitPill'
 import CountBump from '@/components/ui/CountBump'
-import { execKind, ageOf, ageText } from '@/lib/active-work'
+import { execKind, execHref, ageOf, ageText } from '@/lib/active-work'
 import ConflictResolutionPanel from '@/components/mr/ConflictResolutionPanel'
 import type { ToolActivity } from '@/lib/tool-activity'
 import { useTranslations } from 'next-intl'
@@ -618,7 +618,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
                 : <AgentAvatar avatar={ex.agentAvatar ?? 'av-01'} size="sm" toolBadge={kind === 'chat' ? null : (activity?.category ?? null)} />,
               startedAt: ex.startedAt,
               // 에이전트 → 실시간 실행 화면(LiveTracePanel 「전체화면」과 같은 곳), 사람·채팅 → 이슈 상세(검증·확인 버튼이 있는 곳)
-              onClick: () => router.push(isUser || kind === 'chat' ? `/issues/${project.id}/${ex.issueIid}` : `/executions/${ex.id}`),
+              onClick: () => router.push(execHref(ex, project.id)),
             }
           }),
           ...(['verify', 'confirm'] as const).flatMap(kind =>
