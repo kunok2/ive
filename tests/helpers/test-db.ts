@@ -159,6 +159,7 @@ export function setupTestDb(): Database.Database {
       cache_creation_input_tokens INTEGER NOT NULL DEFAULT 0,
       work_sec INTEGER NOT NULL DEFAULT 0,
       stage_verdict TEXT DEFAULT NULL,
+      end_reason TEXT DEFAULT NULL,
       FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
     );
 

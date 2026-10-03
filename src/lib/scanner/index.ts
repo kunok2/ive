@@ -66,6 +66,7 @@ import { resolveIssueRequesterAsync, resolveStageActorAsync } from "../ive-autho
 import { fetchIssueLabelEvents } from "../provider";
 import { isGitBotUser } from "../git-bot";
 import { markersForStageChange, stageLabelFor } from "../stage-transitions";
+import { requeueRestartInterrupted, RESTART_GAVE_UP_NOTE } from "./restart-requeue";
 import { openStageExecution, closeStageExecutions, hasOpenStageExecution, pickStageMeta, type StageKind } from "./stage-records";
 import { startStatsCollector } from "../stats-collector";
 import { startReportScheduler } from "../report-scheduler";
@@ -628,6 +629,11 @@ async function scanProject(project: Project, force: boolean = false) {
         }
       }
 
+      // 재기동 재처리: 서버 재기동으로 끊겨 처리 실패로 남은 처리(dev)를 대기로 되돌린다 (restart-requeue.ts)
+      if (stage === 'dev_fail' && !activeExec && getAssignModeMap(project.id).get(iid)?.mode !== 'assignee') {
+        if (await requeueRestartInterrupted(project, iid, decryptedToken) === 'requeued') continue;
+      }
+
       // 담당자 모드: 담당자가 Git에서 IVE-D를 직접 부여한 경우 → 브랜치 생성 + execution 생성
       // dev_fail = IVE-D 있지만 활성 execution 없음 → assignee 모드이면 execution 생성
       if (stage === 'dev_fail' && !activeExec) {
@@ -742,6 +748,9 @@ async function scanProject(project: Project, force: boolean = false) {
       // 처리 대기를 벗어났으면(사람이 라벨로 옮긴 경우 등) 「지정 처리 에이전트를 쓸 수 없음」 안내는 더 이상 맞지 않다
       if (stage !== 'waiting') {
         try { if (getStageWorkerNote(project.id, iid) === PROCESSOR_INELIGIBLE_NOTE) setStageWorkerNote(project.id, iid, null); } catch { /* ignore */ }
+      }
+      if (stage !== 'dev_fail') {
+        try { if (getStageWorkerNote(project.id, iid) === RESTART_GAVE_UP_NOTE) setStageWorkerNote(project.id, iid, null); } catch { /* ignore */ }
       }
     }
 

@@ -3,6 +3,9 @@ import { getDb } from './connection'
 import { getKSTTodayStartISO, getKSTYesterdayStartISO } from '../date-utils'
 import { getIssueAssigneeUsername } from './issues'
 import type { IssueStage } from './issues'
+import { getLogger } from '../logger'
+
+const dlog = getLogger('DB')
 
 /**
  * timestamp 정규화 — DB 에 저장하기 전 모든 시각 컬럼은 이걸 통과해야 한다.
@@ -133,21 +136,55 @@ export function killExecution(id: string): boolean {
   return true
 }
 
+/**
+ * 서버 기동 시 — 지난 프로세스에서 돌던 에이전트 실행을 끊긴 것으로 정리한다.
+ * 끊긴 사유(end_reason='restart')를 남겨, 스캐너가 처리(dev) 단계 이슈를 대기로 되돌릴 근거로 쓴다
+ * (takeRestartRequeue). 검증·확인 단계는 stage-dispatch 가 판정 없는 기록을 보고 다시 띄운다.
+ */
 export function resetStuckExecutions() {
   const stuckRows = getDb().prepare("SELECT * FROM task_executions WHERE status = 'running' AND (assignee_type IS NULL OR assignee_type = 'agent')").all() as any[]
   for (const r of stuckRows) {
     if (r.pid) {
       try { process.kill(-r.pid, 'SIGKILL') } catch (e: any) {
-        if (e.code !== 'ESRCH') console.warn(`[DB] Kill failed for pid ${r.pid}:`, e.message)
+        if (e.code !== 'ESRCH') dlog.warn(`Kill failed for pid ${r.pid}: ${e.message}`)
       }
     }
-    getDb().prepare("UPDATE task_executions SET status = 'failed', ended_at = ? WHERE id = ?").run(new Date().toISOString(), r.id)
+    getDb().prepare("UPDATE task_executions SET status = 'failed', ended_at = ?, end_reason = 'restart' WHERE id = ?").run(new Date().toISOString(), r.id)
     if (r.agent_id) {
       getDb().prepare("UPDATE agents SET status = 'available' WHERE id = ? AND status = 'busy'").run(r.agent_id)
     }
-    console.log(`[DB] Reset stuck execution ${r.id}`)
+    dlog.info(`Reset stuck execution ${r.id} (#${r.issue_iid}) — 재기동으로 끊김`)
   }
-  if (stuckRows.length > 0) console.log(`[DB] Reset ${stuckRows.length} stuck execution(s).`)
+  if (stuckRows.length > 0) dlog.info(`Reset ${stuckRows.length} stuck execution(s).`)
+}
+
+/** 재기동으로 끊긴 처리 실행이 연달아 이 횟수를 넘으면 더 되돌리지 않고 사람에게 넘긴다 (작업 자체가 서버를 죽이는 경우의 무한 반복 방지) */
+export const MAX_RESTART_REQUEUE = 3
+
+/**
+ * 처리(dev) 단계가 재기동으로 끊겨 처리 실패로 남은 이슈인지 — 이슈의 마지막 처리 실행만 본다.
+ * 그 실행의 end_reason 이 'restart' 일 때만 후보다(되돌린 뒤엔 'restart_requeued' 로 바꿔 두 번 되돌리지 않는다).
+ * streak = 마지막부터 거슬러 연달아 재기동으로 끊긴 처리 실행 수.
+ */
+export function takeRestartRequeue(projectId: string, issueIid: number): { executionId: string; streak: number } | null {
+  const rows = getDb().prepare(`
+    SELECT id, end_reason FROM task_executions
+    WHERE project_id = ? AND issue_iid = ? AND (assignee_type IS NULL OR assignee_type = 'agent')
+      AND id NOT LIKE 'ex-verify-%' AND id NOT LIKE 'ex-confirm-%' AND id NOT LIKE 'ex-reproduce-%'
+    ORDER BY julianday(started_at) DESC LIMIT ?
+  `).all(projectId, issueIid, MAX_RESTART_REQUEUE + 1) as { id: string; end_reason: string | null }[]
+  if (rows.length === 0 || rows[0].end_reason !== 'restart') return null
+  let streak = 0
+  for (const r of rows) {
+    // 앞서 상한에 걸려 사람에게 넘긴 기록에서 끊는다 — 사람이 재처리한 뒤로는 새로 센다
+    if (r.end_reason !== 'restart' && r.end_reason !== 'restart_requeued') break
+    streak++
+  }
+  return { executionId: rows[0].id, streak }
+}
+
+export function setExecutionEndReason(executionId: string, reason: 'restart_requeued' | 'restart_gave_up') {
+  getDb().prepare('UPDATE task_executions SET end_reason = ? WHERE id = ?').run(reason, executionId)
 }
 
 export interface IssueStageTimes {

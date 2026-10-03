@@ -1378,6 +1378,8 @@ function migrateStageAutomation(db: Database.Database) {
   try { db.exec(`ALTER TABLE task_executions ADD COLUMN stage_kind TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
   // 단계 작업자 판정 (확인: pass | fail | blocked). 순환 상한·재기동 판단에 쓴다.
   try { db.exec(`ALTER TABLE task_executions ADD COLUMN stage_verdict TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
+  // 실행이 끝난 사유 — 'restart'(서버 재기동으로 끊김) → 스캐너가 대기로 되돌리면 'restart_requeued', 상한을 넘겨 사람에게 넘기면 'restart_gave_up'.
+  try { db.exec(`ALTER TABLE task_executions ADD COLUMN end_reason TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
   // 사람 단가 배수 — 프로젝트 × 사람 × 역할 (기본 단가 × 배수). 처음 생길 때 그 사람의 종전 배수(users.rate_multiplier)로 채워
   // 적용 직후 보고서 숫자가 바뀌지 않게 한다. 연결 기준: 명부의 Git 사용자 id = IVE 사용자의 OAuth id (프로젝트와 같은 공급자)
   const rmCols = (db.prepare('PRAGMA table_info(project_role_members)').all() as { name: string }[]).map(c => c.name)
