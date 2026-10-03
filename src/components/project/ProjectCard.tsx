@@ -589,10 +589,9 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
           PC 보드 배치(hideActiveList)에서는 오른쪽 보드가 같은 내용을 보여 주므로 숨긴다. */}
       {!expandedPanel && !hideActiveList && (() => {
         const activeIids = new Set(runningExecs.map(ex => ex.issueIid))
+        // 사람도 에이전트와 같은 아바타 부품 — 아바타가 없으면 기본 사람 아이콘, 「사람이 작업 중」 배지
         const userAvatar = (src: string | null | undefined, userId?: string | null) =>
-          src === 'photo' && userId ? <img src={`/api/auth/avatar/image?id=${userId}`} alt="" className="w-6 h-6 rounded-lg object-cover shrink-0 border border-ive-border" />
-          : src && (src.startsWith('/') || src.startsWith('http')) ? <img src={src} alt="" className="w-6 h-6 rounded-lg object-cover shrink-0 border border-ive-border" />
-          : src ? <AgentAvatar avatar={src} size="sm" /> : null
+          <AgentAvatar avatar={src || 'person'} userId={userId} size="sm" toolBadge="human" />
         const items: ActiveItem[] = [
           ...runningExecs.map((ex): ActiveItem => {
             const kind = execKind(ex.id)

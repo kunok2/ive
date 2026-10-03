@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
 import { WORK_KINDS, STAGE_TONE, ageOf, ageText, type WorkKind } from '@/lib/active-work'
 import MarqueeText from '@/components/ui/MarqueeText'
+import AgentAvatar from '@/components/agent/AgentAvatar'
 
 export interface ActiveItem {
   key: string
@@ -21,9 +22,13 @@ export interface ActiveItem {
 
 /**
  * 진행 중인 일 — 종류(처리 → 검증 → 확인 → 채팅)로 묶는다.
- * 한 묶음을 한 사람이 맡고 있으면 이름은 묶음 제목에 한 번만, 여럿이면 줄마다 보인다.
+ * 한 묶음을 한 사람이 맡고 있으면 아바타·이름은 묶음 제목에 한 번만, 여럿이면 줄마다 보인다.
+ * 사람은 아바타가 없어도 기본 사람 아이콘을 둔다(이름만 덩그러니 두지 않는다).
  * 줄은 「#번호 제목 · 경과」, 제목이 칸보다 길면 흐른다(MarqueeText — 긴 작업 이름을 끝까지 읽게, #64·#79). 묶음마다 maxPerKind 줄까지 보이고 나머지는 「더 보기」(onMore).
  */
+// 아바타를 안 넘긴 사람 — 기본 사람 아이콘
+const avatarOf = (it: ActiveItem) => it.avatar ?? (it.who ? <AgentAvatar avatar="person" size="sm" /> : null)
+
 export default function ActiveWorkList({ items, maxPerKind = 3, onMore }: {
   items: ActiveItem[]
   maxPerKind?: number
@@ -50,6 +55,7 @@ export default function ActiveWorkList({ items, maxPerKind = 3, onMore }: {
           <div key={g.kind} className="flex flex-col">
             <div className="flex items-center gap-1.5 pb-1 mb-0.5 border-b border-ive-border-dark text-xs font-bold">
               <span className={`px-1.5 py-0.5 rounded-lg ${STAGE_TONE[g.kind].chip}`}>{tp(`activeKind.${g.kind}`)} {g.items.length}</span>
+              {singleWho && avatarOf(g.items[0])}
               {singleWho && <span className="text-ive-text-secondary truncate">{singleWho}</span>}
             </div>
             {shown.map(it => {
@@ -61,7 +67,7 @@ export default function ActiveWorkList({ items, maxPerKind = 3, onMore }: {
                   onClick={it.onClick}
                   className="flex items-center gap-1.5 min-h-8 text-xs font-bold text-left rounded-lg -mx-1 px-1 hover:bg-white/[0.04] transition-colors"
                 >
-                  {!singleWho && it.avatar}
+                  {!singleWho && avatarOf(it)}
                   {!singleWho && it.who && <span className={`shrink-0 max-w-24 truncate ${STAGE_TONE[g.kind].text} opacity-80`}>{it.who}</span>}
                   <span className="shrink-0 text-ive-text-dim">#{it.iid}</span>
                   <span className="flex-1 min-w-0"><MarqueeText className="text-ive-text-muted">{it.title}</MarqueeText></span>

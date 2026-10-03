@@ -11,14 +11,18 @@ interface Props {
    *  - URL ('http...', '/api/...', 'data:...'): 직접 이미지 표시
    *  - 'photo': 사용자가 업로드/OAuth 다운로드한 사진. 이 경우 `userId` 필요
    *    (userId가 있으면 `/api/auth/avatar/{userId}`로 자동 변환, 없으면 av-01 fallback)
+   *  - 'person': 아바타가 없는 사람 — 기본 사람 아이콘
    */
   avatar: string
   /** avatar==='photo' 일 때만 사용. 사진 fetch URL 생성용 */
   userId?: string | null
   size?: 'xs' | 'sm' | 'md' | 'lg'
   className?: string
-  toolBadge?: ToolCategory | null
+  /** 진행 중 배지 — 에이전트는 도구 종류, 사람은 'human'(사람이 작업 중) */
+  toolBadge?: BadgeKind | null
 }
+
+type BadgeKind = ToolCategory | 'human'
 
 const sizeMap = {
   xs: 'w-4 h-4 text-[10px]',
@@ -49,17 +53,22 @@ const TOOL_BADGE: Record<ToolCategory, { icon: string }> = {
 
 export { TOOL_BADGE }
 
-function ToolBadge({ category, size }: { category: ToolCategory; size: 'xs' | 'sm' | 'md' | 'lg' }) {
-  const badge = TOOL_BADGE[category]
+// 사람은 도구 활동이 없다 — 사람 아이콘 하나로 「작업 중」만 알린다
+const BADGE_ICON: Record<BadgeKind, string> = {
+  ...Object.fromEntries(Object.entries(TOOL_BADGE).map(([k, v]) => [k, v.icon])) as Record<ToolCategory, string>,
+  human: 'fa-solid fa-user-pen',
+}
+
+function ToolBadge({ category, size }: { category: BadgeKind; size: 'xs' | 'sm' | 'md' | 'lg' }) {
   // 배지는 항상 불투명·아바타 위(z-10). 'thinking' 표시는 배지 자체를 흔들지 않고
   // 외곽으로 퍼지는 별도 ring(animate-ping)으로 표현해야 아이콘이 사라지지 않음.
   return (
     <div className={`absolute ${badgeSizeMap[size]} z-10`}>
-      {category === 'thinking' && (
+      {(category === 'thinking' || category === 'human') && (
         <span className="absolute inset-0 rounded-full ring-2 ring-ive-cyan/70 animate-ping pointer-events-none" />
       )}
       <span className="absolute inset-0 rounded-full bg-ive-bg-deep border border-ive-cyan flex items-center justify-center text-ive-cyan">
-        <i className={badge.icon} />
+        <i className={BADGE_ICON[category]} />
       </span>
     </div>
   )
@@ -80,6 +89,18 @@ export default function AgentAvatar({ avatar, userId, size = 'md', className = '
       <div className={`relative shrink-0 ${wh} ${className}`}>
         <div className="w-full h-full rounded-lg flex items-center justify-center bg-ive-bg-deep border border-ive-border-subtle">
           <CliLogo cli={resolved.slice(4)} className="w-[80%] h-[80%]" />
+        </div>
+        {toolBadge && <ToolBadge category={toolBadge} size={size} />}
+      </div>
+    )
+  }
+
+  // 아바타가 없는 사람
+  if (resolved === 'person') {
+    return (
+      <div className={`relative shrink-0 ${wh} ${className}`}>
+        <div className="w-full h-full rounded-lg flex items-center justify-center bg-ive-bg-deep border border-ive-border-subtle">
+          <i className="fa-solid fa-user text-[10px] text-ive-text-dim" />
         </div>
         {toolBadge && <ToolBadge category={toolBadge} size={size} />}
       </div>
