@@ -1,6 +1,6 @@
 'use client'
 
-import { RefObject } from 'react'
+import { RefObject, useEffect, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 import { useStore } from '@/lib/store'
 import { formatDateMedium } from '@/lib/format-date'
@@ -95,6 +95,43 @@ export default function NotesList({
   const { state } = useStore()
   const tc = useTranslations('common')
   const tIssue = useTranslations('issue')
+
+  // 작업마다 마지막 스크롤 위치를 기억해 다시 열면 그 자리로(이 브라우저 탭 안에서만 — sessionStorage, 실행 목록과 같은 방식).
+  // 노트를 다 받은 뒤 한 번 돌려놓고, 이미지가 늦게 떠 높이가 바뀌는 동안(약 1.5초)은 사용자가 스크롤하지 않았으면 다시 맞춘다.
+  const scrollKey = `issue-scroll-${projectId}-${iid}`
+  const restoredRef = useRef(false)
+  useEffect(() => { restoredRef.current = false }, [scrollKey])
+  useEffect(() => {
+    const el = scrollContainerRef.current
+    if (!el || notesLoading || restoredRef.current) return
+    restoredRef.current = true
+    let saved = 0
+    try { saved = Number(sessionStorage.getItem(scrollKey)) || 0 } catch { /* 저장소를 못 쓰면 맨 위에서 */ }
+    if (saved <= 0) return
+    let userMoved = false
+    const apply = () => { if (!userMoved) el.scrollTop = saved }
+    const stop = () => { userMoved = true }
+    el.addEventListener('wheel', stop, { passive: true })
+    el.addEventListener('touchmove', stop, { passive: true })
+    el.addEventListener('keydown', stop)
+    requestAnimationFrame(apply)
+    const timers = [150, 500, 1000, 1500].map(ms => setTimeout(apply, ms))
+    return () => {
+      timers.forEach(clearTimeout)
+      el.removeEventListener('wheel', stop); el.removeEventListener('touchmove', stop); el.removeEventListener('keydown', stop)
+    }
+  }, [notesLoading, scrollKey, scrollContainerRef])
+  useEffect(() => {
+    const el = scrollContainerRef.current
+    if (!el) return
+    let t: ReturnType<typeof setTimeout> | null = null
+    const save = () => {
+      if (t) clearTimeout(t)
+      t = setTimeout(() => { try { sessionStorage.setItem(scrollKey, String(Math.round(el.scrollTop))) } catch { /* ignore */ } }, 200)
+    }
+    el.addEventListener('scroll', save, { passive: true })
+    return () => { el.removeEventListener('scroll', save); if (t) clearTimeout(t) }
+  }, [scrollKey, scrollContainerRef])
 
   return (
     <div className={`flex-1 flex flex-col min-h-0 ${widthCls} mx-auto w-full`}>
