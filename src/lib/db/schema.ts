@@ -1402,12 +1402,12 @@ function migrateStageAutomation(db: Database.Database) {
       `)
     } catch (e) { console.warn('[DB] role rate migration skipped:', (e as Error).message) }
   }
-  // 묶음 배포 설정(출발 조건·검사 명령·자동 머지) — 3.5.1
+  // 머지·검사 설정(자동 머지·검사 명령) — 예전 묶음 배포 때 만든 컬럼 이름을 그대로 쓴다
   try { db.exec(`ALTER TABLE project_automation ADD COLUMN bundle TEXT NOT NULL DEFAULT '{}'`) } catch { /* 이미 존재 */ }
   // MR 머지로 이슈 자동 닫기 — 처리(D) 커밋·MR 문구에 Git 닫기 키워드(resolve #N)를 넣을지. NULL = 켬(종전 동작)
   try { db.exec(`ALTER TABLE project_automation ADD COLUMN close_on_merge INTEGER DEFAULT NULL`) } catch { /* 이미 존재 */ }
 
-  // 묶음 배포 — 검증(③) 통과 이슈를 모아 staging 에 한 번 푸시한다.
+  // 예전 묶음 배포 기록(없앤 기능) — 남은 기록을 읽기만 한다(db/bundles.ts). 새로 쌓지 않는다.
   //   stage_bundles      : 묶음 하나(출발·머지·푸시·배포·확인 진행 상태)
   //   stage_bundle_items : 묶음 대기열과 묶음에 실린 이슈 (bundle_id 가 NULL 이면 아직 대기)
   db.exec(`

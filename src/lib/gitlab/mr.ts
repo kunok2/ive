@@ -126,7 +126,7 @@ export async function fetchGitLabMRChanges(project: Project, decryptedToken: str
 /**
  * MR을 머지합니다.
  */
-export async function mergeGitLabMR(project: Project, decryptedToken: string, mrIid: number, options?: { isOAuth?: boolean }) {
+export async function mergeGitLabMR(project: Project, decryptedToken: string, mrIid: number, options?: { isOAuth?: boolean; sha?: string }) {
   const projectPath = getProjectPath(project.repoUrl);
   if (!projectPath) throw new Error('Invalid repo URL');
 
@@ -151,6 +151,7 @@ export async function mergeGitLabMR(project: Project, decryptedToken: string, mr
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         should_remove_source_branch: true,
+        ...(options?.sha ? { sha: options.sha } : {}),
       }),
     }
   );

@@ -13,7 +13,6 @@ import {
   getPresetRoles,
   setStageWorkerNote,
   getStageWorkerNote,
-  getActiveBundleItem,
   createExecution,
   updateExecutionStatus,
   updateExecutionTokens,
@@ -75,7 +74,7 @@ import fs from "fs";
 import path from "path";
 import { parseIveMetaSessions, parseIveMetaFixes } from "./formatters";
 import { dispatchStageWorkers, type StageIssue } from "./stage-dispatch";
-import { tickBundles, reopenIfClosedByGit } from "./bundle-deploy";
+import { handOffLegacyBundleQueue, reopenIfClosedBeforeConfirm } from "./auto-merge";
 import { applyDefaultRoles } from "../role-assignment";
 import { isAgentEligibleForProject } from "../project-permissions";
 import { executeTask } from "./execute";
@@ -393,7 +392,7 @@ async function scanProject(project: Project, force: boolean = false) {
     // 레이블로 상태 판정 후, waiting 이슈를 processIssues로 전달
     const waitingIssues: any[] = []
     const stageIssues: StageIssue[] = []
-    // 이번 스캔에서 본 열린 이슈의 단계 — 묶음 배포가 실린 이슈의 진행(확인 끝남 등)을 판정한다
+    // 이번 스캔에서 본 열린 이슈의 단계 — 예전 묶음 대기열을 바로 머지로 넘길 때 지금 단계를 본다
     const scanStages = new Map<number, string | null>()
     const processedIids = new Set<number>()
     for (const [iid, issue] of issueMap) {
@@ -766,10 +765,10 @@ async function scanProject(project: Project, force: boolean = false) {
     try {
       await dispatchStageWorkers(project, stageIssues, decryptedToken);
     } catch (e) { slog.warn(`dispatchStageWorkers failed (${project.name}):`, (e as Error).message); }
-    // 묶음 배포 — 검증 에이전트가 통과시킨 이슈의 대기열·묶음을 한 걸음 진행 (대기열이 빈 프로젝트는 아무것도 하지 않는다)
+    // 예전 묶음 배포 대기열에 남은 이슈 — 한 번 바로 머지로 넘긴다(묶음 배포는 없앴다. 남은 줄이 없으면 아무것도 하지 않는다)
     try {
-      await tickBundles(project, decryptedToken, scanStages);
-    } catch (e) { slog.warn(`tickBundles failed (${project.name}):`, (e as Error).message); }
+      await handOffLegacyBundleQueue(project, decryptedToken, scanStages);
+    } catch (e) { slog.warn(`handOffLegacyBundleQueue failed (${project.name}):`, (e as Error).message); }
 
     // 이번 스캔에서 발견되지 않은 기존 이슈(좀비) 정리
     const staleRows = getDb().prepare(`
@@ -780,13 +779,13 @@ async function scanProject(project: Project, force: boolean = false) {
     for (const row of staleRows) {
       if (!processedIids.has(row.issue_iid)) {
         const iid = row.issue_iid
-        // 묶음으로 staging 에 실려 확인을 기다리는 이슈 — Git 이 커밋 메시지로 닫았으면 다시 열고 정리하지 않는다.
+        // 확인(④)을 기다리던 이슈 — IVE 가 검증 통과로 머지하면서 Git 이 닫기 키워드로 닫았으면 다시 열고 정리하지 않는다.
         // (이번 스캔 목록을 받은 뒤 다시 열렸을 수도 있으니 한 건 조회해 열려 있으면 그대로 둔다)
-        if (getActiveBundleItem(project.id, iid)?.status === 'pushed') {
+        if (row.cached_stage === 'confirm_waiting' || row.cached_stage === 'confirming') {
           try {
             const cur = await fetchSingleIssue(project, iid, decryptedToken)
             if (cur && cur.state !== 'closed') continue
-            if (cur && await reopenIfClosedByGit(project, decryptedToken, iid, cur)) continue
+            if (cur && await reopenIfClosedBeforeConfirm(project, decryptedToken, iid, cur)) continue
           } catch (e) { slog.warn(`reopen check failed (#${iid}):`, (e as Error).message) }
         }
         // 이번 스캔 결과(Open 이슈)에 없음 -> Closed 되었거나 IVE 레이블이 제거됨.

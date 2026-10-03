@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { logActivity } from '@/lib/activity'
-import { getProjectAutomation, updateProjectAutomation, hasRole, DEFAULT_LIMITS, DEFAULT_BUNDLE, type AutomationLimits, type DefaultRoles, type RoleDefaults, type PresetRoleInfo, type BundleSettings, recordConfigChanges } from '@/lib/db'
+import { getProjectAutomation, updateProjectAutomation, hasRole, DEFAULT_LIMITS, DEFAULT_MERGE, type AutomationLimits, type DefaultRoles, type RoleDefaults, type PresetRoleInfo, type MergeSettings, recordConfigChanges } from '@/lib/db'
 import { checkProjectSettingsAccess } from '@/lib/project-permissions'
 import { violatesSelfReview, autoAssignAllAgents, agentRoleAvailable } from '@/lib/role-assignment'
 
@@ -18,7 +18,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const a = getProjectAutomation(id)
   // 「모든 단계 자동배정」을 지금 켜면 누가 뽑히는지 미리보기 (저장 안 함)
   const preview = autoAssignAllAgents(id, null, { dryRun: true, isKo: user.locale !== 'en' })
-  return NextResponse.json({ canEdit: acc.canEdit, canEditStaging: acc.isOwner || user.isAdmin, ...a, defaultLimits: DEFAULT_LIMITS, defaultBundle: DEFAULT_BUNDLE, autoAllPreview: preview })
+  return NextResponse.json({ canEdit: acc.canEdit, canEditStaging: acc.isOwner || user.isAdmin, ...a, defaultLimits: DEFAULT_LIMITS, defaultMerge: DEFAULT_MERGE, autoAllPreview: preview })
 }
 
 function sanitizeRole(r: any): PresetRoleInfo | null {
@@ -46,8 +46,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   if ((body.staging || body.stagingSecrets) && !acc.isOwner && !user.isAdmin) {
     return NextResponse.json({ error: 'staging 정보와 비밀값은 프로젝트 소유자만 바꿀 수 있습니다' }, { status: 403 })
   }
-  // 검사 명령은 IVE 서버에서 실행되고, 자동 머지는 staging 에 사람 승인 없이 푸시한다 — 소유자(또는 관리자)만
-  if (body.bundle && typeof body.bundle === 'object' && (body.bundle.checkCommands !== undefined || body.bundle.agentMerge !== undefined) && !acc.isOwner && !user.isAdmin) {
+  // 검사 명령은 IVE 서버에서 실행되고, 자동 머지는 사람 승인 없이 MR 을 머지한다 — 소유자(또는 관리자)만
+  if (body.merge && typeof body.merge === 'object' && (body.merge.checkCommands !== undefined || body.merge.agentMerge !== undefined) && !acc.isOwner && !user.isAdmin) {
     return NextResponse.json({ error: '검사 명령과 자동 머지는 프로젝트 소유자만 바꿀 수 있습니다' }, { status: 403 })
   }
   const patch: Parameters<typeof updateProjectAutomation>[1] = {}
@@ -118,30 +118,21 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     patch.staging = st
     changed.push('staging')
   }
-  if (body.bundle && typeof body.bundle === 'object') {
-    const b: Partial<BundleSettings> = {}
-    const RANGE: Record<'maxWaiting' | 'quietMin' | 'maxSize' | 'checkTimeoutMin', [number, number]> = {
-      maxWaiting: [1, 50], quietMin: [1, 1440], maxSize: [1, 50], checkTimeoutMin: [1, 120],
+  if (body.merge && typeof body.merge === 'object') {
+    const b: Partial<MergeSettings> = {}
+    if (body.merge.checkTimeoutMin !== undefined) {
+      const n = Math.floor(Number(body.merge.checkTimeoutMin))
+      if (!Number.isFinite(n) || n < 1 || n > 120) return NextResponse.json({ error: 'checkTimeoutMin 값 범위: 1~120' }, { status: 400 })
+      b.checkTimeoutMin = n
     }
-    for (const k of Object.keys(RANGE) as (keyof typeof RANGE)[]) {
-      if (body.bundle[k] === undefined) continue
-      const n = Math.floor(Number(body.bundle[k]))
-      if (!Number.isFinite(n) || n < RANGE[k][0] || n > RANGE[k][1]) return NextResponse.json({ error: `${k} 값 범위: ${RANGE[k][0]}~${RANGE[k][1]}` }, { status: 400 })
-      b[k] = n
-    }
-    if (body.bundle.agentMerge !== undefined) b.agentMerge = !!body.bundle.agentMerge
-    if (body.bundle.times !== undefined) {
-      const times = String(body.bundle.times || '').split(',').map((x: string) => x.trim()).filter(Boolean)
-      if (times.some((x: string) => !/^([01]?\d|2[0-3]):[0-5]\d$/.test(x))) return NextResponse.json({ error: '출발 시각은 HH:MM 을 쉼표로 구분해 적습니다' }, { status: 400 })
-      b.times = times.join(', ')
-    }
-    if (body.bundle.checkCommands !== undefined) {
-      const v = String(body.bundle.checkCommands || '')
+    if (body.merge.agentMerge !== undefined) b.agentMerge = !!body.merge.agentMerge
+    if (body.merge.checkCommands !== undefined) {
+      const v = String(body.merge.checkCommands || '')
       if (v.length > 4000) return NextResponse.json({ error: '검사 명령이 너무 깁니다(4천 자 이하)' }, { status: 400 })
       b.checkCommands = v
     }
-    patch.bundle = b
-    changed.push('묶음 배포')
+    patch.merge = b
+    changed.push('머지·검사')
   }
   if (typeof body.closeIssueOnMerge === 'boolean') {
     patch.closeIssueOnMerge = body.closeIssueOnMerge
@@ -165,12 +156,12 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   }
   // 설정 변경 로그 — 자동화 규칙이 바뀐 시점 전후로 작업 결과를 비교할 수 있게. 비밀값(stagingSecrets)은 이름 목록만 담긴다
   recordConfigChanges('automation', id, beforeAuto as unknown as Record<string, unknown>, getProjectAutomation(id) as unknown as Record<string, unknown>,
-    ['defaultRoles', 'authorAllowlist', 'stagingSecretNames', 'limits', 'staging', 'bundle', 'closeIssueOnMerge'], { projectId: id, actorUserId: user.id })
+    ['defaultRoles', 'authorAllowlist', 'stagingSecretNames', 'limits', 'staging', 'merge', 'closeIssueOnMerge'], { projectId: id, actorUserId: user.id })
   logActivity({
     userId: user.id, category: 'project', action: 'update_automation',
     detail: `단계 자동화 설정 변경: ${acc.project.name} — ${changed.join(', ') || '없음'}`,
     targetType: 'project', targetId: id, req,
   })
   const a = getProjectAutomation(id)
-  return NextResponse.json({ canEdit: true, canEditStaging: acc.isOwner || user.isAdmin, ...a, defaultLimits: DEFAULT_LIMITS, defaultBundle: DEFAULT_BUNDLE, autoAllPreview: autoAssignAllAgents(id, null, { dryRun: true, isKo: user.locale !== 'en' }) })
+  return NextResponse.json({ canEdit: true, canEditStaging: acc.isOwner || user.isAdmin, ...a, defaultLimits: DEFAULT_LIMITS, defaultMerge: DEFAULT_MERGE, autoAllPreview: autoAssignAllAgents(id, null, { dryRun: true, isKo: user.locale !== 'en' }) })
 }

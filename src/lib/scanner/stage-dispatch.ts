@@ -5,7 +5,6 @@
  *   - 그 단계의 배정(issue_stages.preset_*)이 에이전트인가
  *   - 열린 단계 실행 기록(task_executions ex-verify-* / ex-confirm-*)이 없는가
  *   - 지난 자동 실행 기록(판정·횟수)이 상한 안인가
- *   - (확인) 묶음 대기열·묶음 상태(stage_bundle_items · stage_bundles)
  * 여기에 "MR 존재"(검증)와 "배포 사실"(확인: staging 이 내보내는 커밋에 머지 커밋이 들어 있는가)만 외부에서 확인한다.
  * staging 주소·배포 커밋 확인 방법은 IVE 프로젝트 설정(project_automation.staging)에서 읽는다.
  *
@@ -16,7 +15,7 @@ import { Project, Agent, isAgentAvailableNow } from '@/types'
 import {
   getPresetRoles, getAgent, countActiveExecutionsByAgent, getProjectAutomation, getStagingSecrets,
   getSystemSetting, setStageWorkerNote, getStageWorkerNote, getIssueAutomationApproval, getRoster, getDb, hasRole,
-  getLatestBundleItem, getBundle, getUserById, getProjectAccess, getIssueIntakeChannel, recordWaitIfChanged,
+  getLatestBundleItem, getUserById, getProjectAccess, getIssueIntakeChannel, recordWaitIfChanged,
 } from '../db'
 import { isBotName } from '../git-bot'
 import { extractIveAuthorId } from '../ive-author'
@@ -182,7 +181,7 @@ async function dispatchVerify(project: Project, verifyIssues: StageIssue[], toke
   }
 }
 
-/** ④ 확인 — P/C 이고 확인자가 에이전트인 이슈. 묶음으로 staging 에 실려 배포된 뒤(또는 사람이 머지·배포한 뒤) 기동한다 */
+/** ④ 확인 — P/C 이고 확인자가 에이전트인 이슈. MR 이 머지(검증 통과 즉시 IVE 가, 또는 사람이)되어 staging 에 배포된 뒤 기동한다 */
 async function dispatchConfirm(project: Project, confirmIssues: StageIssue[], token: string, busy: Set<string>): Promise<void> {
   if (confirmIssues.length === 0) return
   let staging: ConfigResult<StagingConfig> | null = null
@@ -194,20 +193,6 @@ async function dispatchConfirm(project: Project, confirmIssues: StageIssue[], to
     if (preset.mode !== 'agent' || !preset.agentId) continue       // 사람이 확인 — 종전대로 기다린다
     if (hasOpenStageExecution(project.id, iid, 'confirm')) continue // 이미 누가(사람·에이전트) 확인 중
 
-    // 묶음 배포: 검증 에이전트가 통과시킨 이슈는 묶음으로 staging 에 실린다 — 실리기 전에는 기다린다
-    const item = getLatestBundleItem(project.id, iid)
-    if (item && (item.status === 'waiting' || item.status === 'in_bundle' || item.status === 'merged')) {
-      const b = item.bundleId ? getBundle(item.bundleId) : null
-      note(project.id, iid, b?.status === 'awaiting_approval'
-        ? `묶음 #${b.id} 출발 승인 대기 (프로젝트 화면 → 묶음 배포)`
-        : b ? `묶음 #${b.id} 머지·검사·푸시 중` : '묶음 배포 대기 — 출발 조건이 차면 staging 에 실립니다')
-      continue
-    }
-    if (item?.status === 'pushed' && item.bundleId) {
-      const b = getBundle(item.bundleId)
-      if (b && (b.status === 'failed' || b.status === 'broken')) { note(project.id, iid, `묶음 #${b.id} ${b.note || b.status} — 사람 확인 필요`); continue }
-    }
-
     const agent = passGate(project, iid, issue, stage, 'confirm', preset.agentId, busy)
     if (!agent) continue
 
@@ -216,18 +201,20 @@ async function dispatchConfirm(project: Project, confirmIssues: StageIssue[], to
 
     let mergeCommit: string | null = null
     let mrUrl: string | null = null
+    // 예전 묶음 배포로 staging 에 푸시된 이슈(묶음 배포를 없애기 전 기록) — 그 묶음의 머지 커밋이 기준
+    const item = getLatestBundleItem(project.id, iid)
     if (item?.status === 'pushed' && item.mergeSha) {
-      // 묶음으로 실린 이슈 — 묶음의 머지 커밋이 기준
       mergeCommit = item.mergeSha
       mrUrl = item.mrUrl
     } else {
-      // 사람이 머지한 이슈 — MR 의 머지 커밋이 기준 (종전 동작)
+      // MR 의 머지 커밋이 기준 — 검증 통과 즉시 IVE 가 머지했거나 사람이 머지했다
       let mr: any = null
       try { mr = await fetchMRByBranch(project, token, `dev-${iid}`) } catch (e) { slog.warn(`MR lookup failed #${iid}: ${(e as Error).message}`) }
       if (!mr) { note(project.id, iid, `dev-${iid} MR 을 찾지 못함 — 자동 확인 불가`); continue }
       const merged = mr.state === 'merged' || !!mr.merged_at
       if (!merged) { note(project.id, iid, 'MR 이 아직 머지되지 않음 — 머지·배포 대기'); continue }
-      mergeCommit = mr.merge_commit_sha || mr.squash_commit_sha || item?.mergeSha || null
+      // fast-forward 머지는 머지 커밋이 없다 — MR 머리 커밋이 그대로 대상 브랜치에 올라간다
+      mergeCommit = mr.merge_commit_sha || mr.squash_commit_sha || mr.sha || null
       mrUrl = mr.web_url || mr.html_url || null
       if (!mergeCommit) { note(project.id, iid, '머지 커밋을 알 수 없음 — 자동 확인 불가'); continue }
     }

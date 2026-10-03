@@ -113,9 +113,10 @@ export function fetchMRChanges(project: Project, token: string, mrIid: number) {
     : gitlab.fetchGitLabMRChanges(project, token, mrIid);
 }
 
-export function mergeMR(project: Project, token: string, mrIid: number, options?: { isOAuth?: boolean }) {
+/** options.sha — 주면 MR 머리 커밋이 그 커밋일 때만 머지한다(검증한 뒤 새 커밋이 올라왔으면 거절) */
+export function mergeMR(project: Project, token: string, mrIid: number, options?: { isOAuth?: boolean; sha?: string }) {
   return project.provider === 'github'
-    ? github.mergeGitHubPR(project, token, mrIid)
+    ? github.mergeGitHubPR(project, token, mrIid, { sha: options?.sha })
     : gitlab.mergeGitLabMR(project, token, mrIid, options);
 }
 

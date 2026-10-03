@@ -77,31 +77,27 @@ export interface StagingSettings {
 
 const EMPTY_STAGING: StagingSettings = { url: '', versionSource: 'url', versionUrl: '', commitField: 'commit', branch: '', notes: '' }
 
-/** 묶음 배포(3.5.1) — 검증 통과 이슈를 모아 staging 에 한 번 푸시한다 */
-export interface BundleSettings {
-  /** 꺼져 있으면 묶음이 출발 조건을 채워도 사람이 「출발 승인」을 눌러야 머지·푸시한다 */
+/**
+ * 머지·검사 — 검증(③) 에이전트가 통과시킨 이슈의 MR 을 IVE 가 바로 머지할지, 검증 때 돌릴 검사 명령.
+ * (DB 컬럼 이름은 예전 묶음 배포 때의 `bundle` 을 그대로 쓴다 — 그때의 출발 조건 값은 읽지 않는다)
+ */
+export interface MergeSettings {
+  /** 켜면 검증 에이전트 통과 즉시 IVE 가 MR 을 머지한다. 꺼져 있으면 사람이 머지한다 */
   agentMerge: boolean
-  /** 대기 N건이면 출발 */
-  maxWaiting: number
-  /** 마지막 추가 후 T분 조용하면 출발 */
-  quietMin: number
-  /** 정해진 시각에 출발 (HH:MM, 쉼표 구분, 프로젝트 소유자 시간대). 비면 쓰지 않는다 */
-  times: string
-  /** 한 묶음에 싣는 최대 건수 */
-  maxSize: number
-  /** 검사 명령(줄마다 하나) — 검증(③)과 묶음 출발 때 IVE 컨테이너에서 실행. 외부 서비스 없이 도는 명령만 */
+  /** 검사 명령(줄마다 하나) — 검증(③) 때 IVE 컨테이너에서 실행. 외부 서비스 없이 도는 명령만 */
   checkCommands: string
   checkTimeoutMin: number
 }
 
-export const DEFAULT_BUNDLE: BundleSettings = {
+export const DEFAULT_MERGE: MergeSettings = {
   agentMerge: false,
-  maxWaiting: 5,
-  quietMin: 30,
-  times: '',
-  maxSize: 10,
   checkCommands: '',
   checkTimeoutMin: 20,
+}
+
+function readMerge(raw: string | null | undefined, patch?: Partial<MergeSettings>): MergeSettings {
+  const v = { ...DEFAULT_MERGE, ...parseJson<Partial<MergeSettings>>(raw, {}), ...(patch || {}) }
+  return { agentMerge: !!v.agentMerge, checkCommands: String(v.checkCommands ?? ''), checkTimeoutMin: Number(v.checkTimeoutMin) || DEFAULT_MERGE.checkTimeoutMin }
 }
 
 export interface ProjectAutomation {
@@ -112,7 +108,7 @@ export interface ProjectAutomation {
   stagingSecretNames: string[]
   limits: AutomationLimits
   staging: StagingSettings
-  bundle: BundleSettings
+  merge: MergeSettings
   /**
    * MR 머지로 이슈 자동 닫기 (기본 켬 = 종전 동작). 켜면 처리(D) 커밋·MR 문구에 Git 닫기 키워드(「fix: resolve #N」)를 넣어
    * 기본 브랜치에 머지되는 순간 Git 이 이슈를 닫는다. 끄면 「fix(#N): …」 — 이슈는 확인을 거쳐 완료(E)가 될 때 IVE 가 닫는다.
@@ -141,7 +137,7 @@ export function getProjectAutomation(projectId: string): ProjectAutomation {
     stagingSecretNames: Object.keys(readSecrets(r?.staging_secrets)),
     limits: { ...DEFAULT_LIMITS, ...parseJson<Partial<AutomationLimits>>(r?.limits, {}) },
     staging: { ...EMPTY_STAGING, ...parseJson<Partial<StagingSettings>>(r?.staging, {}) },
-    bundle: { ...DEFAULT_BUNDLE, ...parseJson<Partial<BundleSettings>>(r?.bundle, {}) },
+    merge: readMerge(r?.bundle),
     closeIssueOnMerge: r?.close_on_merge == null ? true : !!r.close_on_merge,
     updatedAt: r?.updated_at ?? null,
   }
@@ -158,7 +154,7 @@ export interface ProjectAutomationPatch {
   authorAllowlist?: string[]
   limits?: Partial<AutomationLimits>
   staging?: Partial<StagingSettings>
-  bundle?: Partial<BundleSettings>
+  merge?: Partial<MergeSettings>
   closeIssueOnMerge?: boolean
   /** 이름 → 값. 값이 null 이면 삭제, 빈 문자열이면 그대로 둔다(화면 마스킹 값) */
   stagingSecrets?: Record<string, string | null>
@@ -171,7 +167,7 @@ export function updateProjectAutomation(projectId: string, patch: ProjectAutomat
   const allowlist = patch.authorAllowlist ?? parseJson<string[]>(cur?.author_allowlist, [])
   const limits = { ...parseJson<Partial<AutomationLimits>>(cur?.limits, {}), ...(patch.limits || {}) }
   const staging = { ...EMPTY_STAGING, ...parseJson<Partial<StagingSettings>>(cur?.staging, {}), ...(patch.staging || {}) }
-  const bundle = { ...DEFAULT_BUNDLE, ...parseJson<Partial<BundleSettings>>(cur?.bundle, {}), ...(patch.bundle || {}) }
+  const merge = readMerge(cur?.bundle, patch.merge)
   let secretsRaw: string = cur?.staging_secrets || ''
   if (patch.stagingSecrets) {
     if (secretsRaw && decrypt(secretsRaw) === secretsRaw) {
@@ -192,7 +188,7 @@ export function updateProjectAutomation(projectId: string, patch: ProjectAutomat
       default_roles = excluded.default_roles, author_allowlist = excluded.author_allowlist,
       staging_secrets = excluded.staging_secrets, limits = excluded.limits, staging = excluded.staging,
       bundle = excluded.bundle, updated_by = excluded.updated_by, updated_at = datetime('now')
-  `).run(projectId, JSON.stringify(defaultRoles), JSON.stringify(allowlist), secretsRaw, JSON.stringify(limits), JSON.stringify(staging), JSON.stringify(bundle), updatedBy)
+  `).run(projectId, JSON.stringify(defaultRoles), JSON.stringify(allowlist), secretsRaw, JSON.stringify(limits), JSON.stringify(staging), JSON.stringify(merge), updatedBy)
   if (patch.closeIssueOnMerge !== undefined) {
     db.prepare('UPDATE project_automation SET close_on_merge = ? WHERE project_id = ?').run(patch.closeIssueOnMerge ? 1 : 0, projectId)
   }

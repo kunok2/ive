@@ -25,13 +25,13 @@ interface Limits {
   confirmMaxConcurrent: number; confirmMaxTurns: number; confirmTimeoutMin: number; maxAutoCycles: number
 }
 interface StagingSettings { url: string; versionSource: 'url' | 'pipeline'; versionUrl: string; commitField: string; branch: string; notes: string }
-interface BundleSettings { agentMerge: boolean; maxWaiting: number; quietMin: number; times: string; maxSize: number; checkCommands: string; checkTimeoutMin: number }
+interface MergeSettings { agentMerge: boolean; checkCommands: string; checkTimeoutMin: number }
 interface AutomationData {
   canEdit: boolean
   /** staging 정보·비밀값은 소유자(관리자)만 */
   canEditStaging: boolean
   staging: StagingSettings
-  bundle: BundleSettings
+  merge: MergeSettings
   closeIssueOnMerge: boolean
   defaultRoles: DefaultRoles
   authorAllowlist: string[]
@@ -70,8 +70,8 @@ export default function AutomationPanel({ projectId }: { projectId: string }) {
   const [stDraft, setStDraft] = useState<Partial<StagingSettings>>({})
   // 기본 배정을 고치는 경로 — IVE 에서 등록 / 작업 접수 페이지·API·Git 직접
   const [channel, setChannel] = useState<'ive' | 'intake'>('ive')
-  // 묶음 배포 글자 칸(출발 시각·검사 명령) 편집값 — 칸을 벗어나면 저장
-  const [bDraft, setBDraft] = useState<Partial<Pick<BundleSettings, 'times' | 'checkCommands'>>>({})
+  // 검사 명령 칸 편집값 — 칸을 벗어나면 저장
+  const [bDraft, setBDraft] = useState<Partial<Pick<MergeSettings, 'checkCommands'>>>({})
   const { saving, saved, run } = useAutosave()
 
   const load = useCallback(async () => {
@@ -119,12 +119,12 @@ export default function AutomationPanel({ projectId }: { projectId: string }) {
     if (v === undefined || v === data.staging[k]) { setStDraft(x => { const y = { ...x }; delete y[k]; return y }); return }
     if (await put({ staging: { [k]: v } })) setStDraft(x => { const y = { ...x }; delete y[k]; return y })
   }
-  const bValue = (k: 'times' | 'checkCommands') => bDraft[k] ?? data.bundle[k] ?? ''
-  const bCommit = async (k: 'times' | 'checkCommands') => {
+  const bValue = (k: 'checkCommands') => bDraft[k] ?? data.merge[k] ?? ''
+  const bCommit = async (k: 'checkCommands') => {
     const v = bDraft[k]
     const clear = () => setBDraft(x => { const y = { ...x }; delete y[k]; return y })
-    if (v === undefined || v === data.bundle[k]) { clear(); return }
-    if (await put({ bundle: { [k]: v } })) clear()
+    if (v === undefined || v === data.merge[k]) { clear(); return }
+    if (await put({ merge: { [k]: v } })) clear()
   }
   const addAllow = () => {
     const names = allowInput.split(/[\s,]+/).map(s => s.replace(/^@/, '').trim()).filter(Boolean)
@@ -283,51 +283,33 @@ export default function AutomationPanel({ projectId }: { projectId: string }) {
         <p className="text-xs text-ive-text-dim mt-1 ml-6">{t('closeIssueOnMergeHint')}</p>
       </div>
 
-      {/* 묶음 배포 — 검증 통과 이슈를 모아 staging 에 한 번 푸시하는 조건 */}
+      {/* 머지·검사 — 검증 통과 즉시 MR 머지 여부와 검증 때 돌릴 검사 명령 */}
       <div className="border-t border-ive-border-dark pt-3 space-y-3">
-        <label className={SUB_LABEL}><i className="fa-solid fa-boxes-stacked mr-1.5 text-xs" />{t('bundleSettings')}</label>
-        <p className="text-xs text-ive-text-dim ml-1">{t('bundleSettingsHint')}</p>
+        <label className={SUB_LABEL}><i className="fa-solid fa-code-branch mr-1.5 text-xs" />{t('mergeSettings')}</label>
         <div>
           <label className="flex items-center justify-between cursor-pointer">
             <span className="text-base font-bold text-ive-text-muted">
-              <i className="fa-solid fa-code-merge mr-1.5 text-sm" />{t('bundleAgentMerge')}
+              <i className="fa-solid fa-code-merge mr-1.5 text-sm" />{t('mergeAgentMerge')}
             </span>
-            <Switch on={data.bundle.agentMerge} disabled={stagingDisabled} onClick={() => put({ bundle: { agentMerge: !data.bundle.agentMerge } })} />
+            <Switch on={data.merge.agentMerge} disabled={stagingDisabled} onClick={() => put({ merge: { agentMerge: !data.merge.agentMerge } })} />
           </label>
-          <p className="text-xs text-ive-text-dim mt-1 ml-6">{t('bundleAgentMergeHint')}</p>
-        </div>
-        {([
-          ['maxWaiting', 1, 50], ['quietMin', 1, 1440], ['maxSize', 1, 50],
-        ] as ['maxWaiting' | 'quietMin' | 'maxSize', number, number][]).map(([k, min, max]) => (
-          <div key={k}>
-            <label className={SUB_LABEL}>{t(`bundle${k[0].toUpperCase()}${k.slice(1)}`)}</label>
-            <Stepper value={data.bundle[k]} min={min} max={max} disabled={disabled || saving} onChange={v => put({ bundle: { [k]: v } })} />
-          </div>
-        ))}
-        <div>
-          <label className={SUB_LABEL}>{t('bundleTimes')}</label>
-          <input
-            disabled={disabled} value={bValue('times')} placeholder={t('bundleTimesPlaceholder')}
-            onChange={e => setBDraft(x => ({ ...x, times: e.target.value }))}
-            onBlur={() => bCommit('times')} onKeyDown={noSubmit}
-            className={`${INPUT_CLS} font-mono`}
-          />
+          <p className="text-xs text-ive-text-dim mt-1 ml-6">{t('mergeAgentMergeHint')}</p>
         </div>
         <div>
-          <label className={SUB_LABEL}>{t('bundleCheckCommands')}</label>
+          <label className={SUB_LABEL}>{t('mergeCheckCommands')}</label>
           <textarea
-            disabled={stagingDisabled} rows={4} value={bValue('checkCommands')} placeholder={t('bundleCheckCommandsPlaceholder')}
+            disabled={stagingDisabled} rows={4} value={bValue('checkCommands')} placeholder={t('mergeCheckCommandsPlaceholder')}
             onChange={e => setBDraft(x => ({ ...x, checkCommands: e.target.value }))}
             onBlur={() => bCommit('checkCommands')}
             className="w-full bg-ive-bg-input border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green/50 font-mono resize-y"
           />
-          <p className="text-xs text-ive-text-dim mt-1 ml-1">{t('bundleCheckCommandsHint')}</p>
+          <p className="text-xs text-ive-text-dim mt-1 ml-1">{t('mergeCheckCommandsHint')}</p>
         </div>
         <div>
-          <label className={SUB_LABEL}>{t('bundleCheckTimeoutMin')}</label>
-          <Stepper value={data.bundle.checkTimeoutMin} min={1} max={120} disabled={disabled || saving} onChange={v => put({ bundle: { checkTimeoutMin: v } })} />
+          <label className={SUB_LABEL}>{t('mergeCheckTimeoutMin')}</label>
+          <Stepper value={data.merge.checkTimeoutMin} min={1} max={120} disabled={disabled || saving} onChange={v => put({ merge: { checkTimeoutMin: v } })} />
         </div>
-        {stagingDisabled && <p className="text-xs text-ive-text-dim"><i className="fa-solid fa-lock mr-1" />{t('bundleOwnerOnly')}</p>}
+        {stagingDisabled && <p className="text-xs text-ive-text-dim"><i className="fa-solid fa-lock mr-1" />{t('mergeOwnerOnly')}</p>}
       </div>
 
       {/* 작성자 허용 목록 — SharingSection 의 목록 줄 + 추가 */}

@@ -10,7 +10,6 @@ import Modal from '@/components/ui/Modal'
 import ConfirmModal from '@/components/ui/ConfirmModal'
 import CustomSelect from '@/components/ui/CustomSelect'
 import StageAutomationSection from '@/components/project/automation/StageAutomationSection'
-import BundlesPanel from '@/components/project/automation/BundlesPanel'
 import { useTranslations } from 'next-intl'
 
 export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -258,7 +257,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           </div>
         </div>
 
-        {/* PC 폭: 정보 카드 아래를 두 칸으로 — 왼쪽 작업 접수, 오른쪽 멤버·역할·묶음 배포 */}
+        {/* PC 폭: 정보 카드 아래를 두 칸으로 — 왼쪽 작업 접수, 오른쪽 멤버·역할 */}
         <div className={canEdit ? 'desk:grid desk:grid-cols-2 desk:gap-6 desk:items-start' : ''}>
         <div className="min-w-0">
         {/* 작업 접수 페이지 섹션 */}
@@ -591,9 +590,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
         {/* 역할·단계 자동화 — 위 멤버와 소유자·편집 권한자의 에이전트에게 역할을 주고, 단계를 어떻게 자동으로 돌릴지 정한다 */}
         <StageAutomationSection projectId={id} />
-
-        {/* 묶음 배포 현황 — 검증 에이전트가 통과시킨 이슈를 staging 에 묶어 올리는 진행 상황 */}
-        <BundlesPanel projectId={id} />
         </div>
         </div>
       </main>

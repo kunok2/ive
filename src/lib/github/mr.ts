@@ -118,7 +118,7 @@ export async function fetchGitHubPRChanges(project: Project, decryptedToken: str
 /**
  * PR을 머지합니다.
  */
-export async function mergeGitHubPR(project: Project, decryptedToken: string, prNumber: number) {
+export async function mergeGitHubPR(project: Project, decryptedToken: string, prNumber: number, options?: { sha?: string }) {
   const ownerRepo = getOwnerRepo(project.repoUrl);
   if (!ownerRepo) throw new Error('Invalid repo URL');
 
@@ -131,6 +131,7 @@ export async function mergeGitHubPR(project: Project, decryptedToken: string, pr
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         merge_method: 'squash',
+        ...(options?.sha ? { sha: options.sha } : {}),
       }),
     }
   );

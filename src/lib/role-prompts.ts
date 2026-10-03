@@ -212,7 +212,7 @@ ${i.comments ? `\n### 이슈 코멘트 (사람이 쓴 것, 시간순 — 나중 
 - 대상 브랜치: ${i.targetBranch} · 검증하는 커밋: ${i.sourceSha}
 - 워크스페이스는 이 커밋으로 체크아웃되어 있다(코드는 읽기만).
 - 변경 전체 diff: ${i.diffPath}
-- ${i.behindTarget ? `staging(${i.targetBranch}) 최신본이 이 MR 에 들어 있지 않다 — 묶음 배포 때 최신본 위에 머지된다.` : `staging(${i.targetBranch}) 최신본 위에 있다.`}
+- ${i.behindTarget ? `staging(${i.targetBranch}) 최신본이 이 MR 에 들어 있지 않다 — 머지 때 최신본 위에 합쳐진다.` : `staging(${i.targetBranch}) 최신본 위에 있다.`}
 ${i.conflictFiles.length ? `- ⚠️ staging 최신본과 시험 머지에서 충돌: ${i.conflictFiles.join(', ')}` : '- staging 최신본과 시험 머지: 충돌 없음'}
 ${i.e2eScript ? `- 재현 스크립트: ${i.e2eScript}` : '- 재현 스크립트: 없음'}
 

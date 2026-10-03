@@ -7,7 +7,7 @@
  *   3) 프로젝트 설정의 검사 명령을 IVE 가 직접 실행(종료 코드로 판정) — 서버를 띄우지 않는다
  *   4) 검증자 에이전트가 diff 를 라인 단위로 리뷰하고 .ive-out/result.json 을 쓴다
  *   5) 판정 → 증적 보관 → 결과 코멘트 하나(+ ive-meta stage: verify)
- *   6) 통과 → approve(→P) + 묶음 대기열에 올림(바로 머지하지 않는다, 3.5.1)
+ *   6) 통과 → approve(→P) + 그 자리에서 MR 머지(자동 머지가 켜져 있을 때 — auto-merge)
  *      실패 → reject(→S). 결과 코멘트가 다음 처리(D)의 피드백이 된다
  *      판단 불가 → V 에 두고 사람을 기다린다
  *
@@ -20,7 +20,7 @@ import { getLogger } from '../logger'
 import { Project, Agent } from '@/types'
 import {
   getExecution, updateExecutionStatus, markIssueVerifyStarted, markIssueVerified, markIssueVerifyRejected,
-  resetIssueScheduledAt, setStageWorkerNote, getProjectAutomation, stageFromLabels, getPresetRoles, enqueueBundleItem,
+  resetIssueScheduledAt, setStageWorkerNote, getProjectAutomation, stageFromLabels, getPresetRoles,
 } from '../db'
 import { addIssueComment, fetchSingleIssue, fetchIssueNotes } from '../provider'
 import { applyStageAction } from '../stage-apply'
@@ -34,6 +34,7 @@ import { parseCheckCommands, runCheckCommands, type CheckResult } from '../stage
 import { authedRepoUrl } from './git-ops'
 import { openAgentStageExecution, setStageVerdict } from './stage-records'
 import { runStageWorker, type StageKindSpec, type StageContext } from './stage-worker'
+import { mergeVerified } from './auto-merge'
 
 const execFile = promisify(require('child_process').execFile)
 const slog = getLogger('VerifyWorker')
@@ -146,7 +147,7 @@ export function enforceVerifyVerdict(r: VerifyResult, checks: CheckResult[], con
 }
 
 const VERDICT_TITLE: Record<Verdict, { ko: string; en: string }> = {
-  pass: { ko: '✅ 검증 통과 — 묶음 배포 대기', en: '✅ Verified — queued for bundle deploy' },
+  pass: { ko: '✅ 검증 통과', en: '✅ Verified' },
   fail: { ko: '❌ 검증 반려 — 재작업 필요', en: '❌ Rejected — rework needed' },
   blocked: { ko: '⚠️ 검증 불가 — 사람 검증 필요', en: '⚠️ Could not verify — needs a person' },
 }
@@ -203,7 +204,7 @@ async function buildComment(ctx: StageContext, input: VerifyInput, prep: VerifyP
     lines.push('')
   }
   if (input.mrUrl) lines.push(`- MR: ${maskSecrets(input.mrUrl)}`)
-  lines.push(`- ${t('검증한 커밋', 'Verified commit')}: \`${prep.sourceSha.slice(0, 12)}\` · ${t('대상', 'Target')}: \`${input.targetBranch}\` (${prep.behindTarget ? t('최신본 미포함 — 묶음 때 위에 머지', 'behind — merged on top at bundle time') : t('최신본 위', 'up to date')})`)
+  lines.push(`- ${t('검증한 커밋', 'Verified commit')}: \`${prep.sourceSha.slice(0, 12)}\` · ${t('대상', 'Target')}: \`${input.targetBranch}\` (${prep.behindTarget ? t('최신본 미포함 — 머지 때 최신본 위에 합쳐짐', 'behind — merged on top of the latest') : t('최신본 위', 'up to date')})`)
   lines.push(`- ${t('바뀐 파일', 'Changed files')}: ${prep.changedFiles.length}`)
   lines.push(`- ${t('검증 에이전트', 'Verifier agent')}: ${agent.name}`)
   for (const c of result.commands.slice(0, 20)) lines.push(`- \`${c.replace(/`/g, "'")}\``)
@@ -261,7 +262,7 @@ function verifySpec(input: VerifyInput): StageKindSpec<VerifyPrep> {
       let behindTarget = false
       try { await git(workspacePath, ['merge-base', '--is-ancestor', `origin/${target}`, sourceSha]) } catch { behindTarget = true }
 
-      // staging 최신본과 시험 머지 — 묶음 배포 때 충돌할지 미리 본다
+      // staging 최신본과 시험 머지 — 머지 때 충돌할지 미리 본다
       let conflictFiles: string[] = []
       await git(workspacePath, ['checkout', '-q', '-B', 'ive-trial-merge', `origin/${target}`])
       try {
@@ -283,12 +284,12 @@ function verifySpec(input: VerifyInput): StageKindSpec<VerifyPrep> {
       } catch { /* ignore */ }
 
       // 검사 명령 — IVE 가 직접 실행하고 종료 코드로 판정한다
-      const bundle = getProjectAutomation(project.id).bundle
-      const checkCommands = parseCheckCommands(bundle.checkCommands)
+      const merge = getProjectAutomation(project.id).merge
+      const checkCommands = parseCheckCommands(merge.checkCommands)
       let checks: CheckResult[] = []
       if (checkCommands.length) {
         log(`검사 명령 ${checkCommands.length}개 실행`, 'system')
-        checks = await runCheckCommands(workspacePath, checkCommands, bundle.checkTimeoutMin, secrets, log, chunk => logStream.write(chunk))
+        checks = await runCheckCommands(workspacePath, checkCommands, merge.checkTimeoutMin, secrets, log, chunk => logStream.write(chunk))
       } else {
         log('검사 명령 없음(프로젝트 설정) — 리뷰로만 판정', 'system')
       }
@@ -390,11 +391,11 @@ function verifySpec(input: VerifyInput): StageKindSpec<VerifyPrep> {
       }
 
       if (result.verdict === 'pass') {
-        if (!(await move('approve', '단계: 검증 중 → 확인대기 (묶음 배포 대기)'))) return
+        if (!(await move('approve', '단계: 검증 중 → 확인대기'))) return
         // 확인자 배정(사람이면 Git 담당자 교체, 에이전트면 배정 안내) — 화면 승인 경로와 같다
         try { await applyRoleAssignee(project, iid, token, '확인자', getPresetRoles(project.id, iid).confirmer) } catch (e) { log(`확인자 배정 실패: ${(e as Error).message}`, 'warn') }
-        const item = enqueueBundleItem(project.id, iid, { sourceSha: prep.sourceSha, mrIid: input.mrIid, mrUrl: input.mrUrl, issueTitle: ctx.issue.title })
-        log(item ? `묶음 대기열에 올림 (커밋 ${prep.sourceSha.slice(0, 12)})` : '이미 진행 중인 묶음에 실려 있어 대기열에 다시 올리지 않음', 'system')
+        // 바로 머지 — 실패·건너뜀은 노트·코멘트로 사람에게 넘긴다(다시 시도하지 않는다)
+        await mergeVerified({ project, token, iid, sourceSha: prep.sourceSha, targetBranch: input.targetBranch, isKo, log })
       } else if (result.verdict === 'fail') {
         // 반려 = 처리 재요청(스케줄). 결과 코멘트가 다음 처리의 피드백이 된다.
         if (await move('reject', '단계: 검증 중 → 스케줄 (재작업)')) resetIssueScheduledAt(project.id, iid)

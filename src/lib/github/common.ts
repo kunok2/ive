@@ -81,6 +81,9 @@ export function normalizePR(pr: any): any {
     user_notes_count: pr.comments,
     created_at: pr.created_at,
     merged_at: pr.merged_at,
+    // 머지 커밋(squash 면 squash 커밋) — 확인(④)이 배포 커밋에 이것이 들어 있는지 본다
+    merge_commit_sha: pr.merged_at ? (pr.merge_commit_sha ?? null) : null,
+    sha: pr.head?.sha ?? null,
     merged_by: pr.merged_by ? { name: pr.merged_by.login } : null,
     diff_refs: null,
   };

@@ -51,7 +51,7 @@ function pickField(obj: any, field: string): unknown {
 }
 
 /**
- * staging 브랜치 — 묶음 배포가 머지·푸시하는 곳이자 확인 워크스페이스의 기준.
+ * staging 브랜치 — 검증이 시험 머지하고 자동 머지가 MR 대상과 맞춰 보는 곳이자 확인 워크스페이스의 기준.
  * 설정값 → 프로젝트 기준 브랜치 → 저장소 기본 브랜치.
  */
 export async function resolveStagingBranch(project: Project, token: string, s?: StagingSettings): Promise<string> {

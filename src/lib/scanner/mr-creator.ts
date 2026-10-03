@@ -99,7 +99,7 @@ export async function commitPushAndCreateMR(params: {
 
   // 커밋·MR 문구 — 프로젝트 설정 「MR 머지로 이슈 자동 닫기」(기본 켬 = 종전 문구)
   //   켬 : 「fix: resolve #N - 제목」 Git 닫기 키워드 — 기본 브랜치에 머지되면 Git 이 이슈를 닫는다(종전 동작)
-  //   끔 : 「fix(#N): 제목」 — 이슈는 확인을 거쳐 완료(E)가 될 때 IVE 가 닫는다(단계 자동화·묶음 배포를 쓰는 프로젝트)
+  //   끔 : 「fix(#N): 제목」 — 이슈는 확인을 거쳐 완료(E)가 될 때 IVE 가 닫는다(확인 단계를 쓰는 프로젝트)
   const closeOnMerge = getProjectAutomation(project.id).closeIssueOnMerge
   const commitTitle = closeOnMerge ? `fix: resolve #${iid} - ${issueTitle}` : `fix(#${iid}): ${issueTitle}`
   const mrDescription = (kind: 'MR' | 'PR') => closeOnMerge

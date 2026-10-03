@@ -15,7 +15,7 @@ type Tab = 'roles' | 'prompts' | 'automation'
  * 프로젝트 설정 모달이 아니라 이 화면에 둔다.
  *   역할: 누가(사람·에이전트) 처리·검증·확인을 할 수 있는가 (역할 명부)
  *   프롬프트: 역할별 에이전트 지시문 (편집 가능한 부분 + IVE 고정 부분)
- *   자동화: 기본 배정(「모든 단계 자동배정」), staging·배포 커밋 확인, 묶음 배포, 작성자 허용 목록, staging 비밀값, 상한
+ *   자동화: 기본 배정(「모든 단계 자동배정」), staging·배포 커밋 확인, 머지·검사, 작성자 허용 목록, staging 비밀값, 상한
  */
 export default function StageAutomationSection({ projectId }: { projectId: string }) {
   const t = useTranslations('automation')
