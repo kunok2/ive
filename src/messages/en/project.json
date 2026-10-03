@@ -221,5 +221,5 @@
   "boardDoneToday": "Done today",
   "activeVerifyingHeader": "Verifying {n}",
   "activeConfirmingHeader": "Confirming {n}",
-  "waitShort": "+{n} waiting"
+  "waitShort": "←{n}"
 }

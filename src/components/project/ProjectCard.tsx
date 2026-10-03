@@ -504,7 +504,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
           title={tp('workingTooltip')}
           className={`flex-1 min-w-0 py-2.5 px-1 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'running' ? 'bg-ive-stage-process/5' : 'hover:bg-white/[0.02]'}`}
         >
-          <div className="flex items-center gap-1">
+          <div className="flex items-baseline gap-1">
             <span className={`text-lg font-bold leading-none ${agentWorkingCount > 0 ? 'text-ive-stage-process animate-pulse' : 'text-ive-text-dim'}`}>
               {agentWorkingCount}
             </span>
@@ -520,7 +520,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
           title={tp('verifyingTooltip')}
           className={`flex-1 min-w-0 py-2.5 px-1 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'verifying' ? 'bg-ive-stage-verify/5' : 'hover:bg-white/[0.02]'}`}
         >
-          <div className="flex items-center gap-1">
+          <div className="flex items-baseline gap-1">
             <span className={`text-lg font-bold leading-none ${verifyingCount > 0 ? 'text-ive-stage-verify animate-pulse' : 'text-ive-text-dim'}`}>
               {verifyingCount}
             </span>
@@ -536,7 +536,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
           title={tp('confirmingTooltip')}
           className={`flex-1 min-w-0 py-2.5 px-1 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'confirming' ? 'bg-ive-stage-confirm/5' : 'hover:bg-white/[0.02]'}`}
         >
-          <div className="flex items-center gap-1">
+          <div className="flex items-baseline gap-1">
             <span className={`text-lg font-bold leading-none ${confirmingCount > 0 ? 'text-ive-stage-confirm animate-pulse' : 'text-ive-text-dim'}`}>
               {confirmingCount}
             </span>

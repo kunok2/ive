@@ -142,7 +142,7 @@ export default function ProjectBoard({ project }: { project: Project }) {
             <div key={col} className={`min-h-0 flex-col rounded-lg bg-ive-bg-card/60 border border-ive-border-subtle ${col === 'done' ? 'hidden wide:flex' : 'flex'}`}>
               <div className={`shrink-0 flex items-center gap-1.5 mx-3 pt-3 pb-2 border-b-2 ${calm ? 'border-ive-cyan' : STAGE_TONE[col as 'process' | 'verify' | 'confirm'].border}`}>
                 <span className="text-sm font-bold text-ive-text">{tp(COL_LABEL[col])}</span>
-                {/* 진행 중 건수 + 그 단계 대기(⏱n) — 카드의 단계 칸과 같은 표기 */}
+                {/* 진행 중 건수 + 그 단계 대기(←n) — 카드의 단계 칸과 같은 표기 */}
                 <span className={`text-xl font-bold leading-none tabular-nums ${!activeN ? 'text-ive-text-dim' : calm ? 'text-ive-cyan' : STAGE_TONE[col as 'process' | 'verify' | 'confirm'].text}`}>{activeN}</span>
                 <WaitPill n={waitN} title={tp('stageWaitingHint', { n: waitN })} />
                 {col === 'done' && <span className="ml-auto text-xs font-bold text-ive-text-dim">{tp('boardDoneSub')}</span>}

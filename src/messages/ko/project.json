@@ -221,5 +221,5 @@
   "boardDoneToday": "오늘 완료",
   "activeVerifyingHeader": "검증 중 {n}",
   "activeConfirmingHeader": "확인 중 {n}",
-  "waitShort": "대기 {n}"
+  "waitShort": "←{n}"
 }
