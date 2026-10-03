@@ -243,5 +243,6 @@
   "snapshotHint": "{at} 에 확정된 값입니다. 단가를 나중에 바꿔도 이 보고서 숫자는 변하지 않습니다.",
   "today": "오늘",
   "yearMonth": "{year}년 {month}월",
-  "yearUnit": "{year}년"
+  "yearUnit": "{year}년",
+  "liveAsOf": "{time} 기준 · 1분마다 자동 갱신"
 }

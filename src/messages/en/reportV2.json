@@ -243,5 +243,6 @@
   "snapshotHint": "Finalized at {at}. Later rate changes do not alter this report.",
   "today": "Today",
   "yearMonth": "{month}/{year}",
-  "yearUnit": "{year}"
+  "yearUnit": "{year}",
+  "liveAsOf": "As of {time} · refreshes every minute"
 }

@@ -14,6 +14,7 @@ import { useDialog } from '@/components/ui/ConfirmDialog'
 import PullToRefresh from '@/components/ui/PullToRefresh'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { getKSTTodayString } from '@/lib/date-utils'
+import { useTab } from '@/lib/tab-context'
 import type { ReportModel, HeldIssue } from '@/lib/report-model/types'
 import { periodOf, previousPeriod, nextPeriod, addDays, FINALIZE_AFTER_DAYS, type ReportType } from '@/lib/report-model/period'
 import {
@@ -58,21 +59,23 @@ export default function ReportsTab() {
 
   // 기간을 빠르게 넘기면 요청이 겹친다 — 마지막 요청의 응답만 화면에 쓴다
   const reqSeq = useRef(0)
-  const fetchReport = useCallback(async () => {
+  // 화면 숫자가 언제 기준인지 — 진행 중인 기간은 저절로 다시 받으므로 기준 시각을 함께 보인다
+  const [fetchedAt, setFetchedAt] = useState<number | null>(null)
+  // silent: 자동 갱신 — 로딩 표시를 띄우지 않고, 실패해도 보던 숫자를 그대로 둔다
+  const fetchReport = useCallback(async (silent = false) => {
     const seq = ++reqSeq.current
-    setLoading(true)
-    setError(null)
+    if (!silent) { setLoading(true); setError(null) }
     try {
       const res = await fetch(`/api/reports/v2?type=${type}&date=${date}`)
       // 서버 문구는 언어가 고정이라 보이지 않고, 오류 코드만 함께 보인다
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.code || `http_${res.status}`)
       const m = await res.json()
-      if (seq === reqSeq.current) setModel(m)
+      if (seq === reqSeq.current) { setModel(m); setFetchedAt(Date.now()) }
     } catch (e) {
-      if (seq !== reqSeq.current) return
+      if (seq !== reqSeq.current || silent) return
       setError((e as Error).message)
       setModel(null)
-    } finally { if (seq === reqSeq.current) setLoading(false) }
+    } finally { if (seq === reqSeq.current && !silent) setLoading(false) }
   }, [type, date])
 
   useEffect(() => { fetchReport() }, [fetchReport])
@@ -105,6 +108,17 @@ export default function ReportsTab() {
   const prevLabel = tr(`prev.${type}`)
   const next = nextPeriod(shown)
   const isTodayPeriod = shown.start <= today && today < shown.end
+  // 진행 중인 기간은 1분마다 저절로 다시 받는다(보고서 탭을 보고 있을 때만). 끝난 기간은 고정
+  const { activeTab } = useTab()
+  const live = isTodayPeriod && activeTab === 'reports'
+  useEffect(() => {
+    if (!live) return
+    const refresh = () => { if (document.visibilityState === 'visible') fetchReport(true) }
+    const timer = setInterval(refresh, 60_000)
+    document.addEventListener('visibilitychange', refresh)
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', refresh) }
+  }, [live, fetchReport])
+  const asOf = fetchedAt ? new Date(fetchedAt).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) : null
   // 메일의 "내 일 열기"로 왔으면 내 손에 있는 일로 내린다(한 번만)
   const mineRef = useRef<HTMLDivElement>(null)
   const mineScrolled = useRef(false)
@@ -115,7 +129,7 @@ export default function ReportsTab() {
   }, [linked, model])
 
   return (
-    <PullToRefresh onRefresh={fetchReport} className="w-full flex-1 flex flex-col max-w-lg desk:max-w-[1360px] mx-auto px-4 desk:px-6 overflow-hidden">
+    <PullToRefresh onRefresh={() => fetchReport()} className="w-full flex-1 flex flex-col max-w-lg desk:max-w-[1360px] mx-auto px-4 desk:px-6 overflow-hidden">
       <div className="shrink-0 pt-4 pb-2 w-full desk:max-w-lg desk:mx-auto" data-tour="reports-period">
         <div className="flex gap-1 mb-2">
           {(['weekly', 'monthly', 'yearly'] as const).map(rt => (
@@ -150,6 +164,12 @@ export default function ReportsTab() {
           {/* 진행 중인 기간 다음은 아직 오지 않은 기간이라 열지 않는다 */}
           <button aria-label={tr('nextPeriod')} disabled={next.start > today} onClick={() => setDate(next.start)} className="w-11 h-11 flex items-center justify-center rounded-lg text-ive-text-secondary hover:text-ive-text disabled:opacity-40"><i className="fa-solid fa-chevron-right" /></button>
         </div>
+        {/* 진행 중인 기간: 몇 시 기준 숫자인지(1분마다 저절로 갱신). 끝난 기간은 위의 확정·잠정 배지로 충분하다 */}
+        {isTodayPeriod && asOf && (
+          <div className="text-center text-xs font-bold text-ive-text-dim -mt-1">
+            <i className="fa-solid fa-rotate mr-1 opacity-70" />{tr('liveAsOf', { time: asOf })}
+          </div>
+        )}
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto">
@@ -159,7 +179,7 @@ export default function ReportsTab() {
             <div className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-4 text-sm font-bold text-ive-text flex flex-col gap-2">
               <span><i className="fa-solid fa-circle-xmark text-ive-red mr-1.5" />{tr('loadFailed')}</span>
               <span className="text-xs text-ive-text-secondary break-all">{tr('errorCode', { code: error })}</span>
-              <button onClick={fetchReport} className="self-start px-3 py-2 rounded-lg bg-white/5 border border-ive-border-subtle text-sm font-bold text-ive-text-muted">{tr('retry')}</button>
+              <button onClick={() => fetchReport()} className="self-start px-3 py-2 rounded-lg bg-white/5 border border-ive-border-subtle text-sm font-bold text-ive-text-muted">{tr('retry')}</button>
             </div>
           )}
           {/* PC 3단 — 카드 폭은 폰과 같게, 읽는 순서는 단마다 위에서 아래로(폰·패드는 1열 가운데) */}
