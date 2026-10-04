@@ -92,7 +92,7 @@ export function ShareTrendSection({ months, tr }: { months: MonthPoint[]; tr: Tr
         ))}
       </div>
       {lead && first !== ref && (
-        <span className="text-xs font-bold text-ive-text-muted">{tr('shareMoved', {
+        <span className="text-sm font-bold text-ive-text-secondary">{tr('shareMoved', {
           name: lead.name, from: pct(shareOf(first, lead.id)), to: pct(shareOf(ref, lead.id)),
           m1: Number(first.label.slice(5, 7)), m2: Number(ref.label.slice(5, 7)),
         })}</span>
@@ -147,25 +147,26 @@ export function RiskSection({ risks, held, tr }: { risks: Risks; held: Held; tr:
     items.push(<RiskCard key="a" icon="fa-clock" title={tr('riskAged', { n: held.over7 })}
       detail={held.prevOver7 != null ? tr('riskAgedPrev', { n: held.prevOver7 }) : ''} />)
   }
+  // 다른 칸과 같은 짜임 — 카드 안에 제목, 항목은 그 안의 하위 상자(「지금 손쓸 것」과 같은 모양)
   return (
-    <section className="flex flex-col gap-2">
-      <span className="text-base font-bold text-ive-text pt-1">{items.length ? tr('riskTitleN', { n: items.length }) : tr('riskTitle')}</span>
-      {items.length ? items : (
-        <div className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-3 flex items-center gap-2">
+    <Card>
+      <SectionTitle>{items.length ? tr('riskTitleN', { n: items.length }) : tr('riskTitle')}</SectionTitle>
+      {items.length ? <div className="flex flex-col gap-2">{items}</div> : (
+        <div className="flex items-center gap-2">
           <i className="fa-solid fa-circle-check text-sm text-ive-cyan" />
           <span className="text-sm font-bold text-ive-text">{tr('riskNone')}</span>
         </div>
       )}
       {risks.rejectRate != null && (
-        <span className="text-xs font-bold text-ive-text-muted px-1">{tr('rejectRateLine', { v: pct(risks.rejectRate), p: risks.prevRejectRate != null ? pct(risks.prevRejectRate) : '—' })}</span>
+        <span className="text-sm font-bold text-ive-text-secondary">{tr('rejectRateLine', { v: pct(risks.rejectRate), p: risks.prevRejectRate != null ? pct(risks.prevRejectRate) : '—' })}</span>
       )}
-    </section>
+    </Card>
   )
 }
 
 function RiskCard({ icon, title, detail }: { icon: string; title: string; detail: string }) {
   return (
-    <div className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-3 flex gap-2">
+    <div className="bg-ive-bg/50 border border-ive-border-dark rounded-lg p-3 flex gap-2">
       <i className={`fa-solid ${icon} text-sm mt-0.5 text-ive-amber`} />
       <div className="flex flex-col gap-1 min-w-0">
         <span className="text-sm font-bold text-ive-text">{title}</span>

@@ -37,6 +37,8 @@ export function StackedHBar({
   const hovered = hoveredProp !== undefined ? hoveredProp : own
   const setHovered = (k: string | null) => { if (onHover) onHover(k); else setOwn(k) }
   const shown = segments.filter(s => s.value > 0)
+  // 묶음이 있으면 묶음 안은 완전히 붙이고(대기+진행 한 덩어리) 묶음 사이만 띄운다
+  const grouped = shown.some(s => s.group != null)
   const total = shown.reduce((sum, s) => sum + s.value, 0)
   if (total <= 0) return null
 
@@ -52,7 +54,7 @@ export function StackedHBar({
     <div className="relative" onPointerLeave={() => setHovered(null)}>
       {/* 바탕 줄 — 조각 사이 틈으로 보인다 */}
       <div className={`absolute inset-x-0 top-1/2 -translate-y-1/2 rounded-full bg-ive-bg ${heightClass}`} aria-hidden="true" />
-      <div className={`relative flex ${gapClass} -my-2`}>
+      <div className={`relative flex ${grouped ? '' : gapClass} -my-2`}>
         {shown.map((s, i) => {
           const dim = hovered != null && hovered !== s.key
           const groupStart = i === 0 || shown[i - 1].group !== s.group

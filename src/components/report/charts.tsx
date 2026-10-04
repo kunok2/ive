@@ -74,8 +74,8 @@ export function TrendCompare({ trend, type, tr, dayLabels, prevLabel }: { trend:
       <ResponsiveContainer width="100%" height={150}>
         <AreaChart data={data} margin={{ top: 6, right: 6, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
-          <XAxis dataKey="label" tick={{ fill: C.muted, fontSize: 10 }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
-          <YAxis tick={{ fill: C.muted, fontSize: 10 }} axisLine={false} tickLine={false} width={24} allowDecimals={false} />
+          <XAxis dataKey="label" tick={{ fill: C.muted, fontSize: 12 }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+          <YAxis tick={{ fill: C.muted, fontSize: 12 }} axisLine={false} tickLine={false} width={24} allowDecimals={false} />
           {!mobile && <Tooltip content={<Tip />} />}
           <Area dataKey="prevInflow" name={tr('legPrevInflow', { label: prevLabel })} fill="none" stroke={C.muted} strokeWidth={1.5} strokeDasharray="4 3" dot={false} connectNulls />
           <Area dataKey="prevCompleted" name={tr('legPrevDone', { label: prevLabel })} fill="none" stroke={C.primary} strokeWidth={1.5} strokeDasharray="4 3" dot={false} connectNulls />
@@ -101,8 +101,8 @@ export function HeldCompare({ trend, type, tr, dayLabels, prevLabel }: { trend: 
       <ResponsiveContainer width="100%" height={110}>
         <LineChart data={data} margin={{ top: 6, right: 6, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
-          <XAxis dataKey="label" tick={{ fill: C.muted, fontSize: 10 }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
-          <YAxis tick={{ fill: C.muted, fontSize: 10 }} axisLine={false} tickLine={false} width={24} allowDecimals={false} />
+          <XAxis dataKey="label" tick={{ fill: C.muted, fontSize: 12 }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+          <YAxis tick={{ fill: C.muted, fontSize: 12 }} axisLine={false} tickLine={false} width={24} allowDecimals={false} />
           {!mobile && <Tooltip content={<Tip />} />}
           <Line dataKey="prevHeld" name={tr('legPrevHeld', { label: prevLabel })} stroke={C.muted} strokeWidth={1.5} strokeDasharray="4 3" dot={false} connectNulls />
           <Line dataKey="held" name={tr('legHeld')} stroke={C.text} strokeWidth={2} dot={{ r: 2, fill: C.text }} connectNulls={false} />
@@ -119,9 +119,9 @@ export function MonthBars({ months, tr }: { months: MonthPoint[]; tr: Tr }) {
   return (
     <ResponsiveContainer width="100%" height={120}>
       <BarChart data={data} margin={{ top: 14, right: 4, left: 0, bottom: 0 }}>
-        <XAxis dataKey="label" tick={{ fill: C.muted, fontSize: 10 }} axisLine={false} tickLine={false} />
+        <XAxis dataKey="label" tick={{ fill: C.muted, fontSize: 12 }} axisLine={false} tickLine={false} />
         <YAxis hide allowDecimals={false} />
-        <Bar dataKey="v" radius={[2, 2, 0, 0]} label={{ position: 'top', fill: C.secondary, fontSize: 10 }}
+        <Bar dataKey="v" radius={[2, 2, 0, 0]} label={{ position: 'top', fill: C.secondary, fontSize: 12 }}
           shape={(p: any) => <rect x={p.x} y={p.y} width={p.width} height={p.height} rx={2} fill={C.primary} fillOpacity={p.payload.last ? 1 : 0.4} />} />
       </BarChart>
     </ResponsiveContainer>

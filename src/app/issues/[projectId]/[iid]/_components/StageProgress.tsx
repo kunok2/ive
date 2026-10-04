@@ -9,9 +9,9 @@ import { ISSUE_STAGE_STYLE, type IssueStageStyle } from '@/lib/active-work'
 /** 진행 막대 칸(유입·처리·검증·확인·완료) → 그 단계의 진행·대기 색. 대기 화살표 끝(삼각형)은 border-l 색 */
 const MACRO_TONE: Record<number, { active: IssueStageStyle; wait: IssueStageStyle; waitArrow: string }> = {
   1: { active: ISSUE_STAGE_STYLE.none, wait: ISSUE_STAGE_STYLE.none, waitArrow: 'border-l-ive-border-subtle' },
-  2: { active: ISSUE_STAGE_STYLE.dev, wait: ISSUE_STAGE_STYLE.waiting, waitArrow: 'border-l-ive-stage-process/40' },
-  3: { active: ISSUE_STAGE_STYLE.verifying, wait: ISSUE_STAGE_STYLE.verify_waiting, waitArrow: 'border-l-ive-stage-verify/40' },
-  4: { active: ISSUE_STAGE_STYLE.confirming, wait: ISSUE_STAGE_STYLE.confirm_waiting, waitArrow: 'border-l-ive-stage-confirm/40' },
+  2: { active: ISSUE_STAGE_STYLE.dev, wait: ISSUE_STAGE_STYLE.waiting, waitArrow: 'border-l-ive-text-muted/50' },
+  3: { active: ISSUE_STAGE_STYLE.verifying, wait: ISSUE_STAGE_STYLE.verify_waiting, waitArrow: 'border-l-ive-text-muted/50' },
+  4: { active: ISSUE_STAGE_STYLE.confirming, wait: ISSUE_STAGE_STYLE.confirm_waiting, waitArrow: 'border-l-ive-text-muted/50' },
   5: { active: ISSUE_STAGE_STYLE.done, wait: ISSUE_STAGE_STYLE.done, waitArrow: 'border-l-ive-green' },
 }
 import {

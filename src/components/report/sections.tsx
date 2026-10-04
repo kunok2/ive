@@ -71,13 +71,13 @@ export function HeldCard({ held, tr, prevLabel, tracking }: { held: Held; tr: Tr
       <SectionTitle>{title}</SectionTitle>
       {held.end == null ? (
         <div className="flex flex-col gap-1">
-          <span className="text-base font-bold text-ive-text-secondary">{tr('heldNoRecord')}</span>
+          <span className="text-sm font-bold text-ive-text-secondary">{tr('heldNoRecord')}</span>
           <span className="text-xs font-bold text-ive-text-muted">{tracking ? tr('heldTrackingSince', { date: tracking }) : tr('heldTrackingSoon')}</span>
         </div>
       ) : (
         <>
           <div className="flex items-baseline gap-3 flex-wrap">
-            <span className="text-4xl font-bold text-ive-text tabular-nums leading-none"><CountBump value={held.end}>{held.end.toLocaleString()}</CountBump><span className="text-lg ml-0.5">{tr('countUnit')}</span></span>
+            <span className="text-3xl font-bold text-ive-text tabular-nums leading-none"><CountBump value={held.end}>{held.end.toLocaleString()}</CountBump><span className="text-base ml-0.5">{tr('countUnit')}</span></span>
             {held.start != null && <Delta cur={held.end} prev={held.start} goodWhenUp={false} text={tr('vsPrevEnd', { label: prevLabel, n: held.start })} />}
           </div>
           {held.live && (
@@ -154,7 +154,7 @@ function ActionCard({ tone, icon, title, children }: { tone: 'red' | 'amber'; ic
 
 function IssueLine({ text, right, href }: { text: string; right: string; href: string }) {
   return (
-    <a href={href} className="flex items-center justify-between gap-2 text-xs font-bold text-ive-text-secondary hover:text-ive-text">
+    <a href={href} className="flex items-center justify-between gap-2 text-sm font-bold text-ive-text-secondary hover:text-ive-text">
       <span className="truncate">{text}</span>
       <span className="tabular-nums shrink-0">{right}</span>
     </a>
@@ -295,7 +295,7 @@ export function StageTimeSection({ st, tr, prevLabel }: { st: StageTime | undefi
         </>
       )}
       {prevAvg != null && (
-        <span className="text-xs font-bold text-ive-text-secondary">{tr('stageTimePrev', { label: prevLabel, n: st.prevN, t: fmtHours(tr, prevAvg) })}</span>
+        <span className="text-sm font-bold text-ive-text-secondary">{tr('stageTimePrev', { label: prevLabel, n: st.prevN, t: fmtHours(tr, prevAvg) })}</span>
       )}
       <span className="text-xs font-bold text-ive-text-muted">{tr('stageTimeNote')}</span>
     </Card>
@@ -371,14 +371,14 @@ export function ProjectsSection({ projects, cost, tr, prevLabel }: { projects: P
             ))}
           </div>
           {moved && Math.abs(moved.d) >= 0.05 && (
-            <span className="text-xs font-bold text-ive-text-muted">{tr(moved.d > 0 ? 'shareUp' : 'shareDown', { name: moved.p.name, label: prevLabel, pp: Math.round(Math.abs(moved.d) * 100) })}</span>
+            <span className="text-sm font-bold text-ive-text-secondary">{tr(moved.d > 0 ? 'shareUp' : 'shareDown', { name: moved.p.name, label: prevLabel, pp: Math.round(Math.abs(moved.d) * 100) })}</span>
           )}
         </>
       ) : (
-        <span className="text-xs font-bold text-ive-text-muted">{tr('hoursNone')}</span>
+        <span className="text-sm font-bold text-ive-text-secondary">{tr('hoursNone')}</span>
       )}
       <div className="overflow-x-auto">
-        <table className="w-full text-xs font-bold">
+        <table className="w-full text-sm font-bold">
           <thead>
             <tr className="text-ive-text-muted">
               <th className="text-left py-1.5 pr-2">{tr('colProject')}</th>
@@ -493,20 +493,20 @@ export function CompletedList({ items, tr }: { items: CompletedItem[]; tr: Tr })
   if (items.length === 0) return null
   return (
     <section className="bg-ive-bg-card border border-ive-border-subtle rounded-lg">
-      <button onClick={() => setOpen(o => !o)} className="w-full min-h-12 px-4 flex items-center justify-between text-sm font-bold text-ive-text">
+      <button onClick={() => setOpen(o => !o)} className="w-full min-h-12 px-4 flex items-center justify-between text-base font-bold text-ive-text">
         <span>{tr('completedList')}</span>
-        <span className="flex items-center gap-2 text-xs text-ive-text-muted">{tr('countN', { n: items.length })}<i className={`fa-solid fa-chevron-${open ? 'up' : 'down'}`} /></span>
+        <span className="flex items-center gap-2 text-xs font-bold text-ive-text-muted">{tr('countN', { n: items.length })}<i className={`fa-solid fa-chevron-${open ? 'up' : 'down'}`} /></span>
       </button>
       {/* PC 다단: 펼친 목록이 단 높이를 키워 다른 카드를 다른 단으로 밀지 않도록 카드 안에서 스크롤한다 */}
       {open && (
         <div className="px-4 pb-3 flex flex-col desk:max-h-[480px] desk:overflow-y-auto">
           {items.slice(0, limit).map(i => (
-            <a key={`${i.projectId}:${i.iid}:${i.completedAt}`} href={issueHref(i.projectId, i.iid)} className="flex items-center justify-between gap-2 py-2 border-t border-ive-border-dark text-xs font-bold hover:bg-white/[0.03]">
+            <a key={`${i.projectId}:${i.iid}:${i.completedAt}`} href={issueHref(i.projectId, i.iid)} className="flex items-center justify-between gap-2 py-2 border-t border-ive-border-dark font-bold hover:bg-white/[0.03]">
               <span className="flex flex-col min-w-0">
-                <span className="text-ive-text truncate">#{i.iid} {i.title ?? ''}</span>
-                <span className="text-ive-text-muted truncate">{i.projectName} · {tr(`form.${i.form}`)}</span>
+                <span className="text-sm text-ive-text truncate">#{i.iid} {i.title ?? ''}</span>
+                <span className="text-xs text-ive-text-muted truncate">{i.projectName} · {tr(`form.${i.form}`)}</span>
               </span>
-              <span className="text-ive-text-secondary tabular-nums shrink-0">{i.leadH != null ? fmtHours(tr, i.leadH) : kstMonthDay(i.completedAt)}</span>
+              <span className="text-sm text-ive-text-secondary tabular-nums shrink-0">{i.leadH != null ? fmtHours(tr, i.leadH) : kstMonthDay(i.completedAt)}</span>
             </a>
           ))}
           {items.length > limit && (
@@ -533,12 +533,12 @@ export function MineSection({ mine, tr, highlight }: { mine: HeldIssue[]; tr: Tr
       ) : (
         <div className="flex flex-col">
           {mine.slice(0, limit).map(i => (
-            <a key={`${i.projectId}:${i.iid}`} href={issueHref(i.projectId, i.iid)} className="flex items-center justify-between gap-2 py-2 border-t border-ive-border-dark first:border-t-0 text-xs font-bold hover:bg-white/[0.03]">
+            <a key={`${i.projectId}:${i.iid}`} href={issueHref(i.projectId, i.iid)} className="flex items-center justify-between gap-2 py-2 border-t border-ive-border-dark first:border-t-0 font-bold hover:bg-white/[0.03]">
               <span className="flex flex-col min-w-0">
-                <span className="text-ive-text truncate">#{i.iid} {i.title ?? ''}</span>
-                <span className="text-ive-text-muted truncate">{i.projectName} · {tr(`stage.${i.stage}`)}{i.role ? ` · ${tr(`role.${i.role}`)}` : ''}</span>
+                <span className="text-sm text-ive-text truncate">#{i.iid} {i.title ?? ''}</span>
+                <span className="text-xs text-ive-text-muted truncate">{i.projectName} · {tr(`stage.${i.stage}`)}{i.role ? ` · ${tr(`role.${i.role}`)}` : ''}</span>
               </span>
-              <span className="text-ive-text-secondary tabular-nums shrink-0">{tr('elapsed', { t: fmtHours(tr, i.ageHours) })}</span>
+              <span className="text-sm text-ive-text-secondary tabular-nums shrink-0">{tr('elapsed', { t: fmtHours(tr, i.ageHours) })}</span>
             </a>
           ))}
           {mine.length > limit && (
