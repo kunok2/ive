@@ -3,6 +3,26 @@
  */
 import { Project } from "@/types";
 
+/** 처리 결과 표시 — 최종 메시지 마지막 줄. mr-creator 가 읽어 검증대기 / 처리 미완(재처리)을 가른다. */
+export const DEV_RESULT_MARKER = 'IVE-RESULT:';
+
+/** 최종 보고에서 결과 표시를 읽는다. 표시가 없으면 null(종전 동작 — 검증대기). */
+export function devResultOf(report: string): 'complete' | 'incomplete' | null {
+  const m = [...report.matchAll(/IVE-RESULT:\s*`?\s*(complete|incomplete)\b/gi)].pop();
+  return m ? (m[1].toLowerCase() as 'complete' | 'incomplete') : null;
+}
+
+// 요건·공용 부품 전수·범위 — IVE 고정 줄(프로젝트 덮어쓰기로 지우지 못한다).
+//   #1972·#1975(2026-10-04): 공용 목록 부품을 바꾸면서 쓰는 곳을 훑지 않아 다른 화면이 깨졌고(스크롤바가 화면 밖),
+//   이슈가 명시한 검사 축을 「범위 밖」이라며 건너뛰었다.
+export const DEV_REQUIREMENT_LINES = `- Requirements: list every requirement in the issue body and in every later rejection/confirmation note (later corrections win) and implement all of them. Ending your run while a requirement is unimplemented is a failure, not a result — stop early only when you need the issue author's decision (then ask in a comment).
+- Shared code: when you change a shared component, style class, CSS variable, composable or utility, grep every usage in the repository and make sure each one is still correct — including screens the issue does not name. A fix that is right for one screen and breaks another is not done.
+- Scope: requirements written in the issue or in a rejection note are in scope — including any checks, lint axes or tests they ask for. Do NOT create or modify shared lint/check scripts, CI config, test harnesses or unrelated files that nobody asked for; if you think such follow-up work is needed, propose it in your final summary instead.`;
+
+// ⛔ 「IVE 제약이 저장소 규칙(CLAUDE.md·rules·skills)보다 우선」이라고 넓게 쓰지 않는다 (#1975) —
+//    환경 우회 금지만 막으려던 줄이 요건·전수 확인까지 끊어도 된다고 읽혔다. 예외는 환경 하나뿐이다.
+export const DEV_REPO_RULES_LINE = `- Repository rules (CLAUDE.md, .claude/rules, skills) apply in full. The only IVE exception is the environment: when a repository rule needs something this container lacks (running app server, database, real screen), do the code-level part and report the rest as not verified.`;
+
 /**
  * 이슈 처리용 프롬프트를 구성합니다.
  */
@@ -38,24 +58,24 @@ export function buildPrompt(
 ## Issue #${iid}: ${issue.title}
 ${issue.description || "No description"}`;
   } else {
+    // ⛔ 「피드백이 유일한 지시, 원래 요건은 이미 끝났다」고 쓰지 않는다 (#1972·#1975, 2026-10-04).
+    //   1회차가 요건 4개 중 1개만 하고 끝났는데, 2회차부터 이 문구 때문에 반려 노트의 증상만 고치고
+    //   원래 요건·공용 부품 전수는 다시 보지 않았다 → 처리 4회·반려 5회 뒤 사람이 직접 고쳤다.
     const feedbackSection = latestFeedback
-      ? `## 🚨 PRIMARY TASK — User Feedback (this is your ONLY instruction):
+      ? `## 🚨 Feedback since the last run (address every point):
 ${latestFeedback}
 
-**⚠️ IMPORTANT: Only perform the user request in the "PRIMARY TASK" section above. The original issue body has already been completed in previous iterations. The history and issue body below are for context only — do NOT re-implement the original request.**`
-      : `## 🚨 PRIMARY TASK — Review and fix remaining issues:
-The user has requested a re-run of this issue. Review the conversation history below and the previous work, then fix any remaining problems or incomplete parts.`;
+**⚠️ The original issue below is still in force.** The feedback lists what was rejected or found missing — it does NOT mean the rest of the issue is done. Address every point in the feedback, re-check every requirement of the original issue against the current branch and finish whatever is still missing, and do not regress what earlier runs fixed.`
+      : `## 🚨 Re-run — finish the issue:
+The user has requested a re-run of this issue. Review the conversation history below and the previous work, re-check every requirement of the original issue against the current branch, then fix any remaining problems or incomplete parts.`;
 
     prompt = `This is follow-up iteration #${iterationCount} for issue #${iid} "${issue.title}". ${langInstruction}
 
 ${feedbackSection}
 ${iterationContext}
 
-<details>
-<summary>Reference: Original issue body (context only — do NOT re-implement)</summary>
-
-${issue.description || "No description"}
-</details>`;
+## Original issue #${iid} (requirements still in force)
+${issue.description || "No description"}`;
   }
 
   // Provider API 정보 추가
@@ -124,15 +144,20 @@ curl -s ${authHeader} "${gitlabBaseUrl}/api/v4/projects/${encodedProjectPath}/is
   // 결과 노트 규약 — IVE 가 최종 메시지를 이슈 결과 노트로 올린다(mr-creator.buildWorkSummary).
   // 시작·진행·결과 코멘트를 에이전트가 따로 쓰면 같은 내용이 노트 2~3개로 겹치고, 처리 중 말까지 실려 아무도 읽지 않는다.
   const reportSections = isKo
-    ? '**원인** / **수정** / **검증** / **확인 못 한 것**(있을 때만) / **결정 필요**(있을 때만)'
-    : '**Cause** / **Fix** / **Verified** / **Not verified** (only if any) / **Decision needed** (only if any)';
+    ? '**원인** / **수정** / **검증** / **요건 대조** / **확인 못 한 것**(있을 때만) / **결정 필요**(있을 때만)'
+    : '**Cause** / **Fix** / **Verified** / **Requirements** / **Not verified** (only if any) / **Decision needed** (only if any)';
+  // 결과 표시 — IVE(mr-creator)가 이 줄로 「검증대기」와 「처리 미완(재처리)」을 가른다.
   const reportRule = `- Issue comments: do NOT post start, progress or result comments — IVE posts your final message on the issue as the result note. Post a comment only when you need the issue author's decision to continue.${agentMarkerHint}
-- Your FINAL message is that result note, and people only read short ones. Write it as a brief report, not a work log — at most ~15 lines:
+- Your FINAL message is that result note, and people only read short ones. Write it as a brief report, not a work log — at most ~25 lines:
   ${reportSections} — 1–3 short bullets each; name the changed files once.
-  No progress narration ("checking…", "now I will…"), no lists or tables of places you inspected, no repetition, no remarks about git add/commit status.`;
+  The requirements section has one line per requirement (issue body + rejection/confirmation notes): ✅ done (where) or ❌ not done (why).
+  No progress narration ("checking…", "now I will…"), no lists or tables of places you inspected, no repetition, no remarks about git add/commit status.
+- The very last line of your final message must be exactly \`${DEV_RESULT_MARKER} complete\` (every requirement ✅) or \`${DEV_RESULT_MARKER} incomplete\` (any ❌). An incomplete run goes back to the queue to be continued; it is never passed on as done.`;
 
+  // ⛔ 「상한의 60% 안에 끝내라·검증이 길면 멈추고 보고하라」를 두지 않는다 (#1975, 2026-10-04):
+  //   요건 4개 중 1개만 하고 8분 만에 스스로 끝냈다. 시간 상한은 헛돌기(환경 우회)를 끊는 안전장치일 뿐이다.
   const timeBudget = maxRunMinutes > 0 ? `
-- Time budget: this run is force-stopped after ${maxRunMinutes} minutes. Aim to finish well within ~${Math.max(5, Math.round(maxRunMinutes * 0.6))} minutes. Stage your changes (git add) as soon as the fix is in place, then verify. If verification is taking long, stop and report what remains unverified rather than pushing on.` : '';
+- Time budget: this run is force-stopped after ${maxRunMinutes} minutes (your changes are then preserved as a patch). Stage your changes (git add) as soon as each fix is in place. Spend the time on implementing every requirement first; if time runs short, skip optional verification — never requirements.` : '';
 
   if (instructionsOverride && instructionsOverride.trim()) {
     // 덮어쓰기: 편집 가능한 줄만 바꾸고 IVE 고정 줄(스테이징·커밋 금지·코멘트 마커·시간 예산·언어)은 유지.
@@ -140,6 +165,8 @@ curl -s ${authHeader} "${gitlabBaseUrl}/api/v4/projects/${encodedProjectPath}/is
 
 ## Instructions:
 ${instructionsOverride.trim()}
+${DEV_REQUIREMENT_LINES}
+${DEV_REPO_RULES_LINE}
 - After completing changes, stage them with git add.
 - Do NOT git commit or push.
 ${reportRule}${timeBudget}
@@ -157,9 +184,9 @@ ${reportRule}${timeBudget}
 - Do NOT git commit or push.
 ${reportRule}
 - Resolve the problem precisely — no superficial fixes — and review your change until you are confident it works.
-- Scope: change only what this issue asks for. Do NOT create or modify shared lint/check scripts, CI config, test harnesses or unrelated files unless the issue explicitly asks. If you think such follow-up work is needed, propose it in your final summary instead of doing it.
-- Verification environment: use only what this container already provides. Playwright browsers (chromium, webkit, firefox) are preinstalled under $PLAYWRIGHT_BROWSERS_PATH; if the project pins a different Playwright version, \`npx playwright install <browser>\` (no --with-deps) into that same path. Do NOT install system packages, download .deb files, patch LD_LIBRARY_PATH, or debug browser/tool startup — you have no root. If a required verification step cannot run here, skip it and say plainly in your summary what was not verified and why (e.g. "확인 못 했다: WebKit — 컨테이너에서 기동 불가").
-- These IVE constraints take precedence over repository instructions (CLAUDE.md, rules, skills) that would require verification environments or check-building work this container cannot provide within scope.${timeBudget}
+${DEV_REQUIREMENT_LINES}
+- Verification environment: use only what this container already provides. Playwright browsers (chromium, webkit, firefox) are preinstalled under $PLAYWRIGHT_BROWSERS_PATH; if the project pins a different Playwright version, \`npx playwright install <browser>\` (no --with-deps) into that same path. Do NOT install system packages, download .deb files, patch LD_LIBRARY_PATH, or debug browser/tool startup — you have no root. If a verification step cannot run here, skip only that step and say plainly in your summary what was not verified and why (e.g. "확인 못 했다: WebKit — 컨테이너에서 기동 불가"). A verification you cannot run never excuses an unimplemented requirement.
+${DEV_REPO_RULES_LINE}${timeBudget}
 - When designing UI, provide text-art mockups of the result where possible.
 - IMPORTANT: ${langInstruction}`;
 

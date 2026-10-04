@@ -33,7 +33,7 @@ import path from "path";
 import { setupWorkspace, preserveWorkspaceChanges } from "./git-ops";
 import { getMaxRunMinutes, resolveCliPath, runCliProcess } from "./cli-runner";
 import { downloadIssueImages } from "./issue-images";
-import { commitPushAndCreateMR, postErrorNote } from "./mr-creator";
+import { commitPushAndCreateMR, postErrorNote, isProcessorResultNote, isBookkeepingNote, trailingIncompleteStreak } from "./mr-creator";
 import { buildPrompt, buildConflictPrompt } from "./prompt-builder";
 import { runStageWorker, type StageKindSpec } from "./stage-worker";
 import { resolveEditable } from "../role-prompts";
@@ -45,6 +45,8 @@ interface DevPrep {
   latestFeedback: string;
   iterationContext: string;
   issueImageTexts: string[];
+  /** 바로 앞까지 이어진 「처리 미완」 결과 수 — 상한을 넘으면 재처리 대신 검증대기로 넘긴다 */
+  incompleteStreak: number;
 }
 
 /**
@@ -138,6 +140,7 @@ function devStageSpec(waitingSince?: string | null): StageKindSpec<DevPrep> {
 
       // 3. 이전 작업 이력 및 사용자 피드백 확인
       let iterationCount = 1;
+      let prepIncompleteStreak = 0;
       let latestFeedback = "";
       let iterationContext = "";
       // 이슈 본문 + (사용자) 코멘트의 첨부 이미지를 모아 에이전트에게 분석시킬 텍스트
@@ -147,8 +150,13 @@ function devStageSpec(waitingSince?: string | null): StageKindSpec<DevPrep> {
         const notes = isGitHub
           ? await fetchGitHubIssueNotes(project, iid, token)
           : await fetchGitLabIssueNotes(project, iid, token);
-        const botCompletions = notes.filter((n: any) => n.body.includes("<!-- ive-bot -->") || n.body.includes("IVE(봇)"));
-        iterationCount = botCompletions.length + 1;
+        // 경계 = 처리자 결과 노트(개발 완료·처리 미완·실행 오류·변경 없음)만. 검증 반려·확인 노트는 봇 표시(<!-- ive-bot -->)가
+        // 붙어 있어도 피드백이다 — 종전엔 봇 표시가 있는 반려 노트가 피드백에서 빠지고 이력에서 800자로 잘렸다(#1975).
+        type NoteLike = { id: number; body?: string; system?: boolean };
+        const isProcessorResult = (n: NoteLike) => isProcessorResultNote(n.body || "");
+        const processorResults = (notes as NoteLike[]).filter((n) => !n.system && isProcessorResult(n));
+        iterationCount = processorResults.length + 1;
+        prepIncompleteStreak = trailingIncompleteStreak(processorResults.map((n) => n.body || ""));
 
         const userNotes = notes.filter((n: any) =>
           !n.system &&
@@ -158,9 +166,10 @@ function devStageSpec(waitingSince?: string | null): StageKindSpec<DevPrep> {
         // 사용자 코멘트의 첨부 이미지도 분석 대상에 포함 (봇/시스템 노트 제외)
         issueImageTexts.push(...userNotes.map((n: any) => n.body || ""));
 
-        if (botCompletions.length > 0) {
-          const lastBotNoteId = botCompletions[botCompletions.length - 1].id;
-          const feedbackNotes = userNotes.filter((n: any) => n.id > lastBotNoteId);
+        if (processorResults.length > 0) {
+          const lastResultId = processorResults[processorResults.length - 1].id;
+          const feedbackNotes = notes.filter((n: any) =>
+            !n.system && n.id > lastResultId && !isProcessorResult(n) && !isBookkeepingNote(n.body || ""));
           if (feedbackNotes.length > 0) {
             latestFeedback = feedbackNotes.map((n: any) => `> **${n.author.name}**: ${n.body}`).join('\n\n');
           }
@@ -179,7 +188,7 @@ function devStageSpec(waitingSince?: string | null): StageKindSpec<DevPrep> {
           iterationContext = "\n## Issue Conversation History:\n" + conversationNotes.join('\n\n---\n\n');
         }
 
-        log(`반복 횟수: ${iterationCount}차, 봇 완료 노트: ${botCompletions.length}건, 사용자 피드백: ${latestFeedback ? '있음' : '없음'}`, 'system');
+        log(`반복 횟수: ${iterationCount}차, 처리 결과 노트: ${iterationCount - 1}건(연속 미완 ${prepIncompleteStreak}), 사용자 피드백: ${latestFeedback ? '있음' : '없음'}`, 'system');
         if (latestFeedback) {
           log('=== 사용자 피드백 ===', 'system');
           log(latestFeedback, 'info');
@@ -187,7 +196,7 @@ function devStageSpec(waitingSince?: string | null): StageKindSpec<DevPrep> {
         }
       }
 
-      return { baseBranch, branchName, iterationCount, latestFeedback, iterationContext, issueImageTexts };
+      return { baseBranch, branchName, iterationCount, latestFeedback, iterationContext, issueImageTexts, incompleteStreak: prepIncompleteStreak };
     },
 
     async buildPrompt(ctx, prep) {
@@ -247,6 +256,7 @@ function devStageSpec(waitingSince?: string | null): StageKindSpec<DevPrep> {
           issueTitle: issue.title,
           token, workspacePath, baseBranch: prep.baseBranch, branchName: prep.branchName,
           iterationCount: prep.iterationCount, conversationParts, durationStr,
+          incompleteStreak: prep.incompleteStreak,
           logStream, log,
         });
       }

@@ -18,7 +18,7 @@
  *   P-6: agentId 없으면 마커 지시 없음 (conflict 작업 등)
  */
 import { describe, it, expect } from 'vitest'
-import { buildPrompt } from '@/lib/scanner/prompt-builder'
+import { buildPrompt, devResultOf, DEV_RESULT_MARKER, DEV_REQUIREMENT_LINES, DEV_REPO_RULES_LINE } from '@/lib/scanner/prompt-builder'
 import type { Project } from '@/types'
 
 function makeProject(opts: { provider?: 'github' | 'gitlab'; repoUrl?: string } = {}): Project {
@@ -131,5 +131,47 @@ describe('buildPrompt — 범위·검증 환경·시간 예산 (#1788)', () => {
     expect(withLimit).toContain('force-stopped after 40 minutes')
     const noLimit = buildPrompt(makeProject(), issue, 1, false, false, true, 1, '', '', false, 'a', 0)
     expect(noLimit).not.toContain('force-stopped')
+  })
+})
+
+// #1972·#1975 (2026-10-04): 1회차가 요건 4개 중 1개만 하고 끝났는데, 2회차부터 「피드백이 유일한 지시 —
+//   원래 요건은 이미 끝났다」를 받아 반려 노트의 증상만 고쳤다. 공용 목록 부품을 바꾸며 쓰는 곳을 훑지 않아 회귀,
+//   「IVE 제약이 CLAUDE.md 보다 우선」·「상한 60% 안에 끝내라」로 요건이 남은 채 스스로 끝냈다.
+//   P-10: 반복 실행 프롬프트는 원래 요건이 유효하다고 말하고, 「ONLY instruction」「do NOT re-implement」가 없다
+//   P-11: 요건 전수·공용 부품 전수·저장소 규칙 적용 줄이 기본·덮어쓰기 양쪽에 있다(덮어쓰기로 못 지운다)
+//   P-12: 「CLAUDE.md 보다 우선」·「60% 목표」·「검증이 길면 멈춰라」가 없다
+//   P-13: 결과 표시(IVE-RESULT) 지시가 있고, devResultOf 가 마지막 표시를 읽는다
+describe('buildPrompt — 요건 완수 (#1972·#1975)', () => {
+  const body = { title: 't', description: '요건 1·2·3·4' }
+  it('P-10: 반복 실행에서도 원래 요건이 유효', () => {
+    const p = buildPrompt(makeProject(), body, 5, false, false, true, 3, '> **검증자**: 반려', '', false, 'a', 40)
+    expect(p).not.toContain('ONLY instruction')
+    expect(p).not.toContain('do NOT re-implement')
+    expect(p).toContain('The original issue below is still in force')
+    expect(p).toContain('requirements still in force')
+    expect(p).toContain('요건 1·2·3·4')
+  })
+  it('P-11: 요건·공용 부품 전수·저장소 규칙 줄 (기본·덮어쓰기)', () => {
+    const base = buildPrompt(makeProject(), body, 5, false, false, true, 1, '', '', false, 'a', 40)
+    const over = buildPrompt(makeProject(), body, 5, false, false, true, 1, '', '', false, 'a', 40, '- 내 지침')
+    for (const p of [base, over]) {
+      expect(p).toContain(DEV_REQUIREMENT_LINES)
+      expect(p).toContain(DEV_REPO_RULES_LINE)
+      expect(p).toContain('grep every usage')
+    }
+  })
+  it('P-12: 규칙 무력화·조기 종료 문구 없음', () => {
+    const p = buildPrompt(makeProject(), body, 5, false, false, true, 1, '', '', false, 'a', 40)
+    expect(p).not.toContain('take precedence over repository instructions')
+    expect(p).not.toContain('finish well within')
+    expect(p).not.toContain('stop and report what remains unverified')
+  })
+  it('P-13: 결과 표시 지시 + 읽기', () => {
+    const p = buildPrompt(makeProject(), body, 5, false, false, true, 1, '', '', false, 'a', 40)
+    expect(p).toContain(`${DEV_RESULT_MARKER} incomplete`)
+    expect(devResultOf('…\n**요건 대조**\n- ❌ 2\n\nIVE-RESULT: incomplete')).toBe('incomplete')
+    expect(devResultOf('IVE-RESULT: `complete`')).toBe('complete')
+    expect(devResultOf('IVE-RESULT: incomplete\n…\nIVE-RESULT: complete')).toBe('complete')
+    expect(devResultOf('표시 없음')).toBeNull()
   })
 })

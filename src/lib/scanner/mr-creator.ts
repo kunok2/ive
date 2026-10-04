@@ -13,6 +13,7 @@ import { notifyStageTransition } from "../slack-notify";
 import { runAutoAssign } from "./auto-assign";
 import type { PreservedChanges } from "./git-ops";
 import { applyRoleAssignee } from "../role-assignee";
+import { devResultOf } from "./prompt-builder";
 import {
   addGitLabIssueComment,
   addGitLabSpentTime,
@@ -43,6 +44,25 @@ function agentAttemptedEdits(conversationParts: string[]): boolean {
 //    판정에 쓰는 원본(conversationParts)은 그대로 두고, **노트에 실을 때만** 고른다.
 const TOOL_LINE_RE = /^\s*>\s*\*\*🔧/;
 const RUN_FOOTER_RE = /^\s*(---|\*\*📊 실행 결과\*\*.*)\s*$/;
+/** 처리자 결과 노트(IVE 가 처리 실행 끝에 올리는 노트) — 반복 차수와 피드백 경계를 이것으로만 센다 */
+const PROCESSOR_RESULT_RE = /^##\s*(✅ 개발 완료|⚠️ 처리 미완|❌ 실행 오류|⚠️ 변경사항 없음)/m;
+export function isProcessorResultNote(body: string): boolean {
+  return body.includes('<!-- ive-bot -->') && body.includes('<!-- ive-agent:') && PROCESSOR_RESULT_RE.test(body);
+}
+/** 피드백이 아닌 장부성 봇 노트(검증자 배정 안내) */
+export function isBookkeepingNote(body: string): boolean {
+  return body.includes('<!-- ive-bot -->') && /^##\s*🎯 검증자 배정/m.test(body);
+}
+const INCOMPLETE_HEADING = '⚠️ 처리 미완';
+/** 처리자 결과 노트 목록(시간순)에서 맨 뒤부터 이어진 「처리 미완」 수 */
+export function trailingIncompleteStreak(resultBodies: string[]): number {
+  let n = 0;
+  for (let i = resultBodies.length - 1; i >= 0 && resultBodies[i].includes(`## ${INCOMPLETE_HEADING}`); i--) n++;
+  return n;
+}
+/** 연속 「처리 미완」 상한 — 이만큼 이어지면 재처리 대신 검증대기로 넘겨 사람이 본다(토큰 무한 소모 방지) */
+export const MAX_INCOMPLETE_STREAK = 2;
+
 export function buildWorkSummary(conversationParts: string[]): string {
   // 도구 호출 줄을 경계로 문장 덩어리를 나눈다.
   const segments: string[][] = [[]];
@@ -86,6 +106,8 @@ export async function commitPushAndCreateMR(params: {
   iterationCount: number;
   conversationParts: string[];
   durationStr: string;
+  /** 바로 앞까지 이어진 「처리 미완」 결과 수 (execute 가 노트에서 셈) */
+  incompleteStreak?: number;
   logStream: { write(data: string): void; end(): void };
   log: (msg: string, type?: 'info' | 'error' | 'warn' | 'system') => void;
 }): Promise<void> {
@@ -94,6 +116,16 @@ export async function commitPushAndCreateMR(params: {
     workspacePath, baseBranch, branchName, iterationCount,
     conversationParts, durationStr, logStream, log,
   } = params;
+  // 처리자 최종 보고의 결과 표시(IVE-RESULT) — incomplete 면 검증으로 넘기지 않고 재처리 대기열로 되돌린다(#1972·#1975).
+  const workSummaryText = buildWorkSummary(conversationParts);
+  const devResult = devResultOf(workSummaryText);
+  const streak = (params.incompleteStreak ?? 0) + (devResult === 'incomplete' ? 1 : 0);
+  const requeue = devResult === 'incomplete' && streak <= MAX_INCOMPLETE_STREAK;
+  const incompleteHeading = devResult === 'incomplete'
+    ? (requeue
+      ? `## ${INCOMPLETE_HEADING} — 이어서 처리 — ${agent.name}\n\n남은 요건이 있어 검증으로 넘기지 않고 재처리 대기열(${project.labelSchedule || 'IVE-S'})에 다시 넣었습니다. 아래 「요건 대조」의 ❌ 가 다음 실행의 할 일입니다.`
+      : `## ${INCOMPLETE_HEADING} — 남은 요건 있음 (연속 ${streak}회) — ${agent.name}\n\n처리 미완이 ${streak}회 이어져 재처리를 멈추고 검증대기로 넘깁니다. 아래 「요건 대조」의 ❌ 를 사람이 판단해 주세요.`)
+    : null;
   const isGitHub = project.provider === 'github';
   const mrLabel = isGitHub ? 'PR' : 'MR';
 
@@ -174,8 +206,9 @@ export async function commitPushAndCreateMR(params: {
     // 완료 노트
     const mrLine = mrUrl ? `- **${mrLabel}:** ${mrUrl}` : `- **${mrLabel}:** 생성 실패 (권한 부족 또는 API 오류)`;
     const iterLine = iterationCount > 1 ? `\n- **반복 횟수:** ${iterationCount}회` : '';
-    const workSummary = buildWorkSummary(conversationParts);
-    const completionNote = `<!-- ive-bot -->\n<!-- ive-agent:${agent.id} -->\n## ✅ 개발 완료 — ${agent.name}\n\n${mrLine}\n- **소요 시간:** ${durationStr}${iterLine}${workSummary}`;
+    const workSummary = workSummaryText;
+    const heading = incompleteHeading ?? `## ✅ 개발 완료 — ${agent.name}`;
+    const completionNote = `<!-- ive-bot -->\n<!-- ive-agent:${agent.id} -->\n${heading}\n\n${mrLine}\n- **소요 시간:** ${durationStr}${iterLine}${workSummary}`;
     if (isGitHub) {
       await addGitHubIssueComment(project, iid, token, completionNote);
     } else {
@@ -183,6 +216,21 @@ export async function commitPushAndCreateMR(params: {
       await addGitLabSpentTime(project, iid, token, durationStr);
     }
 
+    if (requeue) {
+      // 처리 미완 → 재처리 대기열(IVE-S). 스캐너가 다시 집어 이 노트의 ❌ 를 이어서 처리한다.
+      try {
+        await swapIssueLabels(project, iid, token, [project.labelSchedule || 'IVE-S'], [project.labelDev || 'IVE-D']);
+        recordStageEvent({
+          projectId: project.id, issueIid: iid, fromStage: 'dev', toStage: 'waiting', action: 'incomplete',
+          actor: agentActor(agent, executionId), source: 'worker', executionId,
+          promptVersion: executionPromptVersion(executionId),
+          detail: { changes: true, streak },
+        });
+      } catch (e) { slog.warn({ err: e }, `Label switch failed:`); }
+      log(`처리 미완(${streak}회째) → 재처리 대기열 (${project.labelSchedule || 'IVE-S'}).`, 'warn');
+      updateExecutionStatus(executionId, 'success', new Date().toISOString());
+      return;
+    }
     // 레이블 전환: IVE-D 제거, IVE-W 부착 (검증대기)
     try {
       await swapIssueLabels(project, iid, token, [project.labelVerifyWait || 'IVE-W'], [project.labelDev || 'IVE-D']);
@@ -191,7 +239,7 @@ export async function commitPushAndCreateMR(params: {
         projectId: project.id, issueIid: iid, fromStage: 'dev', toStage: 'verify_waiting', action: 'complete',
         actor: agentActor(agent, executionId), source: 'worker', executionId,
         promptVersion: executionPromptVersion(executionId),
-        detail: { changes: true },
+        detail: { changes: true, ...(devResult ? { result: devResult } : {}) },
       });
     } catch (e) { slog.warn({ err: e }, `Label switch failed:`); }
     log("작업 완료 → 검증대기 (IVE-W). 검증자가 검증시작을 클릭하면 검증이 시작됩니다.", 'system');
@@ -208,7 +256,7 @@ export async function commitPushAndCreateMR(params: {
       log("코드 변경사항 없음. 작업 완료로 처리.", 'system');
     }
     const iterLine = iterationCount > 1 ? `\n- **반복 횟수:** ${iterationCount}회` : '';
-    const workSummary = buildWorkSummary(conversationParts);
+    const workSummary = workSummaryText;
     // 수정 흔적이 있는데 diff가 비면 "확인 필요"로 표면화한다. 깔끔한 "완료"로 덮지 않는다.
     const noChangeHeading = attemptedEdits
       ? `## ⚠️ 변경사항 없음 — 확인 필요 — ${agent.name}\n\n에이전트가 파일 수정 도구를 사용했으나 저장소에 남은 변경이 없습니다. (변경 미반영·되돌림 또는 잘못된 경로 수정 의심)`

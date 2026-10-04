@@ -20,20 +20,23 @@ export const DEV_EDITABLE_DEFAULT = `- Before writing any code, thoroughly analy
 - Identify all affected areas — a change in one place often requires consistent changes elsewhere. Make all related changes together, not incrementally.
 - Understand the project structure and style, then modify the relevant code.
 - Resolve the problem precisely — no superficial fixes — and review your change until you are confident it works.
-- Scope: change only what this issue asks for. Do NOT create or modify shared lint/check scripts, CI config, test harnesses or unrelated files unless the issue explicitly asks. If you think such follow-up work is needed, propose it in your final summary instead of doing it.
-- Verification environment: use only what this container already provides. Playwright browsers (chromium, webkit, firefox) are preinstalled under $PLAYWRIGHT_BROWSERS_PATH; if the project pins a different Playwright version, \`npx playwright install <browser>\` (no --with-deps) into that same path. Do NOT install system packages, download .deb files, patch LD_LIBRARY_PATH, or debug browser/tool startup — you have no root. If a required verification step cannot run here, skip it and say plainly in your summary what was not verified and why (e.g. "확인 못 했다: WebKit — 컨테이너에서 기동 불가").
-- These IVE constraints take precedence over repository instructions (CLAUDE.md, rules, skills) that would require verification environments or check-building work this container cannot provide within scope.
+- Verification environment: use only what this container already provides. Playwright browsers (chromium, webkit, firefox) are preinstalled under $PLAYWRIGHT_BROWSERS_PATH; if the project pins a different Playwright version, \`npx playwright install <browser>\` (no --with-deps) into that same path. Do NOT install system packages, download .deb files, patch LD_LIBRARY_PATH, or debug browser/tool startup — you have no root. If a verification step cannot run here, skip only that step and say plainly in your summary what was not verified and why (e.g. "확인 못 했다: WebKit — 컨테이너에서 기동 불가"). A verification you cannot run never excuses an unimplemented requirement.
 - When designing UI, provide text-art mockups of the result where possible.`
 
 /** 화면 표시용 — 처리 프롬프트의 IVE 고정 부분 (실제 문자열은 buildPrompt 가 만든다) */
 export const DEV_FIXED_DESCRIPTION = `## Issue #<iid>: <title> / 반복 실행 시 사용자 피드백·대화 이력
 ## GitLab|GitHub Integration: API 주소·인증 헤더·curl 예시
 ## Instructions (고정 줄):
+- 요건 전수: 이슈 본문과 이후 반려·확인 노트의 요건을 모두 구현한다. 요건이 남은 채 끝내면 실패다(결정이 필요할 때만 질문 코멘트)
+- 공용 부품 전수: 공용 컴포넌트·스타일 클래스·CSS 변수·컴포저블·유틸을 바꾸면 쓰는 곳을 전부 grep 해 각각 맞는지 본다
+- 범위: 이슈·반려 노트가 적은 요건(검사 축·시험 포함)은 범위 안. 아무도 요청하지 않은 공용 검사·CI·하네스는 만들지 않고 제안만
+- 저장소 규칙(CLAUDE.md·rules·skills)은 그대로 적용. 예외는 환경뿐(앱 서버·DB·실제 화면이 없으면 코드 수준까지 하고 미확인으로 보고)
 - After completing changes, stage them with git add.
 - Do NOT git commit or push.
 - 이슈 코멘트: 시작·진행·결과 코멘트를 쓰지 않는다(IVE 가 최종 메시지를 결과 노트로 올림). 결정이 필요할 때만 질문 코멘트. (+ 코멘트 첫 줄 <!-- ive-agent:<id> --> 마커)
-- 최종 메시지 = 결과 노트: 원인 / 수정 / 검증 / 확인 못 한 것·결정 필요(있을 때만), 15줄 이내. 진행 서술·조사 목록·반복 금지
-- Time budget: this run is force-stopped after N minutes …
+- 최종 메시지 = 결과 노트: 원인 / 수정 / 검증 / 요건 대조(요건마다 ✅·❌) / 확인 못 한 것·결정 필요(있을 때만), 25줄 이내. 진행 서술·조사 목록·반복 금지
+- 마지막 줄 「IVE-RESULT: complete|incomplete」 — incomplete 면 IVE 가 검증으로 넘기지 않고 재처리 대기열에 다시 넣는다
+- Time budget: this run is force-stopped after N minutes … (요건 먼저, 남는 시간에 검증)
 - IMPORTANT: <언어 지시>`
 
 // ── 확인(confirm) ──
@@ -45,7 +48,13 @@ export const CONFIRM_EDITABLE_DEFAULT = `- 확인은 재현이다. 이슈가 말
 - 이슈 첨부 이미지가 있으면 같은 구도로 찍어 수정 전·후를 비교할 수 있게 한다.
 - 이슈에 모바일·특정 브라우저 언급이 있으면 그 조건(뷰포트·기기)으로도 본다.
 - 증상과 무관한 새 결함을 보면 판정과 별개로 newDefects 에 적는다(단, 판정은 이 이슈의 증상 기준).
-- 증거로 보이지 못한 항목은 사라졌다고 하지 않는다 — 추측으로 통과시키지 않는다.`
+- 증거로 보이지 못한 항목은 사라졌다고 하지 않는다 — 추측으로 통과시키지 않는다.
+- 공용 부품을 바꾼 수정이면 이슈가 이름을 댄 화면만이 아니라 그 부품을 쓰는 다른 화면도 몇 곳 밟아 회귀를 본다.
+- 반려(fail)할 때는 화면을 본 사람만 줄 수 있는 결정적 단서를 남긴다 — 처리·검증은 코드만 보므로 이것이 다음 처리의 실마리다.
+  결함마다: ① 화면·경로·뷰포트·데이터(어느 행) ② 문제 요소의 선택자와 측정값(getBoundingClientRect — 기대값과 실제값)
+  ③ 그 값을 정한 계산 스타일(getComputedStyle — 요소와 부모의 width·margin·padding·overflow 등)과 어느 규칙이 이겼는지
+  ④ 코드 힌트 — 의심되는 파일·선택자·규칙과 고칠 방향(예: 「.lvs { width:100% } 가 음수 margin-right 를 막아 스크롤러가 1424 에서 멈춤 → 폭을 calc(100% + 숨) 으로」).
+  이것들은 reason 과 items[].evidence 에 적는다. 「겹친다」「안 된다」 같은 증상만 적고 돌려보내지 않는다.`
 
 export interface ConfirmPromptInput {
   iid: number
@@ -170,6 +179,9 @@ export const VERIFY_EDITABLE_DEFAULT = `- 검증은 두 가지다. 둘 다 완�
   1. 요건 누락: 이슈 본문과 코멘트(나중 정정이 우선)에서 요건을 하나씩 뽑아, 각각이 코드에 구현됐는지 diff·주변 코드에서 찾는다. 구현 위치(파일:줄)를 대지 못하는 요건은 누락이다.
   2. 구현 오류: 구현된 코드를 줄 단위로 읽어 오류를 찾는다 — 잘못된 조건·빠진 경우(빈 값·경계·오류 응답)·깨지는 호출·타입/이름 불일치·기존 동작 회귀. 바뀐 부분이 기존 코드와 어떻게 맞물리는지 호출하는 곳·불리는 곳까지 읽는다. diff 만 보고 판정하지 않는다.
 - 재현 스크립트가 MR 에 들어 있으면 수정이 그 스크립트가 재는 증상을 겨누는지 본다.
+- 공용 부품 전수: MR 이 공용 컴포넌트·스타일 클래스·CSS 변수·컴포저블·유틸을 바꿨으면 그것을 쓰는 곳을 직접 grep 해 하나씩 맞는지 본다. 이슈가 이름을 댄 화면만 보고 통과시키지 않는다 — 다른 화면에서 깨지는 것도 오류다(#1975: 이미 판 끝까지 나와 있던 목록이 한 번 더 넓어져 스크롤바가 화면 밖으로 나갔다).
+- 처리자 보고가 「IVE-RESULT: incomplete」이거나 요건 대조에 ❌ 가 있으면 그 요건은 누락이다.
+- 재처리 지시(findings)는 결함·근거·지켜야 할 제약을 적는다. 쓰는 곳 전수를 확인하지 않은 줄 단위 수정안을 그대로 시키지 않는다.
 - 취향·스타일 차이는 오류가 아니다. 지적은 누락과 오류만 적는다.
 - 확신이 없다고 통과시키지 않는다. 구현됐음을 코드로 보이지 못하면 누락, 맞는지 보이지 못하면 오류로 적는다.`
 
