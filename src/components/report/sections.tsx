@@ -139,9 +139,10 @@ export function HeldCard({ held, tr, prevLabel, tracking }: { held: Held; tr: Tr
 
 // ─── ② 지금 손쓸 것 ───
 
+/** 손쓸 것 한 가지 — 칸(Card) 안의 하위 상자(보유 식 상자와 같은 모양) */
 function ActionCard({ tone, icon, title, children }: { tone: 'red' | 'amber'; icon: string; title: string; children: ReactNode }) {
   return (
-    <div className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-3 flex gap-2">
+    <div className="bg-ive-bg/50 border border-ive-border-dark rounded-lg p-3 flex gap-2">
       <i className={`fa-solid ${icon} text-sm mt-0.5 ${tone === 'red' ? 'text-ive-red' : 'text-ive-amber'}`} />
       <div className="flex flex-col gap-1.5 flex-1 min-w-0">
         <span className="text-sm font-bold text-ive-text">{title}</span>
@@ -192,16 +193,17 @@ export function ActionCards({ actions, tr }: { actions: ActionItems; tr: Tr }) {
       </ActionCard>,
     )
   }
+  // 다른 칸과 같은 짜임 — 카드 안에 제목, 항목은 그 안의 하위 상자(종전엔 이 칸만 제목이 카드 밖에 있었다)
   return (
-    <section className="flex flex-col gap-2">
-      <span className="text-base font-bold text-ive-text pt-1">{items.length > 0 ? tr('actTitleN', { n: items.length }) : tr('actTitle')}</span>
-      {items.length > 0 ? items : (
-        <div className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-3 flex items-center gap-2">
+    <Card>
+      <SectionTitle>{items.length > 0 ? tr('actTitleN', { n: items.length }) : tr('actTitle')}</SectionTitle>
+      {items.length > 0 ? <div className="flex flex-col gap-2">{items}</div> : (
+        <div className="flex items-center gap-2">
           <i className="fa-solid fa-circle-check text-sm text-ive-cyan" />
           <span className="text-sm font-bold text-ive-text">{tr('actNone')}</span>
         </div>
       )}
-    </section>
+    </Card>
   )
 }
 
