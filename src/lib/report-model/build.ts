@@ -634,6 +634,12 @@ export function buildReportModel(scope: Scope, type: ReportType, day: string, no
     live: !!liveIssues, end, start,
     inflow: received.length, completed: completed.length,
     gap: start != null && end != null ? start + received.length - completed.length - end : null,
+    leftUndone: liveIssues
+      ? (() => {
+        const heldKeys = new Set(liveIssues.map(i => `${i.projectId}:${i.iid}`))
+        return received.filter(r => !heldKeys.has(r.key) && !(c.history.get(r.key)?.completions ?? []).some(at => at >= r.at)).length
+      })()
+      : null,
     drainDays,
     byStage: liveIssues
       ? HELD_STAGES.map(stage => {

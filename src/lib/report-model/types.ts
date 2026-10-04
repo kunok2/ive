@@ -48,6 +48,12 @@ export interface Held {
   completed: number
   /** start + inflow − completed − end. 0 이 아니면 집계 차이(범위 밖으로 옮겨진 이슈 등). 계산 불가면 null */
   gap: number | null
+  /**
+   * 진행 중인 기간에만 — 이 기간에 들어왔지만 지금 보유도 아니고 그 뒤 완료도 없는 일(사이클 수).
+   * 완료 없이 닫혔거나(버려짐) 유입 단계로 돌아간 일이다. 기초(start) 기록이 없어 식을 맞춰 볼 수 없을 때
+   * 「유입 − 완료」와 「지금」의 차이를 설명한다. 계산 불가면 null
+   */
+  leftUndone: number | null
   /** 지금 보유 ÷ 최근 28일 하루 평균 완료(사후 기록 제외) */
   drainDays: number | null
   byStage: { stage: HeldStage; count: number; oldestHours: number | null }[] | null

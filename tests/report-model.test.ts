@@ -368,6 +368,36 @@ describe('리뷰에서 찾은 결함 — 회귀 방지', () => {
     expect(m.done.byForm.direct).toBe(m.done.total)
   })
 
+  // 화면 「— + 13 − 6 = 0 · 약 1일치」 — 지난주 말 기록이 없고, 들어온 일 일부가 완료 없이 빠진 경우
+  it('들어왔지만 보유도 완료도 아닌 일(완료 없이 닫힘·유입으로 되돌림)을 leftUndone 으로 센다, 기초 기록이 없으면 start 는 null', async () => {
+    seedBase()
+    const { recordStageEvent } = await import('@/lib/db')
+    // #50 이번 주 접수 → 처리 실패 후 버려져 정리(스캐너는 done 으로 두고 마지막 사건은 closed)
+    exec({ id: 'ex-50', project_id: 'p1', agent_id: 'a1', assignee_type: 'agent', issue_iid: 50, status: 'failed', started_at: iso(kst('2026-09-29T10:00:00')), ended_at: iso(kst('2026-09-29T11:00:00')) })
+    recordStageEvent({ projectId: 'p1', issueIid: 50, fromStage: 'dev_fail', toStage: 'closed', source: 'scanner', occurredAt: iso(kst('2026-09-30T09:00:00')) })
+    stage('p1', 50, 'done', { scheduled_at: iso(kst('2026-09-29T09:00:00')) })
+    // #51 이번 주 접수 → 유입으로 되돌림(단계 라벨 없음)
+    recordStageEvent({ projectId: 'p1', issueIid: 51, fromStage: 'none', toStage: 'waiting', source: 'user', occurredAt: iso(kst('2026-09-30T09:00:00')) })
+    recordStageEvent({ projectId: 'p1', issueIid: 51, fromStage: 'waiting', toStage: 'none', source: 'user', occurredAt: iso(kst('2026-09-30T10:00:00')) })
+    stage('p1', 51, null as any, { scheduled_at: iso(kst('2026-09-30T09:00:00')) })
+    // #52 이번 주 접수·완료(직접 처리)
+    exec({ id: 'ex-ext-52', project_id: 'p1', issue_iid: 52, assignee_type: 'user', user_name: '박개발', status: 'success', started_at: iso(kst('2026-10-01T10:00:00')), ended_at: iso(kst('2026-10-01T11:00:00')), work_sec: 3600 })
+    stage('p1', 52, 'done')
+    const m = buildReportModel('u-lead', 'weekly', '2026-10-02', NOW)
+    expect(m.held.start).toBeNull()
+    expect(m.held.end).toBe(0)
+    expect(m.held.inflow).toBe(3)
+    expect(m.held.completed).toBe(1)
+    expect(m.held.leftUndone).toBe(2)   // #50 버려짐, #51 유입으로 되돌림
+    // 메일: 보유 0이면 「약 1일치」가 아니라 「남은 일 없음」, 식 대신 기초 기록 없음 안내 + 빠진 건수
+    const closed = buildReportModel('u-lead', 'weekly', '2026-09-25', NOW)
+    const { html } = renderReportMail({ kind: 'member', closed, now: m, mine: [], money: v => `$${v}`, baseUrl: '', recipient: { userId: 'u-park', name: '박개발', locale: 'ko' } })
+    expect(html).toContain('남은 일 없음')
+    expect(html).not.toContain('약 1일치')
+    expect(html).toContain('보유 기록이 없어 식으로 맞춰 볼 수 없습니다')
+    expect(html).toContain('2건은 완료 없이 닫혔거나 유입 단계로 돌아가')
+  })
+
   it('AI 구독료는 기간 일수만큼만 배부된다(끝 날짜를 하루 더 넣지 않는다)', () => {
     seedBase()
     db.prepare(`INSERT OR REPLACE INTO token_pricing (id, cli_name, model_name, input_price, output_price, updated_at) VALUES ('sub-claude','claude','subscription (claude)',300,0,datetime('now'))`).run()

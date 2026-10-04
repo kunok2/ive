@@ -90,7 +90,8 @@ export function HeldCard({ held, tr, prevLabel, tracking }: { held: Held; tr: Tr
           </div>
           {held.live && (
             <div className="text-sm font-bold text-ive-text-secondary">
-              {held.drainDays != null ? tr('drainDays', { d: held.drainDays < 1 ? 1 : Math.round(held.drainDays) }) : tr('drainUnknown')}
+              {/* 보유가 0이면 소진 일수도 0 — 「1일 미만이면 1일」로 올리면 「0건인데 1일치」가 된다 */}
+              {held.end === 0 ? tr('drainNone') : held.drainDays != null ? tr('drainDays', { d: held.drainDays < 1 ? 1 : Math.round(held.drainDays) }) : tr('drainUnknown')}
               {' · '}
               {held.over7 ? tr('over7', { n: held.over7 }) : tr('over7None')}
               {held.over7 != null && <> <MiniDelta cur={held.over7} prev={held.prevOver7} goodWhenUp={false} /></>}
@@ -98,7 +99,14 @@ export function HeldCard({ held, tr, prevLabel, tracking }: { held: Held; tr: Tr
           )}
         </>
       )}
-      <div className="bg-ive-bg/50 border border-ive-border-dark rounded-lg p-3 flex items-center justify-between text-center">
+      {/* 기초(지난 기간 말) 기록이 없으면 식을 그리지 않는다 — 「— + 13 − 6 = 0」은 「13 − 6 = 0」으로 읽힌다(메일과 같은 규칙) */}
+      {held.start == null && held.end != null && (
+        <span className="text-sm font-bold text-ive-text-secondary">{tr('eqNoStart', { inflow: held.inflow, completed: held.completed, label: prevLabel })}</span>
+      )}
+      {held.leftUndone != null && held.leftUndone > 0 && (held.start == null || held.gap !== 0) && (
+        <span className="text-xs font-bold text-ive-text-muted">{tr('leftUndone', { n: held.leftUndone })}</span>
+      )}
+      {held.start != null && <div className="bg-ive-bg/50 border border-ive-border-dark rounded-lg p-3 flex items-center justify-between text-center">
         {[
           { v: held.start, l: tr('eqStart', { label: prevLabel }) },
           { op: '+' }, { v: held.inflow, l: tr('eqInflow') },
@@ -112,7 +120,7 @@ export function HeldCard({ held, tr, prevLabel, tracking }: { held: Held; tr: Tr
               <span className="text-xs font-bold text-ive-text-muted">{x.l}</span>
             </div>
           ))}
-      </div>
+      </div>}
       {held.gap != null && held.gap !== 0 && (
         <span className="text-xs font-bold text-ive-text-muted">{tr('eqGap', { n: Math.abs(held.gap) })}</span>
       )}

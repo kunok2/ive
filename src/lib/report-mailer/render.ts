@@ -129,7 +129,7 @@ function heldBlock(t: T, m: ReportModel, at: 'now' | 'closed', prevLabel: string
     ? `<span style="font-size:13px;color:${COLOR.secondary}"> ${esc(t('vsPrevEnd', { label: prevLabel, n: h.start }))}</span>${deltaSpan(h.end, [`${at}.held.start`, h.start], false)}` : ''}</div>`
   const parts: string[] = []
   if (h.live) {
-    parts.push(h.drainDays != null
+    parts.push(h.end === 0 ? esc(t('drainNone')) : h.drainDays != null
       ? num(`${at}.held.drainDays`, h.drainDays, t('drainDays', { d: h.drainDays < 1 ? 1 : Math.round(h.drainDays) }))
       : esc(t('drainUnknown')))
   }
@@ -140,8 +140,12 @@ function heldBlock(t: T, m: ReportModel, at: 'now' | 'closed', prevLabel: string
   const sub = parts.length ? line(parts.join(' · ')) : ''
   const eq = h.start != null
     ? `<div style="font-size:13px;color:${COLOR.secondary};margin-top:8px">${esc(t('eqStart', { label: prevLabel }))} ${num(`${at}.held.start`, h.start, String(h.start))} + ${esc(t('eqInflow'))} ${num(`${at}.held.inflow`, h.inflow, String(h.inflow))} − ${esc(t('eqCompleted'))} ${num(`${at}.held.completed`, h.completed, String(h.completed))} = ${esc(h.live ? t('eqNow') : t('eqEnd'))} ${num(`${at}.held.end`, h.end, String(h.end))}</div>`
+    : `<div style="font-size:13px;color:${COLOR.secondary};margin-top:8px">${esc(t('eqNoStart', { inflow: h.inflow, completed: h.completed, label: prevLabel }))}</div>`
+  // 이 기간에 들어와 완료 없이 빠진 일 — 기초 기록이 없거나 식이 안 맞을 때 차이를 설명한다(화면과 같은 규칙)
+  const left = h.leftUndone != null && h.leftUndone > 0 && (h.start == null || h.gap !== 0)
+    ? `<div style="font-size:12px;color:${COLOR.muted};margin-top:4px">${num(`${at}.held.leftUndone`, h.leftUndone, t('leftUndone', { n: h.leftUndone }))}</div>`
     : ''
-  return block(title, head + sub + eq)
+  return block(title, head + sub + eq + left)
 }
 
 function actionsBlock(t: T, now: ReportModel): string {

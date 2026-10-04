@@ -260,5 +260,8 @@
   "yearMonth": "{month}/{year}",
   "yearUnit": "{year}",
   "liveAsOfSec": "As of {time} · refreshes every {n}s",
-  "liveAsOfMin": "As of {time} · refreshes every {n} min"
+  "liveAsOfMin": "As of {time} · refreshes every {n} min",
+  "drainNone": "Nothing left",
+  "eqNoStart": "Inflow {inflow} · done {completed} this period — no on-hand record for the end of {label}, so the balance can't be checked.",
+  "leftUndone": "{n} of this period's inflow left without completion (closed or sent back to intake) and are not on hand."
 }

@@ -260,5 +260,8 @@
   "yearMonth": "{year}년 {month}월",
   "yearUnit": "{year}년",
   "liveAsOfSec": "{time} 기준 · {n}초마다 자동 갱신",
-  "liveAsOfMin": "{time} 기준 · {n}분마다 자동 갱신"
+  "liveAsOfMin": "{time} 기준 · {n}분마다 자동 갱신",
+  "drainNone": "남은 일 없음",
+  "eqNoStart": "이 기간 유입 {inflow}건 · 완료 {completed}건 — {label} 말 보유 기록이 없어 식으로 맞춰 볼 수 없습니다.",
+  "leftUndone": "이 기간 유입 중 {n}건은 완료 없이 닫혔거나 유입 단계로 돌아가 보유에 없습니다."
 }
