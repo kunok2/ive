@@ -314,7 +314,7 @@ export function PeopleSection({ held, avatars, tr }: { held: Held; avatars?: Rec
   )
 }
 
-// ─── ⑤ 사람 시간이 쓰인 곳 ───
+// ─── ⑤ 프로젝트별 현황(맡은 시간·완료·보유) ───
 
 export function ProjectsSection({ projects, cost, tr, prevLabel }: { projects: ProjectRow[]; cost: Cost; tr: Tr; prevLabel: string }) {
   const [hov, setHov] = useState<string | null>(null)

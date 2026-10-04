@@ -4,8 +4,8 @@
  *
  * 메일 종류
  *  - member(주간·팀원): 내 손에 있는 일 · 팀 보유(식) · 팀이 손쓸 것 · 지난주 끝낸 일
- *  - lead(주간·팀장):   팀 보유(식) · 손쓸 것 · 누구 손에 · 사람 시간이 쓰인 곳(프로젝트별 완료·보유) · 지난주 끝낸 일 · 어디서 시간이 걸렸나
- *  - exec(월간·연간):   기간 말 보유(식·7일 넘은 일) · 산출 추이 · 처리 기간 · 어디서 시간이 걸렸나 · 투입과 비용 · 사람 시간이 쓰인 곳과 비중 추이 · 살펴볼 위험 · 작업 결과 평가(사람·AI 묶음, 모델별)
+ *  - lead(주간·팀장):   팀 보유(식) · 손쓸 것 · 누구 손에 · 프로젝트별 현황(맡은 시간·완료·보유) · 지난주 끝낸 일 · 어디서 시간이 걸렸나
+ *  - exec(월간·연간):   기간 말 보유(식·7일 넘은 일) · 산출 추이 · 처리 기간 · 어디서 시간이 걸렸나 · 투입과 비용 · 프로젝트별 현황과 맡은 시간 비중 추이 · 살펴볼 위험 · 작업 결과 평가(사람·AI 묶음, 모델별)
  * 막 끝나 아직 확정 전인 기간(provisional)은 끝에 잠정 값이라고 밝힌다.
  */
 import { createTranslator } from 'next-intl'
@@ -174,7 +174,7 @@ function peopleBlock(t: T, now: ReportModel): string {
     row(esc(`${p.name} · ${t(`role.${p.role}`)}`), nums([[`now.held.people.${i}.count`, p.count], [`now.held.people.${i}.oldestHours`, p.oldestHours]], t('personCount', { n: p.count, t: fmtHours(t, p.oldestHours) })))).join('')))
 }
 
-/** 사람 시간이 쓰인 곳 — 화면 ProjectsSection 과 같은 줄(사람 시간·비중, 완료, 보유, 지난 기간 대비) */
+/** 프로젝트별 현황 — 화면 ProjectsSection 과 같은 줄(사람 시간·비중, 완료, 보유, 지난 기간 대비) */
 function projectsBlock(t: T, m: ReportModel): string {
   if (!m.projects.length) return ''
   const withHours = m.projects.filter(p => p.humanHours > 0)
