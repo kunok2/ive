@@ -8,7 +8,7 @@
  * 규칙
  *  - 출발 단계는 사건 로그의 마지막 도착 단계를 따른다(로그가 끊기지 않게). 로그가 없으면 캐시된 단계.
  *  - 처리 실패(dev_fail)는 처리 중(dev)에서만 생긴다. 그 밖에서 dev_fail 로 보이면 담당자가 IVE-D 를 막 붙여
- *    실행이 아직 만들어지지 않은 순간이므로 처리 시작(dev)으로 남긴다.
+ *    실행이 아직 만들어지지 않은 순간이므로 처리 시작(dev)으로 남긴다. 이미 처리 실패인 이슈는 그대로(사건 없음).
  *  - 라벨이 바뀌지 않는 전이(처리 중 ↔ 처리 실패)와 처음 보는 이슈는 라벨 이력을 조회하지 않는다.
  *  - 라벨을 붙인 사람·시각은 그 시각이 마지막 사건보다 뒤일 때만 쓴다(앞 사이클의 라벨을 이번 전이로 오인하지 않게).
  *  - 단계 기록 없이 곧바로 완료로 보인 사후 기록(IVE-E)은 이슈를 만든 사람이 직접 처리하고 등록한 것이다 — 작업자는 이슈 작성자.
@@ -38,7 +38,8 @@ export async function recordScannedStageChange(c: ScannedStageChange): Promise<b
   const last = getLastStageEvent(c.project.id, c.iid)
   const prev = last ? last.to : norm(c.prevStage)
   let next = norm(c.stage)
-  if (next === 'dev_fail' && prev !== 'dev') next = 'dev'
+  // 이미 처리 실패인 이슈는 그대로 둔다 — dev 로 바꾸면 다음 스캔에 다시 dev → dev_fail 이 되어 매 스캔 번갈아 쌓인다
+  if (next === 'dev_fail' && prev !== 'dev' && prev !== 'dev_fail') next = 'dev'
   if (prev === next) return false
 
   const labelChanged = !((prev === 'dev' && next === 'dev_fail') || (prev === 'dev_fail' && next === 'dev'))

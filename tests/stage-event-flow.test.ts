@@ -137,6 +137,17 @@ describe('리뷰에서 찾은 결함 — 회귀 방지', () => {
     expect(await recordScannedStageChange({ project, iid: 20, prevStage: 'dev_fail', stage: 'dev', resolveActor, assigneeUsername: () => null })).toBe(false)
   })
 
+  it('처리 실패로 남은 이슈는 스캔마다 처리 중 ↔ 실패를 번갈아 남기지 않는다', async () => {
+    // 운영 2026-10-02~04: 실패한 이슈 19건에서 매분 dev ↔ dev_fail 사건이 3,016건 쌓였다
+    const resolveActor = vi.fn(async () => null)
+    await recordScannedStageChange({ project, iid: 23, prevStage: 'waiting', stage: 'dev', resolveActor, assigneeUsername: () => null })
+    await recordScannedStageChange({ project, iid: 23, prevStage: 'dev', stage: 'dev_fail', resolveActor, assigneeUsername: () => null })
+    for (let i = 0; i < 5; i++) {
+      expect(await recordScannedStageChange({ project, iid: 23, prevStage: 'dev_fail', stage: 'dev_fail', resolveActor, assigneeUsername: () => null })).toBe(false)
+    }
+    expect(getIssueEvents('p1', 23).map(e => [e.fromStage, e.toStage])).toEqual([['waiting', 'dev'], ['dev', 'dev_fail']])
+  })
+
   it('처리 중 → 실패는 라벨이 바뀌지 않으므로 라벨 이력을 조회하지 않는다', async () => {
     const resolveActor = vi.fn(async () => ({ username: 'owner', user: null, createdAt: '2026-01-01T00:00:00Z' }))
     await recordScannedStageChange({ project, iid: 21, prevStage: 'waiting', stage: 'dev', resolveActor: async () => null, assigneeUsername: () => null })
