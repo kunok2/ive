@@ -35,7 +35,7 @@
 일이 어느 단계에 있는지를 색만 보고 가를 수 있게, 세 단계에만 고유색을 둔다. 정의는 `globals.css` 의 `--color-ive-stage-*` 한 곳.
 - 처리 `ive-stage-process` (노랑) · 검증 `ive-stage-verify` (보라) · 확인 `ive-stage-confirm` (분홍)
 - 카드 숫자 칸·진행 중 목록 묶음·보드 칸 머리줄·이슈 단계 배지(이슈 탭·작업 상세)·진행 막대·역할 아바타 테두리·보고서·메일이 같은 색을 쓴다. 단계 → 클래스는 `lib/active-work.ts` 의 `ISSUE_STAGE_STYLE` 한 곳(화면마다 따로 정하지 않는다).
-- **대기**(처리대기·검증대기·확인대기)는 그 단계와 같은 계열에 회색을 반쯤 섞은 색 — `ive-stage-process-wait`(노란 회색) · `ive-stage-verify-wait`(보라 회색) · `ive-stage-confirm-wait`(분홍 회색). 영역은 보이되 진행 단계보다 강조되지 않는다. 카드의 진행 숫자 옆 「대기 n」(`WaitPill`)은 종전대로 흐린 글씨.
+- **대기**(처리대기·검증대기·확인대기)는 그 단계와 같은 계열에 그 테마의 회색을 반쯤 섞은 색(어두운·밝은 테마 각각 정의) — `ive-stage-process-wait`(노란 회색) · `ive-stage-verify-wait`(보라 회색) · `ive-stage-confirm-wait`(분홍 회색). 영역은 보이되 진행 단계보다 강조되지 않는다. 카드의 진행 숫자 옆 「대기 n」(`WaitPill`)은 종전대로 흐린 글씨.
 - 경고(주황 `ive-amber`)·위험(`ive-red`)과 섞어 쓰지 않는다. 단계색은 "어느 단계"만 말한다.
 
 ### 추세(델타) 색

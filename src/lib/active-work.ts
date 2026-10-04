@@ -38,10 +38,10 @@ export const ISSUE_STAGE_STYLE: Record<string, IssueStageStyle> = {
   rejected:        { text: 'text-ive-red',                    bg: 'bg-ive-red/15',                   border: 'border-ive-red/40',                   fill: 'bg-ive-red',                    ring: 'ring-ive-red/30' },
 }
 export const issueStageStyle = (stage: string | null | undefined): IssueStageStyle => ISSUE_STAGE_STYLE[stage ?? 'none'] ?? ISSUE_STAGE_STYLE.none
-/** 단계색 hex — 메일(클래스를 못 쓰는 곳)용. globals.css 토큰과 같은 값 */
+/** 단계색 hex — 메일(클래스를 못 쓰는 곳, 흰 바탕)용. 대기는 globals.css 라이트 테마 토큰과 같은 값 */
 export const STAGE_HEX = {
   process: '#f59e0b', verify: '#a78bfa', confirm: '#f472b6',
-  processWait: '#c0944f', verifyWait: '#988ac6', confirmWait: '#bf7ea4',
+  processWait: '#cba05b', verifyWait: '#a496d2', confirmWait: '#cb8ab0',
 } as const
 
 /** 실행 id 접두어로 종류를 가린다 — 사람이 맡은 실행도 같은 규칙(ex-verify- / ex-confirm- / exec-chat-) */
