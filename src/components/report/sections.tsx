@@ -208,6 +208,9 @@ export function ActionCards({ actions, tr }: { actions: ActionItems; tr: Tr }) {
 }
 
 /** 막대 조각 ↔ 아래 줄 강조 — 줄에 올리면 조각이, 조각에 올리면 줄이 함께 밝아진다 */
+/** 단계 → 막대 묶음(처리대기+처리+처리 실패 · 검증대기+검증 · 확인대기+확인) — 묶음마다 둥글게 시작·끝 */
+const stageGroup = (st: string) => st.startsWith('verify') ? 'verify' : st.startsWith('confirm') ? 'confirm' : 'process'
+
 const rowHover = (on: boolean) => `-mx-2 px-2 rounded-lg transition-colors ${on ? 'bg-white/[0.05]' : ''}`
 
 // ─── ③ 어디에 있나 ───
@@ -220,7 +223,7 @@ export function WhereSection({ held, tr }: { held: Held; tr: Tr }) {
     <Card>
       <SectionTitle right={tr('countN', { n: held.end })}>{tr('whereTitle')}</SectionTitle>
       <StackedHBar hovered={hov} onHover={setHov}
-        segments={rows.map(s => ({ key: s.stage, value: s.count, label: tr(`stage.${s.stage}`), valueText: tr('countN', { n: s.count }), className: STAGE_BAR[s.stage] }))} />
+        segments={rows.map(s => ({ key: s.stage, value: s.count, label: tr(`stage.${s.stage}`), valueText: tr('countN', { n: s.count }), className: STAGE_BAR[s.stage], group: stageGroup(s.stage) }))} />
       <div className="flex flex-col">
         {rows.map((s, i) => (
           <div key={s.stage} onPointerEnter={() => setHov(s.stage)} onPointerLeave={() => setHov(null)}
@@ -261,7 +264,7 @@ export function StageTimeSection({ st, tr, prevLabel }: { st: StageTime | undefi
       ) : (
         <>
           <StackedHBar hovered={hov} onHover={setHov}
-            segments={rows.map(s => ({ key: s.stage, value: s.share, label: tr(`flow.${s.stage}`), valueText: `${pct(s.share)} · ${fmtHours(tr, s.avgH)}`, className: STAGE_BAR[s.stage] }))} />
+            segments={rows.map(s => ({ key: s.stage, value: s.share, label: tr(`flow.${s.stage}`), valueText: `${pct(s.share)} · ${fmtHours(tr, s.avgH)}`, className: STAGE_BAR[s.stage], group: stageGroup(s.stage) }))} />
           {longest && (
             <span className="text-sm font-bold text-ive-text-secondary">
               {tr('stageTimeSplit', { work: pct(work), wait: pct(1 - work), stage: tr(`flow.${longest.stage}`) })}

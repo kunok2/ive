@@ -19,6 +19,8 @@ export interface HBarSegment {
   valueText: string
   className?: string
   style?: CSSProperties
+  /** 묶음 — 같은 묶음끼리 이어 붙이고, 묶음마다 둥글게 시작해 둥글게 끝난다(예: 처리대기+처리). 없으면 막대 전체가 한 묶음 */
+  group?: string
 }
 
 export function StackedHBar({
@@ -53,6 +55,8 @@ export function StackedHBar({
       <div className={`relative flex ${gapClass} -my-2`}>
         {shown.map((s, i) => {
           const dim = hovered != null && hovered !== s.key
+          const groupStart = i === 0 || shown[i - 1].group !== s.group
+          const groupEnd = i === shown.length - 1 || shown[i + 1].group !== s.group
           return (
             <div
               key={s.key}
@@ -60,13 +64,13 @@ export function StackedHBar({
               tabIndex={0}
               aria-label={`${s.label} ${s.valueText}`}
               className={`py-2 outline-none cursor-default group transition-opacity duration-150 ${dim ? 'opacity-35' : ''}`}
-              style={{ flexGrow: s.value, flexBasis: 0, minWidth: 4 }}
+              style={{ flexGrow: s.value, flexBasis: 0, minWidth: 4, marginLeft: groupStart && i > 0 && s.group != null ? 4 : undefined }}
               onPointerEnter={() => setHovered(s.key)}
               onFocus={() => setHovered(s.key)}
               onBlur={() => setHovered(null)}
             >
               <div
-                className={`${heightClass} transition-[filter] duration-150 ${i === 0 ? 'rounded-l-full' : ''} ${i === shown.length - 1 ? 'rounded-r-full' : ''} ${hovered === s.key ? 'brightness-125' : ''} group-focus-visible:ring-2 group-focus-visible:ring-ive-text/60 ${s.className ?? ''}`}
+                className={`${heightClass} transition-[filter] duration-150 ${groupStart ? 'rounded-l-full' : ''} ${groupEnd ? 'rounded-r-full' : ''} ${hovered === s.key ? 'brightness-125' : ''} group-focus-visible:ring-2 group-focus-visible:ring-ive-text/60 ${s.className ?? ''}`}
                 style={s.style}
               />
             </div>
