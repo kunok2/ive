@@ -31,7 +31,7 @@
   "eqCompleted": "완료",
   "eqNow": "지금",
   "eqEnd": "기간 말",
-  "eqGap": "식과 {n}건 차이 — 완료 없이 닫히거나 범위 밖으로 옮겨진 이슈입니다.",
+  "eqGap": "식과 {n}건 차이 — 일부 단계 기록이 빠진 것으로 보입니다.",
   "actTitle": "지금 손쓸 것",
   "actTitleN": "지금 손쓸 것 · {n}",
   "actNone": "없음 · 멈춘 일도, 묵은 일도, 몰린 사람도 없습니다",
@@ -262,6 +262,7 @@
   "liveAsOfSec": "{time} 기준 · {n}초마다 자동 갱신",
   "liveAsOfMin": "{time} 기준 · {n}분마다 자동 갱신",
   "drainNone": "남은 일 없음",
-  "eqNoStart": "이 기간 유입 {inflow}건 · 완료 {completed}건 — {label} 말 보유 기록이 없어 식으로 맞춰 볼 수 없습니다.",
-  "leftUndone": "이 기간 유입 중 {n}건은 완료 없이 닫혔거나 유입 단계로 돌아가 보유에 없습니다."
+  "eqDropped": "빠짐",
+  "eqDroppedNote": "빠짐 — 완료하지 않고 닫혔거나 유입 단계로 돌아갔거나 범위 밖으로 옮겨진 일입니다.",
+  "eqDerived": "{label} 말 보유는 그날 마감 기록이 없어 접수·완료·단계 이력으로 계산했습니다."
 }

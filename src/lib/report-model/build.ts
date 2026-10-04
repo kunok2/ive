@@ -11,7 +11,7 @@ import {
 import {
   scopedProjects, execsInRange, completedInRange, issueFacts, heldNow, heldDaily, heldTrackingSince,
   overturnedKeys, personOf, resetPersonCache, avatarsOfPersonKeys, receivedInRange, verifyDecisions, confirmRejections,
-  loadIssueHistory, heldReceipts, receiptBefore, isExternalRow, byIssue,
+  loadIssueHistory, heldReceipts, receiptBefore, isExternalRow, byIssue, stageTimeline,
   type Scope, type IssueFacts, type IssueExec, type HeldRow, type ScopedProject, type IssueHistory, type CycleEvent,
 } from './load'
 import {
@@ -204,6 +204,43 @@ function actionsOf(issues: HeldIssue[], people: HeldPerson[]): ActionItems {
     }
   }
   return { failed, aged, concentrations }
+}
+
+/**
+ * 한 시각의 보유를 이력으로 다시 센다 — 하루 마감 기록(held_daily)이 없는 날(도입 첫 주 등)에도 보유 식이 서게.
+ *  - 그 시각 전에 단계 사건이 있으면 마지막 사건의 도착 단계가 보유 단계인가.
+ *  - 없으면(사건 기록 이전의 일) 그 시각 전에 접수됐고 그 사이 완료되지 않았으며, 그 뒤에도 살아 있던 일
+ *    (지금 보유 중이거나 그 뒤 완료·단계 사건이 있음) — 오래전에 흐지부지된 일이 계속 보유로 잡히지 않게.
+ * 7일 넘은 일은 세지 않는다(그 시각의 나이 기준이 없다).
+ */
+function heldAtFromHistory(
+  history: Map<string, IssueHistory>, timeline: Map<string, { at: string; to: string | null }[]>,
+  liveKeys: Set<string>, at: string, byProject?: Map<string, number>,
+): number {
+  const held = new Set<string>(HELD_STAGES)
+  let total = 0
+  for (const key of new Set([...history.keys(), ...timeline.keys()])) {
+    const evs = timeline.get(key) ?? []
+    const before = evs.filter(e => e.at < at)
+    let isHeld: boolean
+    if (before.length) {
+      isHeld = held.has(before[before.length - 1].to ?? '')
+    } else {
+      const h = history.get(key)
+      if (!h) continue
+      const first = h.firstReceipt ?? (h.direct ? h.completions[0] ?? null : null)
+      const starts = [first, ...h.reopens].filter((t): t is string => !!t && t < at)
+      if (!starts.length) continue
+      const cycleStart = starts.sort()[starts.length - 1]
+      if (h.completions.some(t => t >= cycleStart && t < at)) continue
+      isHeld = liveKeys.has(key) || h.completions.some(t => t >= at) || evs.some(e => e.at >= at)
+    }
+    if (!isHeld) continue
+    total++
+    const pid = key.slice(0, key.lastIndexOf(':'))
+    byProject?.set(pid, (byProject.get(pid) ?? 0) + 1)
+  }
+  return total
 }
 
 /** 날짜(KST)의 하루 마감 보유. 그날 기록이 하나도 없으면 null. over7 은 그날 모든 줄에 기록이 있을 때만 */
@@ -620,9 +657,24 @@ export function buildReportModel(scope: Scope, type: ReportType, day: string, no
     end = e?.total ?? null
     over7 = e?.over7 ?? null
   }
+  // 하루 마감 기록이 없으면(도입 첫 주 등) 이력으로 다시 센다 — 기록이 없다고 식을 못 세우지 않는다
+  const timeline = stageTimeline(pids)
+  const liveKeys = new Set(heldNow(pids).map(r => `${r.projectId}:${r.iid}`))
+  let endDerived = false
+  if (end == null) {
+    endByProject.clear()
+    end = heldAtFromHistory(c.history, timeline, liveKeys, kstDayStartISO(period.end), endByProject)
+    endDerived = true
+  }
   const startByProject = new Map<string, number>()
   const s = heldOnDay(pids, addDays(period.start, -1), startByProject)
-  const start = s?.total ?? null
+  let start: number | null = s?.total ?? null
+  let startDerived = false
+  if (start == null) {
+    startByProject.clear()
+    start = heldAtFromHistory(c.history, timeline, liveKeys, kstDayStartISO(period.start), startByProject)
+    startDerived = true
+  }
   const people = liveIssues ? peopleOf(liveIssues) : null
   let drainDays: number | null = null
   if (liveIssues) {
@@ -634,12 +686,7 @@ export function buildReportModel(scope: Scope, type: ReportType, day: string, no
     live: !!liveIssues, end, start,
     inflow: received.length, completed: completed.length,
     gap: start != null && end != null ? start + received.length - completed.length - end : null,
-    leftUndone: liveIssues
-      ? (() => {
-        const heldKeys = new Set(liveIssues.map(i => `${i.projectId}:${i.iid}`))
-        return received.filter(r => !heldKeys.has(r.key) && !(c.history.get(r.key)?.completions ?? []).some(at => at >= r.at)).length
-      })()
-      : null,
+    startDerived, endDerived,
     drainDays,
     byStage: liveIssues
       ? HELD_STAGES.map(stage => {

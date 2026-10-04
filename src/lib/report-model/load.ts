@@ -165,6 +165,29 @@ export function loadIssueHistory(projectIds: string[], opts: { onlyHeld?: boolea
   return out
 }
 
+/**
+ * 이슈마다 단계 사건(도착 단계·시각), 오래된 순 — 하루 마감 기록(held_daily)이 없는 날의 보유를 다시 셀 때 쓴다.
+ * 버려짐은 'closed', 유입으로 되돌림은 'none' 으로 남는다.
+ */
+export function stageTimeline(projectIds: string[]): Map<string, { at: string; to: string | null }[]> {
+  const out = new Map<string, { at: string; to: string | null }[]>()
+  if (projectIds.length === 0) return out
+  const ph = projectIds.map(() => '?').join(',')
+  for (const r of getDb().prepare(`
+    SELECT project_id, issue_iid, to_stage, occurred_at FROM issue_events x
+    WHERE +x.event = 'stage' AND project_id IN (${ph}) ORDER BY id
+  `).all(...projectIds) as any[]) {
+    const at = isoTime(r.occurred_at)
+    if (!at) continue
+    const k = `${r.project_id}:${r.issue_iid}`
+    const list = out.get(k) ?? []
+    list.push({ at, to: r.to_stage ?? null })
+    out.set(k, list)
+  }
+  for (const list of out.values()) list.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0))
+  return out
+}
+
 /** 이슈의 한 사이클 사건(접수 또는 완료) */
 export interface CycleEvent { key: string; at: string }
 

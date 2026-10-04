@@ -368,34 +368,55 @@ describe('리뷰에서 찾은 결함 — 회귀 방지', () => {
     expect(m.done.byForm.direct).toBe(m.done.total)
   })
 
-  // 화면 「— + 13 − 6 = 0 · 약 1일치」 — 지난주 말 기록이 없고, 들어온 일 일부가 완료 없이 빠진 경우
-  it('들어왔지만 보유도 완료도 아닌 일(완료 없이 닫힘·유입으로 되돌림)을 leftUndone 으로 센다, 기초 기록이 없으면 start 는 null', async () => {
+  // 화면 「— + 13 − 6 = 0 · 약 1일치」 — 지난주 말 마감 기록이 없어도(도입 첫 주) 식이 선다
+  it('지난 기간 말 기록이 없으면 이력으로 다시 세고, 완료 없이 빠진 일(버려짐·유입으로 되돌림)이 식의 한 칸이 된다', async () => {
     seedBase()
     const { recordStageEvent } = await import('@/lib/db')
+    // #49 지난주 접수, 아직 처리 대기 — 지난주 말 보유이자 지금 보유
+    stage('p1', 49, 'waiting', { scheduled_at: iso(kst('2026-09-24T10:00:00')) })
+    // #48 지난주 접수 → 이번 주 완료
+    exec({ id: 'ex-48', project_id: 'p1', agent_id: 'a1', assignee_type: 'agent', issue_iid: 48, status: 'success', started_at: iso(kst('2026-09-29T10:00:00')), ended_at: iso(kst('2026-09-29T11:00:00')), verified_at: iso(kst('2026-09-29T12:00:00')) })
+    stage('p1', 48, 'done', { scheduled_at: iso(kst('2026-09-25T10:00:00')) })
+    // #47 오래전 접수 후 흐지부지(사건·완료 없음, 지금 보유 아님) — 지난주 말 보유로 세지 않는다
+    stage('p1', 47, 'done', { scheduled_at: iso(kst('2026-06-01T10:00:00')) })
     // #50 이번 주 접수 → 처리 실패 후 버려져 정리(스캐너는 done 으로 두고 마지막 사건은 closed)
     exec({ id: 'ex-50', project_id: 'p1', agent_id: 'a1', assignee_type: 'agent', issue_iid: 50, status: 'failed', started_at: iso(kst('2026-09-29T10:00:00')), ended_at: iso(kst('2026-09-29T11:00:00')) })
     recordStageEvent({ projectId: 'p1', issueIid: 50, fromStage: 'dev_fail', toStage: 'closed', source: 'scanner', occurredAt: iso(kst('2026-09-30T09:00:00')) })
     stage('p1', 50, 'done', { scheduled_at: iso(kst('2026-09-29T09:00:00')) })
-    // #51 이번 주 접수 → 유입으로 되돌림(단계 라벨 없음)
-    recordStageEvent({ projectId: 'p1', issueIid: 51, fromStage: 'none', toStage: 'waiting', source: 'user', occurredAt: iso(kst('2026-09-30T09:00:00')) })
-    recordStageEvent({ projectId: 'p1', issueIid: 51, fromStage: 'waiting', toStage: 'none', source: 'user', occurredAt: iso(kst('2026-09-30T10:00:00')) })
+    // #51 이번 주 접수 → 유입으로 되돌림
+    recordStageEvent({ projectId: 'p1', issueIid: 51, fromStage: 'none', toStage: 'waiting', source: 'ui', occurredAt: iso(kst('2026-09-30T09:00:00')) })
+    recordStageEvent({ projectId: 'p1', issueIid: 51, fromStage: 'waiting', toStage: 'none', source: 'ui', occurredAt: iso(kst('2026-09-30T10:00:00')) })
     stage('p1', 51, null as any, { scheduled_at: iso(kst('2026-09-30T09:00:00')) })
     // #52 이번 주 접수·완료(직접 처리)
     exec({ id: 'ex-ext-52', project_id: 'p1', issue_iid: 52, assignee_type: 'user', user_name: '박개발', status: 'success', started_at: iso(kst('2026-10-01T10:00:00')), ended_at: iso(kst('2026-10-01T11:00:00')), work_sec: 3600 })
     stage('p1', 52, 'done')
     const m = buildReportModel('u-lead', 'weekly', '2026-10-02', NOW)
-    expect(m.held.start).toBeNull()
+    expect(m.held.startDerived).toBe(true)
+    expect(m.held.start).toBe(2)       // #49, #48 (#47 은 흐지부지)
+    expect(m.held.inflow).toBe(3)      // #50, #51, #52
+    expect(m.held.completed).toBe(2)   // #48, #52
+    expect(m.held.end).toBe(1)         // #49
+    expect(m.held.gap).toBe(2)         // 완료 없이 빠짐: #50 버려짐, #51 유입으로 되돌림 → 2 + 3 − 2 − 2 = 1
+    const closed = buildReportModel('u-lead', 'weekly', '2026-09-25', NOW)
+    const { html } = renderReportMail({ kind: 'member', closed, now: m, mine: [], money: v => `$${v}`, baseUrl: '', recipient: { userId: 'u-park', name: '박개발', locale: 'ko' } })
+    expect(html).toContain('빠짐 — 완료하지 않고 닫혔거나')
+    expect(html).toContain('이력으로 계산했습니다')
+  })
+
+  it('보유가 0이면 「약 1일치」가 아니라 「남은 일 없음」', () => {
+    seedBase()
+    exec({ id: 'ex-ext-53', project_id: 'p1', issue_iid: 53, assignee_type: 'user', user_name: '박개발', status: 'success', started_at: iso(kst('2026-10-01T10:00:00')), ended_at: iso(kst('2026-10-01T11:00:00')), work_sec: 3600 })
+    stage('p1', 53, 'done')
+    exec({ id: 'ex-54', project_id: 'p1', agent_id: 'a1', assignee_type: 'agent', issue_iid: 54, status: 'success', started_at: iso(kst('2026-09-20T10:00:00')), ended_at: iso(kst('2026-09-20T11:00:00')), verified_at: iso(kst('2026-09-20T12:00:00')) })
+    stage('p1', 54, 'done')
+    const m = buildReportModel('u-lead', 'weekly', '2026-10-02', NOW)
     expect(m.held.end).toBe(0)
-    expect(m.held.inflow).toBe(3)
-    expect(m.held.completed).toBe(1)
-    expect(m.held.leftUndone).toBe(2)   // #50 버려짐, #51 유입으로 되돌림
-    // 메일: 보유 0이면 「약 1일치」가 아니라 「남은 일 없음」, 식 대신 기초 기록 없음 안내 + 빠진 건수
+    expect(m.held.start).toBe(0)
+    expect(m.held.gap).toBe(0)
     const closed = buildReportModel('u-lead', 'weekly', '2026-09-25', NOW)
     const { html } = renderReportMail({ kind: 'member', closed, now: m, mine: [], money: v => `$${v}`, baseUrl: '', recipient: { userId: 'u-park', name: '박개발', locale: 'ko' } })
     expect(html).toContain('남은 일 없음')
-    expect(html).not.toContain('약 1일치')
-    expect(html).toContain('보유 기록이 없어 식으로 맞춰 볼 수 없습니다')
-    expect(html).toContain('2건은 완료 없이 닫혔거나 유입 단계로 돌아가')
+    expect(html).not.toContain('1일치')
   })
 
   it('AI 구독료는 기간 일수만큼만 배부된다(끝 날짜를 하루 더 넣지 않는다)', () => {

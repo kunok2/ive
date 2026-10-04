@@ -138,14 +138,18 @@ function heldBlock(t: T, m: ReportModel, at: 'now' | 'closed', prevLabel: string
       + deltaSpan(h.over7, [`${at}.held.prevOver7`, h.prevOver7], false))
   }
   const sub = parts.length ? line(parts.join(' · ')) : ''
+  // 보유 식 — 화면과 같은 칸(완료 없이 빠짐은 있을 때만). 지난 기간 말 기록이 없으면 이력으로 다시 센 값
+  const dropped = h.gap != null && h.gap > 0
+    ? ` − ${esc(t('eqDropped'))} ${num(`${at}.held.gap`, h.gap, String(h.gap))}` : ''
   const eq = h.start != null
-    ? `<div style="font-size:13px;color:${COLOR.secondary};margin-top:8px">${esc(t('eqStart', { label: prevLabel }))} ${num(`${at}.held.start`, h.start, String(h.start))} + ${esc(t('eqInflow'))} ${num(`${at}.held.inflow`, h.inflow, String(h.inflow))} − ${esc(t('eqCompleted'))} ${num(`${at}.held.completed`, h.completed, String(h.completed))} = ${esc(h.live ? t('eqNow') : t('eqEnd'))} ${num(`${at}.held.end`, h.end, String(h.end))}</div>`
-    : `<div style="font-size:13px;color:${COLOR.secondary};margin-top:8px">${esc(t('eqNoStart', { inflow: h.inflow, completed: h.completed, label: prevLabel }))}</div>`
-  // 이 기간에 들어와 완료 없이 빠진 일 — 기초 기록이 없거나 식이 안 맞을 때 차이를 설명한다(화면과 같은 규칙)
-  const left = h.leftUndone != null && h.leftUndone > 0 && (h.start == null || h.gap !== 0)
-    ? `<div style="font-size:12px;color:${COLOR.muted};margin-top:4px">${num(`${at}.held.leftUndone`, h.leftUndone, t('leftUndone', { n: h.leftUndone }))}</div>`
+    ? `<div style="font-size:13px;color:${COLOR.secondary};margin-top:8px">${esc(t('eqStart', { label: prevLabel }))} ${num(`${at}.held.start`, h.start, String(h.start))} + ${esc(t('eqInflow'))} ${num(`${at}.held.inflow`, h.inflow, String(h.inflow))} − ${esc(t('eqCompleted'))} ${num(`${at}.held.completed`, h.completed, String(h.completed))}${dropped} = ${esc(h.live ? t('eqNow') : t('eqEnd'))} ${num(`${at}.held.end`, h.end, String(h.end))}</div>`
     : ''
-  return block(title, head + sub + eq + left)
+  const notes = [
+    h.gap != null && h.gap > 0 ? t('eqDroppedNote') : null,
+    h.gap != null && h.gap < 0 ? t('eqGap', { n: Math.abs(h.gap) }) : null,
+    h.startDerived || h.endDerived ? t('eqDerived', { label: prevLabel }) : null,
+  ].filter(Boolean).map(x => `<div style="font-size:12px;color:${COLOR.muted};margin-top:4px">${esc(x!)}</div>`).join('')
+  return block(title, head + sub + eq + notes)
 }
 
 function actionsBlock(t: T, now: ReportModel): string {

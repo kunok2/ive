@@ -99,18 +99,13 @@ export function HeldCard({ held, tr, prevLabel, tracking }: { held: Held; tr: Tr
           )}
         </>
       )}
-      {/* 기초(지난 기간 말) 기록이 없으면 식을 그리지 않는다 — 「— + 13 − 6 = 0」은 「13 − 6 = 0」으로 읽힌다(메일과 같은 규칙) */}
-      {held.start == null && held.end != null && (
-        <span className="text-sm font-bold text-ive-text-secondary">{tr('eqNoStart', { inflow: held.inflow, completed: held.completed, label: prevLabel })}</span>
-      )}
-      {held.leftUndone != null && held.leftUndone > 0 && (held.start == null || held.gap !== 0) && (
-        <span className="text-xs font-bold text-ive-text-muted">{tr('leftUndone', { n: held.leftUndone })}</span>
-      )}
+      {/* 보유 식 — 지난 기간 말 + 유입 − 완료 − 완료 없이 빠짐 = 지금. 지난 기간 말 기록이 없으면(도입 첫 주 등) 이력으로 다시 센 값 */}
       {held.start != null && <div className="bg-ive-bg/50 border border-ive-border-dark rounded-lg p-3 flex items-center justify-between text-center">
         {[
           { v: held.start, l: tr('eqStart', { label: prevLabel }) },
           { op: '+' }, { v: held.inflow, l: tr('eqInflow') },
           { op: '−' }, { v: held.completed, l: tr('eqCompleted') },
+          ...(held.gap != null && held.gap > 0 ? [{ op: '−' }, { v: held.gap, l: tr('eqDropped') }] : []),
           { op: '=' }, { v: held.end, l: held.live ? tr('eqNow') : tr('eqEnd') },
         ].map((x, i) => 'op' in x
           ? <span key={i} className="text-sm font-bold text-ive-text-muted">{x.op}</span>
@@ -121,8 +116,14 @@ export function HeldCard({ held, tr, prevLabel, tracking }: { held: Held; tr: Tr
             </div>
           ))}
       </div>}
-      {held.gap != null && held.gap !== 0 && (
+      {held.gap != null && held.gap > 0 && (
+        <span className="text-xs font-bold text-ive-text-muted">{tr('eqDroppedNote')}</span>
+      )}
+      {held.gap != null && held.gap < 0 && (
         <span className="text-xs font-bold text-ive-text-muted">{tr('eqGap', { n: Math.abs(held.gap) })}</span>
+      )}
+      {(held.startDerived || held.endDerived) && (
+        <span className="text-xs font-bold text-ive-text-muted">{tr('eqDerived', { label: prevLabel })}</span>
       )}
     </Card>
   )

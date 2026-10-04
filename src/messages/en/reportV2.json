@@ -31,7 +31,7 @@
   "eqCompleted": "Done",
   "eqNow": "Now",
   "eqEnd": "Period end",
-  "eqGap": "Off by {n} — issues closed without completion or moved out of scope.",
+  "eqGap": "Off by {n} — some stage records appear to be missing.",
   "actTitle": "Act now",
   "actTitleN": "Act now · {n}",
   "actNone": "Nothing — no stuck, aged, or concentrated work",
@@ -262,6 +262,7 @@
   "liveAsOfSec": "As of {time} · refreshes every {n}s",
   "liveAsOfMin": "As of {time} · refreshes every {n} min",
   "drainNone": "Nothing left",
-  "eqNoStart": "Inflow {inflow} · done {completed} this period — no on-hand record for the end of {label}, so the balance can't be checked.",
-  "leftUndone": "{n} of this period's inflow left without completion (closed or sent back to intake) and are not on hand."
+  "eqDropped": "Dropped",
+  "eqDroppedNote": "Dropped — closed without completion, sent back to intake, or moved out of scope.",
+  "eqDerived": "On-hand at the end of {label} has no daily record, so it was computed from intake, completion and stage history."
 }
