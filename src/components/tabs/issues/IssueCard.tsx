@@ -1,6 +1,7 @@
 'use client'
 
 import { PriorityBadge } from './Priority'
+import IssueBadges, { hasIssueBadges } from './IssueBadges'
 import type { PresetRole, RoleAgentCandidate } from '@/components/issue/RoleAvatarBar'
 import { useTranslations } from 'next-intl'
 import RoleAvatarBar from '@/components/issue/RoleAvatarBar'
@@ -180,37 +181,14 @@ export default function IssueCard({
             onConfirmerChange={onPresetConfirmerChange ? (preset) => onPresetConfirmerChange(issue.iid, preset) : undefined}
           />
         </span>
-        {/* 마감일 + 회차 뱃지 + 상태 배지 — 우측 정렬 그룹.
-            마감일: D-N(남음) / D+N(지남) / 완료 시 일찍/늦게.
-            회차 뱃지: 처리 N회 / 되돌리기 N회. 1회는 평범하니 ≥2회만 노출. */}
+        {/* 마감일 + 회차 뱃지 + 상태 배지 — 우측 정렬 그룹. 마감일·회차는 넓은 화면 보드와 같은 부품(IssueBadges) */}
         {(() => {
-          const ic = issue.iterationCounts
-          const showProcess = !!ic && ic.processCount >= 2
-          const showRetry = !!ic && ic.retryTotal >= 1
           const showState = issue.stage !== 'none'
-          const due = renderDueBadge(issue, tIssue)
-          if (!showProcess && !showRetry && !showState && !due) return null
+          const meta = <IssueBadges issue={issue} />
+          if (!showState && !hasIssueBadges(issue)) return null
           return (
             <span className="ml-auto shrink-0 inline-flex items-center gap-1">
-              {due}
-              {showProcess && ic && (
-                <span
-                  className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border bg-ive-cyan/10 text-ive-cyan border-ive-cyan/20 text-[10px] font-bold"
-                  title={tIssue('iterationCount', { count: ic.processCount })}
-                >
-                  <i className="fa-solid fa-repeat" />
-                  {ic.processCount}
-                </span>
-              )}
-              {showRetry && ic && (
-                <span
-                  className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border bg-ive-amber/10 text-ive-amber border-ive-amber/20 text-[10px] font-bold"
-                  title={tIssue('retryCount', { count: ic.retryTotal })}
-                >
-                  <i className="fa-solid fa-rotate-left" />
-                  {ic.retryTotal}
-                </span>
-              )}
+              {meta}
               {showState && (
                 <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded border ${info.color}`}>
                   <i className={`fa-solid ${info.icon}`} />
@@ -222,77 +200,5 @@ export default function IssueCard({
         })()}
       </div>
     </div>
-  )
-}
-
-/**
- * 카드용 마감일 뱃지.
- *   - 진행중 + 마감 전: "D-N" (cyan / 90%↑ amber / 1일 이내 amber-strong)
- *   - 진행중 + 마감 지남: "D+N" (red)
- *   - 완료(닫힘 또는 done) + 마감 비교: "-N일"(일찍, green) / "+N일"(늦게, red) / "정시"(green)
- *   - 마감일 없음: null
- *
- * "완료" 판정: state === 'closed' 또는 stage === 'done'.
- * 완료 시각은 issue.updatedAt 을 근사치로 사용 (목록 응답엔 closedAt/confirmedAt 미포함).
- */
-function renderDueBadge(issue: IveIssue, t: ReturnType<typeof useTranslations<'issue'>>) {
-  if (!issue.dueDate) return null
-  const end = new Date(`${issue.dueDate}T23:59:59+09:00`).getTime()
-  const isCompleted = issue.state === 'closed' || issue.stage === 'done'
-
-  if (isCompleted) {
-    // updatedAt 을 완료 근사 시각으로 사용. closed 시점/done 라벨링 시점에 가까움.
-    const completedTs = new Date(issue.updatedAt).getTime()
-    const diffMs = end - completedTs
-    const days = Math.round(diffMs / 86400000)
-    if (Math.abs(diffMs) < 60_000) {
-      return (
-        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border bg-ive-green/10 text-ive-green border-ive-green/20 text-[10px] font-bold" title={t('completedOnTime')}>
-          <i className="fa-solid fa-calendar-check" />
-          {t('completedOnTime')}
-        </span>
-      )
-    }
-    if (diffMs >= 0) {
-      const text = `-${Math.max(days, 1)}d`
-      return (
-        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border bg-ive-green/10 text-ive-green border-ive-green/20 text-[10px] font-bold" title={t('completedEarly', { remain: t('daysRemain', { days: Math.max(days, 1) }) })}>
-          <i className="fa-solid fa-calendar-check" />
-          {text}
-        </span>
-      )
-    }
-    const text = `+${Math.max(Math.abs(days), 1)}d`
-    return (
-      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border bg-ive-red/10 text-ive-red border-ive-red/20 text-[10px] font-bold" title={t('completedLate', { remain: t('daysRemain', { days: Math.max(Math.abs(days), 1) }) })}>
-        <i className="fa-solid fa-calendar-xmark" />
-        {text}
-      </span>
-    )
-  }
-
-  // 진행중
-  const now = Date.now()
-  const remainMs = end - now
-  const overdue = remainMs < 0
-  if (overdue) {
-    const days = Math.max(Math.ceil(Math.abs(remainMs) / 86400000), 1)
-    return (
-      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border bg-ive-red/10 text-ive-red border-ive-red/20 text-[10px] font-bold" title={t('overdueBy', { remain: t('daysRemain', { days }) })}>
-        <i className="fa-solid fa-triangle-exclamation" />
-        {`D+${days}`}
-      </span>
-    )
-  }
-  const days = Math.max(Math.ceil(remainMs / 86400000), 0)
-  // 색상: 1일 이내 amber, 그 외 cyan
-  const cls = days <= 1
-    ? 'bg-ive-amber/10 text-ive-amber border-ive-amber/20'
-    : 'bg-ive-cyan/10 text-ive-cyan border-ive-cyan/20'
-  return (
-    <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border ${cls} text-[10px] font-bold`} title={`${issue.dueDate} (${t('daysRemain', { days })} ${t('left')})`}>
-      <i className="fa-solid fa-calendar-day" />
-      {`D-${days}`}
-    </span>
   )
 }

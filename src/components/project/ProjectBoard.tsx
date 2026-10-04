@@ -10,6 +10,8 @@ import { execKind, execHref, ageOf, ageText, STAGE_TONE } from '@/lib/active-wor
 import WaitPill from '@/components/project/WaitPill'
 import CountBump from '@/components/ui/CountBump'
 import AgentAvatar from '@/components/agent/AgentAvatar'
+import { PriorityBadge } from '@/components/tabs/issues/Priority'
+import IssueBadges, { hasIssueBadges } from '@/components/tabs/issues/IssueBadges'
 import type { ToolActivity } from '@/lib/tool-activity'
 
 type Col = 'process' | 'verify' | 'confirm' | 'done'
@@ -23,7 +25,12 @@ interface BoardIssue {
   iid: number
   title: string
   stage: string
+  state: string
   createdAt?: string
+  updatedAt: string
+  dueDate?: string | null
+  priority?: 0 | 1 | 2
+  iterationCounts?: { processCount: number; retryTotal: number }
   preferredAgentName?: string | null
   actualVerifier?: { name?: string | null; avatar?: string | null; userId?: string | null } | null
   actualConfirmer?: { name?: string | null; avatar?: string | null; userId?: string | null } | null
@@ -32,7 +39,8 @@ interface BoardIssue {
 /** 맡은 사람·에이전트의 아바타 — 카드의 진행 중 목록과 같은 부품(AgentAvatar)으로 그린다 */
 interface Face { src: string; userId?: string | null; agentId?: string | null; human: boolean }
 
-interface BoardItem { key: string; iid: number; title: string; who: string | null; face?: Face | null; startedAt: string | null; href: string; waiting?: boolean }
+/** issue — 배지(우선순위·마감일·처리 N회·되돌리기 N회)의 근거. 열린 이슈 목록에 없는 실행·오늘 완료 건은 없다 */
+interface BoardItem { key: string; iid: number; title: string; who: string | null; face?: Face | null; startedAt: string | null; href: string; waiting?: boolean; issue?: BoardIssue }
 
 /**
  * PC 폭의 프로젝트 단계 보드 — 대기 | 처리 | 검증 | 확인 | 완료(오늘).
@@ -92,7 +100,7 @@ export default function ProjectBoard({ project, onOpenTrace }: { project: Projec
 
   const cols: Record<Col, BoardItem[]> = { process: [], verify: [], confirm: [], done: [] }
   for (const i of issues ?? []) {
-    const base = { key: `i-${i.iid}`, iid: i.iid, title: i.title, href: issueHref(i.iid) }
+    const base = { key: `i-${i.iid}`, iid: i.iid, title: i.title, href: issueHref(i.iid), issue: i }
     if (i.stage === 'waiting') {
       cols.process.push({ ...base, who: tp(WAIT_LABEL.process), startedAt: i.createdAt ?? null, waiting: true })
     } else if (i.stage === 'dev') {
@@ -203,6 +211,7 @@ export default function ProjectBoard({ project, onOpenTrace }: { project: Projec
                     )}
                     {g.items.map(it => {
                       const age = it.startedAt ? ageOf(it.startedAt, now) : null
+                      const badges = !!it.issue && (hasIssueBadges(it.issue) || it.issue.priority === 1 || it.issue.priority === 2)
                       return (
                         <button
                           key={it.key}
@@ -214,9 +223,20 @@ export default function ProjectBoard({ project, onOpenTrace }: { project: Projec
                           <span className={`text-xs font-bold leading-snug line-clamp-2 ${it.waiting ? 'text-ive-text-secondary' : 'text-ive-text'}`}>
                             <span className="font-bold text-ive-text-secondary">#{it.iid}</span> {it.title}
                           </span>
-                          {age && (
-                            <span className={`self-end text-xs font-bold tabular-nums ${age.aged ? 'px-1.5 py-0.5 rounded-lg bg-ive-red/15 text-ive-red' : 'text-ive-text-secondary'}`}>
-                              {ageText(tp, age)}
+                          {/* 작업 정보 배지(작업 목록 카드와 같은 부품) 왼쪽 · 경과 오른쪽 */}
+                          {(badges || age) && (
+                            <span className="flex flex-wrap items-center gap-1">
+                              {badges && it.issue && (
+                                <>
+                                  <PriorityBadge priority={it.issue.priority} />
+                                  <IssueBadges issue={it.issue} />
+                                </>
+                              )}
+                              {age && (
+                                <span className={`ml-auto text-xs font-bold tabular-nums ${age.aged ? 'px-1.5 py-0.5 rounded-lg bg-ive-red/15 text-ive-red' : 'text-ive-text-secondary'}`}>
+                                  {ageText(tp, age)}
+                                </span>
+                              )}
                             </span>
                           )}
                         </button>
