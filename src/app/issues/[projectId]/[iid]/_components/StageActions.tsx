@@ -1,6 +1,7 @@
 'use client'
 
 import { useTranslations } from 'next-intl'
+import { ISSUE_STAGE_STYLE } from '@/lib/active-work'
 
 export type StageDirection = 'forward' | 'backward' | 'stay'
 
@@ -17,19 +18,20 @@ export function useStageConfig() {
   const tStage = useTranslations('stage')
   const tIssue = useTranslations('issue')
 
+  // 색 = 앱 전체 단계 색(진행 = 단계색, 그 단계 대기 = 회색빛) — lib/active-work ISSUE_STAGE_STYLE
   const STAGE_INFO: Record<string, { label: string; color: string; icon: string; bg: string }> = {
-    none:            { label: tStage('none'),            color: 'text-ive-text-dim',  icon: 'fa-inbox',              bg: 'bg-white/5' },
-    waiting:         { label: tStage('waiting'),         color: 'text-ive-cyan',      icon: 'fa-clock',              bg: 'bg-ive-cyan/10' },
-    verify_waiting:  { label: tStage('verify_waiting'),  color: 'text-ive-stage-verify',  icon: 'fa-hourglass-half',  bg: 'bg-ive-stage-verify/10' },
-    dev:             { label: tStage('dev'),             color: 'text-ive-stage-process', icon: 'fa-code',           bg: 'bg-ive-stage-process/10' },
-    dev_fail:        { label: tStage('dev_fail'),        color: 'text-ive-red',       icon: 'fa-circle-xmark',       bg: 'bg-ive-red/10' },
-    verifying:       { label: tStage('verifying'),       color: 'text-ive-stage-verify',  icon: 'fa-magnifying-glass', bg: 'bg-ive-stage-verify/10' },
-    confirm_waiting: { label: tStage('confirm_waiting'), color: 'text-ive-stage-confirm', icon: 'fa-hourglass-half',  bg: 'bg-ive-stage-confirm/10' },
-    confirming:      { label: tStage('confirming'),      color: 'text-ive-stage-confirm', icon: 'fa-clipboard-check', bg: 'bg-ive-stage-confirm/10' },
-    done:            { label: tStage('done'),            color: 'text-ive-green',     icon: 'fa-circle-check',       bg: 'bg-ive-green/10' },
-    closed:          { label: tStage('closed'),          color: 'text-ive-text-muted',icon: 'fa-lock',               bg: 'bg-white/5' },
-    rejected:        { label: tStage('rejected'),        color: 'text-ive-red',       icon: 'fa-rotate-left',        bg: 'bg-ive-red/10' },
-    unknown:         { label: tStage('unknown'),         color: 'text-ive-text-dim',  icon: 'fa-question',           bg: 'bg-white/5' },
+    none:            { label: tStage('none'),            color: ISSUE_STAGE_STYLE.none.text, icon: 'fa-inbox',              bg: ISSUE_STAGE_STYLE.none.bg },
+    waiting:         { label: tStage('waiting'),         color: ISSUE_STAGE_STYLE.waiting.text, icon: 'fa-clock',              bg: ISSUE_STAGE_STYLE.waiting.bg },
+    verify_waiting:  { label: tStage('verify_waiting'),  color: ISSUE_STAGE_STYLE.verify_waiting.text, icon: 'fa-hourglass-half',  bg: ISSUE_STAGE_STYLE.verify_waiting.bg },
+    dev:             { label: tStage('dev'),             color: ISSUE_STAGE_STYLE.dev.text, icon: 'fa-code',           bg: ISSUE_STAGE_STYLE.dev.bg },
+    dev_fail:        { label: tStage('dev_fail'),        color: ISSUE_STAGE_STYLE.dev_fail.text, icon: 'fa-circle-xmark',       bg: ISSUE_STAGE_STYLE.dev_fail.bg },
+    verifying:       { label: tStage('verifying'),       color: ISSUE_STAGE_STYLE.verifying.text, icon: 'fa-magnifying-glass', bg: ISSUE_STAGE_STYLE.verifying.bg },
+    confirm_waiting: { label: tStage('confirm_waiting'), color: ISSUE_STAGE_STYLE.confirm_waiting.text, icon: 'fa-hourglass-half',  bg: ISSUE_STAGE_STYLE.confirm_waiting.bg },
+    confirming:      { label: tStage('confirming'),      color: ISSUE_STAGE_STYLE.confirming.text, icon: 'fa-clipboard-check', bg: ISSUE_STAGE_STYLE.confirming.bg },
+    done:            { label: tStage('done'),            color: ISSUE_STAGE_STYLE.done.text, icon: 'fa-circle-check',       bg: ISSUE_STAGE_STYLE.done.bg },
+    closed:          { label: tStage('closed'),          color: ISSUE_STAGE_STYLE.closed.text, icon: 'fa-lock',               bg: ISSUE_STAGE_STYLE.closed.bg },
+    rejected:        { label: tStage('rejected'),        color: ISSUE_STAGE_STYLE.rejected.text, icon: 'fa-rotate-left',        bg: ISSUE_STAGE_STYLE.rejected.bg },
+    unknown:         { label: tStage('unknown'),         color: ISSUE_STAGE_STYLE.none.text, icon: 'fa-question',           bg: ISSUE_STAGE_STYLE.none.bg },
   }
 
   const STAGE_ACTIONS: Record<string, StageAction[]> = {

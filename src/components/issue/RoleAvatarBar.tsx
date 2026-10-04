@@ -1,5 +1,6 @@
 'use client'
 
+import { ISSUE_STAGE_STYLE } from '@/lib/active-work'
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { DEFAULT_AVATARS } from '@/types'
@@ -194,7 +195,7 @@ export default function RoleAvatarBar({
         {/* 처리자 — 실제 처리 에이전트가 있으면 그걸, 없으면 preset(assignMode) */}
         <RoleSlot
           dim={dim}
-          ringClass="ring-ive-cyan/40"
+          ringClass={ISSUE_STAGE_STYLE.dev.ring}
           isCurrent={currentMacro === 2}
           title={tIssue('roleTooltipFormat', {
             role: tIssue('processor'),
@@ -214,7 +215,7 @@ export default function RoleAvatarBar({
         {/* 검증자 — 실제 검증자(시작/완료) 우선, 없으면 preset */}
         <RoleSlot
           dim={dim}
-          ringClass="ring-ive-amber/40"
+          ringClass={ISSUE_STAGE_STYLE.verifying.ring}
           isCurrent={currentMacro === 3}
           title={actualVerifier?.userId
             ? tIssue('roleTooltipFormat', { role: tIssue('verifier'), value: actualVerifier.name || '-' })
@@ -231,7 +232,7 @@ export default function RoleAvatarBar({
         {/* 확인자 — 실제 확인자(시작/완료) 우선, 없으면 preset */}
         <RoleSlot
           dim={dim}
-          ringClass="ring-orange-400/50"
+          ringClass={ISSUE_STAGE_STYLE.confirming.ring}
           isCurrent={currentMacro === 4}
           title={actualConfirmer?.userId
             ? tIssue('roleTooltipFormat', { role: tIssue('confirmer'), value: actualConfirmer.name || '-' })

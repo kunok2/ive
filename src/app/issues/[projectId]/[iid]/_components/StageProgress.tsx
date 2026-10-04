@@ -4,6 +4,16 @@ import { Fragment, useState, useEffect, useRef, useLayoutEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import { formatDateShort } from '@/lib/format-date'
 import { useStore } from '@/lib/store'
+import { ISSUE_STAGE_STYLE, type IssueStageStyle } from '@/lib/active-work'
+
+/** 진행 막대 칸(유입·처리·검증·확인·완료) → 그 단계의 진행·대기 색. 대기 화살표 끝(삼각형)은 border-l 색 */
+const MACRO_TONE: Record<number, { active: IssueStageStyle; wait: IssueStageStyle; waitArrow: string }> = {
+  1: { active: ISSUE_STAGE_STYLE.none, wait: ISSUE_STAGE_STYLE.none, waitArrow: 'border-l-ive-border-subtle' },
+  2: { active: ISSUE_STAGE_STYLE.dev, wait: ISSUE_STAGE_STYLE.waiting, waitArrow: 'border-l-ive-stage-process-wait' },
+  3: { active: ISSUE_STAGE_STYLE.verifying, wait: ISSUE_STAGE_STYLE.verify_waiting, waitArrow: 'border-l-ive-stage-verify-wait' },
+  4: { active: ISSUE_STAGE_STYLE.confirming, wait: ISSUE_STAGE_STYLE.confirm_waiting, waitArrow: 'border-l-ive-stage-confirm-wait' },
+  5: { active: ISSUE_STAGE_STYLE.done, wait: ISSUE_STAGE_STYLE.done, waitArrow: 'border-l-ive-green' },
+}
 import {
   type CreatorInfo,
   type ProcessorInfo,
@@ -302,7 +312,7 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
         }),
         clickable: stageEditable && !!roles.onProcessorClick,
         onClick: roles.onProcessorClick,
-        ringCls: 'ring-ive-cyan/40',
+        ringCls: ISSUE_STAGE_STYLE.dev.ring,
       }
     }
     if (idx === 3) {
@@ -315,7 +325,7 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
           : presetTooltip(tIssue('verifier'), roles.verifier, roles.gitMembers, roles.creator, tIssue),
         clickable: stageEditable,
         onClick: () => setVerifierModalOpen(true),
-        ringCls: 'ring-ive-amber/40',
+        ringCls: ISSUE_STAGE_STYLE.verifying.ring,
       }
     }
     if (idx === 4) {
@@ -328,7 +338,7 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
           : presetTooltip(tIssue('confirmer'), roles.confirmer, confirmerList, roles.creator, tIssue),
         clickable: stageEditable,
         onClick: () => setConfirmerModalOpen(true),
-        ringCls: 'ring-orange-400/50',
+        ringCls: ISSUE_STAGE_STYLE.confirming.ring,
       }
     }
     // idx === 5 → 완료: 아이콘만
@@ -394,9 +404,11 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
             || (m.idx === 5 && arrows.some(a => a.sourceIdx === 5))
           )
 
+          // 지금 단계·대기 화살표 색 = 앱 전체 단계 색(처리 노랑·검증 보라·확인 분홍, 그 단계 대기는 회색빛)
+          const tone = MACRO_TONE[m.idx]
           let chipCls = ''
           if (isError) chipCls = 'bg-ive-red/15 text-ive-red border-ive-red/40 ring-1 ring-ive-red/20'
-          else if (isCurrent) chipCls = 'bg-ive-amber/15 text-ive-amber border-ive-amber/40 ring-1 ring-ive-amber/20'
+          else if (isCurrent) chipCls = `${tone.active.bg} ${tone.active.text} ${tone.active.border} ring-1 ${tone.active.ring}`
           else if (isPast) chipCls = 'bg-ive-green/10 text-ive-green/70 border-ive-green/20'
           else if (visitedAhead) chipCls = 'bg-ive-cyan/5 text-ive-cyan/30 border-ive-cyan/15'
           else chipCls = 'bg-white/[0.02] text-ive-text-dim border-ive-border-subtle'
@@ -411,12 +423,12 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
           const connectorPast = (m.idx < current) || (m.idx === current && !isWaitingSubstate && current > 0)
           const connectorError = isError && m.idx === 2
           const connectorCls = connectorError ? 'bg-ive-red/50'
-            : connectorIncoming ? 'bg-ive-amber/70 animate-pulse'
+            : connectorIncoming ? `${tone.wait.fill} animate-pulse`
             : connectorPast ? 'bg-ive-green/40'
             : visitedAhead ? 'bg-ive-cyan/15'
             : 'bg-ive-border-subtle'
           const arrowCls = connectorError ? 'border-l-ive-red/50'
-            : connectorIncoming ? 'border-l-ive-amber/70 animate-pulse'
+            : connectorIncoming ? `${tone.waitArrow} animate-pulse`
             : connectorPast ? 'border-l-ive-green/40'
             : visitedAhead ? 'border-l-ive-cyan/15'
             : 'border-l-ive-border-subtle'
@@ -466,7 +478,7 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
                      </div>
                      <div
                        className={`w-0 h-0 border-y-[4px] border-y-transparent border-l-[6px] ${connectorIncoming || connectorError ? 'animate-pulse' : arrowCls}`}
-                       style={connectorIncoming ? { borderLeftColor: 'rgba(245, 158, 11, 0.95)' } : connectorError ? { borderLeftColor: 'rgba(239, 68, 68, 0.5)' } : undefined}
+                       style={connectorError ? { borderLeftColor: 'rgba(239, 68, 68, 0.5)' } : undefined}
                      />
                    </div>
                    <span className="block text-[10px] mt-1 leading-none text-ive-text-muted truncate w-full text-center">{waitLabel ?? ''}</span>

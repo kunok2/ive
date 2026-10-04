@@ -12,6 +12,8 @@ import { fmtHours, pct, deltaTone, toneClass, agedCount, projectSwatchStyles, OT
 import AgentAvatar from '@/components/agent/AgentAvatar'
 import CountBump from '@/components/ui/CountBump'
 import { StackedHBar } from './hbar'
+import { ISSUE_STAGE_STYLE } from '@/lib/active-work'
+import { HELD_STAGES } from '@/lib/report-model/types'
 
 /** 보고서의 사람 줄 아바타 — 사람 키(u:<id>)면 그 사용자 아바타, 이름만 아는 사람(n:)은 기본 사람 아이콘 */
 export function PersonFace({ personKey, avatars }: { personKey: string; avatars?: Record<string, string> }) {
@@ -55,20 +57,10 @@ function Delta({ cur, prev, goodWhenUp, text }: { cur: number; prev: number | nu
   )
 }
 
-const STAGE_BADGE: Record<HeldStage, string> = {
-  waiting: 'bg-ive-cyan/20 text-ive-cyan',
-  dev: 'bg-ive-stage-process/20 text-ive-stage-process',
-  dev_fail: 'bg-ive-red/20 text-ive-red',
-  verify_waiting: 'bg-ive-stage-verify/10 text-ive-stage-verify/80',
-  verifying: 'bg-ive-stage-verify/20 text-ive-stage-verify',
-  confirm_waiting: 'bg-ive-stage-confirm/10 text-ive-stage-confirm/80',
-  confirming: 'bg-ive-stage-confirm/20 text-ive-stage-confirm',
-}
-// 막대 조각 색 = 각 줄 앞 견본 점 색(범례 1:1). 단계색(처리 노랑·검증 보라·확인 분홍), 그 단계 대기는 옅게, 처리 대기=시안, 실패=빨강
-export const STAGE_BAR: Record<HeldStage, string> = {
-  waiting: 'bg-ive-cyan', dev: 'bg-ive-stage-process', dev_fail: 'bg-ive-red',
-  verify_waiting: 'bg-ive-stage-verify/45', verifying: 'bg-ive-stage-verify', confirm_waiting: 'bg-ive-stage-confirm/45', confirming: 'bg-ive-stage-confirm',
-}
+// 단계 배지·막대 색 = 앱 전체 단계 색(lib/active-work ISSUE_STAGE_STYLE) — 진행은 단계색, 그 단계 대기는 회색빛
+const STAGE_BADGE = Object.fromEntries(HELD_STAGES.map(st => [st, `${ISSUE_STAGE_STYLE[st].bg} ${ISSUE_STAGE_STYLE[st].text}`])) as Record<HeldStage, string>
+// 막대 조각 색 = 각 줄 앞 견본 점 색(범례 1:1)
+export const STAGE_BAR = Object.fromEntries(HELD_STAGES.map(st => [st, ISSUE_STAGE_STYLE[st].fill])) as Record<HeldStage, string>
 
 // ─── ① 지금 안고 있는 일 ───
 

@@ -12,6 +12,7 @@ import { createTranslator } from 'next-intl'
 import ko from '@/messages/ko/reportV2.json'
 import en from '@/messages/en/reportV2.json'
 import type { ReportModel, HeldIssue, FlowStage } from '../report-model/types'
+import { STAGE_HEX } from '../active-work'
 import { fmtHours, pct, deltaTone, agedCount, MIN_SAMPLE, projectSwatches, OTHERS_ID, WHITE_PROJECT_COLOR, type Tr } from '../report-model/format'
 
 export type MailKind = 'member' | 'lead' | 'exec'
@@ -214,17 +215,11 @@ function doneBlock(t: T, closed: ReportModel, prevLabel: string): string {
   ))
 }
 
-/** 흰 바탕과 미리 섞은 단색(메일 클라이언트마다 투명도 지원이 달라서) */
-function onWhite(hex: string, alpha: number): string {
-  const n = parseInt(hex.slice(1), 16)
-  const mix = (c: number) => Math.round(c * alpha + 255 * (1 - alpha)).toString(16).padStart(2, '0')
-  return `#${mix(n >> 16)}${mix((n >> 8) & 0xff)}${mix(n & 0xff)}`
-}
-/** 단계색 — 화면(STAGE_BAR)과 같은 규칙: 처리 대기=시안, 처리 노랑·검증 보라·확인 분홍, 그 단계 대기는 옅게 */
+/** 단계색 — 화면(ISSUE_STAGE_STYLE)과 같은 규칙: 처리 노랑·검증 보라·확인 분홍, 그 단계 대기는 같은 계열의 회색빛 */
 const FLOW_COLOR: Record<FlowStage, string> = {
-  waiting: '#22d3ee', dev: '#f59e0b',
-  verify_waiting: onWhite('#a78bfa', 0.45), verifying: '#a78bfa',
-  confirm_waiting: onWhite('#f472b6', 0.45), confirming: '#f472b6',
+  waiting: STAGE_HEX.processWait, dev: STAGE_HEX.process,
+  verify_waiting: STAGE_HEX.verifyWait, verifying: STAGE_HEX.verify,
+  confirm_waiting: STAGE_HEX.confirmWait, confirming: STAGE_HEX.confirm,
 }
 const WORK_STAGES: FlowStage[] = ['dev', 'verifying', 'confirming']
 
