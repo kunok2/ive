@@ -68,7 +68,7 @@ export default function VerifyQueueModal({ open, onClose }: Props) {
                   style={{ backgroundColor: item.projectColor || '#888' }}
                 />
                 <span className="text-xs font-bold text-ive-text-muted truncate">{item.projectName}</span>
-                <span className="text-xs font-bold text-ive-text-dim shrink-0">#{item.issueIid}</span>
+                <span className="text-xs font-bold text-ive-text-secondary shrink-0">#{item.issueIid}</span>
                 <span className="ml-auto text-[10px] font-bold text-ive-amber bg-ive-amber/15 border border-ive-amber/30 rounded-lg px-1.5 py-0.5 shrink-0">
                   {tStage(item.stage)}
                 </span>

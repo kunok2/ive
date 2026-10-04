@@ -212,7 +212,7 @@ export default function ProjectBoard({ project, onOpenTrace }: { project: Projec
                         >
                           {/* 대기 건은 한 단계 낮은 글자색 — 손에 있는(진행 중) 건이 먼저 읽히게. 흐린색(dim)은 정보 글씨에 쓰지 않는다 */}
                           <span className={`text-xs font-bold leading-snug line-clamp-2 ${it.waiting ? 'text-ive-text-secondary' : 'text-ive-text'}`}>
-                            <span className="text-ive-text-dim">#{it.iid}</span> {it.title}
+                            <span className="font-bold text-ive-text-secondary">#{it.iid}</span> {it.title}
                           </span>
                           {age && (
                             <span className={`self-end text-xs font-bold tabular-nums ${age.aged ? 'px-1.5 py-0.5 rounded-lg bg-ive-red/15 text-ive-red' : 'text-ive-text-secondary'}`}>

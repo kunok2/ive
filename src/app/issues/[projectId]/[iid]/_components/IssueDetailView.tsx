@@ -1058,7 +1058,7 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
                 <i className="fa-solid fa-arrow-left" />
               </button>
             )}
-            <span className="text-base font-bold text-ive-text-muted shrink-0">#{iid}</span>
+            <span className="text-base font-bold text-ive-text-secondary shrink-0">#{iid}</span>
           </div>
         </header>
         <div className="flex-1 flex items-center justify-center">

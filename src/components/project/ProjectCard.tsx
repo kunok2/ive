@@ -361,7 +361,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
                 className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-3 hover:border-ive-cyan/40 transition-all cursor-pointer active:scale-[0.98]"
               >
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="text-sm font-bold text-ive-text-muted">#{issue.iid}</span>
+                  <span className="text-sm font-bold text-ive-text-secondary">#{issue.iid}</span>
                   {age && (
                     <span className={`ml-auto shrink-0 text-xs font-bold tabular-nums ${age.aged ? 'px-1.5 py-0.5 rounded-lg bg-ive-red/15 text-ive-red' : 'text-ive-text-secondary'}`}>
                       {tp('waitedFor', { t: ageText(tp, age) })}
@@ -694,7 +694,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
                   className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-3 hover:border-ive-text-dim transition-all cursor-pointer active:scale-[0.98]"
                 >
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-sm font-bold text-ive-text-muted">#{issue.iid}</span>
+                    <span className="text-sm font-bold text-ive-text-secondary">#{issue.iid}</span>
                     <span className="text-xs font-bold px-1.5 py-0.5 rounded-lg shrink-0 border text-ive-stage-verify bg-ive-stage-verify/10 border-ive-stage-verify/20">
                       {tp('verifyingBadge')}
                     </span>
@@ -759,7 +759,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
                   className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-3 hover:border-ive-text-dim transition-all cursor-pointer active:scale-[0.98]"
                 >
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-sm font-bold text-ive-text-muted">#{issue.iid}</span>
+                    <span className="text-sm font-bold text-ive-text-secondary">#{issue.iid}</span>
                     <span className="text-xs font-bold px-1.5 py-0.5 rounded-lg shrink-0 border text-ive-stage-confirm bg-ive-stage-confirm/10 border-ive-stage-confirm/20">
                       {tp('confirmingBadge')}
                     </span>
@@ -807,7 +807,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
                   className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-3 hover:border-ive-cyan/40 transition-all cursor-pointer active:scale-[0.98]"
                 >
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-sm font-bold text-ive-text-muted">#{d.iid}</span>
+                    <span className="text-sm font-bold text-ive-text-secondary">#{d.iid}</span>
                     {d.stage === 'rejected' && <span className="px-1.5 py-0.5 rounded-lg text-xs font-bold bg-ive-red/15 text-ive-red">{tp('doneRejected')}</span>}
                     <span className="ml-auto shrink-0 text-xs font-bold tabular-nums text-ive-text-secondary">{formatTime(d.at, userLocale, userTz)}</span>
                   </div>

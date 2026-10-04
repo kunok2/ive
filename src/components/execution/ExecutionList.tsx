@@ -89,7 +89,7 @@ export default function ExecutionList({ executions, showAgent = true, onKill, ki
                   <AgentAvatar avatar={ex.agentAvatar || 'av-01'} size="xs" />{ex.agentName}
                 </span>
               )}
-              <span className="text-sm font-bold text-ive-text-muted">#{ex.issueIid}</span>
+              <span className="text-sm font-bold text-ive-text-secondary">#{ex.issueIid}</span>
               <span className="text-xs font-mono font-bold text-ive-text-muted">{formatTimeWithSeconds(ex.startedAt, userLocale, userTz)}</span>
               {ex.modelName && (
                 <span className="text-xs font-mono text-ive-text-muted bg-white/5 border border-ive-border-subtle px-1 py-0.5 rounded shrink-0">

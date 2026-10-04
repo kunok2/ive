@@ -69,8 +69,8 @@ export default function ActiveWorkList({ items, maxPerKind = 3, onMore }: {
                 >
                   {!singleWho && avatarOf(it)}
                   {!singleWho && it.who && <span className={`shrink-0 max-w-24 truncate ${STAGE_TONE[g.kind].text} opacity-80`}>{it.who}</span>}
-                  <span className="shrink-0 text-ive-text-dim">#{it.iid}</span>
-                  <span className="flex-1 min-w-0"><MarqueeText className="text-ive-text-muted">{it.title}</MarqueeText></span>
+                  <span className="shrink-0 font-bold text-ive-text-secondary">#{it.iid}</span>
+                  <span className="flex-1 min-w-0"><MarqueeText className="text-ive-text-secondary">{it.title}</MarqueeText></span>
                   {age && (
                     <span className={`shrink-0 tabular-nums ${age.aged ? 'px-1.5 py-0.5 rounded-lg bg-ive-red/15 text-ive-red' : 'text-ive-text-secondary'}`}>
                       {ageText(tp, age)}

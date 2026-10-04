@@ -298,7 +298,7 @@ export default function VerifierCard({ verifier, role = 'verify' }: Props) {
                     href={`/issues/${item.projectId}/${item.issueIid}`}
                     className="flex items-center gap-2 px-3 py-2.5 hover:bg-white/[0.02] transition-colors"
                   >
-                    <span className="text-xs font-bold text-ive-text-muted shrink-0">#{item.issueIid}</span>
+                    <span className="text-xs font-bold text-ive-text-secondary shrink-0">#{item.issueIid}</span>
                     <span className="text-sm font-bold text-ive-text flex-1 truncate">{item.issueTitle || '(제목 없음)'}</span>
                     <span className="text-xs font-bold text-ive-text-dim truncate max-w-32">{item.projectName}</span>
                   </a>
@@ -326,7 +326,7 @@ export default function VerifierCard({ verifier, role = 'verify' }: Props) {
                     href={`/issues/${item.projectId}/${item.issueIid}`}
                     className="flex items-center gap-2 px-3 py-2.5 hover:bg-white/[0.02] transition-colors"
                   >
-                    <span className="text-xs font-bold text-ive-text-muted shrink-0">#{item.issueIid}</span>
+                    <span className="text-xs font-bold text-ive-text-secondary shrink-0">#{item.issueIid}</span>
                     <span className="text-sm font-bold text-ive-text flex-1 truncate">{item.issueTitle || '(제목 없음)'}</span>
                     <span className="text-xs font-bold text-ive-text-dim truncate max-w-32">{item.projectName}</span>
                   </a>

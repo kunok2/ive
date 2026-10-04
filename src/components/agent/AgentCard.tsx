@@ -874,7 +874,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
                 href={`/issues/${issue.projectId}/${issue.issueIid}`}
                 className="flex items-center gap-2 px-3 py-2.5 hover:bg-white/[0.02] transition-colors"
               >
-                <span className="text-xs font-bold text-ive-text-muted">#{issue.issueIid}</span>
+                <span className="text-xs font-bold text-ive-text-secondary">#{issue.issueIid}</span>
                 <span className="text-xs text-ive-text-dim truncate">{issue.projectName}</span>
               </a>
             ))}
