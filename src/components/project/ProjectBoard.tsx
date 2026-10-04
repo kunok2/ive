@@ -28,7 +28,7 @@ interface BoardIssue {
   state: string
   createdAt?: string
   updatedAt: string
-  /** 지금 단계에 들어온 시각(단계 사건) — 처리 실패 뒤 얼마나 방치됐는지 */
+  /** 지금 단계에 들어온 시각(단계 사건) — 처리 대기·처리 실패가 얼마나 기다렸는지 */
   stageSince?: string | null
   dueDate?: string | null
   priority?: 0 | 1 | 2
@@ -104,7 +104,8 @@ export default function ProjectBoard({ project, onOpenTrace }: { project: Projec
   for (const i of issues ?? []) {
     const base = { key: `i-${i.iid}`, iid: i.iid, title: i.title, href: issueHref(i.iid), issue: i }
     if (i.stage === 'waiting') {
-      cols.process.push({ ...base, who: tp(WAIT_LABEL.process), startedAt: i.createdAt ?? null, waiting: true })
+      // 처리 대기에 들어온 시각(단계 사건) — 카드의 대기 목록과 같은 기준. 사건 기록 이전이면 이슈 작성 시각
+      cols.process.push({ ...base, who: tp(WAIT_LABEL.process), startedAt: i.stageSince ?? i.createdAt ?? null, waiting: true })
     } else if (i.stage === 'dev_fail') {
       // 처리 실패 — 실패 뒤 아무도 다시 처리하지 않은 일. 진행 숫자에는 넣지 않고 처리 칸 맨 위 묶음으로 드러낸다
       cols.process.push({ ...base, who: tp('failGroupProcess'), startedAt: i.stageSince ?? null, failed: true })
