@@ -60,6 +60,12 @@ export async function GET(
   `).get(id) as any
   const waiting = waitingCount?.count ?? 0
 
+  // 처리 실패로 남은 issue 수 (dev_fail — IVE-D 는 있는데 실행이 없음). 진행이 아니라 다시 처리하기를 기다리는 일
+  const devFailed = (db.prepare(`
+    SELECT COUNT(*) as count FROM issue_stages
+    WHERE project_id = ? AND cached_stage = 'dev_fail'
+  `).get(id) as { count: number } | undefined)?.count ?? 0
+
   // 검증 대기 중인 issue 수 (verify_waiting 단계)
   const verifyWaitingCount = db.prepare(`
     SELECT COUNT(*) as count FROM issue_stages
@@ -123,6 +129,7 @@ export async function GET(
     completed,
     failed,
     waiting,
+    devFailed,
     verifyWaiting,
     confirmWaiting,
     conflictCount: conflicts,

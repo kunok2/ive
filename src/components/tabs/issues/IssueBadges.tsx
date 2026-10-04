@@ -20,7 +20,7 @@ export function hasIssueBadges(i: BadgeIssue): boolean {
 }
 
 /**
- * 작업 배지 — 마감일(D-N·D+N·일찍/늦게) + 회차(처리 N회 · 되돌리기 N회).
+ * 작업 배지 — 마감일(D-N·D+N·일찍/늦게) + 회차(처리 N회 · 되돌림 N회, 아이콘만으로는 둘이 헷갈려 글자로 적는다).
  * 작업 목록 카드와 넓은 화면 프로젝트 보드가 같이 쓴다(한쪽만 바뀌지 않게).
  */
 export default function IssueBadges({ issue }: { issue: BadgeIssue }) {
@@ -35,7 +35,7 @@ export default function IssueBadges({ issue }: { issue: BadgeIssue }) {
           title={t('iterationCount', { count: ic.processCount })}
         >
           <i className="fa-solid fa-repeat" />
-          {ic.processCount}
+          {t('badgeProcess', { count: ic.processCount })}
         </span>
       )}
       {showRetry(issue) && ic && (
@@ -44,7 +44,7 @@ export default function IssueBadges({ issue }: { issue: BadgeIssue }) {
           title={t('retryCount', { count: ic.retryTotal })}
         >
           <i className="fa-solid fa-rotate-left" />
-          {ic.retryTotal}
+          {t('badgeRetry', { count: ic.retryTotal })}
         </span>
       )}
     </>

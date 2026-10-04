@@ -7,7 +7,7 @@ import type { Project, TaskExecution } from '@/types'
 import type { TodayDoneIssue } from '@/lib/db/issues'
 import { useTab } from '@/lib/tab-context'
 import { execKind, execHref, ageOf, ageText, STAGE_TONE } from '@/lib/active-work'
-import WaitPill from '@/components/project/WaitPill'
+import WaitPill, { FailPill } from '@/components/project/WaitPill'
 import CountBump from '@/components/ui/CountBump'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 import { PriorityBadge } from '@/components/tabs/issues/Priority'
@@ -28,6 +28,8 @@ interface BoardIssue {
   state: string
   createdAt?: string
   updatedAt: string
+  /** 지금 단계에 들어온 시각(단계 사건) — 처리 실패 뒤 얼마나 방치됐는지 */
+  stageSince?: string | null
   dueDate?: string | null
   priority?: 0 | 1 | 2
   iterationCounts?: { processCount: number; retryTotal: number }
@@ -40,7 +42,7 @@ interface BoardIssue {
 interface Face { src: string; userId?: string | null; agentId?: string | null; human: boolean }
 
 /** issue — 배지(우선순위·마감일·처리 N회·되돌리기 N회)의 근거. 열린 이슈 목록에 없는 실행·오늘 완료 건은 없다 */
-interface BoardItem { key: string; iid: number; title: string; who: string | null; face?: Face | null; startedAt: string | null; href: string; waiting?: boolean; issue?: BoardIssue }
+interface BoardItem { key: string; iid: number; title: string; who: string | null; face?: Face | null; startedAt: string | null; href: string; waiting?: boolean; failed?: boolean; issue?: BoardIssue }
 
 /**
  * PC 폭의 프로젝트 단계 보드 — 대기 | 처리 | 검증 | 확인 | 완료(오늘).
@@ -103,6 +105,9 @@ export default function ProjectBoard({ project, onOpenTrace }: { project: Projec
     const base = { key: `i-${i.iid}`, iid: i.iid, title: i.title, href: issueHref(i.iid), issue: i }
     if (i.stage === 'waiting') {
       cols.process.push({ ...base, who: tp(WAIT_LABEL.process), startedAt: i.createdAt ?? null, waiting: true })
+    } else if (i.stage === 'dev_fail') {
+      // 처리 실패 — 실패 뒤 아무도 다시 처리하지 않은 일. 진행 숫자에는 넣지 않고 처리 칸 맨 위 묶음으로 드러낸다
+      cols.process.push({ ...base, who: tp('failGroupProcess'), startedAt: i.stageSince ?? null, failed: true })
     } else if (i.stage === 'dev') {
       const e = execFor(i.iid, 'process')
       // 에이전트가 처리 중이면 실시간 실행 화면으로(검증·확인도 같다 — execHref)
@@ -173,11 +178,12 @@ export default function ProjectBoard({ project, onOpenTrace }: { project: Projec
           const groups = [...new Set(items.map(i => i.who ?? ''))]
             .map(who => {
               const mine = items.filter(i => (i.who ?? '') === who)
-              return { who, waiting: mine.some(i => i.waiting), face: mine.find(i => i.face)?.face ?? null, items: mine }
+              return { who, waiting: mine.some(i => i.waiting), failed: mine.some(i => i.failed), face: mine.find(i => i.face)?.face ?? null, items: mine }
             })
-            .sort((a, b) => Number(b.waiting) - Number(a.waiting) || b.items.length - a.items.length)
+            .sort((a, b) => Number(b.failed) - Number(a.failed) || Number(b.waiting) - Number(a.waiting) || b.items.length - a.items.length)
           const waitN = items.filter(i => i.waiting).length
-          const activeN = items.length - waitN
+          const failN = items.filter(i => i.failed).length
+          const activeN = items.length - waitN - failN
           // 완료는 브랜드색, 사람·에이전트 손에 있는 칸은 진행색(카드 숫자 칸과 같은 규칙)
           const calm = col === 'done'
           return (
@@ -187,6 +193,7 @@ export default function ProjectBoard({ project, onOpenTrace }: { project: Projec
                 {/* 진행 중 건수 + 그 단계 대기(←n) — 카드의 단계 칸과 같은 표기 */}
                 <span className={`text-xl font-bold leading-none tabular-nums ${!activeN ? 'text-ive-text-dim' : calm ? 'text-ive-cyan' : STAGE_TONE[col as 'process' | 'verify' | 'confirm'].text}`}><CountBump value={activeN} /></span>
                 <WaitPill n={waitN} title={tp('stageWaitingHint', { n: waitN })} />
+                <FailPill n={failN} />
                 {col === 'done' && <span className="ml-auto text-xs font-bold text-ive-text-dim">{tp('boardDoneSub')}</span>}
               </div>
               <div className="flex-1 min-h-0 overflow-y-auto p-2.5 flex flex-col gap-3">
@@ -195,9 +202,10 @@ export default function ProjectBoard({ project, onOpenTrace }: { project: Projec
                 {groups.map(g => (
                   <div key={g.who || '-'} className="flex flex-col gap-1.5">
                     {g.who && (
-                      <div className="flex items-center gap-1.5 px-1 text-xs font-bold text-ive-text-secondary">
+                      <div className={`flex items-center gap-1.5 px-1 text-xs font-bold ${g.failed ? 'text-ive-red' : 'text-ive-text-secondary'}`}>
                         {/* 아바타 — 진행 중이면 카드와 같은 배지(사람: 작업 중, 에이전트: 지금 쓰는 도구). 완료 칸은 배지 없음 */}
-                        {!g.waiting && g.face && (
+                        {g.failed && <i className="fa-solid fa-triangle-exclamation" />}
+                        {!g.waiting && !g.failed && g.face && (
                           <AgentAvatar
                             avatar={g.face.src}
                             userId={g.face.userId}
@@ -217,7 +225,7 @@ export default function ProjectBoard({ project, onOpenTrace }: { project: Projec
                           key={it.key}
                           type="button"
                           onClick={() => (onOpenTrace && it.href.startsWith('/executions/') ? onOpenTrace(it.href.slice('/executions/'.length)) : router.push(it.href))}
-                          className="text-left flex flex-col gap-1.5 p-2.5 rounded-lg bg-ive-bg-card border border-ive-border-subtle hover:border-ive-cyan/40 transition-colors"
+                          className={`text-left flex flex-col gap-1.5 p-2.5 rounded-lg bg-ive-bg-card border hover:border-ive-cyan/40 transition-colors ${it.failed ? 'border-ive-red/40' : 'border-ive-border-subtle'}`}
                         >
                           {/* 대기 건은 한 단계 낮은 글자색 — 손에 있는(진행 중) 건이 먼저 읽히게. 흐린색(dim)은 정보 글씨에 쓰지 않는다 */}
                           <span className={`text-xs font-bold leading-snug line-clamp-2 ${it.waiting ? 'text-ive-text-secondary' : 'text-ive-text'}`}>

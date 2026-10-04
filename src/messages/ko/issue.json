@@ -72,6 +72,8 @@
   "viewDescription": "설명 보기",
   "iterationCount": "{count}회 작업 완료",
   "iterationLabel": "{count}차",
+  "badgeProcess": "처리 {count}회",
+  "badgeRetry": "되돌림 {count}회",
   "retryCount": "되돌리기 {count}회",
   "viewAll": "전체 보기",
   "chatMode": "채팅",

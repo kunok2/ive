@@ -17,3 +17,18 @@ export default function WaitPill({ n, title }: { n: number; title: string }) {
     </span>
   )
 }
+
+/**
+ * 처리(AI·사람)가 실패하고 아직 아무도 다시 처리하지 않은 건수(dev_fail) — 진행 숫자에 넣지 않고 따로 붙인다.
+ * 방치되기 쉬워 빨강으로 드러낸다. 0이면 그리지 않는다.
+ */
+export function FailPill({ n }: { n: number }) {
+  const tp = useTranslations('project')
+  if (n <= 0) return null
+  const title = tp('stageFailHint', { n })
+  return (
+    <span title={title} aria-label={title} className="text-xs font-bold text-ive-red tabular-nums whitespace-nowrap">
+      <i className="fa-solid fa-triangle-exclamation mr-0.5" /><CountBump value={n} />
+    </span>
+  )
+}

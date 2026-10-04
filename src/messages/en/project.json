@@ -223,5 +223,7 @@
   "boardDoneToday": "Done today",
   "activeVerifyingHeader": "Verifying {n}",
   "activeConfirmingHeader": "Confirming {n}",
+  "failGroupProcess": "Processing failed",
+  "stageFailHint": "{n} failed in processing — waiting to be reprocessed",
   "waitShort": "←{n}"
 }

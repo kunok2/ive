@@ -12,7 +12,7 @@ import LiveTracePanel from '@/components/execution/LiveTracePanel'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 import MarqueeText from '@/components/ui/MarqueeText'
 import ActiveWorkList, { type ActiveItem } from '@/components/project/ActiveWorkList'
-import WaitPill from '@/components/project/WaitPill'
+import WaitPill, { FailPill } from '@/components/project/WaitPill'
 import CountBump from '@/components/ui/CountBump'
 import { execKind, execHref, ageOf, ageText } from '@/lib/active-work'
 import ConflictResolutionPanel from '@/components/mr/ConflictResolutionPanel'
@@ -38,6 +38,8 @@ interface ProjectStats {
   completed: number
   failed: number
   waiting: number
+  /** 처리 실패로 남은 일(dev_fail — AI·사람 모두) — 처리 칸에 따로 붙인다 */
+  devFailed?: number
   verifyWaiting: number
   confirmWaiting: number
   conflictCount: number
@@ -49,6 +51,8 @@ interface ProjectStats {
 
 // 대기 패널의 묶음 순서 — 흐름 순서대로
 const WAIT_GROUPS = [
+  // 처리 실패 — 실패 뒤 아무도 다시 처리하지 않은 일. 처리 대기보다 먼저(방치되기 쉬워 위에 둔다)
+  { stage: 'dev_fail', label: 'failGroupProcess' },
   { stage: 'waiting', label: 'waitGroupProcess' },
   { stage: 'verify_waiting', label: 'waitGroupVerify' },
   { stage: 'confirm_waiting', label: 'waitGroupConfirm' },
@@ -139,7 +143,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
         const res = await fetch(`/api/projects/${project.id}/issues`)
         if (res.ok) {
           const all = await res.json()
-          setWaitingIssues(all.filter((i: any) => i.stage === 'waiting' || i.stage === 'verify_waiting' || i.stage === 'confirm_waiting'))
+          setWaitingIssues(all.filter((i: any) => i.stage === 'dev_fail' || i.stage === 'waiting' || i.stage === 'verify_waiting' || i.stage === 'confirm_waiting'))
         }
       } catch { /* ignore */ }
     }
@@ -234,6 +238,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
   const completedCount = stats?.completed ?? 0
   // 대기 — 처리대기·검증대기·확인대기. 대기 칸은 합계, 각 단계 칸에는 그 단계 몫을 붙인다
   const processWaitCount = stats?.waiting ?? 0
+  const devFailedCount = stats?.devFailed ?? 0
   const verifyWaitCount = stats?.verifyWaiting ?? 0
   const confirmWaitCount = stats?.confirmWaiting ?? 0
   const failedCount = stats?.failed ?? 0
@@ -243,6 +248,8 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
   // 대기 이슈가 무엇을 기다리는지 — 처리대기는 스캐너가 남긴 배정 대기 사유,
   // 검증·확인대기는 작업자를 못 띄운 사유(stageWorkerNote)가 있으면 그것, 없으면 기다리는 사람
   const waitTarget = (issue: any): { icon: string; text: string; face?: { src: string; userId?: string | null } } | null => {
+    // 처리 실패 — 스캐너·작업자가 남긴 사유가 있으면 그것, 없으면 이슈 작성자(아래 기본 표시)
+    if (issue.stage === 'dev_fail') return issue.stageWorkerNote ? { icon: 'fa-circle-info', text: issue.stageWorkerNote } : null
     if (issue.stage === 'waiting') {
       return issue.waitReason && WAIT_REASONS.has(issue.waitReason)
         ? { icon: 'fa-circle-info', text: tp(`waitReason.${issue.waitReason}`) }
@@ -274,7 +281,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
     !expandedPanel || expandedPanel === 'done' ? null
     : expandedPanel === 'conflicts' ? mergeCount
     : !stats ? null
-    : expandedPanel === 'running' ? agentWorkingCount + processWaitCount
+    : expandedPanel === 'running' ? agentWorkingCount + processWaitCount + devFailedCount
     : expandedPanel === 'verifying' ? verifyingCount + verifyWaitCount
     : confirmingCount + confirmWaitCount
   useEffect(() => {
@@ -346,7 +353,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
     return (
       <div key={g.stage}>
         <div className="px-3 py-2 bg-ive-bg-deep/50 border-b border-ive-border-dark">
-          <span className="text-xs font-bold uppercase tracking-widest text-ive-text-secondary">
+          <span className={`text-xs font-bold uppercase tracking-widest ${g.stage === 'dev_fail' ? 'text-ive-red' : 'text-ive-text-secondary'}`}>
             {tp(g.label)} {list.length}
           </span>
         </div>
@@ -522,6 +529,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
               <CountBump value={agentWorkingCount} />
             </span>
             {waitTag(processWaitCount)}
+            <FailPill n={devFailedCount} />
           </div>
           <Sparkline data={snapshots.map(s => s.running)} width={40} height={12} color="amber" />
           <span className="max-w-full truncate text-xs text-ive-text-dim font-bold">{tp('workingLabel')}</span>
@@ -647,13 +655,18 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
       {/* 작업 현황 패널 (AI 에이전트만) — 처리 */}
       {expandedPanel === 'running' && (
         <div className="flex-1 flex flex-col min-h-0">
-          {processWaitCount > 0 && <div className="shrink-0 max-h-[45%] overflow-y-auto border-t border-ive-cyan/20">{renderWaitGroup('waiting')}</div>}
+          {(devFailedCount > 0 || processWaitCount > 0) && (
+            <div className="shrink-0 max-h-[45%] overflow-y-auto border-t border-ive-cyan/20">
+              {renderWaitGroup('dev_fail')}
+              {renderWaitGroup('waiting')}
+            </div>
+          )}
           <LiveTracePanel
             agents={toAgentTabs(runningExecs.filter(e => e.assigneeType !== 'user' && !stageKindOf(e.id)))}
             projectId={project.id}
             onKill={handleKill}
             // 처리 대기가 남아 있으면 진행이 끝나도 패널을 닫지 않는다(대기 목록을 계속 보인다)
-            onAllCompleted={processWaitCount > 0 ? undefined : () => setExpandedPanel(null)}
+            onAllCompleted={processWaitCount + devFailedCount > 0 ? undefined : () => setExpandedPanel(null)}
           />
         </div>
       )}

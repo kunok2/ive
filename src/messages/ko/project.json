@@ -223,5 +223,7 @@
   "boardDoneToday": "오늘 완료",
   "activeVerifyingHeader": "검증 중 {n}",
   "activeConfirmingHeader": "확인 중 {n}",
+  "failGroupProcess": "처리 실패",
+  "stageFailHint": "처리 실패 {n}건 — 다시 처리하기를 기다림",
   "waitShort": "←{n}"
 }
