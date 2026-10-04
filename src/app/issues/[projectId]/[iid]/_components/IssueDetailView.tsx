@@ -22,6 +22,7 @@ import type { ProjectAgent } from '@/components/tabs/issues/types'
 // 노트와 함께 stage 변경이 일어날 때 본문에 붙이는 prefix — "이전 → 다음" 라벨
 // IVE-S(waiting) 은 처리 macro 의 waiting sub-stage 이므로 "처리대기" 로 표시.
 // 'none' 은 아직 IVE 라벨이 안 붙은 신규 이슈(유입 macro) 에 해당.
+// 코멘트 말머리용 — 화면 문구가 아니라 Git 이슈에 남는 공용 기록이라 보는 사람 언어와 무관하게 한국어로 둔다(IVE 봇 코멘트와 같은 언어)
 const STAGE_NAMES_KO: Record<string, string> = {
   none: '유입',
   waiting: '처리대기', dev: '처리', dev_fail: '처리(실패)',
@@ -394,7 +395,7 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
         })
         if (!res.ok) {
           const err = await res.json().catch(() => null)
-          toast(err?.error || 'MR 머지에 실패했습니다', 'error'); return
+          toast(err?.error || tIssue('mrMergeFailed'), 'error'); return
         }
       }
       if (choice === 'close') {
@@ -404,7 +405,7 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
         })
         if (!res.ok) {
           const err = await res.json().catch(() => null)
-          toast(err?.error || 'MR 닫기에 실패했습니다', 'error'); return
+          toast(err?.error || tIssue('mrCloseFailed'), 'error'); return
         }
       }
       setMrActionModal(null); await finalApprove()
@@ -428,7 +429,7 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
           toast(errorData?.error || `Error: ${res.status} ${res.statusText}`, 'error')
         }
       } catch (e: any) {
-        toast(e.message || '네트워크 오류가 발생했습니다.', 'error')
+        toast(e.message || tc('networkError'), 'error')
       } finally { setStageChanging(false) }
     }
     if (issue.stage === 'verifying' && action === 'approve') {
@@ -506,7 +507,7 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
       })
       if (!res.ok) {
         const d = await res.json().catch(() => ({}))
-        toast(d.error || tIssue('settingsSaveFailed') || '설정 저장에 실패했습니다', 'error')
+        toast(d.error || tIssue('settingsSaveFailed'), 'error')
         return
       }
       setPreferredAgent(await res.json())
@@ -525,12 +526,12 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
           setIssue(prev => prev ? { ...prev, assignees: [assignee] } : prev)
         } else {
           const d = await aRes.json().catch(() => ({}))
-          toast(d.error || tIssue('assigneeChangeFailed') || '담당자 변경에 실패했습니다', 'error')
+          toast(d.error || tIssue('assigneeChangeFailed'), 'error')
         }
       }
       setAgentPickerOpen(false)
     } catch (err: any) {
-      toast(err?.message || tc('networkError') || '네트워크 오류', 'error')
+      toast(err?.message || tc('networkError'), 'error')
     } finally {
       setAgentPickerSaving(false)
     }
@@ -583,7 +584,7 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ body: noteBody }),
       })
-      if (!res.ok) { const data = await res.json().catch(() => ({})); toast(data.error || '코멘트 작성에 실패했습니다', 'error'); return }
+      if (!res.ok) { const data = await res.json().catch(() => ({})); toast(data.error || tIssue('commentPostFailed'), 'error'); return }
       setComment(''); localStorage.removeItem(commentKey)
       pendingScrollToBottomRef.current = true; await fetchNotes()
       if (agentId !== undefined) {
@@ -592,7 +593,7 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
           body: JSON.stringify({ agentId }),
         })
         if (agentRes.ok) setPreferredAgent(await agentRes.json())
-        else { const data = await agentRes.json().catch(() => ({})); toast(data.error || '에이전트 설정 변경에 실패했습니다', 'error') }
+        else { const data = await agentRes.json().catch(() => ({})); toast(data.error || tIssue('agentSettingFailed'), 'error') }
       }
       if (issue?.stage !== 'waiting') {
         // stageAction 은 위에서 미리 계산 (note prefix 와 동일 값)
@@ -602,8 +603,8 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
         })
         if (!stageRes.ok) { const errorData = await stageRes.json().catch(() => null); toast(errorData?.error || `Error: ${stageRes.status} ${stageRes.statusText}`, 'error'); return }
       }
-      await refreshAll(); toast('성공적으로 변경되었습니다', 'success')
-    } catch (err: any) { toast(err.message || '네트워크 오류가 발생했습니다', 'error') }
+      await refreshAll(); toast(tIssue('stageChanged'), 'success')
+    } catch (err: any) { toast(err.message || tc('networkError'), 'error') }
     finally { postingRef.current = false; setPosting(false); setPostingType(null) }
   }
 
@@ -623,7 +624,7 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ body: noteBody }),
         })
-        if (!res.ok) { const data = await res.json().catch(() => ({})); toast(data.error || '코멘트 작성에 실패했습니다', 'error'); return }
+        if (!res.ok) { const data = await res.json().catch(() => ({})); toast(data.error || tIssue('commentPostFailed'), 'error'); return }
         setComment(''); localStorage.removeItem(commentKey)
         pendingScrollToBottomRef.current = true; await fetchNotes()
         const stageRes = await fetch(`/api/projects/${projectId}/issues/${iid}/stage`, {
@@ -632,12 +633,12 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
         })
         if (!stageRes.ok) { const errorData = await stageRes.json().catch(() => null); toast(errorData?.error || `Error: ${stageRes.status} ${stageRes.statusText}`, 'error'); return }
         await refreshAll()
-        toast(isConfirming ? '확인 완료되었습니다' : '승인 완료되었습니다', 'success')
+        toast(isConfirming ? tIssue('confirmDone') : tIssue('approveDone'), 'success')
       }
       // verifying 의 approve 만 MR 체크 적용 (confirming 의 accept 는 단순 종결)
       if (isConfirming) await doStage()
       else await runApproveWithMRCheck(doStage)
-    } catch (err: any) { toast(err.message || '네트워크 오류가 발생했습니다', 'error') }
+    } catch (err: any) { toast(err.message || tc('networkError'), 'error') }
     finally { postingRef.current = false; setPosting(false); setPostingType(null) }
   }
 
@@ -653,7 +654,7 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ body: noteBody }),
       })
-      if (!res.ok) { const data = await res.json().catch(() => ({})); toast(data.error || '코멘트 작성에 실패했습니다', 'error'); return }
+      if (!res.ok) { const data = await res.json().catch(() => ({})); toast(data.error || tIssue('commentPostFailed'), 'error'); return }
       setComment(''); localStorage.removeItem(commentKey)
       pendingScrollToBottomRef.current = true; await fetchNotes()
       const stageRes = await fetch(`/api/projects/${projectId}/issues/${iid}/stage`, {
@@ -661,19 +662,19 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
         body: JSON.stringify({ stage: stageNow, action: stageAction }),
       })
       if (!stageRes.ok) { const errorData = await stageRes.json().catch(() => null); toast(errorData?.error || `Error: ${stageRes.status} ${stageRes.statusText}`, 'error'); return }
-      await refreshAll(); toast('유입 상태로 변경되었습니다', 'success')
-    } catch (err: any) { toast(err.message || '네트워크 오류가 발생했습니다', 'error') }
+      await refreshAll(); toast(tIssue('inflowDone'), 'success')
+    } catch (err: any) { toast(err.message || tc('networkError'), 'error') }
     finally { postingRef.current = false; setPosting(false); setPostingType(null) }
   }
 
   const NEXT_STAGE: Record<string, { stage: string; action: string; label: string }> = {
-    none:            { stage: 'none',            action: 'schedule',            label: '처리' },
-    waiting:         { stage: 'waiting',         action: 'start_dev',           label: '개발 시작' },
-    dev:             { stage: 'dev',             action: 'complete',            label: '검증대기' },
-    verify_waiting:  { stage: 'verify_waiting',  action: 'start_verification',  label: '검증 시작' },
-    verifying:       { stage: 'verifying',       action: 'approve',             label: '확인' },
-    confirm_waiting: { stage: 'confirm_waiting', action: 'start_confirmation',  label: '확인 시작' },
-    confirming:      { stage: 'confirming',      action: 'accept',              label: '완료' },
+    none:            { stage: 'none',            action: 'schedule',            label: tIssue('nextStage.none') },
+    waiting:         { stage: 'waiting',         action: 'start_dev',           label: tIssue('nextStage.waiting') },
+    dev:             { stage: 'dev',             action: 'complete',            label: tIssue('nextStage.dev') },
+    verify_waiting:  { stage: 'verify_waiting',  action: 'start_verification',  label: tIssue('nextStage.verify_waiting') },
+    verifying:       { stage: 'verifying',       action: 'approve',             label: tIssue('nextStage.verifying') },
+    confirm_waiting: { stage: 'confirm_waiting', action: 'start_confirmation',  label: tIssue('nextStage.confirm_waiting') },
+    confirming:      { stage: 'confirming',      action: 'accept',              label: tIssue('nextStage.confirming') },
   }
 
   async function handleCommentAndNextStage() {
@@ -691,7 +692,7 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ body: noteBody }),
           })
-          if (!res.ok) { const data = await res.json().catch(() => ({})); toast(data.error || '코멘트 작성에 실패했습니다', 'error'); return }
+          if (!res.ok) { const data = await res.json().catch(() => ({})); toast(data.error || tIssue('commentPostFailed'), 'error'); return }
           setComment(''); localStorage.removeItem(commentKey)
           pendingScrollToBottomRef.current = true; await fetchNotes()
         }
@@ -921,7 +922,7 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
         setChatImages(prev => prev.map(c => c.id === id ? { ...c, url: String(data.url || ''), markdown: String(data.markdown || ''), uploading: false } : c))
       } catch {
         setChatImages(prev => prev.map(c => c.id === id ? { ...c, uploading: false, error: true } : c))
-        toast(tIssue('imageUploadFailed') || '이미지 업로드 실패', 'error')
+        toast(tIssue('imageUploadFailed'), 'error')
       }
     }
   }
@@ -931,7 +932,7 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
 
   async function handleSendChatMessage() {
     if (!chatSessionId || chatSending) return
-    if (chatImages.some(c => c.uploading)) { toast(tIssue('imageUploading') || '이미지 업로드 중이에요…', 'error'); return }
+    if (chatImages.some(c => c.uploading)) { toast(tIssue('imageUploading'), 'error'); return }
     const ready = chatImages.filter(c => c.url && !c.error)
     if (!chatInput.trim() && ready.length === 0) return
     const msg = chatInput.trim(); setChatInput(''); setChatSending(true); setChatSendingStartTime(Date.now())
@@ -1138,13 +1139,13 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
             }
             if (!res.ok) {
               const d = await res.json().catch(() => ({}))
-              toast(d.error || '검증자 변경 실패', 'error')
+              toast(d.error || tIssue('verifierChangeFailed'), 'error')
               setIssue(prev => prev ? { ...prev, presetVerifier: prevPreset } : prev)
             } else {
               window.dispatchEvent(new Event('refresh-counts'))
             }
           } catch (e: any) {
-            toast(e?.message || '네트워크 오류', 'error')
+            toast(e?.message || tc('networkError'), 'error')
             setIssue(prev => prev ? { ...prev, presetVerifier: prevPreset } : prev)
           }
         }}
@@ -1163,13 +1164,13 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
             }
             if (!res.ok) {
               const d = await res.json().catch(() => ({}))
-              toast(d.error || '확인자 변경 실패', 'error')
+              toast(d.error || tIssue('confirmerChangeFailed'), 'error')
               setIssue(prev => prev ? { ...prev, presetConfirmer: prevPreset } : prev)
             } else {
               window.dispatchEvent(new Event('refresh-counts'))
             }
           } catch (e: any) {
-            toast(e?.message || '네트워크 오류', 'error')
+            toast(e?.message || tc('networkError'), 'error')
             setIssue(prev => prev ? { ...prev, presetConfirmer: prevPreset } : prev)
           }
         }}

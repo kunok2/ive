@@ -31,6 +31,8 @@ interface Props {
 
 interface ProjectStats {
   agentWorking: number
+  /** 열려 있는 AI 대화 수 — 처리 숫자와 별개. 진행 목록(대화 항목)을 불러올지 정하는 데만 쓴다 */
+  chatting?: number
   verifying: number
   confirming: number
   completed: number
@@ -112,7 +114,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
   // 실행 목록 로드: 패널 열렸을 때 또는 진행 중 건이 있을 때
   useEffect(() => {
     const needForPanel = expandedPanel === 'running' || expandedPanel === 'done' || expandedPanel === 'verifying' || expandedPanel === 'confirming'
-    const totalActive = (stats?.agentWorking ?? 0) + (stats?.verifying ?? 0) + (stats?.confirming ?? 0)
+    const totalActive = (stats?.agentWorking ?? 0) + (stats?.verifying ?? 0) + (stats?.confirming ?? 0) + (stats?.chatting ?? 0)
     const needForSummary = totalActive > 0 && !expandedPanel
     if (!needForPanel && !needForSummary) {
       setExecutions([])
@@ -127,7 +129,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
     fetchExecs()
     const timer = setInterval(fetchExecs, 5000)
     return () => clearInterval(timer)
-  }, [expandedPanel, project.id, stats?.agentWorking, stats?.verifying, stats?.confirming])
+  }, [expandedPanel, project.id, stats?.agentWorking, stats?.verifying, stats?.confirming, stats?.chatting])
 
   // 단계 패널(처리·검증·확인)이 열리면 그 단계의 대기 건을 함께 보이려고 대기 이슈 목록을 불러온다
   useEffect(() => {

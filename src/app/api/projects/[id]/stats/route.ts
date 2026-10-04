@@ -22,12 +22,17 @@ export async function GET(
 
   // AI 에이전트 처리 중 (assigneeType이 'user'가 아닌 것).
   // 검증·확인·재현 단계 작업자의 실행(ex-verify-/ex-confirm-/ex-reproduce-)은 처리가 아니다 — 그 이슈는 아래 검증 중·확인 중으로 센다.
+  // AI 대화(exec-chat-)도 처리가 아니다 — 대화를 열어 두기만 해도 「처리」 숫자가 오르던 것. 대화는 진행 목록에 「대화」 항목으로 따로 보인다.
   const agentWorkingExec = db.prepare(`
     SELECT COUNT(*) as count FROM task_executions
     WHERE project_id = ? AND status IN ('running', 'assigned') AND (assignee_type IS NULL OR assignee_type != 'user')
-      AND id NOT LIKE 'ex-verify-%' AND id NOT LIKE 'ex-confirm-%' AND id NOT LIKE 'ex-reproduce-%'
+      AND id NOT LIKE 'ex-verify-%' AND id NOT LIKE 'ex-confirm-%' AND id NOT LIKE 'ex-reproduce-%' AND id NOT LIKE 'exec-chat-%'
   `).get(id) as any
   const agentWorking = agentWorkingExec?.count ?? 0
+  // 열려 있는 AI 대화 수 — 처리 숫자에는 넣지 않지만, 카드가 진행 목록(대화 항목 포함)을 불러올지 정하는 데 쓴다
+  const chatting = (db.prepare(
+    "SELECT COUNT(*) as count FROM task_executions WHERE project_id = ? AND status IN ('running', 'assigned') AND id LIKE 'exec-chat-%'"
+  ).get(id) as { count: number } | undefined)?.count ?? 0
 
   // 검증 중 (IVE-V 라벨 단계) — issue_stages.cached_stage 기준
   // waiting/verifyWaiting 카운트와 동일한 소스(issue_stages)를 사용해
@@ -112,6 +117,7 @@ export async function GET(
 
   return NextResponse.json({
     agentWorking,
+    chatting,
     verifying,
     confirming,
     completed,

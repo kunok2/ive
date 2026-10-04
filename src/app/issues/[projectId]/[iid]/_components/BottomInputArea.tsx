@@ -331,10 +331,10 @@ function CommentModeInput({
               onClick={onCommentAndInflow}
               disabled={posting || !comment.trim()}
               className="shrink-0 h-10 px-3 rounded-lg border border-ive-red/40 text-ive-red bg-ive-bg-card hover:bg-ive-red/10 flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold whitespace-nowrap"
-              title="코멘트와 함께 유입 상태로 초기화"
+              title={tIssue('inflowHint')}
             >
               {postingType === 'inflow' ? <i className="fa-solid fa-circle-notch fa-spin" /> : (
-                <><i className="fa-solid fa-rotate-left text-[10px]" /><span>유입</span></>
+                <><i className="fa-solid fa-rotate-left text-[10px]" /><span>{tIssue('inflowShort')}</span></>
               )}
             </button>
           )}
@@ -473,8 +473,8 @@ function ChatModeInput({
           onClick={() => fileInputRef.current?.click()}
           disabled={chatSending}
           className="shrink-0 w-10 h-10 rounded-lg bg-ive-bg-card border border-ive-cyan/30 text-ive-text-dim hover:text-ive-cyan flex items-center justify-center active:scale-95 transition-all disabled:opacity-40"
-          aria-label={tIssue('attachImage') || '이미지 첨부'}
-          title={tIssue('attachImage') || '이미지 첨부'}
+          aria-label={tIssue('attachImage')}
+          title={tIssue('attachImage')}
         >
           <i className="fa-solid fa-image" />
         </button>

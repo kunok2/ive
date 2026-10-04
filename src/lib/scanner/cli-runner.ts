@@ -10,6 +10,7 @@ import { Project, Agent } from "@/types";
 import { getExecution, getSystemSetting, updateExecutionPid, updateExecutionTokens } from "../db";
 import { setToolActivity, setThinking, clearActivity } from "../tool-activity";
 import { calcCostFromDb } from "../token-pricing";
+import { accumulateCliUsage, emptyCliUsage } from "../cli-usage";
 import { buildCliInvocation, resolveCliPath } from "../cli-invocation";
 import {
   formatOpenCodeEvent,
@@ -158,14 +159,10 @@ export async function runCliProcess(
     let stdoutBuffer = '';
     let stderrBuffer = '';
     const STDERR_BUFFER_MAX = 4000;
-    let totalInputTokens = 0;
-    let totalOutputTokens = 0;
-    let totalCacheReadTokens = 0;
-    let totalCacheCreationTokens = 0;
-    let totalCostUsd = 0;
+    // 토큰·비용·모델 — AI 대화와 같은 규칙(cli-usage). 턴 수는 아래에서 CLI 별로 센다
+    const usage = emptyCliUsage();
     let totalTurns = 0;
     let assistantTurnCount = 0;
-    let detectedModel = '';
     // opencode 오류 이벤트 메시지(있으면 종료 시 표면화)
     let ocErrorMsg = '';
     // 사용량 한도(rate limit/quota) 의심 줄. 실패 종료 시 원인으로 표면화한다.
@@ -174,10 +171,7 @@ export async function runCliProcess(
     let prevAgyAssistant = false;
 
     const processEvent = (event: any) => {
-      // 모델명 캡처
-      const eventModel = event.model ?? event.modelId ?? event.model_id
-        ?? event.message?.model ?? event.session?.model ?? '';
-      if (eventModel && !detectedModel) detectedModel = eventModel;
+      accumulateCliUsage(usage, event, agent.cliName);
 
       if (isOpenCode) {
         const formatted = formatOpenCodeEvent(event, project.showToolUsage);
@@ -197,25 +191,8 @@ export async function runCliProcess(
         } else if (event.type === 'step_start') {
           setThinking(executionId, agent.id);
         }
-        // 토큰/비용 누적
-        // opencode 토큰 스키마(실측): part.tokens = {total, input, output, reasoning, cache:{read, write}}
-        //   total = input + output + reasoning + cache.read + cache.write
-        //   input/output은 캐시·추론을 제외한 순수치이므로, claude/codex와 동일하게
-        //   캐시는 총 입력에 합산하고 reasoning은 출력에 합산해 집계 일관성을 맞춘다.
-        if (event.type === 'step_finish') {
-          const tokens = event.part?.tokens ?? {};
-          const cacheRead = Number(tokens.cache?.read ?? 0);
-          const cacheWrite = Number(tokens.cache?.write ?? 0);
-          const iT = Number(tokens.input ?? 0);
-          const oT = Number(tokens.output ?? 0) + Number(tokens.reasoning ?? 0);
-          const cost = Number(event.part?.cost ?? 0);
-          totalInputTokens += iT + cacheRead + cacheWrite;
-          totalCacheReadTokens += cacheRead;
-          totalCacheCreationTokens += cacheWrite;
-          totalOutputTokens += oT;
-          totalCostUsd += cost;
-          if (event.part?.reason === 'stop') totalTurns = assistantTurnCount;
-        }
+        // 토큰/비용은 accumulateCliUsage 가 누적한다. 턴은 멈춘 시점의 어시스턴트 메시지 수
+        if (event.type === 'step_finish' && event.part?.reason === 'stop') totalTurns = assistantTurnCount;
         // opencode error/session.error: 종료 코드와 무관하게 오류를 표면화한다.
         // (opencode는 오류 시에도 exit 0으로 끝나 성공으로 오인될 수 있음)
         if (event.type === 'error' || event.type === 'session.error') {
@@ -250,14 +227,8 @@ export async function runCliProcess(
             setThinking(executionId, agent.id);
           }
         }
-        // 토큰 누적 (codex는 turn.completed에서 usage 제공, 비용 필드는 없음 → DB 단가로 환산)
-        if (event.type === 'turn.completed') {
-          const u = event.usage ?? {};
-          totalInputTokens += Number(u.input_tokens ?? 0);
-          totalCacheReadTokens += Number(u.cached_input_tokens ?? 0);
-          totalOutputTokens += Number(u.output_tokens ?? 0) + Number(u.reasoning_output_tokens ?? 0);
-          totalTurns += 1;
-        }
+        // 턴 = turn.completed 수 (토큰은 accumulateCliUsage — 비용 필드가 없어 종료 때 DB 단가로 환산)
+        if (event.type === 'turn.completed') totalTurns += 1;
       } else if (isAgy) {
         // agy(Antigravity CLI) stream-json 이벤트: init / step_update / result
         const formatted = formatAgyEvent(event, project.showToolUsage);
@@ -280,18 +251,13 @@ export async function runCliProcess(
         } else if (su?.step_type === 'user_input' || su?.step_type === 'checkpoint') {
           prevAgyAssistant = false;
         }
-        // 토큰 누적 + 한도 초과 감지 (result.usage 는 실행 전체 누계, 비용 필드는 없어 DB 단가로 환산)
+        // 한도 초과 감지 + 턴 (토큰은 accumulateCliUsage — 비용 필드가 없어 종료 때 DB 단가로 환산)
         if (event.event === 'result') {
           const r = event.result ?? {};
           if (String(r.status ?? '').toUpperCase() !== 'SUCCESS') {
             const rl = detectRateLimit(`${r.status ?? ''} ${r.error ?? ''}`);
             if (rl) rateLimitHint = rl;
           }
-          const u = r.usage ?? {};
-          // input_tokens 는 캐시 포함 총 입력, output_tokens 는 thinking 포함(total = input + output)
-          totalInputTokens += Number(u.input_tokens ?? 0);
-          totalCacheReadTokens += Number(u.cache_read_tokens ?? 0);
-          totalOutputTokens += Number(u.output_tokens ?? 0);
           const nt = Number(r.num_turns ?? 0);
           if (nt > 0) totalTurns += nt;
         }
@@ -315,21 +281,9 @@ export async function runCliProcess(
           if (!foundTool) setThinking(executionId, agent.id);
           assistantTurnCount++;
         }
-        // 토큰/비용/턴 누적
+        // 턴 (토큰/비용은 accumulateCliUsage)
         if (event.type === 'result') {
-          const u = event.usage ?? {};
-          const baseInput = Number(u.input_tokens ?? 0);
-          const cacheCreation = Number(u.cache_creation_input_tokens ?? 0);
-          const cacheRead = Number(u.cache_read_input_tokens ?? 0);
-          const oT = u.output_tokens ?? event.output_tokens ?? event.outputTokens ?? 0;
-          const cost = event.total_cost_usd ?? event.cost_usd ?? event.costUsd ?? event.cost ?? 0;
-          const turns = event.num_turns ?? event.numTurns ?? 0;
-          totalInputTokens += baseInput + cacheCreation + cacheRead;
-          totalCacheCreationTokens += cacheCreation;
-          totalCacheReadTokens += cacheRead;
-          totalOutputTokens += Number(oT);
-          totalCostUsd += Number(cost);
-          totalTurns = Math.max(totalTurns, Number(turns));
+          totalTurns = Math.max(totalTurns, Number(event.num_turns ?? event.numTurns ?? 0));
         }
       }
     };
@@ -393,12 +347,12 @@ export async function runCliProcess(
       log(`CLI 종료: code=${code}, signal=${signal}`, code === 0 ? 'system' : 'error');
       // 토큰/비용/턴 DB 저장
       const finalTurns = totalTurns > 0 ? totalTurns : assistantTurnCount;
-      const finalModel = detectedModel || recordedFallbackModel || undefined;
-      if (totalInputTokens || totalOutputTokens || totalCostUsd || finalTurns) {
-        const finalCost = totalCostUsd > 0
-          ? totalCostUsd
-          : calcCostFromDb(totalInputTokens, totalOutputTokens, finalModel);
-        updateExecutionTokens(executionId, totalInputTokens, totalOutputTokens, finalCost, finalTurns, finalModel, totalCacheReadTokens, totalCacheCreationTokens);
+      const finalModel = usage.model || recordedFallbackModel || undefined;
+      if (usage.input || usage.output || usage.cost || finalTurns) {
+        const finalCost = usage.cost > 0
+          ? usage.cost
+          : calcCostFromDb(usage.input, usage.output, finalModel);
+        updateExecutionTokens(executionId, usage.input, usage.output, finalCost, finalTurns, finalModel, usage.cacheRead, usage.cacheCreation);
       } else if (finalModel) {
         updateExecutionTokens(executionId, 0, 0, 0, 0, finalModel, 0, 0);
       }

@@ -92,6 +92,25 @@ export function updateExecutionTokens(
   }
 }
 
+/**
+ * 실행 기록에 사용량을 더한다 — AI 대화는 한 세션(실행 기록 하나)에 답이 여러 번 쌓여, 덮어쓰지 않고 누적한다.
+ * 모델은 처음 알게 된 값을 유지한다.
+ */
+export function addExecutionUsage(
+  id: string,
+  d: { input: number; output: number; cacheRead: number; cacheCreation: number; cost: number; turns: number },
+  modelName?: string | null,
+) {
+  getDb().prepare(`
+    UPDATE task_executions SET
+      input_tokens = COALESCE(input_tokens, 0) + ?, output_tokens = COALESCE(output_tokens, 0) + ?,
+      cache_read_input_tokens = COALESCE(cache_read_input_tokens, 0) + ?, cache_creation_input_tokens = COALESCE(cache_creation_input_tokens, 0) + ?,
+      cost_usd = COALESCE(cost_usd, 0) + ?, turns = COALESCE(turns, 0) + ?,
+      model_name = COALESCE(model_name, ?)
+    WHERE id = ?
+  `).run(d.input, d.output, d.cacheRead, d.cacheCreation, d.cost, d.turns, modelName || null, id)
+}
+
 export function getExecution(id: string): TaskExecution | null {
   const r = getDb().prepare('SELECT * FROM task_executions WHERE id = ?').get(id) as any
   if (!r) return null

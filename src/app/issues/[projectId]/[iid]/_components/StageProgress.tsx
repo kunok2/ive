@@ -447,10 +447,10 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
           } else if (m.idx === 5 && isCompleted && completionTime) {
             stageLabel = formatDateShort(completionTime, userLocale, userTz)
           } else {
-            stageLabel = withCount(formatDur(stageDur[m.idx]), stageCount[m.idx])
+            stageLabel = withCount(tIssue, formatDur(tIssue, stageDur[m.idx]), stageCount[m.idx])
           }
           const stageLabelAlign = m.idx === 5 ? 'text-right self-end' : 'text-center'
-          const waitLabel = i > 0 ? withCount(formatDur(waitDur[i]), connectorCount[i]) : null
+          const waitLabel = i > 0 ? withCount(tIssue, formatDur(tIssue, waitDur[i]), connectorCount[i]) : null
 
           return (
              <Fragment key={m.idx}>
@@ -469,7 +469,7 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
                        style={connectorIncoming ? { borderLeftColor: 'rgba(245, 158, 11, 0.95)' } : connectorError ? { borderLeftColor: 'rgba(239, 68, 68, 0.5)' } : undefined}
                      />
                    </div>
-                   <span className="hidden sm:block text-[9px] mt-1 leading-none text-ive-text-dim truncate w-full text-center">{waitLabel ?? ''}</span>
+                   <span className="block text-[10px] mt-1 leading-none text-ive-text-muted truncate w-full text-center">{waitLabel ?? ''}</span>
                  </div>
                )}
               <div className="flex flex-col items-center shrink-0" ref={el => { pillRefs.current[m.idx] = el }}>
@@ -510,7 +510,7 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
                 )}
                 <span>{m.label}</span>
               </div>
-              <span className={`text-[9px] mt-1 leading-none text-ive-text-dim h-3 whitespace-nowrap ${stageLabelAlign}`}>{stageLabel ?? ''}</span>
+              <span className={`text-[10px] mt-1 leading-none text-ive-text-muted h-3 whitespace-nowrap ${stageLabelAlign}`}>{stageLabel ?? ''}</span>
               </div>
             </Fragment>
           )
@@ -552,25 +552,27 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
   )
 }
 
+type DurT = (key: string, values?: Record<string, number>) => string
+
 /** 시간 + 횟수 라벨 합치기. count > 1 일 때만 "·N회" 부착. */
-function withCount(time: string | null, count: number): string | null {
+function withCount(t: DurT, time: string | null, count: number): string | null {
   if (!time && count <= 1) return time
-  if (!time && count > 1) return `${count}회`
-  if (count > 1) return `${time} · ${count}회`
+  if (!time && count > 1) return t('dur.count', { n: count })
+  if (count > 1) return `${time} · ${t('dur.count', { n: count })}`
   return time
 }
 
 /** ms 를 짧은 단위(초/분/시간/일)로 포맷. null/0 이하면 null. */
-function formatDur(ms: number | null): string | null {
+function formatDur(t: DurT, ms: number | null): string | null {
   if (ms == null || ms <= 0) return null
   const sec = Math.floor(ms / 1000)
-  if (sec < 60) return `${sec}초`
+  if (sec < 60) return t('dur.sec', { n: sec })
   const min = Math.floor(sec / 60)
-  if (min < 60) return `${min}분`
+  if (min < 60) return t('dur.min', { n: min })
   const hour = Math.floor(min / 60)
   const remMin = min % 60
-  if (hour < 24) return remMin ? `${hour}시간 ${remMin}분` : `${hour}시간`
+  if (hour < 24) return remMin ? t('dur.hourMin', { h: hour, m: remMin }) : t('dur.hour', { h: hour })
   const day = Math.floor(hour / 24)
   const remHour = hour % 24
-  return remHour ? `${day}일 ${remHour}시간` : `${day}일`
+  return remHour ? t('dur.dayHour', { d: day, h: remHour }) : t('dur.day', { d: day })
 }

@@ -200,5 +200,43 @@
     "process": "처리",
     "verify": "검증",
     "confirm": "확인"
+  },
+  "inflowShort": "유입",
+  "inflowHint": "코멘트와 함께 유입 상태로 초기화",
+  "nextStage": {
+    "none": "처리",
+    "waiting": "개발 시작",
+    "dev": "검증대기",
+    "verify_waiting": "검증 시작",
+    "verifying": "확인",
+    "confirm_waiting": "확인 시작",
+    "confirming": "완료"
+  },
+  "commentPostFailed": "코멘트 작성에 실패했습니다",
+  "stageChanged": "성공적으로 변경되었습니다",
+  "confirmDone": "확인 완료되었습니다",
+  "approveDone": "승인 완료되었습니다",
+  "inflowDone": "유입 상태로 변경되었습니다",
+  "mrMergeFailed": "MR 머지에 실패했습니다",
+  "mrCloseFailed": "MR 닫기에 실패했습니다",
+  "agentSettingFailed": "에이전트 설정 변경에 실패했습니다",
+  "verifierChangeFailed": "검증자 변경 실패",
+  "confirmerChangeFailed": "확인자 변경 실패",
+  "mrModal": {
+    "title": "열려 있는 MR 처리",
+    "desc": "이 이슈에 아직 열려 있는 MR이 있습니다. 검증을 완료하기 전에 MR을 어떻게 처리할지 선택해주세요.",
+    "conflicts": "충돌 있음",
+    "merge": "MR 머지 후 완료",
+    "close": "MR 닫기 후 완료",
+    "keep": "MR 유지 · 상태만 변경"
+  },
+  "dur": {
+    "sec": "{n}초",
+    "min": "{n}분",
+    "hour": "{h}시간",
+    "hourMin": "{h}시간 {m}분",
+    "day": "{d}일",
+    "dayHour": "{d}일 {h}시간",
+    "count": "{n}회"
   }
 }

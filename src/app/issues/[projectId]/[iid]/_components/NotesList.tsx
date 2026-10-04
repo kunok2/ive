@@ -215,7 +215,7 @@ export default function NotesList({
                         )}
                       </span>
                       <div className="ml-auto flex items-center gap-2">
-                        <span className="text-xs text-ive-text-dim">
+                        <span className="text-xs text-ive-text-muted">
                           {formatDateMedium(note.createdAt, state.user?.locale, state.user?.timezone)}
                         </span>
                         {note.isMine && (

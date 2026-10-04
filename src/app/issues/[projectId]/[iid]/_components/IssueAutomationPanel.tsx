@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { useToast } from '@/components/ui/Toast'
+import { useStore } from '@/lib/store'
 
 interface EvidenceRun {
   stage: 'reproduce' | 'verify' | 'confirm'
@@ -39,14 +40,20 @@ interface RolesInfo {
   roles: { confirmer: { mode: string } }
 }
 
-/** 증적 폴더 시각(UTC, 2026-10-01T05-07-47-694Z) → 보는 사람 시간대의 「월/일 시:분」 */
-function stampLabel(stamp: string): string {
+/** 증적 폴더 시각(UTC, 2026-10-01T05-07-47-694Z) → 사용자 설정 시간대(없으면 브라우저)의 「월/일 시:분」 — 다른 시각 표시와 같은 기준 */
+function stampLabel(stamp: string, timeZone?: string | null): string {
   const m = stamp.match(/^(\d{4})-(\d\d)-(\d\d)T(\d\d)-(\d\d)-(\d\d)/)
   if (!m) return stamp
   const d = new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}Z`)
   if (isNaN(d.getTime())) return stamp
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+  try {
+    const parts = new Intl.DateTimeFormat('en-GB', { timeZone: timeZone || undefined, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(d)
+    const g = (type: string) => parts.find(x => x.type === type)?.value ?? ''
+    return `${g('month')}/${g('day')} ${g('hour')}:${g('minute')}`
+  } catch {
+    const p = (n: number) => String(n).padStart(2, '0')
+    return `${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+  }
 }
 
 const VERDICT_BADGE: Record<string, string> = {
@@ -71,6 +78,7 @@ export default function IssueAutomationPanel({
   onChanged: () => void
 }) {
   const t = useTranslations('automation')
+  const { state } = useStore()
   const tc = useTranslations('common')
   const { toast } = useToast()
   const [info, setInfo] = useState<RolesInfo | null>(null)
@@ -156,8 +164,8 @@ export default function IssueAutomationPanel({
             <div className="flex items-center gap-1.5 flex-wrap">
               <span className="text-xs font-bold px-2 py-0.5 rounded-lg bg-ive-cyan/20 text-ive-cyan">{t(`kind_${run.stage}`)}</span>
               {v && <span className={`text-xs font-bold px-2 py-0.5 rounded-lg ${VERDICT_BADGE[v]}`}>{t(`verdict_${v}`)}</span>}
-              {run.result?.agent && <span className="text-xs text-ive-text-dim"><i className="fa-solid fa-robot mr-1" />{run.result.agent}</span>}
-              <span className="text-xs text-ive-text-dim ml-auto">{stampLabel(run.stamp)}</span>
+              {run.result?.agent && <span className="text-xs text-ive-text-muted"><i className="fa-solid fa-robot mr-1" />{run.result.agent}</span>}
+              <span className="text-xs text-ive-text-muted ml-auto">{stampLabel(run.stamp, state.user?.timezone)}</span>
             </div>
             {run.result?.summary && <p className="text-xs text-ive-text whitespace-pre-wrap leading-relaxed">{run.result.summary}</p>}
             {run.result?.reason && v !== 'pass' && <p className="text-xs text-ive-text-muted"><b>{t('reason')}</b>: {run.result.reason}</p>}
@@ -171,7 +179,7 @@ export default function IssueAutomationPanel({
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={fileUrl(run, img)} alt={img} className="max-w-full max-h-full object-contain" />
                     </span>
-                    <span className="block text-xs text-ive-text-dim mt-0.5 truncate">{captions.get(img) || img.split('/').pop()}</span>
+                    <span className="block text-xs text-ive-text-muted mt-0.5 truncate">{captions.get(img) || img.split('/').pop()}</span>
                   </a>
                 ))}
               </div>
@@ -194,7 +202,7 @@ export default function IssueAutomationPanel({
                 ))}
               </div>
             )}
-            {run.result?.behindTarget && <p className="text-xs text-ive-text-dim"><i className="fa-solid fa-code-branch mr-1" />{t('behindTarget')}</p>}
+            {run.result?.behindTarget && <p className="text-xs text-ive-text-muted"><i className="fa-solid fa-code-branch mr-1" />{t('behindTarget')}</p>}
             {(run.result?.requirements?.length || 0) > 0 && (
               <div className="text-xs text-ive-text-muted">
                 <b>{t('requirementsTitle', { done: run.result!.requirements!.filter(q => q.status === 'done').length, n: run.result!.requirements!.length })}</b>
@@ -226,7 +234,7 @@ export default function IssueAutomationPanel({
                   {run.result!.findings!.map((f, i) => (
                     <li key={i}>
                       <span className="font-bold">[{f.kind === 'missing' ? t('findingMissing') : f.kind === 'defect' ? t('findingDefect') : f.severity}]</span>
-                      {f.file && <span className="font-mono text-ive-text-dim"> {f.file}{f.line ? `:${f.line}` : ''}</span>} {f.note}
+                      {f.file && <span className="font-mono text-ive-text-muted"> {f.file}{f.line ? `:${f.line}` : ''}</span>} {f.note}
                     </li>
                   ))}
                 </ul>

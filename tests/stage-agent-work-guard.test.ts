@@ -101,4 +101,23 @@ describe('에이전트 작업 중 단계 이동 차단', () => {
     expect((await res.json()).actualStage).toBe('confirm_waiting')
     expect(swapIssueLabels).not.toHaveBeenCalled()
   })
+
+  // 같은 작업에 단계 변경이 동시에 두 번 오면(버튼 두 곳·더블클릭) 두 번째는 거절 — 기록이 두 번 남지 않게
+  it('동시에 두 번 오면 두 번째는 409, 끝난 뒤에는 다시 받는다', async () => {
+    let release!: () => void
+    fetchSingleIssue.mockImplementationOnce(() => new Promise(r => { release = () => r(null) }))
+    const first = post('verifying', 'approve')
+    await new Promise(r => setTimeout(r, 0))
+    const second = await post('verifying', 'approve')
+    expect(second.status).toBe(409)
+    expect((await second.json()).error).toContain('처리하는 중')
+    // dryRun 은 잠그지도 막히지도 않는다
+    fetchSingleIssue.mockResolvedValue({ labels: ['IVE', 'IVE-V'], assignees: [] })
+    expect((await post('verifying', 'approve', true)).status).toBe(200)
+    release()
+    await first
+    fetchSingleIssue.mockResolvedValue({ labels: ['IVE', 'IVE-P'], assignees: [] })  // 단계가 이미 바뀜 → 잠금이 아니라 단계 불일치로 거절
+    const third = await post('verifying', 'approve')
+    expect((await third.json()).actualStage).toBe('confirm_waiting')
+  })
 })

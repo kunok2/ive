@@ -3,7 +3,9 @@ import { maskSecrets } from './secret-mask'
 import fs from 'fs'
 import path from 'path'
 import { promisify } from 'util'
-import { getSystemSetting, getProject, getAvailableAgentsByUser, countActiveExecutionsByAgent, updateChatSessionCliId, getStaleActiveChatSessions, getChatSession, endChatSession, updateExecutionStatus, updateAgentStatus } from './db'
+import { getSystemSetting, getProject, getAvailableAgentsByUser, countActiveExecutionsByAgent, updateChatSessionCliId, getStaleActiveChatSessions, getChatSession, endChatSession, updateExecutionStatus, updateAgentStatus, addExecutionUsage } from './db'
+import { accumulateCliUsage, emptyCliUsage, type CliUsage } from './cli-usage'
+import { calcCostFromDb } from './token-pricing'
 import { decrypt } from './crypto'
 import { defaultLocale } from '@/i18n/config'
 import { Agent, Project } from '@/types'
@@ -309,6 +311,8 @@ export async function runChatAgentWithCallback(
 
   let capturedCliSessionId: string | null = null
   const extractState = { sawDelta: false } // claude 부분메시지 델타 수신 여부 (중복/폴백 판정용)
+  // 이번 답의 토큰·비용 — 처리 실행과 같은 규칙으로 읽어 대화 실행 기록에 더한다(종전에는 0 으로만 남았다)
+  const usage = emptyCliUsage()
 
   return new Promise<void>((resolve) => {
     let stdoutBuffer = ''
@@ -323,6 +327,7 @@ export async function runChatAgentWithCallback(
         if (!line.trim()) continue
         try {
           const event = JSON.parse(line)
+          accumulateCliUsage(usage, event, cliName)
 
           // opencode: error / session.error — 종료 코드와 무관하게 오류 이벤트로 처리
           if (cliName === 'opencode' && (event.type === 'error' || event.type === 'session.error') && !ocErrorEmitted) {
@@ -364,6 +369,7 @@ export async function runChatAgentWithCallback(
 
     child.on('close', (code) => {
       getAgentMap().delete(sessionId)
+      recordChatUsage(sessionId, usage, opts.agent)
       if (code && code !== 0) {
         onEvent({ type: 'error', content: describeCliFailure(code, lastStderr) })
       } else {
@@ -378,6 +384,20 @@ export async function runChatAgentWithCallback(
       resolve()
     })
   })
+}
+
+/** 한 번의 답에 쓴 사용량을 대화 세션의 실행 기록(exec-chat-)에 더한다. 비용 필드가 없는 CLI 는 DB 단가로 환산 */
+function recordChatUsage(sessionId: string, usage: CliUsage, agent: Agent) {
+  if (!usage.input && !usage.output && !usage.cost) return
+  try {
+    const executionId = getChatSession(sessionId)?.executionId
+    if (!executionId) return
+    const model = usage.model || agent.modelName || null
+    const cost = usage.cost > 0 ? usage.cost : calcCostFromDb(usage.input, usage.output, model || undefined)
+    addExecutionUsage(executionId, { input: usage.input, output: usage.output, cacheRead: usage.cacheRead, cacheCreation: usage.cacheCreation, cost, turns: 1 }, model)
+  } catch (e) {
+    console.warn(`[Chat] 사용량 기록 실패 (${sessionId}): ${(e as Error).message}`)
+  }
 }
 
 /**

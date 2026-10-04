@@ -1,5 +1,6 @@
 'use client'
 
+import { useTranslations } from 'next-intl'
 import Modal from '@/components/ui/Modal'
 
 interface MrInfo {
@@ -18,12 +19,14 @@ interface MrActionModalProps {
 }
 
 export default function MrActionModal({ open, mr, busy, onChoice, onClose }: MrActionModalProps) {
+  const t = useTranslations('issue')
+  const tc = useTranslations('common')
   return (
-    <Modal open={open} onClose={() => !busy && onClose()} title="열려 있는 MR 처리" size="sm">
+    <Modal open={open} onClose={() => !busy && onClose()} title={t('mrModal.title')} size="sm">
       {mr && (
         <div className="p-4 space-y-4">
           <p className="text-sm text-ive-text-muted">
-            이 이슈에 아직 열려 있는 MR이 있습니다. 검증을 완료하기 전에 MR을 어떻게 처리할지 선택해주세요.
+            {t('mrModal.desc')}
           </p>
           <a
             href={mr.web_url}
@@ -35,7 +38,7 @@ export default function MrActionModal({ open, mr, busy, onChoice, onClose }: MrA
             <div className="text-sm text-ive-text truncate">{mr.title}</div>
             {mr.has_conflicts && (
               <div className="text-xs text-ive-red font-bold mt-1">
-                <i className="fa-solid fa-triangle-exclamation mr-1" />충돌 있음
+                <i className="fa-solid fa-triangle-exclamation mr-1" />{t('mrModal.conflicts')}
               </div>
             )}
           </a>
@@ -45,28 +48,28 @@ export default function MrActionModal({ open, mr, busy, onChoice, onClose }: MrA
               disabled={busy || mr.has_conflicts}
               className="w-full px-3 py-2.5 rounded-lg text-sm font-bold text-ive-cyan border border-ive-cyan/30 bg-ive-cyan/5 hover:bg-ive-cyan/15 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
-              <i className="fa-solid fa-code-merge mr-1.5" />MR 머지 후 완료
+              <i className="fa-solid fa-code-merge mr-1.5" />{t('mrModal.merge')}
             </button>
             <button
               onClick={() => onChoice('close')}
               disabled={busy}
               className="w-full px-3 py-2.5 rounded-lg text-sm font-bold text-ive-red border border-ive-red/30 bg-ive-red/5 hover:bg-ive-red/15 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
-              <i className="fa-solid fa-xmark mr-1.5" />MR 닫기 후 완료
+              <i className="fa-solid fa-xmark mr-1.5" />{t('mrModal.close')}
             </button>
             <button
               onClick={() => onChoice('none')}
               disabled={busy}
               className="w-full px-3 py-2.5 rounded-lg text-sm font-bold text-ive-text-dim border border-ive-border-dark bg-ive-bg-deep hover:bg-white/5 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
-              <i className="fa-solid fa-arrow-right mr-1.5" />MR 유지 · 상태만 변경
+              <i className="fa-solid fa-arrow-right mr-1.5" />{t('mrModal.keep')}
             </button>
             <button
               onClick={() => !busy && onClose()}
               disabled={busy}
               className="w-full px-3 py-2 rounded-lg text-xs font-bold text-ive-text-dim hover:text-ive-text transition-colors disabled:opacity-40"
             >
-              취소
+              {tc('cancel')}
             </button>
           </div>
         </div>

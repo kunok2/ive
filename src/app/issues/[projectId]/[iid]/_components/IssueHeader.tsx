@@ -158,7 +158,7 @@ export default function IssueHeader({
             <i className="fa-solid fa-repeat mr-0.5" />{tIssue('iterationLabel', { count: iterationCount })}
           </span>
         )}
-        <span className="text-xs text-ive-text-dim shrink min-w-0 truncate">
+        <span className="text-xs text-ive-text-muted shrink min-w-0 truncate">
           {formatDateMedium(issue.updatedAt, state.user?.locale, state.user?.timezone)}
         </span>
         <span className="ml-auto" />

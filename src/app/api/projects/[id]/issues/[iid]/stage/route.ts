@@ -17,6 +17,11 @@ import path from 'path';
 // 단계 전이 표는 src/lib/stage-transitions.ts 로 분리됨 (테스트 가능).
 // IVE-S 스케줄 → IVE-D 개발 → IVE-W 검증대기 → IVE-V 검증 → IVE-P 확인대기 → IVE-C 확인 → IVE-E 완료
 
+// 같은 작업의 단계 변경이 동시에 두 번 들어오는 것을 막는다(버튼 두 곳을 거의 동시에 누름·더블클릭).
+// 둘 다 Git 단계 확인을 통과하면 두 번째가 첫 번째의 검증자 기록을 닫고 새로 만들며 사건도 두 번 남았다.
+// 서버는 한 프로세스라 메모리 잠금으로 충분하다. 검사만 하는 dryRun 은 잠그지 않는다.
+const stageChangeInFlight = new Set<string>();
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; iid: string }> }
@@ -61,6 +66,14 @@ export async function POST(
       { error: `에이전트 ${agentWork.agentName ? `'${agentWork.agentName}'` : ''}이(가) ${kindLabel} 중입니다. 끝난 뒤 진행하거나, 실행을 중지한 뒤 진행해 주세요.`, agentWork },
       { status: 409 }
     );
+  }
+
+  const lockKey = `${projectId}:${iid}`;
+  if (!dryRun) {
+    if (stageChangeInFlight.has(lockKey)) {
+      return NextResponse.json({ error: '이 작업의 단계 변경을 처리하는 중입니다. 잠시 후 다시 시도해 주세요.' }, { status: 409 });
+    }
+    stageChangeInFlight.add(lockKey);
   }
 
   try {
@@ -445,5 +458,7 @@ export async function POST(
       { error: err instanceof Error ? err.message : '상태 전환 실패' },
       { status: 500 }
     );
+  } finally {
+    if (!dryRun) stageChangeInFlight.delete(lockKey);
   }
 }

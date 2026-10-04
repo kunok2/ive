@@ -200,5 +200,43 @@
     "process": "processing",
     "verify": "verifying",
     "confirm": "confirming"
+  },
+  "inflowShort": "Inflow",
+  "inflowHint": "Reset to inflow with this comment",
+  "nextStage": {
+    "none": "Process",
+    "waiting": "Start dev",
+    "dev": "Ready to verify",
+    "verify_waiting": "Start verification",
+    "verifying": "Approve",
+    "confirm_waiting": "Start confirmation",
+    "confirming": "Done"
+  },
+  "commentPostFailed": "Failed to post the comment",
+  "stageChanged": "Updated",
+  "confirmDone": "Confirmed",
+  "approveDone": "Approved",
+  "inflowDone": "Reset to inflow",
+  "mrMergeFailed": "Failed to merge the MR",
+  "mrCloseFailed": "Failed to close the MR",
+  "agentSettingFailed": "Failed to change the agent setting",
+  "verifierChangeFailed": "Failed to change the verifier",
+  "confirmerChangeFailed": "Failed to change the confirmer",
+  "mrModal": {
+    "title": "Open MR",
+    "desc": "This issue still has an open MR. Choose what to do with it before finishing verification.",
+    "conflicts": "Has conflicts",
+    "merge": "Merge MR and finish",
+    "close": "Close MR and finish",
+    "keep": "Keep MR · change stage only"
+  },
+  "dur": {
+    "sec": "{n}s",
+    "min": "{n}m",
+    "hour": "{h}h",
+    "hourMin": "{h}h {m}m",
+    "day": "{d}d",
+    "dayHour": "{d}d {h}h",
+    "count": "×{n}"
   }
 }
