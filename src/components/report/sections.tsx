@@ -11,6 +11,7 @@ import type {
 import { fmtHours, pct, deltaTone, toneClass, agedCount, projectSwatchStyles, OTHERS_ID, type Tr } from './format'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 import CountBump from '@/components/ui/CountBump'
+import { StackedHBar } from './hbar'
 
 /** 보고서의 사람 줄 아바타 — 사람 키(u:<id>)면 그 사용자 아바타, 이름만 아는 사람(n:)은 기본 사람 아이콘 */
 export function PersonFace({ personKey, avatars }: { personKey: string; avatars?: Record<string, string> }) {
@@ -187,20 +188,24 @@ export function ActionCards({ actions, tr }: { actions: ActionItems; tr: Tr }) {
   )
 }
 
+/** 막대 조각 ↔ 아래 줄 강조 — 줄에 올리면 조각이, 조각에 올리면 줄이 함께 밝아진다 */
+const rowHover = (on: boolean) => `-mx-2 px-2 rounded-lg transition-colors ${on ? 'bg-white/[0.05]' : ''}`
+
 // ─── ③ 어디에 있나 ───
 
 export function WhereSection({ held, tr }: { held: Held; tr: Tr }) {
+  const [hov, setHov] = useState<string | null>(null)
   if (!held.byStage || !held.end) return null
   const rows = held.byStage.filter(s => s.count > 0)
   return (
     <Card>
       <SectionTitle right={tr('countN', { n: held.end })}>{tr('whereTitle')}</SectionTitle>
-      <div className="flex h-2.5 rounded-full overflow-hidden gap-0.5 bg-ive-bg">
-        {rows.map(s => <div key={s.stage} className={STAGE_BAR[s.stage]} style={{ flexGrow: s.count, flexBasis: 0 }} />)}
-      </div>
+      <StackedHBar hovered={hov} onHover={setHov}
+        segments={rows.map(s => ({ key: s.stage, value: s.count, label: tr(`stage.${s.stage}`), valueText: tr('countN', { n: s.count }), className: STAGE_BAR[s.stage] }))} />
       <div className="flex flex-col">
         {rows.map((s, i) => (
-          <div key={s.stage} className={`flex items-center justify-between gap-2 min-h-10 ${i < rows.length - 1 ? 'border-b border-ive-border-dark' : ''}`}>
+          <div key={s.stage} onPointerEnter={() => setHov(s.stage)} onPointerLeave={() => setHov(null)}
+            className={`flex items-center justify-between gap-2 min-h-10 ${rowHover(hov === s.stage)} ${i < rows.length - 1 ? 'border-b border-ive-border-dark' : ''}`}>
             <span className="flex items-center gap-2">
               <span className={`w-2 h-2 rounded-full ${STAGE_BAR[s.stage]}`} aria-hidden="true" />
               <span className={`px-2 py-0.5 rounded-lg text-xs font-bold ${STAGE_BADGE[s.stage]}`}>{tr(`stage.${s.stage}`)}</span>
@@ -222,6 +227,7 @@ const WORK_STAGES: FlowStage[] = ['dev', 'verifying', 'confirming']
 
 /** 끝낸 일의 접수 → 완료를 단계별로 — 막대·줄 색은 「어디에 있나」와 같은 단계색(범례 1:1) */
 export function StageTimeSection({ st, tr, prevLabel }: { st: StageTime | undefined; tr: Tr; prevLabel: string }) {
+  const [hov, setHov] = useState<string | null>(null)
   if (!st) return null
   const rows = st.stages.filter(s => s.share > 0)
   const prevOf = (stage: FlowStage) => st.prevStages?.find(p => p.stage === stage)?.avgH ?? null
@@ -235,9 +241,8 @@ export function StageTimeSection({ st, tr, prevLabel }: { st: StageTime | undefi
         <span className="text-sm font-bold text-ive-text-secondary">{tr('stageTimeNone')}</span>
       ) : (
         <>
-          <div className="flex h-2.5 rounded-full overflow-hidden gap-0.5 bg-ive-bg">
-            {rows.map(s => <div key={s.stage} className={STAGE_BAR[s.stage]} style={{ flexGrow: s.share, flexBasis: 0 }} />)}
-          </div>
+          <StackedHBar hovered={hov} onHover={setHov}
+            segments={rows.map(s => ({ key: s.stage, value: s.share, label: tr(`flow.${s.stage}`), valueText: `${pct(s.share)} · ${fmtHours(tr, s.avgH)}`, className: STAGE_BAR[s.stage] }))} />
           {longest && (
             <span className="text-sm font-bold text-ive-text-secondary">
               {tr('stageTimeSplit', { work: pct(work), wait: pct(1 - work), stage: tr(`flow.${longest.stage}`) })}
@@ -248,7 +253,8 @@ export function StageTimeSection({ st, tr, prevLabel }: { st: StageTime | undefi
               const prev = prevOf(s.stage)
               const tone = prev != null ? deltaTone(s.avgH, prev, false) : 'neutral'
               return (
-                <div key={s.stage} className={`flex items-center justify-between gap-2 min-h-10 ${i < rows.length - 1 ? 'border-b border-ive-border-dark' : ''}`}>
+                <div key={s.stage} onPointerEnter={() => setHov(s.stage)} onPointerLeave={() => setHov(null)}
+                  className={`flex items-center justify-between gap-2 min-h-10 ${rowHover(hov === s.stage)} ${i < rows.length - 1 ? 'border-b border-ive-border-dark' : ''}`}>
                   <span className="flex items-center gap-2">
                     <span className={`w-2 h-2 rounded-full ${STAGE_BAR[s.stage]}`} aria-hidden="true" />
                     <span className={`px-2 py-0.5 rounded-lg text-xs font-bold ${STAGE_BADGE[s.stage]}`}>{tr(`flow.${s.stage}`)}</span>
@@ -289,7 +295,7 @@ export function PeopleSection({ held, avatars, tr }: { held: Held; avatars?: Rec
       ) : (
         <div className="flex flex-col gap-2.5">
           {people.map(p => (
-            <div key={`${p.key}|${p.role}`} className="flex flex-col gap-1">
+            <div key={`${p.key}|${p.role}`} className="group flex flex-col gap-1 -mx-2 px-2 py-1 -my-1 rounded-lg transition-colors hover:bg-white/[0.05]">
               <div className="flex items-center justify-between gap-2 text-sm font-bold">
                 <span className="flex items-center gap-1.5 min-w-0">
                   <PersonFace personKey={p.key} avatars={avatars} />
@@ -298,7 +304,7 @@ export function PeopleSection({ held, avatars, tr }: { held: Held; avatars?: Rec
                 </span>
                 <span className="tabular-nums text-ive-text shrink-0">{tr('personCount', { n: p.count, t: fmtHours(tr, p.oldestHours) })}</span>
               </div>
-              <div className="h-1 rounded-full bg-ive-bg overflow-hidden"><div className="h-full rounded-full bg-ive-cyan" style={{ width: `${(p.count / max) * 100}%` }} /></div>
+              <div className="h-1 rounded-full bg-ive-bg overflow-hidden"><div className="h-full rounded-full bg-ive-cyan/80 transition-[background-color] duration-150 group-hover:bg-ive-cyan" style={{ width: `${(p.count / max) * 100}%` }} /></div>
             </div>
           ))}
         </div>
@@ -311,6 +317,7 @@ export function PeopleSection({ held, avatars, tr }: { held: Held; avatars?: Rec
 // ─── ⑤ 사람 시간이 쓰인 곳 ───
 
 export function ProjectsSection({ projects, cost, tr, prevLabel }: { projects: ProjectRow[]; cost: Cost; tr: Tr; prevLabel: string }) {
+  const [hov, setHov] = useState<string | null>(null)
   if (projects.length === 0) return null
   const withHours = projects.filter(p => p.humanHours > 0)
   const top = withHours.slice(0, 3)
@@ -330,12 +337,15 @@ export function ProjectsSection({ projects, cost, tr, prevLabel }: { projects: P
       <SectionTitle right={cost.humanHours > 0 ? tr('hoursRight', { h: Math.round(cost.humanHours) }) : undefined}>{tr('projectsTitle')}</SectionTitle>
       {withHours.length > 0 ? (
         <>
-          <div className="flex h-3 rounded-full overflow-hidden gap-0.5 bg-ive-bg">
-            {shareParts.map((s, i) => <div key={s.id} style={{ ...swatches[i], flexGrow: s.share, flexBasis: 0 }} />)}
-          </div>
+          <StackedHBar heightClass="h-3" hovered={hov} onHover={setHov}
+            segments={shareParts.map((s, i) => {
+              const row = projects.find(p => p.id === s.id)
+              return { key: s.id, value: s.share, label: s.name, valueText: row ? `${pct(s.share)} · ${Math.round(row.humanHours)}h` : pct(s.share), style: swatches[i] }
+            })} />
           <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-bold text-ive-text-secondary">
             {shareParts.map((s, i) => (
-              <span key={s.id} className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full shrink-0" style={swatches[i]} />{s.name} {pct(s.share)}</span>
+              <span key={s.id} onPointerEnter={() => setHov(s.id)} onPointerLeave={() => setHov(null)}
+                className={`inline-flex items-center gap-1 rounded-lg -mx-1 px-1 transition-colors ${hov === s.id ? 'bg-white/[0.05] text-ive-text' : ''}`}><span className="w-2 h-2 rounded-full shrink-0" style={swatches[i]} />{s.name} {pct(s.share)}</span>
             ))}
           </div>
           {moved && Math.abs(moved.d) >= 0.05 && (
@@ -357,7 +367,8 @@ export function ProjectsSection({ projects, cost, tr, prevLabel }: { projects: P
           </thead>
           <tbody>
             {projects.map(p => (
-              <tr key={p.id} className="border-t border-ive-border-dark">
+              <tr key={p.id} onPointerEnter={() => setHov(p.id)} onPointerLeave={() => setHov(null)}
+                className={`border-t border-ive-border-dark transition-colors ${hov === p.id ? 'bg-white/[0.05]' : ''}`}>
                 <td className="text-left py-1.5 pr-2 text-ive-text">
                   <div className="flex items-center gap-1.5 max-w-36">
                     <span className="w-2 h-2 rounded-full shrink-0" style={swatchOf.get(p.id)} />

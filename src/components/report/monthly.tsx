@@ -9,6 +9,7 @@ import { GRADES, FLOW_STAGES } from '@/lib/report-model/types'
 import { Card, SectionTitle, PersonFace, STAGE_BAR } from './sections'
 import { MonthBars } from './charts'
 import { fmtHours, pct, MIN_SAMPLE, projectSwatchStyles, OTHERS_ID, type Tr } from './format'
+import { StackedHBar } from './hbar'
 
 export function MonthsSection({ months, tr }: { months: MonthPoint[]; tr: Tr }) {
   if (months.length === 0) return null
@@ -180,11 +181,11 @@ const GRADE_STYLE: Record<Grade, string> = {
   pass: 'bg-ive-cyan', rerun: 'bg-ive-cyan/45', rejected_pass: 'bg-ive-amber', rejected_repeat: 'bg-ive-red/60', overturned: 'bg-ive-red',
 }
 
-function GradeBar({ grades }: { grades: Record<Grade, number> }) {
+function GradeBar({ grades, tr }: { grades: Record<Grade, number>; tr: Tr }) {
+  const total = GRADES.reduce((s, g) => s + grades[g], 0)
   return (
-    <div className="flex h-2.5 rounded-full overflow-hidden gap-px bg-ive-bg">
-      {GRADES.map(g => grades[g] > 0 && <div key={g} className={GRADE_STYLE[g]} style={{ flexGrow: grades[g], flexBasis: 0 }} />)}
-    </div>
+    <StackedHBar gapClass="gap-px"
+      segments={GRADES.map(g => ({ key: g, value: grades[g], label: tr(`grade.${g}`), valueText: `${grades[g]} · ${pct(total ? grades[g] / total : 0)}`, className: GRADE_STYLE[g] }))} />
   )
 }
 
@@ -210,7 +211,7 @@ export function EvaluationSection({ ev, avatars, tr }: { ev: Evaluation; avatars
                     <span className="text-ive-text">{tr(`evalGroup.${g.key}`)}</span>
                     <span className="text-ive-text tabular-nums">{tr('passOf', { v: pct(g.passRate), n: g.n })}</span>
                   </div>
-                  <GradeBar grades={g.grades} />
+                  <GradeBar grades={g.grades} tr={tr} />
                 </div>
               ))}
             </div>
@@ -229,7 +230,7 @@ export function EvaluationSection({ ev, avatars, tr }: { ev: Evaluation; avatars
                     ? <span className="text-ive-text tabular-nums shrink-0">{tr('passOf', { v: pct(w.passRate), n: w.n })}</span>
                     : <span className="px-2 py-0.5 rounded-lg text-xs font-bold bg-white/5 text-ive-text-secondary shrink-0">{tr('collecting', { n: w.n, min: MIN_SAMPLE })}</span>}
                 </div>
-                {w.state === 'ok' ? <GradeBar grades={w.grades} /> : <div className="h-2.5 rounded-full border border-dashed border-ive-border" />}
+                {w.state === 'ok' ? <GradeBar grades={w.grades} tr={tr} /> : <div className="h-2.5 rounded-full border border-dashed border-ive-border" />}
               </div>
             ))}
           </div>}
