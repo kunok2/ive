@@ -70,7 +70,7 @@
   "stageTimeSplit": "Work {work} · waiting {wait} — longest: {stage}",
   "stageTimePrev": "{label}: {n} done · avg {t} each",
   "stageTimeNone": "No completed work to measure.",
-  "stageTimeNote": "Each completed item's intake → done is split by its run records: time while a process, verify or confirm record was open counts as that stage; gaps in between count as waiting for the next stage. Direct and after-the-fact work has no intake time and is not measured.",
+  "stageTimeNote": "Each completed item's intake → done is split by stage: time while a process, verify or confirm record was open counts as that stage; gaps in between count as the stage the item was actually in (waiting for processing, verification or confirmation). Direct and after-the-fact work has no intake time and is not measured.",
   "stageTrendTitle": "Time by stage · {n, plural, one {# month} other {# months}}",
   "peopleTitle": "Who has it",
   "peopleRight": "{n} with {p, plural, one {# person} other {# people}}",

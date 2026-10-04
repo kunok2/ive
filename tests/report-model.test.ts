@@ -532,6 +532,118 @@ describe('단계별 시간 — 어디서 시간이 걸렸나', () => {
     expect(h.confirming).toBeCloseTo(1)       // 17~18
   })
 
+  // 단계 사건 — 빈 시간이 실제로 어느 단계였는지
+  const ev = (pid: string, iid: number, from: string | null, to: string, at: string) =>
+    db.prepare(`INSERT INTO issue_events (occurred_at, project_id, issue_iid, event, from_stage, to_stage, source) VALUES (?,?,?,'stage',?,?,'test')`).run(at, pid, iid, from, to)
+
+  it('반려 기록이 남아도 단계가 검증 대기로 돌아갔으면 그 빈 시간은 검증 대기다', () => {
+    // 운영 #1839: 검증 기록이 fail 로 닫혔지만 단계는 verifying → verify_waiting, 재처리 없이 다음 날 같은 결과가 통과
+    seedBase()
+    const t = (s: string) => iso(kst(`2026-09-${s}:00`))
+    stage('p1', 8, 'done', { scheduled_at: t('30T09:00'), confirmed_at: t('30T23:00') })
+    ev('p1', 8, null, 'waiting', t('30T09:00'))
+    ev('p1', 8, 'waiting', 'dev', t('30T10:00'))
+    exec({ id: 'ex-8', project_id: 'p1', agent_id: 'a1', assignee_type: 'agent', issue_iid: 8, status: 'success', started_at: t('30T10:00'), ended_at: t('30T11:00'), rejected_at: t('30T12:00'), verified_at: t('30T21:00') })
+    ev('p1', 8, 'dev', 'verify_waiting', t('30T11:00'))
+    ev('p1', 8, 'verify_waiting', 'verifying', t('30T11:00'))
+    exec({ id: 'ex-verify-8a', project_id: 'p1', issue_iid: 8, assignee_type: 'user', user_id: 'u-lee', status: 'failed', stage_verdict: 'fail', started_at: t('30T11:00'), ended_at: t('30T12:00') })
+    ev('p1', 8, 'verifying', 'verify_waiting', t('30T12:00'))
+    ev('p1', 8, 'verify_waiting', 'verifying', t('30T20:00'))
+    exec({ id: 'ex-verify-8b', project_id: 'p1', issue_iid: 8, assignee_type: 'user', user_id: 'u-lee', status: 'success', started_at: t('30T20:00'), ended_at: t('30T21:00') })
+    ev('p1', 8, 'verifying', 'confirm_waiting', t('30T21:00'))
+    ev('p1', 8, 'confirm_waiting', 'confirming', t('30T22:00'))
+    exec({ id: 'ex-confirm-8', project_id: 'p1', issue_iid: 8, assignee_type: 'user', user_id: 'u-lead', status: 'success', started_at: t('30T22:00'), ended_at: t('30T23:00') })
+    ev('p1', 8, 'confirming', 'done', t('30T23:00'))
+    const h = byStage(buildReportModel('u-lead', 'weekly', '2026-10-02', NOW))
+    expect(h.waiting).toBeCloseTo(1)         // 09~10 접수 후 처리 전만
+    expect(h.dev).toBeCloseTo(1)
+    expect(h.verifying).toBeCloseTo(2)       // 11~12, 20~21
+    expect(h.verify_waiting).toBeCloseTo(8)  // 12~20 — 예전엔 반려로 보고 처리 대기로 셌다
+    expect(h.confirm_waiting).toBeCloseTo(1)
+    expect(h.confirming).toBeCloseTo(1)
+  })
+
+  it('닫혔다 다시 열린 이슈의 빈 시간은 다시 열린 단계다(처리 대기로 세지 않는다)', () => {
+    // 운영 #1820: 처리를 마친 뒤 머지 없이 닫힘 → 검증 대기로 다시 열림 → 다음 날 검증
+    seedBase()
+    const t = (s: string) => iso(kst(`2026-09-30T${s}:00`))
+    stage('p1', 9, 'done', { scheduled_at: t('08:00'), confirmed_at: t('22:00') })
+    ev('p1', 9, null, 'waiting', t('08:00'))
+    ev('p1', 9, 'waiting', 'dev', t('09:00'))
+    exec({ id: 'ex-9', project_id: 'p1', agent_id: 'a1', assignee_type: 'agent', issue_iid: 9, status: 'success', started_at: t('09:00'), ended_at: t('10:00'), verified_at: t('20:00') })
+    ev('p1', 9, 'dev', 'verify_waiting', t('10:00'))
+    ev('p1', 9, 'verify_waiting', 'closed', t('10:30'))
+    ev('p1', 9, 'closed', 'verify_waiting', t('11:00'))   // 재오픈 — 이 사이클의 접수
+    ev('p1', 9, 'verify_waiting', 'verifying', t('19:00'))
+    exec({ id: 'ex-verify-9', project_id: 'p1', issue_iid: 9, assignee_type: 'user', user_id: 'u-lee', status: 'success', started_at: t('19:00'), ended_at: t('20:00') })
+    ev('p1', 9, 'verifying', 'confirm_waiting', t('20:00'))
+    ev('p1', 9, 'confirm_waiting', 'confirming', t('21:00'))
+    exec({ id: 'ex-confirm-9', project_id: 'p1', issue_iid: 9, assignee_type: 'user', user_id: 'u-lead', status: 'success', started_at: t('21:00'), ended_at: t('22:00') })
+    ev('p1', 9, 'confirming', 'done', t('22:00'))
+    const h = byStage(buildReportModel('u-lead', 'weekly', '2026-10-02', NOW))
+    expect(h.waiting).toBeCloseTo(0)
+    expect(h.verify_waiting).toBeCloseTo(8)  // 11~19
+    expect(h.verifying).toBeCloseTo(1)
+    expect(h.confirm_waiting).toBeCloseTo(1)
+    expect(h.confirming).toBeCloseTo(1)
+  })
+
+  it('기록 없이 단계만 처리 중이면(스캐너가 dev ↔ dev_fail 을 되풀이) 처리가 아니라 처리 대기다', () => {
+    // 운영 #1907: 09:16 AI 실패 → 12:58 재처리까지 아무것도 돌지 않았는데 단계는 매분 dev/dev_fail 을 오갔다
+    seedBase()
+    const t = (s: string) => iso(kst(`2026-09-30T${s}:00`))
+    stage('p1', 11, 'done', { scheduled_at: t('09:00'), confirmed_at: t('17:00') })
+    ev('p1', 11, null, 'waiting', t('09:00'))
+    ev('p1', 11, 'waiting', 'dev', t('09:00'))
+    exec({ id: 'ex-11a', project_id: 'p1', agent_id: 'a1', assignee_type: 'agent', issue_iid: 11, status: 'failed', started_at: t('09:00'), ended_at: t('10:00') })
+    for (let m = 0; m < 120; m += 2) {
+      const at = kst('2026-09-30T10:00:00') + m * 60_000
+      ev('p1', 11, 'dev', 'dev_fail', iso(at))
+      ev('p1', 11, 'dev_fail', 'dev', iso(at + 60_000))
+    }
+    ev('p1', 11, 'dev', 'dev_fail', t('12:00'))
+    ev('p1', 11, 'dev_fail', 'waiting', t('13:00'))
+    ev('p1', 11, 'waiting', 'dev', t('14:00'))
+    exec({ id: 'ex-11b', project_id: 'p1', agent_id: 'a1', assignee_type: 'agent', issue_iid: 11, status: 'success', started_at: t('14:00'), ended_at: t('15:00'), verified_at: t('16:00') })
+    ev('p1', 11, 'dev', 'verify_waiting', t('15:00'))
+    ev('p1', 11, 'verify_waiting', 'verifying', t('15:00'))
+    exec({ id: 'ex-verify-11', project_id: 'p1', issue_iid: 11, assignee_type: 'user', user_id: 'u-lee', status: 'success', started_at: t('15:00'), ended_at: t('16:00') })
+    ev('p1', 11, 'verifying', 'confirm_waiting', t('16:00'))
+    ev('p1', 11, 'confirm_waiting', 'confirming', t('16:00'))
+    exec({ id: 'ex-confirm-11', project_id: 'p1', issue_iid: 11, assignee_type: 'user', user_id: 'u-lead', status: 'success', started_at: t('16:00'), ended_at: t('17:00') })
+    ev('p1', 11, 'confirming', 'done', t('17:00'))
+    const h = byStage(buildReportModel('u-lead', 'weekly', '2026-10-02', NOW))
+    expect(h.dev).toBeCloseTo(2)      // 실제로 돈 09~10, 14~15 만
+    expect(h.waiting).toBeCloseTo(4)  // 10~14 실패 후 재처리까지
+  })
+
+  it('단계 사건이 없는 옛 기록 — 실패로 닫힌 검증 뒤 다음 일이 다시 검증이면 처리 대기가 아니다', () => {
+    seedBase()
+    const t = (s: string) => iso(kst(`2026-09-30T${s}:00`))
+    stage('p1', 12, 'done', { scheduled_at: t('09:00'), confirmed_at: t('18:00') })
+    exec({ id: 'ex-12', project_id: 'p1', agent_id: 'a1', assignee_type: 'agent', issue_iid: 12, status: 'success', started_at: t('09:00'), ended_at: t('10:00'), verified_at: t('16:00') })
+    exec({ id: 'ex-verify-12a', project_id: 'p1', issue_iid: 12, assignee_type: 'user', user_id: 'u-lee', status: 'failed', stage_verdict: 'fail', started_at: t('11:00'), ended_at: t('12:00') })
+    exec({ id: 'ex-verify-12b', project_id: 'p1', issue_iid: 12, assignee_type: 'user', user_id: 'u-lee', status: 'success', started_at: t('15:00'), ended_at: t('16:00') })
+    exec({ id: 'ex-confirm-12', project_id: 'p1', issue_iid: 12, assignee_type: 'user', user_id: 'u-lead', status: 'success', started_at: t('17:00'), ended_at: t('18:00') })
+    const h = byStage(buildReportModel('u-lead', 'weekly', '2026-10-02', NOW))
+    expect(h.waiting).toBeCloseTo(0)
+    expect(h.verify_waiting).toBeCloseTo(4)  // 10~11, 12~15 — 재처리 없이 같은 결과를 다시 검증했다
+  })
+
+  it('단계 사건이 없는 옛 기록 — 취소한 검증은 반려가 아니라 검증 대기로 돌아간 것이다', () => {
+    seedBase()
+    const t = (s: string) => iso(kst(`2026-09-30T${s}:00`))
+    stage('p1', 10, 'done', { scheduled_at: t('09:00'), confirmed_at: t('18:00') })
+    exec({ id: 'ex-10', project_id: 'p1', agent_id: 'a1', assignee_type: 'agent', issue_iid: 10, status: 'success', started_at: t('09:00'), ended_at: t('10:00'), verified_at: t('16:00') })
+    exec({ id: 'ex-verify-10a', project_id: 'p1', issue_iid: 10, assignee_type: 'user', user_id: 'u-lee', status: 'failed', stage_verdict: 'cancelled', started_at: t('11:00'), ended_at: t('12:00') })
+    exec({ id: 'ex-verify-10b', project_id: 'p1', issue_iid: 10, assignee_type: 'user', user_id: 'u-lee', status: 'success', started_at: t('15:00'), ended_at: t('16:00') })
+    exec({ id: 'ex-confirm-10', project_id: 'p1', issue_iid: 10, assignee_type: 'user', user_id: 'u-lead', status: 'success', started_at: t('17:00'), ended_at: t('18:00') })
+    const h = byStage(buildReportModel('u-lead', 'weekly', '2026-10-02', NOW))
+    expect(h.waiting).toBeCloseTo(0)
+    expect(h.verify_waiting).toBeCloseTo(4)  // 10~11, 12~15
+    expect(h.verifying).toBeCloseTo(2)
+  })
+
   it('지난 기간 값과 월별 비중을 함께 낸다', () => {
     seedWeek()
     const m = buildReportModel('u-lead', 'monthly', '2026-09-30', NOW)

@@ -303,15 +303,30 @@ function doneOf(completed: CycleEvent[], facts: Map<string, IssueFacts>, history
 
 // ─── 단계별 시간 ───
 
-type Activity = { kind: 'dev' | 'verifying' | 'confirming'; start: number; end: number; ok: boolean }
+type Activity = { kind: 'dev' | 'verifying' | 'confirming'; start: number; end: number; ok: boolean; cancelled: boolean }
+
+/**
+ * 단계 사건의 도착 단계 → 빈 시간(열린 실행 기록이 없는 시간)의 칸. 대기 단계만 사건을 따른다.
+ * 처리 중·검증 중·확인 중은 기록이 열려 있어야 일한 것이다 — 기록 없이 단계만 그렇다면(스캐너가 dev ↔ dev_fail 을
+ * 되풀이한 동안 등) 실제로 돈 일이 없으므로, 완료·버려짐·모르는 단계와 함께 null(마지막으로 끝난 일로 미룬다).
+ */
+function flowOfStage(to: string | null): FlowStage | null {
+  switch (to) {
+    case 'none': case 'waiting': case 'dev_fail': return 'waiting' // 접수 후 처리 전·AI 실패 후 다시 처리를 기다림
+    case 'verify_waiting': case 'confirm_waiting': return to
+    default: return null
+  }
+}
 
 /**
  * 한 사이클(접수 lo → 완료 hi)을 단계로 나눈 시간(시).
- * 처리 실행·검증 기록(ex-verify)·확인 기록(ex-confirm)이 열려 있던 동안은 그 단계(겹치면 나중에 시작한 쪽),
- * 아무것도 열려 있지 않은 동안은 마지막으로 끝난 일이 정한 대기 —
- * 처리 성공 → 검증 대기, 검증 승인 → 확인 대기, 처리 실패·반려(검증·확인) 또는 아직 아무것도 없음 → 처리 대기.
+ * 처리 실행·검증 기록(ex-verify)·확인 기록(ex-confirm)이 열려 있던 동안은 그 단계(겹치면 나중에 시작한 쪽).
+ * 아무것도 열려 있지 않은 동안은 그때 이슈가 실제로 있던 대기 단계(단계 사건) — 반려·취소·재오픈이 어디로 보냈는지는 사건이 안다.
+ * 사건이 대기 단계를 가리키지 않는 시간(사건 기록 이전의 옛 이슈, 기록 없이 작업 단계인 때)은 마지막으로 끝난 일로 미룬다 —
+ * 처리 성공 → 검증 대기, 검증 승인 → 확인 대기, 검증·확인이 취소됐거나 실패 뒤 다음 일이 같은 단계 → 그 단계 대기,
+ * 처리 실패·반려(다음 일이 재처리) 또는 아직 아무것도 없음 → 처리 대기.
  */
-export function stageHoursOf(execs: IssueExec[], lo: number, hi: number): Record<FlowStage, number> {
+export function stageHoursOf(execs: IssueExec[], lo: number, hi: number, stages: { at: string; to: string | null }[] = []): Record<FlowStage, number> {
   const out = Object.fromEntries(FLOW_STAGES.map(s => [s, 0])) as Record<FlowStage, number>
   const acts: Activity[] = []
   for (const e of execs) {
@@ -319,21 +334,31 @@ export function stageHoursOf(execs: IssueExec[], lo: number, hi: number): Record
     if (!kind) continue
     const start = new Date(e.startedAt).getTime()
     const end = e.endedAt ? new Date(e.endedAt).getTime() : hi
-    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= lo || start >= hi) continue
-    acts.push({ kind, start, end: Math.max(start, end), ok: e.status === 'success' })
+    // 사이클 전에 끝난 일도 남긴다 — 재오픈 직후의 빈 시간을 "아직 아무것도 없음"으로 보지 않게
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start >= hi) continue
+    acts.push({ kind, start, end: Math.max(start, end), ok: e.status === 'success', cancelled: e.stageVerdict === 'cancelled' })
   }
-  const cuts = [...new Set([lo, hi, ...acts.flatMap(a => [a.start, a.end]).filter(t => t > lo && t < hi)])].sort((a, b) => a - b)
+  const evs = stages.map(x => ({ at: new Date(x.at).getTime(), flow: flowOfStage(x.to) })).filter(x => Number.isFinite(x.at))
+  const cuts = [...new Set([lo, hi, ...acts.flatMap(a => [a.start, a.end]), ...evs.map(x => x.at)].filter(t => t >= lo && t <= hi))].sort((a, b) => a - b)
   for (let i = 0; i + 1 < cuts.length; i++) {
     const a = cuts[i], b = cuts[i + 1]
     const open = acts.filter(x => x.start <= a && x.end >= b && x.end > x.start).sort((x, y) => y.start - x.start)[0]
     let st: FlowStage
     if (open) st = open.kind
     else {
-      const last = acts.filter(x => x.end <= a).sort((x, y) => y.end - x.end || y.start - x.start)[0]
-      st = !last || !last.ok ? 'waiting'
-        : last.kind === 'dev' ? 'verify_waiting'
-        : last.kind === 'verifying' ? 'confirm_waiting'
-        : 'confirming' // 확인을 마친 뒤 완료 시각까지 남은 틈
+      const ev = evs.filter(x => x.at <= a).pop()
+      if (ev?.flow) st = ev.flow
+      else {
+        const last = acts.filter(x => x.end <= a).sort((x, y) => y.end - x.end || y.start - x.start)[0]
+        // 검증·확인이 실패로 닫혔어도 다음 일이 재처리가 아니라 같은 단계라면 처리로 돌려보낸 게 아니다(취소·되돌림)
+        const next = acts.filter(x => x.start >= b).sort((x, y) => x.start - y.start)[0]
+        const stayed = !!last && !last.ok && last.kind !== 'dev' && (last.cancelled || next?.kind === last.kind)
+        st = stayed ? (last.kind === 'verifying' ? 'verify_waiting' : 'confirm_waiting')
+          : !last || !last.ok ? 'waiting'
+          : last.kind === 'dev' ? 'verify_waiting'
+          : last.kind === 'verifying' ? 'confirm_waiting'
+          : 'confirming' // 확인을 마친 뒤 완료 시각까지 남은 틈
+      }
     }
     out[st] += (b - a) / HOUR
   }
@@ -351,7 +376,7 @@ function stageTotalsOf(completed: CycleEvent[], facts: Map<string, IssueFacts>, 
     if (!receipt) continue
     const lo = new Date(receipt).getTime(), hi = new Date(at).getTime()
     if (!(hi > lo)) continue
-    const h = stageHoursOf(f.execs, lo, hi)
+    const h = stageHoursOf(f.execs, lo, hi, f.stages)
     for (const s of FLOW_STAGES) sum[s] += h[s]
     n++
   }

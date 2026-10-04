@@ -256,6 +256,8 @@ export interface IssueExec {
   endedAt: string | null
   verifiedAt: string | null
   rejectedAt: string | null
+  /** 사람 검증·확인 기록이 실패로 닫힌 까닭(fail 반려 · cancelled 취소 · abandoned 버려짐), 에이전트 판정(pass/fail/blocked) */
+  stageVerdict: string | null
   modelName: string | null
   cliName: string | null
   userId: string | null
@@ -274,6 +276,8 @@ export interface IssueFacts {
   scheduledAt: string | null
   confirmedAt: string | null
   execs: IssueExec[]
+  /** 단계 사건(도착 단계·시각), 오래된 순 — 실행 기록이 없는 빈 시간이 실제로 어느 단계였는지 */
+  stages: { at: string; to: string | null }[]
 }
 
 /** 이슈 키 목록('pid:iid')의 실행 기록과 단계 정보 */
@@ -298,7 +302,7 @@ export function issueFacts(keys: string[]): Map<string, IssueFacts> {
       `).all(pid, ...chunk) as any[]
       const stageMap = new Map(stages.map(s => [s.issue_iid, s]))
       const execs = db.prepare(`
-        SELECT te.id, te.issue_iid, te.agent_id, te.assignee_type, te.status, te.started_at, te.ended_at, te.verified_at, te.rejected_at,
+        SELECT te.id, te.issue_iid, te.agent_id, te.assignee_type, te.status, te.started_at, te.ended_at, te.verified_at, te.rejected_at, te.stage_verdict,
                te.model_name, a.cli_name, te.user_id, te.user_name, te.issue_created_at, te.issue_title,
                te.verifier_name, te.verifier_user_id, te.verifier_username
         FROM task_executions te LEFT JOIN agents a ON a.id = te.agent_id
@@ -310,16 +314,24 @@ export function issueFacts(keys: string[]): Map<string, IssueFacts> {
         out.set(`${pid}:${iid}`, {
           key: `${pid}:${iid}`, projectId: pid, iid,
           title: st?.issue_title ?? null, scheduledAt: isoTime(st?.scheduled_at), confirmedAt: isoTime(st?.confirmed_at),
-          execs: [],
+          execs: [], stages: [],
         })
       }
+      for (const r of db.prepare(`
+        SELECT issue_iid, to_stage, occurred_at FROM issue_events x
+        WHERE +x.event = 'stage' AND project_id = ? AND issue_iid IN (${ph}) ORDER BY id
+      `).all(pid, ...chunk) as any[]) {
+        const at = isoTime(r.occurred_at)
+        if (at) out.get(`${pid}:${r.issue_iid}`)?.stages.push({ at, to: r.to_stage ?? null })
+      }
+      for (const iid of chunk) out.get(`${pid}:${iid}`)!.stages.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0))
       for (const e of execs) {
         const f = out.get(`${pid}:${e.issue_iid}`)
         if (!f) continue
         if (!f.title && e.issue_title) f.title = e.issue_title
         f.execs.push({
           id: e.id, agentId: e.agent_id || null, assigneeType: e.assignee_type ?? null, status: e.status,
-          startedAt: isoTime(e.started_at) ?? e.started_at, endedAt: isoTime(e.ended_at), verifiedAt: isoTime(e.verified_at), rejectedAt: isoTime(e.rejected_at),
+          startedAt: isoTime(e.started_at) ?? e.started_at, endedAt: isoTime(e.ended_at), verifiedAt: isoTime(e.verified_at), rejectedAt: isoTime(e.rejected_at), stageVerdict: e.stage_verdict || null,
           modelName: e.model_name || null, cliName: e.cli_name || null, userId: e.user_id || null, userName: e.user_name || null,
           issueCreatedAt: isoTime(e.issue_created_at), verifierName: e.verifier_name || null,
           verifierUserId: e.verifier_user_id || null, verifierUsername: e.verifier_username || null,
