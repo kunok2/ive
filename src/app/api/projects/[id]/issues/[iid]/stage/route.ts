@@ -34,7 +34,10 @@ export async function POST(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const { stage, action } = await req.json();
+  // dryRun: 아래 검사(에이전트 작업 중·권한·실제 단계)만 하고 아무것도 바꾸지 않는다.
+  // 화면이 「코멘트 + 단계 이동」을 할 때 코멘트를 올리기 전에 먼저 물어본다 — 단계 이동이 거절될 것을
+  // 코멘트(「검증 완료:」 같은 말머리 포함)부터 올려 두면 일어나지 않은 전이를 적은 코멘트가 남는다.
+  const { stage, action, dryRun } = await req.json();
   if (!stage || !action) {
     return NextResponse.json({ error: 'stage와 action이 필요합니다.' }, { status: 400 });
   }
@@ -92,6 +95,7 @@ export async function POST(
         { status: 409 }
       );
     }
+    if (dryRun) return NextResponse.json({ ok: true, dryRun: true });
 
     // 레이블 전환 수행 + 안전망: 전이 결과로 단계 라벨이 정확히 한 개만 남도록
     // 이전 단계의 라벨이 의도치 않게 잔류하면 stage 가 잘못 판정되므로 항상 정리.

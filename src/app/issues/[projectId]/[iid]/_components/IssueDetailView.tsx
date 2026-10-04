@@ -354,6 +354,21 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
     await finalApprove()
   }
 
+  // 코멘트 + 단계 이동 — 코멘트를 올리기 전에 단계 이동이 받아들여질지 먼저 묻는다(dryRun: 검사만, 변경 없음).
+  // 에이전트가 작업 중이거나 단계가 이미 바뀌었으면 코멘트(「검증 완료:」 같은 말머리 포함)를 올리지 않고
+  // 입력창에 남긴 채 사유를 알린다 — 일어나지 않은 전이를 적은 코멘트가 남지 않게.
+  async function precheckStage(stage: string, action: string): Promise<boolean> {
+    const res = await fetch(`/api/projects/${projectId}/issues/${iid}/stage`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stage, action, dryRun: true }),
+    })
+    if (res.ok) return true
+    const data = await res.json().catch(() => null)
+    toast(data?.error || `Error: ${res.status} ${res.statusText}`, 'error')
+    if (res.status === 409) void fetchIssue()  // 바뀐 상태(에이전트 작업 중·다른 단계)를 화면에 반영해 버튼을 맞춘다
+    return false
+  }
+
   async function handleMrActionChoice(choice: 'merge' | 'close' | 'none') {
     if (!mrActionModal) return
     const { finalApprove } = mrActionModal
@@ -536,6 +551,7 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
         : issue?.stage === 'confirming' ? 'return_to_dev'
         : issue?.stage === 'none' ? 'schedule'
         : 'retry'
+      if (issue?.stage !== 'waiting' && !(await precheckStage(issue?.stage ?? 'none', stageAction))) return
       const noteBody = stageTransitionPrefix(issue?.stage, stageAction) + comment.trim()
       const res = await fetch(`/api/projects/${projectId}/issues/${iid}/notes`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -573,6 +589,7 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
     const stageNow = issue.stage
     postingRef.current = true; setPosting(true); setPostingType('done')
     try {
+      if (!(await precheckStage(stageNow, stageAction))) return
       const noteBody = stageTransitionPrefix(stageNow, stageAction) + comment.trim()
       const res = await fetch(`/api/projects/${projectId}/issues/${iid}/notes`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -603,6 +620,7 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
     const stageNow = issue.stage
     postingRef.current = true; setPosting(true); setPostingType('inflow')
     try {
+      if (!(await precheckStage(stageNow, stageAction))) return
       const noteBody = stageTransitionPrefix(stageNow, stageAction) + comment.trim()
       const res = await fetch(`/api/projects/${projectId}/issues/${iid}/notes`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -638,6 +656,7 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
     postingRef.current = true; setPosting(true); setPostingType('next')
     try {
       if (comment.trim()) {
+        if (!(await precheckStage(next.stage, next.action))) return
         const noteBody = stageTransitionPrefix(issue.stage, next.action) + comment.trim()
         const res = await fetch(`/api/projects/${projectId}/issues/${iid}/notes`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },

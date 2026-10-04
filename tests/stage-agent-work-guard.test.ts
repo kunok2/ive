@@ -8,22 +8,24 @@ import { setupTestDb, teardownTestDb, seedUser, seedProject, seedAgent, seedExec
 import { getRunningAgentWork } from '@/lib/db'
 
 const fetchSingleIssue = vi.fn()
+const swapIssueLabels = vi.fn()
 vi.mock('@/lib/auth', () => ({
   getCurrentUser: async () => ({ id: 'user-1', name: '관리자', isAdmin: true }),
 }))
 vi.mock('@/lib/provider', async (orig) => ({
   ...(await orig<typeof import('@/lib/provider')>()),
   fetchSingleIssue: (...a: unknown[]) => fetchSingleIssue(...a),
+  swapIssueLabels: (...a: unknown[]) => swapIssueLabels(...a),
 }))
 
 const PROJ = 'proj-1'
 const IID = 42
 const NOW = new Date().toISOString()
 
-function post(stage: string, action: string) {
+function post(stage: string, action: string, dryRun?: boolean) {
   return import('@/app/api/projects/[id]/issues/[iid]/stage/route').then(m =>
     m.POST(
-      new NextRequest('http://x/api', { method: 'POST', body: JSON.stringify({ stage, action }) }),
+      new NextRequest('http://x/api', { method: 'POST', body: JSON.stringify({ stage, action, dryRun }) }),
       { params: Promise.resolve({ id: PROJ, iid: String(IID) }) },
     ))
 }
@@ -36,6 +38,7 @@ describe('에이전트 작업 중 단계 이동 차단', () => {
     seedProject(db, PROJ, 'user-1', 'P')
     seedAgent(db, 'agent-1', 'user-1', '검증봇')
     fetchSingleIssue.mockReset()
+    swapIssueLabels.mockReset()
   })
   afterEach(() => teardownTestDb())
 
@@ -74,5 +77,28 @@ describe('에이전트 작업 중 단계 이동 차단', () => {
     fetchSingleIssue.mockResolvedValue(null)
     await post('verifying', 'approve')
     expect(fetchSingleIssue).toHaveBeenCalled()
+  })
+
+  // 코멘트 + 단계 이동: 화면은 코멘트를 올리기 전에 dryRun 으로 먼저 묻는다 — 거절될 이동의 코멘트가 남지 않게
+  it('dryRun — 에이전트 작업 중이면 409', async () => {
+    seedExecution(db, { id: 'ex-verify-1', projectId: PROJ, agentId: 'agent-1', issueIid: IID, status: 'running', startedAt: NOW, assigneeType: 'agent' })
+    const res = await post('verifying', 'approve', true)
+    expect(res.status).toBe(409)
+  })
+
+  it('dryRun — 통과해도 라벨을 바꾸지 않는다', async () => {
+    fetchSingleIssue.mockResolvedValue({ labels: ['IVE', 'IVE-V'], assignees: [] })
+    const res = await post('verifying', 'approve', true)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: true, dryRun: true })
+    expect(swapIssueLabels).not.toHaveBeenCalled()
+  })
+
+  it('dryRun — 단계가 이미 바뀌었으면 409(실제 단계를 알려준다)', async () => {
+    fetchSingleIssue.mockResolvedValue({ labels: ['IVE', 'IVE-P'], assignees: [] })
+    const res = await post('verifying', 'approve', true)
+    expect(res.status).toBe(409)
+    expect((await res.json()).actualStage).toBe('confirm_waiting')
+    expect(swapIssueLabels).not.toHaveBeenCalled()
   })
 })
