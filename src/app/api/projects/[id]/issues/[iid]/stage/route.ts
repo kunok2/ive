@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb, getProject, getProjectAuthToken, getProjectAccess, hasActiveExecution, stageFromLabels, markIssueVerifyStarted, markIssueVerified, markIssueVerifyRejected, markIssueConfirmed, markIssueConfirmStarted, resetIssueCycleMarkers, resetIssueScheduledAt, recordIssueScheduledAt, touchProjectActivity, assignIssueAtomically, getAssignModeMap, getIssueScheduledAt, isIssueAssignee, isIssueAuthor, upsertIssueStageSnapshot, updateExecutionStatus, getVerifyWaitingCount, updateProjectLastChecked, getPresetRoles, recordStageEvent, markHumanStageEnd } from '@/lib/db';
+import { getDb, getProject, getProjectAuthToken, getProjectAccess, hasActiveExecution, getRunningAgentWork, stageFromLabels, markIssueVerifyStarted, markIssueVerified, markIssueVerifyRejected, markIssueConfirmed, markIssueConfirmStarted, resetIssueCycleMarkers, resetIssueScheduledAt, recordIssueScheduledAt, touchProjectActivity, assignIssueAtomically, getAssignModeMap, getIssueScheduledAt, isIssueAssignee, isIssueAuthor, upsertIssueStageSnapshot, updateExecutionStatus, getVerifyWaitingCount, updateProjectLastChecked, getPresetRoles, recordStageEvent, markHumanStageEnd } from '@/lib/db';
 import { userActor } from '@/lib/event-actor';
+import { execKind } from '@/lib/active-work';
 import { triggerScan } from '@/lib/scanner';
 import { applyRoleAssignee } from '@/lib/role-assignee';
 import { notifyStageTransition } from '@/lib/slack-notify';
@@ -46,6 +47,17 @@ export async function POST(
   const transition = available.find(t => t.action === action);
   if (!transition) {
     return NextResponse.json({ error: '허용되지 않는 액션입니다.' }, { status: 400 });
+  }
+
+  // 에이전트가 이 작업을 하고 있는 동안은 사람이 단계를 옮기지 못한다 — 옮기면 같은 검증·확인을 두 번 하게 되고,
+  // 에이전트가 끝나며 내리는 판정(통과·반려)이 사람이 옮긴 단계와 엇갈린다. 먼저 실행을 중지해야 한다.
+  const agentWork = getRunningAgentWork(projectId, Number(iid));
+  if (agentWork) {
+    const kindLabel = { process: '처리', verify: '검증', confirm: '확인', chat: '대화' }[execKind(agentWork.executionId)];
+    return NextResponse.json(
+      { error: `에이전트 ${agentWork.agentName ? `'${agentWork.agentName}'` : ''}이(가) ${kindLabel} 중입니다. 끝난 뒤 진행하거나, 실행을 중지한 뒤 진행해 주세요.`, agentWork },
+      { status: 409 }
+    );
   }
 
   try {

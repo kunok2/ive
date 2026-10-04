@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getProject, getProjectAccess, getProjectAuthToken, hasActiveExecution, stageFromLabels, getPresetRoles, getAssigneeAuto, getAssignMode, getActualRoleAssignees, getIssueStageTimes, getIssueRetryCounts, getIssueForwardCounts, getStageWorkerNote } from '@/lib/db'
+import { getProject, getProjectAccess, getProjectAuthToken, hasActiveExecution, stageFromLabels, getPresetRoles, getAssigneeAuto, getAssignMode, getActualRoleAssignees, getIssueStageTimes, getIssueRetryCounts, getIssueForwardCounts, getStageWorkerNote, getRunningAgentWork } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
+import { execKind } from '@/lib/active-work'
 import { logActivity } from '@/lib/activity'
 import { updateIssue, fetchSingleIssue } from '@/lib/provider'
 import { resolveIveAuthorFromBody, stripIveAuthorMarker, stripIveDueMarker, extractIveAuthorId, prependIveAuthorMarker } from '@/lib/ive-author'
@@ -218,6 +219,8 @@ export async function GET(
       presetVerifier: presetRoles.verifier,
       presetConfirmer: presetRoles.confirmer,
       stageWorkerNote: (stage === 'done' || issue.state === 'closed') ? null : getStageWorkerNote(projectId, Number(iid)),
+      // 지금 돌고 있는 에이전트 작업 — 있는 동안 화면은 단계 버튼을 막는다(서버도 막는다)
+      agentWork: (() => { const w = getRunningAgentWork(projectId, Number(iid)); return w ? { ...w, kind: execKind(w.executionId) } : null })(),
       actualProcessor: actuals.processor,
       actualVerifier: actuals.verifier,
       actualConfirmer: actuals.confirmer,

@@ -193,5 +193,12 @@
   "myTurnVerify": "검증할 차례입니다",
   "myTurnConfirm": "확인할 차례입니다",
   "agentBlocked": "에이전트가 맡지 못했습니다 — {note}",
-  "startMyself": "직접 시작"
+  "startMyself": "직접 시작",
+  "agentWorking": "{agent}이(가) {work} 중입니다 — 끝나면 단계를 진행할 수 있습니다",
+  "agentWorkingUnknown": "에이전트",
+  "agentWorkKind": {
+    "process": "처리",
+    "verify": "검증",
+    "confirm": "확인"
+  }
 }

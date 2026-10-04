@@ -1,0 +1,78 @@
+// 에이전트가 검증·확인·처리 중인 작업은 사람이 단계를 옮기지 못한다.
+//
+// 종전에는 검증 에이전트가 도는 동안에도 작업 상세의 「확인 →」·「← 재실행」·「유입」(검증대기면 「검증 시작」)이 살아 있어
+// 누르면 사람이 같은 검증을 겹쳐 하거나, 에이전트의 판정과 사람이 옮긴 단계가 엇갈렸다.
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { NextRequest } from 'next/server'
+import { setupTestDb, teardownTestDb, seedUser, seedProject, seedAgent, seedExecution } from './helpers/test-db'
+import { getRunningAgentWork } from '@/lib/db'
+
+const fetchSingleIssue = vi.fn()
+vi.mock('@/lib/auth', () => ({
+  getCurrentUser: async () => ({ id: 'user-1', name: '관리자', isAdmin: true }),
+}))
+vi.mock('@/lib/provider', async (orig) => ({
+  ...(await orig<typeof import('@/lib/provider')>()),
+  fetchSingleIssue: (...a: unknown[]) => fetchSingleIssue(...a),
+}))
+
+const PROJ = 'proj-1'
+const IID = 42
+const NOW = new Date().toISOString()
+
+function post(stage: string, action: string) {
+  return import('@/app/api/projects/[id]/issues/[iid]/stage/route').then(m =>
+    m.POST(
+      new NextRequest('http://x/api', { method: 'POST', body: JSON.stringify({ stage, action }) }),
+      { params: Promise.resolve({ id: PROJ, iid: String(IID) }) },
+    ))
+}
+
+describe('에이전트 작업 중 단계 이동 차단', () => {
+  let db: ReturnType<typeof setupTestDb>
+  beforeEach(() => {
+    db = setupTestDb()
+    seedUser(db, 'user-1', '관리자')
+    seedProject(db, PROJ, 'user-1', 'P')
+    seedAgent(db, 'agent-1', 'user-1', '검증봇')
+    fetchSingleIssue.mockReset()
+  })
+  afterEach(() => teardownTestDb())
+
+  it('검증 에이전트가 돌고 있으면 그 실행과 에이전트 이름을 돌려준다', () => {
+    seedExecution(db, { id: 'ex-verify-1', projectId: PROJ, agentId: 'agent-1', issueIid: IID, status: 'running', startedAt: NOW, assigneeType: 'agent' })
+    expect(getRunningAgentWork(PROJ, IID)).toEqual({ executionId: 'ex-verify-1', agentName: '검증봇' })
+  })
+
+  it('사람이 맡은 검증·AI 채팅·끝난 실행은 막지 않는다', () => {
+    seedExecution(db, { id: 'ex-verify-2', projectId: PROJ, agentId: '', issueIid: IID, status: 'assigned', startedAt: NOW, assigneeType: 'user', userName: '사람' })
+    seedExecution(db, { id: 'exec-chat-1', projectId: PROJ, agentId: 'agent-1', issueIid: IID, status: 'running', startedAt: NOW, assigneeType: 'agent' })
+    seedExecution(db, { id: 'ex-verify-3', projectId: PROJ, agentId: 'agent-1', issueIid: IID, status: 'success', startedAt: NOW, endedAt: NOW, assigneeType: 'agent' })
+    expect(getRunningAgentWork(PROJ, IID)).toBeNull()
+  })
+
+  it('검증 에이전트 실행 중 사람의 승인·반려·검증 시작은 409 로 거절되고 Git 은 건드리지 않는다', async () => {
+    seedExecution(db, { id: 'ex-verify-1', projectId: PROJ, agentId: 'agent-1', issueIid: IID, status: 'running', startedAt: NOW, assigneeType: 'agent' })
+    for (const [stage, action] of [['verifying', 'approve'], ['verifying', 'retry'], ['verifying', 'to_inflow'], ['verify_waiting', 'start_verification']]) {
+      const res = await post(stage, action)
+      expect(res.status).toBe(409)
+      const body = await res.json()
+      expect(body.error).toContain("'검증봇'")
+      expect(body.error).toContain('검증 중')
+    }
+    expect(fetchSingleIssue).not.toHaveBeenCalled()
+  })
+
+  it('확인 에이전트면 「확인 중」으로 알린다', async () => {
+    seedExecution(db, { id: 'ex-confirm-1', projectId: PROJ, agentId: 'agent-1', issueIid: IID, status: 'running', startedAt: NOW, assigneeType: 'agent' })
+    const res = await post('confirming', 'accept')
+    expect(res.status).toBe(409)
+    expect((await res.json()).error).toContain('확인 중')
+  })
+
+  it('에이전트 실행이 없으면 가드를 지나 종전 경로(Git 단계 확인)로 간다', async () => {
+    fetchSingleIssue.mockResolvedValue(null)
+    await post('verifying', 'approve')
+    expect(fetchSingleIssue).toHaveBeenCalled()
+  })
+})

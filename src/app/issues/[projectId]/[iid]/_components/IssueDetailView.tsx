@@ -69,6 +69,8 @@ interface IssueDetail {
   forwardCounts?: { toProcess: number; toVerify: number; toConfirm: number; toDone: number }
   /** 단계 작업자(에이전트)가 기동하지 못한 사유 — 있으면 사람이 직접 시작할 수 있게 안내 줄에 보인다 */
   stageWorkerNote?: string | null
+  /** 지금 이 작업을 하고 있는 에이전트 실행 — 있는 동안 단계 버튼을 막는다(겹쳐 처리 방지) */
+  agentWork?: { executionId: string; agentName: string | null; kind: 'process' | 'verify' | 'confirm' | 'chat' } | null
   /** 0 보통 · 1 높음 · 2 긴급 (IVE 에만 저장) */
   priority?: 0 | 1 | 2
   canEditPriority?: boolean
@@ -933,7 +935,7 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
   // 단, 에이전트가 맡을 수 없어 멈춘 경우(MR 없음 등 — 기동 못 한 사유가 남아 있음)에는 사유와 함께 사람이 직접 시작하게 한다
   const agentBlocked = (preset: { mode?: string } | null | undefined) => preset?.mode === 'agent' && !!issue?.stageWorkerNote
   const myStart: { action: 'start_verification' | 'start_confirmation'; text: string; button: string } | null =
-    loading || !issue ? null
+    loading || !issue || issue.agentWork ? null
     : issue.stage === 'verify_waiting' && canStartVerification && agentBlocked(issue.presetVerifier)
       ? { action: 'start_verification', text: tIssue('agentBlocked', { note: issue.stageWorkerNote! }), button: tIssue('startMyself') }
     : issue.stage === 'verify_waiting' && canStartVerification && issue.presetVerifier?.mode !== 'agent'
@@ -1145,6 +1147,7 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
         issue={issue}
         mode={mode}
         canProgressStage={canProgressStage}
+        agentWork={issue.agentWork ?? null}
         projectId={projectId}
         comment={comment}
         commentKey={commentKey}

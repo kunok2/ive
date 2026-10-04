@@ -40,6 +40,8 @@ interface BottomInputAreaProps {
   issue: IssueDetail
   mode: 'comment' | 'chat'
   canProgressStage: boolean
+  /** 지금 이 작업을 하고 있는 에이전트 실행 — 있으면 단계 버튼 대신 안내 줄 */
+  agentWork: { executionId: string; agentName: string | null; kind: 'process' | 'verify' | 'confirm' | 'chat' } | null
   projectId: string
   // Comment state
   comment: string
@@ -79,7 +81,7 @@ interface BottomInputAreaProps {
 
 export default function BottomInputArea({
   widthCls = 'max-w-lg desk:max-w-3xl',
-  issue, mode, canProgressStage, projectId,
+  issue, mode, canProgressStage, agentWork, projectId,
   comment, commentKey, posting, postingType,
   chatSessionId, chatHistoryOnly, chatStarting, chatSending, chatInput, chatImages, chatAgentName,
   preferredAgent, projectAgents, NEXT_STAGE,
@@ -128,6 +130,7 @@ export default function BottomInputArea({
           posting={posting}
           postingType={postingType}
           canProgressStage={canProgressStage}
+          agentWork={agentWork}
           preferredAgent={preferredAgent}
           NEXT_STAGE={NEXT_STAGE}
           commentPasteHandlers={commentPasteHandlers}
@@ -247,7 +250,7 @@ function ModeTabs({
 }
 
 function CommentModeInput({
-  issue, comment, commentKey, posting, postingType, canProgressStage,
+  issue, comment, commentKey, posting, postingType, canProgressStage: canProgress, agentWork,
   preferredAgent, NEXT_STAGE, commentPasteHandlers,
   onSetComment, onPostComment, onCommentAndRetry, onCommentAndDone, onCommentAndNextStage, onCommentAndInflow,
 }: {
@@ -257,6 +260,7 @@ function CommentModeInput({
   posting: boolean
   postingType: 'comment' | 'retry' | 'done' | 'next' | 'inflow' | null
   canProgressStage: boolean
+  agentWork: BottomInputAreaProps['agentWork']
   preferredAgent: BottomInputAreaProps['preferredAgent']
   NEXT_STAGE: Record<string, { stage: string; action: string; label: string }>
   commentPasteHandlers: { onPaste: any; onDrop: any; onDragOver: any }
@@ -268,9 +272,20 @@ function CommentModeInput({
   onCommentAndInflow: () => void
 }) {
   const tIssue = useTranslations('issue')
+  // 에이전트가 이 작업을 하는 동안은 단계 버튼(유입·재실행·검증 시작·확인 등)을 내놓지 않는다 — 누르면 같은 일을 겹쳐 하게 된다.
+  // 코멘트는 그대로 남길 수 있다. 서버(stage 라우트)도 같은 이유로 막는다.
+  const canProgressStage = canProgress && !agentWork
 
   return (
     <div className="flex flex-col gap-2">
+      {agentWork && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-ive-bg-card border border-ive-border-subtle text-xs font-bold text-ive-text-secondary">
+          <i className={`fa-solid fa-circle-notch fa-spin ${agentWork.kind === 'confirm' ? 'text-ive-stage-confirm' : agentWork.kind === 'verify' ? 'text-ive-stage-verify' : 'text-ive-stage-process'}`} />
+          <span className="flex-1 min-w-0">
+            {tIssue('agentWorking', { agent: agentWork.agentName || tIssue('agentWorkingUnknown'), work: tIssue(`agentWorkKind.${agentWork.kind === 'chat' ? 'process' : agentWork.kind}`) })}
+          </span>
+        </div>
+      )}
       <textarea
         value={comment}
         onChange={e => {

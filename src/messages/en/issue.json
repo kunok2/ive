@@ -193,5 +193,12 @@
   "myTurnVerify": "Your turn to verify",
   "myTurnConfirm": "Your turn to confirm",
   "agentBlocked": "The agent couldn't take this — {note}",
-  "startMyself": "Start myself"
+  "startMyself": "Start myself",
+  "agentWorking": "{agent} is {work} this — you can move the stage once it finishes",
+  "agentWorkingUnknown": "An agent",
+  "agentWorkKind": {
+    "process": "processing",
+    "verify": "verifying",
+    "confirm": "confirming"
+  }
 }

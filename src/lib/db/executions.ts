@@ -402,6 +402,21 @@ export function hasActiveExecution(projectId: string, issueIid: number): boolean
   return !!r
 }
 
+/**
+ * 이 이슈에서 지금 돌고 있는 에이전트 작업(처리·검증·확인 — AI 채팅 제외).
+ * 이게 있는 동안 사람이 단계를 옮기면 에이전트와 같은 일을 겹쳐 하게 된다 — 단계 버튼을 막는 근거.
+ */
+export function getRunningAgentWork(projectId: string, issueIid: number): { executionId: string; agentName: string | null } | null {
+  const r = getDb().prepare(
+    `SELECT te.id, COALESCE(a.name, te.user_name) AS agent_name FROM task_executions te
+      LEFT JOIN agents a ON a.id = te.agent_id
+      WHERE te.project_id = ? AND te.issue_iid = ? AND te.status IN ('running', 'assigned')
+        AND te.assignee_type = 'agent' AND te.id NOT LIKE 'exec-chat-%'
+      ORDER BY te.started_at DESC LIMIT 1`
+  ).get(projectId, issueIid) as { id: string; agent_name: string | null } | undefined
+  return r ? { executionId: r.id, agentName: r.agent_name } : null
+}
+
 export function getAssignedUserExecution(projectId: string, issueIid: number): TaskExecution | null {
   const r = getDb().prepare(
     "SELECT * FROM task_executions WHERE project_id = ? AND issue_iid = ? AND status = 'assigned' AND assignee_type = 'user' LIMIT 1"
