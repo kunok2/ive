@@ -99,23 +99,39 @@ export function HeldCard({ held, tr, prevLabel, tracking }: { held: Held; tr: Tr
           )}
         </>
       )}
-      {/* 보유 식 — 지난 기간 말 + 유입 − 완료 − 완료 없이 빠짐 = 지금. 지난 기간 말 기록이 없으면(도입 첫 주 등) 이력으로 다시 센 값 */}
-      {held.start != null && <div className="bg-ive-bg/50 border border-ive-border-dark rounded-lg p-3 flex items-center justify-between text-center">
-        {[
-          { v: held.start, l: tr('eqStart', { label: prevLabel }) },
-          { op: '+' }, { v: held.inflow, l: tr('eqInflow') },
-          { op: '−' }, { v: held.completed, l: tr('eqCompleted') },
-          ...(held.gap != null && held.gap > 0 ? [{ op: '−' }, { v: held.gap, l: tr('eqDropped') }] : []),
-          { op: '=' }, { v: held.end, l: held.live ? tr('eqNow') : tr('eqEnd') },
-        ].map((x, i) => 'op' in x
-          ? <span key={i} className="text-sm font-bold text-ive-text-muted">{x.op}</span>
-          : (
-            <div key={i} className="flex flex-col">
-              <span className="text-base font-bold text-ive-text tabular-nums">{x.v == null ? '—' : x.v.toLocaleString()}</span>
-              <span className="text-xs font-bold text-ive-text-muted">{x.l}</span>
-            </div>
-          ))}
-      </div>}
+      {/* 보유 식 — 지난 기간 말 + 유입 − (완료 + 빠짐) = 지금. 지난 기간 말 기록이 없으면(도입 첫 주 등) 이력으로 다시 센 값 */}
+      {held.start != null && (() => {
+        // 연산자·괄호는 숫자와 같은 줄에 — 아래에 이름 줄 높이만큼 빈 칸을 둬 숫자 줄에 맞춘다
+        const op = (o: string) => (
+          <div className="flex flex-col" aria-hidden="true">
+            <span className="text-base font-bold text-ive-text-muted">{o}</span>
+            <span className="text-xs invisible">·</span>
+          </div>
+        )
+        const term = (v: number | null, l: string) => (
+          <div className="flex flex-col">
+            <span className="text-base font-bold text-ive-text tabular-nums">{v == null ? '—' : v.toLocaleString()}</span>
+            <span className="text-xs font-bold text-ive-text-muted">{l}</span>
+          </div>
+        )
+        const dropped = held.gap != null && held.gap > 0
+        return (
+          <div className="bg-ive-bg/50 border border-ive-border-dark rounded-lg p-3 flex items-center justify-between text-center">
+            {term(held.start, tr('eqStart', { label: prevLabel }))}
+            {op('+')}
+            {term(held.inflow, tr('eqInflow'))}
+            {op('−')}
+            {/* 나가는 것(완료·빠짐)은 괄호로 한 덩어리 — 괄호가 숫자에 붙게 안쪽은 좁은 간격 */}
+            {dropped ? (
+              <div className="flex items-center gap-0.5">
+                {op('(')}{term(held.completed, tr('eqCompleted'))}{op('+')}{term(held.gap, tr('eqDropped'))}{op(')')}
+              </div>
+            ) : term(held.completed, tr('eqCompleted'))}
+            {op('=')}
+            {term(held.end, held.live ? tr('eqNow') : tr('eqEnd'))}
+          </div>
+        )
+      })()}
       {held.gap != null && held.gap > 0 && (
         <span className="text-xs font-bold text-ive-text-muted">{tr('eqDroppedNote')}</span>
       )}

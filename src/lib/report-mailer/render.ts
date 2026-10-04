@@ -139,10 +139,12 @@ function heldBlock(t: T, m: ReportModel, at: 'now' | 'closed', prevLabel: string
   }
   const sub = parts.length ? line(parts.join(' · ')) : ''
   // 보유 식 — 화면과 같은 칸(완료 없이 빠짐은 있을 때만). 지난 기간 말 기록이 없으면 이력으로 다시 센 값
-  const dropped = h.gap != null && h.gap > 0
-    ? ` − ${esc(t('eqDropped'))} ${num(`${at}.held.gap`, h.gap, String(h.gap))}` : ''
+  // 나가는 것(완료·빠짐)은 괄호로 묶는다(화면과 같은 꼴)
+  const done = `${esc(t('eqCompleted'))} ${num(`${at}.held.completed`, h.completed, String(h.completed))}`
+  const out = h.gap != null && h.gap > 0
+    ? `(${done} + ${esc(t('eqDropped'))} ${num(`${at}.held.gap`, h.gap, String(h.gap))})` : done
   const eq = h.start != null
-    ? `<div style="font-size:13px;color:${COLOR.secondary};margin-top:8px">${esc(t('eqStart', { label: prevLabel }))} ${num(`${at}.held.start`, h.start, String(h.start))} + ${esc(t('eqInflow'))} ${num(`${at}.held.inflow`, h.inflow, String(h.inflow))} − ${esc(t('eqCompleted'))} ${num(`${at}.held.completed`, h.completed, String(h.completed))}${dropped} = ${esc(h.live ? t('eqNow') : t('eqEnd'))} ${num(`${at}.held.end`, h.end, String(h.end))}</div>`
+    ? `<div style="font-size:13px;color:${COLOR.secondary};margin-top:8px">${esc(t('eqStart', { label: prevLabel }))} ${num(`${at}.held.start`, h.start, String(h.start))} + ${esc(t('eqInflow'))} ${num(`${at}.held.inflow`, h.inflow, String(h.inflow))} − ${out} = ${esc(h.live ? t('eqNow') : t('eqEnd'))} ${num(`${at}.held.end`, h.end, String(h.end))}</div>`
     : ''
   const notes = [
     h.gap != null && h.gap > 0 ? t('eqDroppedNote') : null,
