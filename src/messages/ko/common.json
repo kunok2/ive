@@ -33,5 +33,9 @@
   "selectAll": "전체",
   "clearSelection": "해제",
   "searchPlaceholder": "검색...",
-  "noResults": "결과 없음"
+  "noResults": "결과 없음",
+  "appUpdate": {
+    "title": "새 버전이 있습니다 — 눌러서 새로고침",
+    "short": "새로고침"
+  }
 }

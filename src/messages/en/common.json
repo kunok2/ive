@@ -33,5 +33,9 @@
   "selectAll": "All",
   "clearSelection": "Clear",
   "searchPlaceholder": "Search...",
-  "noResults": "No results"
+  "noResults": "No results",
+  "appUpdate": {
+    "title": "A new version is available — tap to reload",
+    "short": "Reload"
+  }
 }
