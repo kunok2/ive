@@ -375,8 +375,8 @@ function resolveUserAvatar(avatar: string | null | undefined, userId: string | n
   return avatar
 }
 
-// 처리자(D) 판정에서 단계 작업자 행(검증·확인·재현 에이전트)을 뺀다 — 확인 에이전트가 처리자로 보이면 안 된다.
-const NOT_STAGE_ROW = "te.id NOT LIKE 'ex-verify-%' AND te.id NOT LIKE 'ex-confirm-%' AND te.id NOT LIKE 'ex-reproduce-%'"
+// 처리자(D) 판정에서 단계 작업자 행(검증·확인·재현 에이전트)과 AI 채팅·충돌 검사를 뺀다 — 확인 에이전트나 대화만 한 에이전트가 처리자로 보이면 안 된다.
+const NOT_STAGE_ROW = "te.id NOT LIKE 'ex-verify-%' AND te.id NOT LIKE 'ex-confirm-%' AND te.id NOT LIKE 'ex-reproduce-%' AND te.id NOT LIKE 'exec-chat-%' AND te.id NOT LIKE 'ex-conflict%'"
 
 export function getActualRoleAssignees(projectId: string, issueIid: number): ActualRoleAssignees {
   const db = getDb()

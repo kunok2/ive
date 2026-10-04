@@ -83,7 +83,7 @@ export async function POST(
       );
     }
     const currentLabels: string[] = currentIssue?.labels || [];
-    const hasActive = hasActiveExecution(projectId, Number(iid));
+    const hasActive = hasActiveExecution(projectId, Number(iid), { ignoreChat: true }); // 화면(GET 상세)과 같은 기준
     // stageFromLabels: IVE 라벨만 있고 단계 라벨이 없으면 null → 클라이언트의 'none' 으로 정규화.
     const actualStage = stageFromLabels(currentLabels, project, { hasActiveExec: hasActive }) ?? 'none';
     if (actualStage !== stage) {
@@ -160,7 +160,7 @@ export async function POST(
           userAvatar: assignee?.avatar_url || user.avatar,
         };
 
-        assignIssueAtomically(projectId, Number(iid), 'dev', execution);
+        assignIssueAtomically(projectId, Number(iid), 'dev', execution, { ignoreChat: true });
 
         // 브랜치 생성
         const branchName = `dev-${iid}`;
@@ -194,8 +194,9 @@ export async function POST(
       // 1. 아직 실행 중인 dev/기타 작업을 먼저 success로 닫음 (ended_at 찍힘)
       //    — 이 순서가 핵심: 방금 닫힌 execs도 아래 markIssueVerifyStarted 대상에 포함되어야 함
       const db = getDb();
+      //    (열려 있는 AI 채팅은 단계와 무관한 대화라 닫지 않는다 — 닫으면 대화 중인 세션의 실행 기록만 끝나 버린다)
       const allActiveExecs = db.prepare(
-        "SELECT id FROM task_executions WHERE project_id = ? AND issue_iid = ? AND status IN ('running', 'assigned')"
+        "SELECT id FROM task_executions WHERE project_id = ? AND issue_iid = ? AND status IN ('running', 'assigned') AND id NOT LIKE 'exec-chat-%'"
       ).all(projectId, Number(iid)) as any[];
       for (const exec of allActiveExecs) {
         updateExecutionStatus(exec.id, 'success', new Date().toISOString());
@@ -229,7 +230,7 @@ export async function POST(
           userName: user.name,
           userAvatar: user.avatar,
         };
-        const created = assignIssueAtomically(projectId, Number(iid), 'verifying', verifyExecution);
+        const created = assignIssueAtomically(projectId, Number(iid), 'verifying', verifyExecution, { ignoreChat: true });
         console.log(`[Stage] Verify execution created for #${iid}: ${created}, executionId: ${executionId}`);
         if (!created) {
           console.warn(`[Stage] Failed to create verify execution for #${iid}: race condition detected`);
@@ -312,7 +313,7 @@ export async function POST(
           userName: user.name,
           userAvatar: user.avatar,
         };
-        const created = assignIssueAtomically(projectId, Number(iid), 'confirming', confirmExecution);
+        const created = assignIssueAtomically(projectId, Number(iid), 'confirming', confirmExecution, { ignoreChat: true });
         console.log(`[Stage] Confirm execution created for #${iid}: ${created}, executionId: ${executionId}`);
       } catch (e) {
         console.warn(`[Stage] Failed to create confirm execution for #${iid}:`, e);

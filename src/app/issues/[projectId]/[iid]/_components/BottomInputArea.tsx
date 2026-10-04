@@ -275,6 +275,14 @@ function CommentModeInput({
   // 에이전트가 이 작업을 하는 동안은 단계 버튼(유입·재실행·검증 시작·확인 등)을 내놓지 않는다 — 누르면 같은 일을 겹쳐 하게 된다.
   // 코멘트는 그대로 남길 수 있다. 서버(stage 라우트)도 같은 이유로 막는다.
   const canProgressStage = canProgress && !agentWork
+  // 닫힌 작업 — 앞으로 가는 단계 버튼(검증 시작·확인 등)과 유입은 내놓지 않는다. 「← 재실행」은 이슈를 다시 열어 재처리하는 길이라 남긴다
+  const isClosed = issue.state === 'closed'
+  // 등록 뒤(입력이 비면) 늘어난 높이를 되돌린다
+  const commentTextareaRef = useRef<HTMLTextAreaElement>(null)
+  useEffect(() => {
+    const el = commentTextareaRef.current
+    if (!comment && el) { el.style.height = ''; el.style.overflow = 'hidden' }
+  }, [comment])
 
   return (
     <div className="flex flex-col gap-2">
@@ -287,6 +295,7 @@ function CommentModeInput({
         </div>
       )}
       <textarea
+        ref={commentTextareaRef}
         value={comment}
         onChange={e => {
           onSetComment(e.target.value)
@@ -301,6 +310,7 @@ function CommentModeInput({
         onDragOver={commentPasteHandlers.onDragOver}
         onKeyDown={e => {
           if (e.key !== 'Enter') return
+          if (e.nativeEvent.isComposing) return  // 한글 조합 확정 Enter — 보내면 마지막 글자가 입력창에 남는다
           const isMobile = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0)
           if (isMobile) return
           if (e.shiftKey) return
@@ -316,7 +326,7 @@ function CommentModeInput({
             dev_fail 은 처리 단계에서의 실패이므로 '이전 단계'(유입)로 가는 게 아니라 '재처리' 의미. */}
         <div className="flex-1 flex justify-start gap-1.5">
           {/* 유입 버튼 — 검증대기/검증 단계에서만 표시 (이전 버튼 앞에 위치) */}
-          {canProgressStage && (issue.stage === 'verify_waiting' || issue.stage === 'verifying') && (
+          {canProgressStage && !isClosed && (issue.stage === 'verify_waiting' || issue.stage === 'verifying') && (
             <button
               onClick={onCommentAndInflow}
               disabled={posting || !comment.trim()}
@@ -363,7 +373,7 @@ function CommentModeInput({
         {/* 전진 →: 다음 단계 진입 (검증완료/다음단계로) */}
         <div className="flex-1 flex justify-end">
           {/* 검증대기·확인대기는 늘 「검증 시작 →」·「확인 시작 →」 — 에이전트가 맡았어도 MR 없음 등으로 못 맡으면 사람이 진행한다 */}
-          {(preferredAgent?.assignMode === 'assignee' || issue.stage === 'none' || issue.stage === 'verify_waiting' || issue.stage === 'confirm_waiting') && NEXT_STAGE[issue.stage] && canProgressStage && (
+          {(preferredAgent?.assignMode === 'assignee' || issue.stage === 'none' || issue.stage === 'verify_waiting' || issue.stage === 'confirm_waiting') && NEXT_STAGE[issue.stage] && canProgressStage && !isClosed && (
             <button
               onClick={onCommentAndNextStage}
               disabled={posting}
@@ -373,7 +383,7 @@ function CommentModeInput({
               {postingType === 'next' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><span>{NEXT_STAGE[issue.stage].label}</span><i className="fa-solid fa-arrow-right text-[10px]" /></>}
             </button>
           )}
-          {!((preferredAgent?.assignMode === 'assignee' || issue.stage === 'none') && NEXT_STAGE[issue.stage]) && canProgressStage && (issue.stage === 'verifying' || issue.stage === 'confirming') && (
+          {!((preferredAgent?.assignMode === 'assignee' || issue.stage === 'none') && NEXT_STAGE[issue.stage]) && canProgressStage && !isClosed && (issue.stage === 'verifying' || issue.stage === 'confirming') && (
             <button
               onClick={onCommentAndDone}
               disabled={posting || !comment.trim()}
@@ -414,6 +424,9 @@ function ChatModeInput({
 }) {
   const tIssue = useTranslations('issue')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // 보낸 뒤(입력이 비면) 늘어난 높이를 되돌린다 — onChange 에서만 키워서 보낸 뒤에도 큰 채로 남았다
+  const chatTextareaRef = useRef<HTMLTextAreaElement>(null)
+  useEffect(() => { if (!chatInput && chatTextareaRef.current) chatTextareaRef.current.style.height = '' }, [chatInput])
   const anyUploading = chatImages.some(c => c.uploading)
   const canSend = !chatSending && !anyUploading && (!!chatInput.trim() || chatImages.some(c => c.url && !c.error))
 
@@ -466,6 +479,7 @@ function ChatModeInput({
           <i className="fa-solid fa-image" />
         </button>
         <textarea
+          ref={chatTextareaRef}
           value={chatInput}
           onChange={e => {
             onSetChatInput(e.target.value)
@@ -477,6 +491,7 @@ function ChatModeInput({
           onDragOver={e => { if (e.dataTransfer?.types?.includes('Files')) e.preventDefault() }}
           onKeyDown={e => {
             if (e.key !== 'Enter') return
+            if (e.nativeEvent.isComposing) return  // 한글 조합 확정 Enter — 보내면 마지막 글자가 입력창에 남는다
             const isMobile = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0)
             if (isMobile) return
             if (e.shiftKey) return
@@ -485,7 +500,6 @@ function ChatModeInput({
           }}
           placeholder={tIssue('chatPlaceholder')}
           rows={1}
-          disabled={chatSending}
           className="flex-1 min-h-10 bg-ive-bg-card border border-ive-cyan/30 rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-cyan/50 disabled:opacity-50"
           style={{ overflow: 'auto', scrollbarGutter: 'stable' }}
         />

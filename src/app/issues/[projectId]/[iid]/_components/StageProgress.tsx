@@ -110,7 +110,8 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
   // 단계별 시간 계산 — 칩(=stage 지속/경과)과 커넥터(=stage 사이 대기)
   // 진행 중일 때만 1초 타이머로 now 갱신 (현재 단계 경과시간 라이브 업데이트)
   const [now, setNow] = useState(() => Date.now())
-  const isLive = current > 0 && current < 5 && stage !== 'done' && stage !== 'closed' && stage !== 'rejected' && stage !== 'dev_fail'
+  // 단계 도중에 닫힌 작업(라벨은 그대로, closedAt 있음)은 멈춘 시계다 — 닫힌 뒤로 경과가 늘어나면 안 된다
+  const isLive = !closedAt && current > 0 && current < 5 && stage !== 'done' && stage !== 'closed' && stage !== 'rejected' && stage !== 'dev_fail'
   useEffect(() => {
     if (!isLive) return
     const id = setInterval(() => setNow(Date.now()), 1000)
@@ -121,8 +122,7 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
     const d = new Date(b).getTime() - new Date(a).getTime()
     return d > 0 ? d : null
   }
-  const isClosed = stage === 'closed' || stage === 'done'
-  const stageEnd = isClosed && closedAt ? new Date(closedAt).getTime() : now
+  const stageEnd = closedAt ? new Date(closedAt).getTime() : now
   // 칩 표시 시간 — 유입은 "이벤트"라 표시 안 함 (대기시간은 1→2 커넥터에)
   // 처리/검증/확인: 지나간 단계 = 수행시간, 현재 단계 = 경과시간
   const stageDur: Record<MacroIndex, number | null> = {
@@ -144,7 +144,7 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
   //   2→3: devEndedAt → verifyStartedAt (처리 완료 후 검증 대기) — 진행 중이면 elapsed
   //   3→4: verifyEndedAt → confirmStartedAt (검증 통과 후 확인 대기) — 확인대기 중이면 elapsed
   //   4→5: 없음 — 완료는 확인 완료 시점이다(그 뒤 Git 이 이슈를 닫기까지의 지연은 작업 시간이 아니다)
-  const elapsedFrom = (t: string | null | undefined): number | null => t ? Math.max(0, now - new Date(t).getTime()) : null
+  const elapsedFrom = (t: string | null | undefined): number | null => t ? Math.max(0, stageEnd - new Date(t).getTime()) : null
   const waitDur: Record<number, number | null> = {
     // 처리대기 → 처리 픽업: scheduledAt 기준. stage='none' 이면 scheduledAt=null → 표시 안 함.
     1: stageTimes?.firstDevStartedAt

@@ -9,6 +9,7 @@ import { useDialog } from '@/components/ui/ConfirmDialog'
 import { useToast } from '@/components/ui/Toast'
 import { useTranslations } from 'next-intl'
 import { useStageConfig } from './StageActions'
+import { transitionTarget } from '@/lib/stage-transitions'
 import { useStore } from '@/lib/store'
 import IssueHeader from './IssueHeader'
 import NotesList from './NotesList'
@@ -28,20 +29,10 @@ const STAGE_NAMES_KO: Record<string, string> = {
   confirm_waiting: '확인대기', confirming: '확인',
   done: '완료', closed: '완료', rejected: '거부',
 }
-const STAGE_TRANSITION_DESTS: Record<string, Record<string, string>> = {
-  none: { schedule: 'waiting' },
-  waiting: { start_dev: 'dev' },
-  dev: { complete: 'verify_waiting', cancel: 'waiting', retry: 'waiting' },
-  verify_waiting: { start_verification: 'verifying', cancel: 'waiting', retry: 'waiting', to_inflow: 'none' },
-  verifying: { approve: 'confirm_waiting', complete: 'confirm_waiting', reject: 'waiting', retry: 'waiting', to_inflow: 'none' },
-  confirm_waiting: { start_confirmation: 'confirming', cancel: 'waiting', return_to_dev: 'verify_waiting', retry: 'waiting' },
-  confirming: { accept: 'done', return_to_dev: 'verify_waiting', retry: 'waiting' },
-  done: { reopen: 'confirm_waiting', retry: 'waiting' },
-  rejected: { retry: 'waiting' },
-}
+// 말머리의 도착 단계는 실제 전이 표(TRANSITIONS)에서 계산한다 — 따로 적은 표는 전이 표와 어긋났다(확인대기 재작업 → 검증대기로 적힘 등)
 function stageTransitionPrefix(fromStage: string | undefined | null, action: string): string {
   if (!fromStage) return ''
-  const to = STAGE_TRANSITION_DESTS[fromStage]?.[action]
+  const to = transitionTarget(fromStage, action)
   if (!to) return ''
   const fromName = STAGE_NAMES_KO[fromStage] || fromStage
   const toName = STAGE_NAMES_KO[to] || to
@@ -134,6 +125,8 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
   // --- Core state ---
   const [issue, setIssue] = useState<IssueDetail | null>(null)
   const [notes, setNotes] = useState<Note[]>([])
+  const notesRef = useRef<Note[]>([])
+  useEffect(() => { notesRef.current = notes }, [notes])
   const [loading, setLoading] = useState(true)
   const [notesLoading, setNotesLoading] = useState(true)
   const [preferredAgent, setPreferredAgent] = useState<{ assignMode?: string; preferredAgentId: string | null; preferredAgentName: string | null; preferredAgentAvatar: string | null; preferredAgentCliName: string | null } | null>(null)
@@ -185,6 +178,8 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
   const [chatInput, setChatInput] = useState('')
   const [chatSending, setChatSending] = useState(false)
   const [chatSendingStartTime, setChatSendingStartTime] = useState<number | null>(null)
+  // 자동 종료를 미룬 횟수 — 바뀌면 5분 타이머를 다시 건다
+  const [chatIdleTick, setChatIdleTick] = useState(0)
   // 채팅 첨부 이미지: /uploads 로 올려 url/markdown 을 얻고, 전송 시 WS 로 함께 보낸다.
   const [chatImages, setChatImages] = useState<{ id: string; preview: string; url: string | null; markdown: string | null; uploading: boolean; error?: boolean }[]>([])
   const [chatStarting, setChatStarting] = useState(false)
@@ -194,7 +189,12 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
   const [chatHistoryOnly, setChatHistoryOnly] = useState(false)
   const chatSessionRef = useRef<string | null>(null)
   const chatWsRef = useRef<WebSocket | null>(null)
-  const chatWsResolveRef = useRef<(() => void) | null>(null)
+  // WS 콜백·타이머 안에서 최신 값을 읽기 위한 거울 — 끊김 시 「보내는 중」이었는지 판단
+  const chatSendingRef = useRef(false)
+  useEffect(() => { chatSendingRef.current = chatSending }, [chatSending])
+  // 응답 대기 폴링(페이지 재진입·WS 끊김 뒤) — 하나만 돌고, 화면을 떠나면 멈춘다
+  const chatPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  useEffect(() => () => { if (chatPollRef.current) clearInterval(chatPollRef.current) }, [])
   const chatStreamTextRef = useRef('')
 
   // ===================== Data fetching =====================
@@ -248,12 +248,15 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
       setLoading(false)
       return
     }
-    const res = await fetch(`/api/projects/${projectId}/issues/${iid}`, { cache: 'no-store' })
-    if (res.ok) {
-      const data = await res.json()
-      setIssue(prev => (prev && JSON.stringify(prev) === JSON.stringify(data)) ? prev : data)
-    }
-    setLoading(false)
+    // 네트워크 오류여도 로딩은 끝낸다 — 스피너가 끝없이 돌지 않게(이미 보이던 내용은 그대로 둔다)
+    try {
+      const res = await fetch(`/api/projects/${projectId}/issues/${iid}`, { cache: 'no-store' })
+      if (res.ok) {
+        const data = await res.json()
+        setIssue(prev => (prev && JSON.stringify(prev) === JSON.stringify(data)) ? prev : data)
+      }
+    } catch { /* 다음 폴링에서 다시 시도 */ }
+    finally { setLoading(false) }
   }, [projectId, iid])
 
   // 노트 로딩 표시는 "최초 진입" 한 번만 보여준다. 액션 후 갱신 시에는
@@ -270,15 +273,24 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
       return
     }
     if (!notesLoadedOnceRef.current) setNotesLoading(true)
-    const res = await fetch(`/api/projects/${projectId}/issues/${iid}/notes?t=${Date.now()}`)
-    if (res.ok) {
-      const data = await res.json()
-      setNotes(prev => {
+    try {
+      const res = await fetch(`/api/projects/${projectId}/issues/${iid}/notes?t=${Date.now()}`)
+      if (res.ok) {
+        const data = await res.json()
+        const prev = notesRef.current
         // 동일 데이터면 reference를 유지해 자식 리렌더 최소화
-        if (prev.length === data.length && JSON.stringify(prev) === JSON.stringify(data)) return prev
-        return data
-      })
-    }
+        if (prev.length === data.length && JSON.stringify(prev) === JSON.stringify(data)) {
+          // 노트가 그대로면 [notes] effect 가 돌지 않아 「맨 아래로」 예약이 남았다가, 몇 분 뒤 폴링에 새 노트가 오면
+          // 위를 읽던 사람을 끌어내렸다 — 여기서 바로 처리하고 지운다
+          if (pendingScrollToBottomRef.current) {
+            pendingScrollToBottomRef.current = false
+            requestAnimationFrame(() => notesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }))
+          }
+        } else {
+          setNotes(data)
+        }
+      }
+    } catch { /* 다음 폴링에서 다시 시도 */ }
     notesLoadedOnceRef.current = true
     setNotesLoading(false)
   }, [projectId, iid])
@@ -435,18 +447,32 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
     try {
       const res = await fetch(`/api/projects/${projectId}/issues/${iid}/close`, { method: 'POST' })
       if (res.ok) { goBack(); return }
-    } finally { setIsClosing(false) }
+      const data = await res.json().catch(() => ({})); toast(data.error || `${tIssue('closeIssue')}: ${res.status}`, 'error')
+    } catch { toast(tc('networkError'), 'error') }
+    finally { setIsClosing(false) }
   }
 
   async function handleConfirmAssignee(pick: IssueAssignee | null, _auto: boolean) {
     if (!issue) return
     const updated = pick ? [pick] : []
+    const prevAssignees = issue.assignees
     setIssue({ ...issue, assignees: updated })
     setAssigneePickerOpen(false)
-    await fetch(`/api/projects/${projectId}/issues/${iid}/assignees`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ assigneeIds: updated.map(a => a.id), assigneeUsernames: updated.map(a => a.username) }),
-    })
+    // 화면을 먼저 바꾼다 — 실패하면 되돌리고 알린다(종전에는 실패해도 바뀐 것처럼 보였다)
+    try {
+      const res = await fetch(`/api/projects/${projectId}/issues/${iid}/assignees`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assigneeIds: updated.map(a => a.id), assigneeUsernames: updated.map(a => a.username) }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setIssue(curr => curr ? { ...curr, assignees: prevAssignees } : curr)
+        toast(data.error || tc('saveFailed'), 'error')
+      }
+    } catch {
+      setIssue(curr => curr ? { ...curr, assignees: prevAssignees } : curr)
+      toast(tc('networkError'), 'error')
+    }
   }
 
   async function handleChangePreferredAgent(agentIdOrMode: string | null) {
@@ -591,14 +617,15 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
     try {
       if (!(await precheckStage(stageNow, stageAction))) return
       const noteBody = stageTransitionPrefix(stageNow, stageAction) + comment.trim()
-      const res = await fetch(`/api/projects/${projectId}/issues/${iid}/notes`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ body: noteBody }),
-      })
-      if (!res.ok) { const data = await res.json().catch(() => ({})); toast(data.error || '코멘트 작성에 실패했습니다', 'error'); return }
-      setComment(''); localStorage.removeItem(commentKey)
-      pendingScrollToBottomRef.current = true; await fetchNotes()
+      // 코멘트는 실제로 승인하는 순간에 올린다 — 열린 MR 확인 창에서 취소하면 단계도 코멘트도 그대로(입력창 유지)
       const doStage = async () => {
+        const res = await fetch(`/api/projects/${projectId}/issues/${iid}/notes`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ body: noteBody }),
+        })
+        if (!res.ok) { const data = await res.json().catch(() => ({})); toast(data.error || '코멘트 작성에 실패했습니다', 'error'); return }
+        setComment(''); localStorage.removeItem(commentKey)
+        pendingScrollToBottomRef.current = true; await fetchNotes()
         const stageRes = await fetch(`/api/projects/${projectId}/issues/${iid}/stage`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ stage: stageNow, action: stageAction }),
@@ -655,18 +682,19 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
     if (!next) return
     postingRef.current = true; setPosting(true); setPostingType('next')
     try {
-      if (comment.trim()) {
-        if (!(await precheckStage(next.stage, next.action))) return
-        const noteBody = stageTransitionPrefix(issue.stage, next.action) + comment.trim()
-        const res = await fetch(`/api/projects/${projectId}/issues/${iid}/notes`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ body: noteBody }),
-        })
-        if (!res.ok) return
-        setComment(''); localStorage.removeItem(commentKey)
-        pendingScrollToBottomRef.current = true; await fetchNotes()
-      }
+      const noteBody = comment.trim() ? stageTransitionPrefix(issue.stage, next.action) + comment.trim() : null
+      if (noteBody && !(await precheckStage(next.stage, next.action))) return
+      // 코멘트는 실제로 단계를 옮기는 순간에 올린다 — 열린 MR 확인 창에서 취소하면 코멘트도 남지 않는다
       const doNextStage = async () => {
+        if (noteBody) {
+          const res = await fetch(`/api/projects/${projectId}/issues/${iid}/notes`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ body: noteBody }),
+          })
+          if (!res.ok) { const data = await res.json().catch(() => ({})); toast(data.error || '코멘트 작성에 실패했습니다', 'error'); return }
+          setComment(''); localStorage.removeItem(commentKey)
+          pendingScrollToBottomRef.current = true; await fetchNotes()
+        }
         const stageRes = await fetch(`/api/projects/${projectId}/issues/${iid}/stage`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ stage: next.stage, action: next.action }),
@@ -695,7 +723,9 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
         body: JSON.stringify({ title: editTitle.trim(), description: editDesc }),
       })
       if (res.ok) { setEditMode(false); await refreshAll() }
-    } finally { setSaving(false) }
+      else { const data = await res.json().catch(() => ({})); toast(data.error || tc('saveFailed'), 'error') }  // 편집 내용은 그대로 둔다
+    } catch { toast(tc('networkError'), 'error') }
+    finally { setSaving(false) }
   }
 
   async function handleDueDateChange(next: string | null) {
@@ -765,7 +795,9 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
     // 돌아오면 세션이 복원되며 아직 생각 중이면 "생각중" 상태로 이어 보여준다.
     // WS만 닫아 구독을 해제하고, 세션 정리는 서버측 idle 리퍼 + 명시적 "대화 종료" 버튼이 담당.
     return () => {
-      if (chatWsRef.current) { try { chatWsRef.current.close() } catch {} chatWsRef.current = null }
+      // ref 를 먼저 비워, 이 close 를 onclose 가 「끊김」으로 오인해 폴링을 시작하지 않게 한다
+      const ws = chatWsRef.current; chatWsRef.current = null
+      if (ws) { try { ws.close() } catch {} }
     }
   }, [projectId, iid])
 
@@ -780,11 +812,19 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
     }
     const processing = await fetchMsgs()
     if (processing) {
-      setChatSending(true); setChatStreamText('...')
-      const poll = setInterval(async () => {
+      // 답을 기다리는 중 — 재진입이면 시작 시각을 몰라 지금부터 잰다(0초에 멈춰 보이지 않게)
+      setChatSending(true); setChatStreamText('...'); setChatSendingStartTime(t => t ?? Date.now())
+      if (chatPollRef.current) clearInterval(chatPollRef.current)
+      chatPollRef.current = setInterval(async () => {
         const stillProcessing = await fetchMsgs()
-        if (!stillProcessing) { clearInterval(poll); setChatSending(false); setChatStreamText('') }
+        if (!stillProcessing) {
+          if (chatPollRef.current) { clearInterval(chatPollRef.current); chatPollRef.current = null }
+          chatStreamTextRef.current = ''; setChatSending(false); setChatStreamText('')
+        }
       }, 2000)
+    } else if (chatSendingRef.current) {
+      // 끊긴 사이 답이 이미 끝났다 — 저장된 대화로 바꿨으니 대기 표시만 푼다
+      chatStreamTextRef.current = ''; setChatSending(false); setChatStreamText('')
     }
   }
 
@@ -849,14 +889,21 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
           setChatMessages(msgs => [...msgs, { id: `temp-${Date.now()}-${Math.floor(Math.random() * 1000)}-ai`, sessionId: chatSessionRef.current || '', role: 'assistant', content: text.trim(), createdAt: new Date().toISOString() }])
         }
         setChatSending(false)
-        if (chatWsResolveRef.current) { chatWsResolveRef.current(); chatWsResolveRef.current = null }
       } else if (data.type === 'error') {
-        chatStreamTextRef.current += `\n\n[Error: ${data.content}]`; setChatStreamText(chatStreamTextRef.current); setChatSending(false)
-        if (chatWsResolveRef.current) { chatWsResolveRef.current(); chatWsResolveRef.current = null }
+        // 응답 말풍선은 보내는 중에만 그려지므로, 받은 부분과 오류를 대화에 남겨야 보인다(스피너만 사라지고 답이 없던 것)
+        const partial = chatStreamTextRef.current.trim(); chatStreamTextRef.current = ''; setChatStreamText('')
+        setChatMessages(msgs => [...msgs, { id: `temp-${Date.now()}-${Math.floor(Math.random() * 1000)}-err`, sessionId: chatSessionRef.current || '', role: 'assistant', content: `${partial ? partial + '\n\n' : ''}⚠️ ${data.content || tIssue('chatError')}`, createdAt: new Date().toISOString() }])
+        setChatSending(false)
       }
     }
-    ws.onclose = () => { chatWsRef.current = null; if (chatWsResolveRef.current) { chatWsResolveRef.current(); chatWsResolveRef.current = null } }
-    ws.onerror = () => { chatWsRef.current = null; if (chatWsResolveRef.current) { chatWsResolveRef.current(); chatWsResolveRef.current = null } }
+    // 끊김(화면 꺼짐·서버 재기동·네트워크 전환) — 서버는 답을 끝까지 DB 에 저장하므로, 보내는 중이었다면 폴링으로 이어 받는다.
+    // 우리가 일부러 닫은 경우(교체·화면 떠남)는 ref 가 이미 다른 값이라 무시한다. error 뒤에는 늘 close 가 온다.
+    ws.onclose = () => {
+      if (chatWsRef.current !== ws) return
+      chatWsRef.current = null
+      const sid = chatSessionRef.current
+      if (chatSendingRef.current && sid) void loadChatMessages(sid)
+    }
     return ws
   }
 
@@ -971,14 +1018,32 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
   // Auto-close chat after 5 minutes inactivity
   useEffect(() => {
     if (!chatSessionId || chatSending) return
+    const IDLE_MS = 5 * 60 * 1000
     const timer = setTimeout(async () => {
+      // 닫기 전에 서버에 묻는다 — 다른 탭·기기에서 대화를 이어가는 중이면(답을 만드는 중이거나 최근 메시지가 있으면)
+      // 이 탭의 타이머가 그 세션을 끊으면 안 된다. 그 경우 최신 대화로 바꿔 타이머를 다시 건다.
+      try {
+        const res = await fetch(`/api/projects/${projectId}/issues/${iid}/chat/messages?sessionId=${chatSessionId}`)
+        const data = await res.json()
+        const msgs: ChatMessage[] = Array.isArray(data.messages) ? data.messages : []
+        // chat_messages.created_at 은 SQLite datetime('now') — UTC 인데 Z 가 없어 그대로 읽으면 브라우저 시간대로 해석된다
+        const utcMs = (v: string) => new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(v) ? v : v.replace(' ', 'T') + 'Z').getTime()
+        const lastAt = msgs.length ? utcMs(msgs[msgs.length - 1].createdAt) : 0
+        if (data.agentProcessing === true || Date.now() - lastAt < IDLE_MS) {
+          if (msgs.length) setChatMessages(msgs)
+          if (data.agentProcessing === true) void loadChatMessages(chatSessionId)
+          setChatIdleTick(n => n + 1)
+          return
+        }
+      } catch { /* 조회 실패 — 종전대로 닫는다 */ }
       setChatMessages(prev => [...prev, { id: `sys-${Date.now()}`, sessionId: chatSessionId, role: 'assistant', content: tIssue('chatIdleClose', { agent: chatAgentName || 'AI' }), createdAt: new Date().toISOString() }])
       try { await fetch(`/api/projects/${projectId}/issues/${iid}/chat/end`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: chatSessionId }) }) } catch {}
       setChatSessionId(null); setChatHistoryOnly(true)
-    }, 5 * 60 * 1000)
+    }, IDLE_MS)
     return () => clearTimeout(timer)
+  // 입력 중(chatInput)도 활동으로 본다 — 긴 글을 쓰는 사이 세션이 닫히지 않게
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chatSessionId, chatMessages.length, chatSending])
+  }, [chatSessionId, chatMessages.length, chatSending, chatInput, chatIdleTick])
 
   // ===================== Render =====================
 

@@ -100,8 +100,8 @@ async function main() {
   // Chat WebSocket server (separate from terminal)
   const chatWss = new WebSocketServer({ noServer: true })
 
-  chatWss.on('connection', (ws: WebSocket) => {
-    handleChatWebSocket(ws)
+  chatWss.on('connection', (ws: WebSocket, _req: unknown, userId: string) => {
+    handleChatWebSocket(ws, userId)
   })
 
   server.on('upgrade', (req, socket, head) => {
@@ -141,7 +141,7 @@ async function main() {
 
     if (pathname === '/api/chat') {
       chatWss.handleUpgrade(req, socket, head, (ws) => {
-        chatWss.emit('connection', ws, req)
+        chatWss.emit('connection', ws, req, auth.userId)
       })
     } else {
       wss.handleUpgrade(req, socket, head, (ws) => {

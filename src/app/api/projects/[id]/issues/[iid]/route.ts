@@ -135,7 +135,7 @@ export async function GET(
 
     // 레이블에서 stage 판정
     const issueLabels = issue.labels || []
-    const activeExec = hasActiveExecution(projectId, Number(iid))
+    const activeExec = hasActiveExecution(projectId, Number(iid), { ignoreChat: true }) // 대화를 열어도 처리 실패가 「처리 중」으로 보이지 않게
     const stage = stageFromLabels(issueLabels, project, { hasActiveExec: activeExec })
 
     const assignees = (issue.assignees || []).map((a: any) => ({

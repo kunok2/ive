@@ -3,6 +3,7 @@ import { getProject, getProjectAccess, getProjectAuthToken, isIssueAssignee, get
 import { getCurrentUser } from '@/lib/auth'
 import { logActivity } from '@/lib/activity'
 import { pickAgentForChat, prepareChatWorkspace } from '@/lib/chat-agent'
+import { maskSecrets } from '@/lib/secret-mask'
 
 /**
  * GET: Check if there's an active chat session for this issue
@@ -141,7 +142,10 @@ export async function POST(
 
     return NextResponse.json({ sessionId, existing: false, agentName: agentInfo.agent.name, agentAvatar: agentInfo.agent.avatar })
   } catch (err) {
-    console.error('[Chat] Failed to start session:', err)
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed to start chat' }, { status: 500 })
+    console.error('[Chat] Failed to start session:', maskSecrets(err instanceof Error ? (err.stack || err.message) : String(err)))
+    // 작업 디렉토리 준비(git clone) 실패 메시지에는 clone URL 의 접근 토큰이 섞인다 — 화면·로그로 내보내기 전에 가린다
+    let knownSecrets: string[] = []
+    try { knownSecrets = [getProjectAuthToken(projectId)].filter(Boolean) } catch { /* 토큰 없음 */ }
+    return NextResponse.json({ error: err instanceof Error ? maskSecrets(err.message, knownSecrets) : 'Failed to start chat' }, { status: 500 })
   }
 }

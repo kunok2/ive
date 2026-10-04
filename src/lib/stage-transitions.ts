@@ -271,3 +271,19 @@ export function stageLabelFor(p: Project, stage: string | null | undefined): str
     default: return null
   }
 }
+
+/**
+ * 전이 후 단계 — 화면의 코멘트 말머리(「검증 중 → 확인대기」)가 실제 전이와 어긋나지 않게 이 표에서 계산한다.
+ * 기본 라벨 이름으로 addLabels 를 풀어 단계로 되돌린다. 단계 라벨을 붙이지 않는 전이(to_inflow)는 'none'.
+ */
+export function transitionTarget(stage: string | null | undefined, action: string): string | null {
+  const t = (TRANSITIONS[stage || ''] || []).find(x => x.action === action)
+  if (!t) return null
+  const added = t.addLabels({} as Project)[0]
+  if (!added) return 'none'
+  const byLabel: Record<string, string> = {
+    'IVE-S': 'waiting', 'IVE-D': 'dev', 'IVE-W': 'verify_waiting', 'IVE-V': 'verifying',
+    'IVE-P': 'confirm_waiting', 'IVE-C': 'confirming', 'IVE-E': 'done',
+  }
+  return byLabel[added] ?? null
+}

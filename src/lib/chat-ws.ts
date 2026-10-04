@@ -1,7 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import { WebSocket } from 'ws'
-import { getProject, getChatSession, saveChatMessage, getAgent, updateChatSessionActivity } from './db'
+import { getProject, getChatSession, saveChatMessage, getAgent, updateChatSessionActivity, getProjectAccess } from './db'
 import { decrypt } from './crypto'
 import { runChatAgentWithCallback, isChatAgentRunning } from './chat-agent'
 import { fetchSingleIssue, downloadProjectUpload } from './provider'
@@ -21,7 +21,7 @@ import { fetchSingleIssue, downloadProjectUpload } from './provider'
  *   { type: 'error', content }
  *   { type: 'ping' }  (heartbeat — client should respond with pong)
  */
-export function handleChatWebSocket(ws: WebSocket) {
+export function handleChatWebSocket(ws: WebSocket, userId: string) {
   let heartbeatTimer: ReturnType<typeof setInterval> | null = null
   let alive = true
 
@@ -70,7 +70,7 @@ export function handleChatWebSocket(ws: WebSocket) {
     }
 
     if (msg.type === 'send') {
-      await handleSend(ws, msg, safeSend)
+      await handleSend(ws, msg, safeSend, userId)
       return
     }
   })
@@ -98,6 +98,7 @@ async function handleSend(
     imageUrls?: string[]; imageMarkdowns?: string[]
   },
   safeSend: (data: object) => void,
+  userId: string,
 ) {
   const { sessionId, projectId, issueIid, message, locale, imageUrls, imageMarkdowns } = msg
   const hasImages = Array.isArray(imageUrls) && imageUrls.length > 0
@@ -107,20 +108,25 @@ async function handleSend(
     return
   }
 
-  const project = getProject(projectId)
+  const session = getChatSession(sessionId)
+  if (!session || session.status !== 'active') {
+    safeSend({ type: 'error', content: '대화가 종료되었습니다. 새 대화를 시작해 주세요.' })
+    return
+  }
+  // 세션 ID 만 알면 남의 프로젝트 대화에 보낼 수 있었다 — 세션의 프로젝트·작업과 맞는지, 보낸 사람이 그 프로젝트에 접근할 수 있는지 본다.
+  // 프로젝트(=토큰)는 메시지가 아니라 세션에서 고른다.
+  if (session.projectId !== projectId || String(session.issueIid) !== String(issueIid) || !getProjectAccess(session.projectId, userId)) {
+    safeSend({ type: 'error', content: '이 대화에 메시지를 보낼 권한이 없습니다.' })
+    return
+  }
+  const project = getProject(session.projectId)
   if (!project) {
     safeSend({ type: 'error', content: 'Project not found' })
     return
   }
 
-  const session = getChatSession(sessionId)
-  if (!session || session.status !== 'active') {
-    safeSend({ type: 'error', content: 'Session not found or ended' })
-    return
-  }
-
   if (isChatAgentRunning(sessionId)) {
-    safeSend({ type: 'error', content: 'Agent is still processing' })
+    safeSend({ type: 'error', content: '에이전트가 아직 이전 메시지에 답하는 중입니다. 답이 끝난 뒤 다시 보내 주세요.' })
     return
   }
 

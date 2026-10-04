@@ -162,6 +162,13 @@ export function resetStuckExecutions() {
 export const MAX_RESTART_REQUEUE = 3
 
 /**
+ * 처리 실행 행만 — 검증·확인 기록, 충돌 검사, AI 채팅, 재현 실행은 뺀다(보고서 PROCESS_EXEC_SQL 과 같은 기준).
+ * 검증 마커(verify_started_at·verified_at·rejected_at)는 「마지막 처리 실행」에 단다 — 사이에 채팅을 열었다 닫거나
+ * 확인 기록이 닫혀도 그 행에 붙으면 검증 기록이 사라진다.
+ */
+const PROCESS_ROW_SQL = "id NOT LIKE 'ex-verify-%' AND id NOT LIKE 'ex-confirm-%' AND id NOT LIKE 'ex-conflict%' AND id NOT LIKE 'exec-chat-%' AND id NOT LIKE 'ex-reproduce-%'"
+
+/**
  * 처리(dev) 단계가 재기동으로 끊겨 처리 실패로 남은 이슈인지 — 이슈의 마지막 처리 실행만 본다.
  * 그 실행의 end_reason 이 'restart' 일 때만 후보다(되돌린 뒤엔 'restart_requeued' 로 바꿔 두 번 되돌리지 않는다).
  * streak = 마지막부터 거슬러 연달아 재기동으로 끊긴 처리 실행 수.
@@ -170,7 +177,7 @@ export function takeRestartRequeue(projectId: string, issueIid: number): { execu
   const rows = getDb().prepare(`
     SELECT id, end_reason FROM task_executions
     WHERE project_id = ? AND issue_iid = ? AND (assignee_type IS NULL OR assignee_type = 'agent')
-      AND id NOT LIKE 'ex-verify-%' AND id NOT LIKE 'ex-confirm-%' AND id NOT LIKE 'ex-reproduce-%'
+      AND ${PROCESS_ROW_SQL}
     ORDER BY julianday(started_at) DESC LIMIT ?
   `).all(projectId, issueIid, MAX_RESTART_REQUEUE + 1) as { id: string; end_reason: string | null }[]
   if (rows.length === 0 || rows[0].end_reason !== 'restart') return null
@@ -275,6 +282,7 @@ export function markIssueVerifyStarted(projectId: string, issueIid: number) {
     WHERE id = (
       SELECT id FROM task_executions
       WHERE project_id = ? AND issue_iid = ? AND status IN ('success', 'failed') AND ended_at IS NOT NULL
+        AND ${PROCESS_ROW_SQL}
       ORDER BY ended_at DESC LIMIT 1
     )
     AND verify_started_at IS NULL AND id NOT LIKE 'ex-verify-%'
@@ -300,6 +308,7 @@ export function markIssueVerified(projectId: string, issueIid: number, verifier?
     WHERE id = (
       SELECT id FROM task_executions
       WHERE project_id = ? AND issue_iid = ? AND status IN ('success', 'failed') AND ended_at IS NOT NULL
+        AND ${PROCESS_ROW_SQL}
       ORDER BY ended_at DESC LIMIT 1
     )
     AND verify_started_at IS NOT NULL AND verified_at IS NULL AND rejected_at IS NULL AND id NOT LIKE 'ex-verify-%'
@@ -344,6 +353,7 @@ export function markIssueVerifyRejected(projectId: string, issueIid: number, ver
     WHERE id = (
       SELECT id FROM task_executions
       WHERE project_id = ? AND issue_iid = ? AND status IN ('success', 'failed') AND ended_at IS NOT NULL
+        AND ${PROCESS_ROW_SQL}
       ORDER BY ended_at DESC LIMIT 1
     )
     AND verify_started_at IS NOT NULL AND verified_at IS NULL AND rejected_at IS NULL AND id NOT LIKE 'ex-verify-%'
@@ -395,9 +405,10 @@ export function hasAnyExecution(projectId: string, issueIid: number): boolean {
   return !!r
 }
 
-export function hasActiveExecution(projectId: string, issueIid: number): boolean {
+/** ignoreChat: 열려 있는 AI 채팅은 빼고 본다 — 화면 단계 판정용(처리 실패 작업에서 대화를 열어도 「처리 중」으로 보이지 않게). 스캐너는 종전대로 */
+export function hasActiveExecution(projectId: string, issueIid: number, opts: { ignoreChat?: boolean } = {}): boolean {
   const r = getDb().prepare(
-    "SELECT id FROM task_executions WHERE project_id = ? AND issue_iid = ? AND status IN ('running', 'assigned') LIMIT 1"
+    `SELECT id FROM task_executions WHERE project_id = ? AND issue_iid = ? AND status IN ('running', 'assigned')${opts.ignoreChat ? " AND id NOT LIKE 'exec-chat-%'" : ''} LIMIT 1`
   ).get(projectId, issueIid)
   return !!r
 }
@@ -501,10 +512,12 @@ export function assignIssueAtomically(
   issueIid: number,
   _stage: IssueStage,
   execution: TaskExecution,
+  /** 화면 단계 버튼(사람이 맡는 처리·검증·확인) — 열려 있는 AI 채팅은 겹침으로 보지 않는다. 스캐너 배정은 종전대로 채팅도 막는다 */
+  opts: { ignoreChat?: boolean } = {},
 ): boolean {
   const tx = getDb().transaction(() => {
     const active = getDb().prepare(
-      "SELECT id FROM task_executions WHERE project_id = ? AND issue_iid = ? AND status IN ('running', 'assigned') LIMIT 1"
+      `SELECT id FROM task_executions WHERE project_id = ? AND issue_iid = ? AND status IN ('running', 'assigned')${opts.ignoreChat ? " AND id NOT LIKE 'exec-chat-%'" : ''} LIMIT 1`
     ).get(projectId, issueIid)
     if (active) return false
 
