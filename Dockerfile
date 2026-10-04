@@ -54,6 +54,29 @@ RUN HOME=/tmp/agy-install sh -c 'curl -fsSL https://antigravity.google/cli/insta
     && rm -rf /tmp/agy-install \
     && agy --version
 
+# dazzlepf 추출기(apps/extractor)를 작업자가 직접 돌릴 도구 — 파싱 후처리 규칙 접수건에서
+# 「Java·pytest 가 없어 ODL 좌표도 골든도 못 돌렸다」로 멈췄다(MSHOP-202610-0004).
+# - JRE: ODL(opendataloader-pdf) 은 java -jar 로 돈다. docker 는 필요 없다.
+# - tesseract(kor, tessdata_best): 추출기 이미지와 같게 — 없으면 깨진 폰트 문서의 파싱 결과가 운영과 달라진다.
+# - uv + python 3.12: 추출기 운영 이미지(python:3.12-slim)와 같은 판. 베이스의 python3(3.11)는 판이 달라 쓰지 않는다.
+#   venv 는 저장소의 apps/extractor/scripts/setup-venv.sh 가 requirements.lock 으로 만든다.
+#   uv 캐시를 /app/data(호스트 볼륨)에 두어 휠은 처음 한 번만 받는다.
+ENV UV_PYTHON_INSTALL_DIR=/opt/uv-python \
+    UV_CACHE_DIR=/app/data/uv-cache \
+    UV_LINK_MODE=copy
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    default-jre-headless \
+    tesseract-ocr tesseract-ocr-kor \
+    && rm -rf /var/lib/apt/lists/* \
+    && (curl -fsSL -o /usr/share/tesseract-ocr/5/tessdata/kor.traineddata \
+          https://github.com/tesseract-ocr/tessdata_best/raw/main/kor.traineddata \
+        || echo "tessdata_best 내려받기 실패 — 배포판 kor 데이터 사용") \
+    && curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin UV_NO_MODIFY_PATH=1 sh \
+    && UV_CACHE_DIR=/tmp/uv-cache uv python install 3.12 \
+    && rm -rf /tmp/uv-cache \
+    && chmod -R a+rX /opt/uv-python \
+    && java -version && uv --version && tesseract --list-langs | grep -x kor
+
 # Playwright (에이전트가 웹 스크래핑/브라우저 자동화 시 사용)
 # 브라우저 바이너리는 매번 ~150MB CDN 다운로드(느린 상류 회선에 취약) 대신
 # 공식 playwright 이미지(v1.55.0)에서 COPY → 빌드 중 Playwright CDN 다운로드 제거.
