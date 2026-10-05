@@ -12,7 +12,7 @@
   "projectTitle": "Step 1: Connect your projects",
   "projectDesc": "Sign in with GitHub/GitLab via OAuth\nand import all your projects at once.\nNo complex setup needed.",
   "agentTitle": "Step 2: Register AI agents",
-  "agentDesc": "Register AI agents like Claude or agy —\nthey'll automatically handle the tasks you submit.",
+  "agentDesc": "Register AI agents like Claude, Codex, or Antigravity —\nthey'll automatically handle the tasks you submit.",
   "startTitle": "Step 3: Register a task",
   "startDesc": "Create one directly in IVE,\nor just add a label in Git — auto-detected.\nAI takes it from there.",
   "conclusionTitle": "Springware IVE",

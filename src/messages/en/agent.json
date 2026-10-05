@@ -23,7 +23,7 @@
   "limitExceededCurrent": "Maximum {max} agents allowed. (Currently {current})",
   "loadingAgents": "Loading agents...",
   "noAgents": "No agents registered yet",
-  "noAgentsHint": "Register AI CLIs like Claude, agy, Codex as agents",
+  "noAgentsHint": "Register AI CLIs like Claude, Codex, Antigravity as agents",
   "deleteAgent": "Delete Agent",
   "deleteAgentConfirm": "Deleting this agent will unassign it from all projects. Continue?",
   "claudeDesc": "Anthropic's AI Coding CLI",

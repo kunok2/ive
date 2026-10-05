@@ -141,7 +141,7 @@
   "mailSendLogs": "메일발송",
   "maxDevelopers": "최대 에이전트",
   "maxTurns": "최대 턴 수",
-  "mcpConfigHint": "MCP(Model Context Protocol): 에이전트가 이슈 처리 시 사용할 외부 도구 서버를 등록합니다(예: GitHub, 파일시스템). 비워 두면 각 CLI의 기본 도구만 사용합니다. Claude·OpenCode·Codex·agy 모두에 적용되며 로컬(npx 등) 서버를 지원합니다. 원격(remote) 서버는 Claude·OpenCode·agy만 지원(Codex 제외).",
+  "mcpConfigHint": "MCP(Model Context Protocol): 에이전트가 이슈 처리 시 사용할 외부 도구 서버를 등록합니다(예: GitHub, 파일시스템). 비워 두면 각 CLI의 기본 도구만 사용합니다. Claude·OpenCode·Codex·Antigravity 모두에 적용되며 로컬(npx 등) 서버를 지원합니다. 원격(remote) 서버는 Claude·OpenCode·Antigravity만 지원(Codex 제외).",
   "mcpServer": "MCP 서버",
   "modelName": "모델명",
   "modelPricing": "모델 단가",
