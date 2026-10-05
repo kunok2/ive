@@ -29,6 +29,20 @@ interface BulkActionBarProps {
   onBulkAction: (action: string) => void
   onCancel: () => void
   onOpenAssigneeModal: (iids: number[]) => void
+  /** 처리 담당(에이전트·자동·사람) — 프로젝트 에이전트나 Git 멤버가 있을 때 */
+  canPickAgent: boolean
+  onOpenAgentPicker: () => void
+  onBulkPriority: (priority: 0 | 1 | 2) => void
+  onOpenRolePicker: (role: 'verifier' | 'confirmer') => void
+  /** 모든 단계 자동배정 — 에이전트가 있을 때 */
+  canAutoAll: boolean
+  onOpenDueDate: () => void
+}
+
+const PRIORITY_TONE: Record<0 | 1 | 2, string> = {
+  0: 'text-ive-text-secondary border-ive-border-subtle hover:bg-white/[0.04]',
+  1: 'text-ive-amber border-ive-amber/30 hover:bg-ive-amber/10',
+  2: 'text-ive-red border-ive-red/30 hover:bg-ive-red/10',
 }
 
 export default function BulkActionBar({
@@ -45,14 +59,22 @@ export default function BulkActionBar({
   onBulkAction,
   onCancel,
   onOpenAssigneeModal,
+  canPickAgent,
+  onOpenAgentPicker,
+  onBulkPriority,
+  onOpenRolePicker,
+  canAutoAll,
+  onOpenDueDate,
 }: BulkActionBarProps) {
   const tIssue = useTranslations('issue')
   const tCommon = useTranslations('common')
+  const tAuto = useTranslations('automation')
   const STAGE_INFO_UNKNOWN = stageInfo.unknown
 
   return (
-    <div className="mb-3 bg-ive-bg-card border border-ive-amber/30 rounded-lg p-3">
-      <div className="flex items-center justify-between mb-2">
+    // 줄 사이 간격은 gap 으로 — 줄마다 mb 를 두면 아무것도 고르지 않았을 때(첫 줄만) 아래 여백만 커져 위로 쏠렸다
+    <div className="mb-3 flex flex-col gap-2 bg-ive-bg-card border border-ive-amber/30 rounded-lg p-3">
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <button
             onClick={onToggleSelectAll}
@@ -84,7 +106,7 @@ export default function BulkActionBar({
 
       {/* 프로그레스 바 */}
       {bulkProgress && (
-        <div className="mb-2">
+        <div>
           <div className="flex items-center justify-between text-xs mb-1">
             <span className="text-ive-text-muted font-bold">
               {cancelRef.current ? tIssue('cancelled') : bulkProgress.done === bulkProgress.total ? tIssue('completed') : tCommon('processing')}
@@ -109,6 +131,22 @@ export default function BulkActionBar({
       {/* 벌크 액션 버튼들 */}
       {!bulkProgress && selected.size > 0 && (
         <div className="flex gap-2 flex-wrap">
+          {/* 다음 단계로 — 단계가 섞여도 작업마다 자기 다음 단계로(작업 상세의 다음 단계 버튼과 같은 동작). 에이전트가 시작할 일은 건너뛴다 */}
+          <button
+            onClick={() => onBulkAction('next')}
+            className="text-xs font-bold px-3 py-1.5 rounded-lg border text-ive-green border-ive-green/30 bg-ive-bg-deep hover:bg-ive-green/10 transition-all active:scale-95"
+          >
+            <i className="fa-solid fa-forward mr-1" />{tIssue('bulkNextStage')} ({selected.size})
+          </button>
+          {/* 모든 단계 자동배정 — 작업 상세의 같은 버튼(처리·검증·확인을 명부의 에이전트로) */}
+          {canAutoAll && (
+            <button
+              onClick={() => onBulkAction('auto_all')}
+              className="text-xs font-bold px-3 py-1.5 rounded-lg border text-ive-cyan border-ive-cyan/30 bg-ive-bg-deep hover:bg-ive-cyan/10 transition-all active:scale-95"
+            >
+              <i className="fa-solid fa-wand-magic-sparkles mr-1" />{tAuto('autoAllAgents')} ({selected.size})
+            </button>
+          )}
           {gitMembersCount > 0 && (
             <button
               onClick={() => onOpenAssigneeModal([...selected])}
@@ -117,6 +155,41 @@ export default function BulkActionBar({
               <i className="fa-solid fa-user-tag mr-1" />{tIssue('assignee')} ({selected.size})
             </button>
           )}
+          {canPickAgent && (
+            <button
+              onClick={onOpenAgentPicker}
+              className="text-xs font-bold px-3 py-1.5 rounded-lg border text-ive-cyan border-ive-cyan/30 bg-ive-bg-deep hover:bg-ive-cyan/10 transition-all active:scale-95"
+            >
+              <i className="fa-solid fa-robot mr-1" />{tIssue('preferredAgent')} ({selected.size})
+            </button>
+          )}
+          {/* 검증자·확인자 — 카드의 역할 아바타를 눌러 고르는 것과 같은 창 */}
+          {(['verifier', 'confirmer'] as const).map(role => (
+            <button
+              key={role}
+              onClick={() => onOpenRolePicker(role)}
+              className="text-xs font-bold px-3 py-1.5 rounded-lg border text-ive-cyan border-ive-cyan/30 bg-ive-bg-deep hover:bg-ive-cyan/10 transition-all active:scale-95"
+            >
+              <i className={`fa-solid ${role === 'verifier' ? 'fa-magnifying-glass' : 'fa-clipboard-check'} mr-1`} />{tIssue(role)} ({selected.size})
+            </button>
+          ))}
+          <button
+            onClick={onOpenDueDate}
+            className="text-xs font-bold px-3 py-1.5 rounded-lg border text-ive-cyan border-ive-cyan/30 bg-ive-bg-deep hover:bg-ive-cyan/10 transition-all active:scale-95"
+          >
+            <i className="fa-solid fa-calendar-days mr-1" />{tIssue('dueDate')} ({selected.size})
+          </button>
+          {/* 우선순위 — 보통·높음·긴급, 작업 상세의 우선순위와 같은 값 */}
+          {([0, 1, 2] as const).map(p => (
+            <button
+              key={p}
+              onClick={() => onBulkPriority(p)}
+              title={tIssue('priority')}
+              className={`text-xs font-bold px-3 py-1.5 rounded-lg border bg-ive-bg-deep transition-all active:scale-95 ${PRIORITY_TONE[p]}`}
+            >
+              <i className="fa-solid fa-flag mr-1" />{tIssue(`priority${p}`)}
+            </button>
+          ))}
           {stages.size > 1 ? (
             <>
               <span className="text-xs text-ive-amber py-1">{tIssue('sameStageHint')}</span>

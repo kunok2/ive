@@ -19,6 +19,7 @@ import IssueList from '@/components/tabs/issues/IssueList'
 import IssueAddForm from '@/components/tabs/issues/IssueAddForm'
 import BulkActionBar from '@/components/tabs/issues/BulkActionBar'
 import AssigneePickerModal from '@/components/tabs/issues/AssigneePickerModal'
+import Modal from '@/components/ui/Modal'
 import AgentPickerModal from '@/components/tabs/issues/AgentPickerModal'
 import LabelCheckModal from '@/components/tabs/issues/LabelCheckModal'
 import IssueDetailView from '@/app/issues/[projectId]/[iid]/_components/IssueDetailView'
@@ -64,13 +65,21 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     { key: 'history', label: tFilter('history') },
   ], [tFilter])
 
+  // 단계별 일괄 동작 — 서버 전이 표(lib/stage-transitions TRANSITIONS)에 있는 것만. 작업 상세에서 하나씩 하는 단계 이동과 같은 API
   const BULK_ACTIONS: Record<string, { action: string; label: string; icon: string; danger?: boolean }[]> = useMemo(() => ({
-    waiting: [],
+    none: [
+      { action: 'schedule', label: tIssue('nextStage.none'), icon: 'fa-play' },
+    ],
+    waiting: [
+      { action: 'start_dev', label: tIssue('nextStage.waiting'), icon: 'fa-play' },
+    ],
     verify_waiting: [
       { action: 'start_verification', label: tIssue('startVerification'), icon: 'fa-play' },
+      { action: 'to_inflow', label: tIssue('inflowShort'), icon: 'fa-inbox' },
       { action: 'cancel', label: tIssue('cancelToWaiting'), icon: 'fa-rotate-left', danger: true },
     ],
     dev: [
+      { action: 'complete', label: tIssue('nextStage.dev'), icon: 'fa-circle-check' },
       { action: 'cancel', label: tIssue('toWaiting'), icon: 'fa-rotate-left', danger: true },
     ],
     dev_fail: [
@@ -78,10 +87,12 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     ],
     verifying: [
       { action: 'approve', label: tIssue('approveVerify'), icon: 'fa-circle-check' },
+      { action: 'to_inflow', label: tIssue('inflowShort'), icon: 'fa-inbox' },
       { action: 'reject', label: tIssue('rejectVerify'), icon: 'fa-rotate-left', danger: true },
     ],
     confirm_waiting: [
       { action: 'start_confirmation', label: tIssue('startConfirmation'), icon: 'fa-play' },
+      { action: 'return_to_dev', label: tIssue('returnToDev'), icon: 'fa-rotate-left', danger: true },
       { action: 'cancel', label: tIssue('cancelConfirmWait'), icon: 'fa-rotate-left', danger: true },
     ],
     confirming: [
@@ -466,13 +477,13 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   // 처리자 picker — AI 에이전트(특정/자동) 또는 사람(담당자) 선택을 한 모달에서 처리.
   //   - mode='assignee' + assignee 가 있으면: 이슈의 git assignees 도 함께 업데이트.
   //   - 그 외: 기존대로 preferred-agent 만 업데이트.
-  const handleChangeIssueAgent = async (
+  // 저장 핵심 — 실패하면 사유를, 성공하면 null. 하나 바꾸기(알림)와 일괄(사유를 모아 한 번에)이 같이 쓴다
+  const saveIssueAgent = async (
     iid: number,
     mode: 'auto' | 'assignee' | 'agent',
     agentId: string | null,
     assignee?: { id: number; username: string; name: string; avatarUrl: string } | null,
-  ) => {
-    setAgentPickerSaving(true)
+  ): Promise<string | null> => {
     try {
       // 1) assignMode 업데이트
       const body: any = mode === 'agent' ? { assignMode: 'agent', agentId } : { assignMode: mode }
@@ -481,8 +492,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
-        toast(data.error || tIssue('settingsSaveFailed'), 'error')
-        return
+        return data.error || tIssue('settingsSaveFailed')
       }
       const data = await res.json()
       setIssues(prev => prev.map(i => i.iid === iid ? {
@@ -503,32 +513,187 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
         })
         if (!aRes.ok) {
           const d = await aRes.json().catch(() => ({}))
-          toast(d.error || tIssue('assigneeChangeFailed'), 'error')
-        } else {
-          setIssues(prev => prev.map(i => i.iid === iid ? { ...i, assignees: [assignee], assigneeAuto: false } : i))
+          return d.error || tIssue('assigneeChangeFailed')
         }
+        setIssues(prev => prev.map(i => i.iid === iid ? { ...i, assignees: [assignee], assigneeAuto: false } : i))
       }
+      return null
+    } catch (err: any) { return err.message || tIssue('networkErrorOccurred') }
+  }
+
+  const handleChangeIssueAgent = async (
+    iid: number,
+    mode: 'auto' | 'assignee' | 'agent',
+    agentId: string | null,
+    assignee?: { id: number; username: string; name: string; avatarUrl: string } | null,
+  ) => {
+    setAgentPickerSaving(true)
+    try {
+      const err = await saveIssueAgent(iid, mode, agentId, assignee)
+      if (err) { toast(err, 'error'); return }
       setAgentPickerIid(null)
-    } catch (err: any) { toast(err.message || tIssue('networkErrorOccurred'), 'error') }
-    finally { setAgentPickerSaving(false) }
+    } finally { setAgentPickerSaving(false) }
   }
 
   // --- Bulk actions ---
+  // 「다음 단계로」 — 작업마다 자기 단계의 다음(작업 상세의 다음 단계 버튼과 같은 동작). 끝난·실패 단계는 다음이 없다
+  const NEXT_ACTION: Record<string, string> = {
+    none: 'schedule', waiting: 'start_dev', dev: 'complete', verify_waiting: 'start_verification',
+    verifying: 'approve', confirm_waiting: 'start_confirmation', confirming: 'accept',
+  }
+  // 에이전트가 시작할 일을 사람이 시작하지 않는다 — 처리 대기를 에이전트가 맡으면 개발 시작은 라벨만 바꿔 처리 실패가 되고,
+  // 검증·확인 대기의 에이전트 담당은 단계 작업자가 띄운다(작업 상세도 이때 시작 버튼을 내놓지 않는다). 넘기면 사유, 아니면 null
+  const agentStartsReason = (issue: IveIssue, action: string): string | null => {
+    if (action === 'start_dev' && issue.assignMode !== 'assignee') return tIssue('bulkAgentStarts')
+    if (action === 'start_verification' && issue.presetVerifier?.mode === 'agent') return tIssue('bulkAgentStarts')
+    if (action === 'start_confirmation' && issue.presetConfirmer?.mode === 'agent') return tIssue('bulkAgentStarts')
+    return null
+  }
   const getAvailableBulkActions = () => {
     if (selected.size === 0) return []
     const selectedIssues = issues.filter(i => selected.has(i.iid))
     const stages = new Set(selectedIssues.map(i => i.stage))
     if (stages.size !== 1) return []
-    return BULK_ACTIONS[[...stages][0]] || []
+    const stage = [...stages][0]
+    // 다음 단계와 같은 동작은 「다음 단계로」 하나로(항상 보인다) — 같은 일을 두 버튼으로 두지 않는다
+    return (BULK_ACTIONS[stage] || []).filter(a => a.action !== NEXT_ACTION[stage])
   }
   const selectedStages = () => {
     const selectedIssues = issues.filter(i => selected.has(i.iid))
     return new Set(selectedIssues.map(i => i.stage))
   }
 
+  // 일괄 결과 알림 — 실패는 건수만이 아니라 어느 작업이 왜(앞의 3건) 실패했는지. 실패한 작업만 선택에 남겨 다시 시도할 수 있게 한다
+  const finishBulk = (done: number, failures: { iid: number; reason: string }[]) => {
+    if (failures.length > 0) {
+      const reasons = failures.slice(0, 3).map(f => `#${f.iid} ${f.reason}`).join(' · ') + (failures.length > 3 ? ' …' : '')
+      toast(`${tIssue('bulkFailedCount', { count: failures.length })} ${reasons}`, 'error')
+    } else if (done > 0) toast(tIssue('bulkCompletedCount', { count: done }), 'success')
+    fetchIssues()
+    window.dispatchEvent(new CustomEvent('refresh-counts'))
+    if (failures.length > 0) {
+      setSelected(new Set(failures.map(f => f.iid)))
+      setTimeout(() => setBulkProgress(null), 1000)
+    } else {
+      setTimeout(() => { exitBulkMode() }, cancelRef.current ? 500 : 1000)
+    }
+  }
+  const reasonOf = async (res: Response) => {
+    const data = await res.json().catch(() => ({}))
+    return (data?.error as string) || res.statusText || String(res.status)
+  }
+
+  // 선택한 작업마다 한 번씩 — 진행 막대·중단(cancelRef)·실패 사유 모음은 모든 일괄 동작이 같다
+  const runBulk = async (targets: IveIssue[], run: (issue: IveIssue) => Promise<string | null>) => {
+    cancelRef.current = false
+    setBulkProgress({ total: targets.length, done: 0, failed: 0 })
+    let done = 0
+    const failures: { iid: number; reason: string }[] = []
+    for (const issue of targets) {
+      if (cancelRef.current) break
+      let reason: string | null
+      try { reason = await run(issue) } catch (err) { reason = (err as Error).message || tIssue('networkErrorOccurred') }
+      if (reason) failures.push({ iid: issue.iid, reason })
+      else done++
+      setBulkProgress({ total: targets.length, done: done + failures.length, failed: failures.length })
+    }
+    finishBulk(done, failures)
+  }
+
+  const handleBulkPriority = async (priority: 0 | 1 | 2) => {
+    const targets = issues.filter(i => selected.has(i.iid))
+    if (targets.length === 0) return
+    await runBulk(targets, async issue => {
+      const res = await fetch(`/api/projects/${selectedProjectId}/issues/${issue.iid}/priority`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ priority }),
+      })
+      return res.ok ? null : await reasonOf(res)
+    })
+  }
+
+  // 처리 담당 일괄 — 하나 바꾸기와 같은 선택 창(AgentPickerModal)에서 고른 것을 선택한 작업 모두에
+  const [bulkAgentPickerOpen, setBulkAgentPickerOpen] = useState(false)
+  const handleBulkAgent = async (
+    mode: 'auto' | 'assignee' | 'agent',
+    agentId: string | null,
+    assignee?: { id: number; username: string; name: string; avatarUrl: string } | null,
+  ) => {
+    setBulkAgentPickerOpen(false)
+    const targets = issues.filter(i => selected.has(i.iid))
+    if (targets.length === 0) return
+    await runBulk(targets, issue => saveIssueAgent(issue.iid, mode, agentId, assignee))
+  }
+
+  // 검증자·확인자 일괄 — 카드의 지정 창(AssigneePickerModal)을 그대로. 고른 값을 선택한 작업 모두에(작업마다 PATCH preset-roles)
+  const [bulkRole, setBulkRole] = useState<'verifier' | 'confirmer' | null>(null)
+  const [bulkRoleSearch, setBulkRoleSearch] = useState('')
+  const [bulkRolePick, setBulkRolePick] = useState<{ id: number; username: string; name: string; avatarUrl: string } | null>(null)
+  const [bulkRoleAuto, setBulkRoleAuto] = useState(false)
+  const [bulkRoleAgentPick, setBulkRoleAgentPick] = useState<string | null>(null)
+  const openBulkRole = (role: 'verifier' | 'confirmer') => {
+    setBulkRoleSearch(''); setBulkRolePick(null); setBulkRoleAuto(false); setBulkRoleAgentPick(null)
+    setBulkRole(role)
+  }
+  const handleBulkRoleConfirm = async () => {
+    const role = bulkRole
+    if (!role) return
+    // 카드 지정 창과 같은 규칙 — 에이전트 > 자동 > 특정 사람 > 미배정(생성자)
+    const preset: PresetRole = bulkRoleAgentPick ? { mode: 'agent', userId: null, username: null, agentId: bulkRoleAgentPick }
+      : bulkRoleAuto ? { mode: 'auto', userId: null, username: null }
+      : bulkRolePick ? { mode: 'specific', userId: String(bulkRolePick.id), username: bulkRolePick.username }
+      : { mode: 'creator', userId: null, username: null }
+    setBulkRole(null)
+    const targets = issues.filter(i => selected.has(i.iid))
+    if (targets.length === 0) return
+    await runBulk(targets, async issue => {
+      const res = await fetch(`/api/projects/${selectedProjectId}/issues/${issue.iid}/preset-roles`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ [role]: preset }),
+      })
+      return res.ok ? null : await reasonOf(res)
+    })
+  }
+
+  // 마감일 일괄 — 작업 상세의 마감일 입력과 같은 값(YYYY-MM-DD, 지우면 null). PUT 이슈 { dueDate }
+  const [bulkDueOpen, setBulkDueOpen] = useState(false)
+  const [bulkDueDraft, setBulkDueDraft] = useState('')
+  const handleBulkDue = async (dueDate: string | null) => {
+    setBulkDueOpen(false)
+    const targets = issues.filter(i => selected.has(i.iid))
+    if (targets.length === 0) return
+    await runBulk(targets, async issue => {
+      const res = await fetch(`/api/projects/${selectedProjectId}/issues/${issue.iid}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dueDate }),
+      })
+      return res.ok ? null : await reasonOf(res)
+    })
+  }
+
   const handleBulkAction = async (action: string) => {
     if (selected.size === 0) return
     const selectedIssues = issues.filter(i => selected.has(i.iid))
+    if (action === 'auto_all') {
+      // 모든 단계 자동배정 — 작업 상세의 같은 버튼과 같은 요청. 권한·완료·처리 중은 서버가 작업마다 거절한다(사유로 남는다)
+      await runBulk(selectedIssues, async issue => {
+        const res = await fetch(`/api/projects/${selectedProjectId}/issues/${issue.iid}/roles`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'auto_all' }),
+        })
+        return res.ok ? null : await reasonOf(res)
+      })
+      return
+    }
+    if (action === 'next') {
+      await runBulk(selectedIssues, async issue => {
+        const next = NEXT_ACTION[issue.stage]
+        if (!next) return tIssue('bulkNoNextStage')
+        const skip = agentStartsReason(issue, next)
+        if (skip) return skip
+        const res = await fetch(`/api/projects/${selectedProjectId}/issues/${issue.iid}/stage`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: issue.stage, action: next }),
+        })
+        return res.ok ? null : await reasonOf(res)
+      })
+      return
+    }
     const stage = selectedIssues[0].stage
     const isClose = action === 'close'
     if (isClose) {
@@ -538,27 +703,13 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
       })
       if (!ok) return
     }
-    cancelRef.current = false
-    setBulkProgress({ total: selectedIssues.length, done: 0, failed: 0 })
-    let done = 0, failed = 0
-    for (const issue of selectedIssues) {
-      if (cancelRef.current) break
-      try {
-        const url = isClose ? `/api/projects/${selectedProjectId}/issues/${issue.iid}/close` : `/api/projects/${selectedProjectId}/issues/${issue.iid}/stage`
-        const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, ...(isClose ? {} : { body: JSON.stringify({ stage, action }) }) })
-        if (!res.ok) { failed++; const data = await res.json().catch(() => ({})); console.error(`[Bulk] #${issue.iid} failed:`, data.error || res.statusText) }
-        else { done++ }
-      } catch (err) { failed++; console.error(`[Bulk] #${issue.iid} error:`, err) }
-      setBulkProgress({ total: selectedIssues.length, done: done + failed, failed })
-    }
-    if (failed > 0) toast(tIssue('bulkFailedCount', { count: failed }), 'error')
-    else if (done > 0) toast(tIssue('bulkCompletedCount', { count: done }), 'success')
-    if (action === 'waiting' && projectAgents.length === 0) {
-      showAlert({ title: tIssue('noAgentWarningTitle'), message: tIssue('noAgentWarningDesc'), variant: 'error' })
-    }
-    fetchIssues()
-    window.dispatchEvent(new CustomEvent('refresh-counts'))
-    setTimeout(() => { exitBulkMode() }, cancelRef.current ? 500 : 1000)
+    await runBulk(selectedIssues, async issue => {
+      const skip = isClose ? null : agentStartsReason(issue, action)
+      if (skip) return skip
+      const url = isClose ? `/api/projects/${selectedProjectId}/issues/${issue.iid}/close` : `/api/projects/${selectedProjectId}/issues/${issue.iid}/stage`
+      const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, ...(isClose ? {} : { body: JSON.stringify({ stage, action }) }) })
+      return res.ok ? null : await reasonOf(res)
+    })
   }
 
   // --- Label creation ---
@@ -863,6 +1014,12 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
                 onBulkAction={handleBulkAction}
                 onCancel={() => { cancelRef.current = true }}
                 onOpenAssigneeModal={openAssigneeModal}
+                canPickAgent={projectAgents.length > 0 || gitMembers.length > 0}
+                onOpenAgentPicker={() => setBulkAgentPickerOpen(true)}
+                onBulkPriority={handleBulkPriority}
+                onOpenRolePicker={openBulkRole}
+                canAutoAll={projectAgents.length > 0 || roleAgents.verify.length > 0 || roleAgents.confirm.length > 0}
+                onOpenDueDate={() => { setBulkDueDraft(''); setBulkDueOpen(true) }}
               />
             )}
           </>
@@ -986,6 +1143,65 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
         onSelect={handleChangeIssueAgent}
         onClose={() => setAgentPickerIid(null)}
       />
+      {/* 일괄 — 같은 선택 창, 고르면 선택한 작업 모두에 */}
+      <AgentPickerModal
+        iid={bulkAgentPickerOpen ? -1 : null}
+        title={tIssue('bulkPreferredAgentTitle', { count: selected.size })}
+        currentMode={null}
+        projectAgents={projectAgents}
+        gitMembers={gitMembers}
+        saving={false}
+        onSelect={(_iid, mode, agentId, assignee) => { void handleBulkAgent(mode, agentId, assignee) }}
+        onClose={() => setBulkAgentPickerOpen(false)}
+      />
+      {/* 일괄 검증자·확인자 — 카드와 같은 지정 창(후보: 검증자는 Git 멤버, 확인자는 확인자 후보, 에이전트는 역할 명부) */}
+      <AssigneePickerModal
+        open={bulkRole !== null}
+        onClose={() => setBulkRole(null)}
+        iids={[...selected]}
+        gitMembers={bulkRole === 'confirmer' ? confirmerMembers : gitMembers}
+        search={bulkRoleSearch}
+        onSearchChange={setBulkRoleSearch}
+        pick={bulkRolePick}
+        onPickChange={setBulkRolePick}
+        autoMode={bulkRoleAuto}
+        onAutoModeChange={setBulkRoleAuto}
+        onConfirm={() => { void handleBulkRoleConfirm() }}
+        agents={bulkRole === 'confirmer' ? roleAgents.confirm : roleAgents.verify}
+        agentPick={bulkRoleAgentPick}
+        onAgentPickChange={setBulkRoleAgentPick}
+        title={bulkRole === 'confirmer' ? tIssue('confirmer') : tIssue('verifier')}
+        noneLabel={tIssue('roleModeCreator')}
+      />
+      {/* 일괄 마감일 — 작업 상세의 마감일 입력 줄과 같은 모양(날짜 · 저장 · 해제) */}
+      <Modal open={bulkDueOpen} onClose={() => setBulkDueOpen(false)} title={`${tIssue('dueDate')} (${selected.size}${tCommon('items')})`} size="sm">
+        <div className="flex items-center gap-2 p-3">
+          <i className="fa-solid fa-calendar-days text-ive-cyan text-xs" />
+          <input
+            type="date"
+            value={bulkDueDraft}
+            onChange={e => setBulkDueDraft(e.target.value)}
+            className="flex-1 bg-ive-bg-deep border border-ive-border-dark rounded-lg px-2 py-1 text-xs text-ive-text focus:outline-none focus:border-ive-green/50"
+            autoFocus
+          />
+          <button
+            type="button"
+            onClick={() => { void handleBulkDue(bulkDueDraft || null) }}
+            disabled={!bulkDueDraft}
+            className="text-xs font-bold text-ive-green border border-ive-green/30 px-2 py-1 rounded-lg hover:bg-ive-green/10 transition-colors disabled:opacity-40"
+          >
+            {tCommon('save')}
+          </button>
+          <button
+            type="button"
+            onClick={() => { void handleBulkDue(null) }}
+            className="text-xs font-bold text-ive-text-dim border border-ive-border-subtle px-2 py-1 rounded-lg hover:bg-ive-red/10 hover:text-ive-red hover:border-ive-red/30 transition-colors"
+            title={tIssue('clearDueDate')}
+          >
+            <i className="fa-solid fa-xmark" />
+          </button>
+        </div>
+      </Modal>
       <LabelCheckModal
         open={labelModalOpen}
         onClose={() => setLabelModalOpen(false)}

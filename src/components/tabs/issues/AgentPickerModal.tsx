@@ -18,7 +18,9 @@ interface GitMember {
 
 interface AgentPickerModalProps {
   iid: number | null
-  /** 현재 이슈의 assignMode (없으면 'auto') */
+  /** 제목 — 없으면 「#번호 처리 담당」. 일괄(여러 작업)일 때 넘긴다 */
+  title?: string
+  /** 현재 이슈의 assignMode (없으면 'auto'). null 이면 현재 표시 없음 — 일괄은 작업마다 달라 하나로 표시할 수 없다 */
   currentMode?: 'auto' | 'assignee' | 'agent' | null
   /** 현재 지정된 에이전트 id (없으면 null) */
   currentAgentId?: string | null
@@ -50,6 +52,7 @@ interface AgentPickerModalProps {
  */
 export default function AgentPickerModal({
   iid,
+  title,
   currentMode = 'auto',
   currentAgentId = null,
   currentAssigneeIds = [],
@@ -61,7 +64,7 @@ export default function AgentPickerModal({
 }: AgentPickerModalProps) {
   const tIssue = useTranslations('issue')
 
-  const effectiveMode = currentMode || 'auto'
+  const effectiveMode = currentMode === null ? null : (currentMode || 'auto')
   const assigneeIdSet = new Set(currentAssigneeIds)
 
   const [search, setSearch] = useState('')
@@ -81,7 +84,7 @@ export default function AgentPickerModal({
   const isGenericAssignee = effectiveMode === 'assignee' && assigneeIdSet.size === 0
 
   return (
-    <Modal open={iid !== null} onClose={onClose} title={`#${iid ?? ''} ${tIssue('preferredAgent')}`} size="sm">
+    <Modal open={iid !== null} onClose={onClose} title={title ?? `#${iid ?? ''} ${tIssue('preferredAgent')}`} size="sm">
       {/* 검색 — 에이전트/멤버 이름 또는 username 으로 동시 필터 */}
       <div className="sticky top-0 z-10 bg-ive-bg-card p-1.5 border-b border-ive-border-dark">
         <input
