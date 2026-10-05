@@ -723,6 +723,8 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
     const q = issueSearchQuery.trim().toLowerCase()
     return issue.title.toLowerCase().includes(q) || (issue.author?.name || '').toLowerCase().includes(q)
   }).sort((a, b) => {
+    // 이력은 서버(Git)가 최근 갱신순으로 준 순서 그대로 — 생성일로 다시 정렬하면 오늘 닫은 오래된 일이 묻힌다
+    if (isHistoryTab) return 0
     if (sortOrder === 'newest') return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
   })

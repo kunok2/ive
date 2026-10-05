@@ -228,7 +228,8 @@ export async function fetchClosedProjectIssuesPage(
 
   const q = new URLSearchParams({
     state: 'closed',
-    order_by: 'created_at',
+    // 최근 갱신순 — 닫힌 순서에 가장 가까운 기준(GitLab 은 closed_at 정렬이 없다). 오래전에 만든 일을 오늘 끝내도 맨 위에 온다
+    order_by: 'updated_at',
     sort: opts.sort,
     per_page: String(opts.perPage),
     page: String(opts.page),

@@ -103,9 +103,10 @@ export default function IssueCard({
             <div className="flex items-center gap-2">
               <span className="text-sm font-bold text-ive-green">#{issue.iid}</span>
               <PriorityBadge priority={issue.priority} />
+              {/* 이력은 닫은 날짜(이력 정렬 기준과 같은 쪽), 열린 작업은 갱신일 */}
               <span className="text-xs text-ive-text-dim">
-                <i className="fa-solid fa-calendar-day mr-1" />
-                {formatDateMedium(issue.updatedAt, locale, timezone)}
+                <i className={`fa-solid ${isHistoryTab && issue.closedAt ? 'fa-lock' : 'fa-calendar-day'} mr-1`} />
+                {formatDateMedium(isHistoryTab && issue.closedAt ? issue.closedAt : issue.updatedAt, locale, timezone)}
               </span>
               {issue.chatActive && (
                 <span className={`inline-flex items-center gap-1 text-xs font-bold px-1.5 py-0.5 rounded-lg bg-ive-cyan/15 text-ive-cyan ${issue.chatProcessing ? 'animate-pulse' : ''}`}>

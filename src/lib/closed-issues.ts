@@ -8,7 +8,7 @@ export type ClosedIssueSort = 'desc' | 'asc'
 export interface ClosedIssuePageOptions {
   page: number
   perPage: number
-  /** 생성일 기준 — desc=최신순, asc=오래된순 */
+  /** 최근 갱신일 기준(닫힌 순서에 가장 가까움 — GitLab·GitHub 모두 닫힌 시각 정렬이 없다) — desc=최신순, asc=오래된순 */
   sort: ClosedIssueSort
   /** 제목·본문 검색어, 숫자(#123)면 이슈 번호 */
   search?: string

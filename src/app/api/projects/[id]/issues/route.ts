@@ -159,6 +159,7 @@ export async function GET(
           labels: issue.labels,
           createdAt: issue.created_at,
           updatedAt: issue.updated_at,
+          closedAt: issue.closed_at ?? null,
           dueDate: issue.due_date ?? null,
           webUrl: issue.web_url,
           author,

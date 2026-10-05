@@ -203,7 +203,7 @@ export async function fetchClosedProjectIssuesPage(
     const labelQ = opts.label ? ` label:"${opts.label.replace(/"/g, '')}"` : '';
     const q = `repo:${ownerRepo} is:issue is:closed${labelQ} ${search}`;
     const params = new URLSearchParams({
-      q, sort: 'created', order: opts.sort, per_page: String(opts.perPage), page: String(opts.page),
+      q, sort: 'updated', order: opts.sort, per_page: String(opts.perPage), page: String(opts.page),
     });
     const res = await fetch(`${getGitHubApiBase(project.repoUrl)}/search/issues?${params.toString()}`, { headers });
     if (!res.ok) throw new Error(`닫힌 이슈 검색 실패: ${res.status} ${res.statusText}`);
@@ -214,7 +214,7 @@ export async function fetchClosedProjectIssuesPage(
   }
 
   const params = new URLSearchParams({
-    state: 'closed', sort: 'created', direction: opts.sort, per_page: String(opts.perPage), page: String(opts.page),
+    state: 'closed', sort: 'updated', direction: opts.sort, per_page: String(opts.perPage), page: String(opts.page),
   });
   if (opts.label) params.set('labels', opts.label);
   const res = await fetch(apiUrl(project, `/issues?${params.toString()}`), { headers });

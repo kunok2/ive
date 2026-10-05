@@ -14,6 +14,8 @@ export interface IveIssue {
   labels: string[]
   createdAt: string
   updatedAt: string
+  /** 닫힌 시각 — 이력 카드에 보인다 */
+  closedAt?: string | null
   dueDate?: string | null
   /** 0 보통 · 1 높음 · 2 긴급 (IVE 에만 저장) */
   priority?: 0 | 1 | 2
