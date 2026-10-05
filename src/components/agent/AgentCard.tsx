@@ -13,6 +13,7 @@ import type { ToolCategory } from '@/lib/tool-activity'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useTranslations } from 'next-intl'
+import { useKillExecution } from '@/lib/use-kill-execution'
 
 interface AssignedProject {
   id: string
@@ -272,10 +273,10 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
     }
   }, [chatLoading, showInterview])
 
+  const killExecution = useKillExecution()
   const handleKill = async (id: string) => {
-    setKilling(id)
     try {
-      await fetch(`/api/executions/${id}/kill`, { method: 'POST' })
+      if (!await killExecution(id, () => setKilling(id))) return
       const res = await fetch(`/api/agents/${agent.id}/executions`)
       if (res.ok) setExecutions(await res.json())
       fetchStats()

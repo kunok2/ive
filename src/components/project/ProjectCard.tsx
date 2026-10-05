@@ -18,6 +18,7 @@ import { execKind, execHref, ageOf, ageText } from '@/lib/active-work'
 import ConflictResolutionPanel from '@/components/mr/ConflictResolutionPanel'
 import type { ToolActivity } from '@/lib/tool-activity'
 import { useTranslations } from 'next-intl'
+import { useKillExecution } from '@/lib/use-kill-execution'
 import { useTab } from '@/lib/tab-context'
 
 interface Props {
@@ -186,10 +187,10 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
     await updateProject({ ...project, accessToken: '', scannerActive: !project.scannerActive })
   }
 
+  const killExecution = useKillExecution()
   const handleKill = async (id: string) => {
-    setKilling(id)
     try {
-      await fetch(`/api/executions/${id}/kill`, { method: 'POST' })
+      if (!await killExecution(id, () => setKilling(id))) return
       const res = await fetch(`/api/projects/${project.id}/executions`)
       if (res.ok) setExecutions(await res.json())
       fetchStats()

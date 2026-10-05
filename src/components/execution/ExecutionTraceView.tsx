@@ -6,6 +6,7 @@ import LogViewer from '@/components/ui/LogViewer'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 import type { ToolActivity } from '@/lib/tool-activity'
 import { useTranslations } from 'next-intl'
+import { useKillExecution } from '@/lib/use-kill-execution'
 import { useStore } from '@/lib/store'
 
 // 끝난 실행은 종료 시각까지만 센다 (없으면 진행 중 → 현재 시각까지)
@@ -100,10 +101,10 @@ export default function ExecutionTraceView({ id, embedded = false, onClose }: { 
     return () => clearInterval(timer)
   }, [connected])
 
+  const killExecution = useKillExecution()
   const handleKill = async () => {
-    setKilling(true)
     try {
-      await fetch(`/api/executions/${id}/kill`, { method: 'POST' })
+      await killExecution(id, () => setKilling(true))
     } finally {
       setKilling(false)
     }

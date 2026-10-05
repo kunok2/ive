@@ -1,6 +1,8 @@
 'use client'
 
-import { useRef, useEffect, useMemo } from 'react'
+import { useRef, useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
+import { useKillExecution } from '@/lib/use-kill-execution'
 import { useTranslations } from 'next-intl'
 import { createImagePasteHandlers } from '@/lib/paste-upload'
 import AgentPickerDropdown from './AgentPickerDropdown'
@@ -72,6 +74,8 @@ interface BottomInputAreaProps {
   onCommentAndDone: () => void
   onCommentAndNextStage: () => void
   onCommentAndInflow: () => void
+  /** 에이전트 실행을 강제종료한 뒤 — 이슈를 다시 읽어 안내 줄·단계 버튼을 맞춘다 */
+  onAgentWorkStopped: () => void
   onStartChat: (force?: boolean) => void
   onEndChat: () => void
   onSendChatMessage: () => void
@@ -86,7 +90,7 @@ export default function BottomInputArea({
   chatSessionId, chatHistoryOnly, chatStarting, chatSending, chatInput, chatImages, chatAgentName,
   preferredAgent, projectAgents, NEXT_STAGE,
   onSetMode, onSetComment, onSetChatInput, onAddChatImages, onRemoveChatImage,
-  onPostComment, onCommentAndRetry, onCommentAndDone, onCommentAndNextStage, onCommentAndInflow,
+  onPostComment, onCommentAndRetry, onCommentAndDone, onCommentAndNextStage, onCommentAndInflow, onAgentWorkStopped,
   onStartChat, onEndChat, onSendChatMessage, onChangePreferredAgent, onToast,
 }: BottomInputAreaProps) {
   // Image paste handler for comment textarea
@@ -102,8 +106,46 @@ export default function BottomInputArea({
     onError: msg => onToast(msg, 'error'),
   }), [projectId, commentKey, onSetComment, onToast])
 
+  const tIssue = useTranslations('issue')
+  const te = useTranslations('execution')
+  const [killing, setKilling] = useState(false)
+  // 강제종료 — 트레이스 화면의 버튼과 같은 확인·API·동작(실행 실패 처리 + 에이전트 해제)
+  const killExecution = useKillExecution()
+  const handleKill = async () => {
+    if (!agentWork) return
+    try {
+      if (await killExecution(agentWork.executionId, () => setKilling(true))) onAgentWorkStopped()
+    } finally { setKilling(false) }
+  }
+
   return (
     <div className={`shrink-0 px-3 pb-20 pad:pb-4 pt-2 border-t border-ive-border-dark bg-ive-bg-deep ${widthCls} mx-auto w-full`}>
+      {/* 에이전트가 이 작업을 하는 중 — 코멘트·대화 어느 모드에서도 보이고, 이상하면 바로 트레이스로 가거나 멈춘다 */}
+      {agentWork && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-ive-bg-card border border-ive-border-subtle text-xs font-bold text-ive-text-secondary mb-2">
+          <i className={`fa-solid fa-circle-notch fa-spin ${agentWork.kind === 'confirm' ? 'text-ive-stage-confirm' : agentWork.kind === 'verify' ? 'text-ive-stage-verify' : 'text-ive-stage-process'}`} />
+          <span className="flex-1 min-w-0">
+            {tIssue('agentWorking', { agent: agentWork.agentName || tIssue('agentWorkingUnknown'), work: tIssue(`agentWorkKind.${agentWork.kind === 'chat' ? 'process' : agentWork.kind}`) })}
+          </span>
+          {/* 돌고 있는 실행의 트레이스로 · 강제종료(단계 진행 권한자만 — 서버도 프로젝트 권한을 본다) */}
+          <Link
+            href={`/executions/${agentWork.executionId}`}
+            className="shrink-0 px-3 py-1.5 rounded-lg bg-ive-bg-deep border border-ive-border-dark text-ive-text-secondary hover:text-ive-text transition-colors"
+          >
+            <i className="fa-solid fa-terminal mr-1" />{te('viewTrace')}
+          </Link>
+          {canProgressStage && (
+            <button
+              type="button"
+              onClick={handleKill}
+              disabled={killing}
+              className="shrink-0 text-ive-red/70 border border-ive-red/30 px-3 py-1.5 rounded-lg bg-ive-bg-deep hover:bg-ive-red/10 transition-colors disabled:opacity-40"
+            >
+              {killing ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-skull-crossbones mr-1" />{te('forceStop')}</>}
+            </button>
+          )}
+        </div>
+      )}
       {/* Mode tabs */}
       <ModeTabs
         issue={issue}
@@ -272,6 +314,7 @@ function CommentModeInput({
   onCommentAndInflow: () => void
 }) {
   const tIssue = useTranslations('issue')
+
   // 에이전트가 이 작업을 하는 동안은 단계 버튼(유입·재실행·검증 시작·확인 등)을 내놓지 않는다 — 누르면 같은 일을 겹쳐 하게 된다.
   // 코멘트는 그대로 남길 수 있다. 서버(stage 라우트)도 같은 이유로 막는다.
   const canProgressStage = canProgress && !agentWork
@@ -286,14 +329,6 @@ function CommentModeInput({
 
   return (
     <div className="flex flex-col gap-2">
-      {agentWork && (
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-ive-bg-card border border-ive-border-subtle text-xs font-bold text-ive-text-secondary">
-          <i className={`fa-solid fa-circle-notch fa-spin ${agentWork.kind === 'confirm' ? 'text-ive-stage-confirm' : agentWork.kind === 'verify' ? 'text-ive-stage-verify' : 'text-ive-stage-process'}`} />
-          <span className="flex-1 min-w-0">
-            {tIssue('agentWorking', { agent: agentWork.agentName || tIssue('agentWorkingUnknown'), work: tIssue(`agentWorkKind.${agentWork.kind === 'chat' ? 'process' : agentWork.kind}`) })}
-          </span>
-        </div>
-      )}
       <textarea
         ref={commentTextareaRef}
         value={comment}

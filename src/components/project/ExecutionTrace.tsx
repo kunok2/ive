@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
+import { useKillExecution } from '@/lib/use-kill-execution'
 import { TaskExecution } from '@/types'
 import LogViewer from '@/components/ui/LogViewer'
 import MarqueeText from '@/components/ui/MarqueeText'
@@ -19,6 +20,7 @@ function formatDuration(startedAt: string, endedAt?: string): string {
 
 export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { projectId: string; className?: string }) {
   const tExec = useTranslations('execution')
+  const killExecution = useKillExecution()
   const [executions, setExecutions] = useState<TaskExecution[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -145,9 +147,8 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
-                          setKilling(ex.id)
-                          fetch(`/api/executions/${ex.id}/kill`, { method: 'POST' })
-                            .then(() => fetchExecutions())
+                          killExecution(ex.id, () => setKilling(ex.id))
+                            .then(stopped => { if (stopped) fetchExecutions() })
                             .finally(() => setKilling(null))
                         }}
                         disabled={killing === ex.id}

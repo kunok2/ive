@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
+import { useKillExecution } from '@/lib/use-kill-execution'
 import type { Project, TaskExecution } from '@/types'
 import type { TodayDoneIssue } from '@/lib/db/issues'
 import { useTab } from '@/lib/tab-context'
@@ -42,7 +43,8 @@ interface BoardIssue {
 interface Face { src: string; userId?: string | null; agentId?: string | null; human: boolean }
 
 /** issue — 배지(우선순위·마감일·처리 N회·되돌리기 N회)의 근거. 열린 이슈 목록에 없는 실행·오늘 완료 건은 없다 */
-interface BoardItem { key: string; iid: number; title: string; who: string | null; face?: Face | null; startedAt: string | null; href: string; waiting?: boolean; failed?: boolean; issue?: BoardIssue }
+/** href — 카드를 누르면 가는 작업 상세. traceExecId — 에이전트가 돌리고 있으면 그 실행(트레이스·강제종료 버튼) */
+interface BoardItem { key: string; iid: number; title: string; who: string | null; face?: Face | null; startedAt: string | null; href: string; traceExecId?: string; waiting?: boolean; failed?: boolean; issue?: BoardIssue }
 
 /**
  * PC 폭의 프로젝트 단계 보드 — 대기 | 처리 | 검증 | 확인 | 완료(오늘).
@@ -50,8 +52,9 @@ interface BoardItem { key: string; iid: number; title: string; who: string | nul
  * 데이터는 프로젝트 카드와 같은 API(열린 이슈의 단계 + 실행 기록)를 쓴다.
  */
 /** onOpenTrace — 넓은 화면에서 에이전트 실행을 누르면 페이지를 넘기지 않고 오른쪽 칸에 트레이스를 띄운다(ProjectsTab) */
-export default function ProjectBoard({ project, onOpenTrace }: { project: Project; onOpenTrace?: (executionId: string) => void }) {
+export default function ProjectBoard({ project, onOpenTrace }: { project: Project & { shareRole?: string | null }; onOpenTrace?: (executionId: string) => void }) {
   const tp = useTranslations('project')
+  const te = useTranslations('execution')
   const router = useRouter()
   const { navigateToAddIssue } = useTab()
   const [issues, setIssues] = useState<BoardIssue[] | null>(null)
@@ -62,6 +65,16 @@ export default function ProjectBoard({ project, onOpenTrace }: { project: Projec
   const [now, setNow] = useState(() => Date.now())
   // 에이전트 도구 배지 — 카드와 같은 실시간 도구 활동
   const [activities, setActivities] = useState<Record<string, ToolActivity>>({})
+  // 강제종료 — 소유자·편집자만(프로젝트 카드와 같은 기준, 서버도 프로젝트 권한을 본다). 끝나면 실행·이슈를 바로 다시 읽는다
+  const canEdit = !project.shareRole || project.shareRole === 'editor'
+  const [killing, setKilling] = useState<string | null>(null)
+  const [reloadTick, setReloadTick] = useState(0)
+  const killExecution = useKillExecution()
+  const handleKill = async (execId: string) => {
+    try {
+      if (await killExecution(execId, () => setKilling(execId))) setReloadTick(t => t + 1)
+    } finally { setKilling(null) }
+  }
 
   useEffect(() => {
     // 프로젝트가 바뀌면 보드는 key 로 새로 마운트된다(ProjectsTab) — 여기서 비울 필요가 없다
@@ -74,10 +87,14 @@ export default function ProjectBoard({ project, onOpenTrace }: { project: Projec
     const t2 = setInterval(loadExecs, 5_000)
     const t3 = setInterval(() => setNow(Date.now()), 30_000)
     return () => { alive = false; clearInterval(t1); clearInterval(t2); clearInterval(t3) }
-  }, [project.id])
+  }, [project.id, reloadTick])
 
   const running = execs.filter(e => e.status === 'running' || e.status === 'assigned')
-  const execFor = (iid: number, kind: 'process' | 'verify' | 'confirm') => running.find(e => e.issueIid === iid && execKind(e.id) === kind)
+  // 같은 단계에 사람 배정과 에이전트 실행이 함께 있으면 에이전트 쪽 — 트레이스·강제종료 버튼이 그 실행을 가리켜야 한다
+  const execFor = (iid: number, kind: 'process' | 'verify' | 'confirm') => {
+    const mine = running.filter(e => e.issueIid === iid && execKind(e.id) === kind)
+    return mine.find(e => e.assigneeType !== 'user') ?? mine[0]
+  }
   const execWho = (e?: TaskExecution) => e ? (e.assigneeType === 'user' ? (e.userName ?? null) : (e.agentName ?? null)) : null
   const execFace = (e?: TaskExecution): Face | null => !e ? null
     : e.assigneeType === 'user' ? { src: e.userAvatar || 'person', userId: e.userId, human: true }
@@ -99,6 +116,8 @@ export default function ProjectBoard({ project, onOpenTrace }: { project: Projec
     return () => { alive = false; clearInterval(t) }
   }, [liveAgents])
   const issueHref = (iid: number) => `/issues/${project.id}/${iid}`
+  // 에이전트가 돌리는 실행이면 트레이스로 갈 실행 id — 사람이 맡은 일·AI 채팅은 트레이스가 없다(execHref 와 같은 규칙)
+  const traceOf = (e?: TaskExecution) => e && execHref(e, project.id).startsWith('/executions/') ? e.id : undefined
 
   const cols: Record<Col, BoardItem[]> = { process: [], verify: [], confirm: [], done: [] }
   for (const i of issues ?? []) {
@@ -112,17 +131,17 @@ export default function ProjectBoard({ project, onOpenTrace }: { project: Projec
     } else if (i.stage === 'dev') {
       const e = execFor(i.iid, 'process')
       // 에이전트가 처리 중이면 실시간 실행 화면으로(검증·확인도 같다 — execHref)
-      cols.process.push({ ...base, who: execWho(e), face: execFace(e), startedAt: e?.startedAt ?? null, href: e ? execHref(e, project.id) : base.href })
+      cols.process.push({ ...base, who: execWho(e), face: execFace(e), startedAt: e?.startedAt ?? null, traceExecId: traceOf(e) })
     } else if (i.stage === 'verify_waiting') {
       cols.verify.push({ ...base, who: tp(WAIT_LABEL.verify), startedAt: null, waiting: true })
     } else if (i.stage === 'verifying') {
       const e = execFor(i.iid, 'verify')
-      cols.verify.push({ ...base, who: i.actualVerifier?.name ?? execWho(e), face: i.actualVerifier?.name ? actorFace(i.actualVerifier) : execFace(e), startedAt: e?.startedAt ?? null, href: e ? execHref(e, project.id) : base.href })
+      cols.verify.push({ ...base, who: i.actualVerifier?.name ?? execWho(e), face: i.actualVerifier?.name ? actorFace(i.actualVerifier) : execFace(e), startedAt: e?.startedAt ?? null, traceExecId: traceOf(e) })
     } else if (i.stage === 'confirm_waiting') {
       cols.confirm.push({ ...base, who: tp(WAIT_LABEL.confirm), startedAt: null, waiting: true })
     } else if (i.stage === 'confirming') {
       const e = execFor(i.iid, 'confirm')
-      cols.confirm.push({ ...base, who: i.actualConfirmer?.name ?? execWho(e), face: i.actualConfirmer?.name ? actorFace(i.actualConfirmer) : execFace(e), startedAt: e?.startedAt ?? null, href: e ? execHref(e, project.id) : base.href })
+      cols.confirm.push({ ...base, who: i.actualConfirmer?.name ?? execWho(e), face: i.actualConfirmer?.name ? actorFace(i.actualConfirmer) : execFace(e), startedAt: e?.startedAt ?? null, traceExecId: traceOf(e) })
     }
   }
   // 이슈 목록(Git 조회)에 없거나 아직 못 받은 진행 중 실행도 그 종류의 칸에 둔다 — 카드의 진행 중 목록과 같은 근거(실행 기록)
@@ -133,7 +152,7 @@ export default function ProjectBoard({ project, onOpenTrace }: { project: Projec
     if (cols[col].some(it => it.iid === e.issueIid)) continue
     cols[col].push({
       key: `e-${e.id}`, iid: e.issueIid, title: e.issueTitle ?? '', who: execWho(e), face: execFace(e), startedAt: e.startedAt,
-      href: execHref(e, project.id),
+      href: issueHref(e.issueIid), traceExecId: traceOf(e),
     })
   }
   // 완료(오늘) — 카드의 「완료」 숫자와 같은 근거: 오늘 완료·반려로 바뀐 이슈(issue_stages).
@@ -222,11 +241,14 @@ export default function ProjectBoard({ project, onOpenTrace }: { project: Projec
                       const age = it.startedAt ? ageOf(it.startedAt, now) : null
                       const badges = !!it.issue && (hasIssueBadges(it.issue) || it.issue.priority === 1 || it.issue.priority === 2)
                       return (
-                        <button
+                        // 카드 = 작업 상세. 에이전트가 돌리는 중이면 아래 줄의 「트레이스」로 실행 화면을, 「강제종료」로 중지(카드 안에 버튼이 있어 div 로 둔다)
+                        <div
                           key={it.key}
-                          type="button"
-                          onClick={() => (onOpenTrace && it.href.startsWith('/executions/') ? onOpenTrace(it.href.slice('/executions/'.length)) : router.push(it.href))}
-                          className={`text-left flex flex-col gap-1.5 p-2.5 rounded-lg bg-ive-bg-card border hover:border-ive-cyan/40 transition-colors ${it.failed ? 'border-ive-red/40' : 'border-ive-border-subtle'}`}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => router.push(it.href)}
+                          onKeyDown={e => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); router.push(it.href) } }}
+                          className={`cursor-pointer text-left flex flex-col gap-1.5 p-2.5 rounded-lg bg-ive-bg-card border hover:border-ive-cyan/40 transition-colors ${it.failed ? 'border-ive-red/40' : 'border-ive-border-subtle'}`}
                         >
                           {/* 대기 건은 한 단계 낮은 글자색 — 손에 있는(진행 중) 건이 먼저 읽히게. 흐린색(dim)은 정보 글씨에 쓰지 않는다 */}
                           <span className={`text-xs font-bold leading-snug line-clamp-2 ${it.waiting ? 'text-ive-text-secondary' : 'text-ive-text'}`}>
@@ -248,7 +270,28 @@ export default function ProjectBoard({ project, onOpenTrace }: { project: Projec
                               )}
                             </span>
                           )}
-                        </button>
+                          {it.traceExecId && (
+                            <span className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); const id = it.traceExecId!; if (onOpenTrace) onOpenTrace(id); else router.push(`/executions/${id}`) }}
+                                className="text-xs font-bold px-2 py-1 rounded-lg bg-ive-bg-deep border border-ive-border-dark text-ive-text-secondary hover:text-ive-text transition-colors"
+                              >
+                                <i className="fa-solid fa-terminal mr-1" />{te('viewTrace')}
+                              </button>
+                              {canEdit && (
+                                <button
+                                  type="button"
+                                  onClick={e => { e.stopPropagation(); void handleKill(it.traceExecId!) }}
+                                  disabled={killing === it.traceExecId}
+                                  className="ml-auto text-xs font-bold px-2 py-1 rounded-lg bg-ive-bg-deep border border-ive-red/30 text-ive-red/70 hover:bg-ive-red/10 transition-colors disabled:opacity-40"
+                                >
+                                  {killing === it.traceExecId ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-skull-crossbones mr-1" />{te('forceStop')}</>}
+                                </button>
+                              )}
+                            </span>
+                          )}
+                        </div>
                       )
                     })}
                   </div>

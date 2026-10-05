@@ -1254,6 +1254,7 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
         onAddChatImages={addChatImages}
         onRemoveChatImage={removeChatImage}
         onPostComment={handlePostComment}
+        onAgentWorkStopped={() => { void fetchIssue() }}
         onCommentAndRetry={handleCommentAndRetry}
         onCommentAndDone={handleCommentAndDone}
         onCommentAndNextStage={handleCommentAndNextStage}
