@@ -11,16 +11,18 @@ export interface BadgeIssue {
   iterationCounts?: { processCount: number; retryTotal: number }
 }
 
-/** 처리 N회는 1회가 평범하니 2회부터, 되돌리기는 1회부터 */
+/**
+ * 처리 N회는 1회가 평범하니 2회부터. 되돌림 배지는 두지 않는다 — 되돌리면 다시 처리하므로 「처리 2회」가 이미 말해 준다(같은 말을 두 배지로 하며 자리만 차지했다).
+ * 되돌림 이력은 작업 상세의 진행 막대(되돌림 화살표)에서 본다.
+ */
 const showProcess = (i: BadgeIssue) => (i.iterationCounts?.processCount ?? 0) >= 2
-const showRetry = (i: BadgeIssue) => (i.iterationCounts?.retryTotal ?? 0) >= 1
 
 export function hasIssueBadges(i: BadgeIssue): boolean {
-  return !!i.dueDate || showProcess(i) || showRetry(i)
+  return !!i.dueDate || showProcess(i)
 }
 
 /**
- * 작업 배지 — 마감일(D-N·D+N·일찍/늦게) + 회차(처리 N회 · 되돌림 N회, 아이콘만으로는 둘이 헷갈려 글자로 적는다).
+ * 작업 배지 — 마감일(D-N·D+N·일찍/늦게) + 처리 N회(글자로 적는다).
  * 작업 목록 카드와 넓은 화면 프로젝트 보드가 같이 쓴다(한쪽만 바뀌지 않게).
  */
 export default function IssueBadges({ issue }: { issue: BadgeIssue }) {
@@ -36,15 +38,6 @@ export default function IssueBadges({ issue }: { issue: BadgeIssue }) {
         >
           <i className="fa-solid fa-repeat" />
           {t('badgeProcess', { count: ic.processCount })}
-        </span>
-      )}
-      {showRetry(issue) && ic && (
-        <span
-          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border bg-ive-amber/10 text-ive-amber border-ive-amber/20 text-[10px] font-bold"
-          title={t('retryCount', { count: ic.retryTotal })}
-        >
-          <i className="fa-solid fa-rotate-left" />
-          {t('badgeRetry', { count: ic.retryTotal })}
         </span>
       )}
     </>

@@ -73,8 +73,6 @@
   "iterationCount": "{count} iterations completed",
   "iterationLabel": "#{count}",
   "badgeProcess": "Run {count}×",
-  "badgeRetry": "Sent back {count}×",
-  "retryCount": "{count} retries",
   "viewAll": "View All",
   "chatMode": "Chat",
   "chatBadgeActive": "In chat",
