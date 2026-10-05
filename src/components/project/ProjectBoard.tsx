@@ -17,7 +17,7 @@ import type { ToolActivity } from '@/lib/tool-activity'
 
 type Col = 'process' | 'verify' | 'confirm' | 'done'
 const COLS: Col[] = ['process', 'verify', 'confirm', 'done']
-const COL_LABEL: Record<Col, string> = { process: 'boardProcess', verify: 'boardVerify', confirm: 'boardConfirm', done: 'boardDone' }
+const COL_LABEL: Record<Col, string> = { process: 'boardProcess', verify: 'boardVerify', confirm: 'boardConfirm', done: 'boardDoneToday' }
 /** 단계 칸 안의 대기 묶음 — 그 단계에서 아직 아무도 잡지 않은 건. 칸 맨 위에 둔다 */
 const WAIT_LABEL: Record<Exclude<Col, 'done'>, string> = { process: 'waitGroupProcess', verify: 'waitGroupVerify', confirm: 'waitGroupConfirm' }
 
@@ -214,7 +214,6 @@ export default function ProjectBoard({ project, onOpenTrace }: { project: Projec
                 <span className={`text-xl font-bold leading-none tabular-nums ${!activeN ? 'text-ive-text-dim' : calm ? 'text-ive-cyan' : STAGE_TONE[col as 'process' | 'verify' | 'confirm'].text}`}><CountBump value={activeN} /></span>
                 <WaitPill n={waitN} title={tp('stageWaitingHint', { n: waitN })} />
                 <FailPill n={failN} />
-                {col === 'done' && <span className="ml-auto text-xs font-bold text-ive-text-dim">{tp('boardDoneSub')}</span>}
               </div>
               <div className="flex-1 min-h-0 overflow-y-auto p-2.5 flex flex-col gap-3">
                 {issues === null && items.length === 0 && <span className="text-xs font-bold text-ive-text-dim px-1">{tp('boardLoading')}</span>}
