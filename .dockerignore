@@ -6,6 +6,7 @@ claude-config
 .git
 .gitignore
 *.md
+!CHANGELOG.md
 debug_db.ts
 .env
 .env.*

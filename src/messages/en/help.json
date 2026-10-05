@@ -1,5 +1,9 @@
 {
   "title": "Help",
+  "releaseNotes": "Release notes",
+  "currentVersion": "Current",
+  "releaseNotesLoading": "Loading…",
+  "releaseNotesFailed": "Could not load release notes",
   "showIntro": "Show intro again",
 
   "projects": "Projects",

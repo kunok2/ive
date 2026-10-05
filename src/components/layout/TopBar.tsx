@@ -14,6 +14,7 @@ import AgentForm from '@/components/agent/AgentForm'
 import Modal from '@/components/ui/Modal'
 import VerifyQueueModal from '@/components/layout/VerifyQueueModal'
 import HelpModal from '@/components/ui/HelpModal'
+import ReleaseNotesModal from '@/components/ui/ReleaseNotesModal'
 import TourOverlay, { tourSteps } from '@/components/ui/TourOverlay'
 import IntroSlides from '@/components/auth/IntroSlides'
 import { useAppVersionWatch } from '@/lib/use-app-version-watch'
@@ -43,6 +44,7 @@ export default function TopBar() {
   const [avatarTs, setAvatarTs] = useState(() => Date.now())
   const [showNewProject, setShowNewProject] = useState(false)
   const [showNewAgent, setShowNewAgent] = useState(false)
+  const [showReleaseNotes, setShowReleaseNotes] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
   const [showIntro, setShowIntro] = useState(false)
   const [tourTab, setTourTab] = useState<string | null>(null)
@@ -290,6 +292,7 @@ export default function TopBar() {
         open={showHelp}
         onClose={() => setShowHelp(false)}
         onShowIntro={() => setShowIntro(true)}
+        onShowReleaseNotes={() => setShowReleaseNotes(true)}
         onStartTour={(tabKey) => {
           setShowHelp(false)
           setActiveTab(tabKey as any)
@@ -310,6 +313,7 @@ export default function TopBar() {
       )}
 
       <VerifyQueueModal open={showVerifyQueue} onClose={() => setShowVerifyQueue(false)} />
+      <ReleaseNotesModal open={showReleaseNotes} onClose={() => setShowReleaseNotes(false)} />
     </>
   )
 }

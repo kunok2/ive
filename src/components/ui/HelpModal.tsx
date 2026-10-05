@@ -9,6 +9,8 @@ interface HelpModalProps {
   onClose: () => void
   onShowIntro: () => void
   onStartTour: (tabKey: string) => void
+  /** 「변경 이력」 창 열기 — 도움말 아래 판 표시를 누르면 */
+  onShowReleaseNotes: () => void
 }
 
 const tabSections = [
@@ -26,7 +28,7 @@ const slackFlows = [
   { key: 'slackShare', icon: 'fa-solid fa-share-nodes', steps: 4 },
 ] as const
 
-export default function HelpModal({ open, onClose, onShowIntro, onStartTour }: HelpModalProps) {
+export default function HelpModal({ open, onClose, onShowIntro, onStartTour, onShowReleaseNotes }: HelpModalProps) {
   const t = useTranslations('help')
   const tt = useTranslations('tour')
   const { activeTab } = useTab()
@@ -203,6 +205,13 @@ export default function HelpModal({ open, onClose, onShowIntro, onStartTour }: H
           >
             <i className="fa-solid fa-circle-play mr-1.5" />
             {t('showIntro')}
+          </button>
+          {/* 판 — package.json version(빌드 때 APP_VERSION). 누르면 판별 변경 이력 */}
+          <button
+            onClick={() => { onClose(); onShowReleaseNotes() }}
+            className="w-full mt-2 py-1.5 rounded-lg text-xs font-bold text-ive-text-secondary hover:text-ive-text hover:bg-white/[0.04] transition-colors"
+          >
+            IVE v{process.env.APP_VERSION} · {t('releaseNotes')}
           </button>
         </div>
       </div>

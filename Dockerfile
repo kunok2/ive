@@ -122,6 +122,8 @@ COPY server.ts ./
 COPY src ./src
 COPY tsconfig.json ./
 COPY next.config.mjs ./
+# 도움말 › 변경 이력(/api/changelog)이 읽는다
+COPY CHANGELOG.md ./
 
 # non-root 사용자 생성 (Claude Code의 root 제한 우회)
 RUN useradd -m -s /bin/bash ive \

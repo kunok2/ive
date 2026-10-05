@@ -1,5 +1,9 @@
 {
   "title": "도움말",
+  "releaseNotes": "변경 이력",
+  "currentVersion": "현재",
+  "releaseNotesLoading": "불러오는 중…",
+  "releaseNotesFailed": "변경 이력을 불러오지 못했습니다",
   "showIntro": "소개 다시 보기",
 
   "projects": "프로젝트",
