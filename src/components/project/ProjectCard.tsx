@@ -226,6 +226,17 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
   }))
   // 검증·확인 단계를 지금 에이전트가 돌리고 있는 실행
   const liveStageExecs = (kind: 'verify' | 'confirm') => runningExecs.filter(e => e.assigneeType !== 'user' && stageKindOf(e.id) === kind)
+  // 검증·확인 패널의 진행 중 목록(또는 「없음」)을 보일지 — 에이전트 실시간 화면이 모든 건을 덮거나,
+  // 진행 중은 없고 대기만 있으면 목록 칸을 생략한다
+  const stageListShown = (kind: 'verify' | 'confirm') => {
+    const live = liveStageExecs(kind)
+    const issues = kind === 'verify' ? verifyingIssues : confirmingIssues
+    const waitCount = kind === 'verify' ? (stats?.verifyWaiting ?? 0) : (stats?.confirmWaiting ?? 0)
+    if (live.length > 0 && issues.every((i: any) => live.some(e => e.issueIid === i.iid))) return false
+    return !(issues.length === 0 && waitCount > 0)
+  }
+  // 대기 묶음 아래에 실시간 화면이나 목록이 오는지 — 없으면 대기 묶음이 패널 높이를 다 채운다
+  const stageHasBody = (kind: 'verify' | 'confirm') => liveStageExecs(kind).length > 0 || stageListShown(kind)
   const liveAgentCount = runningExecs.filter(e => e.assigneeType !== 'user').length
 
   // 라이브 값(/api/.../conflicts)이 단일 진실. stats.conflictCount는
@@ -676,7 +687,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
       {expandedPanel === 'verifying' && (
         <div className="flex-1 flex flex-col min-h-0 border-t border-ive-stage-verify/30">
           {/* 이 단계에서 기다리는 건이 먼저 */}
-          {renderWaitGroup('verify_waiting') && <div className="shrink-0 max-h-[45%] overflow-y-auto">{renderWaitGroup('verify_waiting')}</div>}
+          {renderWaitGroup('verify_waiting') && <div className={`${stageHasBody('verify') ? 'shrink-0 max-h-[45%]' : 'flex-1 min-h-0'} overflow-y-auto`}>{renderWaitGroup('verify_waiting')}</div>}
           {/* 에이전트가 이 단계를 돌리는 중이면 처리 패널과 같은 실시간 화면 */}
           {liveStageExecs('verify').length > 0 && (
             <div className="flex-1 flex flex-col min-h-0">
@@ -687,12 +698,12 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
               />
             </div>
           )}
-          {liveStageExecs('verify').length > 0 && verifyingIssues.every((i: any) => liveStageExecs('verify').some(e => e.issueIid === i.iid)) ? null : verifyingIssues.length === 0 ? (verifyWaitCount > 0 ? null : (
+          {!stageListShown('verify') ? null : verifyingIssues.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center gap-2 text-ive-text-dim text-sm">
               <i className="fa-solid fa-inbox text-2xl" />
               <span>{tp('noVerifying')}</span>
             </div>
-          )) : (
+          ) : (
             <div className="flex-1 overflow-y-auto">
               {/* 대기 묶음과 나란히 놓일 때 구분되도록 진행 중 머리줄 */}
               <div className="px-3 py-2 bg-ive-bg-deep/50 border-y border-ive-border-dark">
@@ -741,7 +752,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
       {expandedPanel === 'confirming' && (
         <div className="flex-1 flex flex-col min-h-0 border-t border-ive-stage-confirm/30">
           {/* 이 단계에서 기다리는 건이 먼저 */}
-          {renderWaitGroup('confirm_waiting') && <div className="shrink-0 max-h-[45%] overflow-y-auto">{renderWaitGroup('confirm_waiting')}</div>}
+          {renderWaitGroup('confirm_waiting') && <div className={`${stageHasBody('confirm') ? 'shrink-0 max-h-[45%]' : 'flex-1 min-h-0'} overflow-y-auto`}>{renderWaitGroup('confirm_waiting')}</div>}
           {/* 에이전트가 이 단계를 돌리는 중이면 처리 패널과 같은 실시간 화면 */}
           {liveStageExecs('confirm').length > 0 && (
             <div className="flex-1 flex flex-col min-h-0">
@@ -752,12 +763,12 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
               />
             </div>
           )}
-          {liveStageExecs('confirm').length > 0 && confirmingIssues.every((i: any) => liveStageExecs('confirm').some(e => e.issueIid === i.iid)) ? null : confirmingIssues.length === 0 ? (confirmWaitCount > 0 ? null : (
+          {!stageListShown('confirm') ? null : confirmingIssues.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center gap-2 text-ive-text-dim text-sm">
               <i className="fa-solid fa-inbox text-2xl" />
               <span>{tp('noConfirming')}</span>
             </div>
-          )) : (
+          ) : (
             <div className="flex-1 overflow-y-auto">
               {/* 대기 묶음과 나란히 놓일 때 구분되도록 진행 중 머리줄 */}
               <div className="px-3 py-2 bg-ive-bg-deep/50 border-y border-ive-border-dark">
