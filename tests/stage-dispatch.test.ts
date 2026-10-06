@@ -14,6 +14,10 @@
  *   D-10 명부에서 빠진 에이전트, 소유자가 편집 권한을 잃은 에이전트는 돌리지 않는다.
  *   D-11 IVE 가 봇 계정으로 만든 이슈는 본문의 ive-author(실제 등록자)로 판정한다 — 프로젝트 사람이면 허용.
  *        마커는 Git 작성자가 봇일 때만 믿는다.
+ *   H-1 사람이 「에이전트에게 확인 맡기기」를 누르면 확인 중(C)에서 판단 불가로 멈춘 뒤에도 바로 띄운다.
+ *   H-2 맡기기도 배포 사실·작성자 허용·명부는 같은 기준으로 본다 — 못 띄우면 이유만 돌려주고 아무것도 바꾸지 않는다.
+ *   H-3 검증도 같다 — 검증 중(V)에서 판단 불가로 멈춘 뒤에도 고른 에이전트로 바로 띄운다.
+ *   H-4 검증 맡기기도 처리자 ≠ 검증자·MR 닫힘·명부는 스캐너와 같은 기준으로 본다.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import Database from 'better-sqlite3'
@@ -24,13 +28,15 @@ const providerMock = vi.hoisted(() => ({
   readRepoFile: vi.fn(),
 }))
 const workerMock = vi.hoisted(() => ({ runConfirmWorker: vi.fn(() => Promise.resolve()) }))
+const verifyWorkerMock = vi.hoisted(() => ({ runVerifyWorker: vi.fn(() => Promise.resolve()) }))
 vi.mock('@/lib/provider', () => providerMock)
 vi.mock('@/lib/scanner/confirm-worker', () => workerMock)
+vi.mock('@/lib/scanner/verify-worker', () => verifyWorkerMock)
 
 import { initSchema } from '@/lib/db/schema'
 import { setIssueIntakeChannel, setPresetRoles, updateProjectAutomation, getStageWorkerNote, approveIssueAutomation, replaceProjectMembers, setRosterEntry, getPresetRoles, getRoster, updateProjectShareRole } from '@/lib/db'
 import { openAgentStageExecution, setStageVerdict } from '@/lib/scanner/stage-records'
-import { dispatchStageWorkers, isAutomationAllowed } from '@/lib/scanner/stage-dispatch'
+import { dispatchStageWorkers, isAutomationAllowed, checkStageHandOff } from '@/lib/scanner/stage-dispatch'
 import type { Project } from '@/types'
 
 const P = 'p1'
@@ -245,5 +251,90 @@ describe('D-11 IVE 가 봇 계정으로 만든 이슈', () => {
   })
   it('사람이 Git 에 직접 만든 이슈의 마커는 믿지 않는다', () => {
     expect(isAutomationAllowed(project, 4, { author: { username: 'outsider' }, description: body('owner') }).ok).toBe(false)
+  })
+})
+
+describe('H 에이전트에게 확인 맡기기 (화면)', () => {
+  it('H-1 확인 중(C)에서 판단 불가로 멈춘 작업도 바로 띄운다 — 확인자 배정이 사람이어도 고른 에이전트로', async () => {
+    const iid = iidSeq
+    configure()
+    const id = `ex-confirm-h-${iid}`
+    openAgentStageExecution(P, iid, 'confirm', { executionId: id, agentId: 'a1', agentName: 'Alpha', logPath: '' })
+    setStageVerdict(id, 'blocked')
+    db.prepare(`UPDATE task_executions SET status = 'failed' WHERE id = ?`).run(id)
+    const r = await checkStageHandOff(project, issue(iid), 'confirming', 'a1', 'tok')
+    expect(r.ok).toBe(true)
+    expect(workerMock.runConfirmWorker).not.toHaveBeenCalled()   // 검사만 — 띄우는 것은 launch()
+    if (r.ok) r.launch()
+    expect(workerMock.runConfirmWorker).toHaveBeenCalledTimes(1)
+    const [input] = workerMock.runConfirmWorker.mock.calls[0] as unknown as [any]
+    expect(input.stage).toBe('confirming')
+    expect(input.agent.id).toBe('a1')
+    expect(input.deployedCommit).toBe('bbbbbbb2')
+  })
+
+  it('H-2 배포 전·허용 목록 밖·명부 밖이면 이유를 돌려주고 배정·메모를 바꾸지 않는다', async () => {
+    const iid = iidSeq
+    configure()
+    providerMock.isAncestorCommit.mockResolvedValue(false)
+    const notDeployed = await checkStageHandOff(project, issue(iid), 'confirm_waiting', 'a1', 'tok')
+    expect(notDeployed).toEqual({ ok: false, reason: expect.stringMatching(/staging 배포 대기/) })
+    providerMock.isAncestorCommit.mockResolvedValue(true)
+
+    const outsider = await checkStageHandOff(project, issue(iid, 'outsider'), 'confirm_waiting', 'a1', 'tok')
+    expect(outsider).toEqual({ ok: false, reason: expect.stringMatching(/자동 실행 승인 필요/) })
+
+    db.prepare(`INSERT INTO agents (id, user_id, name, cli_name, cli_path) VALUES ('a2', 'owner', 'Beta', 'claude', 'claude')`).run()
+    const offRoster = await checkStageHandOff(project, issue(iid), 'confirm_waiting', 'a2', 'tok')
+    expect(offRoster).toEqual({ ok: false, reason: expect.stringMatching(/명부에 없습니다/) })
+
+    expect(workerMock.runConfirmWorker).not.toHaveBeenCalled()
+    expect(getPresetRoles(P, iid).confirmer.mode).not.toBe('agent')
+    expect(getStageWorkerNote(P, iid)).toBeNull()
+  })
+})
+
+describe('H 에이전트에게 검증 맡기기 (화면)', () => {
+  const verifier = (id: string) => setRosterEntry(P, { subjectType: 'agent', subjectId: id, roles: { process: false, verify: true, confirm: false } }, 'owner')
+
+  it('H-3 검증 중(V)에서 판단 불가로 멈춘 작업도 고른 에이전트로 바로 띄운다', async () => {
+    const iid = iidSeq
+    verifier('a1')
+    providerMock.fetchMRByBranch.mockResolvedValue({ state: 'opened', iid: 7, web_url: 'https://gitlab.com/g/r/-/merge_requests/7' })
+    const id = `ex-verify-h-${iid}`
+    openAgentStageExecution(P, iid, 'verify', { executionId: id, agentId: 'a1', agentName: 'Alpha', logPath: '' })
+    setStageVerdict(id, 'blocked')
+    db.prepare(`UPDATE task_executions SET status = 'failed' WHERE id = ?`).run(id)
+    const r = await checkStageHandOff(project, issue(iid), 'verifying', 'a1', 'tok')
+    expect(r.ok).toBe(true)
+    expect(verifyWorkerMock.runVerifyWorker).not.toHaveBeenCalled()   // 검사만 — 띄우는 것은 launch()
+    if (r.ok) r.launch()
+    expect(verifyWorkerMock.runVerifyWorker).toHaveBeenCalledTimes(1)
+    const [input] = verifyWorkerMock.runVerifyWorker.mock.calls[0] as unknown as [any]
+    expect(input.stage).toBe('verifying')
+    expect(input.agent.id).toBe('a1')
+    expect(input.mrIid).toBe(7)
+    expect(input.targetBranch).toBe('staging')
+    expect(workerMock.runConfirmWorker).not.toHaveBeenCalled()
+  })
+
+  it('H-4 처리한 에이전트·닫힌 MR·검증 명부 밖이면 이유를 돌려주고 띄우지 않는다', async () => {
+    const iid = iidSeq
+    verifier('a1')
+    db.prepare(`INSERT INTO task_executions (id, project_id, agent_id, issue_iid, status, started_at) VALUES (?, ?, 'a1', ?, 'success', '2026-10-01T00:00:00Z')`).run(`ex-proc-${iid}`, P, iid)
+    const self = await checkStageHandOff(project, issue(iid), 'verify_waiting', 'a1', 'tok')
+    expect(self).toEqual({ ok: false, reason: expect.stringMatching(/처리한 에이전트와 같습니다/) })
+
+    db.prepare(`INSERT INTO agents (id, user_id, name, cli_name, cli_path) VALUES ('a2', 'owner', 'Beta', 'claude', 'claude')`).run()
+    const offRoster = await checkStageHandOff(project, issue(iid), 'verify_waiting', 'a2', 'tok')
+    expect(offRoster).toEqual({ ok: false, reason: expect.stringMatching(/검증 에이전트 'Beta' .*명부에 없습니다/) })
+
+    verifier('a2')
+    providerMock.fetchMRByBranch.mockResolvedValue({ state: 'closed' })
+    const closed = await checkStageHandOff(project, issue(iid), 'verify_waiting', 'a2', 'tok')
+    expect(closed).toEqual({ ok: false, reason: expect.stringMatching(/MR 이 닫혀 있습니다/) })
+
+    expect(verifyWorkerMock.runVerifyWorker).not.toHaveBeenCalled()
+    expect(getStageWorkerNote(P, iid)).toBeNull()
   })
 })

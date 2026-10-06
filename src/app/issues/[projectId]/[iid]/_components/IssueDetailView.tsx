@@ -157,6 +157,9 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
 
   // --- Stage/edit state ---
   const [stageChanging, setStageChanging] = useState(false)
+  // 검증·확인을 에이전트에게 맡기기 — 고른 에이전트(없으면 검증자/확인자 에이전트 → 명부 첫 에이전트)
+  const [handOffAgentId, setHandOffAgentId] = useState<string | null>(null)
+  const [handingOff, setHandingOff] = useState(false)
   const [showDesc, setShowDesc] = useState(true)
   const [isClosing, setIsClosing] = useState(false)
   const [editMode, setEditMode] = useState(false)
@@ -440,6 +443,36 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
       await runApproveWithMRCheck(doApprove); return
     }
     await doApprove()
+  }
+
+  // 검증대기·검증 중·확인대기·확인 중인 작업의 그 단계 일을 에이전트에게 맡긴다 — 검증자/확인자를 그 에이전트로 바꾸고 작업자를 바로 띄운다
+  async function handleStageHandOff(kind: 'verify' | 'confirm', agent: RoleAgentCandidate) {
+    if (!issue) return
+    // 진행 중(V/C)이면 사람이 하던 검증·확인을 취소하게 된다 — 먼저 묻는다
+    if (issue.stage === 'verifying' || issue.stage === 'confirming') {
+      const ok = await confirm({
+        title: tIssue('handOffButton'), message: tIssue(`handOffToAgent.${kind}.ask`, { agent: agent.name }),
+        confirmText: tIssue('handOffButton'), cancelText: tc('cancel'), variant: 'warning',
+      })
+      if (!ok) return
+    }
+    setHandingOff(true)
+    try {
+      const res = await fetch(`/api/projects/${projectId}/issues/${iid}/stage-agent`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId: agent.id }),
+      })
+      const data = await res.json().catch(() => null)
+      if (res.ok) {
+        toast(tIssue(`handOffToAgent.${kind}.done`, { agent: data?.agentName || agent.name }), 'success')
+        window.dispatchEvent(new Event('refresh-counts'))
+      } else {
+        toast(data?.error || `Error: ${res.status} ${res.statusText}`, 'error')
+      }
+      await fetchIssue()  // 성공: 에이전트 작업 중 안내로 / 409: 바뀐 상태로 버튼을 맞춘다
+    } catch (e: any) {
+      toast(e?.message || tc('networkError'), 'error')
+    } finally { setHandingOff(false) }
   }
 
   async function handleCloseIssue() {
@@ -1210,6 +1243,54 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
           </div>
         </div>
       )}
+
+      {/* 검증·확인을 에이전트에게 맡기기 — 검증대기·검증 중·확인대기·확인 중이고 에이전트가 이 작업을 하고 있지 않을 때 */}
+      {!issue.agentWork && canProgressStage && (() => {
+        const kind = issue.stage === 'verify_waiting' || issue.stage === 'verifying' ? 'verify'
+          : issue.stage === 'confirm_waiting' || issue.stage === 'confirming' ? 'confirm' : null
+        if (!kind) return null
+        // 자기 작업을 자기가 검증하지 않는다 — 처리한 에이전트는 검증 후보에서 뺀다(서버도 막는다)
+        const agents = kind === 'verify'
+          ? roleAgents.verify.filter(a => a.id !== issue.actualProcessor?.agentId)
+          : roleAgents.confirm
+        if (agents.length === 0) return null
+        const preset = kind === 'verify' ? issue.presetVerifier : issue.presetConfirmer
+        const picked = agents.find(a => a.id === handOffAgentId)
+          || agents.find(a => preset?.mode === 'agent' && a.id === preset?.agentId)
+          || agents[0]
+        return (
+          <div className={`shrink-0 w-full ${widthCls} mx-auto px-3 pt-2`}>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg bg-ive-bg-card border border-ive-border-subtle px-3 py-2">
+              <i className={`fa-solid fa-robot ${kind === 'verify' ? 'text-ive-stage-verify' : 'text-ive-stage-confirm'}`} />
+              <span className="flex-1 min-w-0 text-sm font-bold text-ive-text-secondary">{tIssue(`handOffToAgent.${kind}.text`)}</span>
+              <div className="flex items-center gap-2 shrink-0">
+                {agents.length > 1 && (
+                  <select
+                    value={picked.id}
+                    onChange={e => setHandOffAgentId(e.target.value)}
+                    disabled={handingOff || stageChanging}
+                    aria-label={tIssue(`handOffToAgent.${kind}.pick`)}
+                    className="h-8 max-w-40 bg-ive-bg-input border border-ive-border rounded-lg px-2 text-sm text-ive-text focus:outline-none focus:border-ive-green disabled:opacity-40"
+                  >
+                    {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                  </select>
+                )}
+                <button
+                  onClick={() => handleStageHandOff(kind, picked)}
+                  disabled={handingOff || stageChanging}
+                  className={`h-8 px-3 rounded-lg text-sm font-bold disabled:opacity-40 ${kind === 'verify'
+                    ? 'bg-ive-stage-verify/15 text-ive-stage-verify hover:bg-ive-stage-verify/25'
+                    : 'bg-ive-stage-confirm/15 text-ive-stage-confirm hover:bg-ive-stage-confirm/25'}`}
+                >
+                  {handingOff
+                    ? <i className="fa-solid fa-circle-notch fa-spin" />
+                    : agents.length > 1 ? tIssue('handOffButton') : tIssue('handOffButtonNamed', { agent: picked.name })}
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       <NotesList
         widthCls={widthCls}
