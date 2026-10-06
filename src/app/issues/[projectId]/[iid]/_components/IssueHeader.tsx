@@ -93,6 +93,8 @@ interface IssueHeaderProps {
   onBack?: () => void
   /** 폭 제한 클래스 — 옆 칸이면 칸 전체 폭 */
   widthCls?: string
+  /** 진행막대·마감일·우선순위를 머리에 그리지 않는다 — 폰 폭에서 내용 스크롤 영역에 IssueProgressSection 으로 따로 그릴 때 */
+  hideProgress?: boolean
   onStageAction: (action: string) => void
   onCloseIssue: () => void
   onStartEdit: () => void
@@ -119,18 +121,13 @@ export default function IssueHeader({
   issue, iterationCount,
   canEditAssignees, isClosing, editMode, editTitle, editDesc, saving, showDesc,
   projectId, gitMembers, confirmerMembers, roleAgents, preferredAgent,
-  onBack, widthCls = 'max-w-lg desk:max-w-3xl', onCloseIssue, onStartEdit, onSaveEdit, onCancelEdit,
+  onBack, widthCls = 'max-w-lg desk:max-w-3xl', hideProgress = false, onCloseIssue, onStartEdit, onSaveEdit, onCancelEdit,
   onSetEditTitle, onSetEditDesc, onSetShowDesc, onOpenAssigneePicker, onOpenAgentPicker,
   onPresetVerifierChange, onPresetConfirmerChange, onDueDateChange, onPriorityChange, isCreator, onToast,
 }: IssueHeaderProps) {
   const { state } = useStore()
   const tc = useTranslations('common')
   const tIssue = useTranslations('issue')
-
-  // 완료된 작업(닫힘 또는 done 단계)은 담당자/검증자/확인자/마감일 모두 수정 불가.
-  // 이미 종결된 흐름을 사후 변경하면 통계와 보고서가 어그러진다.
-  const isCompleted = issue.state === 'closed' || issue.stage === 'done'
-  const effectiveCanEditAssignees = canEditAssignees && !isCompleted
 
   // Image paste handler for edit description textarea
   const editDescRef = useRef(editDesc)
@@ -249,81 +246,120 @@ export default function IssueHeader({
           </>
         )}
       </div>
-      {/* 진행막대 — 5단계 흐름 + 단계별 담당자 아바타를 한 줄로 표시 */}
-      {!editMode && (
+      {/* 진행막대 — 폰 폭에서는 내용 스크롤 영역 맨 위로 옮겨 그린다(hideProgress) */}
+      {!editMode && !hideProgress && (
         <div className="px-3 pt-1 pb-3">
-          {/* 넓은 칸에서도 막대는 보기 좋은 폭(최대 768px)까지만, 가운데 */}
-          <div className="w-full max-w-3xl mx-auto">
-          <StageProgress
-            stage={issue.stage}
-            createdAt={issue.createdAt}
-            closedAt={issue.closedAt ?? null}
-            stageTimes={issue.stageTimes ?? null}
-            retryCounts={issue.retryCounts ?? null}
-            forwardCounts={issue.forwardCounts ?? null}
-            roles={{
-              creator: {
-                name: issue.author,
-                avatar: issue.iveAuthorAvatar
-                  ? (issue.iveAuthorAvatar.startsWith('av-') ? null : issue.iveAuthorAvatar)
-                  : (issue.authorAvatarUrl ?? null),
-                avatarUrl: issue.authorAvatarUrl ?? null,
-              },
-              processor: {
-                assignMode: (preferredAgent?.assignMode as 'agent' | 'auto' | 'assignee' | 'none' | undefined) ?? 'auto',
-                agentName: preferredAgent?.preferredAgentName ?? null,
-                agentAvatar: preferredAgent?.preferredAgentAvatar ?? null,
-                username: issue.assignees?.[0]?.username ?? null,
-                name: issue.assignees?.[0]?.name ?? null,
-                avatarUrl: issue.assignees?.[0]?.avatarUrl ?? null,
-                pendingAuto: !!(issue as any).assigneeAuto,
-              },
-              verifier: issue.presetVerifier ?? { mode: 'creator', userId: null, username: null },
-              confirmer: issue.presetConfirmer ?? { mode: 'creator', userId: null, username: null },
-              actualProcessor: issue.actualProcessor ?? null,
-              actualVerifier: issue.actualVerifier ?? null,
-              actualConfirmer: issue.actualConfirmer ?? null,
-              gitMembers,
-              confirmerMembers,
-              canEdit: effectiveCanEditAssignees,
-              // 처리자 아바타 클릭 — 에이전트 picker 가 있으면 그쪽, 없으면 기존 git 담당자 picker.
-              onProcessorClick: onOpenAgentPicker ?? onOpenAssigneePicker,
-              onVerifierChange: onPresetVerifierChange,
-              onConfirmerChange: onPresetConfirmerChange,
-              verifierAgents: roleAgents?.verify,
-              confirmerAgents: roleAgents?.confirm,
-            }}
+          <IssueProgressSection
+            issue={issue}
+            canEditAssignees={canEditAssignees}
+            isCreator={isCreator}
+            gitMembers={gitMembers}
+            confirmerMembers={confirmerMembers}
+            roleAgents={roleAgents}
+            preferredAgent={preferredAgent}
+            onOpenAssigneePicker={onOpenAssigneePicker}
+            onOpenAgentPicker={onOpenAgentPicker}
+            onPresetVerifierChange={onPresetVerifierChange}
+            onPresetConfirmerChange={onPresetConfirmerChange}
+            onDueDateChange={onDueDateChange}
+            onPriorityChange={onPriorityChange}
           />
-          </div>
-          {/* 마감일 진행 — 시작일시 → 마감일시 + 소진율. 작성자만 수정 가능.
-              완료된 작업(closed/done)은 마감일 대비 조기/지연을 표시하므로 마감일이 있어야만 노출. */}
-          {(() => {
-            const isCompleted = issue.state === 'closed' || issue.stage === 'done'
-            const completedAt = issue.closedAt ?? (issue.stage === 'done' ? issue.stageTimes?.confirmedAt ?? null : null)
-            // 완료 + 마감일 미설정: 비교 대상이 없으니 노출 안함.
-            if (isCompleted && !issue.dueDate) return null
-            // 미완료: 마감일이 있거나 작성자(설정 버튼) 인 경우만 노출.
-            if (!isCompleted && !issue.dueDate && !isCreator) return null
-            return (
-              <div className="mt-2">
-                <DeadlineProgress
-                  createdAt={issue.createdAt}
-                  dueDate={issue.dueDate}
-                  completedAt={isCompleted ? completedAt : null}
-                  canEdit={isCreator && !isCompleted}
-                  onChange={onDueDateChange}
-                />
-              </div>
-            )
-          })()}
-          {/* 우선순위 — 에이전트가 대기 작업을 높은 것부터 집는다. 완료된 작업은 바꾸지 않는다 */}
-          {onPriorityChange && issue.state !== 'closed' && issue.stage !== 'done' && (
-            <div className="mt-2">
-              <PriorityPicker value={issue.priority ?? 0} onChange={onPriorityChange} />
-            </div>
-          )}
         </div>
       )}
     </header>
+  )
+}
+
+type IssueProgressSectionProps = Pick<IssueHeaderProps,
+  'issue' | 'canEditAssignees' | 'isCreator' | 'gitMembers' | 'confirmerMembers' | 'roleAgents' | 'preferredAgent'
+  | 'onOpenAssigneePicker' | 'onOpenAgentPicker' | 'onPresetVerifierChange' | 'onPresetConfirmerChange'
+  | 'onDueDateChange' | 'onPriorityChange'>
+
+/**
+ * 진행막대(5단계 흐름 + 단계별 담당자 아바타) · 마감일 진행 · 우선순위.
+ * 넓은 칸은 IssueHeader 안(고정)에, 폰 폭은 내용 스크롤 영역 맨 위에 그려 함께 스크롤된다 — 내용 보기 높이 확보.
+ */
+export function IssueProgressSection({
+  issue, canEditAssignees, isCreator, gitMembers, confirmerMembers, roleAgents, preferredAgent,
+  onOpenAssigneePicker, onOpenAgentPicker, onPresetVerifierChange, onPresetConfirmerChange, onDueDateChange, onPriorityChange,
+}: IssueProgressSectionProps) {
+  // 완료된 작업(닫힘 또는 done 단계)은 담당자/검증자/확인자/마감일 모두 수정 불가.
+  // 이미 종결된 흐름을 사후 변경하면 통계와 보고서가 어그러진다.
+  const isCompleted = issue.state === 'closed' || issue.stage === 'done'
+  const effectiveCanEditAssignees = canEditAssignees && !isCompleted
+
+  return (
+    <>
+      {/* 넓은 칸에서도 막대는 보기 좋은 폭(최대 768px)까지만, 가운데 */}
+      <div className="w-full max-w-3xl mx-auto">
+      <StageProgress
+        stage={issue.stage}
+        createdAt={issue.createdAt}
+        closedAt={issue.closedAt ?? null}
+        stageTimes={issue.stageTimes ?? null}
+        retryCounts={issue.retryCounts ?? null}
+        forwardCounts={issue.forwardCounts ?? null}
+        roles={{
+          creator: {
+            name: issue.author,
+            avatar: issue.iveAuthorAvatar
+              ? (issue.iveAuthorAvatar.startsWith('av-') ? null : issue.iveAuthorAvatar)
+              : (issue.authorAvatarUrl ?? null),
+            avatarUrl: issue.authorAvatarUrl ?? null,
+          },
+          processor: {
+            assignMode: (preferredAgent?.assignMode as 'agent' | 'auto' | 'assignee' | 'none' | undefined) ?? 'auto',
+            agentName: preferredAgent?.preferredAgentName ?? null,
+            agentAvatar: preferredAgent?.preferredAgentAvatar ?? null,
+            username: issue.assignees?.[0]?.username ?? null,
+            name: issue.assignees?.[0]?.name ?? null,
+            avatarUrl: issue.assignees?.[0]?.avatarUrl ?? null,
+            pendingAuto: !!(issue as any).assigneeAuto,
+          },
+          verifier: issue.presetVerifier ?? { mode: 'creator', userId: null, username: null },
+          confirmer: issue.presetConfirmer ?? { mode: 'creator', userId: null, username: null },
+          actualProcessor: issue.actualProcessor ?? null,
+          actualVerifier: issue.actualVerifier ?? null,
+          actualConfirmer: issue.actualConfirmer ?? null,
+          gitMembers,
+          confirmerMembers,
+          canEdit: effectiveCanEditAssignees,
+          // 처리자 아바타 클릭 — 에이전트 picker 가 있으면 그쪽, 없으면 기존 git 담당자 picker.
+          onProcessorClick: onOpenAgentPicker ?? onOpenAssigneePicker,
+          onVerifierChange: onPresetVerifierChange,
+          onConfirmerChange: onPresetConfirmerChange,
+          verifierAgents: roleAgents?.verify,
+          confirmerAgents: roleAgents?.confirm,
+        }}
+      />
+      </div>
+      {/* 마감일 진행 — 시작일시 → 마감일시 + 소진율. 작성자만 수정 가능.
+          완료된 작업(closed/done)은 마감일 대비 조기/지연을 표시하므로 마감일이 있어야만 노출. */}
+      {(() => {
+        const isCompleted = issue.state === 'closed' || issue.stage === 'done'
+        const completedAt = issue.closedAt ?? (issue.stage === 'done' ? issue.stageTimes?.confirmedAt ?? null : null)
+        // 완료 + 마감일 미설정: 비교 대상이 없으니 노출 안함.
+        if (isCompleted && !issue.dueDate) return null
+        // 미완료: 마감일이 있거나 작성자(설정 버튼) 인 경우만 노출.
+        if (!isCompleted && !issue.dueDate && !isCreator) return null
+        return (
+          <div className="mt-2">
+            <DeadlineProgress
+              createdAt={issue.createdAt}
+              dueDate={issue.dueDate}
+              completedAt={isCompleted ? completedAt : null}
+              canEdit={isCreator && !isCompleted}
+              onChange={onDueDateChange}
+            />
+          </div>
+        )
+      })()}
+      {/* 우선순위 — 에이전트가 대기 작업을 높은 것부터 집는다. 완료된 작업은 바꾸지 않는다 */}
+      {onPriorityChange && issue.state !== 'closed' && issue.stage !== 'done' && (
+        <div className="mt-2">
+          <PriorityPicker value={issue.priority ?? 0} onChange={onPriorityChange} />
+        </div>
+      )}
+    </>
   )
 }

@@ -11,7 +11,8 @@ import { useTranslations } from 'next-intl'
 import { useStageConfig, isClosedMidway } from './StageActions'
 import { transitionTarget } from '@/lib/stage-transitions'
 import { useStore } from '@/lib/store'
-import IssueHeader from './IssueHeader'
+import { useIsDesk } from '@/lib/use-media'
+import IssueHeader, { IssueProgressSection } from './IssueHeader'
 import NotesList from './NotesList'
 import BottomInputArea from './BottomInputArea'
 import MrActionModal from './MrActionModal'
@@ -115,6 +116,9 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
   const goBack = () => { if (embedded) onClose?.(); else router.back() }
   // 넓은 화면 작업 탭의 옆 칸이면 칸 전체 폭을 쓰고 ← 를 그리지 않는다(목록이 바로 옆에 있다)
   const widthCls = embedded ? 'max-w-none' : 'max-w-lg desk:max-w-3xl'
+  // 폰 폭: 진행막대·마감일·우선순위를 고정 머리에서 빼 내용 스크롤 영역 맨 위에 둔다 — 함께 스크롤되어 내용 보기 높이가 커진다
+  const isDesk = useIsDesk()
+  const progressInScroll = !embedded && !isDesk
   const { confirm } = useDialog()
   const { toast } = useToast()
   const { state } = useStore()
@@ -1088,6 +1092,58 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
   // 처리 횟수 — 실제 처리 실행 수(카드의 ↻ 와 같은 근거). 봇 코멘트 수를 세면 검증·확인 결과까지 더해져 한 번에 통과해도 「4차」가 된다
   const iterationCount = issue.forwardCounts?.toProcess ?? 0
 
+  // 검증자·확인자 미리 지정 — 낙관 반영 후 서버 저장값으로 맞추고, 실패하면 되돌린다
+  const handlePresetVerifierChange = async (preset: PresetRole) => {
+    const prevPreset = issue?.presetVerifier
+    setIssue(prev => prev ? { ...prev, presetVerifier: preset } : prev)
+    try {
+      const res = await fetch(`/api/projects/${projectId}/issues/${iid}/preset-roles`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ verifier: preset }),
+      })
+      if (res.ok) {
+        // 서버 저장값(에이전트 이름·아바타 포함)으로 맞춘다
+        const saved = await res.clone().json().catch(() => null)
+        if (saved?.verifier) setIssue(prev => prev ? { ...prev, presetVerifier: saved.verifier } : prev)
+      }
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        toast(d.error || tIssue('verifierChangeFailed'), 'error')
+        setIssue(prev => prev ? { ...prev, presetVerifier: prevPreset } : prev)
+      } else {
+        window.dispatchEvent(new Event('refresh-counts'))
+      }
+    } catch (e: any) {
+      toast(e?.message || tc('networkError'), 'error')
+      setIssue(prev => prev ? { ...prev, presetVerifier: prevPreset } : prev)
+    }
+  }
+  const handlePresetConfirmerChange = async (preset: PresetRole) => {
+    const prevPreset = issue?.presetConfirmer
+    setIssue(prev => prev ? { ...prev, presetConfirmer: preset } : prev)
+    try {
+      const res = await fetch(`/api/projects/${projectId}/issues/${iid}/preset-roles`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirmer: preset }),
+      })
+      if (res.ok) {
+        // 서버 저장값(에이전트 이름·아바타 포함)으로 맞춘다
+        const saved = await res.clone().json().catch(() => null)
+        if (saved?.confirmer) setIssue(prev => prev ? { ...prev, presetConfirmer: saved.confirmer } : prev)
+      }
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        toast(d.error || tIssue('confirmerChangeFailed'), 'error')
+        setIssue(prev => prev ? { ...prev, presetConfirmer: prevPreset } : prev)
+      } else {
+        window.dispatchEvent(new Event('refresh-counts'))
+      }
+    } catch (e: any) {
+      toast(e?.message || tc('networkError'), 'error')
+      setIssue(prev => prev ? { ...prev, presetConfirmer: prevPreset } : prev)
+    }
+  }
+
   return (
     <div className="h-full flex flex-col">
       <IssueHeader
@@ -1124,56 +1180,9 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
         onSetShowDesc={setShowDesc}
         onOpenAssigneePicker={() => setAssigneePickerOpen(true)}
         onOpenAgentPicker={() => setAgentPickerOpen(true)}
-        onPresetVerifierChange={async (preset) => {
-          const prevPreset = issue?.presetVerifier
-          setIssue(prev => prev ? { ...prev, presetVerifier: preset } : prev)
-          try {
-            const res = await fetch(`/api/projects/${projectId}/issues/${iid}/preset-roles`, {
-              method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ verifier: preset }),
-            })
-            if (res.ok) {
-              // 서버 저장값(에이전트 이름·아바타 포함)으로 맞춘다
-              const saved = await res.clone().json().catch(() => null)
-              if (saved?.verifier) setIssue(prev => prev ? { ...prev, presetVerifier: saved.verifier } : prev)
-            }
-            if (!res.ok) {
-              const d = await res.json().catch(() => ({}))
-              toast(d.error || tIssue('verifierChangeFailed'), 'error')
-              setIssue(prev => prev ? { ...prev, presetVerifier: prevPreset } : prev)
-            } else {
-              window.dispatchEvent(new Event('refresh-counts'))
-            }
-          } catch (e: any) {
-            toast(e?.message || tc('networkError'), 'error')
-            setIssue(prev => prev ? { ...prev, presetVerifier: prevPreset } : prev)
-          }
-        }}
-        onPresetConfirmerChange={async (preset) => {
-          const prevPreset = issue?.presetConfirmer
-          setIssue(prev => prev ? { ...prev, presetConfirmer: preset } : prev)
-          try {
-            const res = await fetch(`/api/projects/${projectId}/issues/${iid}/preset-roles`, {
-              method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ confirmer: preset }),
-            })
-            if (res.ok) {
-              // 서버 저장값(에이전트 이름·아바타 포함)으로 맞춘다
-              const saved = await res.clone().json().catch(() => null)
-              if (saved?.confirmer) setIssue(prev => prev ? { ...prev, presetConfirmer: saved.confirmer } : prev)
-            }
-            if (!res.ok) {
-              const d = await res.json().catch(() => ({}))
-              toast(d.error || tIssue('confirmerChangeFailed'), 'error')
-              setIssue(prev => prev ? { ...prev, presetConfirmer: prevPreset } : prev)
-            } else {
-              window.dispatchEvent(new Event('refresh-counts'))
-            }
-          } catch (e: any) {
-            toast(e?.message || tc('networkError'), 'error')
-            setIssue(prev => prev ? { ...prev, presetConfirmer: prevPreset } : prev)
-          }
-        }}
+        onPresetVerifierChange={handlePresetVerifierChange}
+        onPresetConfirmerChange={handlePresetConfirmerChange}
+        hideProgress={progressInScroll}
         onToast={toast}
       />
 
@@ -1225,6 +1234,25 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
         notesEndRef={notesEndRef}
         onRefreshAll={refreshAll}
         onDeleteNote={handleDeleteNote}
+        headSlot={progressInScroll && !editMode ? (
+          <div className="pt-2 pb-1 pr-2">
+            <IssueProgressSection
+              issue={issue}
+              canEditAssignees={canEditAssignees}
+              isCreator={isCreator}
+              gitMembers={gitMembers}
+              confirmerMembers={confirmerMembers}
+              roleAgents={roleAgents}
+              preferredAgent={preferredAgent}
+              onOpenAssigneePicker={() => setAssigneePickerOpen(true)}
+              onOpenAgentPicker={() => setAgentPickerOpen(true)}
+              onPresetVerifierChange={handlePresetVerifierChange}
+              onPresetConfirmerChange={handlePresetConfirmerChange}
+              onDueDateChange={handleDueDateChange}
+              onPriorityChange={issue.canEditPriority ? handlePriorityChange : undefined}
+            />
+          </div>
+        ) : undefined}
         topSlot={
           <IssueAutomationPanel
             projectId={projectId}
