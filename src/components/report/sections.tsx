@@ -59,8 +59,8 @@ function Delta({ cur, prev, goodWhenUp, text }: { cur: number; prev: number | nu
 
 // 단계 배지·막대 색 = 앱 전체 단계 색(lib/active-work ISSUE_STAGE_STYLE) — 진행은 단계색, 그 단계 대기는 회색빛
 const STAGE_BADGE = Object.fromEntries(HELD_STAGES.map(st => [st, `${ISSUE_STAGE_STYLE[st].bg} ${ISSUE_STAGE_STYLE[st].text}`])) as Record<HeldStage, string>
-// 막대 조각 색 = 각 줄 앞 견본 점 색(범례 1:1)
-export const STAGE_BAR = Object.fromEntries(HELD_STAGES.map(st => [st, ISSUE_STAGE_STYLE[st].fill])) as Record<HeldStage, string>
+// 막대 조각 색 = 각 줄 앞 견본 점 색(범례 1:1). 조각마다 묶음 단계색 테두리 — 대기+진행 묶음 전체가 한 테두리로 보이고 그 안의 빈 칸이 대기
+export const STAGE_BAR = Object.fromEntries(HELD_STAGES.map(st => [st, `${ISSUE_STAGE_STYLE[st].fill} ${ISSUE_STAGE_STYLE[st].outline}`.trim()])) as Record<HeldStage, string>
 
 // ─── ① 지금 안고 있는 일 ───
 
