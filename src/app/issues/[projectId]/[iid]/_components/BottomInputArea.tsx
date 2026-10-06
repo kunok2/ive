@@ -6,6 +6,7 @@ import { useKillExecution } from '@/lib/use-kill-execution'
 import { useTranslations } from 'next-intl'
 import { createImagePasteHandlers } from '@/lib/paste-upload'
 import AgentPickerDropdown from './AgentPickerDropdown'
+import { isClosedMidway } from './StageActions'
 
 interface IssueDetail {
   iid: number
@@ -320,6 +321,8 @@ function CommentModeInput({
   const canProgressStage = canProgress && !agentWork
   // 닫힌 작업 — 앞으로 가는 단계 버튼(검증 시작·확인 등)과 유입은 내놓지 않는다. 「← 재실행」은 이슈를 다시 열어 재처리하는 길이라 남긴다
   const isClosed = issue.state === 'closed'
+  // 단, 검증·확인 도중에 닫힌 작업(MR 머지의 닫기 키워드로 Git 이 닫음 등)은 다음 단계로 이어 갈 수 있어야 정리된다 — 서버가 이슈를 다시 연다
+  const forwardOk = !isClosed || isClosedMidway(issue)
   // 등록 뒤(입력이 비면) 늘어난 높이를 되돌린다
   const commentTextareaRef = useRef<HTMLTextAreaElement>(null)
   useEffect(() => {
@@ -408,7 +411,7 @@ function CommentModeInput({
         {/* 전진 →: 다음 단계 진입 (검증완료/다음단계로) */}
         <div className="flex-1 flex justify-end">
           {/* 검증대기·확인대기는 늘 「검증 시작 →」·「확인 시작 →」 — 에이전트가 맡았어도 MR 없음 등으로 못 맡으면 사람이 진행한다 */}
-          {(preferredAgent?.assignMode === 'assignee' || issue.stage === 'none' || issue.stage === 'verify_waiting' || issue.stage === 'confirm_waiting') && NEXT_STAGE[issue.stage] && canProgressStage && !isClosed && (
+          {(preferredAgent?.assignMode === 'assignee' || issue.stage === 'none' || issue.stage === 'verify_waiting' || issue.stage === 'confirm_waiting') && NEXT_STAGE[issue.stage] && canProgressStage && forwardOk && (
             <button
               onClick={onCommentAndNextStage}
               disabled={posting}
@@ -418,7 +421,7 @@ function CommentModeInput({
               {postingType === 'next' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><span>{NEXT_STAGE[issue.stage].label}</span><i className="fa-solid fa-arrow-right text-[10px]" /></>}
             </button>
           )}
-          {!((preferredAgent?.assignMode === 'assignee' || issue.stage === 'none') && NEXT_STAGE[issue.stage]) && canProgressStage && !isClosed && (issue.stage === 'verifying' || issue.stage === 'confirming') && (
+          {!((preferredAgent?.assignMode === 'assignee' || issue.stage === 'none') && NEXT_STAGE[issue.stage]) && canProgressStage && forwardOk && (issue.stage === 'verifying' || issue.stage === 'confirming') && (
             <button
               onClick={onCommentAndDone}
               disabled={posting || !comment.trim()}

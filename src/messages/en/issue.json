@@ -197,6 +197,7 @@
   "myTurnVerify": "Your turn to verify",
   "myTurnConfirm": "Your turn to confirm",
   "agentBlocked": "The agent couldn't take this — {note}",
+  "closedMidway": "Closed while in “{stage}” — move it to the next stage below to reopen the issue and continue",
   "startMyself": "Start myself",
   "agentWorking": "{agent} is {work} this — you can move the stage once it finishes",
   "agentWorkingUnknown": "An agent",

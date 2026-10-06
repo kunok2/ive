@@ -14,6 +14,12 @@ export interface StageAction {
   danger?: boolean
 }
 
+/** 검증·확인 도중에 닫힌 작업 — 단계 라벨은 그대로인데 이슈만 닫혔다(MR 머지의 닫기 키워드로 Git 이 닫음 등). 다음 단계로 이어 가면 서버가 다시 연다 */
+const MIDWAY_STAGES = new Set(['verify_waiting', 'verifying', 'confirm_waiting', 'confirming'])
+export function isClosedMidway(issue: { state?: string; stage?: string }): boolean {
+  return issue.state === 'closed' && !!issue.stage && MIDWAY_STAGES.has(issue.stage)
+}
+
 export function useStageConfig() {
   const tStage = useTranslations('stage')
   const tIssue = useTranslations('issue')

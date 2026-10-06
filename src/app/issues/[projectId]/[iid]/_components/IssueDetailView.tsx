@@ -8,7 +8,7 @@ import MobileTabBar from '@/components/layout/MobileTabBar'
 import { useDialog } from '@/components/ui/ConfirmDialog'
 import { useToast } from '@/components/ui/Toast'
 import { useTranslations } from 'next-intl'
-import { useStageConfig } from './StageActions'
+import { useStageConfig, isClosedMidway } from './StageActions'
 import { transitionTarget } from '@/lib/stage-transitions'
 import { useStore } from '@/lib/store'
 import IssueHeader from './IssueHeader'
@@ -1189,6 +1189,15 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
             >
               {myStart.button}
             </button>
+          </div>
+        </div>
+      )}
+
+      {!myStart && !issue.agentWork && canProgressStage && isClosedMidway(issue) && (
+        <div className={`shrink-0 w-full ${widthCls} mx-auto px-3 pt-2`}>
+          <div className="flex items-center gap-3 rounded-lg bg-ive-bg-card border border-ive-border-subtle px-3 py-2">
+            <i className="fa-solid fa-lock-open text-ive-amber" />
+            <span className="flex-1 min-w-0 text-sm font-bold text-ive-text-secondary">{tIssue('closedMidway', { stage: (STAGE_INFO[issue.stage] || STAGE_INFO.unknown).label })}</span>
           </div>
         </div>
       )}

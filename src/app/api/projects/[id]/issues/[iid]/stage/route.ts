@@ -122,20 +122,18 @@ export async function POST(
     // 한 번에 바꾼다 — 떼고 붙이는 사이에 스캐너가 「단계 없음」을 읽지 않게(swapIssueLabels)
     await swapIssueLabels(project, Number(iid), token, labelsToAdd, sanitizedRemove);
 
-    // 종료 라벨(IVE-E) 외 단계로 되돌리는 액션은 닫힌 이슈를 다시 열어준다.
-    //   - 스케줄(IVE-S)로 되돌리는 retry/cancel
-    //   - done → 확인(IVE-C)으로 되돌리는 reopen (step-back)
+    // 닫힌 이슈를 종료 라벨(IVE-E) 외 단계로 옮기면 다시 연다 — 닫힌 채로는 스캐너가 보지 않아 다음 단계가 돌지 않는다.
+    //   - 스케줄(IVE-S)로 되돌리는 retry/cancel, done → 확인(IVE-C)으로 되돌리는 reopen
+    //   - 단계 도중(검증·확인)에 MR 머지의 닫기 키워드로 Git 이 닫은 이슈를 사람이 다음 단계로 이어 가는 경우
     const labelEnd = project.labelEnd || 'IVE-E';
     const isLeavingDone = sanitizedRemove.includes(labelEnd) && !labelsToAdd.includes(labelEnd);
     const isBackToSchedule = labelsToAdd.some(l => l === (project.labelSchedule || 'IVE-S'));
+    const toOpenStage = isLeavingDone || (!!keepLabel && keepLabel !== labelEnd);
     // 완료를 떠나면 새 사이클 — 이전 사이클의 확인 마커를 비운다 (보고서 완료 시각이 옛 날짜에 고정되지 않게).
     if (isLeavingDone) resetIssueCycleMarkers(projectId, Number(iid));
-    if (isBackToSchedule || isLeavingDone) {
+    if (toOpenStage && currentIssue?.state === 'closed') {
       try {
-        const issue = await fetchSingleIssue(project, Number(iid), token);
-        if (issue?.state === 'closed') {
-          await reopenIssue(project, Number(iid), token);
-        }
+        await reopenIssue(project, Number(iid), token);
       } catch (err) {
         console.error(`[Stage] 이슈 #${iid} 다시 열기 실패:`, err);
       }
