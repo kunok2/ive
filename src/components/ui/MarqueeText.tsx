@@ -2,6 +2,13 @@
 
 import { useEffect, useRef, useState } from 'react'
 
+// 흐르는 속도(px/초)를 글 길이와 상관없이 일정하게 — 고정 주기면 긴 글일수록 빨라져 읽을 수 없었다(IVE #542).
+const SCROLL_SPEED = 30
+// keyframes(globals.css `marquee`)에서 실제로 움직이는 구간(12% → 88%)의 비율
+const MOVE_RATIO = 0.76
+// 짧은 글은 종전 주기(12초)보다 빨라지지 않게
+const MIN_DURATION = 12
+
 export default function MarqueeText({ children, className }: { children: React.ReactNode; className?: string }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLSpanElement>(null)
@@ -22,6 +29,8 @@ export default function MarqueeText({ children, className }: { children: React.R
         const gap = 80
         const scrollDist = textWidth + gap
         content.style.setProperty('--marquee-scroll', `-${scrollDist}px`)
+        const duration = Math.max(MIN_DURATION, scrollDist / SCROLL_SPEED / MOVE_RATIO)
+        content.style.setProperty('--marquee-duration', `${duration.toFixed(1)}s`)
         setScrolling(true)
       } else {
         setScrolling(false)
