@@ -25,19 +25,23 @@ export const STAGE_TONE: Record<WorkKind, { text: string; chip: string; border: 
  * 옅은 바탕은 투명도라 어두운·밝은 테마 바탕에 그대로 얹힌다.
  * Tailwind 가 읽을 수 있게 클래스 이름을 문자열 그대로 둔다.
  */
-export interface IssueStageStyle { text: string; bg: string; border: string; fill: string; ring: string }
+/**
+ * outline — 보고서 막대 조각 테두리. 모든 단계가 자기 묶음의 단계색으로 두른다(대기는 그 대기가 기다리는 단계색).
+ * 진행 조각은 테두리가 칠과 같은 색이라 묻히고, 대기+진행 묶음 전체가 한 테두리 안에 들어가 그 안의 빈(연한 회색) 칸이 대기 길이로 보인다.
+ */
+export interface IssueStageStyle { text: string; bg: string; border: string; fill: string; ring: string; outline: string }
 export const ISSUE_STAGE_STYLE: Record<string, IssueStageStyle> = {
-  none:            { text: 'text-ive-text-muted',             bg: 'bg-white/5',                      border: 'border-ive-border-subtle',            fill: 'bg-ive-text-muted',             ring: 'ring-ive-border-subtle' },
-  waiting:         { text: 'text-ive-text-secondary',          bg: 'bg-ive-text-muted/10',            border: 'border-ive-text-muted/20',            fill: 'bg-ive-text-muted/25',          ring: 'ring-ive-text-muted/20' },
-  dev:             { text: 'text-ive-stage-process',          bg: 'bg-ive-stage-process/15',         border: 'border-ive-stage-process/40',         fill: 'bg-ive-stage-process',          ring: 'ring-ive-stage-process/30' },
-  dev_fail:        { text: 'text-ive-red',                    bg: 'bg-ive-red/15',                   border: 'border-ive-red/40',                   fill: 'bg-ive-red',                    ring: 'ring-ive-red/30' },
-  verify_waiting:  { text: 'text-ive-text-secondary',          bg: 'bg-ive-text-muted/10',            border: 'border-ive-text-muted/20',            fill: 'bg-ive-text-muted/25',          ring: 'ring-ive-text-muted/20' },
-  verifying:       { text: 'text-ive-stage-verify',           bg: 'bg-ive-stage-verify/15',          border: 'border-ive-stage-verify/40',          fill: 'bg-ive-stage-verify',           ring: 'ring-ive-stage-verify/30' },
-  confirm_waiting: { text: 'text-ive-text-secondary',          bg: 'bg-ive-text-muted/10',            border: 'border-ive-text-muted/20',            fill: 'bg-ive-text-muted/25',          ring: 'ring-ive-text-muted/20' },
-  confirming:      { text: 'text-ive-stage-confirm',          bg: 'bg-ive-stage-confirm/15',         border: 'border-ive-stage-confirm/40',         fill: 'bg-ive-stage-confirm',          ring: 'ring-ive-stage-confirm/30' },
-  done:            { text: 'text-ive-green',                  bg: 'bg-ive-green/15',                 border: 'border-ive-green/30',                 fill: 'bg-ive-green',                  ring: 'ring-ive-green/30' },
-  closed:          { text: 'text-ive-text-muted',             bg: 'bg-white/5',                      border: 'border-ive-border-subtle',            fill: 'bg-ive-text-muted',             ring: 'ring-ive-border-subtle' },
-  rejected:        { text: 'text-ive-red',                    bg: 'bg-ive-red/15',                   border: 'border-ive-red/40',                   fill: 'bg-ive-red',                    ring: 'ring-ive-red/30' },
+  none:            { text: 'text-ive-text-muted',             bg: 'bg-white/5',                      border: 'border-ive-border-subtle',            fill: 'bg-ive-text-muted',             ring: 'ring-ive-border-subtle', outline: 'inset-ring inset-ring-ive-text-muted' },
+  waiting:         { text: 'text-ive-text-secondary',          bg: 'bg-ive-text-muted/10',            border: 'border-ive-text-muted/20',            fill: 'bg-ive-text-muted/25',          ring: 'ring-ive-text-muted/20', outline: 'inset-ring inset-ring-ive-stage-process' },
+  dev:             { text: 'text-ive-stage-process',          bg: 'bg-ive-stage-process/15',         border: 'border-ive-stage-process/40',         fill: 'bg-ive-stage-process',          ring: 'ring-ive-stage-process/30', outline: 'inset-ring inset-ring-ive-stage-process' },
+  dev_fail:        { text: 'text-ive-red',                    bg: 'bg-ive-red/15',                   border: 'border-ive-red/40',                   fill: 'bg-ive-red',                    ring: 'ring-ive-red/30', outline: 'inset-ring inset-ring-ive-red' },
+  verify_waiting:  { text: 'text-ive-text-secondary',          bg: 'bg-ive-text-muted/10',            border: 'border-ive-text-muted/20',            fill: 'bg-ive-text-muted/25',          ring: 'ring-ive-text-muted/20', outline: 'inset-ring inset-ring-ive-stage-verify' },
+  verifying:       { text: 'text-ive-stage-verify',           bg: 'bg-ive-stage-verify/15',          border: 'border-ive-stage-verify/40',          fill: 'bg-ive-stage-verify',           ring: 'ring-ive-stage-verify/30', outline: 'inset-ring inset-ring-ive-stage-verify' },
+  confirm_waiting: { text: 'text-ive-text-secondary',          bg: 'bg-ive-text-muted/10',            border: 'border-ive-text-muted/20',            fill: 'bg-ive-text-muted/25',          ring: 'ring-ive-text-muted/20', outline: 'inset-ring inset-ring-ive-stage-confirm' },
+  confirming:      { text: 'text-ive-stage-confirm',          bg: 'bg-ive-stage-confirm/15',         border: 'border-ive-stage-confirm/40',         fill: 'bg-ive-stage-confirm',          ring: 'ring-ive-stage-confirm/30', outline: 'inset-ring inset-ring-ive-stage-confirm' },
+  done:            { text: 'text-ive-green',                  bg: 'bg-ive-green/15',                 border: 'border-ive-green/30',                 fill: 'bg-ive-green',                  ring: 'ring-ive-green/30', outline: 'inset-ring inset-ring-ive-green' },
+  closed:          { text: 'text-ive-text-muted',             bg: 'bg-white/5',                      border: 'border-ive-border-subtle',            fill: 'bg-ive-text-muted',             ring: 'ring-ive-border-subtle', outline: 'inset-ring inset-ring-ive-text-muted' },
+  rejected:        { text: 'text-ive-red',                    bg: 'bg-ive-red/15',                   border: 'border-ive-red/40',                   fill: 'bg-ive-red',                    ring: 'ring-ive-red/30', outline: 'inset-ring inset-ring-ive-red' },
 }
 export const issueStageStyle = (stage: string | null | undefined): IssueStageStyle => ISSUE_STAGE_STYLE[stage ?? 'none'] ?? ISSUE_STAGE_STYLE.none
 /** 단계색 hex — 메일(클래스를 못 쓰는 곳, 흰 바탕)용. 대기는 한 가지 연한 회색(화면의 muted/25 를 흰 바탕에 미리 섞은 값) */
