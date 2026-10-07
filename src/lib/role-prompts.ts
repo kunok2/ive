@@ -111,7 +111,7 @@ function confirmFixed(i: ConfirmPromptInput): string {
 \`\`\`
 - 마지막 줄에 정확히 \`${CONFIRM_RESULT_MARKER} pass\` 또는 \`fail\` 또는 \`blocked\` 를 출력한다.
 - items 에는 이슈의 증상, 처리·검증 결과의 요건, 「확인 요청」 항목을 빠짐없이 적고, 항목마다 증거(스크린샷 파일·측정값)를 단다. 증거가 없는 항목은 unverified 다.
-- 판정 기준: 모든 확인 항목이 gone(증상이 사라짐)이고 증거가 있으면 **pass** → 완료. 하나라도 present(증상 그대로)이거나 수정이 새 문제를 만들었으면 fail → 재처리.
+- 판정 기준: 모든 확인 항목이 gone(증상이 사라짐)이고 증거가 있으면 **pass** → 완료. 하나라도 present(증상 그대로)이거나 수정이 새 문제를 만들었으면 fail → **검증대기**(처리대기가 아니다 — 검증자가 네 단서를 읽고 처리자에게 재작업 지시를 쓴다). 그러니 단서는 검증자가 코드로 옮길 수 있게 구체적으로 적는다.
   확인할 수 없으면(로그인 불가·경로 불명·staging 장애, 증거를 남기지 못함) blocked → 사람 확인. items 와 verdict 가 어긋나거나 증거 없는 pass 는 IVE 가 고친다.${i.maxRunMinutes > 0 ? `
 - 시간 예산: ${i.maxRunMinutes}분 뒤 강제 종료된다. 약 ${Math.max(5, Math.round(i.maxRunMinutes * 0.6))}분 안에 result.json 을 쓴다.` : ''}
 - ${lang}`
@@ -216,9 +216,25 @@ export interface VerifyPromptInput {
   noChange?: boolean
   /** noChange 일 때 작업자 보고 파일(워크스페이스 상대 경로) */
   reportPath?: string
+  /** 확인 반려로 돌아온 건이면 그 반려 노트(확인자가 화면에서 본 결함·단서) */
+  confirmRejection?: string
 }
 
 export const VERIFY_RESULT_MARKER = 'IVE_VERIFY_RESULT:'
+
+/** 확인 반려로 돌아온 건 — 확인자가 화면에서 본 결함이 이번 검증의 출발점이다 */
+function confirmRejectionSection(i: VerifyPromptInput): string {
+  if (!i.confirmRejection) return ''
+  return `
+## ⚠️ 확인 반려로 돌아온 건 — 이것부터 본다
+확인자가 staging 화면에서 아래 결함을 보고 검증대기로 돌려보냈다. 처리자는 이 노트를 직접 받지 않는다 — **네가 이것을 코드 지시로 바꿔 처리자에게 넘긴다.**
+- 결함마다 원인 코드를 찾아 findings(kind defect)에 적는다: 확인자가 적은 화면·선택자·측정값·이긴 규칙을 그대로 옮기고, 고칠 파일·줄·방향을 덧붙인다.
+- 지금 코드(검증하는 커밋)에서 그 결함이 고쳐졌음을 코드로 보이지 못하면 pass 하지 않는다. 고쳐진 것이 보이면 그 근거(파일:줄)를 requirements 에 적고 toConfirm 에 「다시 볼 것」으로 넣는다.
+- 확인자가 「재현 조건만 적고 증상을 못 봤다」고 한 항목은 결함이 아니다 — toConfirm 으로 넘긴다.
+
+${i.confirmRejection}
+`
+}
 
 function verifyFixed(i: VerifyPromptInput): string {
   const lang = i.isKo
@@ -251,6 +267,7 @@ ${i.noChange ? `- 이 작업은 코드 변경 없이 끝났다. requirements 의
 - toConfirm 에는 처리자의 「확인 요청」과 네가 코드에서 본 확인 거리(공용 부품을 쓰는 다른 화면 등)를 빠짐없이 적는다. 확인자는 이 목록을 그대로 밟는다. 없으면 빈 배열.
 - 판정 기준: 요건이 모두 done 이고 오류(defect)가 하나도 없으면 pass → 확인 단계로 넘어간다. 처리 환경에서 못 한 검수가 남은 것은 pass 를 막지 않는다(toConfirm 으로 넘긴다). 누락이나 오류가 하나라도 있으면 fail → 재처리로 돌아간다(findings 가 처리자에게 갈 지시다, 구체적으로).
   blocked 는 diff·작업 공간을 읽을 수 없는 등 기술적으로 검증을 못 한 경우, 또는 작업자가 할 수 없다고 한 이유가 맞아 사람이 풀어야 하는 경우에만 쓴다(확신이 없다는 이유로 쓰지 않는다).
+  확인 반려로 돌아온 건(위 「확인 반려」 절)이면 그 결함마다 판정한다 — 고쳐졌음을 코드로 보이지 못한 결함은 defect 다.
   IVE 검사 명령이 실패했거나 staging 최신본과 충돌하면 IVE 가 fail 로 처리한다 — 너는 그 원인을 findings 에 짚어 준다.
   findings·requirements 와 verdict 가 어긋나면 IVE 가 fail 로 고친다.${i.maxRunMinutes > 0 ? `
 - 시간 예산: ${i.maxRunMinutes}분 뒤 강제 종료된다. 약 ${Math.max(5, Math.round(i.maxRunMinutes * 0.6))}분 안에 result.json 을 쓴다.` : ''}
@@ -264,7 +281,7 @@ export function buildVerifyPrompt(i: VerifyPromptInput, editable: string): strin
 
 ## 검증할 이슈 #${i.iid}: ${i.title}
 ${i.body || '(본문 없음)'}
-${i.comments ? `\n### 이슈 코멘트 (사람이 쓴 것, 시간순 — 나중 정정이 우선)\n${i.comments}\n` : ''}
+${i.comments ? `\n### 이슈 코멘트 (사람이 쓴 것, 시간순 — 나중 정정이 우선)\n${i.comments}\n` : ''}${confirmRejectionSection(i)}
 ## MR (IVE 가 준비함)
 - MR: ${i.mrUrl ?? '(알 수 없음)'}
 - 대상 브랜치: ${i.targetBranch} · 검증하는 커밋: ${i.sourceSha}
@@ -296,7 +313,7 @@ function buildVerifyNoChangePrompt(i: VerifyPromptInput, editable: string): stri
 
 ## 검증할 이슈 #${i.iid}: ${i.title}
 ${i.body || '(본문 없음)'}
-${i.comments ? `\n### 이슈 코멘트 (사람이 쓴 것, 시간순 — 나중 정정이 우선)\n${i.comments}\n` : ''}
+${i.comments ? `\n### 이슈 코멘트 (사람이 쓴 것, 시간순 — 나중 정정이 우선)\n${i.comments}\n` : ''}${confirmRejectionSection(i)}
 ## 작업자 보고 (IVE 가 준비함)
 - 작업자의 마지막 보고: ${i.reportPath ?? '(없음)'} — 이 파일이 검증 대상이다. 보고가 없으면 모든 요건이 누락이다.
 - 워크스페이스는 ${i.targetBranch} 최신본이다(읽기만). 보고가 저장소 코드·설정을 근거로 들었다면 여기서 사실을 확인한다.

@@ -7,7 +7,7 @@
  *   2) 배포된 커밋으로 워크스페이스를 만든다(읽기 전용)
  *   3) Playwright MCP 로 staging 을 직접 열어 확인 + 재현 스크립트가 있으면 3엔진 실행
  *   4) 에이전트가 쓴 .ive-out/result.json 으로 판정 → 증적 보관·업로드 → 증적 코멘트 하나(+ ive-meta stage: confirm)
- *   5) 통과 → accept(→E), 실패 → 스케줄(→S, 증적 코멘트가 다음 처리의 피드백), 확인 불가 → C 에 두고 사람을 기다린다
+ *   5) 통과 → accept(→E), 실패 → 검증대기(→W, 검증자가 반려 단서를 읽고 재작업 지시를 쓴다), 확인 불가 → C 에 두고 사람을 기다린다
  *
  * 코멘트·단계 이동은 IVE 가 한다(에이전트는 파일만 쓴다) — 형식이 흔들리지 않고 비밀값이 코멘트로 새지 않는다.
  */
@@ -215,9 +215,17 @@ export function enforceConfirmVerdict(r: ConfirmResult, savedScreens: number, is
   return { ...r, verdict: 'blocked', reason: reasons.join(' / ') }
 }
 
-const VERDICT_TITLE: Record<Verdict, { ko: string; en: string }> = {
+/**
+ * 확인 판정 → 단계 이동. 통과 → 완료, 반려 → **검증대기**(재검증 — 처리대기가 아니다), 확인 불가 → 그대로(사람).
+ * 확인 반려를 처리대기로 바로 보내면 확인자의 화면 단서가 코드 지시로 바뀌지 않은 채 처리자에게 가고, 검증을 건너뛴 재작업이 된다.
+ */
+export function confirmStageAction(verdict: Verdict): 'accept' | 'return_to_dev' | null {
+  return verdict === 'pass' ? 'accept' : verdict === 'fail' ? 'return_to_dev' : null
+}
+
+export const CONFIRM_VERDICT_TITLE: Record<Verdict, { ko: string; en: string }> = {
   pass: { ko: '✅ 확인 통과', en: '✅ Confirmed' },
-  fail: { ko: '❌ 확인 실패 — 재작업 필요', en: '❌ Not fixed — rework needed' },
+  fail: { ko: '❌ 확인 반려 — 재검증', en: '❌ Rejected at confirm — back to verification' },
   blocked: { ko: '⚠️ 확인 불가 — 사람 확인 필요', en: '⚠️ Could not confirm — needs a person' },
 }
 
@@ -254,7 +262,7 @@ async function buildEvidenceComment(
 
   const lines: string[] = []
   lines.push(`<!-- ive-agent:${agent.id} -->`)
-  lines.push(`## ${isKo ? VERDICT_TITLE[result.verdict].ko : VERDICT_TITLE[result.verdict].en}`)
+  lines.push(`## ${isKo ? CONFIRM_VERDICT_TITLE[result.verdict].ko : CONFIRM_VERDICT_TITLE[result.verdict].en}`)
   lines.push('')
   if (result.summary) lines.push(result.summary, '')
   if (result.reason && result.verdict !== 'pass') lines.push(`**${t('사유', 'Reason')}**: ${result.reason}`, '')
@@ -481,7 +489,7 @@ function confirmSpec(input: ConfirmInput): StageKindSpec<ConfirmPrep> {
         return
       }
 
-      const move = async (action: 'accept' | 'retry', label: string) => {
+      const move = async (action: 'accept' | 'return_to_dev', label: string) => {
         try {
           await applyStageAction(project, iid, token, 'confirming', action, { actor: agentActor(agent, executionId), executionId, reason: result.verdict, detail: result.reason ? { reason: String(result.reason).slice(0, 500) } : null })
           log(label, 'system')
@@ -495,10 +503,11 @@ function confirmSpec(input: ConfirmInput): StageKindSpec<ConfirmPrep> {
 
       if (result.verdict === 'pass') {
         markIssueConfirmed(project.id, iid, { name: agent.name, avatar: agent.avatar, userId: null })
-        if (await move('accept', '단계: 확인 중 → 완료')) void notifyStageTransition(project, iid, token, 'done')
+        if (await move(confirmStageAction('pass')!, '단계: 확인 중 → 완료')) void notifyStageTransition(project, iid, token, 'done')
       } else if (result.verdict === 'fail') {
-        // 확인 실패 = 수정이 증상을 없애지 못함 → 처리 재요청(스케줄). 증적 코멘트가 다음 처리의 피드백이 된다.
-        await move('retry', '단계: 확인 중 → 스케줄 (재작업)')
+        // 확인 반려 = 수정이 증상을 없애지 못함 → 검증대기(재검증). 처리대기로 바로 보내지 않는다(사용자 확정 2026-10-07) —
+        //   검증자가 확인자의 화면 단서를 읽어 코드에서 원인을 짚고, 재작업 지시(findings)로 처리자에게 돌린다.
+        await move(confirmStageAction('fail')!, '단계: 확인 중 → 검증대기 (재검증)')
       } else {
         setStageWorkerNote(project.id, iid, `${isKo ? '확인 불가' : 'Could not confirm'}: ${result.reason || '-'}`)
         log('단계: 확인 중에 머무름 — 사람 확인 필요', 'warn')

@@ -68,6 +68,8 @@ interface VerifyPrep {
   comments: string
   /** noChange: 작업자의 마지막 보고가 있었는가 */
   hasReport: boolean
+  /** 확인 반려로 검증대기에 돌아온 건이면 그 반려 노트(확인자가 화면에서 본 결함·단서) — 없으면 '' */
+  confirmRejection: string
 }
 
 type Verdict = 'pass' | 'fail' | 'blocked'
@@ -258,7 +260,7 @@ async function buildComment(ctx: StageContext, input: VerifyInput, prep: VerifyP
  *  - comments: 사람이 쓴 코멘트(요건 정정·재작업 지시가 본문이 아니라 여기 있다 — 봇·에이전트 코멘트 제외)
  *  - report: 작업자(처리 에이전트)의 마지막 보고 — 코드 변경 없는 작업의 검증 대상. 검증·확인 결과 코멘트는 빼고 가장 최근 것
  */
-async function issueThread(project: Project, iid: number, token: string, log: StageContext['log']): Promise<{ comments: string; report: string }> {
+async function issueThread(project: Project, iid: number, token: string, log: StageContext['log']): Promise<{ comments: string; report: string; confirmRejection: string }> {
   try {
     const notes = (await fetchIssueNotes(project, iid, token)) as any[]
     const comments = notes
@@ -271,11 +273,24 @@ async function issueThread(project: Project, iid: number, token: string, log: St
       .filter(n => !n.system && typeof n.body === 'string' && n.body.includes('<!-- ive-agent:') && !isStageResult(n.body))
       .sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')))
     const report = reports.length ? String(reports[reports.length - 1].body).replace(/<!--[\s\S]*?-->/g, '').trim().slice(-20000) : ''
-    return { comments, report }
+    // 확인 반려 — 마지막 단계 결과 노트가 확인 반려면 지금 검증의 출발점이다(확인 반려는 검증대기로 돌아온다).
+    //   확인 작업자 노트는 에이전트 표시가 있어 위 comments(사람 노트)에서 빠지므로 따로 싣는다.
+    const stageResults = notes
+      .filter(n => !n.system && typeof n.body === 'string' && isStageResult(n.body))
+      .sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')))
+    const last = stageResults.length ? String(stageResults[stageResults.length - 1].body) : ''
+    const confirmRejection = /stage:\s*confirm/.test(last) && isConfirmRejectionNote(last)
+      ? last.replace(/<!--[\s\S]*?-->/g, '').trim().slice(0, 12000) : ''
+    return { comments, report, confirmRejection }
   } catch (e) {
     log(`이슈 코멘트 조회 실패 — 본문만으로 요건을 대조합니다: ${(e as Error).message}`, 'warn')
-    return { comments: '', report: '' }
+    return { comments: '', report: '', confirmRejection: '' }
   }
+}
+
+/** 확인 작업자의 반려 노트인가 — 제목(confirm-worker VERDICT_TITLE.fail, 옛 제목 포함) */
+export function isConfirmRejectionNote(body: string): boolean {
+  return /^##\s*❌\s*(확인 반려|확인 실패|Not fixed|Rejected at confirm)/m.test(body)
 }
 
 function verifySpec(input: VerifyInput): StageKindSpec<VerifyPrep> {
@@ -312,10 +327,10 @@ function verifySpec(input: VerifyInput): StageKindSpec<VerifyPrep> {
         const sourceSha = (await git(workspacePath, ['rev-parse', 'HEAD'])).trim()
         fs.mkdirSync(path.join(workspacePath, OUT_DIR), { recursive: true })
         try { fs.appendFileSync(path.join(workspacePath, '.git', 'info', 'exclude'), `\n${OUT_DIR}/\n.mcp.json\n.agents/\n.octmp/\n`) } catch { /* ignore */ }
-        const { comments, report } = await issueThread(project, iid, token, log)
+        const { comments, report, confirmRejection } = await issueThread(project, iid, token, log)
         fs.writeFileSync(path.join(workspacePath, OUT_DIR, 'report.md'), report || '(작업자 보고 없음)')
         log(`코드 변경 없는 작업 — 작업자 보고${report ? '' : '(없음)'}를 검증합니다`, 'system')
-        return { sourceSha, behindTarget: false, conflictFiles: [], changedFiles: [], checks: [], checkCommands: [], e2eScript: null, startedAt, comments, hasReport: !!report }
+        return { sourceSha, behindTarget: false, conflictFiles: [], changedFiles: [], checks: [], checkCommands: [], e2eScript: null, startedAt, comments, hasReport: !!report, confirmRejection }
       }
       await git(workspacePath, ['fetch', 'origin', `+refs/heads/dev-${iid}:refs/remotes/origin/dev-${iid}`])
       const sourceSha = (await git(workspacePath, ['rev-parse', `origin/dev-${iid}`])).trim()
@@ -360,9 +375,9 @@ function verifySpec(input: VerifyInput): StageKindSpec<VerifyPrep> {
       const script = `.ive/e2e/issue-${iid}.spec.ts`
       const e2eScript = fs.existsSync(path.join(workspacePath, script)) ? script : null
 
-      const { comments } = await issueThread(project, iid, token, log)
+      const { comments, confirmRejection } = await issueThread(project, iid, token, log)
 
-      return { sourceSha, behindTarget, conflictFiles, changedFiles, checks, checkCommands, e2eScript, startedAt, comments, hasReport: false }
+      return { sourceSha, behindTarget, conflictFiles, changedFiles, checks, checkCommands, e2eScript, startedAt, comments, hasReport: false, confirmRejection }
     },
 
     buildPrompt(ctx, prep) {
@@ -374,7 +389,7 @@ function verifySpec(input: VerifyInput): StageKindSpec<VerifyPrep> {
         conflictFiles: prep.conflictFiles, changedFiles: prep.changedFiles, diffPath: `${OUT_DIR}/mr.diff`,
         checksSection: checksSection(prep.checks, prep.checkCommands, ctx.isKo), e2eScript: prep.e2eScript,
         outDir: OUT_DIR, maxRunMinutes: limits.verifyTimeoutMin,
-        noChange: !!input.noChange, reportPath: `${OUT_DIR}/report.md`,
+        noChange: !!input.noChange, reportPath: `${OUT_DIR}/report.md`, confirmRejection: prep.confirmRejection,
       }, editable ?? VERIFY_EDITABLE_DEFAULT)
       return { prompt, promptVersion: version }
     },
