@@ -1,11 +1,14 @@
 'use client'
 
 import { useRef, useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { useKillExecution } from '@/lib/use-kill-execution'
 import { useTranslations } from 'next-intl'
 import { createImagePasteHandlers } from '@/lib/paste-upload'
 import AgentPickerDropdown from './AgentPickerDropdown'
+import AgentAvatar from '@/components/agent/AgentAvatar'
+import type { RoleAgentCandidate } from '@/components/issue/RoleAvatarBar'
 import { isClosedMidway } from './StageActions'
 
 interface IssueDetail {
@@ -35,6 +38,18 @@ interface PreferredAgent {
 interface ProjectAgent {
   agentId: string
   agent: { id: string; name: string; avatar: string; cliName: string; status: string }
+}
+
+/** 검증·확인을 에이전트에게 맡기기 — 등록 오른쪽 「에이전트 호출」 버튼 */
+export interface StageHandOff {
+  kind: 'verify' | 'confirm'
+  /** 그 역할 명부의 에이전트(검증은 처리한 에이전트 제외) — 지정된 에이전트가 맨 위 */
+  agents: RoleAgentCandidate[]
+  presetAgentId: string | null
+  /** 에이전트가 맡지 못한 사유(MR 없음 등) — 메뉴 안에서만 보인다 */
+  note: string | null
+  busy: boolean
+  onPick: (agent: RoleAgentCandidate) => void
 }
 
 interface BottomInputAreaProps {
@@ -81,6 +96,7 @@ interface BottomInputAreaProps {
   onEndChat: () => void
   onSendChatMessage: () => void
   onChangePreferredAgent: (agentIdOrMode: string | null) => void
+  handOff?: StageHandOff | null
   onToast: (msg: string, type: 'success' | 'error') => void
 }
 
@@ -92,7 +108,7 @@ export default function BottomInputArea({
   preferredAgent, projectAgents, NEXT_STAGE,
   onSetMode, onSetComment, onSetChatInput, onAddChatImages, onRemoveChatImage,
   onPostComment, onCommentAndRetry, onCommentAndDone, onCommentAndNextStage, onCommentAndInflow, onAgentWorkStopped,
-  onStartChat, onEndChat, onSendChatMessage, onChangePreferredAgent, onToast,
+  onStartChat, onEndChat, onSendChatMessage, onChangePreferredAgent, handOff = null, onToast,
 }: BottomInputAreaProps) {
   // Image paste handler for comment textarea
   const commentRef = useRef(comment)
@@ -183,6 +199,7 @@ export default function BottomInputArea({
           onCommentAndDone={onCommentAndDone}
           onCommentAndNextStage={onCommentAndNextStage}
           onCommentAndInflow={onCommentAndInflow}
+          handOff={handOff}
         />
       )}
 
@@ -295,7 +312,7 @@ function ModeTabs({
 function CommentModeInput({
   issue, comment, commentKey, posting, postingType, canProgressStage: canProgress, agentWork,
   preferredAgent, NEXT_STAGE, commentPasteHandlers,
-  onSetComment, onPostComment, onCommentAndRetry, onCommentAndDone, onCommentAndNextStage, onCommentAndInflow,
+  onSetComment, onPostComment, onCommentAndRetry, onCommentAndDone, onCommentAndNextStage, onCommentAndInflow, handOff,
 }: {
   issue: BottomInputAreaProps['issue']
   comment: string
@@ -313,6 +330,7 @@ function CommentModeInput({
   onCommentAndDone: () => void
   onCommentAndNextStage: () => void
   onCommentAndInflow: () => void
+  handOff: StageHandOff | null
 }) {
   const tIssue = useTranslations('issue')
 
@@ -368,11 +386,12 @@ function CommentModeInput({
             <button
               onClick={onCommentAndInflow}
               disabled={posting || !comment.trim()}
-              className="shrink-0 h-10 px-3 rounded-lg border border-ive-red/40 text-ive-red bg-ive-bg-card hover:bg-ive-red/10 flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold whitespace-nowrap"
+              className="shrink-0 h-10 w-10 pad:w-auto pad:px-3 rounded-lg border border-ive-red/40 text-ive-red bg-ive-bg-card hover:bg-ive-red/10 flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold whitespace-nowrap"
               title={tIssue('inflowHint')}
+              aria-label={tIssue('inflowShort')}
             >
               {postingType === 'inflow' ? <i className="fa-solid fa-circle-notch fa-spin" /> : (
-                <><i className="fa-solid fa-rotate-left text-[10px]" /><span>{tIssue('inflowShort')}</span></>
+                <><i className="fa-solid fa-rotate-left text-sm pad:text-[10px]" /><span className="hidden pad:inline">{tIssue('inflowShort')}</span></>
               )}
             </button>
           )}
@@ -382,14 +401,14 @@ function CommentModeInput({
               <button
                 onClick={() => onCommentAndRetry()}
                 disabled={posting || !comment.trim()}
-                className="shrink-0 h-10 px-3 rounded-lg border border-ive-amber/40 text-ive-amber bg-ive-bg-card hover:bg-ive-amber/10 flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold whitespace-nowrap"
+                className="shrink-0 h-10 w-10 pad:w-auto pad:px-3 rounded-lg border border-ive-amber/40 text-ive-amber bg-ive-bg-card hover:bg-ive-amber/10 flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold whitespace-nowrap"
                 title={tIssue(isReprocess ? 'postAndReprocessHint' : 'postAndRetryHint')}
                 aria-label={tIssue(isReprocess ? 'postAndReprocess' : 'postAndRetry')}
               >
                 {postingType === 'retry' ? <i className="fa-solid fa-circle-notch fa-spin" /> : (
                   <>
-                    <i className={`fa-solid ${isReprocess ? 'fa-arrow-rotate-right' : 'fa-arrow-left'} text-[10px]`} />
-                    <span>{tIssue(isReprocess ? 'reprocess' : 'rerun')}</span>
+                    <i className={`fa-solid ${isReprocess ? 'fa-arrow-rotate-right' : 'fa-arrow-left'} text-sm pad:text-[10px]`} />
+                    <span className="hidden pad:inline">{tIssue(isReprocess ? 'reprocess' : 'rerun')}</span>
                   </>
                 )}
               </button>
@@ -397,41 +416,53 @@ function CommentModeInput({
           })()}
         </div>
 
-        {/* 가운데: 코멘트만 (stay) */}
+        {/* 가운데: 단계를 옮기지 않는 일 — 코멘트만(stay) · 에이전트 호출(지금 단계의 검증·확인을 에이전트에게 맡긴다) */}
+        <div className="flex items-center gap-1.5">
         <button
           onClick={onPostComment}
           disabled={posting || !comment.trim()}
-          className="shrink-0 h-10 px-3 rounded-lg bg-ive-green text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-40 text-xs font-bold whitespace-nowrap"
+          className="shrink-0 h-10 w-10 pad:w-auto pad:px-3 rounded-lg bg-ive-green text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-40 text-xs font-bold whitespace-nowrap"
           title={tIssue('postCommentOnly')}
           aria-label={tIssue('postComment')}
         >
-          {postingType === 'comment' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-paper-plane" /><span>{tIssue('postCommentShort')}</span></>}
+          {postingType === 'comment' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-paper-plane" /><span className="hidden pad:inline">{tIssue('postCommentShort')}</span></>}
         </button>
+        {handOff && canProgressStage && forwardOk && <HandOffMenu handOff={handOff} disabled={posting} />}
+        </div>
 
         {/* 전진 →: 다음 단계 진입 (검증완료/다음단계로) */}
         <div className="flex-1 flex justify-end">
-          {/* 검증대기·확인대기는 늘 「검증 시작 →」·「확인 시작 →」 — 에이전트가 맡았어도 MR 없음 등으로 못 맡으면 사람이 진행한다 */}
-          {(preferredAgent?.assignMode === 'assignee' || issue.stage === 'none' || issue.stage === 'verify_waiting' || issue.stage === 'confirm_waiting') && NEXT_STAGE[issue.stage] && canProgressStage && forwardOk && (
-            <button
-              onClick={onCommentAndNextStage}
-              disabled={posting}
-              className="shrink-0 h-10 px-3 rounded-lg bg-ive-cyan text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-40 text-xs font-bold whitespace-nowrap"
-              title={issue.stage === 'none' ? tIssue('startProcessingHint') : undefined}
-            >
-              {postingType === 'next' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><span>{NEXT_STAGE[issue.stage].label}</span><i className="fa-solid fa-arrow-right text-[10px]" /></>}
-            </button>
-          )}
-          {!((preferredAgent?.assignMode === 'assignee' || issue.stage === 'none') && NEXT_STAGE[issue.stage]) && canProgressStage && forwardOk && (issue.stage === 'verifying' || issue.stage === 'confirming') && (
-            <button
-              onClick={onCommentAndDone}
-              disabled={posting || !comment.trim()}
-              className="shrink-0 h-10 px-3 rounded-lg bg-ive-cyan text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-40 text-xs font-bold whitespace-nowrap"
-              title={tIssue('postAndDoneHint')}
-              aria-label={tIssue('postAndDone')}
-            >
-              {postingType === 'done' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><span>{NEXT_STAGE[issue.stage]?.label || tIssue('done')}</span><i className="fa-solid fa-arrow-right text-[10px]" /></>}
-            </button>
-          )}
+          {(() => {
+            // 검증대기·확인대기는 늘 「검증 시작 →」·「확인 시작 →」 — 에이전트가 맡았어도 MR 없음 등으로 못 맡으면 사람이 진행한다
+            const showNext = (preferredAgent?.assignMode === 'assignee' || issue.stage === 'none' || issue.stage === 'verify_waiting' || issue.stage === 'confirm_waiting') && !!NEXT_STAGE[issue.stage] && canProgressStage && forwardOk
+            const showDone = !((preferredAgent?.assignMode === 'assignee' || issue.stage === 'none') && NEXT_STAGE[issue.stage]) && canProgressStage && forwardOk && (issue.stage === 'verifying' || issue.stage === 'confirming')
+            return (
+              <div className="flex items-center gap-1.5">
+                {showNext && (
+                  <button
+                    onClick={onCommentAndNextStage}
+                    disabled={posting}
+                    className={`shrink-0 h-10 w-10 pad:w-auto pad:px-3 rounded-lg bg-ive-cyan text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-40 text-xs font-bold whitespace-nowrap`}
+                    title={issue.stage === 'none' ? tIssue('startProcessingHint') : NEXT_STAGE[issue.stage].label}
+                    aria-label={NEXT_STAGE[issue.stage].label}
+                  >
+                    {postingType === 'next' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><span className="hidden pad:inline">{NEXT_STAGE[issue.stage].label}</span><i className="fa-solid fa-arrow-right text-sm pad:text-[10px]" /></>}
+                  </button>
+                )}
+                {showDone && (
+                  <button
+                    onClick={onCommentAndDone}
+                    disabled={posting || !comment.trim()}
+                    className={`shrink-0 h-10 w-10 pad:w-auto pad:px-3 rounded-lg bg-ive-cyan text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-40 text-xs font-bold whitespace-nowrap`}
+                    title={tIssue('postAndDoneHint')}
+                    aria-label={tIssue('postAndDone')}
+                  >
+                    {postingType === 'done' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><span className="hidden pad:inline">{NEXT_STAGE[issue.stage]?.label || tIssue('done')}</span><i className="fa-solid fa-arrow-right text-sm pad:text-[10px]" /></>}
+                  </button>
+                )}
+              </div>
+            )
+          })()}
         </div>
       </div>
     </div>
@@ -586,3 +617,77 @@ function ChatStartPrompt({ onStartChat }: { onStartChat: (force?: boolean) => vo
   )
 }
 
+
+/**
+ * 「에이전트 호출」 버튼 — 지금 단계 일(검증·확인)을 에이전트에게 맡긴다. 앞으로 가는 버튼 앞에 따로 둔다. 메뉴는 AgentPickerDropdown 과 같은 모양으로 위로 열린다.
+ * 버튼 줄이 overflow-hidden(좁은 폭에서 버튼 넘침 방지)이라 메뉴는 body 로 띄워 버튼 위치에 고정한다 — 줄 안에 두면 잘리고 입력칸이 클릭을 가로챈다.
+ */
+function HandOffMenu({ handOff, disabled }: { handOff: StageHandOff; disabled: boolean }) {
+  const tIssue = useTranslations('issue')
+  // 열린 메뉴의 고정 위치(버튼의 오른쪽 끝·윗변 기준) — null 이면 닫힘
+  const [pos, setPos] = useState<{ right: number; bottom: number } | null>(null)
+  const open = pos != null
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      const t = e.target as Node
+      if (!btnRef.current?.contains(t) && !menuRef.current?.contains(t)) setPos(null)
+    }
+    // 스크롤·크기 변경 시 위치가 어긋나므로 닫는다
+    const close = () => setPos(null)
+    document.addEventListener('mousedown', handler)
+    window.addEventListener('resize', close)
+    return () => { document.removeEventListener('mousedown', handler); window.removeEventListener('resize', close) }
+  }, [open])
+
+  const toggle = () => {
+    if (open || !btnRef.current) { setPos(null); return }
+    const r = btnRef.current.getBoundingClientRect()
+    setPos({ right: Math.max(12, window.innerWidth - r.right), bottom: window.innerHeight - r.top + 4 })
+  }
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={toggle}
+        disabled={disabled || handOff.busy}
+        className={`shrink-0 h-10 w-10 pad:w-auto pad:px-3 rounded-lg border bg-ive-bg-card flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold whitespace-nowrap ${handOff.kind === 'verify'
+          ? 'border-ive-stage-verify/40 text-ive-stage-verify hover:bg-ive-stage-verify/10'
+          : 'border-ive-stage-confirm/40 text-ive-stage-confirm hover:bg-ive-stage-confirm/10'}`}
+        title={tIssue('callAgent')}
+        aria-label={tIssue('callAgent')}
+        aria-expanded={open}
+      >
+        {/* 폰 폭은 하단 버튼 모두 아이콘만(줄 폭 확보) — 넓은 칸에서 글자까지 */}
+        {handOff.busy ? <i className="fa-solid fa-circle-notch fa-spin" /> : <>
+          <i className="fa-solid fa-robot text-sm pad:text-[10px]" />
+          <span className="hidden pad:inline">{tIssue('callAgent')}</span>
+        </>}
+      </button>
+      {pos && createPortal(
+        <div ref={menuRef} style={{ position: 'fixed', right: pos.right, bottom: pos.bottom }} className="z-50 bg-ive-bg-deep border border-ive-border-subtle rounded-lg overflow-hidden shadow-lg shadow-black/30 min-w-[220px] max-w-[min(320px,calc(100vw-24px))]">
+          {handOff.note && (
+            <div className="px-3 pt-2.5 pb-1.5 text-xs text-ive-amber break-words">{tIssue('agentBlocked', { note: handOff.note })}</div>
+          )}
+          {handOff.agents.map(a => (
+            <button
+              key={a.id}
+              onClick={() => { setPos(null); handOff.onPick(a) }}
+              className="w-full px-3 py-2.5 text-left text-xs flex items-center gap-2 text-ive-text hover:bg-white/5 transition-colors"
+            >
+              <AgentAvatar avatar={a.avatar} size="xs" />
+              <span className="font-bold min-w-0 truncate">{a.name}</span>
+              {a.id === handOff.presetAgentId && <i className="fa-solid fa-check ml-auto text-ive-green" />}
+            </button>
+          ))}
+        </div>,
+        document.body,
+      )}
+    </>
+  )
+}

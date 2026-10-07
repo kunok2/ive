@@ -8,10 +8,9 @@ import MobileTabBar from '@/components/layout/MobileTabBar'
 import { useDialog } from '@/components/ui/ConfirmDialog'
 import { useToast } from '@/components/ui/Toast'
 import { useTranslations } from 'next-intl'
-import { useStageConfig, isClosedMidway } from './StageActions'
+import { useStageConfig } from './StageActions'
 import { transitionTarget } from '@/lib/stage-transitions'
 import { useStore } from '@/lib/store'
-import { useIsDesk } from '@/lib/use-media'
 import IssueHeader, { IssueProgressSection } from './IssueHeader'
 import NotesList from './NotesList'
 import BottomInputArea from './BottomInputArea'
@@ -116,9 +115,6 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
   const goBack = () => { if (embedded) onClose?.(); else router.back() }
   // 넓은 화면 작업 탭의 옆 칸이면 칸 전체 폭을 쓰고 ← 를 그리지 않는다(목록이 바로 옆에 있다)
   const widthCls = embedded ? 'max-w-none' : 'max-w-lg desk:max-w-3xl'
-  // 폰 폭: 진행막대·마감일·우선순위를 고정 머리에서 빼 내용 스크롤 영역 맨 위에 둔다 — 함께 스크롤되어 내용 보기 높이가 커진다
-  const isDesk = useIsDesk()
-  const progressInScroll = !embedded && !isDesk
   const { confirm } = useDialog()
   const { toast } = useToast()
   const { state } = useStore()
@@ -158,7 +154,6 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
   // --- Stage/edit state ---
   const [stageChanging, setStageChanging] = useState(false)
   // 검증·확인을 에이전트에게 맡기기 — 고른 에이전트(없으면 검증자/확인자 에이전트 → 명부 첫 에이전트)
-  const [handOffAgentId, setHandOffAgentId] = useState<string | null>(null)
   const [handingOff, setHandingOff] = useState(false)
   const [showDesc, setShowDesc] = useState(true)
   const [isClosing, setIsClosing] = useState(false)
@@ -1030,25 +1025,16 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
     // creator / 미지정 → 작성자
     return isCreator
   }
-  const canStartVerification = !!issue && canStartFor(issue.presetVerifier ?? null, issue.actualVerifier ?? null)
-  const canStartConfirmation  = !!issue && canStartFor(issue.presetConfirmer ?? null, issue.actualConfirmer ?? null)
 
-  // Verify-waiting popup — 이슈당 1회 자동 트리거
-  // 내가 시작할 차례인 단계 — 확인창을 자동으로 띄우지 않고 머리줄 아래 안내 줄로 알린다(목록을 넘겨 볼 때 방해되지 않게).
-  // 에이전트가 맡은 단계는 사람에게 권하지 않는다(버튼으로 직접 시작은 가능)
-  // 단, 에이전트가 맡을 수 없어 멈춘 경우(MR 없음 등 — 기동 못 한 사유가 남아 있음)에는 사유와 함께 사람이 직접 시작하게 한다
-  const agentBlocked = (preset: { mode?: string } | null | undefined) => preset?.mode === 'agent' && !!issue?.stageWorkerNote
-  const myStart: { action: 'start_verification' | 'start_confirmation'; text: string; button: string } | null =
-    loading || !issue || issue.agentWork ? null
-    : issue.stage === 'verify_waiting' && canStartVerification && agentBlocked(issue.presetVerifier)
-      ? { action: 'start_verification', text: tIssue('agentBlocked', { note: issue.stageWorkerNote! }), button: tIssue('startMyself') }
-    : issue.stage === 'verify_waiting' && canStartVerification && issue.presetVerifier?.mode !== 'agent'
-      ? { action: 'start_verification', text: tIssue('myTurnVerify'), button: tIssue('startVerification') }
-    : issue.stage === 'confirm_waiting' && canStartConfirmation && agentBlocked(issue.presetConfirmer)
-      ? { action: 'start_confirmation', text: tIssue('agentBlocked', { note: issue.stageWorkerNote! }), button: tIssue('startMyself') }
-    : issue.stage === 'confirm_waiting' && canStartConfirmation && issue.presetConfirmer?.mode !== 'agent'
-      ? { action: 'start_confirmation', text: tIssue('myTurnConfirm'), button: tIssue('startConfirmation') }
-    : null
+  // 검증·확인을 에이전트에게 맡기기 — 하단 앞으로 가는 버튼의 ▾ 메뉴(검증대기·검증 중·확인대기·확인 중, 에이전트가 이 작업을 하고 있지 않을 때)
+  const handOffKind: 'verify' | 'confirm' | null = !issue || issue.agentWork ? null
+    : issue.stage === 'verify_waiting' || issue.stage === 'verifying' ? 'verify'
+    : issue.stage === 'confirm_waiting' || issue.stage === 'confirming' ? 'confirm' : null
+  // 자기 작업을 자기가 검증하지 않는다 — 처리한 에이전트는 검증 후보에서 뺀다(서버도 막는다). 지정된 에이전트를 맨 위에
+  const handOffPreset = handOffKind === 'verify' ? issue?.presetVerifier : handOffKind === 'confirm' ? issue?.presetConfirmer : null
+  const handOffAgents = !handOffKind ? []
+    : (handOffKind === 'verify' ? roleAgents.verify.filter(a => a.id !== issue?.actualProcessor?.agentId) : roleAgents.confirm)
+      .slice().sort((x, y) => Number(handOffPreset?.mode === 'agent' && y.id === handOffPreset.agentId) - Number(handOffPreset?.mode === 'agent' && x.id === handOffPreset.agentId))
 
   // Force comment mode if not authorized
   useEffect(() => { if (!canProgressStage && mode === 'chat') setMode('comment') }, [canProgressStage, mode])
@@ -1187,9 +1173,6 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
         iterationCount={iterationCount}
         canProgressStage={canProgressStage}
         canEditAssignees={canEditAssignees}
-        isCreator={isCreator}
-        onDueDateChange={handleDueDateChange}
-        onPriorityChange={issue.canEditPriority ? handlePriorityChange : undefined}
         isClosing={isClosing}
         editMode={editMode}
         editTitle={editTitle}
@@ -1197,10 +1180,6 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
         saving={saving}
         showDesc={showDesc}
         projectId={projectId}
-        gitMembers={gitMembers}
-        confirmerMembers={confirmerMembers}
-        roleAgents={roleAgents}
-        preferredAgent={preferredAgent}
         onBack={embedded ? undefined : () => goBack()}
         widthCls={widthCls}
         onStageAction={handleStageAction}
@@ -1211,86 +1190,8 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
         onSetEditTitle={setEditTitle}
         onSetEditDesc={setEditDesc}
         onSetShowDesc={setShowDesc}
-        onOpenAssigneePicker={() => setAssigneePickerOpen(true)}
-        onOpenAgentPicker={() => setAgentPickerOpen(true)}
-        onPresetVerifierChange={handlePresetVerifierChange}
-        onPresetConfirmerChange={handlePresetConfirmerChange}
-        hideProgress={progressInScroll}
         onToast={toast}
       />
-
-      {myStart && (
-        <div className={`shrink-0 w-full ${widthCls} mx-auto px-3 pt-2`}>
-          <div className="flex items-center gap-3 rounded-lg bg-ive-bg-card border border-ive-border-subtle px-3 py-2">
-            <i className={`fa-solid ${myStart.action === 'start_verification' ? 'fa-user-check text-ive-stage-verify' : 'fa-circle-check text-ive-stage-confirm'}`} />
-            <span className="flex-1 min-w-0 text-sm font-bold text-ive-text-secondary">{myStart.text}</span>
-            <button
-              onClick={() => handleStageAction(myStart.action)}
-              disabled={stageChanging}
-              className={`shrink-0 h-8 px-3 rounded-lg text-sm font-bold disabled:opacity-50 ${myStart.action === 'start_verification' ? 'bg-ive-stage-verify/15 text-ive-stage-verify hover:bg-ive-stage-verify/25' : 'bg-ive-stage-confirm/15 text-ive-stage-confirm hover:bg-ive-stage-confirm/25'}`}
-            >
-              {myStart.button}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {!myStart && !issue.agentWork && canProgressStage && isClosedMidway(issue) && (
-        <div className={`shrink-0 w-full ${widthCls} mx-auto px-3 pt-2`}>
-          <div className="flex items-center gap-3 rounded-lg bg-ive-bg-card border border-ive-border-subtle px-3 py-2">
-            <i className="fa-solid fa-lock-open text-ive-amber" />
-            <span className="flex-1 min-w-0 text-sm font-bold text-ive-text-secondary">{tIssue('closedMidway', { stage: (STAGE_INFO[issue.stage] || STAGE_INFO.unknown).label })}</span>
-          </div>
-        </div>
-      )}
-
-      {/* 검증·확인을 에이전트에게 맡기기 — 검증대기·검증 중·확인대기·확인 중이고 에이전트가 이 작업을 하고 있지 않을 때 */}
-      {!issue.agentWork && canProgressStage && (() => {
-        const kind = issue.stage === 'verify_waiting' || issue.stage === 'verifying' ? 'verify'
-          : issue.stage === 'confirm_waiting' || issue.stage === 'confirming' ? 'confirm' : null
-        if (!kind) return null
-        // 자기 작업을 자기가 검증하지 않는다 — 처리한 에이전트는 검증 후보에서 뺀다(서버도 막는다)
-        const agents = kind === 'verify'
-          ? roleAgents.verify.filter(a => a.id !== issue.actualProcessor?.agentId)
-          : roleAgents.confirm
-        if (agents.length === 0) return null
-        const preset = kind === 'verify' ? issue.presetVerifier : issue.presetConfirmer
-        const picked = agents.find(a => a.id === handOffAgentId)
-          || agents.find(a => preset?.mode === 'agent' && a.id === preset?.agentId)
-          || agents[0]
-        return (
-          <div className={`shrink-0 w-full ${widthCls} mx-auto px-3 pt-2`}>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg bg-ive-bg-card border border-ive-border-subtle px-3 py-2">
-              <i className={`fa-solid fa-robot ${kind === 'verify' ? 'text-ive-stage-verify' : 'text-ive-stage-confirm'}`} />
-              <span className="flex-1 min-w-0 text-sm font-bold text-ive-text-secondary">{tIssue(`handOffToAgent.${kind}.text`)}</span>
-              <div className="flex items-center gap-2 shrink-0">
-                {agents.length > 1 && (
-                  <select
-                    value={picked.id}
-                    onChange={e => setHandOffAgentId(e.target.value)}
-                    disabled={handingOff || stageChanging}
-                    aria-label={tIssue(`handOffToAgent.${kind}.pick`)}
-                    className="h-8 max-w-40 bg-ive-bg-input border border-ive-border rounded-lg px-2 text-sm text-ive-text focus:outline-none focus:border-ive-green disabled:opacity-40"
-                  >
-                    {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                  </select>
-                )}
-                <button
-                  onClick={() => handleStageHandOff(kind, picked)}
-                  disabled={handingOff || stageChanging}
-                  className={`h-8 px-3 rounded-lg text-sm font-bold disabled:opacity-40 ${kind === 'verify'
-                    ? 'bg-ive-stage-verify/15 text-ive-stage-verify hover:bg-ive-stage-verify/25'
-                    : 'bg-ive-stage-confirm/15 text-ive-stage-confirm hover:bg-ive-stage-confirm/25'}`}
-                >
-                  {handingOff
-                    ? <i className="fa-solid fa-circle-notch fa-spin" />
-                    : agents.length > 1 ? tIssue('handOffButton') : tIssue('handOffButtonNamed', { agent: picked.name })}
-                </button>
-              </div>
-            </div>
-          </div>
-        )
-      })()}
 
       <NotesList
         widthCls={widthCls}
@@ -1315,7 +1216,8 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
         notesEndRef={notesEndRef}
         onRefreshAll={refreshAll}
         onDeleteNote={handleDeleteNote}
-        headSlot={progressInScroll && !editMode ? (
+        // 진행막대·마감일·우선순위는 고정 머리가 아니라 내용 스크롤 영역 맨 위 — 함께 스크롤되어 내용 보기 높이가 커진다(폭과 무관)
+        headSlot={!editMode ? (
           <div className="pt-2 pb-1 pr-2">
             <IssueProgressSection
               issue={issue}
@@ -1381,6 +1283,14 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
         onEndChat={handleEndChat}
         onSendChatMessage={handleSendChatMessage}
         onChangePreferredAgent={handleChangePreferredAgent}
+        handOff={handOffKind && handOffAgents.length > 0 ? {
+          kind: handOffKind,
+          agents: handOffAgents,
+          presetAgentId: handOffPreset?.mode === 'agent' ? handOffPreset.agentId ?? null : null,
+          note: issue.stageWorkerNote ?? null,
+          busy: handingOff || stageChanging,
+          onPick: agent => handleStageHandOff(handOffKind, agent),
+        } : null}
         onToast={toast}
 
       />

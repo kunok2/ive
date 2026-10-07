@@ -194,27 +194,19 @@
   "roleModeAgent": "Agent",
   "detailPaneLabel": "Issue detail",
   "detailPanePlaceholder": "Pick an issue to open it here",
-  "myTurnVerify": "Your turn to verify",
-  "myTurnConfirm": "Your turn to confirm",
   "agentBlocked": "The agent couldn't take this — {note}",
-  "closedMidway": "Closed while in “{stage}” — move it to the next stage below to reopen the issue and continue",
-  "startMyself": "Start myself",
   "handOffToAgent": {
     "verify": {
-      "text": "You can hand this verification to an agent",
-      "pick": "Verifier agent",
       "ask": "The verification in progress will be cancelled and {agent} will start verifying. Continue?",
       "done": "Handed the verification to {agent}"
     },
     "confirm": {
-      "text": "You can hand this confirmation to an agent",
-      "pick": "Confirmer agent",
       "ask": "The confirmation in progress will be cancelled and {agent} will start confirming. Continue?",
       "done": "Handed the confirmation to {agent}"
     }
   },
+  "callAgent": "Call agent",
   "handOffButton": "Hand to agent",
-  "handOffButtonNamed": "Hand to {agent}",
   "agentWorking": "{agent} is {work} this — you can move the stage once it finishes",
   "agentWorkingUnknown": "An agent",
   "agentWorkKind": {

@@ -77,24 +77,10 @@ interface IssueHeaderProps {
   saving: boolean
   showDesc: boolean
   projectId: string
-  gitMembers: IssueAssignee[]
-  /** 확인자 후보 — 검증자/담당자(프로젝트 멤버)와 달리 provider 로 식별되는 모든 IVE 사용자. */
-  confirmerMembers?: IssueAssignee[]
-  /** 역할 명부의 에이전트 — 검증자·확인자 picker 후보 */
-  roleAgents?: { verify: RoleAgentCandidate[]; confirm: RoleAgentCandidate[] }
-  preferredAgent: {
-    assignMode?: string
-    preferredAgentId: string | null
-    preferredAgentName: string | null
-    preferredAgentAvatar: string | null
-    preferredAgentCliName: string | null
-  } | null
   /** 없으면 ← 버튼을 그리지 않는다(넓은 화면 작업 탭의 옆 칸 — 목록이 옆에 있다) */
   onBack?: () => void
   /** 폭 제한 클래스 — 옆 칸이면 칸 전체 폭 */
   widthCls?: string
-  /** 진행막대·마감일·우선순위를 머리에 그리지 않는다 — 폰 폭에서 내용 스크롤 영역에 IssueProgressSection 으로 따로 그릴 때 */
-  hideProgress?: boolean
   onStageAction: (action: string) => void
   onCloseIssue: () => void
   onStartEdit: () => void
@@ -103,27 +89,15 @@ interface IssueHeaderProps {
   onSetEditTitle: (v: string) => void
   onSetEditDesc: (v: string) => void
   onSetShowDesc: (v: boolean) => void
-  onOpenAssigneePicker: () => void
-  /** 처리자(에이전트) picker — 처리자 아바타 클릭 시 호출. 미지정 시 onOpenAssigneePicker 사용. */
-  onOpenAgentPicker?: () => void
-  onPresetVerifierChange: (preset: PresetRole) => Promise<void> | void
-  onPresetConfirmerChange: (preset: PresetRole) => Promise<void> | void
-  /** 작성자 또는 관리자만 호출됨. null 이면 마감일 해제. */
-  onDueDateChange: (next: string | null) => Promise<void> | void
-  /** 우선순위 변경 — 없으면 고르는 칸을 그리지 않는다(배지만) */
-  onPriorityChange?: (next: Priority) => Promise<void> | void
-  /** 작성자(생성자) 권한 — DeadlineProgress 노출/편집 제어. */
-  isCreator: boolean
   onToast: (msg: string, type: 'success' | 'error') => void
 }
 
 export default function IssueHeader({
   issue, iterationCount,
   canEditAssignees, isClosing, editMode, editTitle, editDesc, saving, showDesc,
-  projectId, gitMembers, confirmerMembers, roleAgents, preferredAgent,
-  onBack, widthCls = 'max-w-lg desk:max-w-3xl', hideProgress = false, onCloseIssue, onStartEdit, onSaveEdit, onCancelEdit,
-  onSetEditTitle, onSetEditDesc, onSetShowDesc, onOpenAssigneePicker, onOpenAgentPicker,
-  onPresetVerifierChange, onPresetConfirmerChange, onDueDateChange, onPriorityChange, isCreator, onToast,
+  projectId,
+  onBack, widthCls = 'max-w-lg desk:max-w-3xl', onCloseIssue, onStartEdit, onSaveEdit, onCancelEdit,
+  onSetEditTitle, onSetEditDesc, onSetShowDesc, onToast,
 }: IssueHeaderProps) {
   const { state } = useStore()
   const tc = useTranslations('common')
@@ -246,38 +220,39 @@ export default function IssueHeader({
           </>
         )}
       </div>
-      {/* 진행막대 — 폰 폭에서는 내용 스크롤 영역 맨 위로 옮겨 그린다(hideProgress) */}
-      {!editMode && !hideProgress && (
-        <div className="px-3 pt-1 pb-3">
-          <IssueProgressSection
-            issue={issue}
-            canEditAssignees={canEditAssignees}
-            isCreator={isCreator}
-            gitMembers={gitMembers}
-            confirmerMembers={confirmerMembers}
-            roleAgents={roleAgents}
-            preferredAgent={preferredAgent}
-            onOpenAssigneePicker={onOpenAssigneePicker}
-            onOpenAgentPicker={onOpenAgentPicker}
-            onPresetVerifierChange={onPresetVerifierChange}
-            onPresetConfirmerChange={onPresetConfirmerChange}
-            onDueDateChange={onDueDateChange}
-            onPriorityChange={onPriorityChange}
-          />
-        </div>
-      )}
     </header>
   )
 }
 
-type IssueProgressSectionProps = Pick<IssueHeaderProps,
-  'issue' | 'canEditAssignees' | 'isCreator' | 'gitMembers' | 'confirmerMembers' | 'roleAgents' | 'preferredAgent'
-  | 'onOpenAssigneePicker' | 'onOpenAgentPicker' | 'onPresetVerifierChange' | 'onPresetConfirmerChange'
-  | 'onDueDateChange' | 'onPriorityChange'>
+interface IssueProgressSectionProps extends Pick<IssueHeaderProps, 'issue' | 'canEditAssignees'> {
+  gitMembers: IssueAssignee[]
+  /** 확인자 후보 — 검증자/담당자(프로젝트 멤버)와 달리 provider 로 식별되는 모든 IVE 사용자. */
+  confirmerMembers?: IssueAssignee[]
+  /** 역할 명부의 에이전트 — 검증자·확인자 picker 후보 */
+  roleAgents?: { verify: RoleAgentCandidate[]; confirm: RoleAgentCandidate[] }
+  preferredAgent: {
+    assignMode?: string
+    preferredAgentId: string | null
+    preferredAgentName: string | null
+    preferredAgentAvatar: string | null
+    preferredAgentCliName: string | null
+  } | null
+  onOpenAssigneePicker: () => void
+  /** 처리자(에이전트) picker — 처리자 아바타 클릭 시 호출. 미지정 시 onOpenAssigneePicker 사용. */
+  onOpenAgentPicker?: () => void
+  onPresetVerifierChange: (preset: PresetRole) => Promise<void> | void
+  onPresetConfirmerChange: (preset: PresetRole) => Promise<void> | void
+  /** 작성자 또는 관리자만 호출됨. null 이면 마감일 해제. */
+  onDueDateChange: (next: string | null) => Promise<void> | void
+  /** 우선순위 변경 — 없으면 고르는 칸을 그리지 않는다(배지만) */
+  onPriorityChange?: (next: Priority) => Promise<void> | void
+  /** 작성자(생성자) 권한 — DeadlineProgress 노출/편집 제어. */
+  isCreator: boolean
+}
 
 /**
  * 진행막대(5단계 흐름 + 단계별 담당자 아바타) · 마감일 진행 · 우선순위.
- * 넓은 칸은 IssueHeader 안(고정)에, 폰 폭은 내용 스크롤 영역 맨 위에 그려 함께 스크롤된다 — 내용 보기 높이 확보.
+ * 고정 머리가 아니라 내용 스크롤 영역 맨 위에 그려 함께 스크롤된다 — 화면 폭과 관계없이 내용 보기 높이 확보(IVE #540).
  */
 export function IssueProgressSection({
   issue, canEditAssignees, isCreator, gitMembers, confirmerMembers, roleAgents, preferredAgent,

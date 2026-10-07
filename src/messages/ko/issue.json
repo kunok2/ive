@@ -194,27 +194,19 @@
   "roleModeAgent": "에이전트",
   "detailPaneLabel": "작업 상세",
   "detailPanePlaceholder": "작업을 고르면 여기에 열립니다",
-  "myTurnVerify": "검증할 차례입니다",
-  "myTurnConfirm": "확인할 차례입니다",
   "agentBlocked": "에이전트가 맡지 못했습니다 — {note}",
-  "closedMidway": "「{stage}」 단계에서 닫힌 작업입니다 — 아래에서 다음 단계로 옮기면 이슈를 다시 열고 이어 갑니다",
-  "startMyself": "직접 시작",
   "handOffToAgent": {
     "verify": {
-      "text": "검증을 에이전트에게 맡길 수 있습니다",
-      "pick": "검증 에이전트",
       "ask": "지금 하던 검증은 취소되고 {agent}이(가) 검증을 시작합니다. 맡길까요?",
       "done": "{agent}에게 검증을 맡겼습니다"
     },
     "confirm": {
-      "text": "확인을 에이전트에게 맡길 수 있습니다",
-      "pick": "확인 에이전트",
       "ask": "지금 하던 확인은 취소되고 {agent}이(가) 확인을 시작합니다. 맡길까요?",
       "done": "{agent}에게 확인을 맡겼습니다"
     }
   },
+  "callAgent": "에이전트 호출",
   "handOffButton": "에이전트에게 맡기기",
-  "handOffButtonNamed": "{agent}에게 맡기기",
   "agentWorking": "{agent}이(가) {work} 중입니다 — 끝나면 단계를 진행할 수 있습니다",
   "agentWorkingUnknown": "에이전트",
   "agentWorkKind": {

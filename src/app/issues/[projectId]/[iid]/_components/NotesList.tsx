@@ -75,7 +75,7 @@ interface NotesListProps {
   chatStreamText: string
   // Refs
   scrollContainerRef: RefObject<HTMLDivElement | null>
-  /** 스크롤 영역 맨 위(본문 앞)에 끼울 블록 — 폰 폭에서 진행막대를 함께 스크롤시킬 때 */
+  /** 스크롤 영역 맨 위(본문 앞)에 끼울 블록 — 진행막대를 내용과 함께 스크롤시킬 때 */
   headSlot?: React.ReactNode
   /** 본문과 활동 기록 사이에 끼울 블록 (단계 자동화·증적 패널) */
   topSlot?: React.ReactNode
