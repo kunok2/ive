@@ -218,7 +218,7 @@ describe('R-1 확인 전에 Git 이 닫은 이슈', () => {
 describe('V-1 검증 판정', () => {
   const ok: CheckResult = { command: 'npm test', ok: true, exitCode: 0, timedOut: false, durationSec: 1, outputTail: '' }
   const bad: CheckResult = { ...ok, ok: false, exitCode: 1 }
-  const pass = { verdict: 'pass' as const, summary: 's', reason: '', requirements: [], findings: [], commands: [] }
+  const pass = { verdict: 'pass' as const, summary: 's', reason: '', requirements: [], findings: [], toConfirm: [], commands: [] }
   it('검사 실패·충돌이면 에이전트가 pass 라도 fail', () => {
     expect(enforceVerifyVerdict(pass, [ok], []).verdict).toBe('pass')
     expect(enforceVerifyVerdict(pass, [bad], [])).toMatchObject({ verdict: 'fail', reason: expect.stringMatching(/npm test/) })
@@ -236,6 +236,10 @@ describe('V-1 검증 판정', () => {
     fs.mkdirSync(path.join(ws, '.ive-out'))
     fs.writeFileSync(path.join(ws, '.ive-out', 'result.json'), JSON.stringify({ verdict: 'fail', summary: 's', reason: 'r', findings: [{ severity: 'major', file: 'a.ts', line: 3, note: 'n' }, { note: '' }] }))
     expect(parseVerifyResult(ws, log)).toMatchObject({ verdict: 'fail', findings: [{ severity: 'major', file: 'a.ts', line: 3, note: 'n' }] })
+    // 확인 요청(toConfirm) — 처리·검증 환경에서 못 한 검수를 확인 단계로 넘긴다. 빈 항목은 버린다
+    fs.writeFileSync(path.join(ws, '.ive-out', 'result.json'), JSON.stringify({ verdict: 'pass', summary: 's', toConfirm: [{ item: '목록에서 행 클릭', how: '관리자 › 자산 홈', expect: '모달이 뜬다' }, { item: '' }] }))
+    expect(parseVerifyResult(ws, log)).toMatchObject({ verdict: 'pass', toConfirm: [{ item: '목록에서 행 클릭', how: '관리자 › 자산 홈', expect: '모달이 뜬다', prereq: '' }] })
+    expect(parseVerifyResult(ws, log).toConfirm).toHaveLength(1)
     // 새 형식 — 요건 대조와 누락/오류 두 종류
     fs.writeFileSync(path.join(ws, '.ive-out', 'result.json'), JSON.stringify({ verdict: 'fail', summary: 's', requirements: [{ item: '요건1', status: 'done', where: 'a.ts:1' }, { item: '요건2', status: 'nope' }], findings: [{ kind: 'missing', file: 'b.ts', note: '요건2 없음' }, { kind: 'defect', file: 'a.ts', line: 2, note: '빈 값' }] }))
     expect(parseVerifyResult(ws, log)).toMatchObject({

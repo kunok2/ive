@@ -120,10 +120,24 @@ describe('buildPrompt — 범위·검증 환경·시간 예산 (#1788)', () => {
     expect(p).toContain('Do NOT create or modify shared lint/check scripts')
   })
 
-  it('P-8: 시스템 패키지 설치·우회 금지 + 미검증 명시', () => {
+  it('P-8: 시스템 패키지 설치·우회 금지 + 못 한 검수는 확인 요청으로 넘김', () => {
     const p = buildPrompt(makeProject(), issue, 1, false, false, true, 1, '', '')
     expect(p).toContain('Do NOT install system packages')
-    expect(p).toContain('확인 못 했다')
+    expect(p).toContain('hand it over under 확인 요청')
+  })
+
+  // P-10: 환경 때문에 못 한 검수는 미완(incomplete)이 아니다 — 확인 요청으로 넘긴다 (기본·덮어쓰기 양쪽).
+  //   dazzlepf #1961·#1962(2026-10-07): 컨테이너에 DB·앱 서버가 없어 화면 검수를 못 하자 incomplete 로 내
+  //   재처리 3회 → 검증 반려 → 재처리가 끝없이 돌았다.
+  it('P-10: 못 한 검수로 incomplete 를 내지 않고 확인 요청으로 넘긴다 (기본·덮어쓰기)', () => {
+    const base = buildPrompt(makeProject(), issue, 1, false, false, true, 1, '', '', false, 'agent-1')
+    const over = buildPrompt(makeProject(), issue, 1, false, false, true, 1, '', '', false, 'agent-1', 0, '- 내 지침')
+    for (const p of [base, over]) {
+      expect(p).toContain('Never mark a run incomplete only because a check could not run')
+      expect(p).toContain('A requirement is ❌ only when its IMPLEMENTATION is missing')
+      expect(p).toContain('**확인 요청**')
+      expect(p).toContain('hand the rest over under 확인 요청')
+    }
   })
 
   it('P-9: 시간 상한 전달 시 분 단위로 안내, 0 이면 생략', () => {

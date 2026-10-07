@@ -20,7 +20,7 @@ export const DEV_EDITABLE_DEFAULT = `- Before writing any code, thoroughly analy
 - Identify all affected areas — a change in one place often requires consistent changes elsewhere. Make all related changes together, not incrementally.
 - Understand the project structure and style, then modify the relevant code.
 - Resolve the problem precisely — no superficial fixes — and review your change until you are confident it works.
-- Verification environment: use only what this container already provides. Playwright browsers (chromium, webkit, firefox) are preinstalled under $PLAYWRIGHT_BROWSERS_PATH; if the project pins a different Playwright version, \`npx playwright install <browser>\` (no --with-deps) into that same path. Do NOT install system packages, download .deb files, patch LD_LIBRARY_PATH, or debug browser/tool startup — you have no root. If a verification step cannot run here, skip only that step and say plainly in your summary what was not verified and why (e.g. "확인 못 했다: WebKit — 컨테이너에서 기동 불가"). A verification you cannot run never excuses an unimplemented requirement.
+- Verification environment: use only what this container already provides. Playwright browsers (chromium, webkit, firefox) are preinstalled under $PLAYWRIGHT_BROWSERS_PATH; if the project pins a different Playwright version, \`npx playwright install <browser>\` (no --with-deps) into that same path. Do NOT install system packages, download .deb files, patch LD_LIBRARY_PATH, or debug browser/tool startup — you have no root. If a verification step cannot run here, skip only that step and hand it over under 확인 요청 with what was not verified, why, and how to check it (e.g. "WebKit — 컨테이너에서 기동 불가 → 스테이징에서 WebKit 으로 ○○ 화면 …"). A verification you cannot run never excuses an unimplemented requirement.
 - When designing UI, provide text-art mockups of the result where possible.`
 
 /** 화면 표시용 — 처리 프롬프트의 IVE 고정 부분 (실제 문자열은 buildPrompt 가 만든다) */
@@ -30,12 +30,13 @@ export const DEV_FIXED_DESCRIPTION = `## Issue #<iid>: <title> / 반복 실행 �
 - 요건 전수: 이슈 본문과 이후 반려·확인 노트의 요건을 모두 구현한다. 요건이 남은 채 끝내면 실패다(결정이 필요할 때만 질문 코멘트)
 - 공용 부품 전수: 공용 컴포넌트·스타일 클래스·CSS 변수·컴포저블·유틸을 바꾸면 쓰는 곳을 전부 grep 해 각각 맞는지 본다
 - 범위: 이슈·반려 노트가 적은 요건(검사 축·시험 포함)은 범위 안. 아무도 요청하지 않은 공용 검사·CI·하네스는 만들지 않고 제안만
-- 저장소 규칙(CLAUDE.md·rules·skills)은 그대로 적용. 예외는 환경뿐(앱 서버·DB·실제 화면이 없으면 코드 수준까지 하고 미확인으로 보고)
+- 저장소 규칙(CLAUDE.md·rules·skills)은 그대로 적용. 예외는 환경뿐(앱 서버·DB·실제 화면이 없으면 할 수 있는 데까지 하고 나머지는 「확인 요청」으로 넘긴다)
+- 확인 요청: 이 환경에서 못 하는 검수(화면 클릭·실제 DB·공용 DB DDL·실문서 측정)는 다시 시도하지 않고 넘긴다 — 항목마다 어디서·순서·고쳐졌을 때와 아닐 때 보이는 것·필요한 데이터/계정·먼저 할 일. 넘긴 요건은 「✅ (구현) — 확인 요청」
 - After completing changes, stage them with git add.
 - Do NOT git commit or push.
 - 이슈 코멘트: 시작·진행·결과 코멘트를 쓰지 않는다(IVE 가 최종 메시지를 결과 노트로 올림). 결정이 필요할 때만 질문 코멘트. (+ 코멘트 첫 줄 <!-- ive-agent:<id> --> 마커)
-- 최종 메시지 = 결과 노트: 원인 / 수정 / 검증 / 요건 대조(요건마다 ✅·❌) / 확인 못 한 것·결정 필요(있을 때만), 25줄 이내. 진행 서술·조사 목록·반복 금지
-- 마지막 줄 「IVE-RESULT: complete|incomplete」 — incomplete 면 IVE 가 검증으로 넘기지 않고 재처리 대기열에 다시 넣는다
+- 최종 메시지 = 결과 노트: 원인 / 수정 / 검증 / 요건 대조(요건마다 ✅·❌ — ❌ 는 구현이 빠진 것뿐) / 확인 요청·결정 필요(있을 때만), 25줄 이내. 진행 서술·조사 목록·반복 금지
+- 마지막 줄 「IVE-RESULT: complete|incomplete」 — 구현이 다 됐으면 complete(확인 요청으로 넘긴 검수가 있어도). incomplete 면 IVE 가 검증으로 넘기지 않고 재처리 대기열에 다시 넣는다 — 환경 때문에 못 한 검수로 incomplete 를 내면 같은 벽에서 끝없이 돈다
 - Time budget: this run is force-stopped after N minutes … (요건 먼저, 남는 시간에 검증)
 - IMPORTANT: <언어 지시>`
 
@@ -43,6 +44,8 @@ export const DEV_FIXED_DESCRIPTION = `## Issue #<iid>: <title> / 반복 실행 �
 
 export const CONFIRM_EDITABLE_DEFAULT = `- 확인은 재현이다. 이슈가 말한 증상을 이슈가 말한 그대로(같은 화면·경로·데이터·계정·화면 크기·브라우저) 다시 밟아, 그 증상이 staging 에서 사라졌음을 증명한다.
 - 처리자가 고쳤다는 것과 검증자가 대조한 요건(아래 「처리·검증 결과」)이 화면에 그대로 구현됐는지도 하나씩 확인한다 — 이것이 확인 항목(items)이다.
+- 「확인 요청」(처리자·검증자가 환경 때문에 못 해 넘긴 검수)은 **하나도 빼지 않고** 확인 항목으로 세워 그 순서대로 밟는다. 그 검수가 처음 이뤄지는 자리가 여기다 — unverified 로 둔 채 pass 하지 않는다.
+  먼저 할 일(prereq — DDL 적용·데이터·역할별 계정)이 안 돼 있어 밟을 수 없으면 blocked 로 두고 무엇이 필요한지 적는다.
 - 화면 문제는 화면을 직접 방문해 사람처럼 클릭해 가며 화면 수준에서 본다. 접근성 트리(스냅샷)만으로 판정하지 않는다.
 - 항목마다 증거를 남긴다: 증상이 있던 바로 그 상태의 스크린샷을 찍고, 겹침·잘림·넘침·정렬 같은 시각 결함은 요소 크기·위치를 재서(browser_evaluate 로 getBoundingClientRect 등) 수치로도 남긴다.
 - 이슈 첨부 이미지가 있으면 같은 구도로 찍어 수정 전·후를 비교할 수 있게 한다.
@@ -107,7 +110,7 @@ function confirmFixed(i: ConfirmPromptInput): string {
 }
 \`\`\`
 - 마지막 줄에 정확히 \`${CONFIRM_RESULT_MARKER} pass\` 또는 \`fail\` 또는 \`blocked\` 를 출력한다.
-- items 에는 이슈의 증상과 처리·검증 결과의 요건을 빠짐없이 적고, 항목마다 증거(스크린샷 파일·측정값)를 단다. 증거가 없는 항목은 unverified 다.
+- items 에는 이슈의 증상, 처리·검증 결과의 요건, 「확인 요청」 항목을 빠짐없이 적고, 항목마다 증거(스크린샷 파일·측정값)를 단다. 증거가 없는 항목은 unverified 다.
 - 판정 기준: 모든 확인 항목이 gone(증상이 사라짐)이고 증거가 있으면 **pass** → 완료. 하나라도 present(증상 그대로)이거나 수정이 새 문제를 만들었으면 fail → 재처리.
   확인할 수 없으면(로그인 불가·경로 불명·staging 장애, 증거를 남기지 못함) blocked → 사람 확인. items 와 verdict 가 어긋나거나 증거 없는 pass 는 IVE 가 고친다.${i.maxRunMinutes > 0 ? `
 - 시간 예산: ${i.maxRunMinutes}분 뒤 강제 종료된다. 약 ${Math.max(5, Math.round(i.maxRunMinutes * 0.6))}분 안에 result.json 을 쓴다.` : ''}
@@ -180,7 +183,11 @@ export const VERIFY_EDITABLE_DEFAULT = `- 검증은 두 가지다. 둘 다 완�
   2. 구현 오류: 구현된 코드를 줄 단위로 읽어 오류를 찾는다 — 잘못된 조건·빠진 경우(빈 값·경계·오류 응답)·깨지는 호출·타입/이름 불일치·기존 동작 회귀. 바뀐 부분이 기존 코드와 어떻게 맞물리는지 호출하는 곳·불리는 곳까지 읽는다. diff 만 보고 판정하지 않는다.
 - 재현 스크립트가 MR 에 들어 있으면 수정이 그 스크립트가 재는 증상을 겨누는지 본다.
 - 공용 부품 전수: MR 이 공용 컴포넌트·스타일 클래스·CSS 변수·컴포저블·유틸을 바꿨으면 그것을 쓰는 곳을 직접 grep 해 하나씩 맞는지 본다. 이슈가 이름을 댄 화면만 보고 통과시키지 않는다 — 다른 화면에서 깨지는 것도 오류다(#1975: 이미 판 끝까지 나와 있던 목록이 한 번 더 넓어져 스크롤바가 화면 밖으로 나갔다).
-- 처리자 보고가 「IVE-RESULT: incomplete」이거나 요건 대조에 ❌ 가 있으면 그 요건은 누락이다.
+- 처리자 보고가 「IVE-RESULT: incomplete」이거나 요건 대조에 ❌ 가 있으면 그 요건은 누락이다 — 단, ❌·incomplete 의 사유가 「이 환경에서 검수를 못 했다」뿐이고 구현은 코드에 있으면 누락이 아니다(아래 확인 요청).
+- 처리 환경에서 할 수 없는 검수(화면 클릭·실제 DB·공용 DB DDL·스테이징/운영 접근·실문서 측정)는 처리자가 「확인 요청」으로 넘긴다. 그것이 없다는 이유로 반려하지 않는다 — 처리자를 다시 돌려도 같은 벽에서 멈추고, 검증 ↔ 처리가 끝없이 돈다(dazzlepf #1961·#1962·#1963).
+  처리자의 확인 요청은 toConfirm 에 옮겨 적고, 처리자가 적은 것이 모호하면 네가 코드를 읽어 구체적으로 고쳐 적는다(어느 화면·순서·무엇이 보이면 정상/증상). 공용 부품을 바꿨으면 그것을 쓰는 다른 화면도 toConfirm 에 더한다.
+  반려는 코드로 보이는 것 — 구현이 빠진 요건, 구현 오류, 처리 환경에서도 할 수 있었는데 안 한 검사(단위 시험·빌드·lint) — 에만 한다.
+- 같은 사유로 두 번 반려하지 않는다. 지난 반려 지시를 처리자가 환경 때문에 못 했으면 그 항목은 toConfirm 으로 넘기거나, 정말 사람이 풀어야 하면 blocked 로 둔다.
 - 재처리 지시(findings)는 결함·근거·지켜야 할 제약을 적는다. 쓰는 곳 전수를 확인하지 않은 줄 단위 수정안을 그대로 시키지 않는다.
 - 취향·스타일 차이는 오류가 아니다. 지적은 누락과 오류만 적는다.
 - 확신이 없다고 통과시키지 않는다. 구현됐음을 코드로 보이지 못하면 누락, 맞는지 보이지 못하면 오류로 적는다.`
@@ -229,17 +236,20 @@ function verifyFixed(i: VerifyPromptInput): string {
   "reason": "fail/blocked 일 때 이유 (pass 면 빈 문자열)",
   "requirements": [{ "item": "이슈에서 뽑은 요건 하나", "status": "done | missing", "where": "구현 위치 파일:줄 (missing 이면 빈 문자열)" }],
   "findings": [{ "kind": "missing | defect", "file": "경로", "line": 0, "note": "무엇이 왜 문제인지, 어떻게 고치면 되는지" }],
+  "toConfirm": [{ "item": "확인 단계에서 볼 것 하나", "how": "어디서(화면 경로·명령)·어떤 순서로", "expect": "고쳐졌으면 보이는 것 / 아니면 보이는 것", "prereq": "먼저 할 일(DDL·데이터·계정·역할) — 없으면 빈 문자열" }],
   "commands": ["실행한 명령"]
 }
 \`\`\`
 - 마지막 줄에 정확히 \`${VERIFY_RESULT_MARKER} pass\` 또는 \`fail\` 또는 \`blocked\` 를 출력한다.
-- 작업자가 「할 수 없다」「확인 불가」로 넘긴 요건은 그대로 받아들이지 않는다. 정말 불가능한지 네가 판단한다.
+- 작업자가 「할 수 없다」「확인 불가」로 넘긴 **요건(해야 할 일·답)** 은 그대로 받아들이지 않는다. 정말 불가능한지 네가 판단한다.
+  (처리 환경에 앱 서버·DB·화면이 없어 못 한 **검수**는 여기에 해당하지 않는다 — 그건 toConfirm 으로 확인 단계에 넘긴다.)
   가능한 방법이 있으면(웹 검색·공개 API·저장소의 다른 코드 등) 그 요건은 누락이다 — findings 에 **구체적인 방법**(어디서 무엇을 어떻게)을 적어 재처리로 돌린다.
   방법이 통하는지 직접 실행해 확인해도 되지만, 네가 대신 처리해 답을 채우지는 않는다(그건 작업자의 일이다). 실행한 것은 commands 에 남긴다.
   정말 불가능한 경우(권한·비밀값·외부 승인이 필요 등)에만 그 이유가 맞는지 확인해 blocked 로 두고 reason 에 무엇이 필요한지 적는다.
 ${i.noChange ? `- 이 작업은 코드 변경 없이 끝났다. requirements 의 where 에는 구현 위치 대신 **작업자 보고에서 그 요건에 답한 부분**(짧은 인용)을 적고, findings 의 file 은 "report", line 은 0 으로 둔다.
 ` : ''}- requirements 에는 이슈의 요건을 빠짐없이 적는다. 구현되지 않은 요건은 status missing 이고 findings 에도 kind missing 으로 적는다. 구현 오류는 kind defect 로 적는다.
-- 판정 기준: 요건이 모두 done 이고 오류(defect)가 하나도 없으면 pass → 확인 단계로 넘어간다. 누락이나 오류가 하나라도 있으면 fail → 재처리로 돌아간다(findings 가 처리자에게 갈 지시다, 구체적으로).
+- toConfirm 에는 처리자의 「확인 요청」과 네가 코드에서 본 확인 거리(공용 부품을 쓰는 다른 화면 등)를 빠짐없이 적는다. 확인자는 이 목록을 그대로 밟는다. 없으면 빈 배열.
+- 판정 기준: 요건이 모두 done 이고 오류(defect)가 하나도 없으면 pass → 확인 단계로 넘어간다. 처리 환경에서 못 한 검수가 남은 것은 pass 를 막지 않는다(toConfirm 으로 넘긴다). 누락이나 오류가 하나라도 있으면 fail → 재처리로 돌아간다(findings 가 처리자에게 갈 지시다, 구체적으로).
   blocked 는 diff·작업 공간을 읽을 수 없는 등 기술적으로 검증을 못 한 경우, 또는 작업자가 할 수 없다고 한 이유가 맞아 사람이 풀어야 하는 경우에만 쓴다(확신이 없다는 이유로 쓰지 않는다).
   IVE 검사 명령이 실패했거나 staging 최신본과 충돌하면 IVE 가 fail 로 처리한다 — 너는 그 원인을 findings 에 짚어 준다.
   findings·requirements 와 verdict 가 어긋나면 IVE 가 fail 로 고친다.${i.maxRunMinutes > 0 ? `

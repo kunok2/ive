@@ -21,7 +21,7 @@ export const DEV_REQUIREMENT_LINES = `- Requirements: list every requirement in 
 
 // ⛔ 「IVE 제약이 저장소 규칙(CLAUDE.md·rules·skills)보다 우선」이라고 넓게 쓰지 않는다 (#1975) —
 //    환경 우회 금지만 막으려던 줄이 요건·전수 확인까지 끊어도 된다고 읽혔다. 예외는 환경 하나뿐이다.
-export const DEV_REPO_RULES_LINE = `- Repository rules (CLAUDE.md, .claude/rules, skills) apply in full. The only IVE exception is the environment: when a repository rule needs something this container lacks (running app server, database, real screen), do the code-level part and report the rest as not verified.`;
+export const DEV_REPO_RULES_LINE = `- Repository rules (CLAUDE.md, .claude/rules, skills) apply in full. The only IVE exception is the environment: when a repository rule needs something this container lacks (running app server, database, real screen), do the code-level part and hand the rest over under 확인 요청 — the run is still complete if the implementation is.`;
 
 /**
  * 이슈 처리용 프롬프트를 구성합니다.
@@ -144,15 +144,21 @@ curl -s ${authHeader} "${gitlabBaseUrl}/api/v4/projects/${encodedProjectPath}/is
   // 결과 노트 규약 — IVE 가 최종 메시지를 이슈 결과 노트로 올린다(mr-creator.buildWorkSummary).
   // 시작·진행·결과 코멘트를 에이전트가 따로 쓰면 같은 내용이 노트 2~3개로 겹치고, 처리 중 말까지 실려 아무도 읽지 않는다.
   const reportSections = isKo
-    ? '**원인** / **수정** / **검증** / **요건 대조** / **확인 못 한 것**(있을 때만) / **결정 필요**(있을 때만)'
-    : '**Cause** / **Fix** / **Verified** / **Requirements** / **Not verified** (only if any) / **Decision needed** (only if any)';
+    ? '**원인** / **수정** / **검증** / **요건 대조** / **확인 요청**(있을 때만) / **결정 필요**(있을 때만)'
+    : '**Cause** / **Fix** / **Verified** / **Requirements** / **확인 요청** (only if any) / **Decision needed** (only if any)';
   // 결과 표시 — IVE(mr-creator)가 이 줄로 「검증대기」와 「처리 미완(재처리)」을 가른다.
   const reportRule = `- Issue comments: do NOT post start, progress or result comments — IVE posts your final message on the issue as the result note. Post a comment only when you need the issue author's decision to continue.${agentMarkerHint}
 - Your FINAL message is that result note, and people only read short ones. Write it as a brief report, not a work log — at most ~25 lines:
   ${reportSections} — 1–3 short bullets each; name the changed files once.
   The requirements section has one line per requirement (issue body + rejection/confirmation notes): ✅ done (where) or ❌ not done (why).
+  A requirement is ❌ only when its IMPLEMENTATION is missing. A check this environment cannot run is not a missing requirement — see 「확인 요청」 below.
+- 확인 요청 (hand-over to the confirm stage): this container has no running app stack (no database server, no auth/web/API servers, no real data, no staging/production access). When a requirement's check needs any of that — clicking through a screen, running SQL on a real database, applying DDL to shared databases, measuring a real document — do every part you CAN do here (unit tests, build, lint, logic run against fakes or a throwaway database if one is already available), then hand the rest over instead of retrying it.
+  Do NOT spend the run assembling a missing stack (installing or starting a database, faking servers, working around login) — check once what exists, then hand over.
+  Under the heading **확인 요청** write one item per hand-over, each with: where (screen path or command), the steps in order, what is seen when it is fixed vs. when it is still broken, the data/account/role needed, and any prerequisite someone must do first (e.g. "apply this DDL to local·staging before merge").
+  Mark that requirement "✅ (구현) — 확인 요청" in the requirements section. Writing only "화면 검수 못 함" is not a hand-over: say exactly what to look at.
+  This hand-over is the normal path, not a failure: the verifier passes it on and the confirmer walks it on staging.
   No progress narration ("checking…", "now I will…"), no lists or tables of places you inspected, no repetition, no remarks about git add/commit status.
-- The very last line of your final message must be exactly \`${DEV_RESULT_MARKER} complete\` (every requirement ✅) or \`${DEV_RESULT_MARKER} incomplete\` (any ❌). An incomplete run goes back to the queue to be continued; it is never passed on as done.`;
+- The very last line of your final message must be exactly \`${DEV_RESULT_MARKER} complete\` (every requirement implemented — items handed over under 확인 요청 count as implemented) or \`${DEV_RESULT_MARKER} incomplete\` (some implementation is still missing). An incomplete run goes back to the queue to be continued; it is never passed on as done. Never mark a run incomplete only because a check could not run in this environment — that loops forever (the next run hits the same wall).`;
 
   // ⛔ 「상한의 60% 안에 끝내라·검증이 길면 멈추고 보고하라」를 두지 않는다 (#1975, 2026-10-04):
   //   요건 4개 중 1개만 하고 8분 만에 스스로 끝냈다. 시간 상한은 헛돌기(환경 우회)를 끊는 안전장치일 뿐이다.
@@ -185,7 +191,7 @@ ${reportRule}${timeBudget}
 ${reportRule}
 - Resolve the problem precisely — no superficial fixes — and review your change until you are confident it works.
 ${DEV_REQUIREMENT_LINES}
-- Verification environment: use only what this container already provides. Playwright browsers (chromium, webkit, firefox) are preinstalled under $PLAYWRIGHT_BROWSERS_PATH; if the project pins a different Playwright version, \`npx playwright install <browser>\` (no --with-deps) into that same path. Do NOT install system packages, download .deb files, patch LD_LIBRARY_PATH, or debug browser/tool startup — you have no root. If a verification step cannot run here, skip only that step and say plainly in your summary what was not verified and why (e.g. "확인 못 했다: WebKit — 컨테이너에서 기동 불가"). A verification you cannot run never excuses an unimplemented requirement.
+- Verification environment: use only what this container already provides. Playwright browsers (chromium, webkit, firefox) are preinstalled under $PLAYWRIGHT_BROWSERS_PATH; if the project pins a different Playwright version, \`npx playwright install <browser>\` (no --with-deps) into that same path. Do NOT install system packages, download .deb files, patch LD_LIBRARY_PATH, or debug browser/tool startup — you have no root. If a verification step cannot run here, skip only that step and hand it over under 확인 요청 with what was not verified, why, and how to check it (e.g. "WebKit — 컨테이너에서 기동 불가 → 스테이징에서 WebKit 으로 ○○ 화면 …"). A verification you cannot run never excuses an unimplemented requirement.
 ${DEV_REPO_RULES_LINE}${timeBudget}
 - When designing UI, provide text-art mockups of the result where possible.
 - IMPORTANT: ${langInstruction}`;

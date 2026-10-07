@@ -389,7 +389,11 @@ function confirmSpec(input: ConfirmInput): StageKindSpec<ConfirmPrep> {
         // 결과 절이 없으면(코드 변경 없는 처리 등) 보고 전체
         const devReport = dev ? (body(dev).split(/^### 📝 (?:결과|수행 작업)\s*$/m)[1] || body(dev)) : ''
         const ver = lastOf(/^## ✅ 검증 통과/m)
+        // 「확인 요청」(처리·검증 환경에서 못 해 넘긴 검수)은 보고가 길어 잘려도 빠지지 않게 따로 뽑아 맨 앞에 둔다
+        const handOver = (x: string) => (stripMeta(x).match(/\*\*확인 요청[^*\n]*\*\*[\s\S]*?(?=\n\*\*[^*\n]+\*\*|\nIVE-RESULT|\n<details>|\n\| |$)/) || [''])[0].trim()
+        const requests = [devReport && handOver(devReport), ver && handOver(body(ver))].filter(Boolean)
         priorWork = [
+          requests.length ? `### 확인 요청 — 처리·검증 환경에서 못 한 검수 (하나도 빼지 않고 밟는다)\n${requests.join('\n\n').slice(0, 6000)}` : '',
           devReport.trim() ? `### 처리자 결과 보고\n${stripMeta(devReport).slice(0, 4000)}` : '',
           ver ? `### 검증 통과 노트(요건 대조)\n${stripMeta(body(ver)).replace(/^## .*$/m, '').trim().slice(0, 4000)}` : '',
         ].filter(Boolean).join('\n\n')

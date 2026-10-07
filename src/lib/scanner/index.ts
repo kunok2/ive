@@ -47,13 +47,13 @@ import {
   updateUserOAuthTokens,
   getOAuthProviderRaw,
   completeMergedIssue,
-  recordStageEvent, recordWaitIfChanged, recordIssueLink, SYSTEM_ACTOR, markHumanStageEnd,
+  recordStageEvent, recordWaitIfChanged, recordIssueLink, SYSTEM_ACTOR, markHumanStageEnd, getReworkStreak,
 } from "../db";
 import { gitActor } from "../event-actor";
 import { recordScannedStageChange } from "./stage-events";
 import { fetchProjectMembers } from "../provider";
 import { decrypt, encrypt } from "../crypto";
-import { removeIssueLabels, addIssueComment, createBranch, getDefaultBranch, closeIssue, fetchSingleIssue, fetchMRByBranch, fetchIssueNotes } from "../provider";
+import { removeIssueLabels, swapIssueLabels, addIssueComment, createBranch, getDefaultBranch, closeIssue, fetchSingleIssue, fetchMRByBranch, fetchIssueNotes } from "../provider";
 import {
   fetchGitLabIssues,
   refreshGitLabToken,
@@ -105,6 +105,34 @@ declare global {
 
 /** 명부에서 고른 처리 에이전트의 주인이 편집 권한을 잃었을 때 이슈에 남기는 안내 (처리 시작·재지정 시 지운다) */
 const PROCESSOR_INELIGIBLE_NOTE = '지정 처리 에이전트를 이 이슈에서 쓸 수 없습니다 — 처리자를 다시 지정해 주세요';
+
+/**
+ * 반려 고리 상한 — 검증·확인에서 이만큼 연달아 반려된 이슈는 처리자를 다시 붙이지 않고 검증대기로 넘겨 사람이 판단한다.
+ * 같은 사유로 반려가 되풀이되면 처리자는 같은 자리에서 멈추고(예: 처리 환경에 없는 화면 검수) 토큰만 쓴다.
+ */
+export const MAX_REWORK_STREAK = 2;
+
+/** 반려 고리를 끊는다 — 스케줄 → 검증대기 + 사람 판단 요청 노트. 노트·라벨 실패는 다음 스캔이 다시 시도한다. */
+async function holdReworkLoop(project: Project, iid: number, token: string, streak: number): Promise<void> {
+  const s = project.labelSchedule || 'IVE-S';
+  const w = project.labelVerifyWait || 'IVE-W';
+  const body = `<!-- ive-bot -->
+## 🔁 반려 반복 — 사람 판단 필요
+
+검증·확인에서 **${streak}회 연달아 반려**되어 처리자를 다시 붙이지 않고 검증대기(\`${w}\`)로 넘깁니다.
+같은 사유가 되풀이되면 처리자를 다시 돌려도 같은 자리에서 멈춥니다.
+
+사람이 지난 반려 노트들을 보고 하나를 고릅니다.
+- **남은 것이 처리 환경에서 할 수 없는 검수**(화면·실제 DB·운영 접근)뿐이면 → 머지하고 그 항목을 확인자에게 넘깁니다(\`확인자에게\` 목록).
+- **구현이 정말 모자라면** → 무엇을 어느 파일에서 어떻게 고칠지 한 번에 적고 \`${s}\` 로 돌립니다(반려 횟수는 여기서 새로 셉니다).
+- **요건 자체를 정해야 하면** → 의뢰자에게 묻습니다.`;
+  await swapIssueLabels(project, iid, token, [w], [s]);
+  recordStageEvent({
+    projectId: project.id, issueIid: iid, fromStage: 'waiting', toStage: 'verify_waiting', action: 'rework_loop',
+    actor: SYSTEM_ACTOR, source: 'scanner', detail: { streak },
+  });
+  try { await addIssueComment(project, iid, token, body); } catch (e) { slog.warn({ err: e }, `rework-loop note failed #${iid}`); }
+}
 
 export function startScanner() {
   if (global.scanInterval) {
@@ -903,6 +931,14 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
     if (assignInfo.mode === 'assignee') {
       slog.info(`[WAIT] Issue #${issue.iid} — assignee 모드, 담당자가 IVE-D 레이블 부여 대기`);
       recordWaitIfChanged(project.id, issue.iid, 'assignee_mode');
+      continue;
+    }
+
+    // ── 반려 고리 끊기 ── 검증·확인에서 연달아 반려된 이슈는 처리자를 다시 붙이지 않는다(사람 판단).
+    const reworkStreak = getReworkStreak(project.id, issue.iid);
+    if (reworkStreak >= MAX_REWORK_STREAK) {
+      slog.info(`[HOLD] Issue #${issue.iid} — 반려 ${reworkStreak}회 연속, 검증대기로 넘겨 사람 판단`);
+      try { await holdReworkLoop(project, issue.iid, decryptedToken, reworkStreak); } catch (e) { slog.warn({ err: e }, `rework-loop hold failed #${issue.iid}`); }
       continue;
     }
 

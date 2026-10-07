@@ -81,12 +81,17 @@ export interface VerifyFinding { kind: 'missing' | 'defect' | null; severity: st
 /** 이슈에서 뽑은 요건 하나와 구현 여부 */
 export interface VerifyRequirement { item: string; status: 'done' | 'missing'; where: string }
 
+/** 처리·검증 환경에서 못 해 확인 단계로 넘기는 검수 하나 (처리자의 「확인 요청」 + 검증자가 코드에서 본 확인 거리) */
+export interface VerifyToConfirm { item: string; how: string; expect: string; prereq: string }
+
 export interface VerifyResult {
   verdict: Verdict
   summary: string
   reason: string
   requirements: VerifyRequirement[]
   findings: VerifyFinding[]
+  /** 확인 단계로 넘길 검수 — 통과 노트에 「확인 요청」으로 실려 확인자 프롬프트에 들어간다 */
+  toConfirm: VerifyToConfirm[]
   commands: string[]
 }
 
@@ -105,7 +110,7 @@ export function parseVerifyResult(workspacePath: string, logPath: string): Verif
   } catch { /* ignore */ }
   if (!raw) {
     return {
-      verdict: 'blocked', summary: '', requirements: [], findings: [], commands: [],
+      verdict: 'blocked', summary: '', requirements: [], findings: [], toConfirm: [], commands: [],
       reason: marker ? `결과 파일(result.json)이 없습니다 (마지막 출력: ${marker})` : '검증 작업자가 결과 파일(result.json)을 남기지 않았습니다',
     }
   }
@@ -127,6 +132,9 @@ export function parseVerifyResult(workspacePath: string, logPath: string): Verif
         line: Number.isFinite(Number(f?.line)) && Number(f?.line) > 0 ? Number(f.line) : null, note: String(f?.note || ''),
       }
     }).filter(f => f.note),
+    toConfirm: arr(raw.toConfirm).map((c: any) => ({
+      item: String(c?.item || ''), how: String(c?.how || ''), expect: String(c?.expect || ''), prereq: String(c?.prereq || ''),
+    })).filter(c => c.item),
     commands: arr(raw.commands).map(String),
   }
 }
@@ -190,6 +198,17 @@ async function buildComment(ctx: StageContext, input: VerifyInput, prep: VerifyP
     for (const f of result.findings.slice(0, 30)) {
       const loc = f.file ? ` \`${f.file}${f.line ? `:${f.line}` : ''}\`` : ''
       lines.push(`- [${kindLabel(f)}]${loc} ${f.note}`)
+    }
+    lines.push('')
+  }
+  // 확인 요청 — 처리·검증 환경에서 못 한 검수. 확인자 프롬프트가 이 절을 그대로 받아 확인 항목으로 세운다(confirm-worker)
+  if (result.toConfirm.length) {
+    lines.push(`**${t('확인 요청', '확인 요청 (for the confirmer)')}**`)
+    for (const c of result.toConfirm.slice(0, 30)) {
+      lines.push(`- ${c.item}`)
+      if (c.how) lines.push(`  - ${t('어디서·순서', 'Where & steps')}: ${c.how}`)
+      if (c.expect) lines.push(`  - ${t('보일 것', 'Expect')}: ${c.expect}`)
+      if (c.prereq) lines.push(`  - ${t('먼저 할 일', 'Prerequisite')}: ${c.prereq}`)
     }
     lines.push('')
   }
@@ -373,6 +392,7 @@ function verifySpec(input: VerifyInput): StageKindSpec<VerifyPrep> {
         ...raw, summary: m(raw.summary), reason: m(raw.reason), commands: raw.commands.map(m),
         findings: raw.findings.map(f => ({ ...f, note: m(f.note), file: m(f.file) })),
         requirements: raw.requirements.map(q => ({ ...q, item: m(q.item), where: m(q.where) })),
+        toConfirm: raw.toConfirm.map(c => ({ item: m(c.item), how: m(c.how), expect: m(c.expect), prereq: m(c.prereq) })),
       }, prep.checks, prep.conflictFiles, isKo)
       log(`판정: ${result.verdict}${result.reason ? ` — ${result.reason}` : ''}`, 'system')
 

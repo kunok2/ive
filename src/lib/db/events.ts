@@ -99,6 +99,32 @@ export function getLastStageEvent(projectId: string, issueIid: number): { to: st
 }
 
 /**
+ * 검증·확인에서 연달아 반려된 횟수 — 반려 고리(핑퐁) 끊기용.
+ * 마지막으로 확인대기·완료에 닿았거나 반려 고리로 사람에게 넘긴(action rework_loop) 뒤에 남은
+ * 「검증 중·확인 중 → 스케줄」 전이 수다. 처리자의 처리 미완(처리 중 → 스케줄)은 세지 않는다(MAX_INCOMPLETE_STREAK 몫).
+ * 실사고(dazzlepf #1961·#1962·#1963, 2026-10-04~07): 처리 컨테이너가 할 수 없는 화면 검수를 검증이 거듭 요구해
+ * 처리 → 반려가 끝없이 돌았다.
+ */
+export function getReworkStreak(projectId: string, issueIid: number): number {
+  try {
+    const r = getDb().prepare(`
+      SELECT COUNT(*) AS n FROM issue_events
+      WHERE project_id = ? AND issue_iid = ? AND event = 'stage'
+        AND from_stage IN ('verifying', 'confirming') AND to_stage = 'waiting'
+        AND id > COALESCE((
+          SELECT MAX(id) FROM issue_events
+          WHERE project_id = ? AND issue_iid = ? AND event = 'stage'
+            AND (to_stage IN ('confirm_waiting', 'done') OR action = 'rework_loop')
+        ), 0)
+    `).get(projectId, issueIid, projectId, issueIid) as { n: number } | undefined
+    return r?.n ?? 0
+  } catch (err) {
+    console.warn('[events] getReworkStreak failed:', (err as Error).message)
+    return 0
+  }
+}
+
+/**
  * 프로젝트 이슈별 「지금 단계에 들어온 시각」과 「지금 대기 사유」 — 카드 대기 목록용(한 번의 쿼리).
  * 대기 사유는 마지막 단계 사건 뒤에 남은 것만 지금 사유로 본다(단계가 바뀌면 이전 사유는 끝난 것).
  */
