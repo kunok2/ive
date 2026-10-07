@@ -268,7 +268,7 @@ body::before {
 }
 
 .marquee-content.scrolling {
-  animation: marquee 12s linear infinite;
+  animation: marquee var(--marquee-duration, 12s) linear infinite;
 }
 
 .marquee-segment {
