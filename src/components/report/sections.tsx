@@ -11,7 +11,7 @@ import type {
 import { fmtHours, pct, deltaTone, toneClass, agedCount, projectSwatchStyles, OTHERS_ID, type Tr } from './format'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 import CountBump from '@/components/ui/CountBump'
-import { StackedHBar } from './hbar'
+import { StackedHBar, hoverHandlers } from './hbar'
 import { ISSUE_STAGE_STYLE } from '@/lib/active-work'
 import { HELD_STAGES } from '@/lib/report-model/types'
 
@@ -226,7 +226,7 @@ export function WhereSection({ held, tr }: { held: Held; tr: Tr }) {
         segments={rows.map(s => ({ key: s.stage, value: s.count, label: tr(`stage.${s.stage}`), valueText: tr('countN', { n: s.count }), className: STAGE_BAR[s.stage], group: stageGroup(s.stage) }))} />
       <div className="flex flex-col">
         {rows.map((s, i) => (
-          <div key={s.stage} onPointerEnter={() => setHov(s.stage)} onPointerLeave={() => setHov(null)}
+          <div key={s.stage} {...hoverHandlers(s.stage, setHov)}
             className={`flex items-center justify-between gap-2 min-h-10 ${rowHover(hov === s.stage)} ${i < rows.length - 1 ? 'border-b border-ive-border-dark' : ''}`}>
             <span className="flex items-center gap-2">
               <span className={`w-2 h-2 rounded-full ${STAGE_BAR[s.stage]}`} aria-hidden="true" />
@@ -275,7 +275,7 @@ export function StageTimeSection({ st, tr, prevLabel }: { st: StageTime | undefi
               const prev = prevOf(s.stage)
               const tone = prev != null ? deltaTone(s.avgH, prev, false) : 'neutral'
               return (
-                <div key={s.stage} onPointerEnter={() => setHov(s.stage)} onPointerLeave={() => setHov(null)}
+                <div key={s.stage} {...hoverHandlers(s.stage, setHov)}
                   className={`flex items-center justify-between gap-2 min-h-10 ${rowHover(hov === s.stage)} ${i < rows.length - 1 ? 'border-b border-ive-border-dark' : ''}`}>
                   <span className="flex items-center gap-2">
                     <span className={`w-2 h-2 rounded-full ${STAGE_BAR[s.stage]}`} aria-hidden="true" />
@@ -366,7 +366,7 @@ export function ProjectsSection({ projects, cost, tr, prevLabel }: { projects: P
             })} />
           <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-bold text-ive-text-secondary">
             {shareParts.map((s, i) => (
-              <span key={s.id} onPointerEnter={() => setHov(s.id)} onPointerLeave={() => setHov(null)}
+              <span key={s.id} {...hoverHandlers(s.id, setHov)}
                 className={`inline-flex items-center gap-1 rounded-lg -mx-1 px-1 transition-colors ${hov === s.id ? 'bg-white/[0.05] text-ive-text' : ''}`}><span className="w-2 h-2 rounded-full shrink-0" style={swatches[i]} />{s.name} {pct(s.share)}</span>
             ))}
           </div>
@@ -389,7 +389,7 @@ export function ProjectsSection({ projects, cost, tr, prevLabel }: { projects: P
           </thead>
           <tbody>
             {projects.map(p => (
-              <tr key={p.id} onPointerEnter={() => setHov(p.id)} onPointerLeave={() => setHov(null)}
+              <tr key={p.id} {...hoverHandlers(p.id, setHov)}
                 className={`border-t border-ive-border-dark transition-colors ${hov === p.id ? 'bg-white/[0.05]' : ''}`}>
                 <td className="text-left py-1.5 pr-2 text-ive-text">
                   <div className="flex items-center gap-1.5 max-w-36">

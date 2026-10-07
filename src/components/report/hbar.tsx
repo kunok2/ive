@@ -7,7 +7,18 @@
  * 아래 범례 줄과 같은 hovered 를 쓰면 줄 ↔ 조각이 함께 강조된다(sections 의 WhereSection 등).
  * 툴팁은 꾸밈일 뿐 값은 범례 줄·표에도 있다(툴팁이 정보를 가두지 않는다).
  */
-import { useState, type CSSProperties } from 'react'
+import { useState, type CSSProperties, type PointerEvent } from 'react'
+
+/**
+ * 호버 강조 핸들러 — 마우스·펜만. 터치는 스크롤하려고 손가락을 대기만 해도 pointerenter→(스크롤 시작)pointerleave 가
+ * 연달아 와서 툴팁·강조가 번쩍 나왔다 사라진다(잔상). 터치에서는 탭(포커스)으로만 툴팁을 띄운다.
+ */
+export function hoverHandlers(key: string, set: (key: string | null) => void) {
+  return {
+    onPointerEnter: (e: PointerEvent) => { if (e.pointerType !== 'touch') set(key) },
+    onPointerLeave: (e: PointerEvent) => { if (e.pointerType !== 'touch') set(null) },
+  }
+}
 
 export interface HBarSegment {
   key: string
@@ -51,7 +62,7 @@ export function StackedHBar({
   const shift = c < 0.15 ? '0%' : c > 0.85 ? '-100%' : '-50%'
 
   return (
-    <div className="relative" onPointerLeave={() => setHovered(null)}>
+    <div className="relative" onPointerLeave={e => { if (e.pointerType !== 'touch') setHovered(null) }}>
       {/* 바탕 줄 — 조각 사이 틈으로 보인다 */}
       <div className={`absolute inset-x-0 top-1/2 -translate-y-1/2 rounded-full bg-ive-bg ${heightClass}`} aria-hidden="true" />
       <div className={`relative flex ${grouped ? '' : gapClass} -my-2`}>
@@ -66,8 +77,8 @@ export function StackedHBar({
               tabIndex={0}
               aria-label={`${s.label} ${s.valueText}`}
               className={`py-2 outline-none cursor-default group transition-opacity duration-150 ${dim ? 'opacity-35' : ''}`}
-              style={{ flexGrow: s.value, flexBasis: 0, minWidth: 4, marginLeft: groupStart && i > 0 && s.group != null ? 4 : undefined }}
-              onPointerEnter={() => setHovered(s.key)}
+              style={{ flexGrow: s.value, flexBasis: 0, minWidth: 4, marginLeft: groupStart && i > 0 && s.group != null ? 4 : undefined, WebkitTapHighlightColor: 'transparent' }}
+              onPointerEnter={e => { if (e.pointerType !== 'touch') setHovered(s.key) }}
               onFocus={() => setHovered(s.key)}
               onBlur={() => setHovered(null)}
             >
