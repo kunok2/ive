@@ -134,10 +134,11 @@ export const TRANSITIONS: Record<string, StageTransition[]> = {
       addLabels: p => [p.labelSchedule || 'IVE-S'],
     },
     {
+      // 확인 쪽 반려는 검증대기로 돌아간다(처리대기 아님 — 사용자 확정 2026-10-07). 화면 버튼 이름도 「검증대기로」다.
       action: 'return_to_dev',
-      description: '재작업 요청 → 스케줄',
+      description: '재검증 요청 → 검증대기',
       removeLabels: p => [p.labelConfirmWait || 'IVE-P'],
-      addLabels: p => [p.labelSchedule || 'IVE-S'],
+      addLabels: p => [p.labelVerifyWait || 'IVE-W'],
     },
     {
       action: 'retry',
@@ -159,12 +160,8 @@ export const TRANSITIONS: Record<string, StageTransition[]> = {
       removeLabels: p => [p.labelConfirm || 'IVE-C'],
       addLabels: p => [p.labelVerifyWait || 'IVE-W'],
     },
-    {
-      action: 'retry',
-      description: '재시도 → 스케줄',
-      removeLabels: p => [p.labelConfirm || 'IVE-C'],
-      addLabels: p => [p.labelSchedule || 'IVE-S'],
-    },
+    // ⛔ 확인 중 → 스케줄(retry) 길을 두지 않는다 — 확인 반려는 검증대기로만 간다(사용자 확정 2026-10-07).
+    //    처리대기로 바로 보내면 확인자의 화면 단서가 코드 지시로 바뀌지 않은 채 처리자에게 간다.
   ],
   done: [
     {

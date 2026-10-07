@@ -339,7 +339,7 @@ export async function POST(
     }
 
     // confirming 단계 종료 시 확인자 execution 닫기 (verify 종료 패턴과 동일)
-    if (stage === 'confirming' && (action === 'accept' || action === 'return_to_dev' || action === 'retry')) {
+    if (stage === 'confirming' && (action === 'accept' || action === 'return_to_dev')) {
       const db = getDb();
       const confirmExecs = db.prepare(
         "SELECT id FROM task_executions WHERE project_id = ? AND issue_iid = ? AND status IN ('running', 'assigned') AND assignee_type = 'user'"
@@ -419,7 +419,7 @@ export async function POST(
       start_verification: '검증 시작',
       start_confirmation: '확인 시작',
       accept: '확인 완료',
-      return_to_dev: '재작업 요청',
+      return_to_dev: '재검증 요청',
       start_dev: '개발 시작',
       schedule: '스케줄 등록',
       to_inflow: '유입 전환',

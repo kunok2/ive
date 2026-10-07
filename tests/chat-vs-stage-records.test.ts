@@ -90,8 +90,10 @@ describe('코멘트 말머리 도착 단계 = 실제 전이', () => {
   it('전이 표의 모든 액션이 도착 단계를 가진다', () => {
     for (const [stage, ts] of Object.entries(TRANSITIONS)) for (const t of ts) expect(transitionTarget(stage, t.action), `${stage}.${t.action}`).toBeTruthy()
   })
-  it('종전 표가 틀렸던 곳 — 확인대기 재작업은 처리대기, 처리 실패 재처리도 말머리가 있다', () => {
-    expect(transitionTarget('confirm_waiting', 'return_to_dev')).toBe('waiting')
+  it('종전 표가 틀렸던 곳 — 확인 쪽 반려는 검증대기(2026-10-07), 처리 실패 재처리도 말머리가 있다', () => {
+    expect(transitionTarget('confirm_waiting', 'return_to_dev')).toBe('verify_waiting')
+    expect(transitionTarget('confirming', 'return_to_dev')).toBe('verify_waiting')
+    expect(transitionTarget('confirming', 'retry')).toBeNull()
     expect(transitionTarget('dev_fail', 'retry')).toBe('waiting')
     expect(transitionTarget('verifying', 'to_inflow')).toBe('none')
     expect(transitionTarget('verifying', 'approve')).toBe('confirm_waiting')
