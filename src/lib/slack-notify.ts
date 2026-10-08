@@ -10,10 +10,12 @@
 //   매핑되고 slack_user_id 연결 + slack_notify=true 인 사람에게만 DM. 아니면 조용히 스킵.
 // 언어: 수신자(IVE 사용자)의 locale 을 따른다(없으면 ko).
 // im:write 권한 필요(없으면 Slack API 실패 → 조용히 무시).
+// 채널: 프로젝트에 알림 채널(slackNotifyChannel)을 정했으면 같은 알림을 그 채널에도 올리고, 수신을 켠 담당자를 멘션한다.
+//   (수신을 끈 사람은 멘션하지 않는다 — 채널 글 자체는 팀 공용이라 올린다.) 봇이 그 채널에 들어가 있어야 한다.
 import { Project, User } from '@/types'
 import { fetchSingleIssue } from './provider'
 import { getUserByOAuthId, getUserByGitUsername, getSystemSetting, getPresetRoles } from './db'
-import { sendSlackDM } from './slack'
+import { sendSlackDM, sendSlackChannelMessage } from './slack'
 import { DEFAULT_LABELS } from '@/lib/labels'
 
 /** IVE 공개 베이스 URL. system_settings['oauth.redirect_base'] → env → 빈 값(스킵). 백그라운드(스캐너)에서도 동작. */
@@ -156,8 +158,21 @@ export function buildStageMessage(
   return MSG[locale][kind]
 }
 
+/** 채널 알림 본문 — DM 과 같은 내용 앞에 담당자 멘션(있으면). 언어는 첫 담당자 것, 없으면 ko */
+export function buildChannelStageMessage(
+  kind: StageNotifyKind,
+  recipients: StageRecipient[],
+  opts: { iid: number; title: string; iveUrl: string; webUrl: string; providerLabel: 'GitLab' | 'GitHub' },
+): string {
+  const locale = recipients[0]?.locale ?? 'ko'
+  const mentions = [...new Set(recipients.map(r => r.slackUserId))].map(id => `<@${id}>`).join(' ')
+  const body = buildStageMessage(kind, locale, opts)
+  return mentions ? `${mentions} ${body}` : body
+}
+
 /**
  * 단계 전이 시 해당 단계의 담당자(사람)에게 DM 발송.
+ * 프로젝트에 알림 채널을 정했으면 그 채널에도 담당자를 멘션해 올린다.
  * 모든 오류를 내부에서 삼키므로 호출 측은 fire-and-forget 으로 안전하게 부른다.
  *
  * @param kind 'verify'  → 검증대기 진입: 수신자 = 현재 담당자(검증자)
@@ -183,18 +198,19 @@ export async function notifyStageTransition(project: Project, iid: number, token
     const recipients = kind === 'confirm'
       ? resolveConfirmRecipients(project, issue, iid)
       : resolveStageRecipients(project, issue, kind)
-    if (recipients.length === 0) return
+    const channel = (project.slackNotifyChannel || '').trim()
+    if (recipients.length === 0 && !channel) return
 
     const title = issue.title || `#${iid}`
-    const linkOpts = buildLinkOpts(project, issue, iid)
+    const msgOpts = { iid, title, ...buildLinkOpts(project, issue, iid) }
     const workspaceId = project.slackWorkspaceId || ''
 
-    await Promise.all(
-      recipients.map(u =>
-        sendSlackDM(workspaceId, u.slackUserId, buildStageMessage(kind, u.locale, { iid, title, ...linkOpts }))
-          .catch(() => false),
+    await Promise.all([
+      ...recipients.map(u =>
+        sendSlackDM(workspaceId, u.slackUserId, buildStageMessage(kind, u.locale, msgOpts)).catch(() => false),
       ),
-    )
+      ...(channel ? [sendSlackChannelMessage(workspaceId, channel, buildChannelStageMessage(kind, recipients, msgOpts)).catch(() => false)] : []),
+    ])
   } catch (e) {
     console.warn('[slack-notify] notifyStageTransition failed:', (e as Error)?.message || e)
   }
