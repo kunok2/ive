@@ -19,6 +19,13 @@ export function cleanNoteBody(body: string): string {
     .replace(/<\/details>/gi, '')
     .replace(/<summary>(.*?)<\/summary>/gi, '**$1**')
     .replace(/<\/?br\s*\/?>/gi, '\n')
+    // <img> 태그 → 마크다운 이미지 (GitHub 은 붙여 넣은 이미지를 HTML 태그로 넣는다 — 그대로 두면 태그 글자가 보인다)
+    .replace(/<img\b[^>]*>/gi, tag => {
+      const src = tag.match(/\bsrc\s*=\s*["']([^"']+)["']/i)?.[1]
+      if (!src) return ''
+      const alt = (tag.match(/\balt\s*=\s*["']([^"']*)["']/i)?.[1] || '').replace(/[[\]]/g, '')
+      return `![${alt}](${src})`
+    })
     .replace(/<\/?(?:div|span|p)[^>]*>/gi, '')
     .replace(/<!--[\s\S]*?-->/g, '')
     .replace(/\n{3,}/g, '\n\n')
