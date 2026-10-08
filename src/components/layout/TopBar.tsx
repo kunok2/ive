@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { useStore } from '@/lib/store'
-import { useTab, tabForPath } from '@/lib/tab-context'
+import { useTab } from '@/lib/tab-context'
 import { useDialog } from '@/components/ui/ConfirmDialog'
 import { useTranslations } from 'next-intl'
 import { DEFAULT_AVATARS } from '@/types'
@@ -27,7 +27,6 @@ export default function TopBar() {
   // 메뉴 위치 「위」(기본) — PC 폭에서 상단바 가운데에 주 메뉴. 탭 목록·이동은 하단 탭·세로 메뉴와 같은 것
   const mainTabs = useMainTabs()
   const { alert: showAlert, confirm: showConfirm } = useDialog()
-  const tn = useTranslations('nav')
   const tc = useTranslations('common')
   const td = useTranslations('dialog')
   const tAuth = useTranslations('auth')
@@ -101,7 +100,8 @@ export default function TopBar() {
                 <span className="text-[#22c55e]">Spring</span><span className="text-ive-amber">ware</span>{' '}
                 <span className="text-ive-cyan">IVE</span>
               </h1>
-              <p className="text-xs text-ive-text-dim mt-0.5">{tn((isMainPage ? activeTab : (tabForPath(pathname) ?? activeTab)) as 'projects' | 'agents' | 'issues' | 'reports' | 'admin')}</p>
+              {/* 슬로건 — 지금 화면 이름은 메뉴가 이미 강조해 보여 주므로 여기선 IVE 의 풀네임(언어 무관) */}
+              <p className="text-xs font-bold text-ive-text-secondary mt-0.5">Integrated Value Environment</p>
             </div>
           </button>
           {/* 메뉴 위치 「위」(기본) — 패드·PC 폭에서 로고와 오른쪽 버튼 사이 남은 자리 가운데 */}
