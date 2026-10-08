@@ -114,6 +114,23 @@ export async function fetchGitHubPRChanges(project: Project, decryptedToken: str
 }
 
 /**
+ * 저장소가 허용하는 머지 방식 — squash 우선, 막혀 있으면 merge commit, 그다음 rebase.
+ * 저장소 설정에서 squash 를 끈 곳(merge commit 만 허용)에 squash 로 머지하면 GitHub 이 405 로 거절한다.
+ * 설정을 못 읽으면 종전대로 squash.
+ */
+async function getAllowedMergeMethod(project: Project, headers: Record<string, string>): Promise<'squash' | 'merge' | 'rebase'> {
+  try {
+    const res = await fetch(apiUrl(project, ''), { headers });
+    if (!res.ok) return 'squash';
+    const repo = await res.json();
+    if (repo.allow_squash_merge !== false) return 'squash';
+    if (repo.allow_merge_commit !== false) return 'merge';
+    if (repo.allow_rebase_merge !== false) return 'rebase';
+  } catch { /* 종전 동작 */ }
+  return 'squash';
+}
+
+/**
  * PR을 머지합니다.
  */
 export async function mergeGitHubPR(project: Project, decryptedToken: string, prNumber: number, options?: { sha?: string }) {
@@ -121,6 +138,7 @@ export async function mergeGitHubPR(project: Project, decryptedToken: string, pr
   if (!ownerRepo) throw new Error('Invalid repo URL');
 
   const headers = getGitHubAuthHeaders(project, decryptedToken);
+  const mergeMethod = await getAllowedMergeMethod(project, headers);
 
   const res = await fetch(
     apiUrl(project, `/pulls/${prNumber}/merge`),
@@ -128,7 +146,7 @@ export async function mergeGitHubPR(project: Project, decryptedToken: string, pr
       method: 'PUT',
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        merge_method: 'squash',
+        merge_method: mergeMethod,
         ...(options?.sha ? { sha: options.sha } : {}),
       }),
     }
@@ -136,9 +154,10 @@ export async function mergeGitHubPR(project: Project, decryptedToken: string, pr
 
   if (!res.ok) {
     const body = await res.text();
-    console.error(`[mergeGitHubPR] 실패 status=${res.status} body=${body} prNumber=${prNumber}`);
+    console.error(`[mergeGitHubPR] 실패 status=${res.status} method=${mergeMethod} body=${body} prNumber=${prNumber}`);
     if (res.status === 405) {
-      throw new Error(`머지 불가: PR이 머지 가능한 상태가 아닙니다.`);
+      const reason = (() => { try { return JSON.parse(body).message as string } catch { return '' } })();
+      throw new Error(`머지 불가: PR이 머지 가능한 상태가 아닙니다.${reason ? ` (${reason})` : ''}`);
     }
     if (res.status === 409) {
       throw new Error(`머지 불가: 충돌이 있거나 머지 조건이 충족되지 않았습니다.`);
