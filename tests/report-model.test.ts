@@ -176,6 +176,42 @@ describe('R-4·R-5·R-6 주간 모델', () => {
     expect(lee.done.byForm.direct).toBe(0) // p2(직접 처리)는 이검증에게 공유되지 않았다
   })
 
+  it('R-6 프로젝트 필터: 고른 프로젝트만 센다 — 여럿 고르면 합, 범위 밖 id 는 무시', () => {
+    seedWeek()
+    const all = buildReportModel('u-lead', 'weekly', '2026-10-02', NOW)
+    const shop = buildReportModel({ user: 'u-lead', projects: ['p1'] }, 'weekly', '2026-10-02', NOW)
+    const portal = buildReportModel({ user: 'u-lead', projects: ['p2'] }, 'weekly', '2026-10-02', NOW)
+    expect(shop.projects.map(p => p.id)).toEqual(['p1'])
+    expect(shop.held.end).toBe(2)               // p1 #1·#3
+    expect(shop.done.byForm).toEqual({ agent: 1, human: 0, direct: 0 })
+    expect(portal.held.end).toBe(0)
+    expect(portal.done.byForm).toEqual({ agent: 0, human: 0, direct: 1 })
+    expect(portal.cost.total).toBeCloseTo(all.cost.total - shop.cost.total)
+    // 둘 다 고르면 전체와 같다 / 공유받지 않은 p3 를 넣어도 나오지 않는다
+    const both = buildReportModel({ user: 'u-lead', projects: ['p1', 'p2', 'p3'] }, 'weekly', '2026-10-02', NOW)
+    expect(both.held).toEqual(all.held)
+    expect(both.done).toEqual(all.done)
+    expect(both.cost).toEqual(all.cost)
+    expect(both.projects.map(p => p.name)).not.toContain('Secret')
+  })
+
+  it('R-10 프로젝트 필터 확정본은 전체 확정본과 따로 저장된다', () => {
+    seedWeek()
+    const at = new Date('2026-10-09T00:00:00Z')
+    const shop = getReportModel({ user: 'u-lead', projects: ['p1'] }, 'weekly', '2026-09-29', at)
+    const all = getReportModel('u-lead', 'weekly', '2026-09-29', at)
+    expect(shop.snapshotAt).toBeTruthy()
+    expect(all.snapshotAt).toBeTruthy()
+    expect(shop.done.byForm.direct).toBe(0)
+    expect(all.done.byForm.direct).toBe(1)
+    // 고른 순서가 달라도 같은 확정본
+    const owners = (db.prepare(`SELECT user_id FROM report_snapshots ORDER BY user_id`).all() as { user_id: string }[]).map(r => r.user_id)
+    expect(owners).toEqual(['u-lead', 'u-lead|p:p1'])
+    getReportModel({ user: 'u-lead', projects: ['p2', 'p1'] }, 'weekly', '2026-09-29', at)
+    getReportModel({ user: 'u-lead', projects: ['p1', 'p2'] }, 'weekly', '2026-09-29', at)
+    expect((db.prepare(`SELECT COUNT(*) AS n FROM report_snapshots`).get() as { n: number }).n).toBe(3)
+  })
+
   it('R-7 AI 실패와 사람 손 보유', () => {
     seedWeek()
     const m = buildReportModel('u-lead', 'weekly', '2026-10-02', NOW)

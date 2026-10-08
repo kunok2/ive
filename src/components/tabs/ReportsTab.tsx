@@ -23,10 +23,17 @@ import {
 import { TrendCompare, HeldCompare } from '@/components/report/charts'
 import { MonthsSection, ShareTrendSection, StageTrendSection, RiskSection, EvaluationSection } from '@/components/report/monthly'
 import type { Tr } from '@/components/report/format'
+import ProjectFilter, { type ProjectOption } from '@/components/report/ProjectFilter'
 
 const USD_CURRENCY: ResolvedCurrency = { code: 'USD', rate: 1, source: 'usd', updatedAt: null }
 /** API 응답 — 보고서 모델 + (진행 중인 기간이면) 지금 내 손에 있는 일 */
-type ReportResponse = ReportModel & { mine?: HeldIssue[] }
+type ReportResponse = ReportModel & { mine?: HeldIssue[]; projectOptions?: ProjectOption[] }
+
+/** 고른 프로젝트 — 이 브라우저에만 기억(보는 사람의 편의). 저장소를 못 쓰면 전체로 */
+const FILTER_KEY = 'ive-report-projects'
+function loadFilter(): string[] {
+  try { const v = JSON.parse(localStorage.getItem(FILTER_KEY) || '[]'); return Array.isArray(v) ? v.filter(x => typeof x === 'string') : [] } catch { return [] }
+}
 
 export default function ReportsTab() {
   const trV = useTranslations('reportV2')
@@ -56,6 +63,18 @@ export default function ReportsTab() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [regenerating, setRegenerating] = useState(false)
+  const [projectIds, setProjectIds] = useState<string[]>(() => (typeof window === 'undefined' ? [] : loadFilter()))
+  const [projectOptions, setProjectOptions] = useState<ProjectOption[]>([])
+  const changeProjects = useCallback((ids: string[]) => {
+    setProjectIds(ids)
+    try { localStorage.setItem(FILTER_KEY, JSON.stringify(ids)) } catch { /* 저장 못 해도 이번 화면엔 적용 */ }
+  }, [])
+  // 요청에 실을 필터 — 이제 고를 수 없는 프로젝트(공유 해제 등)는 뺀다. 목록을 받기 전엔 기억한 값 그대로
+  const activeIds = useMemo(() => {
+    const ids = projectOptions.length ? projectIds.filter(id => projectOptions.some(o => o.id === id)) : projectIds
+    return [...ids].sort()
+  }, [projectIds, projectOptions])
+  const projectsQuery = activeIds.length ? `&projects=${encodeURIComponent(activeIds.join(','))}` : ''
 
   // 기간을 빠르게 넘기면 요청이 겹친다 — 마지막 요청의 응답만 화면에 쓴다
   const reqSeq = useRef(0)
@@ -66,17 +85,17 @@ export default function ReportsTab() {
     const seq = ++reqSeq.current
     if (!silent) { setLoading(true); setError(null) }
     try {
-      const res = await fetch(`/api/reports/v2?type=${type}&date=${date}`)
+      const res = await fetch(`/api/reports/v2?type=${type}&date=${date}${projectsQuery}`)
       // 서버 문구는 언어가 고정이라 보이지 않고, 오류 코드만 함께 보인다
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.code || `http_${res.status}`)
       const m = await res.json()
-      if (seq === reqSeq.current) { setModel(m); setFetchedAt(Date.now()) }
+      if (seq === reqSeq.current) { setModel(m); setFetchedAt(Date.now()); if (m.projectOptions) setProjectOptions(m.projectOptions) }
     } catch (e) {
       if (seq !== reqSeq.current || silent) return
       setError((e as Error).message)
       setModel(null)
     } finally { if (seq === reqSeq.current && !silent) setLoading(false) }
-  }, [type, date])
+  }, [type, date, projectsQuery])
 
   useEffect(() => { fetchReport() }, [fetchReport])
 
@@ -85,11 +104,11 @@ export default function ReportsTab() {
     if (!ok) return
     setRegenerating(true)
     try {
-      const res = await fetch(`/api/reports/v2?type=${type}&date=${date}`, { method: 'DELETE' }).catch(() => null)
+      const res = await fetch(`/api/reports/v2?type=${type}&date=${date}${projectsQuery}`, { method: 'DELETE' }).catch(() => null)
       if (!res?.ok) { setError((await res?.json().catch(() => null))?.code || `http_${res?.status ?? 0}`); return }
       await fetchReport()
     } finally { setRegenerating(false) }
-  }, [confirm, tr, type, date, fetchReport])
+  }, [confirm, tr, type, date, projectsQuery, fetchReport])
 
   const dayLabels = useMemo(() => trV.raw('dayLabels') as string[], [trV])
 
@@ -139,6 +158,7 @@ export default function ReportsTab() {
             </button>
           ))}
         </div>
+        <ProjectFilter options={projectOptions} selected={activeIds} onChange={changeProjects} tr={tr} />
         <div className="flex items-center justify-between">
           <button aria-label={tr('prevPeriod')} onClick={() => setDate(previousPeriod(shown).start)} className="w-11 h-11 flex items-center justify-center rounded-lg text-ive-text-secondary hover:text-ive-text"><i className="fa-solid fa-chevron-left" /></button>
           <div className="flex items-center gap-2">

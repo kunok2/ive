@@ -8,11 +8,12 @@
 import { getReportSnapshot, putReportSnapshot, deleteReportSnapshot, getDb } from '../db'
 import { buildReportModel, stageTimeForPeriod } from './build'
 import { periodOf, isClosed, addDays, kstToday, FINALIZE_AFTER_DAYS, type ReportType } from './period'
-import type { Scope } from './load'
+import { scopeKey, type Scope } from './load'
 import type { ReportModel } from './types'
 import { DEFAULT_PROJECT_COLOR } from './format'
 
 export * from './types'
+export type { Scope, FilteredScope } from './load'
 export { periodOf, previousPeriod, kstToday, FINALIZE_AFTER_DAYS, type ReportType, type Period } from './period'
 
 const snapKind = (type: ReportType) => `${type}@v2`
@@ -48,7 +49,7 @@ function withStageTime(model: ReportModel, scope: Scope, type: ReportType, day: 
  */
 export function getReportModel(scope: Scope, type: ReportType, day: string, now: Date = new Date()): ReportModel {
   const p = periodOf(type, day)
-  const owner = scope ?? GLOBAL_SCOPE
+  const owner = scopeKey(scope, GLOBAL_SCOPE)
   if (isClosed(p, now) && kstToday(now) >= addDays(p.end, FINALIZE_AFTER_DAYS)) {
     const snap = getReportSnapshot(owner, snapKind(type), p.start, p.end)
     if (snap) return { ...withStageTime(withProjectColors(snap.payload as ReportModel), scope, type, day), snapshotAt: snap.generatedAt }
@@ -65,5 +66,5 @@ export function getReportModel(scope: Scope, type: ReportType, day: string, now:
 /** 확정본 재생성 — 지우면 다음 조회에서 지금의 계산·단가로 다시 확정된다 */
 export function regenerateReportModel(scope: Scope, type: ReportType, day: string): void {
   const p = periodOf(type, day)
-  deleteReportSnapshot(scope ?? GLOBAL_SCOPE, snapKind(type), p.start, p.end)
+  deleteReportSnapshot(scopeKey(scope, GLOBAL_SCOPE), snapKind(type), p.start, p.end)
 }

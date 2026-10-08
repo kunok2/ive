@@ -1,13 +1,26 @@
 /**
  * 보고서 모델용 DB 조회. 보고서 조회 중에는 Git 을 호출하지 않는다(DB 만).
  * 범위(scope): 사용자 id 면 그 사람이 소유하거나 공유받은 프로젝트, null 이면 전체.
+ * { user, projects } 면 그 범위 안에서 고른 프로젝트만(보고서 화면의 프로젝트 필터).
  */
 import { getDb, getExecutionsInRange, getGlobalExecutionsInRange, resolveManualAlias, type ReportExecution } from '../db'
 import { kstDayStartISO } from './period'
 import { AGED_HOURS, DEFAULT_PROJECT_COLOR } from './format'
 import type { HeldStage } from './types'
 
-export type Scope = string | null
+/** 프로젝트 필터 — 사용자 범위(user) 안에서 고른 프로젝트만. 범위 밖 id 는 무시된다 */
+export interface FilteredScope { user: string | null; projects: string[] }
+export type Scope = string | null | FilteredScope
+
+const userOf = (scope: Scope): string | null => (scope && typeof scope === 'object' ? scope.user : scope)
+const projectFilterOf = (scope: Scope): Set<string> | null => (scope && typeof scope === 'object' ? new Set(scope.projects) : null)
+
+/** 확정본 저장 키 — 필터 보기는 고른 프로젝트 조합마다 따로 확정한다(전체 보고서 확정본과 섞이지 않게) */
+export function scopeKey(scope: Scope, globalKey: string): string {
+  const user = userOf(scope) ?? globalKey
+  const filter = projectFilterOf(scope)
+  return filter ? `${user}|p:${[...filter].sort().join(',')}` : user
+}
 
 /**
  * 이슈의 "처리" 실행만 — 검증·확인 실행, 충돌 검사(iid 0), 채팅, 재현 실행은 뺀다.
@@ -20,17 +33,22 @@ const PROCESS_EXEC_SQL = (alias = 'te') => `${alias}.issue_iid > 0
 export interface ScopedProject { id: string; name: string; provider: string; color: string }
 
 export function scopedProjects(scope: Scope): ScopedProject[] {
-  const rows = scope
+  const filter = projectFilterOf(scope)
+  const user = userOf(scope)
+  const rows = user
     ? getDb().prepare(`
         SELECT id, name, provider, color FROM projects p
         WHERE p.user_id = ? OR EXISTS (SELECT 1 FROM project_shares ps WHERE ps.project_id = p.id AND ps.user_id = ?)
-        ORDER BY name`).all(scope, scope)
+        ORDER BY name`).all(user, user)
     : getDb().prepare(`SELECT id, name, provider, color FROM projects ORDER BY name`).all()
-  return (rows as any[]).map(r => ({ id: r.id, name: r.name, provider: r.provider, color: r.color || DEFAULT_PROJECT_COLOR }))
+  return (rows as any[]).filter(r => !filter || filter.has(r.id)).map(r => ({ id: r.id, name: r.name, provider: r.provider, color: r.color || DEFAULT_PROJECT_COLOR }))
 }
 
 export function execsInRange(scope: Scope, start: string, end: string): ReportExecution[] {
-  return scope ? getExecutionsInRange(scope, start, end) : getGlobalExecutionsInRange(start, end)
+  const user = userOf(scope)
+  const filter = projectFilterOf(scope)
+  const rows = user ? getExecutionsInRange(user, start, end) : getGlobalExecutionsInRange(start, end)
+  return filter ? rows.filter(e => filter.has(e.projectId)) : rows
 }
 
 // ─── 이슈 이력: 접수·재오픈·완료 (사이클 단위) ───
