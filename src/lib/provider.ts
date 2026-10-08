@@ -170,6 +170,13 @@ export function ensureLabels(project: Project, token: string) {
     : gitlab.ensureGitLabLabels(project, token);
 }
 
+/** 저장소 레이블 이름 변경 — renamed · already(이미 새 이름) · absent(둘 다 없음). 둘 다 있으면 예외 */
+export function renameLabel(project: Project, token: string, from: string, to: string) {
+  return project.provider === 'github'
+    ? github.renameGitHubLabel(project, token, from, to)
+    : gitlab.renameGitLabLabel(project, token, from, to);
+}
+
 export function checkLabelsExist(project: Project, token: string) {
   return project.provider === 'github'
     ? github.checkGitHubLabelsExist(project, token)

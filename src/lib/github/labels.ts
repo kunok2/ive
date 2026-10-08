@@ -138,3 +138,34 @@ export async function checkGitHubLabelsExist(project: Project, decryptedToken: s
     return labelsToCheck.map(l => ({ label: l, exists: false }));
   }
 }
+
+/**
+ * 저장소 레이블 이름을 바꾼다(붙어 있는 이슈는 그대로 새 이름을 단다).
+ * GitHub 레이블 이름은 대소문자를 가리지 않으므로(IVE 와 ive 는 같은 레이블) 대소문자 비교로 찾는다.
+ * - renamed: 바꿈 · already: 새 이름만 있음(이미 바뀜) · absent: 둘 다 없음
+ * 옛 이름·새 이름 레이블이 둘 다 있으면 합칠 수 없어 예외.
+ */
+export async function renameGitHubLabel(project: Project, decryptedToken: string, from: string, to: string): Promise<'renamed' | 'already' | 'absent'> {
+  const headers = getGitHubAuthHeaders(project, decryptedToken);
+  const list = await fetchAllPages(apiUrl(project, '/labels'), headers);
+  if (!list.ok) throw new Error(`레이블 목록 조회 실패 (${list.status}): ${list.statusText}`);
+  const find = (name: string) => list.items.find((l: any) => String(l.name).toLowerCase() === name.toLowerCase());
+  const oldL = find(from);
+  const newL = find(to);
+  const sameIgnoringCase = from.toLowerCase() === to.toLowerCase();
+  if (!oldL && !newL) return 'absent';
+  if (!oldL || (sameIgnoringCase && oldL.name === to)) return 'already';
+  if (newL && !sameIgnoringCase) {
+    throw new Error(`저장소에 「${oldL.name}」과 「${newL.name}」 레이블이 둘 다 있어 이름을 바꿀 수 없습니다 — 하나를 정리한 뒤 다시 저장하세요.`);
+  }
+  const res = await fetch(apiUrl(project, `/labels/${encodeURIComponent(oldL.name)}`), {
+    method: 'PATCH',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ new_name: to }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`레이블 「${oldL.name}」 → 「${to}」 이름 변경 실패 (${res.status}): ${body.slice(0, 200)}`);
+  }
+  return 'renamed';
+}

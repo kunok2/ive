@@ -2,7 +2,7 @@
 export { getProjectPath, refreshGitLabToken, getApiBaseUrl, getAuthHeaders, apiUrl } from './common';
 
 // Labels: CRUD operations
-export { ensureGitLabLabels, addGitLabIssueLabels, removeGitLabIssueLabels, swapGitLabIssueLabels, checkGitLabLabelsExist, fetchGitLabIssueLabelEvents } from './labels';
+export { ensureGitLabLabels, addGitLabIssueLabels, removeGitLabIssueLabels, swapGitLabIssueLabels, checkGitLabLabelsExist, fetchGitLabIssueLabelEvents, renameGitLabLabel } from './labels';
 export type { IssueLabelEvent } from './labels';
 
 // Issues: fetching, creation, updating, commenting/notes

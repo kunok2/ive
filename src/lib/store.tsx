@@ -44,13 +44,19 @@ function reducer(state: State, action: Action): State {
   }
 }
 
+/** 프로젝트 저장 결과 — 실패 사유, 또는 레이블 이름 변경 결과(저장소 이름 변경·가이드 갱신 MR) */
+export interface UpdateProjectResult {
+  error?: string
+  labelRename?: { renamed: string[]; guideMrUrl: string | null; guideError?: string } | null
+}
+
 const StoreContext = createContext<{
   state: State
   refreshUser: () => Promise<User | null>
   refresh: () => Promise<void>
   logout: () => Promise<void>
   addProject: (p: Omit<Project, 'id' | 'userId' | 'createdAt' | 'conflictCount'> & { useOAuthToken?: boolean }) => Promise<void>
-  updateProject: (p: Project) => Promise<void>
+  updateProject: (p: Project) => Promise<UpdateProjectResult>
   deleteProject: (id: string) => Promise<void>
   refreshAgents: () => Promise<void>
   addAgent: (a: Omit<Agent, 'id' | 'userId' | 'createdAt'>) => Promise<void>
@@ -62,7 +68,7 @@ const StoreContext = createContext<{
   refresh: async () => {},
   logout: async () => {},
   addProject: async () => {},
-  updateProject: async () => {},
+  updateProject: async () => ({}),
   deleteProject: async () => {},
   refreshAgents: async () => {},
   addAgent: async () => {},
@@ -214,13 +220,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     await refresh()
   }, [refresh])
 
-  const updateProject = useCallback(async (p: Project) => {
-    await fetch(`/api/projects/${p.id}`, {
+  const updateProject = useCallback(async (p: Project): Promise<UpdateProjectResult> => {
+    const res = await fetch(`/api/projects/${p.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(p),
     })
+    const data = await res.json().catch(() => ({}))
     await refresh()
+    if (!res.ok) return { error: data.error || `HTTP ${res.status}` }
+    return { labelRename: data.labelRename ?? null }
   }, [refresh])
 
   const deleteProject = useCallback(async (id: string) => {

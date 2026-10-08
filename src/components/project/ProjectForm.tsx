@@ -15,6 +15,7 @@ import AiGuideSection from './AiGuideSection'
 import ScannerSettingsSection, { type ScannerSettingsValues } from './ScannerSettingsSection'
 import SharingSection from './SharingSection'
 import { DEFAULT_LABELS } from '@/lib/labels'
+import { useToast } from '@/components/ui/Toast'
 
 interface Props {
   existing?: Project
@@ -27,6 +28,8 @@ export default function ProjectForm({ existing, onSuccess, onCancel }: Props) {
   const { addProject, updateProject } = useStore()
   const t = useTranslations('project')
   const tc = useTranslations('common')
+  const { toast } = useToast()
+  const [saving, setSaving] = useState(false)
 
   // --- Core form state ---
   const [color, setColor] = useState<ProjectColor>(existing?.color ?? '#4ade80')
@@ -153,7 +156,19 @@ export default function ProjectForm({ existing, onSuccess, onCancel }: Props) {
     }
 
     if (existing) {
-      await updateProject({ ...existing, ...projectData })
+      // 레이블 이름을 바꾸면 서버가 저장소 레이블 이름 변경·가이드 갱신 MR 까지 하므로 몇 초 걸릴 수 있다
+      setSaving(true)
+      const result = await updateProject({ ...existing, ...projectData }).finally(() => setSaving(false))
+      if (result.error) {
+        toast(`${t('saveFailed')}: ${result.error}`, 'error')
+        return
+      }
+      const lr = result.labelRename
+      if (lr && lr.renamed.length > 0) {
+        const count = lr.renamed.length
+        if (lr.guideError) toast(t('labelsRenamedGuideFail', { count, error: lr.guideError }), 'warning')
+        else toast(lr.guideMrUrl ? t('labelsRenamedGuide', { count }) : t('labelsRenamed', { count }), 'success')
+      }
       onSuccess?.()
       if (!onSuccess) router.push(`/projects/${existing.id}`)
     } else {
@@ -214,9 +229,10 @@ export default function ProjectForm({ existing, onSuccess, onCancel }: Props) {
         )}
         <button
           type="submit"
-          className="flex-[2] bg-ive-green-dark text-white font-bold py-4 rounded-lg text-sm active:opacity-90 transition-all"
+          disabled={saving}
+          className="flex-[2] bg-ive-green-dark text-white font-bold py-4 rounded-lg text-sm active:opacity-90 transition-all disabled:opacity-60"
         >
-          <i className={`fa-solid ${existing ? 'fa-check' : 'fa-plus'} mr-2`} />
+          <i className={`fa-solid ${saving ? 'fa-circle-notch fa-spin' : existing ? 'fa-check' : 'fa-plus'} mr-2`} />
           {existing ? t('settingsUpdated') : t('createProject')}
         </button>
       </div>

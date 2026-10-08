@@ -154,3 +154,34 @@ export async function checkGitLabLabelsExist(project: Project, decryptedToken: s
     return labelsToCheck.map(l => ({ label: l, exists: false }));
   }
 }
+
+/**
+ * 프로젝트 레이블 이름을 바꾼다(붙어 있는 이슈는 그대로 새 이름을 단다).
+ * - renamed: 바꿈 · already: 새 이름만 있음(이미 바뀜) · absent: 둘 다 없음
+ * 옛 이름·새 이름 레이블이 둘 다 있거나, 옛 레이블이 그룹 레이블(프로젝트에서 이름을 못 바꿈)이면 예외.
+ */
+export async function renameGitLabLabel(project: Project, decryptedToken: string, from: string, to: string): Promise<'renamed' | 'already' | 'absent'> {
+  const headers = getAuthHeaders(project, decryptedToken);
+  const list = await fetchAllPages(apiUrl(project, '/labels'), headers);
+  if (!list.ok) throw new Error(`레이블 목록 조회 실패 (${list.status}): ${list.statusText}`);
+  const oldL = list.items.find((l: any) => l.name === from);
+  const newL = list.items.find((l: any) => l.name === to);
+  if (!oldL && !newL) return 'absent';
+  if (!oldL) return 'already';
+  if (newL) {
+    throw new Error(`저장소에 「${from}」과 「${to}」 레이블이 둘 다 있어 이름을 바꿀 수 없습니다 — 하나를 정리한 뒤 다시 저장하세요.`);
+  }
+  if (oldL.is_project_label === false) {
+    throw new Error(`「${from}」은 그룹 레이블이라 프로젝트에서 이름을 바꿀 수 없습니다 — 그룹 설정에서 바꾸거나 다른 이름을 쓰세요.`);
+  }
+  const res = await fetch(apiUrl(project, `/labels/${oldL.id}`), {
+    method: 'PUT',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ new_name: to }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`레이블 「${from}」 → 「${to}」 이름 변경 실패 (${res.status}): ${body.slice(0, 200)}`);
+  }
+  return 'renamed';
+}

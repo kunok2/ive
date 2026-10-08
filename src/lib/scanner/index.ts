@@ -238,6 +238,26 @@ function finishScan() {
   }
 }
 
+/**
+ * 스캔을 멈춘 채로 fn 을 실행한다 — 진행 중인 스캔이 끝나기를 기다렸다가 스캔 잠금(isScanning)을 잡고,
+ * 끝나면 finishScan 으로 풀어 그사이 큐잉된 트리거도 이어서 돌린다.
+ * 레이블 이름 변경처럼 저장소와 프로젝트 설정이 잠깐 어긋나는 작업에 쓴다 — 그 사이 스캔이 돌면
+ * 열린 이슈를 「사라진 이슈」로 보고 정리(실행 실패·완료 표시)해 버린다.
+ */
+export async function runWhileScannerHeld<T>(fn: () => Promise<T>, waitMs = 120_000): Promise<T> {
+  const deadline = Date.now() + waitMs;
+  while (global.isScanning) {
+    if (Date.now() > deadline) throw new Error('스캔이 끝나지 않아 기다리다 멈췄습니다 — 잠시 뒤 다시 시도하세요.');
+    await new Promise(r => setTimeout(r, 500));
+  }
+  global.isScanning = true;
+  try {
+    return await fn();
+  } finally {
+    finishScan();
+  }
+}
+
 export function stopScanner() {
   if (global.scanInterval) {
     clearInterval(global.scanInterval);
