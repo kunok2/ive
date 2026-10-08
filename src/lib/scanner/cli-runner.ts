@@ -327,6 +327,9 @@ export async function runCliProcess(
     });
 
     child.on('close', (code, signal) => {
+      // 에이전트가 띄우고 안 끈 것(검수용 앱 서버·vite·브라우저)이 컨테이너에 남지 않게, 끝나면 프로세스 묶음째 정리한다.
+      // 에이전트는 detached 로 떠서 제 묶음(PGID = pid)을 갖는다. 남은 것이 없으면 ESRCH 로 지나간다.
+      try { if (child.pid) process.kill(-child.pid, 'SIGKILL'); } catch { /* 남은 것 없음 */ }
       if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
       if (runLimitTimer) clearTimeout(runLimitTimer);
       // 버퍼에 남은 데이터 처리
