@@ -209,7 +209,7 @@ export function ActionCards({ actions, tr }: { actions: ActionItems; tr: Tr }) {
 
 /** 막대 조각 ↔ 아래 줄 강조 — 줄에 올리면 조각이, 조각에 올리면 줄이 함께 밝아진다 */
 /** 단계 → 막대 묶음(처리대기+처리+처리 실패 · 검증대기+검증 · 확인대기+확인) — 묶음마다 둥글게 시작·끝 */
-const stageGroup = (st: string) => st.startsWith('verify') ? 'verify' : st.startsWith('confirm') ? 'confirm' : 'process'
+export const stageGroup = (st: string) => st.startsWith('verify') ? 'verify' : st.startsWith('confirm') ? 'confirm' : 'process'
 
 const rowHover = (on: boolean) => `-mx-2 px-2 rounded-lg transition-colors ${on ? 'bg-white/[0.05]' : ''}`
 

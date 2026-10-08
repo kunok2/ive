@@ -3,13 +3,13 @@
 /**
  * 월간·연간(경영진용) 섹션 — 산출 추이, 보유 추세, 사람 시간 비중 추이, 위험, 작업 결과 평가.
  */
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import type { MonthPoint, Risks, Held, Evaluation, Grade } from '@/lib/report-model/types'
 import { GRADES, FLOW_STAGES } from '@/lib/report-model/types'
-import { Card, SectionTitle, PersonFace, STAGE_BAR } from './sections'
+import { Card, SectionTitle, PersonFace, STAGE_BAR, stageGroup } from './sections'
 import { MonthBars } from './charts'
 import { fmtHours, pct, MIN_SAMPLE, projectSwatchStyles, OTHERS_ID, type Tr } from './format'
-import { StackedHBar } from './hbar'
+import { StackedHBar, hoverHandlers } from './hbar'
 
 export function MonthsSection({ months, tr }: { months: MonthPoint[]; tr: Tr }) {
   if (months.length === 0) return null
@@ -103,30 +103,40 @@ export function ShareTrendSection({ months, tr }: { months: MonthPoint[]; tr: Tr
 
 /** 달마다 끝낸 일의 단계별 시간 비중 — 색은 「어디서 시간이 걸렸나」와 같은 단계색(범례 1:1) */
 export function StageTrendSection({ months, tr }: { months: MonthPoint[]; tr: Tr }) {
+  // 강조 — 막대 조각을 호버하면 그 달에 툴팁, 범례를 호버하면 그 단계를 모든 달에서(툴팁 없이)
+  const [hov, setHov] = useState<{ stage: string; month: string | null } | null>(null)
   if (!months.some(m => m.stageShares?.length)) return null
   const used = FLOW_STAGES.filter(st => months.some(m => (m.stageShares?.find(s => s.stage === st)?.share ?? 0) > 0))
-  const cols = { gridTemplateColumns: `repeat(${months.length}, minmax(0, 1fr))` }
+  // 「어디서 시간이 걸렸나」와 같은 가로 묶음 막대를 달마다 한 줄 — 같은 단계색·같은 묶음(대기+진행)·같은 툴팁
   return (
     <Card>
       <SectionTitle>{tr('stageTrendTitle', { n: months.length })}</SectionTitle>
-      <div className="grid gap-2 h-28" style={cols}>
+      <div className="flex flex-col gap-1">
         {months.map(m => (
-          <div key={m.start} className="flex flex-col-reverse gap-0.5 h-full">
-            {!m.stageShares?.length
-              ? <div className="h-full rounded-lg border border-dashed border-ive-border" />
-              : used.map(st => {
-                const v = m.stageShares!.find(s => s.stage === st)?.share ?? 0
-                return v > 0 && <div key={st} title={`${tr(`flow.${st}`)} ${pct(v)}`} className={STAGE_BAR[st]} style={{ flexGrow: v, flexBasis: 0 }} />
-              })}
+          <div key={m.start} className="grid grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-2 min-h-7">
+            <span className="text-xs font-bold text-ive-text-secondary tabular-nums">{tr('monthShort', { m: Number(m.label.slice(5, 7)) })}</span>
+            {m.stageShares?.length ? (
+              <StackedHBar
+                hovered={hov?.stage ?? null}
+                showTip={hov?.month === m.start}
+                onHover={k => setHov(k ? { stage: k, month: m.start } : null)}
+                segments={used.map(st => {
+                  const v = m.stageShares!.find(s => s.stage === st)?.share ?? 0
+                  return { key: st, value: v, label: tr(`flow.${st}`), valueText: pct(v), className: STAGE_BAR[st], group: stageGroup(st) }
+                })}
+              />
+            ) : (
+              <span className="text-xs font-bold text-ive-text-muted">{tr('noRecord')}</span>
+            )}
           </div>
         ))}
       </div>
-      <div className="grid gap-2 text-center text-xs font-bold text-ive-text-muted" style={cols}>
-        {months.map(m => <span key={m.start}>{tr('monthShort', { m: Number(m.label.slice(5, 7)) })}</span>)}
-      </div>
       <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-bold text-ive-text-secondary">
         {used.map(st => (
-          <span key={st} className="inline-flex items-center gap-1"><span className={`w-2 h-2 rounded-full shrink-0 ${STAGE_BAR[st]}`} />{tr(`flow.${st}`)}</span>
+          <span key={st} {...hoverHandlers(st, k => setHov(k ? { stage: k, month: null } : null))}
+            className={`inline-flex items-center gap-1 cursor-default transition-opacity ${hov && hov.stage !== st ? 'opacity-50' : ''}`}>
+            <span className={`w-2 h-2 rounded-full shrink-0 ${STAGE_BAR[st]}`} />{tr(`flow.${st}`)}
+          </span>
         ))}
       </div>
     </Card>

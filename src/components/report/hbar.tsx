@@ -35,7 +35,7 @@ export interface HBarSegment {
 }
 
 export function StackedHBar({
-  segments, heightClass = 'h-2.5', gapClass = 'gap-0.5', hovered: hoveredProp, onHover,
+  segments, heightClass = 'h-2.5', gapClass = 'gap-0.5', hovered: hoveredProp, onHover, showTip = true,
 }: {
   segments: HBarSegment[]
   heightClass?: string
@@ -43,6 +43,8 @@ export function StackedHBar({
   /** 바깥(범례 줄)과 강조를 나눌 때 — 주지 않으면 막대 혼자 관리 */
   hovered?: string | null
   onHover?: (key: string | null) => void
+  /** 툴팁 — 여러 막대가 강조를 나눌 때(같은 단계를 모든 달에서 강조) 호버한 막대에만 띄운다 */
+  showTip?: boolean
 }) {
   const [own, setOwn] = useState<string | null>(null)
   const hovered = hoveredProp !== undefined ? hoveredProp : own
@@ -57,7 +59,7 @@ export function StackedHBar({
   let acc = 0
   const centers = new Map<string, number>()
   for (const s of shown) { centers.set(s.key, (acc + s.value / 2) / total); acc += s.value }
-  const tip = hovered ? shown.find(s => s.key === hovered) : undefined
+  const tip = hovered && showTip ? shown.find(s => s.key === hovered) : undefined
   const c = tip ? centers.get(tip.key)! : 0
   const shift = c < 0.15 ? '0%' : c > 0.85 ? '-100%' : '-50%'
 
