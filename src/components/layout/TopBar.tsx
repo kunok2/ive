@@ -110,6 +110,7 @@ export default function TopBar() {
               {mainTabs.tabs.map(tab => (
                 <button
                   key={tab.key}
+                  data-tour={`tab-${tab.key}`}
                   onClick={() => mainTabs.go(tab.key)}
                   aria-current={mainTabs.activeTab === tab.key ? 'page' : undefined}
                   title={tab.label}

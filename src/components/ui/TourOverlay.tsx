@@ -43,6 +43,15 @@ export const tourSteps: Record<string, TourStep[]> = {
   ],
 }
 
+/**
+ * 화면에 보이는 대상 — 같은 표시가 여럿일 수 있다(메뉴는 폰 아래 탭 바·위쪽 메뉴·옆 메뉴에 각각 있고, 지금 폭에 맞는 하나만 보인다).
+ * 숨은(display:none) 것은 크기가 0 이라 고르지 않는다.
+ */
+function findTarget(target: string): HTMLElement | null {
+  const all = Array.from(document.querySelectorAll<HTMLElement>(`[data-tour="${target}"]`))
+  return all.find(el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 }) ?? null
+}
+
 interface Props {
   steps: TourStep[]
   onClose: () => void
@@ -56,8 +65,7 @@ export default function TourOverlay({ steps, onClose }: Props) {
   const tooltipRef = useRef<HTMLDivElement>(null)
 
   const activeSteps = useMemo(() =>
-    steps.filter(s => document.querySelector(`[data-tour="${s.target}"]`)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    steps.filter(s => findTarget(s.target)),
     [steps]
   )
 
@@ -71,7 +79,7 @@ export default function TourOverlay({ steps, onClose }: Props) {
   // Measure target element
   useEffect(() => {
     if (!step) return
-    const el = document.querySelector(`[data-tour="${step.target}"]`) as HTMLElement
+    const el = findTarget(step.target)
     if (!el) return
 
     el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })

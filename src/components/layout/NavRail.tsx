@@ -17,6 +17,7 @@ export default function NavRail({ side = 'left' }: { side?: 'left' | 'right' }) 
       {tabs.map(tab => (
         <button
           key={tab.key}
+          data-tour={`tab-${tab.key}`}
           onClick={() => go(tab.key)}
           aria-current={activeTab === tab.key ? 'page' : undefined}
           className={`w-[60px] py-2 rounded-lg flex flex-col items-center gap-1 transition-colors ${
