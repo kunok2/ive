@@ -13,7 +13,7 @@ import ko from '@/messages/ko/reportV2.json'
 import en from '@/messages/en/reportV2.json'
 import type { ReportModel, HeldIssue, FlowStage } from '../report-model/types'
 import { STAGE_HEX } from '../active-work'
-import { fmtHours, pct, deltaTone, agedCount, MIN_SAMPLE, projectSwatches, OTHERS_ID, WHITE_PROJECT_COLOR, type Tr } from '../report-model/format'
+import { fmtHours, pct, deltaTone, agedCount, MIN_SAMPLE, projectSwatches, OTHERS_ID, WHITE_PROJECT_COLOR, PERSON_COLORS, type Tr } from '../report-model/format'
 
 export type MailKind = 'member' | 'lead' | 'exec'
 
@@ -47,6 +47,10 @@ function nums(srcs: Src[], text: string): string {
   return `<span data-metric="${esc(srcs.map(x => x[0]).join('|'))}" data-value="${esc(srcs.map(x => val(x[1])).join('|'))}" style="font-weight:700;color:${COLOR.text};font-variant-numeric:tabular-nums">${esc(text)}</span>`
 }
 const num = (metric: string, value: Src[1], text: string) => nums([[metric, value]], text)
+/** 보조 글씨로 쓰는 숫자 칸 — 대조용 표시(data-metric)는 같고 굵기·색만 곁줄에 맞춘다 */
+function quietNums(srcs: Src[], text: string, color: string): string {
+  return `<span data-metric="${esc(srcs.map(x => x[0]).join('|'))}" data-value="${esc(srcs.map(x => val(x[1])).join('|'))}" style="color:${color};font-variant-numeric:tabular-nums">${esc(text)}</span>`
+}
 
 /**
  * 증감 — 화면과 같은 규칙(deltaTone)으로 화살표에만 색. goodWhenUp 이 null 이면 좋고 나쁨이 없는 값(색 없음).
@@ -206,6 +210,40 @@ function projectsBlock(t: T, m: ReportModel): string {
   return block(t('projectsTitle'), (parts.length ? shareBar(parts) : '') + rows(body))
 }
 
+/**
+ * 누가 검증·확인했나 — 화면 StageWorkSection 과 같은 내용: 판정 건수 비중 막대(다섯 명까지 제 색·나머지 기타),
+ * 사람별 검증·확인 건수와 반려, 지난 기간 건수. 에이전트 판정은 한 줄 합계로만. 메일은 끝난 기간(closed) 기준.
+ */
+function stageWorkBlock(t: T, m: ReportModel, prevLabel: string): string {
+  const w = m.stageWork
+  if (!w || !w.people.length) return ''
+  const sum = (p: (typeof w.people)[number]) => p.verifyApproved + p.verifyRejected + p.confirmAccepted + p.confirmRejected
+  const total = w.people.reduce((n, p) => n + sum(p), 0)
+  const colorOf = (i: number) => PERSON_COLORS[i] ?? '#d4d4d8'
+  const restN = w.people.slice(PERSON_COLORS.length).reduce((n, p) => n + sum(p), 0)
+  const parts = [
+    ...w.people.slice(0, PERSON_COLORS.length).map((p, i) => ({ share: sum(p) / total, color: colorOf(i) })),
+    ...(restN > 0 ? [{ share: restN / total, color: '#d4d4d8' }] : []),
+  ]
+  const body = w.people.slice(0, 8).map((p, i) => {
+    const at = `closed.stageWork.people.${i}`
+    const v = p.verifyApproved + p.verifyRejected
+    const c = p.confirmAccepted + p.confirmRejected
+    const rejected = [
+      p.verifyRejected ? quietNums([[`${at}.verifyRejected`, p.verifyRejected]], t('workVerifyRejected', { n: p.verifyRejected }), COLOR.secondary) : '',
+      p.confirmRejected ? quietNums([[`${at}.confirmRejected`, p.confirmRejected]], t('workConfirmRejected', { n: p.confirmRejected }), COLOR.secondary) : '',
+    ].filter(Boolean)
+    const prev = esc(t('prevShort', { label: prevLabel, v: t('countN', { n: p.prevVerify + p.prevConfirm }) }))
+    return row(dot(colorOf(i)) + esc(p.name),
+      `${nums([[`${at}.verifyApproved`, p.verifyApproved], [`${at}.verifyRejected`, p.verifyRejected]], t('workVerify', { n: v }))} · ${nums([[`${at}.confirmAccepted`, p.confirmAccepted], [`${at}.confirmRejected`, p.confirmRejected]], t('workConfirm', { n: c }))} · ${esc(pct(sum(p) / total))}`
+      + `<div style="font-size:12px;color:${COLOR.secondary}">${[...rejected, prev].join(' · ')}</div>`)
+  }).join('')
+  const agent = w.agentVerify > 0 || w.agentConfirm > 0
+    ? `<div style="font-size:12px;color:${COLOR.muted};margin-top:6px">${quietNums([['closed.stageWork.agentVerify', w.agentVerify], ['closed.stageWork.agentConfirm', w.agentConfirm]], t('workAgentLine', { v: w.agentVerify, c: w.agentConfirm }), COLOR.muted)}</div>`
+    : ''
+  return block(t('workTitle'), shareBar(parts) + rows(body) + agent)
+}
+
 function doneBlock(t: T, closed: ReportModel, prevLabel: string): string {
   const d = closed.done
   return block(t('mail.doneTitle', { label: prevLabel }), rows(
@@ -298,6 +336,7 @@ function execBlocks(t: T, m: ReportModel, money: (usd: number) => string, prevLa
     row(esc(t('perCompleted')), c.perCompleted == null ? '—' : num('closed.cost.perCompleted', c.perCompleted, money(c.perCompleted))),
   ) + `<div style="font-size:12px;color:${COLOR.muted};margin-top:6px">${num('closed.cost.aiNotional', c.aiNotional, t('notionalNote', { v: money(c.aiNotional) }))}</div>`))
   out.push(projectsBlock(t, m))
+  out.push(stageWorkBlock(t, m, prevLabel))
   out.push(shareTrendBlock(t, m))
   out.push(riskBlock(t, m))
   out.push(evaluationBlock(t, m))
@@ -389,6 +428,7 @@ export function renderReportMail(input: RenderInput): { subject: string; html: s
   } else if (kind === 'lead') {
     if (now) { parts.push(heldBlock(t, now, 'now', prevLabel)); parts.push(actionsBlock(t, now)); parts.push(peopleBlock(t, now)) }
     parts.push(projectsBlock(t, closed))
+    parts.push(stageWorkBlock(t, closed, prevLabel))
     parts.push(doneBlock(t, closed, prevLabel))
     parts.push(stageTimeBlock(t, closed))
   } else {

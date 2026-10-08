@@ -6,9 +6,9 @@
  * 확정본은 종전 보고서와 섞이지 않도록 보고서 종류 뒤에 판(@v2)을 붙여 저장한다.
  */
 import { getReportSnapshot, putReportSnapshot, deleteReportSnapshot, getDb } from '../db'
-import { buildReportModel, stageTimeForPeriod } from './build'
+import { buildReportModel, stageTimeForPeriod, stageWorkForPeriod } from './build'
 import { periodOf, isClosed, addDays, kstToday, FINALIZE_AFTER_DAYS, type ReportType } from './period'
-import { scopeKey, type Scope } from './load'
+import { scopeKey, avatarsOfPersonKeys, type Scope } from './load'
 import type { ReportModel } from './types'
 import { DEFAULT_PROJECT_COLOR } from './format'
 
@@ -40,7 +40,11 @@ function withProjectColors(model: ReportModel): ReportModel {
  * 근거인 실행 기록은 지난 기간에 대해 바뀌지 않으므로 확정 당시 계산과 같은 값이다.
  */
 function withStageTime(model: ReportModel, scope: Scope, type: ReportType, day: string): ReportModel {
-  return model.stageTime ? model : { ...model, stageTime: stageTimeForPeriod(scope, type, day) }
+  const m = model.stageTime ? model : { ...model, stageTime: stageTimeForPeriod(scope, type, day) }
+  if (m.stageWork) return m
+  // 누가 검증·확인했나도 같은 까닭으로 읽을 때 채운다 — 아바타도 함께
+  const stageWork = stageWorkForPeriod(scope, type, day)
+  return { ...m, stageWork, avatars: { ...(m.avatars ?? {}), ...avatarsOfPersonKeys(stageWork.people.map(p => p.key)) } }
 }
 
 /**

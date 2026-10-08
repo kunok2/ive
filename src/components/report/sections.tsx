@@ -6,9 +6,9 @@
  */
 import { useState, type ReactNode } from 'react'
 import type {
-  Held, ActionItems, HeldStage, HeldIssue, ProjectRow, Done, Cost, CompletedItem, FlowStage, StageTime,
+  Held, ActionItems, HeldStage, HeldIssue, ProjectRow, Done, Cost, CompletedItem, FlowStage, StageTime, StageWork,
 } from '@/lib/report-model/types'
-import { fmtHours, pct, deltaTone, toneClass, agedCount, projectSwatchStyles, OTHERS_ID, type Tr } from './format'
+import { fmtHours, pct, deltaTone, toneClass, agedCount, projectSwatchStyles, OTHERS_ID, PERSON_COLORS, type Tr } from './format'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 import CountBump from '@/components/ui/CountBump'
 import { StackedHBar, hoverHandlers } from './hbar'
@@ -332,6 +332,79 @@ export function PeopleSection({ held, avatars, tr }: { held: Held; avatars?: Rec
         </div>
       )}
       {notPeople > 0 && <span className="text-xs font-bold text-ive-text-muted">{tr('peopleExcluded', { n: notPeople })}</span>}
+    </Card>
+  )
+}
+
+// ─── 누가 검증·확인했나 ───
+
+/**
+ * 그 기간 사람이 내린 검증·확인 판정 — 누가 얼마나 맡았는지 비중(「프로젝트별 현황」의 맡은 시간 비중과 같은 짜임)과
+ * 사람별 검증·확인 건수(반려 포함), 지난 기간 건수. 비중은 판정 건수 기준. 에이전트 판정은 아래 한 줄 합계로만.
+ */
+export function StageWorkSection({ work, avatars, tr, prevLabel }: { work: StageWork | undefined; avatars?: Record<string, string>; tr: Tr; prevLabel: string }) {
+  const [hov, setHov] = useState<string | null>(null)
+  if (!work) return null
+  const people = work.people
+  const sum = (p: StageWork['people'][number]) => p.verifyApproved + p.verifyRejected + p.confirmAccepted + p.confirmRejected
+  const total = people.reduce((n, p) => n + sum(p), 0)
+  const totalV = people.reduce((n, p) => n + p.verifyApproved + p.verifyRejected, 0)
+  const totalC = people.reduce((n, p) => n + p.confirmAccepted + p.confirmRejected, 0)
+  // 막대: 많이 한 사람 다섯까지 제 색, 나머지는 「기타」 한 조각(중립색) — 줄의 색 점도 같은 색
+  const top = people.slice(0, PERSON_COLORS.length)
+  const rest = people.slice(PERSON_COLORS.length)
+  const restN = rest.reduce((n, p) => n + sum(p), 0)
+  const colorOf = new Map(top.map((p, i) => [p.key, PERSON_COLORS[i]]))
+  const othersStyle = { background: 'var(--color-ive-text-muted)', opacity: 0.35 }
+  const swatch = (key: string) => (colorOf.has(key) ? { background: colorOf.get(key) } : othersStyle)
+  const segments = [
+    ...top.map(p => ({ key: p.key, value: sum(p), label: p.name, valueText: `${pct(sum(p) / total)} · ${tr('countN', { n: sum(p) })}`, style: swatch(p.key) })),
+    ...(restN > 0 ? [{ key: OTHERS_ID, value: restN, label: tr('others'), valueText: `${pct(restN / total)} · ${tr('countN', { n: restN })}`, style: othersStyle }] : []),
+  ]
+  return (
+    <Card>
+      <SectionTitle right={people.length ? tr('workRight', { v: totalV, c: totalC }) : undefined}>{tr('workTitle')}</SectionTitle>
+      {people.length === 0 ? (
+        <span className="text-sm font-bold text-ive-text-secondary">{tr('workNone')}</span>
+      ) : (
+        <>
+          <StackedHBar heightClass="h-3" hovered={hov} onHover={setHov} segments={segments} />
+          <div className="flex flex-col">
+            {people.map((p, i) => {
+              const v = p.verifyApproved + p.verifyRejected
+              const c = p.confirmAccepted + p.confirmRejected
+              const rejected = [
+                p.verifyRejected ? tr('workVerifyRejected', { n: p.verifyRejected }) : '',
+                p.confirmRejected ? tr('workConfirmRejected', { n: p.confirmRejected }) : '',
+              ].filter(Boolean).join(' · ')
+              const segKey = colorOf.has(p.key) ? p.key : OTHERS_ID
+              return (
+                <div key={p.key} {...hoverHandlers(segKey, setHov)}
+                  className={`flex flex-col gap-0.5 py-2 ${rowHover(hov === segKey)} ${i < people.length - 1 ? 'border-b border-ive-border-dark' : ''}`}>
+                  <div className="flex items-center justify-between gap-2 text-sm font-bold">
+                    <span className="flex items-center gap-1.5 min-w-0">
+                      <span className="w-2 h-2 rounded-full shrink-0" style={swatch(p.key)} aria-hidden="true" />
+                      <PersonFace personKey={p.key} avatars={avatars} />
+                      <span className="truncate text-ive-text">{p.name}</span>
+                    </span>
+                    <span className="flex items-center gap-3 tabular-nums shrink-0">
+                      <span className={v ? 'text-ive-text' : 'text-ive-text-muted'}>{tr('workVerify', { n: v })}</span>
+                      <span className={c ? 'text-ive-text' : 'text-ive-text-muted'}>{tr('workConfirm', { n: c })}</span>
+                      <span className="text-ive-text-secondary w-10 text-right">{pct(sum(p) / total)}</span>
+                    </span>
+                  </div>
+                  <span className="text-xs font-bold text-ive-text-secondary">
+                    {[rejected, tr('prevShort', { label: prevLabel, v: tr('countN', { n: p.prevVerify + p.prevConfirm }) })].filter(Boolean).join(' · ')}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </>
+      )}
+      {(work.agentVerify > 0 || work.agentConfirm > 0) && (
+        <span className="text-xs font-bold text-ive-text-muted">{tr('workAgentLine', { v: work.agentVerify, c: work.agentConfirm })}</span>
+      )}
     </Card>
   )
 }

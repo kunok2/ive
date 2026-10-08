@@ -4,7 +4,7 @@
 import type { CSSProperties } from 'react'
 import { projectSwatches, WHITE_PROJECT_COLOR } from '@/lib/report-model/format'
 
-export { fmtHours, pct, deltaTone, agedCount, AGED_HOURS, MIN_SAMPLE, OTHERS_ID, type Tr } from '@/lib/report-model/format'
+export { fmtHours, pct, deltaTone, agedCount, AGED_HOURS, MIN_SAMPLE, OTHERS_ID, PERSON_COLORS, type Tr } from '@/lib/report-model/format'
 
 export const toneClass = { good: 'text-ive-cyan', bad: 'text-ive-red', neutral: 'text-ive-text-secondary' } as const
 

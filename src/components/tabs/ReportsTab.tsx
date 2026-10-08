@@ -18,7 +18,7 @@ import { useTab } from '@/lib/tab-context'
 import type { ReportModel, HeldIssue } from '@/lib/report-model/types'
 import { periodOf, previousPeriod, nextPeriod, addDays, FINALIZE_AFTER_DAYS, type ReportType } from '@/lib/report-model/period'
 import {
-  HeldCard, ActionCards, WhereSection, PeopleSection, ProjectsSection, DoneSection, StageTimeSection, CostSection, CompletedList, MineSection, Card, SectionTitle,
+  HeldCard, ActionCards, WhereSection, PeopleSection, StageWorkSection, ProjectsSection, DoneSection, StageTimeSection, CostSection, CompletedList, MineSection, Card, SectionTitle,
 } from '@/components/report/sections'
 import { TrendCompare, HeldCompare } from '@/components/report/charts'
 import { MonthsSection, ShareTrendSection, StageTrendSection, RiskSection, EvaluationSection } from '@/components/report/monthly'
@@ -213,6 +213,7 @@ export default function ReportsTab() {
               {model.risks && <ErrorBoundary label={tr('riskTitle')}><RiskSection risks={model.risks} held={model.held} tr={tr} /></ErrorBoundary>}
               <ErrorBoundary label={tr('whereTitle')}><WhereSection held={model.held} tr={tr} /></ErrorBoundary>
               <ErrorBoundary label={tr('peopleTitle')}><PeopleSection held={model.held} avatars={model.avatars} tr={tr} /></ErrorBoundary>
+              <ErrorBoundary label={tr('workTitle')}><StageWorkSection work={model.stageWork} avatars={model.avatars} tr={tr} prevLabel={prevLabel} /></ErrorBoundary>
               {model.months && <ErrorBoundary label={tr('monthsTitle', { n: 6 })}><MonthsSection months={model.months} tr={tr} /></ErrorBoundary>}
               <ErrorBoundary label={tr('projectsTitle')}><ProjectsSection projects={model.projects} cost={model.cost} tr={tr} prevLabel={prevLabel} /></ErrorBoundary>
               {model.months && <ErrorBoundary label={tr('shareTrendTitle', { n: 6 })}><ShareTrendSection months={model.months} tr={tr} /></ErrorBoundary>}

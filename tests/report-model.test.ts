@@ -195,6 +195,51 @@ describe('R-4·R-5·R-6 주간 모델', () => {
     expect(both.projects.map(p => p.name)).not.toContain('Secret')
   })
 
+  it('R-6 누가 검증·확인했나: 사람별 판정 수(승인·반려 / 완료·반려)와 지난 기간, 에이전트 판정은 합계로만', () => {
+    seedWeek()
+    // 이검증: 이번 주 확인 완료 1건 + 확인 반려 1건, 지난주 검증 1건 / 에이전트 확인 통과 1건
+    exec({ id: 'ex-confirm-2', project_id: 'p1', issue_iid: 2, assignee_type: 'user', user_id: 'u-lee', user_name: '이검증', status: 'success', started_at: iso(kst('2026-09-29T11:00:00')), ended_at: iso(kst('2026-09-29T12:00:00')) })
+    exec({ id: 'ex-confirm-5', project_id: 'p1', issue_iid: 5, assignee_type: 'user', user_id: 'u-lee', user_name: '이검증', status: 'failed', stage_verdict: 'fail', started_at: iso(kst('2026-09-30T11:00:00')), ended_at: iso(kst('2026-09-30T12:00:00')) })
+    exec({ id: 'ex-verify-6', project_id: 'p1', issue_iid: 6, assignee_type: 'user', user_id: 'u-lee', user_name: '이검증', status: 'success', started_at: iso(kst('2026-09-22T09:00:00')), ended_at: iso(kst('2026-09-22T10:00:00')), verified_at: iso(kst('2026-09-22T10:00:00')) })
+    exec({ id: 'ex-confirm-7', project_id: 'p1', issue_iid: 7, agent_id: 'a1', assignee_type: 'agent', status: 'success', stage_verdict: 'pass', started_at: iso(kst('2026-10-01T09:00:00')), ended_at: iso(kst('2026-10-01T10:00:00')) })
+    // 취소로 닫힌 사람 확인은 판정이 아니다
+    exec({ id: 'ex-confirm-8', project_id: 'p1', issue_iid: 8, assignee_type: 'user', user_id: 'u-lee', user_name: '이검증', status: 'failed', stage_verdict: 'cancelled', started_at: iso(kst('2026-10-01T09:00:00')), ended_at: iso(kst('2026-10-01T10:00:00')) })
+    const m = buildReportModel('u-lead', 'weekly', '2026-10-02', NOW)
+    expect(m.stageWork?.people).toEqual([
+      { key: 'u:u-lee', name: '이검증', verifyApproved: 1, verifyRejected: 0, confirmAccepted: 1, confirmRejected: 1, prevVerify: 1, prevConfirm: 0 },
+    ])
+    expect(m.stageWork?.agentVerify).toBe(0)
+    expect(m.stageWork?.agentConfirm).toBe(1)
+    // 프로젝트 필터를 따른다
+    const portal = buildReportModel({ user: 'u-lead', projects: ['p2'] }, 'weekly', '2026-10-02', NOW)
+    expect(portal.stageWork?.people).toEqual([])
+
+    // 메일(팀장·경영진)에도 같은 숫자 — 메일은 끝난 기간(closed) 모델을 그린다
+    for (const kind of ['lead', 'exec'] as const) {
+      const { html } = renderReportMail({ kind, closed: m, now: m, money: v => `$${v}`, baseUrl: '', recipient: { userId: 'u-lead', name: '정팀장', locale: 'ko' } })
+      expect(html).toContain('누가 검증·확인했나')
+      expect(html).toContain('data-metric="closed.stageWork.people.0.verifyApproved|closed.stageWork.people.0.verifyRejected" data-value="1|0"')
+      expect(html).toContain('data-metric="closed.stageWork.people.0.confirmAccepted|closed.stageWork.people.0.confirmRejected" data-value="1|1"')
+      expect(html).toContain('>확인 반려 1<')
+      expect(html).toContain('data-metric="closed.stageWork.agentVerify|closed.stageWork.agentConfirm" data-value="0|1"')
+    }
+    // 팀원 메일에는 넣지 않는다(내 손에 있는 일 중심)
+    const member = renderReportMail({ kind: 'member', closed: m, now: m, mine: [], money: v => `$${v}`, baseUrl: '', recipient: { userId: 'u-lee', name: '이검증', locale: 'ko' } })
+    expect(member.html).not.toContain('누가 검증·확인했나')
+  })
+
+  it('R-10 이 항목 전에 확정된 보고서는 읽을 때 누가 검증·확인했나를 채운다', () => {
+    seedWeek()
+    const at = new Date('2026-10-09T00:00:00Z')
+    getReportModel('u-lead', 'weekly', '2026-09-29', at)
+    // 옛 확정본 흉내 — stageWork 를 지운다
+    const row = db.prepare(`SELECT id, payload FROM report_snapshots`).get() as { id: string; payload: string }
+    const payload = JSON.parse(row.payload); delete payload.stageWork
+    db.prepare(`UPDATE report_snapshots SET payload = ? WHERE id = ?`).run(JSON.stringify(payload), row.id)
+    const again = getReportModel('u-lead', 'weekly', '2026-09-29', at)
+    expect(again.stageWork?.people.map(p => [p.name, p.verifyApproved])).toEqual([['이검증', 1]])
+  })
+
   it('R-10 프로젝트 필터 확정본은 전체 확정본과 따로 저장된다', () => {
     seedWeek()
     const at = new Date('2026-10-09T00:00:00Z')

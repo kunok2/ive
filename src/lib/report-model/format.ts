@@ -45,6 +45,8 @@ export const MIN_SAMPLE = 20
 export const DEFAULT_PROJECT_COLOR = '#4ade80'
 /** 주제색 중 "흰색" — 밝은 배경(라이트 테마·메일)에서 보이지 않아 중립색으로 바꿔 칠한다 */
 export const WHITE_PROJECT_COLOR = '#e0e0e0'
+/** 「누가 검증·확인했나」 사람 조각 색 — 프로젝트 색 목록에서 단계색(검증 보라·확인 분홍)과 겹치지 않는 것만, 많이 한 순서로. 화면·메일 공용 */
+export const PERSON_COLORS = ['#22d3ee', '#60a5fa', '#fbbf24', '#a3e635', '#fb923c']
 /** 비중 막대의 「기타」 조각 id */
 export const OTHERS_ID = '__others'
 

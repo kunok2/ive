@@ -10,7 +10,7 @@ import {
 } from './period'
 import {
   scopedProjects, execsInRange, completedInRange, issueFacts, heldNow, heldDaily, heldTrackingSince,
-  overturnedKeys, personOf, resetPersonCache, avatarsOfPersonKeys, receivedInRange, verifyDecisions, confirmRejections,
+  overturnedKeys, personOf, resetPersonCache, avatarsOfPersonKeys, receivedInRange, verifyDecisions, confirmDecisions, confirmRejections,
   loadIssueHistory, heldReceipts, receiptBefore, isExternalRow, byIssue, stageTimeline,
   type Scope, type IssueFacts, type IssueExec, type HeldRow, type ScopedProject, type IssueHistory, type CycleEvent,
 } from './load'
@@ -22,7 +22,7 @@ import {
   GRADES, HELD_STAGES, FLOW_STAGES,
   type ReportModel, type WorkForm, type HeldIssue, type HeldPerson, type Held, type ActionItems, type Concentration,
   type Done, type Trend, type ProjectRow, type Cost, type PersonRole, type Grade, type Evaluation, type WorkerEval,
-  type MonthPoint, type Risks, type CompletedItem, type FlowStage, type StageTime,
+  type MonthPoint, type Risks, type CompletedItem, type FlowStage, type StageTime, type StageWork, type StageWorkPerson,
 } from './types'
 import { AGED_HOURS, MIN_SAMPLE, DEFAULT_PROJECT_COLOR } from './format'
 
@@ -416,6 +416,65 @@ export function stageTimeForPeriod(scope: Scope, type: ReportType, day: string):
   return stageTimeOf(completed, prevCompleted, facts, history)
 }
 
+// ─── 누가 검증·확인했나 ───
+
+/**
+ * 기간 안에 사람이 내린 검증·확인 판정을 사람별로 센다(승인·반려, 완료·반려). 지난 기간 건수를 곁들인다.
+ * 에이전트 판정은 사람 줄에 넣지 않고 합계로만 — 에이전트는 사람이 아니라 실행 단위다.
+ * 사람 식별은 다른 섹션과 같은 personOf(같은 사람의 여러 기록·계정을 하나로).
+ */
+function stageWorkOf(pids: string[], period: Period, prev: Period): StageWork {
+  const range = (p: Period): [string, string] => [kstDayStartISO(p.start), kstDayStartISO(p.end)]
+  const people = new Map<string, StageWorkPerson>()
+  const row = (key: string, name: string) => {
+    let r = people.get(key)
+    if (!r) { r = { key, name, verifyApproved: 0, verifyRejected: 0, confirmAccepted: 0, confirmRejected: 0, prevVerify: 0, prevConfirm: 0 }; people.set(key, r) }
+    return r
+  }
+  let agentVerify = 0, agentConfirm = 0
+  for (const d of verifyDecisions(pids, ...range(period))) {
+    if (!d.approvedAt && !d.rejectedAt) continue
+    if (d.byAgent) { agentVerify++; continue }
+    const p = personOf(d.userId, d.userName, d.username, projectProvider(d.projectId))
+    if (!p) continue
+    const r = row(p.key, p.name)
+    if (d.rejectedAt) r.verifyRejected++; else r.verifyApproved++
+  }
+  for (const d of confirmDecisions(pids, ...range(period))) {
+    if (!d.acceptedAt && !d.rejectedAt) continue
+    if (d.byAgent) { agentConfirm++; continue }
+    const p = personOf(d.userId, d.userName, null, projectProvider(d.projectId))
+    if (!p) continue
+    const r = row(p.key, p.name)
+    if (d.rejectedAt) r.confirmRejected++; else r.confirmAccepted++
+  }
+  // 지난 기간 — 이번 기간에 판정한 사람만 곁들인다(비교용)
+  for (const d of verifyDecisions(pids, ...range(prev))) {
+    if (d.byAgent || (!d.approvedAt && !d.rejectedAt)) continue
+    const p = personOf(d.userId, d.userName, d.username, projectProvider(d.projectId))
+    if (p && people.has(p.key)) people.get(p.key)!.prevVerify++
+  }
+  for (const d of confirmDecisions(pids, ...range(prev))) {
+    if (d.byAgent || (!d.acceptedAt && !d.rejectedAt)) continue
+    const p = personOf(d.userId, d.userName, null, projectProvider(d.projectId))
+    if (p && people.has(p.key)) people.get(p.key)!.prevConfirm++
+  }
+  const total = (r: StageWorkPerson) => r.verifyApproved + r.verifyRejected + r.confirmAccepted + r.confirmRejected
+  return {
+    people: [...people.values()].sort((a, b) => total(b) - total(a) || a.name.localeCompare(b.name)),
+    agentVerify, agentConfirm,
+  }
+}
+
+/** 누가 검증·확인했나만 따로 — 이 항목이 생기기 전에 확정된 보고서를 읽을 때 채운다(실행 기록은 지난 기간에 대해 바뀌지 않는다) */
+export function stageWorkForPeriod(scope: Scope, type: ReportType, day: string): StageWork {
+  resetPersonCache()
+  const projectList = scopedProjects(scope)
+  setProviders(projectList)
+  const period = periodOf(type, day)
+  return stageWorkOf(projectList.map(p => p.id), period, previousPeriod(period))
+}
+
 // ─── 추이 ───
 
 function bucketKey(type: ReportType, iso: string): string {
@@ -772,6 +831,7 @@ export function buildReportModel(scope: Scope, type: ReportType, day: string, no
     actions: liveIssues && people ? actionsOf(liveIssues, people) : null,
     done: { ...cur.done, prevTotal: prevCompleted.length, prevFirstPass: prevDone.done.firstPass },
     stageTime: stageTimeOf(completed, prevCompleted, facts, c.history),
+    stageWork: stageWorkOf(pids, period, prev),
     trend, projects: projectRows, cost,
     completedList: cur.list,
   }
@@ -786,6 +846,7 @@ export function buildReportModel(scope: Scope, type: ReportType, day: string, no
     ...(model.held.people ?? []).map(p => p.key),
     ...(model.evaluation?.workers ?? []).filter(w => w.kind === 'person').map(w => w.key),
     ...(model.evaluation?.verifiers ?? []).map(v => v.key),
+    ...(model.stageWork?.people ?? []).map(p => p.key),
   ])
   return model
 }

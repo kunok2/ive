@@ -592,6 +592,36 @@ export function verifyDecisions(projectIds: string[], startISO: string, endISO: 
   })
 }
 
+/** 기간 안에 확인 판정(완료·반려)을 내린 확인 실행 — 검증 판정(verifyDecisions)과 같은 규칙 */
+export interface ConfirmDecision {
+  projectId: string; iid: number; userId: string | null; userName: string | null
+  acceptedAt: string | null; rejectedAt: string | null
+  byAgent: boolean
+}
+
+export function confirmDecisions(projectIds: string[], startISO: string, endISO: string): ConfirmDecision[] {
+  if (projectIds.length === 0) return []
+  const ph = projectIds.map(() => '?').join(',')
+  const rows = getDb().prepare(`
+    SELECT c.project_id, c.issue_iid, c.user_id, c.user_name, c.rejected_at, c.ended_at, c.status, c.assignee_type, c.stage_verdict
+    FROM task_executions c
+    WHERE c.id LIKE 'ex-confirm-%' AND c.project_id IN (${ph})
+      AND julianday(COALESCE(c.rejected_at, c.ended_at)) >= julianday(?) AND julianday(COALESCE(c.rejected_at, c.ended_at)) < julianday(?)
+      AND (c.status = 'success' OR (c.status = 'failed' AND (c.assignee_type = 'agent' OR ${HUMAN_REJECTED_SQL('c')})))
+  `).all(...projectIds, startISO, endISO) as any[]
+  return rows.map(r => {
+    const rejected = isoTime(r.rejected_at), ended = isoTime(r.ended_at)
+    const byAgent = r.assignee_type === 'agent'
+    // 에이전트의 실패에는 판단 불가·오류도 섞여 있다 — 판정(pass/fail)으로만 센다
+    const accepted = byAgent ? r.stage_verdict === 'pass' : r.status === 'success' && !rejected
+    const rej = byAgent ? r.stage_verdict === 'fail' : !!rejected || r.status === 'failed'
+    return {
+      projectId: r.project_id, iid: r.issue_iid, userId: r.user_id || null, userName: r.user_name || null,
+      acceptedAt: accepted ? ended : null, rejectedAt: rej ? (rejected || ended) : null, byAgent,
+    }
+  })
+}
+
 /** 이슈들의 확인 반려 시각(확인 실행이 실패로 끝난 시각) */
 export function confirmRejections(projectIds: string[], sinceISO: string): Map<string, string[]> {
   const out = new Map<string, string[]>()

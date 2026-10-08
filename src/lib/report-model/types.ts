@@ -117,6 +117,26 @@ export interface StageTime {
   prevStages: { stage: FlowStage; avgH: number; share: number }[] | null
 }
 
+/** 그 기간 사람이 내린 검증·확인 판정 — 사람별(누가 검증·확인했나). 에이전트 판정은 합계로만 */
+export interface StageWorkPerson {
+  key: string
+  name: string
+  verifyApproved: number
+  verifyRejected: number
+  confirmAccepted: number
+  confirmRejected: number
+  /** 지난 기간 검증·확인 건수(판정 합) */
+  prevVerify: number
+  prevConfirm: number
+}
+
+export interface StageWork {
+  people: StageWorkPerson[]
+  /** 에이전트가 내린 검증·확인 판정 건수 — 사람 줄에는 넣지 않는다 */
+  agentVerify: number
+  agentConfirm: number
+}
+
 export interface Trend {
   labels: string[]
   inflow: (number | null)[]
@@ -224,6 +244,8 @@ export interface ReportModel {
   done: Done
   /** 이 항목 전에 확정된 보고서에는 없다(읽을 때 채운다 — index.getReportModel) */
   stageTime?: StageTime
+  /** 누가 검증·확인했나 — 이 항목 전에 확정된 보고서에는 없다(읽을 때 채운다) */
+  stageWork?: StageWork
   trend: Trend
   projects: ProjectRow[]
   cost: Cost
