@@ -5,6 +5,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { logActivity } from '@/lib/activity'
 import { decrypt } from '@/lib/crypto'
 import { removeIssueLabels, addIssueLabels, swapIssueLabels } from '@/lib/provider'
+import { DEFAULT_LABELS } from '@/lib/labels'
 
 export async function POST(
   req: NextRequest,
@@ -40,7 +41,7 @@ export async function POST(
     try {
       const decryptedToken = decrypt(project.accessToken)
       if (finalStatus === 'success') {
-        await swapIssueLabels(project, execution.issueIid, decryptedToken, [project.labelVerify || 'IVE-V'], [project.labelDev || 'IVE-D'])
+        await swapIssueLabels(project, execution.issueIid, decryptedToken, [project.labelVerify || DEFAULT_LABELS.verify], [project.labelDev || DEFAULT_LABELS.dev])
       }
       // 실패 시: IVE-D 레이블 유지 → 스캐너가 활성 실행 없음을 감지하여 dev_fail로 판정
       // 사건 로그 — 사람이 처리 결과를 직접 확정

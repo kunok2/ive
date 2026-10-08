@@ -11,7 +11,7 @@
   "projectsStep1": "Tap the + button at the top of the screen. (If no projects exist, there's also an 'Add Project' button on the empty screen.)",
   "projectsStep2": "If OAuth is set up, select a repo from the list. Otherwise, enter the repository URL and access token manually.",
   "projectsStep3": "Click 'Test Connection' to verify the repository is accessible.",
-  "projectsStep4": "In label settings, click 'Create labels in Git' to create IVE workflow labels (IVE, IVE-S, IVE-D, etc.) in your repo. Defaults work fine.",
+  "projectsStep4": "In label settings, click 'Create labels in Git' to create IVE workflow labels (ive, ive:todo, ive:doing, etc.) in your repo. Defaults work fine.",
   "projectsStep5": "After saving, create at least one agent in the Agents tab — then any task you submit is auto-processed. (Agents live in your personal pool; no per-project assignment needed.)",
   "projectsStep6": "The project card shows stats: Waiting, Working, Verifying, Done, and Merge. Tap each number to open a detail panel.",
   "projectsStep7": "Use the ⏸ button to pause/resume the scanner, 🚀 to scan immediately, and + to add a task right from the card.",

@@ -1,6 +1,7 @@
 import { Project } from "@/types";
 import { getProjectPath, getAuthHeaders, apiUrl } from "./common";
 import { fetchAllPages } from "@/lib/git-paging";
+import { DEFAULT_LABELS } from "@/lib/labels";
 
 /**
  * GitLab 프로젝트에 필요한 레이블들이 있는지 확인하고, 없으면 생성합니다.
@@ -14,14 +15,14 @@ export async function ensureGitLabLabels(project: Project, decryptedToken: strin
   // (cyan=정보/대기, amber=진행/검증, green=완료) — 토큰 hex 값과 정확히 일치
   const labelsToEnsure = [
     { name: project.labelTarget, color: '#22d3ee', description: 'IVE 관리 대상 이슈 표시.' },
-    { name: project.labelSchedule || 'IVE-S', color: '#22d3ee', description: '스케줄 대기. 스캐너가 이 레이블의 이슈를 에이전트에 배정합니다.' },
-    { name: project.labelDev || 'IVE-D', color: '#f59e0b', description: '개발 중. 에이전트가 작업을 시작하면 자동 부착됩니다.' },
-    { name: project.labelVerifyWait || 'IVE-W', color: '#f59e0b', description: '검증대기. 개발이 완료되어 검증자의 검증시작을 기다리고 있습니다.' },
-    { name: project.labelVerify || 'IVE-V', color: '#f59e0b', description: '검증 중. 검증자가 검증을 진행하고 있습니다.' },
-    { name: project.labelConfirmWait || 'IVE-P', color: '#f59e0b', description: '확인대기. 머지가 완료되어 확인자의 실환경 확인을 기다리고 있습니다.' },
-    { name: project.labelConfirm || 'IVE-C', color: '#f59e0b', description: '확인 중. 확인자가 실환경에서 동작을 직접 확인하고 있습니다.' },
-    { name: project.labelEnd || 'IVE-E', color: '#4ade80', description: '처리 완료. 확인까지 마친 최종 완료 상태입니다.' },
-    { name: project.labelNotify || 'IVE-N', color: '#64748b', description: '완료 알림 대상. 이 레이블이 붙은 이슈는 처리 완료/실패 시 담당자에게 Slack 알림(DM·채널)을 보냅니다.' },
+    { name: project.labelSchedule || DEFAULT_LABELS.schedule, color: '#22d3ee', description: '스케줄 대기. 스캐너가 이 레이블의 이슈를 에이전트에 배정합니다.' },
+    { name: project.labelDev || DEFAULT_LABELS.dev, color: '#f59e0b', description: '개발 중. 에이전트가 작업을 시작하면 자동 부착됩니다.' },
+    { name: project.labelVerifyWait || DEFAULT_LABELS.verifyWait, color: '#f59e0b', description: '검증대기. 개발이 완료되어 검증자의 검증시작을 기다리고 있습니다.' },
+    { name: project.labelVerify || DEFAULT_LABELS.verify, color: '#f59e0b', description: '검증 중. 검증자가 검증을 진행하고 있습니다.' },
+    { name: project.labelConfirmWait || DEFAULT_LABELS.confirmWait, color: '#f59e0b', description: '확인대기. 머지가 완료되어 확인자의 실환경 확인을 기다리고 있습니다.' },
+    { name: project.labelConfirm || DEFAULT_LABELS.confirm, color: '#f59e0b', description: '확인 중. 확인자가 실환경에서 동작을 직접 확인하고 있습니다.' },
+    { name: project.labelEnd || DEFAULT_LABELS.end, color: '#4ade80', description: '처리 완료. 확인까지 마친 최종 완료 상태입니다.' },
+    { name: project.labelNotify || DEFAULT_LABELS.notify, color: '#64748b', description: '완료 알림 대상. 이 레이블이 붙은 이슈는 처리 완료/실패 시 담당자에게 Slack 알림(DM·채널)을 보냅니다.' },
   ];
 
   try {
@@ -139,10 +140,10 @@ export async function checkGitLabLabelsExist(project: Project, decryptedToken: s
   const headers = getAuthHeaders(project, decryptedToken);
   const labelsToCheck = [
     project.labelTarget,
-    project.labelSchedule || 'IVE-S', project.labelDev || 'IVE-D',
-    project.labelVerifyWait || 'IVE-W', project.labelVerify || 'IVE-V',
-    project.labelConfirmWait || 'IVE-P', project.labelConfirm || 'IVE-C',
-    project.labelEnd || 'IVE-E', project.labelNotify || 'IVE-N',
+    project.labelSchedule || DEFAULT_LABELS.schedule, project.labelDev || DEFAULT_LABELS.dev,
+    project.labelVerifyWait || DEFAULT_LABELS.verifyWait, project.labelVerify || DEFAULT_LABELS.verify,
+    project.labelConfirmWait || DEFAULT_LABELS.confirmWait, project.labelConfirm || DEFAULT_LABELS.confirm,
+    project.labelEnd || DEFAULT_LABELS.end, project.labelNotify || DEFAULT_LABELS.notify,
   ];
   try {
     const res = await fetchAllPages(apiUrl(project, '/labels'), headers);

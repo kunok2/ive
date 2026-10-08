@@ -13,6 +13,7 @@ import { logActivity } from '@/lib/activity';
 import { TRANSITIONS, staleStageLabelsToRemove } from '@/lib/stage-transitions';
 import fs from 'fs';
 import path from 'path';
+import { DEFAULT_LABELS } from '@/lib/labels';
 
 // 단계 전이 표는 src/lib/stage-transitions.ts 로 분리됨 (테스트 가능).
 // IVE-S 스케줄 → IVE-D 개발 → IVE-W 검증대기 → IVE-V 검증 → IVE-P 확인대기 → IVE-C 확인 → IVE-E 완료
@@ -125,9 +126,9 @@ export async function POST(
     // 닫힌 이슈를 종료 라벨(IVE-E) 외 단계로 옮기면 다시 연다 — 닫힌 채로는 스캐너가 보지 않아 다음 단계가 돌지 않는다.
     //   - 스케줄(IVE-S)로 되돌리는 retry/cancel, done → 확인(IVE-C)으로 되돌리는 reopen
     //   - 단계 도중(검증·확인)에 MR 머지의 닫기 키워드로 Git 이 닫은 이슈를 사람이 다음 단계로 이어 가는 경우
-    const labelEnd = project.labelEnd || 'IVE-E';
+    const labelEnd = project.labelEnd || DEFAULT_LABELS.end;
     const isLeavingDone = sanitizedRemove.includes(labelEnd) && !labelsToAdd.includes(labelEnd);
-    const isBackToSchedule = labelsToAdd.some(l => l === (project.labelSchedule || 'IVE-S'));
+    const isBackToSchedule = labelsToAdd.some(l => l === (project.labelSchedule || DEFAULT_LABELS.schedule));
     const toOpenStage = isLeavingDone || (!!keepLabel && keepLabel !== labelEnd);
     // 완료를 떠나면 새 사이클 — 이전 사이클의 확인 마커를 비운다 (보고서 완료 시각이 옛 날짜에 고정되지 않게).
     if (isLeavingDone) resetIssueCycleMarkers(projectId, Number(iid));

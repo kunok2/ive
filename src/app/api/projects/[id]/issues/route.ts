@@ -10,6 +10,7 @@ import { fetchAllProjectIssues, fetchClosedProjectIssuesPage, createIssue } from
 import { parseClosedPageOptions, parseIidSearch, isGitLabSearchable } from '@/lib/closed-issues';
 import { withGitToken, friendlyGitError } from '@/lib/git-token';
 import { prependIveAuthorMarker, stripIveAuthorMarker, stripIveDueMarker, resolveIveAuthorFromBody } from '@/lib/ive-author';
+import { DEFAULT_LABELS } from '@/lib/labels';
 
 export async function GET(
   req: NextRequest,
@@ -250,10 +251,10 @@ export async function POST(
     // IVE 레이블 항상 부착 + asDev면 IVE-S(스케줄 대상)도 부착
     const isAssigneeMode = reqAssignMode === 'assignee';
     const labels = asDev
-      ? [project.labelTarget, project.labelSchedule || 'IVE-S']
+      ? [project.labelTarget, project.labelSchedule || DEFAULT_LABELS.schedule]
       : [project.labelTarget];
     // 완료 알림 선택 시 알림 트리거 레이블(IVE-N) 부착 → 완료/실패 시 담당자에게 Slack 알림
-    if (notify) labels.push(project.labelNotify || 'IVE-N');
+    if (notify) labels.push(project.labelNotify || DEFAULT_LABELS.notify);
     // assignee 결정 — 모델: "처리전에는 생성자, 처리때는 처리자 또는 생성자"
     //   1) 자동배정 모드: 비움 (스캐너가 처리 마무리 시 가장 한가한 멤버 선택)
     //   2) 명시적 지정: 그대로 사용
@@ -325,11 +326,11 @@ export async function POST(
     // assignee 모드: 가이드 노트 작성 (담당자에게 레이블 변경 안내)
     if (issue.iid && isAssigneeMode) {
       try {
-        const labelS = project.labelSchedule || 'IVE-S';
-        const labelD = project.labelDev || 'IVE-D';
-        const labelW = project.labelVerifyWait || 'IVE-W';
-        const labelV = project.labelVerify || 'IVE-V';
-        const labelE = project.labelEnd || 'IVE-E';
+        const labelS = project.labelSchedule || DEFAULT_LABELS.schedule;
+        const labelD = project.labelDev || DEFAULT_LABELS.dev;
+        const labelW = project.labelVerifyWait || DEFAULT_LABELS.verifyWait;
+        const labelV = project.labelVerify || DEFAULT_LABELS.verify;
+        const labelE = project.labelEnd || DEFAULT_LABELS.end;
         const guideNote = `<!-- ive-bot -->\n## 📋 담당자 작업 안내\n\n| 레이블 | 단계 | 설명 |\n|:---:|---|---|\n| \`${labelS}\` | 대기 | 현재 단계 |\n| \`${labelD}\` | 개발 | 개발 진행 중 (브랜치 자동 생성) |\n| \`${labelW}\` | 검증 대기 | 개발 완료 |\n| \`${labelV}\` | 검증 중 | 검증 진행 중 |\n| \`${labelE}\` | 완료 | 모든 작업 완료 |`;
         await withGitToken(user, project, (ctx) =>
           addIssueComment(project, issue.iid, ctx.token, guideNote, { isOAuth: ctx.isOAuth })

@@ -3,6 +3,7 @@ import { getDb } from './connection'
 import { getKSTTodayStartISO } from '../date-utils'
 import { isBotName } from '../git-bot'
 import { syncRosterWithMembers } from './roles'
+import { DEFAULT_LABELS } from '@/lib/labels'
 
 // ── Issue Stage (레이블 기반 상태 판정) ──
 
@@ -15,13 +16,13 @@ export function stageFromLabels(
 ): IssueStage | null {
   if (!labels.includes(project.labelTarget)) return null
 
-  const labelS = project.labelSchedule || 'IVE-S'
-  const labelD = project.labelDev || 'IVE-D'
-  const labelW = project.labelVerifyWait || 'IVE-W'
-  const labelV = project.labelVerify || 'IVE-V'
-  const labelP = project.labelConfirmWait || 'IVE-P'
-  const labelC = project.labelConfirm || 'IVE-C'
-  const labelE = project.labelEnd || 'IVE-E'
+  const labelS = project.labelSchedule || DEFAULT_LABELS.schedule
+  const labelD = project.labelDev || DEFAULT_LABELS.dev
+  const labelW = project.labelVerifyWait || DEFAULT_LABELS.verifyWait
+  const labelV = project.labelVerify || DEFAULT_LABELS.verify
+  const labelP = project.labelConfirmWait || DEFAULT_LABELS.confirmWait
+  const labelC = project.labelConfirm || DEFAULT_LABELS.confirm
+  const labelE = project.labelEnd || DEFAULT_LABELS.end
 
   // 우선순위: E > C > P > V > W > D > S
   if (labels.includes(labelE)) return 'done'

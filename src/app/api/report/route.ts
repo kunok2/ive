@@ -5,6 +5,7 @@ import { friendlyGitError } from '@/lib/git-token'
 import { verifyReportToken } from '@/lib/report-token'
 import { getCurrentUser } from '@/lib/auth'
 import { prependIveAuthorMarker, stripAllIveMarkers, stripIveDueMarker } from '@/lib/ive-author'
+import { DEFAULT_LABELS } from '@/lib/labels'
 
 // Rate limiting store (in-memory, single-instance)
 const rateLimitStore = new Map<string, number[]>()
@@ -148,7 +149,7 @@ export async function POST(req: NextRequest) {
     }
 
     // IVE + IVE-S (스케줄 대기) 레이블 부착
-    const labels = [project.labelTarget, project.labelSchedule || 'IVE-S']
+    const labels = [project.labelTarget, project.labelSchedule || DEFAULT_LABELS.schedule]
 
     const issue = await createIssue(project, authToken, title, description, labels, undefined, { isOAuth: project.usesOAuthToken, dueDate: dueDateNormalized })
     // 들어온 경로 — 작업 접수 페이지 (경로별 기본 배정·자동 실행 허용)

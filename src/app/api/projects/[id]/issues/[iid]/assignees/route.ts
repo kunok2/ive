@@ -3,6 +3,7 @@ import { getProject, getProjectAccess, getProjectAuthToken, setAssigneeAuto, isI
 import { getCurrentUser } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import { updateIssue, fetchSingleIssue } from '@/lib/provider';
+import { DEFAULT_LABELS } from '@/lib/labels';
 
 export async function PATCH(
   req: NextRequest,
@@ -35,7 +36,7 @@ export async function PATCH(
   const current = await fetchSingleIssue(project, issueIid, token);
   if (current) {
     const isClosed = current.state === 'closed';
-    const labelEnd = project.labelEnd || 'IVE-E';
+    const labelEnd = project.labelEnd || DEFAULT_LABELS.end;
     const isDone = (current.labels || []).includes(labelEnd);
     if (isClosed || isDone) {
       return NextResponse.json(

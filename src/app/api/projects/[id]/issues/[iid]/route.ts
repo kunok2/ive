@@ -5,6 +5,7 @@ import { execKind } from '@/lib/active-work'
 import { logActivity } from '@/lib/activity'
 import { updateIssue, fetchSingleIssue } from '@/lib/provider'
 import { resolveIveAuthorFromBody, stripIveAuthorMarker, stripIveDueMarker, extractIveAuthorId, prependIveAuthorMarker } from '@/lib/ive-author'
+import { DEFAULT_LABELS } from '@/lib/labels'
 
 export async function PUT(
   req: NextRequest,
@@ -44,7 +45,7 @@ export async function PUT(
         return NextResponse.json({ error: '작성자만 마감일을 변경할 수 있습니다' }, { status: 403 })
       }
       // 완료된 작업은 마감일 변경 금지.
-      const labelEnd = project.labelEnd || 'IVE-E'
+      const labelEnd = project.labelEnd || DEFAULT_LABELS.end
       if (current.state === 'closed' || (current.labels || []).includes(labelEnd)) {
         return NextResponse.json({ error: '완료된 작업은 마감일을 변경할 수 없습니다' }, { status: 409 })
       }

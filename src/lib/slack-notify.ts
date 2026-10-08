@@ -14,6 +14,7 @@ import { Project, User } from '@/types'
 import { fetchSingleIssue } from './provider'
 import { getUserByOAuthId, getUserByGitUsername, getSystemSetting, getPresetRoles } from './db'
 import { sendSlackDM } from './slack'
+import { DEFAULT_LABELS } from '@/lib/labels'
 
 /** IVE 공개 베이스 URL. system_settings['oauth.redirect_base'] → env → 빈 값(스킵). 백그라운드(스캐너)에서도 동작. */
 export function getIveBaseUrl(): string {
@@ -170,7 +171,7 @@ export async function notifyStageTransition(project: Project, iid: number, token
     if (!issue) return
 
     // 트리거: 알림 라벨(IVE-N)이 붙은 이슈만 (등록 시 '알림 발송' 체크)
-    const notifyLabel = project.labelNotify || 'IVE-N'
+    const notifyLabel = project.labelNotify || DEFAULT_LABELS.notify
     if (!extractLabels(issue).includes(notifyLabel)) return
 
     // 그 단계를 에이전트가 맡았으면 사람에게 "검증/확인하세요" 를 보내지 않는다(단계 작업자가 한다).
@@ -266,8 +267,8 @@ export async function notifyMergeOutcome(
     let confirmers: StageRecipient[] = []
     if (ready && issue) {
       const labels = extractLabels(issue)
-      const notifyLabel = project.labelNotify || 'IVE-N'
-      const confirmWaitLabel = project.labelConfirmWait || 'IVE-P'
+      const notifyLabel = project.labelNotify || DEFAULT_LABELS.notify
+      const confirmWaitLabel = project.labelConfirmWait || DEFAULT_LABELS.confirmWait
       if (labels.includes(notifyLabel) && labels.includes(confirmWaitLabel)) {
         confirmers = resolveConfirmRecipients(project, issue, iid)
       }

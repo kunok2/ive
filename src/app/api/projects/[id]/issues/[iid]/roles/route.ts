@@ -9,6 +9,7 @@ import { fetchSingleIssue } from '@/lib/provider'
 import { checkProjectSettingsAccess } from '@/lib/project-permissions'
 import { getIssueRoles, autoAssignAllAgents } from '@/lib/role-assignment'
 import { isAutomationAllowed } from '@/lib/scanner/stage-dispatch'
+import { DEFAULT_LABELS } from '@/lib/labels'
 
 /**
  * 이슈의 세 역할(처리자·검증자·확인자) — 한 번에 보기, 「모든 단계 자동배정」, 외부 작성자 이슈 자동 실행 승인.
@@ -63,7 +64,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: '이 이슈의 작성자 또는 관리자만 바꿀 수 있습니다' }, { status: 403 })
     }
     const issue = await fetchSingleIssue(project, Number(iid), token)
-    const labelEnd = project.labelEnd || 'IVE-E'
+    const labelEnd = project.labelEnd || DEFAULT_LABELS.end
     if (issue && (issue.state === 'closed' || (issue.labels || []).includes(labelEnd))) {
       return NextResponse.json({ error: '완료된 작업은 역할을 바꿀 수 없습니다' }, { status: 409 })
     }

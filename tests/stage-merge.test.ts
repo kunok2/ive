@@ -55,6 +55,13 @@ import { mergeVerified, handOffLegacyBundleQueue, reopenIfClosedBeforeConfirm } 
 import { runCheckCommand, parseCheckCommands, type CheckResult } from '@/lib/stage-checks'
 import { resolveStagingConfig, fetchDeployedCommit } from '@/lib/staging-config'
 import type { Project } from '@/types'
+import { LEGACY_LABELS } from '@/lib/labels'
+
+const legacyLabels = {
+  labelTarget: LEGACY_LABELS.target, labelSchedule: LEGACY_LABELS.schedule, labelDev: LEGACY_LABELS.dev,
+  labelVerifyWait: LEGACY_LABELS.verifyWait, labelVerify: LEGACY_LABELS.verify, labelConfirmWait: LEGACY_LABELS.confirmWait,
+  labelConfirm: LEGACY_LABELS.confirm, labelEnd: LEGACY_LABELS.end, labelNotify: LEGACY_LABELS.notify,
+}
 
 const P = 'p1'
 let db: Database.Database
@@ -72,7 +79,7 @@ beforeEach(() => {
     db.prepare(`INSERT INTO agents (id, user_id, name, cli_name, cli_path) VALUES (?, 'owner', ?, 'claude', 'claude')`).run(id, name)
   }
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ive-merge-'))
-  project = { id: P, name: 'Proj', userId: 'owner', provider: 'gitlab', repoUrl: 'https://gitlab.com/g/r', baseBranch: 'main', labelTarget: 'IVE', testSiteUrl: '' } as unknown as Project
+  project = { id: P, name: 'Proj', userId: 'owner', provider: 'gitlab', repoUrl: 'https://gitlab.com/g/r', baseBranch: 'main', ...legacyLabels, testSiteUrl: '' } as unknown as Project
   providerMock.fetchSingleIssue.mockImplementation(async (_p: Project, iid: number) => ({ iid, state: 'opened', labels: ['IVE', 'IVE-P'] }))
 })
 

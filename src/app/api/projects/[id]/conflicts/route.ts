@@ -4,6 +4,7 @@ import { getProject, getProjectAuthToken, getProjectAccess, updateProjectConflic
 import { userActor } from '@/lib/event-actor'
 import { fetchOpenMRs, mergeMR, closeMR, fetchSingleIssue, addIssueLabels, removeIssueLabels, swapIssueLabels } from '@/lib/provider'
 import { logActivity } from '@/lib/activity'
+import { DEFAULT_LABELS } from '@/lib/labels'
 
 export async function GET(
   req: NextRequest,
@@ -88,10 +89,10 @@ export async function POST(
     }
 
     // 머지 성공한 MR에 대해 관련 이슈의 IVE 레이블 → IVE-E 전환 + 실행 기록 정리
-    const labelD = project.labelDev || 'IVE-D'
-    const labelW = project.labelVerifyWait || 'IVE-W'
-    const labelV = project.labelVerify || 'IVE-V'
-    const labelE = project.labelEnd || 'IVE-E'
+    const labelD = project.labelDev || DEFAULT_LABELS.dev
+    const labelW = project.labelVerifyWait || DEFAULT_LABELS.verifyWait
+    const labelV = project.labelVerify || DEFAULT_LABELS.verify
+    const labelE = project.labelEnd || DEFAULT_LABELS.end
     const db = getDb()
 
     for (const r of results) {

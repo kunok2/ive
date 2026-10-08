@@ -2,6 +2,7 @@ import { Project } from '@/types'
 import { getDb } from './connection'
 import { getProjectWithUserOAuth } from './oauth'
 import { decrypt } from '../crypto'
+import { DEFAULT_LABELS } from '@/lib/labels'
 
 export type ProjectRow = {
   id: string; user_id: string; name: string; provider: string;
@@ -42,14 +43,14 @@ export function mapProject(r: ProjectRow): Project {
     color: (r.color || '#4ade80') as Project['color'],
     createdAt: r.created_at,
     labelTarget: r.label_target,
-    labelSchedule: r.label_schedule || 'IVE-S',
-    labelDev: r.label_dev || 'IVE-D',
-    labelVerifyWait: r.label_verify_wait || 'IVE-W',
-    labelVerify: r.label_verify || 'IVE-V',
-    labelConfirmWait: r.label_confirm_wait || 'IVE-P',
-    labelConfirm: r.label_confirm || 'IVE-C',
-    labelEnd: r.label_end || 'IVE-E',
-    labelNotify: r.label_notify || 'IVE-N',
+    labelSchedule: r.label_schedule || DEFAULT_LABELS.schedule,
+    labelDev: r.label_dev || DEFAULT_LABELS.dev,
+    labelVerifyWait: r.label_verify_wait || DEFAULT_LABELS.verifyWait,
+    labelVerify: r.label_verify || DEFAULT_LABELS.verify,
+    labelConfirmWait: r.label_confirm_wait || DEFAULT_LABELS.confirmWait,
+    labelConfirm: r.label_confirm || DEFAULT_LABELS.confirm,
+    labelEnd: r.label_end || DEFAULT_LABELS.end,
+    labelNotify: r.label_notify || DEFAULT_LABELS.notify,
     baseBranch: r.base_branch || '',
     confirmBaseBranch: r.confirm_base_branch || '',
     testSiteUrl: r.test_site_url || '',
@@ -128,10 +129,10 @@ export function createProject(p: Project) {
   ).run(
     p.id, p.userId, p.name, p.provider, p.repoUrl, p.authType || 'token', p.gitUsername || '',
     p.accessToken, p.color || '#4ade80',
-    p.labelTarget, p.labelSchedule || 'IVE-S', p.labelDev || 'IVE-D',
-    p.labelVerifyWait || 'IVE-W', p.labelVerify || 'IVE-V',
-    p.labelConfirmWait || 'IVE-P', p.labelConfirm || 'IVE-C',
-    p.labelEnd || 'IVE-E', p.labelNotify || 'IVE-N', p.baseBranch || '', p.confirmBaseBranch || '', p.testSiteUrl || '', p.showToolUsage ? 1 : 0,
+    p.labelTarget, p.labelSchedule || DEFAULT_LABELS.schedule, p.labelDev || DEFAULT_LABELS.dev,
+    p.labelVerifyWait || DEFAULT_LABELS.verifyWait, p.labelVerify || DEFAULT_LABELS.verify,
+    p.labelConfirmWait || DEFAULT_LABELS.confirmWait, p.labelConfirm || DEFAULT_LABELS.confirm,
+    p.labelEnd || DEFAULT_LABELS.end, p.labelNotify || DEFAULT_LABELS.notify, p.baseBranch || '', p.confirmBaseBranch || '', p.testSiteUrl || '', p.showToolUsage ? 1 : 0,
     p.checkInterval, p.lastCheckedAt, p.lastScannedIssueCount, p.lastVerifyWaitingCount, p.scannerActive ? 1 : 0, p.usesOAuthToken ? 1 : 0, sortOrder,
     p.avatarUrl || '', p.snapshotInterval ?? 1, p.sparklinePoints ?? 60, p.statsRetention ?? 7,
     p.lastError || null, p.lastErrorAt || null, p.slackNotifyChannel || '', p.slackWorkspaceId || '', p.createdAt
@@ -154,10 +155,10 @@ export function updateProject(p: Project) {
   ).run(
     p.name, p.repoUrl, p.accessToken, p.color || '#4ade80',
     p.authType || 'token', p.gitUsername || '',
-    p.labelTarget, p.labelSchedule || 'IVE-S', p.labelDev || 'IVE-D',
-    p.labelVerifyWait || 'IVE-W', p.labelVerify || 'IVE-V',
-    p.labelConfirmWait || 'IVE-P', p.labelConfirm || 'IVE-C',
-    p.labelEnd || 'IVE-E', p.labelNotify || 'IVE-N', p.baseBranch || '', p.confirmBaseBranch || '', p.testSiteUrl || '', p.showToolUsage ? 1 : 0,
+    p.labelTarget, p.labelSchedule || DEFAULT_LABELS.schedule, p.labelDev || DEFAULT_LABELS.dev,
+    p.labelVerifyWait || DEFAULT_LABELS.verifyWait, p.labelVerify || DEFAULT_LABELS.verify,
+    p.labelConfirmWait || DEFAULT_LABELS.confirmWait, p.labelConfirm || DEFAULT_LABELS.confirm,
+    p.labelEnd || DEFAULT_LABELS.end, p.labelNotify || DEFAULT_LABELS.notify, p.baseBranch || '', p.confirmBaseBranch || '', p.testSiteUrl || '', p.showToolUsage ? 1 : 0,
     p.checkInterval, p.lastCheckedAt, p.lastScannedIssueCount,
     p.scannerActive ? 1 : 0, p.usesOAuthToken ? 1 : 0, p.sortOrder ?? 0, p.avatarUrl || '',
     p.snapshotInterval ?? 1, p.sparklinePoints ?? 60, p.statsRetention ?? 7,

@@ -27,6 +27,7 @@ import {
   getGitHubPR,
   addGitHubPRNote,
 } from "../github";
+import { DEFAULT_LABELS } from "@/lib/labels";
 
 const execFile = promisify(require('child_process').execFile);
 
@@ -123,7 +124,7 @@ export async function commitPushAndCreateMR(params: {
   const requeue = devResult === 'incomplete' && streak <= MAX_INCOMPLETE_STREAK;
   const incompleteHeading = devResult === 'incomplete'
     ? (requeue
-      ? `## ${INCOMPLETE_HEADING} — 이어서 처리 — ${agent.name}\n\n남은 요건이 있어 검증으로 넘기지 않고 재처리 대기열(${project.labelSchedule || 'IVE-S'})에 다시 넣었습니다. 아래 「요건 대조」의 ❌ 가 다음 실행의 할 일입니다.`
+      ? `## ${INCOMPLETE_HEADING} — 이어서 처리 — ${agent.name}\n\n남은 요건이 있어 검증으로 넘기지 않고 재처리 대기열(${project.labelSchedule || DEFAULT_LABELS.schedule})에 다시 넣었습니다. 아래 「요건 대조」의 ❌ 가 다음 실행의 할 일입니다.`
       : `## ${INCOMPLETE_HEADING} — 남은 요건 있음 (연속 ${streak}회) — ${agent.name}\n\n처리 미완이 ${streak}회 이어져 재처리를 멈추고 검증대기로 넘깁니다. 아래 「요건 대조」의 ❌ 를 사람이 판단해 주세요.`)
     : null;
   const isGitHub = project.provider === 'github';
@@ -219,7 +220,7 @@ export async function commitPushAndCreateMR(params: {
     if (requeue) {
       // 처리 미완 → 재처리 대기열(IVE-S). 스캐너가 다시 집어 이 노트의 ❌ 를 이어서 처리한다.
       try {
-        await swapIssueLabels(project, iid, token, [project.labelSchedule || 'IVE-S'], [project.labelDev || 'IVE-D']);
+        await swapIssueLabels(project, iid, token, [project.labelSchedule || DEFAULT_LABELS.schedule], [project.labelDev || DEFAULT_LABELS.dev]);
         recordStageEvent({
           projectId: project.id, issueIid: iid, fromStage: 'dev', toStage: 'waiting', action: 'incomplete',
           actor: agentActor(agent, executionId), source: 'worker', executionId,
@@ -227,13 +228,13 @@ export async function commitPushAndCreateMR(params: {
           detail: { changes: true, streak },
         });
       } catch (e) { slog.warn({ err: e }, `Label switch failed:`); }
-      log(`처리 미완(${streak}회째) → 재처리 대기열 (${project.labelSchedule || 'IVE-S'}).`, 'warn');
+      log(`처리 미완(${streak}회째) → 재처리 대기열 (${project.labelSchedule || DEFAULT_LABELS.schedule}).`, 'warn');
       updateExecutionStatus(executionId, 'success', new Date().toISOString());
       return;
     }
     // 레이블 전환: IVE-D 제거, IVE-W 부착 (검증대기)
     try {
-      await swapIssueLabels(project, iid, token, [project.labelVerifyWait || 'IVE-W'], [project.labelDev || 'IVE-D']);
+      await swapIssueLabels(project, iid, token, [project.labelVerifyWait || DEFAULT_LABELS.verifyWait], [project.labelDev || DEFAULT_LABELS.dev]);
       // 사건 로그 — 에이전트 처리 완료(처리 → 검증대기). 다음 스캔이 같은 전이를 감지해도 중복 기록하지 않는다
       recordStageEvent({
         projectId: project.id, issueIid: iid, fromStage: 'dev', toStage: 'verify_waiting', action: 'complete',
@@ -272,7 +273,7 @@ export async function commitPushAndCreateMR(params: {
     } catch (e) { slog.warn({ err: e }, `Remote comment failed:`); }
     // 레이블 전환: IVE-D 제거, IVE-W 부착 (검증대기)
     try {
-      await swapIssueLabels(project, iid, token, [project.labelVerifyWait || 'IVE-W'], [project.labelDev || 'IVE-D']);
+      await swapIssueLabels(project, iid, token, [project.labelVerifyWait || DEFAULT_LABELS.verifyWait], [project.labelDev || DEFAULT_LABELS.dev]);
       // 사건 로그 — 에이전트 처리 완료(처리 → 검증대기). 다음 스캔이 같은 전이를 감지해도 중복 기록하지 않는다
       recordStageEvent({
         projectId: project.id, issueIid: iid, fromStage: 'dev', toStage: 'verify_waiting', action: 'complete',

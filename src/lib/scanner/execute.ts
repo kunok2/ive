@@ -37,6 +37,7 @@ import { commitPushAndCreateMR, postErrorNote, isProcessorResultNote, isBookkeep
 import { buildPrompt, buildConflictPrompt } from "./prompt-builder";
 import { runStageWorker, type StageKindSpec } from "./stage-worker";
 import { resolveEditable } from "../role-prompts";
+import { DEFAULT_LABELS } from "@/lib/labels";
 
 interface DevPrep {
   baseBranch: string;
@@ -117,7 +118,7 @@ function devStageSpec(waitingSince?: string | null): StageKindSpec<DevPrep> {
 
         // 레이블 전환: IVE-S 제거, IVE-D 부착 (개발 시작)
         try {
-          await swapIssueLabels(project, iid, token, [project.labelDev || 'IVE-D'], [project.labelSchedule || 'IVE-S']);
+          await swapIssueLabels(project, iid, token, [project.labelDev || DEFAULT_LABELS.dev], [project.labelSchedule || DEFAULT_LABELS.schedule]);
         } catch (e) { slog.warn({ err: e }, `Failed to switch labels on #${iid}:`); }
 
         // 작업 등록 활동 로그

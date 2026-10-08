@@ -4,6 +4,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { readRepoFile, upsertRepoFile, createBranch, createMR, getDefaultBranch } from '@/lib/provider'
 import { logActivity } from '@/lib/activity'
 import { Project } from '@/types'
+import { DEFAULT_LABELS } from '@/lib/labels'
 
 const IVE_MARKER_BEGIN = '<!-- ive:begin -->'
 const IVE_MARKER_END = '<!-- ive:end -->'
@@ -45,13 +46,13 @@ function mergeIveSection(existing: string | null, iveSection: string): string {
  * 검토자가 이슈 노트만 읽고 통과시켰기 때문이다. 그 절차를 여기서 못 박는다.
  */
 function generateStageLabelGuide(project: Project): string {
-  const s = project.labelSchedule || 'IVE-S'
-  const d = project.labelDev || 'IVE-D'
-  const w = project.labelVerifyWait || 'IVE-W'
-  const v = project.labelVerify || 'IVE-V'
-  const pw = project.labelConfirmWait || 'IVE-P'
-  const c = project.labelConfirm || 'IVE-C'
-  const e = project.labelEnd || 'IVE-E'
+  const s = project.labelSchedule || DEFAULT_LABELS.schedule
+  const d = project.labelDev || DEFAULT_LABELS.dev
+  const w = project.labelVerifyWait || DEFAULT_LABELS.verifyWait
+  const v = project.labelVerify || DEFAULT_LABELS.verify
+  const pw = project.labelConfirmWait || DEFAULT_LABELS.confirmWait
+  const c = project.labelConfirm || DEFAULT_LABELS.confirm
+  const e = project.labelEnd || DEFAULT_LABELS.end
   const isGitHub = /github\.com/i.test(project.repoUrl || '')
   const cli = isGitHub
     ? `gh issue edit <번호> --remove-label "${w}" --add-label "${v}"`
@@ -231,12 +232,12 @@ ${noteCli}
  * 올리는 것"까지를 각 단계의 완료 조건으로 못 박는다.
  */
 function generateAgentStageGuide(project: Project): string {
-  const s = project.labelSchedule || 'IVE-S'
-  const w = project.labelVerifyWait || 'IVE-W'
-  const v = project.labelVerify || 'IVE-V'
-  const pw = project.labelConfirmWait || 'IVE-P'
-  const c = project.labelConfirm || 'IVE-C'
-  const e = project.labelEnd || 'IVE-E'
+  const s = project.labelSchedule || DEFAULT_LABELS.schedule
+  const w = project.labelVerifyWait || DEFAULT_LABELS.verifyWait
+  const v = project.labelVerify || DEFAULT_LABELS.verify
+  const pw = project.labelConfirmWait || DEFAULT_LABELS.confirmWait
+  const c = project.labelConfirm || DEFAULT_LABELS.confirm
+  const e = project.labelEnd || DEFAULT_LABELS.end
   const isGitHub = /github\.com/i.test(project.repoUrl || '')
 
   // 코드 블록이 번호 목록 안에 들어가므로 줄바꿈 없이 한 줄로 만든다.
@@ -509,10 +510,10 @@ ended_at: <KST 시각>
 }
 
 function generateIveGuide(project: Project): string {
-  const labelTarget = project.labelTarget || 'IVE'
-  const labelEnd = project.labelEnd  || 'IVE-E'
-  const labelVerifyWait = project.labelVerifyWait || 'IVE-W'
-  const labelConfirmWait = project.labelConfirmWait || 'IVE-P'
+  const labelTarget = project.labelTarget || DEFAULT_LABELS.target
+  const labelEnd = project.labelEnd  || DEFAULT_LABELS.end
+  const labelVerifyWait = project.labelVerifyWait || DEFAULT_LABELS.verifyWait
+  const labelConfirmWait = project.labelConfirmWait || DEFAULT_LABELS.confirmWait
 
   return `## IVE 작업 등록
 

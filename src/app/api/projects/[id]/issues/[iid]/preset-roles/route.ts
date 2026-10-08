@@ -4,6 +4,7 @@ import { violatesSelfReview, agentRoleAvailable } from '@/lib/role-assignment'
 import { getCurrentUser } from '@/lib/auth'
 import { logActivity } from '@/lib/activity'
 import { fetchSingleIssue } from '@/lib/provider'
+import { DEFAULT_LABELS } from '@/lib/labels'
 
 /**
  * 이슈의 검증자/확인자 사전 배정(preset)을 갱신한다.
@@ -40,7 +41,7 @@ export async function PATCH(
   // 완료된 작업은 검증자/확인자 변경 금지 — 통계/보고서 일관성 보호.
   const issueNow = await fetchSingleIssue(project, Number(iid), token)
   if (issueNow) {
-    const labelEnd = project.labelEnd || 'IVE-E'
+    const labelEnd = project.labelEnd || DEFAULT_LABELS.end
     if (issueNow.state === 'closed' || (issueNow.labels || []).includes(labelEnd)) {
       return NextResponse.json({ error: '완료된 작업은 검증자/확인자를 변경할 수 없습니다' }, { status: 409 })
     }

@@ -79,6 +79,7 @@ import { handOffLegacyBundleQueue, reopenIfClosedBeforeConfirm } from "./auto-me
 import { applyDefaultRoles } from "../role-assignment";
 import { isAgentEligibleForProject } from "../project-permissions";
 import { executeTask } from "./execute";
+import { DEFAULT_LABELS } from "@/lib/labels";
 
 // Re-export for external consumers
 export { executeTask } from "./execute";
@@ -116,8 +117,8 @@ export const MAX_REWORK_STREAK = 2;
 
 /** 반려 고리를 끊는다 — 스케줄 → 검증대기 + 사람 판단 요청 노트. 노트·라벨 실패는 다음 스캔이 다시 시도한다. */
 async function holdReworkLoop(project: Project, iid: number, token: string, streak: number): Promise<void> {
-  const s = project.labelSchedule || 'IVE-S';
-  const w = project.labelVerifyWait || 'IVE-W';
+  const s = project.labelSchedule || DEFAULT_LABELS.schedule;
+  const w = project.labelVerifyWait || DEFAULT_LABELS.verifyWait;
   const body = `<!-- ive-bot -->
 ## 🔁 반려 반복 — 사람 판단 필요
 
@@ -369,11 +370,11 @@ async function scanProject(project: Project, force: boolean = false) {
     // IVE 레이블이 없으면 IVE에서 관리하지 않는 이슈이므로 무시합니다.
     const fetchIssues = project.provider === 'github' ? fetchGitHubIssues : fetchGitLabIssues;
     const labelTarget = project.labelTarget;
-    const labelS = project.labelSchedule || 'IVE-S';
-    const labelD = project.labelDev || 'IVE-D';
-    const labelW = project.labelVerifyWait || 'IVE-W';
-    const labelV = project.labelVerify || 'IVE-V';
-    const labelE = project.labelEnd || 'IVE-E';
+    const labelS = project.labelSchedule || DEFAULT_LABELS.schedule;
+    const labelD = project.labelDev || DEFAULT_LABELS.dev;
+    const labelW = project.labelVerifyWait || DEFAULT_LABELS.verifyWait;
+    const labelV = project.labelVerify || DEFAULT_LABELS.verify;
+    const labelE = project.labelEnd || DEFAULT_LABELS.end;
 
     // IVE 레이블이 있는 이슈를 기본으로 조회 (모든 IVE 관리 이슈)
     // + 상태 레이블 이슈도 병합 (IVE 없이 상태 레이블만 남은 경우 정리용)
@@ -711,9 +712,9 @@ async function scanProject(project: Project, force: boolean = false) {
 
               // IVE-S 잔류 레이블 정리 (담당자가 IVE-S를 안 지웠을 수 있음)
               try {
-                const hasScheduleLabel = labels.includes(project.labelSchedule || 'IVE-S');
+                const hasScheduleLabel = labels.includes(project.labelSchedule || DEFAULT_LABELS.schedule);
                 if (hasScheduleLabel) {
-                  await removeIssueLabels(project, iid, decryptedToken, [project.labelSchedule || 'IVE-S']);
+                  await removeIssueLabels(project, iid, decryptedToken, [project.labelSchedule || DEFAULT_LABELS.schedule]);
                 }
               } catch (e) { slog.warn({ err: e }, `Failed to clean IVE-S on #${iid}:`); }
 

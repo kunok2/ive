@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Project } from '@/types'
 import { useTranslations } from 'next-intl'
+import { DEFAULT_LABELS } from '@/lib/labels'
 
 export interface LabelValues {
   labelTarget: string
@@ -96,7 +97,7 @@ export default function LabelSection({ existing, values, onChange }: LabelSectio
           title={t('labelTarget')}
           desc={t('labelTargetDesc')}
           value={values.labelTarget}
-          placeholder="IVE"
+          placeholder={DEFAULT_LABELS.target}
           onChange={v => onChange('labelTarget', v)}
         />
 
@@ -106,7 +107,7 @@ export default function LabelSection({ existing, values, onChange }: LabelSectio
             title={t('labelSchedule')}
             desc={t('labelScheduleDesc')}
             value={values.labelSchedule}
-            placeholder="IVE-S"
+            placeholder={DEFAULT_LABELS.schedule}
             onChange={v => onChange('labelSchedule', v)}
           />
           <LabelInput
@@ -114,7 +115,7 @@ export default function LabelSection({ existing, values, onChange }: LabelSectio
             title={t('labelDev')}
             desc={t('labelDevDesc')}
             value={values.labelDev}
-            placeholder="IVE-D"
+            placeholder={DEFAULT_LABELS.dev}
             onChange={v => onChange('labelDev', v)}
           />
         </StageGroup>
@@ -125,7 +126,7 @@ export default function LabelSection({ existing, values, onChange }: LabelSectio
             title={t('labelVerifyWait')}
             desc={t('labelVerifyWaitDesc')}
             value={values.labelVerifyWait}
-            placeholder="IVE-W"
+            placeholder={DEFAULT_LABELS.verifyWait}
             onChange={v => onChange('labelVerifyWait', v)}
           />
           <LabelInput
@@ -133,7 +134,7 @@ export default function LabelSection({ existing, values, onChange }: LabelSectio
             title={t('labelVerify')}
             desc={t('labelVerifyDesc')}
             value={values.labelVerify}
-            placeholder="IVE-V"
+            placeholder={DEFAULT_LABELS.verify}
             onChange={v => onChange('labelVerify', v)}
           />
         </StageGroup>
@@ -144,7 +145,7 @@ export default function LabelSection({ existing, values, onChange }: LabelSectio
             title={t('labelConfirmWait')}
             desc={t('labelConfirmWaitDesc')}
             value={values.labelConfirmWait}
-            placeholder="IVE-P"
+            placeholder={DEFAULT_LABELS.confirmWait}
             onChange={v => onChange('labelConfirmWait', v)}
           />
           <LabelInput
@@ -152,7 +153,7 @@ export default function LabelSection({ existing, values, onChange }: LabelSectio
             title={t('labelConfirm')}
             desc={t('labelConfirmDesc')}
             value={values.labelConfirm}
-            placeholder="IVE-C"
+            placeholder={DEFAULT_LABELS.confirm}
             onChange={v => onChange('labelConfirm', v)}
           />
         </StageGroup>
@@ -162,7 +163,7 @@ export default function LabelSection({ existing, values, onChange }: LabelSectio
           title={t('labelEnd')}
           desc={t('labelEndDesc')}
           value={values.labelEnd}
-          placeholder="IVE-E"
+          placeholder={DEFAULT_LABELS.end}
           onChange={v => onChange('labelEnd', v)}
         />
 
@@ -171,7 +172,7 @@ export default function LabelSection({ existing, values, onChange }: LabelSectio
           title={t('labelNotify')}
           desc={t('labelNotifyDesc')}
           value={values.labelNotify}
-          placeholder="IVE-N"
+          placeholder={DEFAULT_LABELS.notify}
           onChange={v => onChange('labelNotify', v)}
         />
       </div>

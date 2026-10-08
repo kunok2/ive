@@ -17,6 +17,7 @@
 import { getUserById, getUserByOAuthId, getUserByGitUsername, getAgent } from '@/lib/db'
 import type { User, Agent, Project } from '@/types'
 import { isBotName } from '@/lib/git-bot'
+import { DEFAULT_LABELS } from '@/lib/labels'
 
 /**
  * Git 쪽 행위자(레이블 부착자 / 이슈 작성자)를 IVE 사용자로 식별한다.
@@ -254,7 +255,7 @@ export async function resolveIssueRequesterAsync(
   }
 
   // 2) Schedule 레이블(IVE-S) 을 가장 최근 부착한 사람
-  const scheduleLabel = project.labelSchedule || 'IVE-S'
+  const scheduleLabel = project.labelSchedule || DEFAULT_LABELS.schedule
   try {
     const events = await fetchLabelEvents()
     const sorted = [...events].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))

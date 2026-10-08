@@ -6,8 +6,16 @@ import { resolveStageActorAsync } from '@/lib/ive-author'
 import { stageLabelFor } from '@/lib/stage-transitions'
 import { setupTestDb, teardownTestDb, seedUser } from './helpers/test-db'
 import type { Project } from '@/types'
+import { LEGACY_LABELS } from '@/lib/labels'
 
-const project = { id: 'p1', provider: 'gitlab', labelTarget: 'IVE' } as unknown as Project
+const legacyLabels = {
+  labelTarget: LEGACY_LABELS.target, labelSchedule: LEGACY_LABELS.schedule, labelDev: LEGACY_LABELS.dev,
+  labelVerifyWait: LEGACY_LABELS.verifyWait, labelVerify: LEGACY_LABELS.verify, labelConfirmWait: LEGACY_LABELS.confirmWait,
+  labelConfirm: LEGACY_LABELS.confirm, labelEnd: LEGACY_LABELS.end, labelNotify: LEGACY_LABELS.notify,
+}
+
+// 옛 기본 이름(IVE, IVE-S …)으로 등록된 기존 프로젝트 — 저장된 이름을 그대로 쓴다
+const project = { id: 'p1', provider: 'gitlab', ...legacyLabels } as unknown as Project
 
 const ev = (label: string, username: string | null, createdAt: string, action: 'add' | 'remove' = 'add') =>
   ({ action, label, userId: null, username, createdAt })

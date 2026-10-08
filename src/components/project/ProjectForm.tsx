@@ -14,6 +14,7 @@ import SlackNotifySection from './SlackNotifySection'
 import AiGuideSection from './AiGuideSection'
 import ScannerSettingsSection, { type ScannerSettingsValues } from './ScannerSettingsSection'
 import SharingSection from './SharingSection'
+import { DEFAULT_LABELS } from '@/lib/labels'
 
 interface Props {
   existing?: Project
@@ -41,15 +42,15 @@ export default function ProjectForm({ existing, onSuccess, onCancel }: Props) {
   const [usesOAuthToken, setUsesOAuthToken] = useState(existing?.usesOAuthToken ?? false)
 
   // Label settings
-  const [labelTarget, setLabelTarget] = useState(existing?.labelTarget ?? 'IVE')
-  const [labelSchedule, setLabelSchedule] = useState(existing?.labelSchedule ?? 'IVE-S')
-  const [labelDev, setLabelDev] = useState(existing?.labelDev ?? 'IVE-D')
-  const [labelVerifyWait, setLabelVerifyWait] = useState(existing?.labelVerifyWait ?? 'IVE-W')
-  const [labelVerify, setLabelVerify] = useState(existing?.labelVerify ?? 'IVE-V')
-  const [labelConfirmWait, setLabelConfirmWait] = useState(existing?.labelConfirmWait ?? 'IVE-P')
-  const [labelConfirm, setLabelConfirm] = useState(existing?.labelConfirm ?? 'IVE-C')
-  const [labelEnd, setLabelEnd] = useState(existing?.labelEnd ?? 'IVE-E')
-  const [labelNotify, setLabelNotify] = useState(existing?.labelNotify ?? 'IVE-N')
+  const [labelTarget, setLabelTarget] = useState(existing?.labelTarget ?? DEFAULT_LABELS.target)
+  const [labelSchedule, setLabelSchedule] = useState(existing?.labelSchedule ?? DEFAULT_LABELS.schedule)
+  const [labelDev, setLabelDev] = useState(existing?.labelDev ?? DEFAULT_LABELS.dev)
+  const [labelVerifyWait, setLabelVerifyWait] = useState(existing?.labelVerifyWait ?? DEFAULT_LABELS.verifyWait)
+  const [labelVerify, setLabelVerify] = useState(existing?.labelVerify ?? DEFAULT_LABELS.verify)
+  const [labelConfirmWait, setLabelConfirmWait] = useState(existing?.labelConfirmWait ?? DEFAULT_LABELS.confirmWait)
+  const [labelConfirm, setLabelConfirm] = useState(existing?.labelConfirm ?? DEFAULT_LABELS.confirm)
+  const [labelEnd, setLabelEnd] = useState(existing?.labelEnd ?? DEFAULT_LABELS.end)
+  const [labelNotify, setLabelNotify] = useState(existing?.labelNotify ?? DEFAULT_LABELS.notify)
   const [confirmBaseBranch] = useState(existing?.confirmBaseBranch ?? '')
 
   // Slack 작업완료 알림 채널
@@ -120,15 +121,15 @@ export default function ProjectForm({ existing, onSuccess, onCancel }: Props) {
       gitUsername: '',
       accessToken: usesOAuthToken ? '' : accessToken.trim(),
       usesOAuthToken,
-      labelTarget: labelTarget.trim(),
-      labelSchedule: labelSchedule.trim() || 'IVE-S',
-      labelDev: labelDev.trim() || 'IVE-D',
-      labelVerifyWait: labelVerifyWait.trim() || 'IVE-W',
-      labelVerify: labelVerify.trim() || 'IVE-V',
-      labelConfirmWait: labelConfirmWait.trim() || 'IVE-P',
-      labelConfirm: labelConfirm.trim() || 'IVE-C',
-      labelEnd: labelEnd.trim() || 'IVE-E',
-      labelNotify: labelNotify.trim() || 'IVE-N',
+      labelTarget: labelTarget.trim() || existing?.labelTarget || DEFAULT_LABELS.target,
+      labelSchedule: labelSchedule.trim() || existing?.labelSchedule || DEFAULT_LABELS.schedule,
+      labelDev: labelDev.trim() || existing?.labelDev || DEFAULT_LABELS.dev,
+      labelVerifyWait: labelVerifyWait.trim() || existing?.labelVerifyWait || DEFAULT_LABELS.verifyWait,
+      labelVerify: labelVerify.trim() || existing?.labelVerify || DEFAULT_LABELS.verify,
+      labelConfirmWait: labelConfirmWait.trim() || existing?.labelConfirmWait || DEFAULT_LABELS.confirmWait,
+      labelConfirm: labelConfirm.trim() || existing?.labelConfirm || DEFAULT_LABELS.confirm,
+      labelEnd: labelEnd.trim() || existing?.labelEnd || DEFAULT_LABELS.end,
+      labelNotify: labelNotify.trim() || existing?.labelNotify || DEFAULT_LABELS.notify,
       baseBranch: baseBranch.trim(),
       confirmBaseBranch: confirmBaseBranch.trim(),
       testSiteUrl: testSiteUrl.trim(),

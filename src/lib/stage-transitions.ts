@@ -9,6 +9,7 @@
  */
 
 import type { Project } from '@/types'
+import { DEFAULT_LABELS } from '@/lib/labels'
 
 export interface StageTransition {
   action: string
@@ -23,68 +24,68 @@ export const TRANSITIONS: Record<string, StageTransition[]> = {
       action: 'schedule',
       description: '스케줄 등록',
       removeLabels: () => [],
-      addLabels: p => [p.labelSchedule || 'IVE-S'],
+      addLabels: p => [p.labelSchedule || DEFAULT_LABELS.schedule],
     },
   ],
   waiting: [
     {
       action: 'start_dev',
       description: '개발 시작 → 개발 중',
-      removeLabels: p => [p.labelSchedule || 'IVE-S'],
-      addLabels: p => [p.labelDev || 'IVE-D'],
+      removeLabels: p => [p.labelSchedule || DEFAULT_LABELS.schedule],
+      addLabels: p => [p.labelDev || DEFAULT_LABELS.dev],
     },
   ],
   dev: [
     {
       action: 'cancel',
       description: '작업 취소 → 스케줄',
-      removeLabels: p => [p.labelDev || 'IVE-D'],
-      addLabels: p => [p.labelSchedule || 'IVE-S'],
+      removeLabels: p => [p.labelDev || DEFAULT_LABELS.dev],
+      addLabels: p => [p.labelSchedule || DEFAULT_LABELS.schedule],
     },
     {
       action: 'complete',
       description: '머지 완료 → 검증대기',
-      removeLabels: p => [p.labelDev || 'IVE-D'],
-      addLabels: p => [p.labelVerifyWait || 'IVE-W'],
+      removeLabels: p => [p.labelDev || DEFAULT_LABELS.dev],
+      addLabels: p => [p.labelVerifyWait || DEFAULT_LABELS.verifyWait],
     },
     {
       action: 'retry',
       description: '재시도 → 스케줄',
-      removeLabels: p => [p.labelDev || 'IVE-D'],
-      addLabels: p => [p.labelSchedule || 'IVE-S'],
+      removeLabels: p => [p.labelDev || DEFAULT_LABELS.dev],
+      addLabels: p => [p.labelSchedule || DEFAULT_LABELS.schedule],
     },
   ],
   dev_fail: [
     {
       action: 'retry',
       description: '재시도 → 스케줄',
-      removeLabels: p => [p.labelDev || 'IVE-D'],
-      addLabels: p => [p.labelSchedule || 'IVE-S'],
+      removeLabels: p => [p.labelDev || DEFAULT_LABELS.dev],
+      addLabels: p => [p.labelSchedule || DEFAULT_LABELS.schedule],
     },
   ],
   verify_waiting: [
     {
       action: 'start_verification',
       description: '검증시작 → 검증 중',
-      removeLabels: p => [p.labelVerifyWait || 'IVE-W'],
-      addLabels: p => [p.labelVerify || 'IVE-V'],
+      removeLabels: p => [p.labelVerifyWait || DEFAULT_LABELS.verifyWait],
+      addLabels: p => [p.labelVerify || DEFAULT_LABELS.verify],
     },
     {
       action: 'cancel',
       description: '검증대기 취소 → 스케줄',
-      removeLabels: p => [p.labelVerifyWait || 'IVE-W'],
-      addLabels: p => [p.labelSchedule || 'IVE-S'],
+      removeLabels: p => [p.labelVerifyWait || DEFAULT_LABELS.verifyWait],
+      addLabels: p => [p.labelSchedule || DEFAULT_LABELS.schedule],
     },
     {
       action: 'retry',
       description: '재시도 → 스케줄',
-      removeLabels: p => [p.labelVerifyWait || 'IVE-W'],
-      addLabels: p => [p.labelSchedule || 'IVE-S'],
+      removeLabels: p => [p.labelVerifyWait || DEFAULT_LABELS.verifyWait],
+      addLabels: p => [p.labelSchedule || DEFAULT_LABELS.schedule],
     },
     {
       action: 'to_inflow',
       description: '유입 상태로 초기화',
-      removeLabels: p => [p.labelVerifyWait || 'IVE-W'],
+      removeLabels: p => [p.labelVerifyWait || DEFAULT_LABELS.verifyWait],
       addLabels: () => [],
     },
   ],
@@ -92,31 +93,31 @@ export const TRANSITIONS: Record<string, StageTransition[]> = {
     {
       action: 'approve',
       description: '검증 승인 → 확인대기',
-      removeLabels: p => [p.labelVerify || 'IVE-V'],
-      addLabels: p => [p.labelConfirmWait || 'IVE-P'],
+      removeLabels: p => [p.labelVerify || DEFAULT_LABELS.verify],
+      addLabels: p => [p.labelConfirmWait || DEFAULT_LABELS.confirmWait],
     },
     {
       action: 'complete',
       description: '머지 완료 → 확인대기',
-      removeLabels: p => [p.labelVerify || 'IVE-V', p.labelDev || 'IVE-D'],
-      addLabels: p => [p.labelConfirmWait || 'IVE-P'],
+      removeLabels: p => [p.labelVerify || DEFAULT_LABELS.verify, p.labelDev || DEFAULT_LABELS.dev],
+      addLabels: p => [p.labelConfirmWait || DEFAULT_LABELS.confirmWait],
     },
     {
       action: 'reject',
       description: '검증 반려 → 스케줄 (처리 재요청)',
-      removeLabels: p => [p.labelVerify || 'IVE-V'],
-      addLabels: p => [p.labelSchedule || 'IVE-S'],
+      removeLabels: p => [p.labelVerify || DEFAULT_LABELS.verify],
+      addLabels: p => [p.labelSchedule || DEFAULT_LABELS.schedule],
     },
     {
       action: 'retry',
       description: '재시도 → 스케줄',
-      removeLabels: p => [p.labelVerify || 'IVE-V'],
-      addLabels: p => [p.labelSchedule || 'IVE-S'],
+      removeLabels: p => [p.labelVerify || DEFAULT_LABELS.verify],
+      addLabels: p => [p.labelSchedule || DEFAULT_LABELS.schedule],
     },
     {
       action: 'to_inflow',
       description: '유입 상태로 초기화',
-      removeLabels: p => [p.labelVerify || 'IVE-V'],
+      removeLabels: p => [p.labelVerify || DEFAULT_LABELS.verify],
       addLabels: () => [],
     },
   ],
@@ -124,41 +125,41 @@ export const TRANSITIONS: Record<string, StageTransition[]> = {
     {
       action: 'start_confirmation',
       description: '확인 시작 → 확인 중',
-      removeLabels: p => [p.labelConfirmWait || 'IVE-P'],
-      addLabels: p => [p.labelConfirm || 'IVE-C'],
+      removeLabels: p => [p.labelConfirmWait || DEFAULT_LABELS.confirmWait],
+      addLabels: p => [p.labelConfirm || DEFAULT_LABELS.confirm],
     },
     {
       action: 'cancel',
       description: '확인대기 취소 → 스케줄',
-      removeLabels: p => [p.labelConfirmWait || 'IVE-P'],
-      addLabels: p => [p.labelSchedule || 'IVE-S'],
+      removeLabels: p => [p.labelConfirmWait || DEFAULT_LABELS.confirmWait],
+      addLabels: p => [p.labelSchedule || DEFAULT_LABELS.schedule],
     },
     {
       // 확인 쪽 반려는 검증대기로 돌아간다(처리대기 아님 — 사용자 확정 2026-10-07). 화면 버튼 이름도 「검증대기로」다.
       action: 'return_to_dev',
       description: '재검증 요청 → 검증대기',
-      removeLabels: p => [p.labelConfirmWait || 'IVE-P'],
-      addLabels: p => [p.labelVerifyWait || 'IVE-W'],
+      removeLabels: p => [p.labelConfirmWait || DEFAULT_LABELS.confirmWait],
+      addLabels: p => [p.labelVerifyWait || DEFAULT_LABELS.verifyWait],
     },
     {
       action: 'retry',
       description: '재시도 → 스케줄',
-      removeLabels: p => [p.labelConfirmWait || 'IVE-P'],
-      addLabels: p => [p.labelSchedule || 'IVE-S'],
+      removeLabels: p => [p.labelConfirmWait || DEFAULT_LABELS.confirmWait],
+      addLabels: p => [p.labelSchedule || DEFAULT_LABELS.schedule],
     },
   ],
   confirming: [
     {
       action: 'accept',
       description: '확인 완료 → 완료',
-      removeLabels: p => [p.labelConfirm || 'IVE-C'],
-      addLabels: p => [p.labelEnd || 'IVE-E'],
+      removeLabels: p => [p.labelConfirm || DEFAULT_LABELS.confirm],
+      addLabels: p => [p.labelEnd || DEFAULT_LABELS.end],
     },
     {
       action: 'return_to_dev',
       description: '재검증 요청 → 검증대기',
-      removeLabels: p => [p.labelConfirm || 'IVE-C'],
-      addLabels: p => [p.labelVerifyWait || 'IVE-W'],
+      removeLabels: p => [p.labelConfirm || DEFAULT_LABELS.confirm],
+      addLabels: p => [p.labelVerifyWait || DEFAULT_LABELS.verifyWait],
     },
     // ⛔ 확인 중 → 스케줄(retry) 길을 두지 않는다 — 확인 반려는 검증대기로만 간다(사용자 확정 2026-10-07).
     //    처리대기로 바로 보내면 확인자의 화면 단서가 코드 지시로 바뀌지 않은 채 처리자에게 간다.
@@ -167,14 +168,14 @@ export const TRANSITIONS: Record<string, StageTransition[]> = {
     {
       action: 'reopen',
       description: '재확인 요청 → 확인대기',
-      removeLabels: p => [p.labelEnd || 'IVE-E'],
-      addLabels: p => [p.labelConfirmWait || 'IVE-P'],
+      removeLabels: p => [p.labelEnd || DEFAULT_LABELS.end],
+      addLabels: p => [p.labelConfirmWait || DEFAULT_LABELS.confirmWait],
     },
     {
       action: 'retry',
       description: '재시도 → 스케줄',
-      removeLabels: p => [p.labelEnd || 'IVE-E'],
-      addLabels: p => [p.labelSchedule || 'IVE-S'],
+      removeLabels: p => [p.labelEnd || DEFAULT_LABELS.end],
+      addLabels: p => [p.labelSchedule || DEFAULT_LABELS.schedule],
     },
   ],
   rejected: [
@@ -182,7 +183,7 @@ export const TRANSITIONS: Record<string, StageTransition[]> = {
       action: 'retry',
       description: '재시도 → 스케줄',
       removeLabels: () => [],
-      addLabels: p => [p.labelSchedule || 'IVE-S'],
+      addLabels: p => [p.labelSchedule || DEFAULT_LABELS.schedule],
     },
   ],
 }
@@ -190,13 +191,13 @@ export const TRANSITIONS: Record<string, StageTransition[]> = {
 /** 모든 단계 라벨 목록 */
 export function allStageLabels(p: Project): string[] {
   return [
-    p.labelSchedule || 'IVE-S',
-    p.labelDev || 'IVE-D',
-    p.labelVerifyWait || 'IVE-W',
-    p.labelVerify || 'IVE-V',
-    p.labelConfirmWait || 'IVE-P',
-    p.labelConfirm || 'IVE-C',
-    p.labelEnd || 'IVE-E',
+    p.labelSchedule || DEFAULT_LABELS.schedule,
+    p.labelDev || DEFAULT_LABELS.dev,
+    p.labelVerifyWait || DEFAULT_LABELS.verifyWait,
+    p.labelVerify || DEFAULT_LABELS.verify,
+    p.labelConfirmWait || DEFAULT_LABELS.confirmWait,
+    p.labelConfirm || DEFAULT_LABELS.confirm,
+    p.labelEnd || DEFAULT_LABELS.end,
   ]
 }
 
@@ -257,14 +258,14 @@ export function markersForStageChange(
 /** 단계(stage) → 그 단계를 나타내는 라벨. 라벨 이벤트에서 "누가 이 단계로 옮겼는가"를 찾을 때 쓴다. */
 export function stageLabelFor(p: Project, stage: string | null | undefined): string | null {
   switch (stage) {
-    case 'waiting': return p.labelSchedule || 'IVE-S'
+    case 'waiting': return p.labelSchedule || DEFAULT_LABELS.schedule
     case 'dev':
-    case 'dev_fail': return p.labelDev || 'IVE-D'
-    case 'verify_waiting': return p.labelVerifyWait || 'IVE-W'
-    case 'verifying': return p.labelVerify || 'IVE-V'
-    case 'confirm_waiting': return p.labelConfirmWait || 'IVE-P'
-    case 'confirming': return p.labelConfirm || 'IVE-C'
-    case 'done': return p.labelEnd || 'IVE-E'
+    case 'dev_fail': return p.labelDev || DEFAULT_LABELS.dev
+    case 'verify_waiting': return p.labelVerifyWait || DEFAULT_LABELS.verifyWait
+    case 'verifying': return p.labelVerify || DEFAULT_LABELS.verify
+    case 'confirm_waiting': return p.labelConfirmWait || DEFAULT_LABELS.confirmWait
+    case 'confirming': return p.labelConfirm || DEFAULT_LABELS.confirm
+    case 'done': return p.labelEnd || DEFAULT_LABELS.end
     default: return null
   }
 }
@@ -279,8 +280,10 @@ export function transitionTarget(stage: string | null | undefined, action: strin
   const added = t.addLabels({} as Project)[0]
   if (!added) return 'none'
   const byLabel: Record<string, string> = {
-    'IVE-S': 'waiting', 'IVE-D': 'dev', 'IVE-W': 'verify_waiting', 'IVE-V': 'verifying',
-    'IVE-P': 'confirm_waiting', 'IVE-C': 'confirming', 'IVE-E': 'done',
+    [DEFAULT_LABELS.schedule]: 'waiting', [DEFAULT_LABELS.dev]: 'dev',
+    [DEFAULT_LABELS.verifyWait]: 'verify_waiting', [DEFAULT_LABELS.verify]: 'verifying',
+    [DEFAULT_LABELS.confirmWait]: 'confirm_waiting', [DEFAULT_LABELS.confirm]: 'confirming',
+    [DEFAULT_LABELS.end]: 'done',
   }
   return byLabel[added] ?? null
 }
