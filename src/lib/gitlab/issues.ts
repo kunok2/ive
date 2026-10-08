@@ -1,6 +1,7 @@
 import { Project } from "@/types";
 import { parseIidSearch, type ClosedIssuePage, type ClosedIssuePageOptions } from "@/lib/closed-issues";
 import { getProjectPath, getAuthHeaders, apiUrl } from "./common";
+import { fetchAllPages } from "@/lib/git-paging";
 
 /**
  * 특정 레이블이 붙은 열린 이슈 목록을 가져옵니다.
@@ -12,9 +13,9 @@ export async function fetchGitLabIssues(project: Project, decryptedToken: string
   const headers = getAuthHeaders(project, decryptedToken);
 
   try {
-    const res = await fetch(
+    const res = await fetchAllPages(
       apiUrl(project, `/issues?labels=${encodeURIComponent(label)}&state=opened`),
-      { headers }
+      headers
     );
 
     if (!res.ok) {
@@ -24,7 +25,7 @@ export async function fetchGitLabIssues(project: Project, decryptedToken: string
       if (status === 403) throw new Error('접근 권한이 없습니다. 인증 정보를 확인하세요.');
       throw new Error(`GitLab API 오류 (${status}): ${res.statusText}`);
     }
-    return await res.json();
+    return res.items;
   } catch (err) {
     throw err;
   }
@@ -68,14 +69,14 @@ export async function fetchGitLabIssueNotes(project: Project, issueIid: number, 
   const headers = getAuthHeaders(project, decryptedToken, options);
 
   try {
-    const res = await fetch(apiUrl(project, `/issues/${issueIid}/notes?sort=asc&per_page=100`), { headers });
+    const res = await fetchAllPages(apiUrl(project, `/issues/${issueIid}/notes?sort=asc`), headers);
     if (!res.ok) {
       if (!options?.silent) {
         console.error(`[GitLab] Error fetching notes for issue #${issueIid}: ${res.statusText} (${res.status})`);
       }
       return [];
     }
-    return await res.json();
+    return res.items;
   } catch (err) {
     if (!options?.silent) {
       console.error(`[GitLab] Error fetching notes for issue #${issueIid}:`, err);
@@ -159,13 +160,12 @@ export async function fetchAllIveIssues(project: Project, decryptedToken: string
   try {
     const results: any[] = [];
     for (const label of allLabels) {
-      const res = await fetch(
-        apiUrl(project, `/issues?labels=${encodeURIComponent(label)}&state=opened&per_page=100`),
-        { headers }
+      const res = await fetchAllPages(
+        apiUrl(project, `/issues?labels=${encodeURIComponent(label)}&state=opened`),
+        headers
       );
       if (res.ok) {
-        const issues = await res.json();
-        for (const issue of issues) {
+        for (const issue of res.items) {
           if (!results.some(r => r.iid === issue.iid)) {
             results.push(issue);
           }
@@ -360,9 +360,9 @@ export async function createGitLabIssue(
 
 export async function fetchGitLabProjectMembers(project: Project, decryptedToken: string) {
   const headers = getAuthHeaders(project, decryptedToken);
-  const res = await fetch(apiUrl(project, '/members/all?per_page=100'), { headers });
+  const res = await fetchAllPages(apiUrl(project, '/members/all'), headers);
   if (!res.ok) return [];
-  const members = await res.json();
+  const members = res.items;
   return members
     .filter((m: any) => !m.bot && m.state === 'active' && !m.username.startsWith('project_') && !m.username.includes('_bot'))
     .map((m: any) => ({
@@ -379,9 +379,9 @@ export async function fetchGitLabProjectMembers(project: Project, decryptedToken
  */
 export async function isGitLabIssueClosedByGit(project: Project, issueIid: number, decryptedToken: string): Promise<boolean | null> {
   try {
-    const res = await fetch(apiUrl(project, `/issues/${issueIid}/resource_state_events?per_page=100`), { headers: getAuthHeaders(project, decryptedToken) });
+    const res = await fetchAllPages(apiUrl(project, `/issues/${issueIid}/resource_state_events`), getAuthHeaders(project, decryptedToken));
     if (!res.ok) return null;
-    const events = (await res.json()) as any[];
+    const events = res.items;
     const closed = events.filter(e => e?.state === 'closed').pop();
     if (!closed) return null;
     return !!(closed.source_commit || closed.source_merge_request);

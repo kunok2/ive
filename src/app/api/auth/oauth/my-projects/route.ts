@@ -2,18 +2,15 @@ import { NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { getUserOAuthTokenRaw, getOAuthProviderById } from '@/lib/db'
 import { decrypt } from '@/lib/crypto'
+import { fetchAllPages } from '@/lib/git-paging'
 
 /**
  * OAuth로 로그인한 사용자가 가진 git 저장소 목록을 반환.
  *
- * 응답: { provider: 'github' | 'gitlab', projects: [{ id, name, fullPath, repoUrl, avatarUrl, defaultBranch, visibility, openIssuesCount }] }
- *
- * 쿼리 파라미터:
- *   - q: 검색어 (선택)
- *   - page: 페이지 (기본 1)
- *   - per_page: 페이지당 개수 (기본 30, 최대 100)
+ * 응답: { provider: 'github' | 'gitlab', total, projects: [{ id, name, fullPath, repoUrl, avatarUrl, defaultBranch, visibility, openIssuesCount }] }
+ * 전체 목록을 한 번에 돌려주고, 검색 필터는 클라이언트(피커)가 입력 즉시 수행한다.
  */
-export async function GET(req: Request) {
+export async function GET() {
   const user = await getCurrentUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -33,59 +30,39 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'OAuth 토큰 복호화 실패' }, { status: 500 })
   }
 
-  const url = new URL(req.url)
-  const q = (url.searchParams.get('q') || '').trim()
-  const page = Math.max(1, Number(url.searchParams.get('page') || '1') || 1)
-  const perPage = Math.min(100, Math.max(1, Number(url.searchParams.get('per_page') || '30') || 30))
-
   try {
     if (provider.type === 'github') {
-      return await fetchGitHubRepos(token, q, page, perPage)
+      return await fetchGitHubRepos(token)
     }
-    return await fetchGitLabProjects(provider.baseUrl, token, q, page, perPage)
+    return await fetchGitLabProjects(provider.baseUrl, token)
   } catch (err) {
     console.error('[oauth/my-projects] failed:', err)
     return NextResponse.json({ error: '프로젝트 목록 조회에 실패했습니다' }, { status: 400 })
   }
 }
 
-async function fetchGitHubRepos(token: string, q: string, page: number, perPage: number) {
-  const headers = {
-    'Authorization': `Bearer ${token}`,
-    'Accept': 'application/vnd.github+json',
-    'X-GitHub-Api-Version': '2022-11-28',
-  }
+// 사용자가 가진 저장소를 모두 받는다(최대 1000개).
+// 피커가 받은 목록을 입력 즉시 클라이언트에서 거르므로, 검색어로 서버를 다시 부르지 않는다.
+const MAX_PAGES = 10
 
-  // GitHub /user/repos는 search 파라미터를 지원하지 않음 → 큰 목록을 받아와 서버에서 필터링
-  // (일반 사용자가 가진 저장소는 수백 개 이내로 가정)
-  const listUrl = q
-    ? `https://api.github.com/user/repos?per_page=100&sort=pushed&affiliation=owner,collaborator,organization_member`
-    : `https://api.github.com/user/repos?per_page=${perPage}&page=${page}&sort=pushed&affiliation=owner,collaborator,organization_member`
-
-  const res = await fetch(listUrl, { headers })
+async function fetchGitHubRepos(token: string) {
+  const res = await fetchAllPages(
+    'https://api.github.com/user/repos?sort=pushed&affiliation=owner,collaborator,organization_member',
+    {
+      'Authorization': `Bearer ${token}`,
+      'Accept': 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+    },
+    MAX_PAGES,
+  )
   if (!res.ok) {
     return NextResponse.json({ error: `GitHub API 오류 (${res.status}): ${res.statusText}` }, { status: 400 })
   }
-  let repos = await res.json() as any[]
-  let total = repos.length
-
-  if (q) {
-    const needle = q.toLowerCase()
-    repos = repos.filter(r =>
-      r.name?.toLowerCase().includes(needle) ||
-      r.full_name?.toLowerCase().includes(needle) ||
-      (r.description && r.description.toLowerCase().includes(needle))
-    )
-    total = repos.length
-    repos = repos.slice((page - 1) * perPage, page * perPage)
-  }
+  const repos = res.items
 
   return NextResponse.json({
     provider: 'github',
-    page,
-    perPage,
-    hasMore: repos.length === perPage,
-    total,
+    total: repos.length,
     projects: repos.map(r => ({
       id: String(r.id),
       name: r.name,
@@ -102,7 +79,7 @@ async function fetchGitHubRepos(token: string, q: string, page: number, perPage:
   })
 }
 
-async function fetchGitLabProjects(baseUrl: string, token: string, q: string, page: number, perPage: number) {
+async function fetchGitLabProjects(baseUrl: string, token: string) {
   const headers = { 'Authorization': `Bearer ${token}` }
   const apiBase = `${baseUrl.replace(/\/+$/, '')}/api/v4`
 
@@ -111,19 +88,14 @@ async function fetchGitLabProjects(baseUrl: string, token: string, q: string, pa
     membership: 'true',
     order_by: 'last_activity_at',
     sort: 'desc',
-    per_page: String(perPage),
-    page: String(page),
     simple: 'false',
     min_access_level: '20',
   })
-  if (q) params.set('search', q)
-
-  const res = await fetch(`${apiBase}/projects?${params.toString()}`, { headers })
+  const res = await fetchAllPages(`${apiBase}/projects?${params.toString()}`, headers, MAX_PAGES)
   if (!res.ok) {
     return NextResponse.json({ error: `GitLab API 오류 (${res.status}): ${res.statusText}` }, { status: 400 })
   }
-  const projects = await res.json() as any[]
-  const total = Number(res.headers.get('x-total') || '0')
+  const projects = res.items
   const baseOrigin = baseUrl.replace(/\/+$/, '')
 
   // GitLab은 avatar_url이 상대경로(/uploads/...)인 경우가 많고, private 프로젝트는 인증 헤더가 필요해
@@ -142,10 +114,7 @@ async function fetchGitLabProjects(baseUrl: string, token: string, q: string, pa
 
   return NextResponse.json({
     provider: 'gitlab',
-    page,
-    perPage,
-    hasMore: projects.length === perPage,
-    total,
+    total: projects.length,
     projects: projects.map(p => ({
       id: String(p.id),
       name: p.name,

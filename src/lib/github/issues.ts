@@ -3,6 +3,7 @@ import { getOwnerRepo, getGitHubAuthHeaders, getGitHubApiBase, apiUrl, normalize
 import type { ClosedIssuePage, ClosedIssuePageOptions } from "@/lib/closed-issues";
 import { ensureGitHubLabels } from "./labels";
 import { setIveDueMarker } from "@/lib/ive-author";
+import { fetchAllPages } from "@/lib/git-paging";
 
 /**
  * 특정 레이블이 붙은 열린 이슈 목록을 가져옵니다.
@@ -14,9 +15,9 @@ export async function fetchGitHubIssues(project: Project, decryptedToken: string
   const headers = getGitHubAuthHeaders(project, decryptedToken);
 
   try {
-    const res = await fetch(
-      apiUrl(project, `/issues?labels=${encodeURIComponent(label)}&state=open&per_page=100`),
-      { headers }
+    const res = await fetchAllPages(
+      apiUrl(project, `/issues?labels=${encodeURIComponent(label)}&state=open`),
+      headers
     );
     if (!res.ok) {
       if (res.status === 401) throw new Error('인증 정보가 유효하지 않거나 만료되었습니다. GitHub Personal Access Token을 확인해주세요.');
@@ -24,7 +25,7 @@ export async function fetchGitHubIssues(project: Project, decryptedToken: string
       if (res.status === 403) throw new Error('접근 권한이 없습니다. 인증 정보를 확인하세요.');
       throw new Error(`GitHub API 오류 (${res.status}): ${res.statusText}`);
     }
-    const issues = await res.json();
+    const issues = res.items;
     // GitHub issues API에는 PR도 포함되므로 제외
     return issues
       .filter((i: any) => !i.pull_request)
@@ -64,9 +65,9 @@ export async function fetchGitHubIssueNotes(project: Project, issueNumber: numbe
   const headers = getGitHubAuthHeaders(project, decryptedToken);
 
   try {
-    const res = await fetch(apiUrl(project, `/issues/${issueNumber}/comments?per_page=100`), { headers });
+    const res = await fetchAllPages(apiUrl(project, `/issues/${issueNumber}/comments`), headers);
     if (!res.ok) throw new Error(`Fetch comments failed: ${res.statusText}`);
-    const comments = await res.json();
+    const comments = res.items;
     // GitLab notes 형태로 정규화
     return comments.map((c: any) => ({
       id: c.id,
@@ -114,13 +115,12 @@ export async function fetchAllIveIssues(project: Project, decryptedToken: string
   try {
     const results: any[] = [];
     for (const label of allLabels) {
-      const res = await fetch(
-        apiUrl(project, `/issues?labels=${encodeURIComponent(label)}&state=open&per_page=100`),
-        { headers }
+      const res = await fetchAllPages(
+        apiUrl(project, `/issues?labels=${encodeURIComponent(label)}&state=open`),
+        headers
       );
       if (res.ok) {
-        const issues = await res.json();
-        for (const issue of issues) {
+        for (const issue of res.items) {
           if (issue.pull_request) continue; // PR 제외
           const normalized = normalizeIssue(issue);
           if (!results.some(r => r.iid === normalized.iid)) {
@@ -334,9 +334,9 @@ export async function createGitHubIssue(
     await ensureGitHubLabels(project, decryptedToken); // 내부에서 에러 catch됨
     // 실제 존재하는 레이블만 필터링 (권한 부족으로 생성 실패했을 수 있으므로)
     try {
-      const labelsRes = await fetch(apiUrl(project, '/labels?per_page=100'), { headers });
+      const labelsRes = await fetchAllPages(apiUrl(project, '/labels'), headers);
       if (labelsRes.ok) {
-        const existing = (await labelsRes.json()).map((l: any) => l.name);
+        const existing = labelsRes.items.map((l: any) => l.name);
         validLabels = labels.filter(l => existing.includes(l));
       } else {
         validLabels = [];
@@ -367,9 +367,9 @@ export async function createGitHubIssue(
 
 export async function fetchGitHubCollaborators(project: Project, decryptedToken: string) {
   const headers = getGitHubAuthHeaders(project, decryptedToken);
-  const res = await fetch(apiUrl(project, '/collaborators?per_page=100'), { headers });
+  const res = await fetchAllPages(apiUrl(project, '/collaborators'), headers);
   if (!res.ok) return [];
-  const members = await res.json();
+  const members = res.items;
   return members
     .filter((m: any) => m.type !== 'Bot' && !m.login.includes('[bot]') && !m.login.endsWith('-bot'))
     .map((m: any) => ({
@@ -403,9 +403,9 @@ export async function fetchGitHubIssue(project: Project, issueNumber: number, de
  */
 export async function isGitHubIssueClosedByGit(project: Project, issueNumber: number, decryptedToken: string): Promise<boolean | null> {
   try {
-    const res = await fetch(apiUrl(project, `/issues/${issueNumber}/events?per_page=100`), { headers: getGitHubAuthHeaders(project, decryptedToken) });
+    const res = await fetchAllPages(apiUrl(project, `/issues/${issueNumber}/events`), getGitHubAuthHeaders(project, decryptedToken));
     if (!res.ok) return null;
-    const events = (await res.json()) as any[];
+    const events = res.items;
     const closed = events.filter(e => e?.event === 'closed').pop();
     if (!closed) return null;
     return !!closed.commit_id;

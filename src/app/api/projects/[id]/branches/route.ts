@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { getProject, getProjectAccess, getProjectAuthToken } from '@/lib/db'
+import { fetchAllPages } from '@/lib/git-paging'
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser()
@@ -45,15 +46,12 @@ async function fetchBranches(
   const pathStr = (url.pathname.startsWith('/') ? url.pathname.slice(1) : url.pathname).replace(/\/+$/, '')
 
   if (provider === 'github') {
-    const res = await fetch(`https://api.github.com/repos/${pathStr}/branches?per_page=100`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/vnd.github+json',
-      },
+    const res = await fetchAllPages(`https://api.github.com/repos/${pathStr}/branches`, {
+      'Authorization': `Bearer ${token}`,
+      'Accept': 'application/vnd.github+json',
     })
     if (!res.ok) throw new Error(`GitHub API ${res.status}: ${res.statusText}`)
-    const data = await res.json()
-    return Array.isArray(data) ? data.map((b: any) => b.name).filter(Boolean) : []
+    return res.items.map((b: any) => b.name).filter(Boolean)
   }
 
   const apiBase = `${url.protocol}//${url.host}/api/v4`
@@ -67,8 +65,7 @@ async function fetchBranches(
   } else {
     headers['PRIVATE-TOKEN'] = token
   }
-  const res = await fetch(`${apiBase}/projects/${projectPath}/repository/branches?per_page=100`, { headers })
+  const res = await fetchAllPages(`${apiBase}/projects/${projectPath}/repository/branches`, headers)
   if (!res.ok) throw new Error(`GitLab API ${res.status}: ${res.statusText}`)
-  const data = await res.json()
-  return Array.isArray(data) ? data.map((b: any) => b.name).filter(Boolean) : []
+  return res.items.map((b: any) => b.name).filter(Boolean)
 }

@@ -1,6 +1,7 @@
 import { Project } from "@/types";
 import { getOwnerRepo, getGitHubAuthHeaders, apiUrl, normalizePR } from "./common";
 import { addGitHubIssueComment } from "./issues";
+import { fetchAllPages } from "@/lib/git-paging";
 
 /**
  * Pull Request를 생성합니다.
@@ -92,12 +93,9 @@ export async function fetchGitHubPRChanges(project: Project, decryptedToken: str
   const headers = getGitHubAuthHeaders(project, decryptedToken);
 
   try {
-    const res = await fetch(
-      apiUrl(project, `/pulls/${prNumber}/files?per_page=300`),
-      { headers }
-    );
+    const res = await fetchAllPages(apiUrl(project, `/pulls/${prNumber}/files`), headers, 30);
     if (!res.ok) throw new Error(`Fetch PR files failed: ${res.statusText}`);
-    const files = await res.json();
+    const files = res.items;
     // GitLab MR changes 형태로 정규화
     return {
       changes: files.map((f: any) => ({

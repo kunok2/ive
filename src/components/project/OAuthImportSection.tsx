@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { useTranslations } from 'next-intl'
 
 interface OAuthRepo {
@@ -39,12 +40,22 @@ export default function OAuthImportSection({ oauthInfo, onSelectProject }: OAuth
   const [pickerQuery, setPickerQuery] = useState('')
   const [pickerRepos, setPickerRepos] = useState<OAuthRepo[]>([])
 
-  const loadOAuthProjects = useCallback(async (q: string) => {
+  // 전체 목록을 한 번 받아 두고 입력할 때마다 즉시 거른다
+  const filteredRepos = useMemo(() => {
+    const needle = pickerQuery.trim().toLowerCase()
+    if (!needle) return pickerRepos
+    return pickerRepos.filter(r =>
+      r.name.toLowerCase().includes(needle) ||
+      r.fullPath.toLowerCase().includes(needle) ||
+      r.description.toLowerCase().includes(needle)
+    )
+  }, [pickerRepos, pickerQuery])
+
+  const loadOAuthProjects = useCallback(async () => {
     setPickerLoading(true)
     setPickerError(null)
     try {
-      const url = `/api/auth/oauth/my-projects${q ? `?q=${encodeURIComponent(q)}` : ''}`
-      const res = await fetch(url)
+      const res = await fetch('/api/auth/oauth/my-projects')
       const data = await res.json()
       if (!res.ok) {
         setPickerError(data.error || t('projectListLoadFailed'))
@@ -63,7 +74,7 @@ export default function OAuthImportSection({ oauthInfo, onSelectProject }: OAuth
   function openProjectPicker() {
     setPickerOpen(true)
     if (pickerRepos.length === 0) {
-      loadOAuthProjects('')
+      loadOAuthProjects()
     }
   }
 
@@ -95,14 +106,15 @@ export default function OAuthImportSection({ oauthInfo, onSelectProject }: OAuth
         </p>
       </div>
 
-      {/* OAuth project picker modal */}
-      {pickerOpen && (
+      {/* OAuth project picker modal — body로 포털: 바깥 Modal 카드의 backdrop-filter가
+          fixed의 기준 박스가 되어 피커가 카드 안에 갇히는 것을 피한다 */}
+      {pickerOpen && createPortal(
         <div
           className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
           onClick={() => setPickerOpen(false)}
         >
           <div
-            className="bg-ive-bg-solid border border-ive-border rounded-2xl w-full max-w-md max-h-[75vh] flex flex-col overflow-hidden"
+            className="bg-ive-bg-solid border border-ive-border rounded-2xl w-full max-w-md max-h-[75dvh] flex flex-col overflow-hidden"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-4 py-3 border-b border-ive-border-subtle">
@@ -126,19 +138,15 @@ export default function OAuthImportSection({ oauthInfo, onSelectProject }: OAuth
                   type="text"
                   value={pickerQuery}
                   onChange={e => setPickerQuery(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      loadOAuthProjects(pickerQuery.trim())
-                    }
-                  }}
+                  onKeyDown={e => { if (e.key === 'Enter') e.preventDefault() }}
+                  autoFocus
                   placeholder={t('searchRepoPlaceholder')}
                   className="w-full bg-ive-bg-input border border-ive-border rounded-lg pl-8 pr-3 py-2 text-sm text-ive-text placeholder:text-ive-text-dim focus:outline-none focus:border-ive-green"
                 />
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-2 pb-2">
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-2 pb-2">
               {pickerLoading && (
                 <div className="flex items-center justify-center py-10 text-ive-text-dim text-sm font-bold">
                   <i className="fa-solid fa-circle-notch fa-spin mr-2" />
@@ -151,12 +159,12 @@ export default function OAuthImportSection({ oauthInfo, onSelectProject }: OAuth
                   {pickerError}
                 </div>
               )}
-              {!pickerLoading && !pickerError && pickerRepos.length === 0 && (
+              {!pickerLoading && !pickerError && filteredRepos.length === 0 && (
                 <div className="text-center py-10 text-ive-text-dim text-sm font-bold">
                   {t('noRepos')}
                 </div>
               )}
-              {!pickerLoading && pickerRepos.map(repo => (
+              {!pickerLoading && filteredRepos.map(repo => (
                 <button
                   key={repo.id}
                   type="button"
@@ -198,7 +206,8 @@ export default function OAuthImportSection({ oauthInfo, onSelectProject }: OAuth
               ))}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   )

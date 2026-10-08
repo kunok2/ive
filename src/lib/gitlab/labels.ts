@@ -1,5 +1,6 @@
 import { Project } from "@/types";
 import { getProjectPath, getAuthHeaders, apiUrl } from "./common";
+import { fetchAllPages } from "@/lib/git-paging";
 
 /**
  * GitLab 프로젝트에 필요한 레이블들이 있는지 확인하고, 없으면 생성합니다.
@@ -24,13 +25,13 @@ export async function ensureGitLabLabels(project: Project, decryptedToken: strin
   ];
 
   try {
-    const res = await fetch(apiUrl(project, '/labels'), { headers });
+    const res = await fetchAllPages(apiUrl(project, '/labels'), headers);
 
     if (!res.ok) {
       if (res.status === 401) throw new Error('인증 정보가 유효하지 않거나 만료되었습니다. GitLab Personal Access Token을 확인해주세요.');
       throw new Error(`Failed to fetch labels: ${res.statusText}`);
     }
-    const existingLabels: any[] = await res.json();
+    const existingLabels: any[] = res.items;
     const existingByName = new Map<string, any>(existingLabels.map(l => [l.name, l]));
 
     for (const label of labelsToEnsure) {
@@ -117,9 +118,9 @@ export async function fetchGitLabIssueLabelEvents(
 ): Promise<IssueLabelEvent[]> {
   const headers = getAuthHeaders(project, decryptedToken);
   try {
-    const res = await fetch(apiUrl(project, `/issues/${issueIid}/resource_label_events?per_page=100`), { headers });
+    const res = await fetchAllPages(apiUrl(project, `/issues/${issueIid}/resource_label_events`), headers);
     if (!res.ok) return [];
-    const events: any[] = await res.json();
+    const events: any[] = res.items;
     return events
       .filter(e => e?.label?.name)
       .map(e => ({
@@ -144,9 +145,9 @@ export async function checkGitLabLabelsExist(project: Project, decryptedToken: s
     project.labelEnd || 'IVE-E', project.labelNotify || 'IVE-N',
   ];
   try {
-    const res = await fetch(apiUrl(project, '/labels?per_page=100'), { headers });
+    const res = await fetchAllPages(apiUrl(project, '/labels'), headers);
     if (!res.ok) return labelsToCheck.map(l => ({ label: l, exists: false }));
-    const existing = (await res.json()).map((l: any) => l.name);
+    const existing = res.items.map((l: any) => l.name);
     return labelsToCheck.map(l => ({ label: l, exists: existing.includes(l) }));
   } catch {
     return labelsToCheck.map(l => ({ label: l, exists: false }));

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { getProject, getProjectAuthToken, getProjectWithUserOAuth, getUserOAuthTokenRaw } from '@/lib/db'
 import { decrypt } from '@/lib/crypto'
+import { fetchAllPages } from '@/lib/git-paging'
 import { AuthType, detectProvider } from '@/types'
 
 export async function POST(req: Request) {
@@ -113,7 +114,7 @@ async function testGitHub(repoUrl: string, token: string) {
 
   const [repoRes, branchesRes] = await Promise.all([
     fetch(`https://api.github.com/repos/${ownerRepo}`, { headers }),
-    fetch(`https://api.github.com/repos/${ownerRepo}/branches?per_page=100`, { headers }),
+    fetchAllPages(`https://api.github.com/repos/${ownerRepo}/branches`, headers),
   ])
   if (!repoRes.ok) {
     if (repoRes.status === 404) {
@@ -132,10 +133,7 @@ async function testGitHub(repoUrl: string, token: string) {
   const repo = await repoRes.json()
   let branches: string[] = []
   if (branchesRes.ok) {
-    const branchesData = await branchesRes.json()
-    if (Array.isArray(branchesData)) {
-      branches = branchesData.map((b: any) => b.name).filter(Boolean)
-    }
+    branches = branchesRes.items.map((b: any) => b.name).filter(Boolean)
   }
 
   return NextResponse.json({
@@ -185,7 +183,7 @@ async function testGitLab(repoUrl: string, token: string, authMode: string, user
 
   const [res, branchesRes] = await Promise.all([
     fetch(`${apiBase}/projects/${projectPath}`, { headers }),
-    fetch(`${apiBase}/projects/${projectPath}/repository/branches?per_page=100`, { headers }),
+    fetchAllPages(`${apiBase}/projects/${projectPath}/repository/branches`, headers),
   ])
   if (!res.ok) {
     if (res.status === 404) {
@@ -204,10 +202,7 @@ async function testGitLab(repoUrl: string, token: string, authMode: string, user
   const project = await res.json()
   let branches: string[] = []
   if (branchesRes.ok) {
-    const branchesData = await branchesRes.json()
-    if (Array.isArray(branchesData)) {
-      branches = branchesData.map((b: any) => b.name).filter(Boolean)
-    }
+    branches = branchesRes.items.map((b: any) => b.name).filter(Boolean)
   }
 
   return NextResponse.json({
