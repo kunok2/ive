@@ -8,6 +8,14 @@ Springware IVE의 굵직한 변경 이력입니다.
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-10-08
+
+### Changed
+- **새 프로젝트의 기본 레이블 이름을 소문자·뜻이 보이는 이름으로** — `IVE`·`IVE-S`…처럼 대문자 한 글자 약자라 다른 레이블 사이에서 튀고 이름만으로 뜻을 알 수 없었다. 새로 등록하는 프로젝트의 기본값은 `ive` · `ive:todo` · `ive:doing` · `ive:verify-wait` · `ive:verifying` · `ive:confirm-wait` · `ive:confirming` · `ive:done` · `ive:notify`. 레이블 이름은 원래 프로젝트마다 저장된 설정값이라, 이미 등록된 프로젝트는 저장된 옛 이름을 그대로 쓴다(이미 붙은 레이블·가이드·이슈 등록 규칙 모두 그대로). 기본값은 한 곳(`lib/labels.ts`)에 모았고, 기존 프로젝트를 편집하며 레이블 칸을 비우면 새 기본값이 아니라 기존 값으로 돌아간다.
+
+### Fixed
+- **squash 를 끈 GitHub 저장소에서 PR 머지가 안 되던 것** — IVE 는 GitHub PR 을 늘 squash 로 머지해, 저장소 설정에서 squash 를 끄고 merge commit 만 허용한 곳은 GitHub 이 405 로 거절했다(화면에는 「PR이 머지 가능한 상태가 아닙니다」만 떠 이유가 가려졌다). 이제 저장소가 허용하는 방식을 읽어 고르고(squash → merge commit → rebase 순), 405 면 GitHub 이 알려 준 이유를 함께 보인다. GitLab 은 프로젝트 설정을 그대로 따르므로 해당 없음.
+
 ## [1.12.0] - 2026-10-08
 
 ### Added
