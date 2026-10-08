@@ -2,6 +2,7 @@
 
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { isGitHubAttachmentUrl } from '@/lib/github-attachment'
 
 /** 노트 본문 정리: 도구 태그 제거, HTML 태그를 MD로 변환, ANSI 이스케이프 제거 */
 export function cleanNoteBody(body: string): string {
@@ -54,6 +55,9 @@ export default function MarkdownNote({ body, projectId }: { body: string; projec
           let resolvedSrc = String(src || '')
           if (projectId && resolvedSrc.startsWith('/uploads/')) {
             resolvedSrc = `/api/projects/${projectId}${resolvedSrc}`
+          } else if (projectId && isGitHubAttachmentUrl(resolvedSrc)) {
+            // private 저장소 GitHub 첨부는 브라우저가 직접 못 연다(404) — 서버 프록시 경유
+            resolvedSrc = `/api/projects/${projectId}/attachment?url=${encodeURIComponent(resolvedSrc)}`
           }
           return <img src={resolvedSrc} alt={alt || ''} className="max-w-full rounded-lg my-1" {...rest} />
         },

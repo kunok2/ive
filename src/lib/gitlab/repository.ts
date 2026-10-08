@@ -156,7 +156,11 @@ export async function downloadGitLabUpload(
     // url 은 "/uploads/<secret>/<file>" (프로젝트 경로 기준 상대)
     abs = `${u.origin}${u.pathname}${url.startsWith('/') ? '' : '/'}${url}`;
   }
-  const res = await fetch(abs, { headers: getAuthHeaders(project, decryptedToken) });
+  // 토큰은 저장소와 같은 GitLab 호스트에만 — 본문에 박힌 외부 이미지 URL 로 토큰이 새지 않게
+  const sameOrigin = (() => {
+    try { return new URL(abs).origin === new URL(project.repoUrl.replace(/\.git$/, '')).origin } catch { return false }
+  })();
+  const res = await fetch(abs, { headers: sameOrigin ? getAuthHeaders(project, decryptedToken) : {} });
   if (!res.ok) {
     console.error(`[GitLab] upload download failed (${res.status}) ${abs}`);
     return null;

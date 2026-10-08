@@ -19,8 +19,8 @@ export function extractImageUrls(text: string): string[] {
   let m: RegExpExecArray | null
   while ((m = md.exec(text))) urls.add(m[1])
   while ((m = img.exec(text))) urls.add(m[1])
-  // 이미지 확장자이거나 업로드 첨부 경로(/uploads/)인 것만
-  return [...urls].filter(u => IMG_EXT_RE.test(u) || /\/uploads\//.test(u))
+  // 이미지 확장자이거나 업로드 첨부 경로(GitLab /uploads/, GitHub /user-attachments/assets/ — 확장자 없음)인 것만
+  return [...urls].filter(u => IMG_EXT_RE.test(u) || /\/uploads\//.test(u) || /\/user-attachments\/assets\//.test(u))
 }
 
 /**

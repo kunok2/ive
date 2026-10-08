@@ -1,5 +1,6 @@
 import { Project } from "@/types";
 import { getGitHubAuthHeaders, apiUrl } from "./common";
+import { isGitHubAttachmentUrl } from "@/lib/github-attachment";
 
 /**
  * GitHub 저장소에 브랜치를 생성합니다.
@@ -156,7 +157,9 @@ export async function downloadGitHubFile(
   decryptedToken: string,
   url: string,
 ): Promise<{ buffer: Buffer; contentType: string } | null> {
-  const res = await fetch(url, { headers: getGitHubAuthHeaders(project, decryptedToken) });
+  // 토큰은 GitHub 호스트에만 — 본문에 박힌 외부 이미지 URL 로 토큰이 새지 않게
+  const headers = isGitHubAttachmentUrl(url) ? getGitHubAuthHeaders(project, decryptedToken) : {};
+  const res = await fetch(url, { headers });
   if (!res.ok) {
     console.error(`[GitHub] file download failed (${res.status}) ${url}`);
     return null;
