@@ -13,19 +13,35 @@ interface HelpModalProps {
   onShowReleaseNotes: () => void
 }
 
+/**
+ * 이 도움말 내용이 기준으로 삼은 판 — 도움말을 고쳐 쓸 때 함께 올린다.
+ * 지금 판(APP_VERSION)을 그대로 쓰면 도움말이 낡아도 늘 「최신 기준」처럼 보이므로 따로 둔다.
+ */
+const HELP_BASED_ON = '1.14.0'
+
+/** a 가 b 보다 새 판인가 (x.y.z) */
+function isNewerVersion(a: string, b: string): boolean {
+  const pa = a.split('.').map(Number), pb = b.split('.').map(Number)
+  for (let i = 0; i < 3; i++) if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0)
+  return false
+}
+
+// tour: 가이드 투어가 있는 탭만(「넓은 화면」은 탭이 아니라 투어가 없다)
 const tabSections = [
-  { key: 'projects', icon: 'fa-solid fa-folder', steps: 7 },
-  { key: 'agents', icon: 'fa-solid fa-robot', steps: 7 },
-  { key: 'issues', icon: 'fa-solid fa-list-check', steps: 6 },
-  { key: 'reports', icon: 'fa-solid fa-chart-line', steps: 3 },
-  { key: 'admin', icon: 'fa-solid fa-gear', steps: 4 },
+  { key: 'projects', icon: 'fa-solid fa-folder', steps: 8, tour: true },
+  { key: 'agents', icon: 'fa-solid fa-robot', steps: 7, tour: true },
+  { key: 'issues', icon: 'fa-solid fa-list-check', steps: 8, tour: true },
+  { key: 'reports', icon: 'fa-solid fa-chart-line', steps: 6, tour: true },
+  { key: 'admin', icon: 'fa-solid fa-gear', steps: 5, tour: true },
+  { key: 'layout', icon: 'fa-solid fa-desktop', steps: 4, tour: false },
 ] as const
 
-// Slack 연동은 특정 탭이 아니라 '내 정보'(워크스페이스 추가)와 '프로젝트 공유'에 걸쳐 있어
+// Slack 연동은 특정 탭이 아니라 '내 정보'(워크스페이스 추가·알림)와 '프로젝트 공유'에 걸쳐 있어
 // 별도 섹션으로 안내한다. 가이드 투어가 없으므로 흐름별 단계만 보여준다.
 const slackFlows = [
   { key: 'slackUser', icon: 'fa-solid fa-user', steps: 6 },
   { key: 'slackShare', icon: 'fa-solid fa-share-nodes', steps: 4 },
+  { key: 'slackNotify', icon: 'fa-solid fa-bell', steps: 3 },
 ] as const
 
 export default function HelpModal({ open, onClose, onShowIntro, onStartTour, onShowReleaseNotes }: HelpModalProps) {
@@ -64,7 +80,7 @@ export default function HelpModal({ open, onClose, onShowIntro, onStartTour, onS
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-4 py-3">
           <div className="flex flex-col gap-2">
-            {tabSections.map(({ key, icon, steps }) => {
+            {tabSections.map(({ key, icon, steps, tour }) => {
               const isExpanded = expandedKey === key
               return (
                 <div
@@ -82,7 +98,7 @@ export default function HelpModal({ open, onClose, onShowIntro, onStartTour, onS
                   >
                     <h3 className={`text-sm font-bold ${isExpanded ? 'text-ive-cyan' : 'text-ive-text'}`}>
                       <i className={`${icon} mr-1.5`} />
-                      {t(key as 'projects' | 'agents' | 'issues' | 'reports' | 'admin')}
+                      {t(key)}
                     </h3>
                     <i className={`fa-solid fa-chevron-down text-xs text-ive-text-dim transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                   </button>
@@ -118,13 +134,15 @@ export default function HelpModal({ open, onClose, onShowIntro, onStartTour, onS
                       </div>
 
                       {/* Start guide tour button */}
-                      <button
-                        onClick={() => onStartTour(key)}
-                        className="w-full py-2 rounded-lg text-xs font-bold text-ive-cyan border border-ive-cyan/20 hover:bg-ive-cyan/10 transition-colors"
-                      >
-                        <i className="fa-solid fa-route mr-1.5" />
-                        {tt('startGuide')}
-                      </button>
+                      {tour && (
+                        <button
+                          onClick={() => onStartTour(key)}
+                          className="w-full py-2 rounded-lg text-xs font-bold text-ive-cyan border border-ive-cyan/20 hover:bg-ive-cyan/10 transition-colors"
+                        >
+                          <i className="fa-solid fa-route mr-1.5" />
+                          {tt('startGuide')}
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -194,6 +212,14 @@ export default function HelpModal({ open, onClose, onShowIntro, onStartTour, onS
                 </div>
               )
             })()}
+
+            {/* 이 도움말의 기준 판 — 지금 판이 더 새로우면 그 사이 변경은 변경 이력에서 */}
+            <p className="pt-1 text-center text-xs font-bold text-ive-text-secondary leading-relaxed">
+              {t('basedOn', { version: HELP_BASED_ON })}
+              {process.env.APP_VERSION && isNewerVersion(process.env.APP_VERSION, HELP_BASED_ON) && (
+                <><br />{t('basedOnNewer', { current: process.env.APP_VERSION })}</>
+              )}
+            </p>
           </div>
         </div>
 

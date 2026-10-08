@@ -160,7 +160,7 @@
   "reportPageHowTo": "How to use",
   "reportPageStep1": "Share the generated URL on your test site, documentation, or email.",
   "reportPageStep2": "Users who access the link will see a form to submit tasks. An optional due date can be picked too — it maps directly to the GitLab/GitHub issue due date.",
-  "reportPageStep3": "Submissions are automatically created as issues in this project with the IVE target and to-do labels.",
+  "reportPageStep3": "Submissions are automatically created as issues in this project with the to-do label (default ive:todo).",
   "reportPageStep4": "If the URL is leaked, click 'Regenerate URL' to immediately invalidate the old link.",
   "reportPageAdvanced": "Advanced options",
   "reportPageTheme": "Theme & Language",
