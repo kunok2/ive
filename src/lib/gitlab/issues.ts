@@ -1,5 +1,5 @@
 import { Project } from "@/types";
-import { parseIidSearch, type ClosedIssuePage, type ClosedIssuePageOptions } from "@/lib/closed-issues";
+import { parseIidSearch, mergeClosedIssueStreams, type ClosedIssuePage, type ClosedIssuePageOptions } from "@/lib/closed-issues";
 import { getProjectPath, getAuthHeaders, apiUrl } from "./common";
 import { fetchAllPages } from "@/lib/git-paging";
 
@@ -221,10 +221,19 @@ export async function fetchAllProjectIssues(project: Project, decryptedToken: st
 export async function fetchClosedProjectIssuesPage(
   project: Project,
   decryptedToken: string,
-  opts: ClosedIssuePageOptions,
+  opts: ClosedIssuePageOptions & { notLabel?: string },
 ): Promise<ClosedIssuePage> {
   const projectPath = getProjectPath(project.repoUrl);
   if (!projectPath) return { issues: [], total: 0, hasMore: false };
+
+  // GitLab REST 는 라벨 OR 조회가 없다 — label 인 것 + (orLabel 이면서 label 은 없는 것) 두 조회를 합친다(겹치지 않음)
+  if (opts.label && opts.orLabel && opts.orLabel !== opts.label) {
+    const { label, orLabel } = opts;
+    return mergeClosedIssueStreams(opts, [
+      (page, perPage) => fetchClosedProjectIssuesPage(project, decryptedToken, { ...opts, page, perPage, orLabel: undefined }),
+      (page, perPage) => fetchClosedProjectIssuesPage(project, decryptedToken, { ...opts, page, perPage, label: orLabel, orLabel: undefined, notLabel: label }),
+    ]);
+  }
 
   const q = new URLSearchParams({
     state: 'closed',
@@ -235,6 +244,7 @@ export async function fetchClosedProjectIssuesPage(
     page: String(opts.page),
   });
   if (opts.label) q.set('labels', opts.label);
+  if (opts.notLabel) q.set('not[labels]', opts.notLabel);
   const search = (opts.search || '').trim();
   const iid = parseIidSearch(search);
   if (opts.iids) {

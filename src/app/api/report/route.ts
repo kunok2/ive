@@ -138,18 +138,20 @@ export async function POST(req: NextRequest) {
   if (!authToken) return NextResponse.json({ error: '프로젝트 토큰이 설정되지 않았습니다.' }, { status: 500 })
 
   try {
+    // IVE-S (스케줄 대기) 레이블만 부착 — 단계 라벨이 곧 IVE 관리 표시라 대상 라벨(IVE)은 함께 달지 않는다
+    const scheduleLabel = project.labelSchedule || DEFAULT_LABELS.schedule
+
     // 레이블 존재 확인
     const labelCheck = await checkLabelsExist(project, authToken)
-    const targetLabel = labelCheck.find(l => l.label === project.labelTarget)
+    const targetLabel = labelCheck.find(l => l.label === scheduleLabel)
     if (targetLabel && !targetLabel.exists) {
       return NextResponse.json({
-        error: `레이블 "${project.labelTarget}"이 Git에 없습니다. 프로젝트 설정에서 레이블을 생성해주세요.`,
+        error: `레이블 "${scheduleLabel}"이 Git에 없습니다. 프로젝트 설정에서 레이블을 생성해주세요.`,
         labelMissing: true,
       }, { status: 400 })
     }
 
-    // IVE + IVE-S (스케줄 대기) 레이블 부착
-    const labels = [project.labelTarget, project.labelSchedule || DEFAULT_LABELS.schedule]
+    const labels = [scheduleLabel]
 
     const issue = await createIssue(project, authToken, title, description, labels, undefined, { isOAuth: project.usesOAuthToken, dueDate: dueDateNormalized })
     // 들어온 경로 — 작업 접수 페이지 (경로별 기본 배정·자동 실행 허용)

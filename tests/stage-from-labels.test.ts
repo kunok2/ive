@@ -7,7 +7,7 @@
  *     E > C > P > V > W > D > S
  *
  * 불변식:
- *   P-0: labelTarget(IVE) 없으면 항상 null
+ *   P-0: IVE·단계 라벨이 하나도 없으면 null. 단계 라벨만 있어도 판정한다(단계 라벨을 붙일 때 IVE 는 뗀다)
  *   P-1: 단일 레이블이 단독으로 있을 때 해당 stage 를 반환
  *   P-2: 여러 레이블이 동시에 있을 때 우선순위 상위 stage 를 반환
  *   P-3: dev 단계는 hasActiveExec === false 이면 'dev_fail'
@@ -40,11 +40,14 @@ const project: Project = {
 }
 
 describe('stageFromLabels — P-0: labelTarget 미부착', () => {
-  it('IVE 레이블 없으면 모든 stage 레이블 무시하고 null', () => {
-    expect(stageFromLabels(['IVE-S'], project)).toBeNull()
-    expect(stageFromLabels(['IVE-D', 'IVE-W'], project)).toBeNull()
-    expect(stageFromLabels(['IVE-E'], project)).toBeNull()
+  it('IVE 없이 단계 라벨만 있어도 판정한다', () => {
+    expect(stageFromLabels(['IVE-S'], project)).toBe('waiting')
+    expect(stageFromLabels(['IVE-D', 'IVE-W'], project)).toBe('verify_waiting')
+    expect(stageFromLabels(['IVE-E'], project)).toBe('done')
+  })
+  it('IVE·단계 라벨이 하나도 없으면 null', () => {
     expect(stageFromLabels([], project)).toBeNull()
+    expect(stageFromLabels(['bug', 'IVE-N'], project)).toBeNull()
   })
 })
 

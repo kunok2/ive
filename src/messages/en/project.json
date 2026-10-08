@@ -47,7 +47,7 @@
   "labelsRenamedGuideFail": "Renamed {count} labels, but updating the AI guide failed: {error}",
   "saveFailed": "Could not save",
   "labelTarget": "Target",
-  "labelTargetDesc": "Base label IVE tracks to enter the workflow",
+  "labelTargetDesc": "Base label IVE tracks to enter the workflow. IVE removes it once a stage label is attached",
   "stageProcess": "Process",
   "stageProcessDesc": "AI agent writes code and opens the merge request",
   "stageVerify": "Verify",

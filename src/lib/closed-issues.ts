@@ -17,6 +17,11 @@ export interface ClosedIssuePageOptions {
    * (IVE 와 무관한 이슈만 있는 페이지) 건수(total)가 실제 목록과 어긋난다 — 개발계 검증에서 확인.
    */
   label?: string
+  /**
+   * 또는 이 라벨 (label OR orLabel). 단계 라벨을 붙이면 대상 라벨(IVE)을 떼므로, 새로 끝난 이슈엔
+   * 종료 라벨(IVE-E)만 남는다 — 예전 이슈(IVE 부착)와 함께 보려고 둘 중 하나라도 있으면 포함한다.
+   */
+  orLabel?: string
   /** 이 이슈 번호들로 한정 (GitLab 이 못 하는 짧은 검색어를 IVE DB 제목으로 찾은 결과). 빈 배열이면 결과 없음. */
   iids?: number[]
 }
@@ -54,4 +59,38 @@ export function parseClosedPageOptions(sp: URLSearchParams): ClosedIssuePageOpti
   const sort: ClosedIssueSort = sp.get('sort') === 'asc' ? 'asc' : 'desc'
   const search = (sp.get('q') || '').trim().slice(0, 200) || undefined
   return { page, perPage, sort, search }
+}
+
+/**
+ * 정렬된 두 페이지 흐름(서로 겹치지 않는 조회)을 합쳐 opts.page 한 페이지를 만든다.
+ * Git 이 라벨 OR 조회를 못 할 때(GitLab REST) 쓴다 — 각 흐름에서 앞쪽 page×perPage 건만 받으면 충분하다.
+ */
+export async function mergeClosedIssueStreams(
+  opts: ClosedIssuePageOptions,
+  fetchers: Array<(page: number, perPage: number) => Promise<ClosedIssuePage>>,
+): Promise<ClosedIssuePage> {
+  const need = opts.page * opts.perPage
+  const BATCH = CLOSED_PAGE_SIZE_MAX
+  const streams = await Promise.all(fetchers.map(async fetchPage => {
+    const items: any[] = [] // eslint-disable-line @typescript-eslint/no-explicit-any -- provider 원본 이슈
+    let total: number | null = 0
+    let more = true
+    for (let page = 1; more && items.length < need; page++) {
+      const r = await fetchPage(page, BATCH)
+      items.push(...r.issues)
+      total = r.total
+      more = r.hasMore
+    }
+    return { items, total, more }
+  }))
+  const dir = opts.sort === 'asc' ? 1 : -1
+  const merged = streams.flatMap(s => s.items)
+    .sort((a, b) => dir * (Date.parse(a.updated_at || '') - Date.parse(b.updated_at || '')))
+  const start = (opts.page - 1) * opts.perPage
+  const totals = streams.map(s => s.total)
+  return {
+    issues: merged.slice(start, start + opts.perPage),
+    total: totals.every(t => t != null) ? totals.reduce((n, t) => n + (t as number), 0) : null,
+    hasMore: merged.length > need || streams.some(s => s.more),
+  }
 }

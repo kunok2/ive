@@ -65,7 +65,7 @@ import { Project, Agent, isAgentAvailableNow } from "@/types";
 import { resolveIssueRequesterAsync, resolveStageActorAsync } from "../ive-author";
 import { fetchIssueLabelEvents } from "../provider";
 import { isGitBotUser } from "../git-bot";
-import { markersForStageChange, stageLabelFor } from "../stage-transitions";
+import { markersForStageChange, stageLabelFor, allStageLabels } from "../stage-transitions";
 import { requeueRestartInterrupted, RESTART_GAVE_UP_NOTE } from "./restart-requeue";
 import { openStageExecution, closeStageExecutions, hasOpenStageExecution, pickStageMeta, type StageKind } from "./stage-records";
 import { startStatsCollector } from "../stats-collector";
@@ -386,8 +386,8 @@ async function scanProject(project: Project, force: boolean = false) {
     // 레이블 동기화는 프로젝트 설정에서 수동으로 수행
     // (스캐너에서 자동 생성하지 않음 — 권한 없을 수 있음)
 
-    // 모든 상태 레이블로 이슈를 조회합니다.
-    // IVE 레이블이 없으면 IVE에서 관리하지 않는 이슈이므로 무시합니다.
+    // 대상 라벨(ive)과 모든 단계 라벨로 이슈를 조회해 합칩니다.
+    // 단계 라벨이 붙으면 ive 는 뗀다 — 단계 라벨만 있는 이슈도 IVE 관리 이슈다(예전 이슈는 둘 다 붙어 있을 수 있다).
     const fetchIssues = project.provider === 'github' ? fetchGitHubIssues : fetchGitLabIssues;
     const labelTarget = project.labelTarget;
     const labelS = project.labelSchedule || DEFAULT_LABELS.schedule;
@@ -396,40 +396,20 @@ async function scanProject(project: Project, force: boolean = false) {
     const labelV = project.labelVerify || DEFAULT_LABELS.verify;
     const labelE = project.labelEnd || DEFAULT_LABELS.end;
 
-    // IVE 레이블이 있는 이슈를 기본으로 조회 (모든 IVE 관리 이슈)
-    // + 상태 레이블 이슈도 병합 (IVE 없이 상태 레이블만 남은 경우 정리용)
-    const [targetIssues, sIssues, dIssues, wIssues, vIssues, eIssues] = await Promise.all([
-      fetchIssues(project, decryptedToken, labelTarget),
-      fetchIssues(project, decryptedToken, labelS),
-      fetchIssues(project, decryptedToken, labelD),
-      fetchIssues(project, decryptedToken, labelW),
-      fetchIssues(project, decryptedToken, labelV),
-      fetchIssues(project, decryptedToken, labelE),
-    ]);
+    const fetched = await Promise.all(
+      [labelTarget, ...allStageLabels(project)].map(label => fetchIssues(project, decryptedToken, label)),
+    );
 
     // 이슈를 Map으로 병합 (iid → issue), closed 제외
     const issueMap = new Map<number, any>();
-    for (const issue of [...targetIssues, ...sIssues, ...dIssues, ...wIssues, ...vIssues, ...eIssues]) {
+    for (const issue of fetched.flat()) {
       if (issue.state === 'closed') continue;
       issueMap.set(issue.iid, issue);
     }
 
-    // 레이블 정리: IVE 없이 상태 레이블만 있는 이슈 → 상태 레이블 제거 (고아 정리)
-    // 고아 레이블 정리 및 중복 레이블 정리
+    // 중복 단계 레이블 정리
     for (const [iid, issue] of issueMap) {
       const labels: string[] = issue.labels || [];
-      const hasTarget = labels.includes(labelTarget);
-
-      if (!hasTarget) {
-        // IVE 레이블 없음 — 고아 상태 레이블 정리
-        const orphanLabels = [labelS, labelD, labelW, labelV, labelE].filter(l => labels.includes(l));
-        if (orphanLabels.length > 0) {
-          try { await removeIssueLabels(project, iid, decryptedToken, orphanLabels); } catch { /* ignore */ }
-          slog.info(`Issue #${iid} — orphan labels removed (no ${labelTarget}): ${orphanLabels.join(', ')}`);
-        }
-        issueMap.delete(iid);
-        continue;
-      }
 
       // IVE-E가 있으면서 이전 단계 레이블 잔류 → 정리
       if (labels.includes(labelE)) {

@@ -11,6 +11,7 @@ import { parseClosedPageOptions, parseIidSearch, isGitLabSearchable } from '@/li
 import { withGitToken, friendlyGitError } from '@/lib/git-token';
 import { prependIveAuthorMarker, stripIveAuthorMarker, stripIveDueMarker, resolveIveAuthorFromBody } from '@/lib/ive-author';
 import { DEFAULT_LABELS } from '@/lib/labels';
+import { isIveManaged } from '@/lib/stage-transitions';
 
 export async function GET(
   req: NextRequest,
@@ -34,7 +35,7 @@ export async function GET(
     const token = getProjectAuthToken(projectId);
     // 닫힌 이슈(이력 탭)는 한 페이지만 — 전체를 받으면 이슈가 쌓일수록 수십 초가 걸린다.
     const closedOpts = stateParam === 'closed'
-      ? { ...parseClosedPageOptions(req.nextUrl.searchParams), label: project.labelTarget }
+      ? { ...parseClosedPageOptions(req.nextUrl.searchParams), label: project.labelTarget, orLabel: project.labelEnd || DEFAULT_LABELS.end }
       : null;
     // GitLab 검색은 3글자 미만 단어를 무시한다 → 짧은 검색어는 IVE 가 기록한 제목으로 번호를 찾아 한정한다.
     if (closedOpts?.search && project.provider !== 'github'
@@ -57,9 +58,9 @@ export async function GET(
     const isClosed = stateParam === 'closed';
 
     const mapped = issues
-      // IVE 레이블 필수 (없으면 IVE에서 관리하지 않는 이슈).
+      // IVE 대상 라벨 또는 단계 라벨 필수 (없으면 IVE에서 관리하지 않는 이슈).
       // 닫힌 이슈는 Git 조회 단계에서 이미 IVE 레이블로 한정했으므로(페이지·건수 일치) 여기선 그대로 통과.
-      .filter((issue: any) => isClosed || (issue.labels || []).includes(project.labelTarget))
+      .filter((issue: any) => isClosed || isIveManaged(issue.labels || [], project))
       .map((issue: any) => {
         // 레이블에서 stage 판정
         const issueLabels = issue.labels || [];
@@ -233,26 +234,26 @@ export async function POST(
   const dueDateNormalized: string | null = (typeof dueDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dueDate)) ? dueDate : null;
 
   try {
+    // 붙일 단계 라벨 — 스케줄 대상이면 단계 라벨(IVE-S)만, 아니면 등록 표시(IVE)만. 단계 라벨이 곧 IVE 관리 표시라 둘을 함께 달지 않는다.
+    const stageLabel = asDev ? (project.labelSchedule || DEFAULT_LABELS.schedule) : project.labelTarget;
+
     // 레이블 존재 확인 (asDev일 때만) — 프로젝트 레벨 설정 점검이라 프로젝트 토큰 고정.
     // 접속자 OAuth 토큰은 조직/private repo 접근 권한이 없을 수 있고, checkLabelsExist는 API 실패를
     // "모두 없음"으로 묻기 때문에 접속자 토큰으로 하면 오탐(모달 오동작) 발생.
     if (asDev) {
       const projectToken = getProjectAuthToken(projectId);
       const labelCheck = await checkLabelsExist(project, projectToken);
-      const devLabel = labelCheck.find(l => l.label === project.labelTarget);
+      const devLabel = labelCheck.find(l => l.label === stageLabel);
       if (devLabel && !devLabel.exists) {
         return NextResponse.json({
-          error: `레이블 "${project.labelTarget}"이 Git에 없습니다. 프로젝트 설정에서 레이블을 생성해주세요.`,
+          error: `레이블 "${stageLabel}"이 Git에 없습니다. 프로젝트 설정에서 레이블을 생성해주세요.`,
           labelMissing: true,
         }, { status: 400 });
       }
     }
 
-    // IVE 레이블 항상 부착 + asDev면 IVE-S(스케줄 대상)도 부착
     const isAssigneeMode = reqAssignMode === 'assignee';
-    const labels = asDev
-      ? [project.labelTarget, project.labelSchedule || DEFAULT_LABELS.schedule]
-      : [project.labelTarget];
+    const labels = [stageLabel];
     // 완료 알림 선택 시 알림 트리거 레이블(IVE-N) 부착 → 완료/실패 시 담당자에게 Slack 알림
     if (notify) labels.push(project.labelNotify || DEFAULT_LABELS.notify);
     // assignee 결정 — 모델: "처리전에는 생성자, 처리때는 처리자 또는 생성자"

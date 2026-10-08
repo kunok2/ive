@@ -5,6 +5,7 @@ import { Project } from "@/types";
 import * as gitlab from "./gitlab";
 import * as github from "./github";
 import type { ClosedIssuePageOptions } from "./closed-issues";
+import { withTargetLabelSwap } from "./stage-transitions";
 
 // Issues
 export function fetchAllProjectIssues(project: Project, token: string) {
@@ -195,8 +196,10 @@ export async function addIssueLabels(project: Project, iid: number, token: strin
  *  - GitLab: 붙이기·떼기를 한 번의 요청으로
  *  - GitHub: 붙이기 먼저, 떼기 나중(잠깐 두 라벨이 함께 있을 뿐 단계가 비지 않는다)
  * 붙일 라벨은 뗄 목록에서 뺀다.
+ * 단계 라벨을 붙이면 대상 라벨(ive)은 뗀다 — 단계 라벨이 곧 IVE 관리 표시(withTargetLabelSwap).
  */
-export async function swapIssueLabels(project: Project, iid: number, token: string, add: string[], remove: string[]) {
+export async function swapIssueLabels(project: Project, iid: number, token: string, addLabels: string[], removeLabels: string[]) {
+  const { add, remove } = withTargetLabelSwap(project, addLabels, removeLabels);
   const rm = remove.filter(l => !add.includes(l));
   if (project.provider === 'github') {
     if (add.length) await github.addGitHubIssueLabels(project, iid, token, add);

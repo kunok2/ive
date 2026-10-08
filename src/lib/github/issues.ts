@@ -194,14 +194,18 @@ export async function fetchClosedProjectIssuesPage(
     if (res.status === 404) return { issues: [], total: 0, hasMore: false };
     if (!res.ok) throw new Error(`닫힌 이슈 조회 실패: ${res.status} ${res.statusText}`);
     const issue = await res.json();
-    const hasLabel = !opts.label || (issue.labels || []).some((l: string | { name?: string }) => (typeof l === 'string' ? l : l.name) === opts.label);
+    const wanted = [opts.label, opts.orLabel].filter(Boolean);
+    const hasLabel = !opts.label || (issue.labels || []).some((l: string | { name?: string }) => wanted.includes(typeof l === 'string' ? l : l.name));
     const ok = issue.state === 'closed' && !issue.pull_request && hasLabel;
     return { issues: ok ? [normalizeIssue(issue)] : [], total: ok ? 1 : 0, hasMore: false };
   }
 
-  if (search) {
-    const labelQ = opts.label ? ` label:"${opts.label.replace(/"/g, '')}"` : '';
-    const q = `repo:${ownerRepo} is:issue is:closed${labelQ} ${search}`;
+  // 라벨 OR(label, orLabel)는 Search API 만 된다(쉼표 = OR) — /issues 의 labels 는 AND
+  const orLabel = opts.label && opts.orLabel && opts.orLabel !== opts.label ? opts.orLabel : null;
+  if (search || orLabel) {
+    const quote = (l: string) => `"${l.replace(/"/g, '')}"`;
+    const labelQ = opts.label ? ` label:${[opts.label, orLabel].filter((l): l is string => !!l).map(quote).join(',')}` : '';
+    const q = `repo:${ownerRepo} is:issue is:closed${labelQ}${search ? ` ${search}` : ''}`;
     const params = new URLSearchParams({
       q, sort: 'updated', order: opts.sort, per_page: String(opts.perPage), page: String(opts.page),
     });

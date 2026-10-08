@@ -201,6 +201,36 @@ export function allStageLabels(p: Project): string[] {
   ]
 }
 
+/** 대상 라벨(ive) — 단계 라벨 없이 등록만 된 이슈 표시 */
+export function targetLabelOf(p: Project): string {
+  return p.labelTarget || DEFAULT_LABELS.target
+}
+
+/**
+ * IVE 가 관리하는 이슈인가 — 대상 라벨(ive) 또는 단계 라벨 중 하나라도 있으면.
+ * 단계 라벨이 붙으면 대상 라벨은 뗀다(중복 표시). 예전 이슈는 둘 다 붙어 있을 수 있다.
+ */
+export function isIveManaged(labels: string[], p: Project): boolean {
+  return labels.includes(targetLabelOf(p)) || allStageLabels(p).some(l => labels.includes(l))
+}
+
+/**
+ * 단계 라벨을 바꿀 때 대상 라벨(ive) 정리 — 단계 라벨이 곧 IVE 관리 표시라 둘을 함께 달지 않는다.
+ *  - 단계 라벨을 붙이면 대상 라벨을 뗀다
+ *  - 단계 라벨을 떼기만 하면(유입으로 되돌림) 대상 라벨을 붙인다 — 라벨이 다 빠져 IVE 가 이슈를 놓치지 않게
+ */
+export function withTargetLabelSwap(p: Project, add: string[], remove: string[]): { add: string[]; remove: string[] } {
+  const target = targetLabelOf(p)
+  const stages = allStageLabels(p)
+  if (add.some(l => stages.includes(l))) {
+    return { add: add.filter(l => l !== target), remove: remove.includes(target) ? remove : [...remove, target] }
+  }
+  if (remove.some(l => stages.includes(l)) && !add.includes(target)) {
+    return { add: [...add, target], remove: remove.filter(l => l !== target) }
+  }
+  return { add, remove }
+}
+
 /**
  * 전이 시 라벨 잔재 안전 정리.
  * 단계 라벨 중 "유지할 단일 라벨" 외의 모든 라벨을 제거 대상에 포함.

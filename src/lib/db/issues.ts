@@ -4,6 +4,7 @@ import { getKSTTodayStartISO } from '../date-utils'
 import { isBotName } from '../git-bot'
 import { syncRosterWithMembers } from './roles'
 import { DEFAULT_LABELS } from '@/lib/labels'
+import { isIveManaged } from '@/lib/stage-transitions'
 
 // ── Issue Stage (레이블 기반 상태 판정) ──
 
@@ -14,7 +15,8 @@ export function stageFromLabels(
   project: Project,
   options?: { hasActiveExec?: boolean }
 ): IssueStage | null {
-  if (!labels.includes(project.labelTarget)) return null
+  // 대상 라벨(ive) 또는 단계 라벨이 있어야 IVE 관리 이슈 — 단계 라벨만 있어도 된다(붙일 때 ive 는 뗀다)
+  if (!isIveManaged(labels, project)) return null
 
   const labelS = project.labelSchedule || DEFAULT_LABELS.schedule
   const labelD = project.labelDev || DEFAULT_LABELS.dev
