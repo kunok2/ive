@@ -10,6 +10,7 @@ import { useTranslations } from 'next-intl'
 import ProjectFilter from '@/components/report/ProjectFilter'
 import type { Tr } from '@/components/report/format'
 import type { Agent } from '@/types'
+import { cardGridVars } from '@/lib/card-grid'
 
 type FilterKey = 'all' | 'process' | 'verify' | 'confirm'
 
@@ -232,8 +233,9 @@ export default function AgentsTab({ onAdd }: { onAdd?: () => void }) {
               })
 
               return (
-                // PC 3열 — 카드 폭은 폰과 같게 두고 칸 수만 늘린다(폰·패드는 1열 가운데)
-                <div className="flex flex-col gap-3 desk:grid desk:grid-cols-3 desk:items-start">
+                // PC 3열 — 카드 폭은 폰과 같게 두고 칸 수만 늘린다(폰·패드는 1열 가운데). 3장보다 적으면 가운데
+                <div className="flex flex-col gap-3 desk:grid desk:grid-cols-[var(--grid-cols)] desk:w-[var(--grid-w)] desk:mx-auto desk:items-start"
+                  style={cardGridVars(Math.min(shown, shownItems.length), 3, 0.75)}>
                   {shownItems.slice(0, shown).map(item => item.kind === 'worker' ? (
                     <AgentCard
                       key={`w-${item.agent.id}`}

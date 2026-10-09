@@ -12,6 +12,7 @@ import ActivityContent from './ActivityContent'
 import ReportScheduleView from './ReportScheduleView'
 import PersonAliasView from './PersonAliasView'
 import EvalVisibilityView from './EvalVisibilityView'
+import { cardGridVars } from '@/lib/card-grid'
 
 type UsersSubView = 'users' | 'activity' | 'reports'
 
@@ -268,8 +269,9 @@ export default function UsersPanel() {
     <main>
       {tabBar}
       <div className="text-xs text-ive-text-dim mb-3">{t('totalUsersCount', { count: users.length })}</div>
-      {/* PC 폭: 사용자 카드 2열 */}
-      <div className="space-y-2 desk:space-y-0 desk:grid desk:grid-cols-2 desk:gap-3">
+      {/* PC 폭: 사용자 카드 2열 — 1명이면 가운데 */}
+      <div className="space-y-2 desk:space-y-0 desk:grid desk:grid-cols-[var(--grid-cols)] desk:w-[var(--grid-w)] desk:mx-auto desk:gap-3"
+        style={cardGridVars(users.length, 2, 0.75)}>
         {users.map(u => (
           <div key={u.id} className="bg-ive-bg-card border border-ive-border-subtle rounded-lg px-4 py-3">
             <div className="flex items-center gap-3">
