@@ -36,6 +36,9 @@
   "noResults": "결과 없음",
   "appUpdate": {
     "title": "새 버전이 있습니다 — 눌러서 새로고침",
-    "short": "새로고침"
+    "short": "새로고침",
+    "tipTitle": "새 업데이트가 배포되었습니다",
+    "tipTitleVersion": "새 버전 v{version}이 나왔습니다",
+    "tipHint": "눌러서 새로고침하면 바로 적용됩니다"
   }
 }

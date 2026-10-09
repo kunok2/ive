@@ -36,6 +36,9 @@
   "noResults": "No results",
   "appUpdate": {
     "title": "A new version is available — tap to reload",
-    "short": "Reload"
+    "short": "Reload",
+    "tipTitle": "A new update has been deployed",
+    "tipTitleVersion": "Version v{version} is out",
+    "tipHint": "Tap to reload and apply it now"
   }
 }

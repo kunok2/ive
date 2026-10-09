@@ -18,6 +18,7 @@ import ReleaseNotesModal from '@/components/ui/ReleaseNotesModal'
 import TourOverlay, { tourSteps } from '@/components/ui/TourOverlay'
 import IntroSlides from '@/components/auth/IntroSlides'
 import { useAppVersionWatch } from '@/lib/use-app-version-watch'
+import AppUpdateButton from '@/components/layout/AppUpdateButton'
 
 export default function TopBar() {
   const router = useRouter()
@@ -172,17 +173,7 @@ export default function TopBar() {
             })()}
 
             {/* 새 판 알림 — 이 탭이 옛 번들을 돌고 있으면. 누르면 페이지를 다시 연다 */}
-            {appVersion.stale && (
-              <button
-                onClick={appVersion.reload}
-                className="relative w-8 h-8 rounded-lg bg-ive-green/20 border border-ive-green/40 flex items-center justify-center text-ive-green hover:bg-ive-green/30 active:scale-95 transition-all"
-                title={`${tc('appUpdate.title')}${appVersion.latestVersion ? ` (v${appVersion.latestVersion})` : ''}`}
-                aria-label={tc('appUpdate.title')}
-              >
-                <i className="fa-solid fa-arrows-rotate text-sm" />
-                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-ive-red" />
-              </button>
-            )}
+            {appVersion.stale && <AppUpdateButton latestVersion={appVersion.latestVersion} onReload={appVersion.reload} />}
 
             {/* 내 검증 대기 뱃지 */}
             {myVerifyCount > 0 && (
