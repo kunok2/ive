@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { useToast } from '@/components/ui/Toast'
 import { useStore } from '@/lib/store'
+import ImageViewer, { ViewerImage } from '@/components/ui/ImageViewer'
 
 interface EvidenceRun {
   stage: 'reproduce' | 'verify' | 'confirm'
@@ -84,6 +85,7 @@ export default function IssueAutomationPanel({
   const [info, setInfo] = useState<RolesInfo | null>(null)
   const [runs, setRuns] = useState<EvidenceRun[]>([])
   const [busy, setBusy] = useState<null | 'auto_all' | 'approve_automation'>(null)
+  const [viewer, setViewer] = useState<{ images: ViewerImage[]; index: number } | null>(null)
   const focusRun = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('run') : null
 
   const load = useCallback(async () => {
@@ -171,10 +173,16 @@ export default function IssueAutomationPanel({
             {run.result?.reason && v !== 'pass' && <p className="text-xs text-ive-text-muted"><b>{t('reason')}</b>: {run.result.reason}</p>}
             {run.images.length > 0 && (
               // 증적은 버튼·라벨만 잘라 찍은 작은 이미지가 많다 — 칸 폭에 맞춰 키우면 흐릿하게 커진다.
-              // 고정 높이 칸 안에 원본 크기 이하로(비율 유지) 보이고, 누르면 원본을 연다
+              // 고정 높이 칸 안에 원본 크기 이하로(비율 유지) 보이고, 누르면 사진 보기로 크게(확대·이동) 본다
               <div className="grid grid-cols-2 desk:grid-cols-4 gap-2">
-                {run.images.map(img => (
-                  <a key={img} href={fileUrl(run, img)} target="_blank" rel="noreferrer" className="block min-w-0">
+                {run.images.map((img, i) => (
+                  <a key={img} href={fileUrl(run, img)} target="_blank" rel="noreferrer" className="block min-w-0 cursor-zoom-in"
+                    onClick={e => {
+                      // 새 탭으로 열기(가운데 클릭·Ctrl/⌘ 클릭)는 그대로 두고, 그냥 누르면 사진 보기
+                      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+                      e.preventDefault()
+                      setViewer({ images: run.images.map(im => ({ src: fileUrl(run, im), alt: captions.get(im) || im.split('/').pop() })), index: i })
+                    }}>
                     <span className="h-36 flex items-center justify-center rounded-lg border border-ive-border-dark bg-ive-bg-deep overflow-hidden p-1">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={fileUrl(run, img)} alt={img} className="max-w-full max-h-full object-contain" />
@@ -254,6 +262,14 @@ export default function IssueAutomationPanel({
           </div>
         )
       })}
+      {viewer && (
+        <ImageViewer
+          images={viewer.images}
+          index={viewer.index}
+          onClose={() => setViewer(null)}
+          onIndexChange={index => setViewer(v => v && { ...v, index })}
+        />
+      )}
     </div>
   )
 }
