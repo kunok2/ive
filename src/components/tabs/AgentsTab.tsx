@@ -8,6 +8,7 @@ import ConfirmModal from '@/components/ui/ConfirmModal'
 import PullToRefresh from '@/components/ui/PullToRefresh'
 import { useTranslations } from 'next-intl'
 import ProjectFilter from '@/components/report/ProjectFilter'
+import SegmentTabs from '@/components/ui/SegmentTabs'
 import type { Tr } from '@/components/report/format'
 import type { Agent } from '@/types'
 import { cardGridVars } from '@/lib/card-grid'
@@ -158,33 +159,20 @@ export default function AgentsTab({ onAdd }: { onAdd?: () => void }) {
           </div>
         ) : (
           <>
-            <div className="desk:max-w-xl desk:mx-auto">
+            {/* 위쪽 순서·모양은 보고서와 같다: 프로젝트 필터 → 종류(전체·처리·검증·확인) */}
+            <div className="desk:max-w-lg desk:mx-auto">
               <ProjectFilter options={projectOptions} selected={activeIds} onChange={changeProjects} tr={trFilter} />
-            </div>
-            {/* 필터 탭 — ReportsTab과 동일 스타일 */}
-            <div data-tour="agents-filter" className="flex gap-1 mb-3 desk:max-w-xl desk:mx-auto">
-              {([
-                { key: 'all', icon: '', label: t('filterAll'), count: allCount, backlog: 0 },
-                { key: 'process', icon: 'fa-robot', label: ta('role_process'), count: processCount, backlog: processBacklog },
-                { key: 'verify', icon: 'fa-user-check', label: ta('role_verify'), count: verifyCount, backlog: verifyBacklog },
-                { key: 'confirm', icon: 'fa-circle-check', label: ta('role_confirm'), count: confirmCount, backlog: confirmBacklog },
-              ] as { key: FilterKey; icon: string; label: string; count: number; backlog: number }[]).map(f => (
-                <button
-                  key={f.key}
-                  onClick={() => changeFilter(f.key)}
-                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${filter === f.key ? 'bg-ive-green text-ive-bg-deep' : 'bg-ive-bg-card text-ive-text-dim'}`}
-                >
-                  {f.icon && <i className={`fa-solid ${f.icon} mr-1`} />}{f.label} {f.count}
-                  {f.backlog > 0 && (
-                    <span className={`ml-1 inline-flex px-1.5 rounded-lg text-xs font-bold ${filter === f.key ? 'bg-ive-bg-deep/30 text-ive-bg-deep' : 'bg-ive-cyan/20 text-ive-cyan'}`}>{f.backlog}</span>
-                  )}
-                </button>
-              ))}
+              <SegmentTabs<FilterKey> dataTour="agents-filter" value={filter} onChange={changeFilter} items={[
+                { key: 'all', label: t('filterAll'), count: allCount },
+                { key: 'process', icon: 'fa-robot', label: ta('role_process'), count: processCount, badge: processBacklog },
+                { key: 'verify', icon: 'fa-user-check', label: ta('role_verify'), count: verifyCount, badge: verifyBacklog },
+                { key: 'confirm', icon: 'fa-circle-check', label: ta('role_confirm'), count: confirmCount, badge: confirmBacklog },
+              ]} />
             </div>
             {allCount > 8 && (
               <input type="text" value={query} onChange={e => { setQuery(e.target.value); setShown(30) }}
                 placeholder={tIssue('searchMember')}
-                className="w-full mb-3 desk:max-w-xl desk:mx-auto desk:block bg-ive-bg-deep border border-ive-border-dark rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim focus:outline-none focus:border-ive-green/50" />
+                className="w-full mb-3 desk:max-w-lg desk:mx-auto desk:block bg-ive-bg-deep border border-ive-border-dark rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim focus:outline-none focus:border-ive-green/50" />
             )}
           </>
         )}

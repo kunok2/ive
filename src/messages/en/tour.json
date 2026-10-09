@@ -45,7 +45,7 @@
   "tabReports": "Reports Tab",
   "tabReportsDesc": "See the work you are holding, work finished, where the time went, and hours and cost spent, by period.",
   "reportsPeriod": "Period Selector",
-  "reportsPeriodDesc": "Choose weekly, monthly or yearly and use the arrows to move between periods. The project filter below lets you pick only the projects you want.",
+  "reportsPeriodDesc": "Choose weekly, monthly or yearly and use the arrows to move between periods. The project filter above lets you pick only the projects you want.",
 
   "tabAdmin": "Admin Tab",
   "tabAdminDesc": "Admins only. Manage user permissions, report mail, and system settings such as CLI paths, mail, OAuth and rates.",
