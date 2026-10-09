@@ -15,6 +15,9 @@ import { PriorityBadge } from '@/components/tabs/issues/Priority'
 import IssueBadges, { hasIssueBadges } from '@/components/tabs/issues/IssueBadges'
 import type { ToolActivity } from '@/lib/tool-activity'
 
+/** 칸 안 묶음의 성격 — 정렬 순서(실패 → 대기 → 진행 중)대로 바뀌는 자리에 구분선을 긋는다 */
+const groupKind = (g: { waiting: boolean; failed: boolean }) => g.failed ? 'fail' : g.waiting ? 'wait' : 'active'
+
 type Col = 'process' | 'verify' | 'confirm' | 'done'
 const COLS: Col[] = ['process', 'verify', 'confirm', 'done']
 const COL_LABEL: Record<Col, string> = { process: 'boardProcess', verify: 'boardVerify', confirm: 'boardConfirm', done: 'boardDoneToday' }
@@ -133,12 +136,13 @@ export default function ProjectBoard({ project, onOpenTrace }: { project: Projec
       // 에이전트가 처리 중이면 실시간 실행 화면으로(검증·확인도 같다 — execHref)
       cols.process.push({ ...base, who: execWho(e), face: execFace(e), startedAt: e?.startedAt ?? null, traceExecId: traceOf(e) })
     } else if (i.stage === 'verify_waiting') {
-      cols.verify.push({ ...base, who: tp(WAIT_LABEL.verify), startedAt: null, waiting: true })
+      // 검증·확인 대기도 그 단계에 들어온 시각(단계 사건)부터 — 카드의 대기 묶음과 같은 기준. 사건 기록 전이면 모름(경과 생략)
+      cols.verify.push({ ...base, who: tp(WAIT_LABEL.verify), startedAt: i.stageSince ?? null, waiting: true })
     } else if (i.stage === 'verifying') {
       const e = execFor(i.iid, 'verify')
       cols.verify.push({ ...base, who: i.actualVerifier?.name ?? execWho(e), face: i.actualVerifier?.name ? actorFace(i.actualVerifier) : execFace(e), startedAt: e?.startedAt ?? null, traceExecId: traceOf(e) })
     } else if (i.stage === 'confirm_waiting') {
-      cols.confirm.push({ ...base, who: tp(WAIT_LABEL.confirm), startedAt: null, waiting: true })
+      cols.confirm.push({ ...base, who: tp(WAIT_LABEL.confirm), startedAt: i.stageSince ?? null, waiting: true })
     } else if (i.stage === 'confirming') {
       const e = execFor(i.iid, 'confirm')
       cols.confirm.push({ ...base, who: i.actualConfirmer?.name ?? execWho(e), face: i.actualConfirmer?.name ? actorFace(i.actualConfirmer) : execFace(e), startedAt: e?.startedAt ?? null, traceExecId: traceOf(e) })
@@ -218,8 +222,9 @@ export default function ProjectBoard({ project, onOpenTrace }: { project: Projec
               <div className="flex-1 min-h-0 overflow-y-auto p-2.5 flex flex-col gap-3">
                 {issues === null && items.length === 0 && <span className="text-xs font-bold text-ive-text-dim px-1">{tp('boardLoading')}</span>}
                 {issues !== null && items.length === 0 && <span className="text-xs font-bold text-ive-text-dim px-1">{tp('boardEmpty')}</span>}
-                {groups.map(g => (
-                  <div key={g.who || '-'} className="flex flex-col gap-1.5">
+                {groups.map((g, gi) => (
+                  // 묶음 성격(실패 · 대기 · 진행 중)이 바뀌는 곳마다 구분선 — 한 목록으로 섞여 읽히지 않게
+                  <div key={g.who || '-'} className={`flex flex-col gap-1.5 ${gi > 0 && groupKind(g) !== groupKind(groups[gi - 1]) ? 'pt-3 border-t border-ive-text-dim/40' : ''}`}>
                     {g.who && (
                       <div className={`flex items-center gap-1.5 px-1 text-xs font-bold ${g.failed ? 'text-ive-red' : 'text-ive-text-secondary'}`}>
                         {/* 아바타 — 진행 중이면 카드와 같은 배지(사람: 작업 중, 에이전트: 지금 쓰는 도구). 완료 칸은 배지 없음 */}
