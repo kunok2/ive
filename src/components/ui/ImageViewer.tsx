@@ -21,18 +21,25 @@ const MIN_SCALE = 1
 const MAX_SCALE = 8
 const STEP = 1.5
 const DOUBLE_TAP_SCALE = 2.5
+/** 아래로 끌어 닫기 — 이만큼 내리거나, 덜 내려도 빠르게 튕기면 닫는다 */
+const PULL_CLOSE_PX = 120
+const PULL_FLICK_PX = 40
+const PULL_FLICK_SPEED = 0.6 // px/ms
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 
 /**
  * 사진 보기 — 이미지만 화면 가득 띄우고 확대·이동해 볼 수 있다.
  * 휠·핀치·더블클릭(더블탭)·버튼으로 확대, 끌어서 이동, ←/→·밀기로 앞뒤 이미지, Esc·바깥 누르면 닫힘.
+ * 확대하지 않은 상태에서 아래로 끌어내리면 닫힘 — 끄는 동안 이미지가 손가락을 따라 내려오고 바탕이 옅어진다.
  * 배율은 화면에 맞춘 크기를 100% 로 본다.
  */
 export default function ImageViewer({ images, index, onClose, onIndexChange }: Props) {
   const t = useTranslations('common')
   const [view, setView] = useState({ scale: 1, x: 0, y: 0 })
   const [dragging, setDragging] = useState(false)
+  // 아래로 끌어 닫는 중 내려온 거리(px) — 0 이면 끌지 않는 중
+  const [pullY, setPullY] = useState(0)
   const stageRef = useRef<HTMLDivElement>(null)
   const imgRef = useRef<HTMLImageElement>(null)
   // 이벤트 처리기(창 키보드·휠)에서 최신 배율을 읽는 용도
@@ -40,7 +47,8 @@ export default function ImageViewer({ images, index, onClose, onIndexChange }: P
   useLayoutEffect(() => { viewRef.current = view }, [view])
   // 진행 중인 포인터(마우스·손가락) — 2개면 핀치
   const pointers = useRef(new Map<number, { x: number; y: number }>())
-  const gesture = useRef<{ startX: number; startY: number; viewX: number; viewY: number; moved: boolean; onImage: boolean; pinchDist: number; pinchScale: number } | null>(null)
+  // axis — 확대 안 한 상태에서 한 손가락으로 끌 때 처음 움직인 방향으로 고정(x: 앞뒤 넘기기, y: 끌어 닫기)
+  const gesture = useRef<{ startX: number; startY: number; startT: number; viewX: number; viewY: number; moved: boolean; onImage: boolean; pinchDist: number; pinchScale: number; axis: 'x' | 'y' | null } | null>(null)
   const lastTap = useRef(0)
 
   const open = index !== null && images.length > 0
@@ -52,6 +60,7 @@ export default function ImageViewer({ images, index, onClose, onIndexChange }: P
   if (shownIndex !== index) {
     setShownIndex(index)
     setView({ scale: 1, x: 0, y: 0 })
+    setPullY(0)
   }
 
   // 열린 동안 뒤 화면 스크롤 막기 — 모달 안에서 열 수도 있어 닫을 때 원래 값으로 되돌린다
@@ -127,8 +136,10 @@ export default function ImageViewer({ images, index, onClose, onIndexChange }: P
     const v = viewRef.current
     const pts = [...pointers.current.values()]
     gesture.current = {
-      startX: e.clientX, startY: e.clientY, viewX: v.x, viewY: v.y,
+      startX: e.clientX, startY: e.clientY, startT: Date.now(), viewX: v.x, viewY: v.y,
       moved: gesture.current?.moved ?? false,
+      // 두 번째 손가락이 닿으면 핀치 — 끌어 닫기는 그만둔다
+      axis: pts.length === 1 ? null : 'x',
       onImage: gesture.current?.onImage ?? onImage,
       pinchDist: pts.length === 2 ? Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) : 0,
       pinchScale: v.scale,
@@ -143,14 +154,20 @@ export default function ImageViewer({ images, index, onClose, onIndexChange }: P
     const pts = [...pointers.current.values()]
     if (pts.length === 2 && g.pinchDist > 0) {
       g.moved = true
+      setPullY(0)
       const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y)
       zoomAt(g.pinchScale * dist / g.pinchDist, (pts[0].x + pts[1].x) / 2, (pts[0].y + pts[1].y) / 2)
       return
     }
     const dx = e.clientX - g.startX
     const dy = e.clientY - g.startY
-    if (!g.moved && Math.hypot(dx, dy) > 4) { g.moved = true; setDragging(true) }
+    if (!g.moved && Math.hypot(dx, dy) > 4) {
+      g.moved = true
+      setDragging(true)
+      if (g.axis === null) g.axis = dy > 0 && Math.abs(dy) > Math.abs(dx) ? 'y' : 'x'
+    }
     if (g.moved && viewRef.current.scale > 1) setView(v => ({ ...v, x: g.viewX + dx, y: g.viewY + dy }))
+    else if (g.moved && g.axis === 'y') setPullY(Math.max(0, dy))
   }
 
   const onPointerUp = (e: React.PointerEvent) => {
@@ -158,6 +175,7 @@ export default function ImageViewer({ images, index, onClose, onIndexChange }: P
     const wasPinch = pointers.current.size === 2
     pointers.current.delete(e.pointerId)
     if (pointers.current.size > 0) {
+      setPullY(0)
       // 핀치에서 한 손가락만 남음 — 남은 손가락 기준으로 이동을 이어 간다
       const [rest] = [...pointers.current.values()]
       const v = viewRef.current
@@ -168,6 +186,14 @@ export default function ImageViewer({ images, index, onClose, onIndexChange }: P
     setDragging(false)
     if (!g || wasPinch) return
     const dx = e.clientX - g.startX
+    if (g.moved && g.axis === 'y' && viewRef.current.scale === 1) {
+      // 아래로 끌어 닫기 — 충분히 내렸거나 빠르게 튕겼으면 닫고, 아니면 제자리로 돌아간다
+      const dy = Math.max(0, e.clientY - g.startY)
+      const speed = dy / Math.max(1, Date.now() - g.startT)
+      setPullY(0)
+      if (dy > PULL_CLOSE_PX || (dy > PULL_FLICK_PX && speed > PULL_FLICK_SPEED)) onClose()
+      return
+    }
     if (g.moved) {
       // 확대 안 한 상태에서 옆으로 밀면 앞뒤 이미지
       if (viewRef.current.scale === 1 && Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(e.clientY - g.startY)) go(dx < 0 ? 1 : -1)
@@ -194,11 +220,14 @@ export default function ImageViewer({ images, index, onClose, onIndexChange }: P
 
   // 포털이어도 React 이벤트는 부모 컴포넌트로 거슬러 올라간다 — 노트 접기 등 바깥 클릭 처리가 같이 돌지 않게 막는다
   const stop = (e: React.SyntheticEvent) => e.stopPropagation()
+  // 끌어 내리는 만큼 바탕·도구줄이 옅어진다(0.9 → 0.3)
+  const pullFade = Math.min(pullY / 300, 1)
 
   return createPortal(
     <div onClick={stop} onPointerDown={stop} onMouseDown={stop} onTouchStart={stop} onTouchEnd={stop} onDoubleClick={stop} onContextMenu={stop}
-      className="fixed inset-0 z-[60] bg-black/90 flex flex-col select-none" role="dialog" aria-modal="true" aria-label={t('imageViewer.title')}>
-      <div className="flex items-center gap-1 px-2 py-2 shrink-0 text-white/80 text-sm">
+      style={{ backgroundColor: `rgba(0, 0, 0, ${0.9 - 0.6 * pullFade})` }}
+      className="fixed inset-0 z-[60] flex flex-col select-none" role="dialog" aria-modal="true" aria-label={t('imageViewer.title')}>
+      <div className="flex items-center gap-1 px-2 py-2 shrink-0 text-white/80 text-sm" style={pullY ? { opacity: 1 - pullFade } : undefined}>
         <span className="px-2 font-bold tabular-nums min-w-0 truncate">
           {count > 1 && <span className="mr-3">{clamp(index!, 0, count - 1) + 1} / {count}</span>}
           <span className="text-white/60">{Math.round(view.scale * 100)}%</span>
@@ -237,7 +266,7 @@ export default function ImageViewer({ images, index, onClose, onIndexChange }: P
           alt={current.alt || ''}
           draggable={false}
           className={`max-w-full max-h-full object-contain ${dragging ? '' : 'transition-transform duration-150'}`}
-          style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }}
+          style={{ transform: `translate(${view.x}px, ${view.y + pullY}px) scale(${view.scale * (1 - 0.15 * pullFade)})` }}
         />
 
         {count > 1 && (
