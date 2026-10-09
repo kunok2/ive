@@ -206,7 +206,7 @@ export default function ProjectBoard({ project, onOpenTrace }: { project: Projec
           <span
             role="status"
             aria-live={syncError ? 'polite' : 'off'}
-            className={`inline-flex items-center gap-1.5 text-xs font-bold ${syncError ? 'text-ive-red' : 'text-ive-text-dim'}`}
+            className={`inline-flex items-center gap-1.5 text-xs font-bold ${syncError ? 'text-ive-red' : 'text-ive-text-secondary'}`}
             title={syncMessage}
             aria-label={syncMessage}
           >
@@ -226,7 +226,7 @@ export default function ProjectBoard({ project, onOpenTrace }: { project: Projec
         </div>
       </header>
 
-      <div className="flex-1 min-h-0 grid grid-cols-3 wide:grid-cols-4 gap-3">
+      <div className="flex-1 min-h-0 grid grid-cols-3 wide:grid-cols-4 items-start content-start gap-3">
         {COLS.map(col => {
           const items = cols[col]
           // 묶음: 그 단계의 대기 묶음이 맨 위, 그다음 맡은 사람(건수 많은 순)
@@ -242,7 +242,7 @@ export default function ProjectBoard({ project, onOpenTrace }: { project: Projec
           // 완료는 브랜드색, 사람·에이전트 손에 있는 칸은 진행색(카드 숫자 칸과 같은 규칙)
           const calm = col === 'done'
           return (
-            <div key={col} className={`min-h-0 flex-col rounded-lg bg-ive-bg-card/60 border border-ive-border-subtle ${col === 'done' ? 'hidden wide:flex' : 'flex'}`}>
+            <div key={col} className={`min-h-[180px] max-h-full min-w-0 flex-col rounded-lg bg-ive-bg-card/60 border border-ive-border-subtle ${col === 'done' ? 'hidden wide:flex' : 'flex'}`}>
               <div className={`shrink-0 flex items-center gap-1.5 mx-3 pt-3 pb-2 border-b-2 ${calm ? 'border-ive-cyan' : STAGE_TONE[col as 'process' | 'verify' | 'confirm'].border}`}>
                 <span className="text-sm font-bold text-ive-text">{tp(COL_LABEL[col])}</span>
                 {/* 진행 중 건수 + 그 단계 대기(←n) — 카드의 단계 칸과 같은 표기 */}
@@ -251,8 +251,18 @@ export default function ProjectBoard({ project, onOpenTrace }: { project: Projec
                 <FailPill n={failN} />
               </div>
               <div className="flex-1 min-h-0 overflow-y-auto p-2.5 flex flex-col gap-3">
-                {issues === null && items.length === 0 && <span className="text-xs font-bold text-ive-text-dim px-1">{tp('boardLoading')}</span>}
-                {issues !== null && items.length === 0 && <span className="text-xs font-bold text-ive-text-dim px-1">{tp('boardEmpty')}</span>}
+                {issues === null && items.length === 0 && (
+                  <div className="flex flex-1 flex-col items-center justify-center gap-2 px-3 py-5 text-center text-xs font-bold text-ive-text-muted">
+                    <i className="fa-solid fa-circle-notch fa-spin text-base" />
+                    <span>{tp('boardLoading')}</span>
+                  </div>
+                )}
+                {issues !== null && items.length === 0 && (
+                  <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-ive-border-dark bg-ive-bg/30 px-3 py-5 text-center text-xs font-bold text-ive-text-muted">
+                    <i className="fa-regular fa-folder-open text-base text-ive-text-dim" />
+                    <span>{tp('boardEmpty')}</span>
+                  </div>
+                )}
                 {groups.map((g, gi) => (
                   // 묶음 성격(실패 · 대기 · 진행 중)이 바뀌는 곳마다 구분선 — 한 목록으로 섞여 읽히지 않게
                   <div key={g.who || '-'} className={`flex flex-col gap-1.5 ${gi > 0 && groupKind(g) !== groupKind(groups[gi - 1]) ? 'pt-3 border-t border-ive-text-dim/40' : ''}`}>

@@ -1,8 +1,8 @@
 {
   "issues": "Tasks",
-  "noIssues": "No tasks",
-  "noIveIssues": "No IVE tasks",
-  "noFilterMatch": "No tasks match the current filter",
+  "noIssues": "There are no tasks yet.",
+  "noIveIssues": "There are no IVE tasks in this project yet. Add a task or label a Git issue for IVE to get started.",
+  "noFilterMatch": "No tasks match these conditions. Try changing your search or filters.",
   "loadMore": "Load more",
   "loadingIssues": "Loading tasks...",
   "addNewIssue": "Add New Task",

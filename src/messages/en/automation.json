@@ -53,7 +53,7 @@
   "confirmerBadge": "Confirmer",
   "confirmingLabel": "Confirming",
   "confirmWaitingLabel": "To confirm",
-  "noConfirmers": "No people or agents with the confirm role",
+  "noConfirmers": "No people or agents have been assigned the confirmer role yet.",
   "agentRoleBadge": "{role} {count}",
   "issuePanelTitle": "Stage automation & evidence",
   "evidenceCount": "{count} evidence runs",

@@ -1,8 +1,8 @@
 {
   "issues": "작업",
-  "noIssues": "작업가 없습니다",
-  "noIveIssues": "IVE 작업이 없습니다",
-  "noFilterMatch": "해당 필터에 맞는 작업가 없습니다",
+  "noIssues": "아직 작업이 없어요.",
+  "noIveIssues": "아직 이 프로젝트에 IVE 작업이 없어요. 새 작업을 추가하거나 Git 이슈에 IVE 레이블을 붙여 시작해 보세요.",
+  "noFilterMatch": "조건에 맞는 작업을 찾지 못했어요. 검색어나 필터를 바꿔 다시 살펴보세요.",
   "loadMore": "더 보기",
   "loadingIssues": "작업 불러오는 중...",
   "addNewIssue": "새 작업 추가",

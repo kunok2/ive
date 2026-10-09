@@ -257,7 +257,7 @@
     "Sat"
   ],
   "loadingCompact": "Loading...",
-  "noWorkInPeriod": "No tasks were processed in this period.",
+  "noWorkInPeriod": "No tasks were processed during this period. Try another period or project to see more activity.",
   "periodWeeklyLabel": "{year}.{month1}.{day1} ~ {month2}.{day2}",
   "regenerateTitle": "Recompute report",
   "regenerateMessage": "Discards the saved snapshot and recomputes with current rates. Numbers may differ from what was already emailed.",

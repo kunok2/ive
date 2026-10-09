@@ -257,7 +257,7 @@
     "토"
   ],
   "loadingCompact": "로딩 중...",
-  "noWorkInPeriod": "해당 기간에 처리된 작업이 없습니다.",
+  "noWorkInPeriod": "이번 기간에는 처리된 작업이 없어요. 기간이나 프로젝트를 바꿔 다른 기록도 확인해 보세요.",
   "periodWeeklyLabel": "{year}.{month1}.{day1} ~ {month2}.{day2}",
   "regenerateTitle": "보고서 다시 확정",
   "regenerateMessage": "저장된 확정본을 지우고 현재 단가로 다시 계산합니다. 이미 메일로 보낸 수치와 달라질 수 있습니다.",

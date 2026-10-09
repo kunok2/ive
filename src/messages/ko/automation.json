@@ -53,7 +53,7 @@
   "confirmerBadge": "확인자",
   "confirmingLabel": "확인중",
   "confirmWaitingLabel": "확인대기",
-  "noConfirmers": "확인 역할을 가진 사람·에이전트가 없습니다",
+  "noConfirmers": "아직 확인 담당자로 등록된 사람이나 에이전트가 없어요.",
   "agentRoleBadge": "{role} {count}",
   "issuePanelTitle": "단계 자동화·증적",
   "evidenceCount": "증적 {count}건",
