@@ -47,7 +47,7 @@ export const issueStageStyle = (stage: string | null | undefined): IssueStageSty
 /** 단계색 hex — 메일(클래스를 못 쓰는 곳, 흰 바탕)용. 대기는 한 가지 연한 회색(화면의 muted/25 를 흰 바탕에 미리 섞은 값) */
 const WAIT_HEX = '#d4d4d8'
 export const STAGE_HEX = {
-  process: '#f59e0b', verify: '#a78bfa', confirm: '#f472b6',
+  process: '#eab308', verify: '#a78bfa', confirm: '#f472b6',
   processWait: WAIT_HEX, verifyWait: WAIT_HEX, confirmWait: WAIT_HEX,
 } as const
 

@@ -64,6 +64,9 @@ export default function ProjectBoard({ project, onOpenTrace }: { project: Projec
   const [execs, setExecs] = useState<TaskExecution[]>([])
   // 완료(오늘) — 카드 「완료」 숫자와 같은 근거(오늘 완료·반려로 바뀐 이슈)
   const [doneToday, setDoneToday] = useState<TodayDoneIssue[]>([])
+  const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null)
+  const [boardSyncError, setBoardSyncError] = useState(false)
+  const [executionSyncError, setExecutionSyncError] = useState(false)
   // 경과는 분 단위 — 30초마다 다시 그린다
   const [now, setNow] = useState(() => Date.now())
   // 에이전트 도구 배지 — 카드와 같은 실시간 도구 활동
@@ -82,11 +85,24 @@ export default function ProjectBoard({ project, onOpenTrace }: { project: Projec
   useEffect(() => {
     // 프로젝트가 바뀌면 보드는 key 로 새로 마운트된다(ProjectsTab) — 여기서 비울 필요가 없다
     let alive = true
-    const loadIssues = () => fetch(`/api/projects/${project.id}/issues`).then(r => r.ok ? r.json() : []).then(d => { if (alive) setIssues(Array.isArray(d) ? d : []) }).catch(() => {})
-    const loadExecs = () => fetch(`/api/projects/${project.id}/executions`).then(r => r.ok ? r.json() : []).then(d => { if (alive) setExecs(Array.isArray(d) ? d : []) }).catch(() => {})
-    const loadDone = () => fetch(`/api/projects/${project.id}/done-today`).then(r => r.ok ? r.json() : []).then(d => { if (alive) setDoneToday(Array.isArray(d) ? d : []) }).catch(() => {})
-    loadIssues(); loadExecs(); loadDone()
-    const t1 = setInterval(() => { loadIssues(); loadDone() }, 10_000)
+    const loadBoardData = async () => {
+      const [issuesResult, doneResult] = await Promise.allSettled([
+        fetch(`/api/projects/${project.id}/issues`).then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json() }),
+        fetch(`/api/projects/${project.id}/done-today`).then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json() }),
+      ])
+      if (!alive) return
+      if (issuesResult.status === 'fulfilled') setIssues(Array.isArray(issuesResult.value) ? issuesResult.value : [])
+      if (doneResult.status === 'fulfilled') setDoneToday(Array.isArray(doneResult.value) ? doneResult.value : [])
+      const failed = issuesResult.status === 'rejected' || doneResult.status === 'rejected'
+      setBoardSyncError(failed)
+      if (!failed) setLastSyncedAt(Date.now())
+    }
+    const loadExecs = () => fetch(`/api/projects/${project.id}/executions`)
+      .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json() })
+      .then(d => { if (alive) { setExecs(Array.isArray(d) ? d : []); setExecutionSyncError(false) } })
+      .catch(() => { if (alive) setExecutionSyncError(true) })
+    loadBoardData(); loadExecs()
+    const t1 = setInterval(loadBoardData, 10_000)
     const t2 = setInterval(loadExecs, 5_000)
     const t3 = setInterval(() => setNow(Date.now()), 30_000)
     return () => { alive = false; clearInterval(t1); clearInterval(t2); clearInterval(t3) }
@@ -170,6 +186,11 @@ export default function ProjectBoard({ project, onOpenTrace }: { project: Projec
   }
 
   const color = project.color || '#4ade80'
+  const syncError = boardSyncError || executionSyncError
+  const syncTime = lastSyncedAt == null ? null : new Date(lastSyncedAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+  const syncMessage = syncError
+    ? syncTime ? tp('boardSyncFailed', { time: syncTime }) : tp('boardSyncFailedNoTime')
+    : lastSyncedAt == null ? tp('boardSyncLoading') : tp('boardSyncAt', { time: syncTime! })
 
   return (
     <section className="flex-1 min-w-0 flex flex-col gap-4 p-5 overflow-hidden">
@@ -182,6 +203,16 @@ export default function ProjectBoard({ project, onOpenTrace }: { project: Projec
           <span className="text-xs font-bold text-ive-text-dim font-mono truncate">{project.repoUrl.replace(/^https?:\/\//, '').replace(/\.git$/, '')}</span>
         </div>
         <div className="ml-auto flex items-center gap-2 shrink-0">
+          <span
+            role="status"
+            aria-live={syncError ? 'polite' : 'off'}
+            className={`inline-flex items-center gap-1.5 text-xs font-bold ${syncError ? 'text-ive-red' : 'text-ive-text-dim'}`}
+            title={syncMessage}
+            aria-label={syncMessage}
+          >
+            <i className={`fa-solid ${syncError ? 'fa-triangle-exclamation' : lastSyncedAt == null ? 'fa-circle-notch fa-spin' : 'fa-rotate'}`} />
+            <span className="max-w-[160px] truncate">{syncMessage}</span>
+          </span>
           {/* 1440px 아래에서는 완료 칸을 접고 오늘 완료 건수만 보인다 */}
           <span className="wide:hidden text-xs font-bold text-ive-text-secondary mr-1">
             {tp('boardDoneToday')} <span className={cols.done.length ? 'text-ive-cyan' : 'text-ive-text-dim'}><CountBump value={cols.done.length} /></span>

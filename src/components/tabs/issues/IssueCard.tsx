@@ -75,6 +75,8 @@ export default function IssueCard({
 
   const displayStage = issue.state === 'closed' && (!issue.stage || issue.stage === 'none') ? 'closed' : issue.stage
   const info = stageInfo[displayStage] || stageInfo.unknown
+  const showState = issue.stage !== 'none'
+  const meta = <IssueBadges issue={issue} />
 
   return (
     <div
@@ -102,12 +104,12 @@ export default function IssueCard({
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <span className="text-sm font-bold text-ive-green">#{issue.iid}</span>
-              <PriorityBadge priority={issue.priority} />
-              {/* 이력은 닫은 날짜(이력 정렬 기준과 같은 쪽), 열린 작업은 갱신일 */}
-              <span className="text-xs text-ive-text-dim">
-                <i className={`fa-solid ${isHistoryTab && issue.closedAt ? 'fa-lock' : 'fa-calendar-day'} mr-1`} />
-                {formatDateMedium(isHistoryTab && issue.closedAt ? issue.closedAt : issue.updatedAt, locale, timezone)}
-              </span>
+              {showState && (
+                <span className={`inline-flex items-center gap-1 text-xs font-bold px-1.5 py-0.5 rounded-lg border ${info.color}`}>
+                  <i className={`fa-solid ${info.icon}`} />
+                  {info.label}
+                </span>
+              )}
               {issue.chatActive && (
                 <span className={`inline-flex items-center gap-1 text-xs font-bold px-1.5 py-0.5 rounded-lg bg-ive-cyan/15 text-ive-cyan ${issue.chatProcessing ? 'animate-pulse' : ''}`}>
                   {issue.chatProcessing
@@ -182,23 +184,19 @@ export default function IssueCard({
             onConfirmerChange={onPresetConfirmerChange ? (preset) => onPresetConfirmerChange(issue.iid, preset) : undefined}
           />
         </span>
-        {/* 마감일 + 회차 뱃지 + 상태 배지 — 우측 정렬 그룹. 마감일·회차는 넓은 화면 보드와 같은 부품(IssueBadges) */}
-        {(() => {
-          const showState = issue.stage !== 'none'
-          const meta = <IssueBadges issue={issue} />
-          if (!showState && !hasIssueBadges(issue)) return null
-          return (
-            <span className="ml-auto shrink-0 inline-flex items-center gap-1">
-              {meta}
-              {showState && (
-                <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded border ${info.color}`}>
-                  <i className={`fa-solid ${info.icon}`} />
-                  {info.label}
-                </span>
-              )}
-            </span>
-          )
-        })()}
+        {/* 담당자와 현재 단계가 먼저 보이도록, 날짜·우선순위·회차는 보조 정보로 아래에 둔다. */}
+        {(hasIssueBadges(issue) || issue.priority === 1 || issue.priority === 2 || issue.updatedAt) && (
+          <span className="ml-auto shrink-0 inline-flex flex-wrap items-center justify-end gap-1">
+            <PriorityBadge priority={issue.priority} />
+            {meta}
+            {issue.updatedAt && (
+              <span className="text-xs text-ive-text-dim">
+                <i className={`fa-solid ${isHistoryTab && issue.closedAt ? 'fa-lock' : 'fa-calendar-day'} mr-1`} />
+                {formatDateMedium(isHistoryTab && issue.closedAt ? issue.closedAt : issue.updatedAt, locale, timezone)}
+              </span>
+            )}
+          </span>
+        )}
       </div>
     </div>
   )

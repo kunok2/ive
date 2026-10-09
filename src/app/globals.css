@@ -38,7 +38,7 @@
   /* 단계색 — 처리·검증·확인을 한눈에 가른다(카드·보드·진행 중 목록·단계 배지·진행 막대·보고서가 같은 색).
      대기(처리대기·검증대기·확인대기)는 단계색이 아니라 한 가지 연한 회색 바탕으로 강조하지 않는다(DESIGN_GUIDE 「단계색」).
      클래스 묶음은 lib/active-work.ts 의 ISSUE_STAGE_STYLE 한 곳 */
-  --color-ive-stage-process: #f59e0b;
+  --color-ive-stage-process: #eab308;
   --color-ive-stage-verify: #a78bfa;
   --color-ive-stage-confirm: #f472b6;
 
@@ -305,4 +305,3 @@ body::before {
   scrollbar-width: thin;
   scrollbar-color: var(--color-ive-text-dim) var(--color-ive-bg-deep);
 }
-
