@@ -73,6 +73,7 @@
   "filterAll": "All",
   "filterWorkers": "Agents",
   "filterVerifiers": "Verifiers",
+  "noneInProjects": "No people or agents in the selected projects",
   "noVerifiers": "No tasks currently waiting for or under verification",
   "verifyingLabel": "Verifying",
   "approvedLabel": "Approved",

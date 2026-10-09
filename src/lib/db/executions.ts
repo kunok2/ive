@@ -1,5 +1,5 @@
 import { TaskExecution, TaskStatus } from '@/types'
-import { getDb } from './connection'
+import { getDb, inProjectsSql } from './connection'
 import { getKSTTodayStartISO, getKSTYesterdayStartISO } from '../date-utils'
 import { getIssueAssigneeUsername } from './issues'
 import type { IssueStage } from './issues'
@@ -478,15 +478,16 @@ export function getLatestExecutionsByProject(projectId: string, limit: number = 
   return rows.map(mapExecution)
 }
 
-export function getLatestExecutionsByAgent(agentId: string, limit: number = 20): TaskExecution[] {
+export function getLatestExecutionsByAgent(agentId: string, limit: number = 20, projectIds?: string[] | null): TaskExecution[] {
+  const f = inProjectsSql('te.project_id', projectIds)
   const rows = getDb().prepare(`
     SELECT te.*, a.name AS agent_name, a.avatar AS agent_avatar
     FROM task_executions te
     LEFT JOIN agents a ON a.id = te.agent_id
-    WHERE te.agent_id = ?
+    WHERE te.agent_id = ?${f.sql}
     ORDER BY te.started_at DESC
     LIMIT ?
-  `).all(agentId, limit) as any[]
+  `).all(agentId, ...f.params, limit) as any[]
   return rows.map(mapExecution)
 }
 
@@ -502,27 +503,29 @@ export function getTodayExecutionsByProject(projectId: string): TaskExecution[] 
   return rows.map(mapExecution)
 }
 
-export function getTodayExecutionsByAgent(agentId: string): TaskExecution[] {
+export function getTodayExecutionsByAgent(agentId: string, projectIds?: string[] | null): TaskExecution[] {
   const todayStartISO = getKSTTodayStartISO()
+  const f = inProjectsSql('te.project_id', projectIds)
   const rows = getDb().prepare(`
     SELECT te.*, a.name AS agent_name, a.avatar AS agent_avatar
     FROM task_executions te
     LEFT JOIN agents a ON a.id = te.agent_id
-    WHERE te.agent_id = ? AND te.started_at >= ?
+    WHERE te.agent_id = ? AND te.started_at >= ?${f.sql}
     ORDER BY te.started_at DESC
-  `).all(agentId, todayStartISO) as any[]
+  `).all(agentId, todayStartISO, ...f.params) as any[]
   return rows.map(mapExecution)
 }
 
-export function getYesterdayCompletedCount(entityType: 'project' | 'agent', entityId: string): number {
+export function getYesterdayCompletedCount(entityType: 'project' | 'agent', entityId: string, projectIds?: string[] | null): number {
   const yesterdayStartISO = getKSTYesterdayStartISO()
   const todayStartISO = getKSTTodayStartISO()
   const col = entityType === 'project' ? 'project_id' : 'agent_id'
+  const f = inProjectsSql('project_id', projectIds)
   const r = getDb().prepare(`
     SELECT COUNT(*) as cnt FROM task_executions
     WHERE ${col} = ? AND status IN ('success', 'failed')
-    AND started_at >= ? AND started_at < ?
-  `).get(entityId, yesterdayStartISO, todayStartISO) as { cnt: number }
+    AND started_at >= ? AND started_at < ?${f.sql}
+  `).get(entityId, yesterdayStartISO, todayStartISO, ...f.params) as { cnt: number }
   return r.cnt
 }
 

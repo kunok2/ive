@@ -58,3 +58,8 @@ export function getDb() {
   }
   return global.db
 }
+
+/** 프로젝트 필터 조건 — ids 가 없거나 비면 조건 없음(종전과 같음) */
+export function inProjectsSql(col: string, ids?: string[] | null): { sql: string; params: string[] } {
+  return ids && ids.length ? { sql: ` AND ${col} IN (${ids.map(() => '?').join(',')})`, params: ids } : { sql: '', params: [] }
+}

@@ -28,6 +28,8 @@ interface Props {
   compact?: boolean
   assignedProjects?: AssignedProject[]
   onRemove?: (id: string) => void
+  /** 개발자 탭 프로젝트 필터 — 있으면 통계·대기열·실행 목록을 이 프로젝트 것만. 추이(스파크라인)는 에이전트 단위 기록이라 비운다 */
+  projectIds?: string[]
 }
 
 interface AgentStats {
@@ -72,7 +74,9 @@ function formatPausedUntil(iso: string): string {
   return `${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-export default function AgentCard({ agent, onDelete, compact, assignedProjects, onRemove }: Props) {
+export default function AgentCard({ agent, onDelete, compact, assignedProjects, onRemove, projectIds }: Props) {
+  const projectsKey = projectIds?.length ? projectIds.join(',') : ''
+  const pq = projectsKey ? `projects=${encodeURIComponent(projectsKey)}` : ''
   const { state, refreshAgents, updateAgent } = useStore()
   const t = useTranslations('agent')
   const tc = useTranslations('common')
@@ -190,15 +194,17 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
   const fetchStats = useCallback(async () => {
     try {
       const [statsRes, snapRes, queueRes] = await Promise.all([
-        fetch(`/api/agents/${agent.id}/stats`),
-        fetch(`/api/agents/${agent.id}/snapshots?mode=daily_avg`),
-        fetch(`/api/agents/${agent.id}/queue`),
+        fetch(`/api/agents/${agent.id}/stats${pq ? `?${pq}` : ''}`),
+        // 추이는 에이전트 단위로만 쌓인다 — 프로젝트를 고르면 나눌 수 없으므로 받지 않는다(빈 추이)
+        pq ? null : fetch(`/api/agents/${agent.id}/snapshots?mode=daily_avg`),
+        fetch(`/api/agents/${agent.id}/queue${pq ? `?${pq}` : ''}`),
       ])
       if (statsRes.ok) setStats(await statsRes.json())
-      if (snapRes.ok) setSnapshots(await snapRes.json())
+      if (!snapRes) setSnapshots([])
+      else if (snapRes.ok) setSnapshots(await snapRes.json())
       if (queueRes.ok) setPendingQueue(await queueRes.json())
     } catch { /* ignore */ }
-  }, [agent.id])
+  }, [agent.id, pq])
 
   // 통계·추이·대기열은 카드를 펼쳤을 때만 — 접힌 헤더는 이 값을 쓰지 않는다(에이전트가 많으면 카드마다 10초 폴링이 쌓인다)
   useEffect(() => {
@@ -214,14 +220,14 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
     if (!expandedPanel || expandedPanel === 'stats' || expandedPanel === 'pending') return
     const fetchExecs = async () => {
       try {
-        const res = await fetch(`/api/agents/${agent.id}/executions`)
+        const res = await fetch(`/api/agents/${agent.id}/executions${pq ? `?${pq}` : ''}`)
         if (res.ok) setExecutions(await res.json())
       } catch { /* ignore */ }
     }
     fetchExecs()
     const timer = setInterval(fetchExecs, 5000)
     return () => clearInterval(timer)
-  }, [expandedPanel, agent.id])
+  }, [expandedPanel, agent.id, pq])
 
   async function handleTest() {
     setTesting(true)
@@ -277,7 +283,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
   const handleKill = async (id: string) => {
     try {
       if (!await killExecution(id, () => setKilling(id))) return
-      const res = await fetch(`/api/agents/${agent.id}/executions`)
+      const res = await fetch(`/api/agents/${agent.id}/executions${pq ? `?${pq}` : ''}`)
       if (res.ok) setExecutions(await res.json())
       fetchStats()
     } finally { setKilling(null) }

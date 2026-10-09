@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { getAgent, getTodayExecutionsByAgent, getLatestExecutionsByAgent, getYesterdayCompletedCount } from '@/lib/db'
 import { getKSTTodayStart } from '@/lib/date-utils'
+import { parseProjectsParam } from '@/lib/project-filter-param'
 
 export async function GET(
   req: NextRequest,
@@ -16,17 +17,18 @@ export async function GET(
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
-  const todayExecs = getTodayExecutionsByAgent(id)
+  const projectIds = parseProjectsParam(req.url) // 개발자 탭 프로젝트 필터
+  const todayExecs = getTodayExecutionsByAgent(id, projectIds)
   const running = todayExecs.filter(e => e.status === 'running')
   const completed = todayExecs.filter(e => e.status === 'success')
   const failed = todayExecs.filter(e => e.status === 'failed')
 
   const totalTokens = todayExecs.reduce((sum, e) => sum + e.inputTokens + e.outputTokens, 0)
   const totalCost = todayExecs.reduce((sum, e) => sum + e.costUsd, 0)
-  const yesterdayCount = getYesterdayCompletedCount('agent', id)
+  const yesterdayCount = getYesterdayCompletedCount('agent', id, projectIds)
 
   // 평균 작업 시간 (최근 20건 기준)
-  const recentDone = getLatestExecutionsByAgent(id, 20).filter(e => e.endedAt && e.status !== 'running')
+  const recentDone = getLatestExecutionsByAgent(id, 20, projectIds).filter(e => e.endedAt && e.status !== 'running')
   let avgDurationSec = 0
   let avgTokensPerTask = 0
   let avgCostPerTask = 0

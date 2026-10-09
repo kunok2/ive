@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { getAgent, getLatestExecutionsByAgent } from '@/lib/db'
+import { parseProjectsParam } from '@/lib/project-filter-param'
 
 export async function GET(
   req: NextRequest,
@@ -15,6 +16,6 @@ export async function GET(
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
-  const executions = getLatestExecutionsByAgent(id, 50)
+  const executions = getLatestExecutionsByAgent(id, 50, parseProjectsParam(req.url))
   return NextResponse.json(executions)
 }

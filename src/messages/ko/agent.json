@@ -73,6 +73,7 @@
   "filterAll": "전체",
   "filterWorkers": "에이전트",
   "filterVerifiers": "검증자",
+  "noneInProjects": "고른 프로젝트에 걸린 사람·에이전트가 없습니다",
   "noVerifiers": "검증 중이거나 검증 대기인 작업가 없습니다",
   "verifyingLabel": "검증중",
   "approvedLabel": "금일승인",

@@ -7,7 +7,7 @@
  *     역할을 전부 끈 사람 줄은 "명시적 제외" 기록으로 남아, 다음 동기화에서 다시 들어오지 않는다.
  *   - 에이전트 줄은 역할을 전부 끄면 지운다(동기화 대상이 아니므로 제외 기록이 필요 없다).
  */
-import { getDb } from './connection'
+import { getDb, inProjectsSql } from './connection'
 
 export type RoleKey = 'process' | 'verify' | 'confirm'
 export type RosterSubjectType = 'user' | 'agent'
@@ -223,25 +223,43 @@ export interface AgentRoleSummary {
   confirming: number
 }
 
-export function getAgentRoleSummary(agentId: string): AgentRoleSummary {
+export function getAgentRoleSummary(agentId: string, projectIds?: string[] | null): AgentRoleSummary {
   const db = getDb()
+  const f = inProjectsSql('project_id', projectIds)
   const r = db.prepare(`
     SELECT SUM(can_process) as p, SUM(can_verify) as v, SUM(can_confirm) as c
-    FROM project_role_members WHERE subject_type = 'agent' AND subject_id = ?
-  `).get(agentId) as any
+    FROM project_role_members WHERE subject_type = 'agent' AND subject_id = ?${f.sql}
+  `).get(agentId, ...f.params) as any
   const q = db.prepare(`
     SELECT
       SUM(CASE WHEN preset_verifier_mode = 'agent' AND preset_verifier_agent_id = ? AND cached_stage = 'verify_waiting' THEN 1 ELSE 0 END) as vw,
       SUM(CASE WHEN preset_verifier_mode = 'agent' AND preset_verifier_agent_id = ? AND cached_stage = 'verifying' THEN 1 ELSE 0 END) as vi,
       SUM(CASE WHEN preset_confirmer_mode = 'agent' AND preset_confirmer_agent_id = ? AND cached_stage = 'confirm_waiting' THEN 1 ELSE 0 END) as cw,
       SUM(CASE WHEN preset_confirmer_mode = 'agent' AND preset_confirmer_agent_id = ? AND cached_stage = 'confirming' THEN 1 ELSE 0 END) as ci
-    FROM issue_stages
-  `).get(agentId, agentId, agentId, agentId) as any
+    FROM issue_stages WHERE 1 = 1${f.sql}
+  `).get(agentId, agentId, agentId, agentId, ...f.params) as any
   return {
     roles: { process: Number(r?.p || 0), verify: Number(r?.v || 0), confirm: Number(r?.c || 0) },
     verifyWaiting: Number(q?.vw || 0), verifying: Number(q?.vi || 0),
     confirmWaiting: Number(q?.cw || 0), confirming: Number(q?.ci || 0),
   }
+}
+
+/**
+ * 고른 프로젝트에 걸린 에이전트 — 그 프로젝트의 역할 명부에 있거나, 그 프로젝트에서 실행한 기록이 있거나,
+ * 그 프로젝트 이슈에 처리·검증·확인으로 지정돼 있는 에이전트. 개발자 탭의 프로젝트 필터가 쓴다.
+ */
+export function agentsInProjects(agentIds: string[], projectIds: string[]): Set<string> {
+  if (!agentIds.length || !projectIds.length) return new Set()
+  const a = agentIds.map(() => '?').join(','), p = projectIds.map(() => '?').join(',')
+  const rows = getDb().prepare(`
+    SELECT subject_id AS id FROM project_role_members WHERE subject_type = 'agent' AND subject_id IN (${a}) AND project_id IN (${p})
+    UNION SELECT DISTINCT agent_id FROM task_executions WHERE agent_id IN (${a}) AND project_id IN (${p})
+    UNION SELECT preferred_agent_id FROM issue_stages WHERE preferred_agent_id IN (${a}) AND project_id IN (${p})
+    UNION SELECT preset_verifier_agent_id FROM issue_stages WHERE preset_verifier_agent_id IN (${a}) AND project_id IN (${p})
+    UNION SELECT preset_confirmer_agent_id FROM issue_stages WHERE preset_confirmer_agent_id IN (${a}) AND project_id IN (${p})
+  `).all(...agentIds, ...projectIds, ...agentIds, ...projectIds, ...agentIds, ...projectIds, ...agentIds, ...projectIds, ...agentIds, ...projectIds) as { id: string }[]
+  return new Set(rows.map(r => r.id))
 }
 
 const RATE_COL: Record<RoleKey, string> = { process: 'rate_process', verify: 'rate_verify', confirm: 'rate_confirm' }

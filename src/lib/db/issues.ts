@@ -1,5 +1,5 @@
 import { Project } from '@/types'
-import { getDb } from './connection'
+import { getDb, inProjectsSql } from './connection'
 import { getKSTTodayStartISO } from '../date-utils'
 import { isBotName } from '../git-bot'
 import { syncRosterWithMembers } from './roles'
@@ -215,20 +215,22 @@ const NOT_PENDING_GUARD = `
       AND te.status IN ('success', 'running')
   )`
 
-export function countPreferredIssuesByAgent(agentId: string): number {
+export function countPreferredIssuesByAgent(agentId: string, projectIds?: string[] | null): number {
+  const f = inProjectsSql('project_id', projectIds)
   const r = getDb().prepare(`
     SELECT COUNT(*) as cnt FROM issue_stages
-    WHERE preferred_agent_id = ? AND (cached_stage IS NULL OR cached_stage IN ('', 'waiting'))
+    WHERE preferred_agent_id = ? AND (cached_stage IS NULL OR cached_stage IN ('', 'waiting'))${f.sql}
     ${NOT_PENDING_GUARD}
-  `).get(agentId) as any
+  `).get(agentId, ...f.params) as any
   return r?.cnt || 0
 }
 
-export function getPreferredIssuesByAgent(agentId: string): { projectId: string; projectName: string; issueIid: number }[] {
+export function getPreferredIssuesByAgent(agentId: string, projectIds?: string[] | null): { projectId: string; projectName: string; issueIid: number }[] {
+  const f = inProjectsSql('s.project_id', projectIds)
   return getDb().prepare(`
     SELECT s.project_id as projectId, p.name as projectName, s.issue_iid as issueIid
     FROM issue_stages s JOIN projects p ON p.id = s.project_id
-    WHERE s.preferred_agent_id = ? AND (s.cached_stage IS NULL OR s.cached_stage IN ('', 'waiting'))
+    WHERE s.preferred_agent_id = ? AND (s.cached_stage IS NULL OR s.cached_stage IN ('', 'waiting'))${f.sql}
       AND NOT EXISTS (
         SELECT 1 FROM task_executions te
         WHERE te.project_id = s.project_id
@@ -236,7 +238,7 @@ export function getPreferredIssuesByAgent(agentId: string): { projectId: string;
           AND te.status IN ('success', 'running')
       )
     ORDER BY s.updated_at ASC
-  `).all(agentId) as any[]
+  `).all(agentId, ...f.params) as any[]
 }
 
 export function clearPreferredAgentRefs(agentId: string) {
@@ -615,18 +617,18 @@ export interface VerifierSummary {
   iveUser: { id: string; name: string; email: string; avatar: string } | null
 }
 
-export function getVerifiersList(userId: string): VerifierSummary[] {
-  return getRolePeopleList(userId, 'verify')
+export function getVerifiersList(userId: string, projectIds?: string[] | null): VerifierSummary[] {
+  return getRolePeopleList(userId, 'verify', projectIds)
 }
 
 /** 확인자 목록 — 검증자 카드와 같은 모양(대기·진행·처리 건수). verifyWaiting/verifying 은 확인대기/확인중. */
-export function getConfirmersList(userId: string): VerifierSummary[] {
-  return getRolePeopleList(userId, 'confirm')
+export function getConfirmersList(userId: string, projectIds?: string[] | null): VerifierSummary[] {
+  return getRolePeopleList(userId, 'confirm', projectIds)
 }
 
 /** 처리자(사람) 목록 — 같은 카드 모양. verifyWaiting/verifying 은 처리대기(스케줄)/처리중, approved/rejected 는 처리 완료/실패. */
-export function getProcessorsList(userId: string): VerifierSummary[] {
-  return getRolePeopleList(userId, 'process')
+export function getProcessorsList(userId: string, projectIds?: string[] | null): VerifierSummary[] {
+  return getRolePeopleList(userId, 'process', projectIds)
 }
 
 /**
@@ -634,9 +636,13 @@ export function getProcessorsList(userId: string): VerifierSummary[] {
  * 사람 후보는 역할 명부(project_role_members)에서 그 역할을 가진 사람이다. 명부 밖이어도 지금 그 단계의
  * Git 담당자로 걸려 있는 사람은 일감이 있으므로 함께 보인다(종전 검증자 목록과 같은 규칙).
  */
-function getRolePeopleList(userId: string, role: 'process' | 'verify' | 'confirm'): VerifierSummary[] {
+function getRolePeopleList(userId: string, role: 'process' | 'verify' | 'confirm', projectIds?: string[] | null): VerifierSummary[] {
   const db = getDb()
+  // 접근 범위(소유·공유) — 프로젝트 필터가 있으면 그 안에서 고른 프로젝트만(명부·일감·통계 모두 이 조건 하나로 좁혀진다).
+  // 고른 id 는 문자 그대로 SQL 에 넣지 않고, 영숫자·-·_ 만 남겨 따옴표로 감싼다(사용자 입력).
+  const pick = (projectIds ?? []).map(id => id.replace(/[^A-Za-z0-9_-]/g, '')).filter(Boolean)
   const accessCondition = `(p.user_id = ? OR EXISTS (SELECT 1 FROM project_shares ps WHERE ps.project_id = p.id AND ps.user_id = ?))`
+    + (pick.length ? ` AND p.id IN (${pick.map(id => `'${id}'`).join(',')})` : '')
   const todayStartISO = getKSTTodayStartISO()
   const week7Ago = new Date(Date.now() - 7 * 86400 * 1000).toISOString()
   const roleCol = role === 'process' ? 'can_process' : role === 'verify' ? 'can_verify' : 'can_confirm'
