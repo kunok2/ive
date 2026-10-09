@@ -40,5 +40,13 @@
     "tipTitle": "A new update has been deployed",
     "tipTitleVersion": "Version v{version} is out",
     "tipHint": "Tap to reload and apply it now"
+  },
+  "imageViewer": {
+    "title": "Image viewer",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "fit": "Fit to screen",
+    "openOriginal": "Open original in new tab",
+    "open": "View larger"
   }
 }

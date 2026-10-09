@@ -40,5 +40,13 @@
     "tipTitle": "새 업데이트가 배포되었습니다",
     "tipTitleVersion": "새 버전 v{version}이 나왔습니다",
     "tipHint": "눌러서 새로고침하면 바로 적용됩니다"
+  },
+  "imageViewer": {
+    "title": "사진 보기",
+    "zoomIn": "확대",
+    "zoomOut": "축소",
+    "fit": "화면에 맞추기",
+    "openOriginal": "원본 새 탭에서 열기",
+    "open": "크게 보기"
   }
 }

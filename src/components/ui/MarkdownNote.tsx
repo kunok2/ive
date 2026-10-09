@@ -1,8 +1,10 @@
 'use client'
 
+import { useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { isGitHubAttachmentUrl } from '@/lib/github-attachment'
+import ImageViewer, { ViewerImage } from '@/components/ui/ImageViewer'
 
 /** 노트 본문 정리: 도구 태그 제거, HTML 태그를 MD로 변환, ANSI 이스케이프 제거 */
 export function cleanNoteBody(body: string): string {
@@ -36,49 +38,78 @@ export function cleanNoteBody(body: string): string {
 }
 
 export default function MarkdownNote({ body, projectId }: { body: string; projectId?: string }) {
+  const rootRef = useRef<HTMLDivElement>(null)
+  const [viewer, setViewer] = useState<{ images: ViewerImage[]; index: number } | null>(null)
+
+  /** 본문 이미지를 누르면 사진 보기로 — 같은 본문의 이미지끼리 앞뒤로 넘겨 본다 */
+  const openViewer = (target: HTMLImageElement) => {
+    const nodes = Array.from(rootRef.current?.querySelectorAll<HTMLImageElement>('img[data-zoomable]') || [])
+    const images = nodes.map(n => ({ src: n.currentSrc || n.src, alt: n.alt }))
+    setViewer({ images, index: Math.max(0, nodes.indexOf(target)) })
+  }
+
   return (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
-      components={{
-        h1: ({ children }) => <h1 className="text-base font-bold text-ive-text mt-2 mb-1">{children}</h1>,
-        h2: ({ children }) => <h2 className="text-sm font-bold text-ive-text mt-2 mb-1">{children}</h2>,
-        h3: ({ children }) => <h3 className="text-sm font-bold text-ive-text mt-1.5 mb-0.5">{children}</h3>,
-        p: ({ children }) => <p className="mb-1.5 last:mb-0">{children}</p>,
-        ul: ({ children }) => <ul className="list-disc list-inside mb-1.5 space-y-0.5">{children}</ul>,
-        ol: ({ children }) => <ol className="list-decimal list-inside mb-1.5 space-y-0.5">{children}</ol>,
-        li: ({ children }) => <li>{children}</li>,
-        strong: ({ children }) => <strong className="font-bold text-ive-text">{children}</strong>,
-        em: ({ children }) => <em className="italic">{children}</em>,
-        code: ({ children, className }) => {
-          const isBlock = className?.includes('language-')
-          if (isBlock) {
-            return <code className="block bg-ive-bg-deep rounded-lg p-2 my-1.5 text-xs font-mono overflow-x-auto whitespace-pre">{children}</code>
-          }
-          return <code className="bg-ive-bg-deep px-1 py-0.5 rounded text-xs font-mono text-ive-text">{children}</code>
-        },
-        pre: ({ children }) => <pre className="mb-1.5">{children}</pre>,
-        blockquote: ({ children }) => <blockquote className="border-l-2 border-ive-border pl-2.5 my-1.5 text-ive-text-dim">{children}</blockquote>,
-        img: ({ src, alt, ...rest }) => {
-          let resolvedSrc = String(src || '')
-          if (projectId && resolvedSrc.startsWith('/uploads/')) {
-            resolvedSrc = `/api/projects/${projectId}${resolvedSrc}`
-          } else if (projectId && isGitHubAttachmentUrl(resolvedSrc)) {
-            // private 저장소 GitHub 첨부는 브라우저가 직접 못 연다(404) — 서버 프록시 경유
-            resolvedSrc = `/api/projects/${projectId}/attachment?url=${encodeURIComponent(resolvedSrc)}`
-          }
-          return <img src={resolvedSrc} alt={alt || ''} className="max-w-full rounded-lg my-1" {...rest} />
-        },
-        a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-ive-cyan hover:underline">{children}</a>,
-        hr: () => <hr className="border-ive-border-dark my-2" />,
-        table: ({ children }) => <table className="w-full border-collapse my-2 text-sm">{children}</table>,
-        thead: ({ children }) => <thead className="bg-ive-bg-deep">{children}</thead>,
-        tbody: ({ children }) => <tbody>{children}</tbody>,
-        tr: ({ children }) => <tr className="border-b border-ive-border-dark">{children}</tr>,
-        th: ({ children }) => <th className="border border-ive-border-dark px-2 py-1 text-left font-bold text-ive-text">{children}</th>,
-        td: ({ children }) => <td className="border border-ive-border-dark px-2 py-1 text-ive-text-dim">{children}</td>,
-      }}
-    >
-      {body}
-    </ReactMarkdown>
+    // display: contents — 이미지 모음용 묶음일 뿐 배치에는 끼지 않는다
+    <div ref={rootRef} className="contents">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          h1: ({ children }) => <h1 className="text-base font-bold text-ive-text mt-2 mb-1">{children}</h1>,
+          h2: ({ children }) => <h2 className="text-sm font-bold text-ive-text mt-2 mb-1">{children}</h2>,
+          h3: ({ children }) => <h3 className="text-sm font-bold text-ive-text mt-1.5 mb-0.5">{children}</h3>,
+          p: ({ children }) => <p className="mb-1.5 last:mb-0">{children}</p>,
+          ul: ({ children }) => <ul className="list-disc list-inside mb-1.5 space-y-0.5">{children}</ul>,
+          ol: ({ children }) => <ol className="list-decimal list-inside mb-1.5 space-y-0.5">{children}</ol>,
+          li: ({ children }) => <li>{children}</li>,
+          strong: ({ children }) => <strong className="font-bold text-ive-text">{children}</strong>,
+          em: ({ children }) => <em className="italic">{children}</em>,
+          code: ({ children, className }) => {
+            const isBlock = className?.includes('language-')
+            if (isBlock) {
+              return <code className="block bg-ive-bg-deep rounded-lg p-2 my-1.5 text-xs font-mono overflow-x-auto whitespace-pre">{children}</code>
+            }
+            return <code className="bg-ive-bg-deep px-1 py-0.5 rounded text-xs font-mono text-ive-text">{children}</code>
+          },
+          pre: ({ children }) => <pre className="mb-1.5">{children}</pre>,
+          blockquote: ({ children }) => <blockquote className="border-l-2 border-ive-border pl-2.5 my-1.5 text-ive-text-dim">{children}</blockquote>,
+          img: ({ src, alt, ...rest }) => {
+            let resolvedSrc = String(src || '')
+            if (projectId && resolvedSrc.startsWith('/uploads/')) {
+              resolvedSrc = `/api/projects/${projectId}${resolvedSrc}`
+            } else if (projectId && isGitHubAttachmentUrl(resolvedSrc)) {
+              // private 저장소 GitHub 첨부는 브라우저가 직접 못 연다(404) — 서버 프록시 경유
+              resolvedSrc = `/api/projects/${projectId}/attachment?url=${encodeURIComponent(resolvedSrc)}`
+            }
+            return (
+              <img
+                src={resolvedSrc} alt={alt || ''} className="max-w-full rounded-lg my-1 cursor-zoom-in" {...rest}
+                data-zoomable=""
+                // 링크로 감싼 이미지도 이동하지 않고 사진 보기로 연다(원본은 사진 보기의 「원본 열기」로)
+                onClick={e => { e.preventDefault(); e.stopPropagation(); openViewer(e.currentTarget) }}
+              />
+            )
+          },
+          a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-ive-cyan hover:underline">{children}</a>,
+          hr: () => <hr className="border-ive-border-dark my-2" />,
+          table: ({ children }) => <table className="w-full border-collapse my-2 text-sm">{children}</table>,
+          thead: ({ children }) => <thead className="bg-ive-bg-deep">{children}</thead>,
+          tbody: ({ children }) => <tbody>{children}</tbody>,
+          tr: ({ children }) => <tr className="border-b border-ive-border-dark">{children}</tr>,
+          th: ({ children }) => <th className="border border-ive-border-dark px-2 py-1 text-left font-bold text-ive-text">{children}</th>,
+          td: ({ children }) => <td className="border border-ive-border-dark px-2 py-1 text-ive-text-dim">{children}</td>,
+        }}
+      >
+        {body}
+      </ReactMarkdown>
+      {/* 열 때만 그린다 — 닫힌 동안은 번역 등 사진 보기 쪽 준비가 필요 없다 */}
+      {viewer && (
+        <ImageViewer
+          images={viewer.images}
+          index={viewer.index}
+          onClose={() => setViewer(null)}
+          onIndexChange={index => setViewer(v => v && { ...v, index })}
+        />
+      )}
+    </div>
   )
 }
