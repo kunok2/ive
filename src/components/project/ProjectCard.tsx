@@ -284,7 +284,11 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
   }
 
   // 단계 칸의 진행 중 숫자 옆에 붙는 그 단계 대기 건수 — 점선 숫자(보드의 대기 카드와 같은 표시)
-  const waitTag = (n: number) => <WaitPill n={n} title={tp('stageWaitingHint', { n })} />
+  // 단계 칸: 큰 숫자(진행 중) 아래 한 줄에 대기·실패를 작게 — 옆에 나란히 두면 세 숫자가 한 줄에 뒤섞여 읽힌다.
+  // 오늘완료의 어제 대비 증감도 같은 줄에 둔다. 어느 칸이든 그 줄에 적을 것이 있으면 다섯 칸 모두 줄 높이를 비워 둔다(아래 추이선·이름이 어긋나지 않게)
+  const anySub = processWaitCount + verifyWaitCount + confirmWaitCount + devFailedCount > 0 || (!!stats && yesterdayDiff !== 0)
+  const subRow = (children: React.ReactNode) => anySub ? <div className="h-4 flex items-center justify-center gap-1.5">{children}</div> : null
+  const waitTag = (n: number, kind: 'process' | 'verify' | 'confirm') => <WaitPill n={n} kind={kind} title={tp('stageWaitingHint', { n })} />
 
   // 펼친 패널의 건수가 1건 이상이었다가 0이 되면(작업이 처리되어 비워짐) 패널을 닫는다.
   // 처음부터 0건인 패널을 사용자가 직접 연 경우는 그대로 둔다.
@@ -509,8 +513,8 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
           {(agentWorkingCount + verifyingCount + confirmingCount) > 0 && (
             <div className="shrink-0 flex items-center">
               <div className="relative w-10 h-10 flex items-center justify-center">
-                <i className="fa-solid fa-gear fa-spin text-xl text-ive-amber" style={{ animationDuration: '2s' }} />
-                <span className="absolute -bottom-0.5 -right-0.5 bg-ive-amber text-ive-bg-deep text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center">{agentWorkingCount + verifyingCount + confirmingCount}</span>
+                <i className="fa-solid fa-gear fa-spin text-xl" style={{ animationDuration: '2s', color: project.color || '#4ade80' }} />
+                <span className="absolute -bottom-0.5 -right-0.5 text-ive-bg-deep text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center" style={{ backgroundColor: project.color || '#4ade80' }}>{agentWorkingCount + verifyingCount + confirmingCount}</span>
               </div>
             </div>
           )}
@@ -540,9 +544,8 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
             <span className={`text-lg font-bold leading-none ${agentWorkingCount > 0 ? 'text-ive-stage-process animate-pulse' : 'text-ive-text-dim'}`}>
               <CountBump value={agentWorkingCount} />
             </span>
-            {waitTag(processWaitCount)}
-            <FailPill n={devFailedCount} />
           </div>
+          {subRow(<>{waitTag(processWaitCount, 'process')}<FailPill n={devFailedCount} /></>)}
           <Sparkline data={snapshots.map(s => s.running)} width={40} height={12} color="amber" />
           <span className="max-w-full truncate text-xs text-ive-text-dim font-bold">{tp('workingLabel')}</span>
         </button>
@@ -557,8 +560,8 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
             <span className={`text-lg font-bold leading-none ${verifyingCount > 0 ? 'text-ive-stage-verify animate-pulse' : 'text-ive-text-dim'}`}>
               <CountBump value={verifyingCount} />
             </span>
-            {waitTag(verifyWaitCount)}
           </div>
+          {subRow(waitTag(verifyWaitCount, 'verify'))}
           <Sparkline data={snapshots.map(s => s.running)} width={40} height={12} color="verify" />
           <span className="max-w-full truncate text-xs text-ive-text-dim font-bold">{tp('verifyingLabel')}</span>
         </button>
@@ -573,8 +576,8 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
             <span className={`text-lg font-bold leading-none ${confirmingCount > 0 ? 'text-ive-stage-confirm animate-pulse' : 'text-ive-text-dim'}`}>
               <CountBump value={confirmingCount} />
             </span>
-            {waitTag(confirmWaitCount)}
           </div>
+          {subRow(waitTag(confirmWaitCount, 'confirm'))}
           <Sparkline data={snapshots.map(s => s.running)} width={40} height={12} color="confirm" />
           <span className="max-w-full truncate text-xs text-ive-text-dim font-bold">{tp('confirmingLabel')}</span>
         </button>
@@ -589,12 +592,13 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
             <span className={`text-lg font-bold leading-none ${totalDone > 0 ? 'text-ive-green' : 'text-ive-text-dim'}`}>
               <CountBump value={totalDone} />
             </span>
-            {stats && yesterdayDiff !== 0 && (
-              <span title={tp('yesterdayDiffTooltip', { count: stats.yesterdayCompleted })} className={`text-xs font-bold ${yesterdayDiff > 0 ? 'text-ive-green' : 'text-ive-red'}`}>
-                <CountBump value={yesterdayDiff}>{yesterdayDiff > 0 ? '+' : ''}{yesterdayDiff}</CountBump>
-              </span>
-            )}
           </div>
+          {/* 어제 대비 증감 — 단계 칸의 대기·실패와 같은 자리(큰 숫자 아래 줄) */}
+          {subRow(stats && yesterdayDiff !== 0 && (
+            <span title={tp('yesterdayDiffTooltip', { count: stats.yesterdayCompleted })} className={`text-xs font-bold tabular-nums ${yesterdayDiff > 0 ? 'text-ive-green' : 'text-ive-red'}`}>
+              <CountBump value={yesterdayDiff}>{yesterdayDiff > 0 ? '+' : ''}{yesterdayDiff}</CountBump>
+            </span>
+          ))}
           <Sparkline data={snapshots.map(s => s.completed + s.failed)} width={40} height={12} />
           <span className="max-w-full truncate text-xs text-ive-text-dim font-bold">{tp('completedLabel')}</span>
         </button>
@@ -608,6 +612,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
           <span className={`text-lg font-bold leading-none ${mergeCount === null ? 'text-ive-text-dim/40' : conflictCount > 0 ? 'text-ive-red animate-pulse' : mergeCount > 0 ? 'text-ive-amber' : 'text-ive-text-dim'}`}>
             <CountBump value={mergeCount}>{mergeCount === null ? '–' : mergeCount}</CountBump>
           </span>
+          {subRow(null)}
           {/* Sparkline(40x12)과 동일 박스로 감싸야 <i> baseline 정렬이 위 숫자와 붙어 보이는 현상 방지 */}
           <div className="flex items-center justify-center" style={{ width: 40, height: 12 }}>
             <i className={`fa-solid fa-code-merge text-[10px] leading-none ${conflictCount > 0 ? 'text-ive-red' : (mergeCount ?? 0) > 0 ? 'text-ive-amber' : 'text-ive-text-dim'}`} />
@@ -665,23 +670,30 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
       })()}
 
       {/* 작업 현황 패널 (AI 에이전트만) — 처리 */}
-      {expandedPanel === 'running' && (
-        <div className="flex-1 flex flex-col min-h-0">
-          {(devFailedCount > 0 || processWaitCount > 0) && (
-            <div className="shrink-0 max-h-[45%] overflow-y-auto border-t border-ive-cyan/20">
-              {renderWaitGroup('dev_fail')}
-              {renderWaitGroup('waiting')}
-            </div>
-          )}
-          <LiveTracePanel
-            agents={toAgentTabs(runningExecs.filter(e => e.assigneeType !== 'user' && !stageKindOf(e.id)))}
-            projectId={project.id}
-            onKill={handleKill}
-            // 처리 대기가 남아 있으면 진행이 끝나도 패널을 닫지 않는다(대기 목록을 계속 보인다)
-            onAllCompleted={processWaitCount + devFailedCount > 0 ? undefined : () => setExpandedPanel(null)}
-          />
-        </div>
-      )}
+      {expandedPanel === 'running' && (() => {
+        const liveProcess = runningExecs.filter(e => e.assigneeType !== 'user' && !stageKindOf(e.id))
+        const hasWaitList = devFailedCount > 0 || processWaitCount > 0
+        return (
+          <div className="flex-1 flex flex-col min-h-0">
+            {/* 돌고 있는 에이전트가 없으면 대기·실패 목록이 패널 전체를 쓴다 — 45% 로 묶어 두면 아래가 비어 있는데도 목록이 잘려 스크롤된다(검증·확인 패널과 같은 규칙) */}
+            {hasWaitList && (
+              <div className={`${liveProcess.length > 0 ? 'shrink-0 max-h-[45%]' : 'flex-1 min-h-0'} overflow-y-auto border-t border-ive-cyan/20`}>
+                {renderWaitGroup('dev_fail')}
+                {renderWaitGroup('waiting')}
+              </div>
+            )}
+            {(liveProcess.length > 0 || !hasWaitList) && (
+              <LiveTracePanel
+                agents={toAgentTabs(liveProcess)}
+                projectId={project.id}
+                onKill={handleKill}
+                // 처리 대기가 남아 있으면 진행이 끝나도 패널을 닫지 않는다(대기 목록을 계속 보인다)
+                onAllCompleted={hasWaitList ? undefined : () => setExpandedPanel(null)}
+              />
+            )}
+          </div>
+        )
+      })()}
 
       {/* 검증 중 패널 — IVE-V 라벨 단계 이슈 목록 (라벨 기반, task_execution 없어도 표시) */}
       {expandedPanel === 'verifying' && (

@@ -306,10 +306,13 @@ export default function ProjectBoard({ projects, onOpenTrace, filterSlot }: { pr
             <div key={col} className={`min-h-[180px] max-h-full min-w-0 flex-col rounded-lg bg-ive-bg-card/60 border border-ive-border-subtle ${col === 'done' ? 'hidden wide:flex' : 'flex'}`}>
               <div className={`shrink-0 flex items-center gap-1.5 mx-3 pt-3 pb-2 border-b-2 ${calm ? 'border-ive-cyan' : STAGE_TONE[col as 'process' | 'verify' | 'confirm'].border}`}>
                 <span className="text-sm font-bold text-ive-text">{tp(COL_LABEL[col])}</span>
-                {/* 진행 중 건수 + 그 단계 대기(←n) — 카드의 단계 칸과 같은 표기 */}
+                {/* 진행 중 건수 + 그 단계 대기(시계 n) — 카드의 단계 칸과 같은 표기 */}
                 <span className={`text-xl font-bold leading-none tabular-nums ${!activeN ? 'text-ive-text-dim' : calm ? 'text-ive-cyan' : STAGE_TONE[col as 'process' | 'verify' | 'confirm'].text}`}><CountBump value={activeN} /></span>
-                <WaitPill n={waitN} title={tp('stageWaitingHint', { n: waitN })} />
-                <FailPill n={failN} />
+                {/* 대기·실패는 오른쪽 끝에 — 진행 숫자와 떨어뜨려 따로 읽히게 */}
+                <span className="ml-auto flex items-center gap-1.5">
+                  {col !== 'done' && <WaitPill n={waitN} kind={col} title={tp('stageWaitingHint', { n: waitN })} />}
+                  <FailPill n={failN} />
+                </span>
               </div>
               <div className="flex-1 min-h-0 overflow-y-auto p-2.5 flex flex-col gap-3">
                 {issues === null && items.length === 0 && (

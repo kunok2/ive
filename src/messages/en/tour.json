@@ -12,7 +12,7 @@
   "addProjectEmpty": "Add Your First Project",
   "addProjectEmptyDesc": "No projects yet! Tap this button to connect a GitHub/GitLab repository.",
   "projectStats": "Project Status",
-  "projectStatsDesc": "Shows processing, verification and confirmation (in progress, ←waiting), done today, and work to merge (open MRs). Press a number to expand that stage's list.",
+  "projectStatsDesc": "Shows processing, verification and confirmation (the large number is in progress, the number beside the clock is waiting), done today, and work to merge (open MRs). Press a number to expand that stage's list.",
   "projectScanner": "Scanner Control",
   "projectScannerDesc": "Pause or resume automatic task detection.",
 

@@ -2,18 +2,22 @@
 
 import { useTranslations } from 'next-intl'
 import CountBump from '@/components/ui/CountBump'
+import { STAGE_TONE } from '@/lib/active-work'
+
+/** 대기·실패 표시의 공통 꼴 — 바탕 없는 아이콘 + 작은 굵은 숫자(배지로 만들지 않는다 — 큰 숫자 옆에서 덩어리가 커진다). 나란히 놓이므로 꼴이 같아야 한다 */
+const PILL = 'text-xs font-bold tabular-nums whitespace-nowrap'
 
 /**
- * 그 단계에서 아직 아무도 잡지 않은 건수 — 진행 숫자 옆 「←n」(들어와 기다리는 n건).
- * 완료 칸의 증분 「+n/-n」과 같은 모양(작은 굵은 글씨, 숫자와 기준선 맞춤). 뜻은 title(「대기 n건」)로.
- * 색은 읽히는 보조색 — dim(#52525b)은 다크 카드에서 2.2:1 이라 안 읽혔다. 0이면 그리지 않는다.
+ * 그 단계에서 아직 아무도 잡지 않은 건수 — 시계 + n(기다리는 n건).
+ * 화살표(「←n」)는 방향으로 읽혀 대기라는 뜻이 전해지지 않았다 — 「대기」 단계 배지와 같은 시계 아이콘으로(모래시계는 작은 크기에서 가늘고 조잡했다),
+ * 실패 표시(경고 아이콘 + n)와 같은 꼴. 색은 그 단계 색을 조금 옅게 — 큰 숫자(진행 중)와 같은 단계의 것임이 색으로 이어진다.
+ * 뜻은 title(「대기 n건」)로도. 0이면 그리지 않는다.
  */
-export default function WaitPill({ n, title }: { n: number; title: string }) {
-  const tp = useTranslations('project')
+export default function WaitPill({ n, title, kind }: { n: number; title: string; kind: 'process' | 'verify' | 'confirm' }) {
   if (n <= 0) return null
   return (
-    <span title={title} aria-label={title} className="text-xs font-bold text-ive-text-secondary tabular-nums whitespace-nowrap">
-      <CountBump value={n}>{tp('waitShort', { n })}</CountBump>
+    <span title={title} aria-label={title} className={`${PILL} ${STAGE_TONE[kind].text} opacity-80`}>
+      <i className="fa-regular fa-clock mr-0.5" /><CountBump value={n} />
     </span>
   )
 }
@@ -27,7 +31,7 @@ export function FailPill({ n }: { n: number }) {
   if (n <= 0) return null
   const title = tp('stageFailHint', { n })
   return (
-    <span title={title} aria-label={title} className="text-xs font-bold text-ive-red tabular-nums whitespace-nowrap">
+    <span title={title} aria-label={title} className={`${PILL} text-ive-red`}>
       <i className="fa-solid fa-triangle-exclamation mr-0.5" /><CountBump value={n} />
     </span>
   )
