@@ -8,7 +8,7 @@ import MobileTabBar from '@/components/layout/MobileTabBar'
 import { useDialog } from '@/components/ui/ConfirmDialog'
 import { useToast } from '@/components/ui/Toast'
 import { useTranslations } from 'next-intl'
-import { useStageConfig } from './StageActions'
+import { useStageConfig, retryActionOf } from './StageActions'
 import { transitionTarget } from '@/lib/stage-transitions'
 import { useStore } from '@/lib/store'
 import IssueHeader, { IssueProgressSection } from './IssueHeader'
@@ -606,11 +606,7 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
     if (!comment.trim() || postingRef.current) return
     postingRef.current = true; setPosting(true); setPostingType('retry')
     try {
-      const stageAction = issue?.stage === 'done' ? 'reopen'
-        : issue?.stage === 'verifying' ? 'reject'
-        : issue?.stage === 'confirming' ? 'return_to_dev'
-        : issue?.stage === 'none' ? 'schedule'
-        : 'retry'
+      const stageAction = retryActionOf(issue?.stage)
       if (issue?.stage !== 'waiting' && !(await precheckStage(issue?.stage ?? 'none', stageAction))) return
       const noteBody = stageTransitionPrefix(issue?.stage, stageAction) + comment.trim()
       const res = await fetch(`/api/projects/${projectId}/issues/${iid}/notes`, {

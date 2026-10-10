@@ -93,7 +93,7 @@ interface IssueHeaderProps {
 }
 
 export default function IssueHeader({
-  issue, iterationCount,
+  issue, stageInfo, iterationCount,
   canEditAssignees, isClosing, editMode, editTitle, editDesc, saving, showDesc,
   projectId,
   onBack, widthCls = 'max-w-lg desk:max-w-3xl', onCloseIssue, onStartEdit, onSaveEdit, onCancelEdit,
@@ -122,6 +122,10 @@ export default function IssueHeader({
           </button>
         )}
         <span className="text-base font-bold text-ive-green shrink-0">#{issue.iid}</span>
+        {/* 지금 단계 — 진행 막대는 내용과 함께 스크롤돼 사라지므로 고정 머리에도 이름으로 적는다 */}
+        <span className={`text-xs font-bold px-2 py-0.5 rounded-lg shrink-0 whitespace-nowrap ${stageInfo.bg} ${stageInfo.color}`} title={tIssue('currentStage', { stage: stageInfo.label })}>
+          <i className={`fa-solid ${stageInfo.icon} mr-1`} />{stageInfo.label}
+        </span>
         <PriorityBadge priority={issue.priority} />
         {/* 처리가 2회 이상일 때만 — 1회는 평범하다(카드와 같은 규칙) */}
         {iterationCount >= 2 && (

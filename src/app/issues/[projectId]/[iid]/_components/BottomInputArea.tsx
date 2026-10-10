@@ -6,7 +6,8 @@ import { useKillExecution } from '@/lib/use-kill-execution'
 import { useTranslations } from 'next-intl'
 import { createImagePasteHandlers } from '@/lib/paste-upload'
 import AgentPickerDropdown from './AgentPickerDropdown'
-import { isClosedMidway } from './StageActions'
+import { isClosedMidway, retryActionOf } from './StageActions'
+import { transitionTarget } from '@/lib/stage-transitions'
 
 interface IssueDetail {
   iid: number
@@ -329,6 +330,10 @@ function CommentModeInput({
   handOff: StageHandOff | null
 }) {
   const tIssue = useTranslations('issue')
+  const tStage = useTranslations('stage')
+  // 누르면 가게 되는 단계 이름 — 폰 폭 버튼 글자(「← 대기」·「확인대기 →」)와 풍선말에 쓴다. 전이 표에서 계산해 실제 이동과 어긋나지 않는다
+  const targetLabel = (action: string | undefined) => tStage((action && transitionTarget(issue.stage, action)) || issue.stage)
+  const withTarget = (hint: string, target: string) => `${hint} (→ ${target})`
 
   // 에이전트가 이 작업을 하는 동안은 단계 버튼(유입·재실행·검증 시작·확인 등)을 내놓지 않는다 — 누르면 같은 일을 겹쳐 하게 된다.
   // 코멘트는 그대로 남길 수 있다. 서버(stage 라우트)도 같은 이유로 막는다.
@@ -373,38 +378,44 @@ function CommentModeInput({
         rows={1}
         className="w-full min-h-10 bg-ive-bg-card border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-green/50 overflow-hidden"
       />
-      <div className="flex gap-2 items-center overflow-hidden">
+      {/* 폰 폭: 글자까지 다 적으면 한 줄에 안 들어가 두 줄로 — 윗줄 단계 이동(← 뒤 · 앞 →), 아랫줄 단계를 옮기지 않는 일(등록 · 에이전트 호출).
+          단계 이동 버튼은 도착 단계 이름을 적는다(화살표만으로는 어디로 가는지 알 수 없다). 넓은 칸은 종전대로 한 줄 */}
+      <div className="flex flex-wrap pad:flex-nowrap gap-2 items-center">
         {/* ← 후진: 재실행 (현재 stage 를 스케줄로 되돌림). dev/none 단계에선 backward 액션 없음.
             dev_fail 은 처리 단계에서의 실패이므로 '이전 단계'(유입)로 가는 게 아니라 '재처리' 의미. */}
-        <div className="flex-1 flex justify-start gap-1.5">
+        <div className="flex-1 flex flex-wrap justify-start gap-1.5 empty:hidden pad:empty:flex">
           {/* 유입 버튼 — 검증대기/검증 단계에서만 표시 (이전 버튼 앞에 위치) */}
           {canProgressStage && !isClosed && (issue.stage === 'verify_waiting' || issue.stage === 'verifying') && (
             <button
               onClick={onCommentAndInflow}
               disabled={posting || !comment.trim()}
-              className="shrink-0 h-10 w-10 pad:w-auto pad:px-3 rounded-lg border border-ive-red/40 text-ive-red bg-ive-bg-card hover:bg-ive-red/10 flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold whitespace-nowrap"
+              className="shrink-0 h-10 px-3 rounded-lg border border-ive-red/40 text-ive-red bg-ive-bg-card hover:bg-ive-red/10 flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold whitespace-nowrap"
               title={tIssue('inflowHint')}
               aria-label={tIssue('inflowShort')}
             >
               {postingType === 'inflow' ? <i className="fa-solid fa-circle-notch fa-spin" /> : (
-                <><i className="fa-solid fa-rotate-left text-sm pad:text-[10px]" /><span className="hidden pad:inline">{tIssue('inflowShort')}</span></>
+                <><i className="fa-solid fa-rotate-left text-[10px]" /><span>{tIssue('inflowShort')}</span></>
               )}
             </button>
           )}
           {canProgressStage && issue.stage !== 'dev' && issue.stage !== 'none' && !(preferredAgent?.assignMode === 'assignee' && NEXT_STAGE[issue.stage]) && (() => {
             const isReprocess = issue.stage === 'dev_fail'
+            const backTarget = targetLabel(retryActionOf(issue.stage))
             return (
               <button
                 onClick={() => onCommentAndRetry()}
                 disabled={posting || !comment.trim()}
-                className="shrink-0 h-10 w-10 pad:w-auto pad:px-3 rounded-lg border border-ive-amber/40 text-ive-amber bg-ive-bg-card hover:bg-ive-amber/10 flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold whitespace-nowrap"
-                title={tIssue(isReprocess ? 'postAndReprocessHint' : 'postAndRetryHint')}
+                className="shrink-0 h-10 px-3 rounded-lg border border-ive-amber/40 text-ive-amber bg-ive-bg-card hover:bg-ive-amber/10 flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold whitespace-nowrap"
+                title={withTarget(tIssue(isReprocess ? 'postAndReprocessHint' : 'postAndRetryHint'), backTarget)}
                 aria-label={tIssue(isReprocess ? 'postAndReprocess' : 'postAndRetry')}
               >
                 {postingType === 'retry' ? <i className="fa-solid fa-circle-notch fa-spin" /> : (
                   <>
-                    <i className={`fa-solid ${isReprocess ? 'fa-arrow-rotate-right' : 'fa-arrow-left'} text-sm pad:text-[10px]`} />
-                    <span className="hidden pad:inline">{tIssue(isReprocess ? 'reprocess' : 'rerun')}</span>
+                    <i className={`fa-solid ${isReprocess ? 'fa-arrow-rotate-right' : 'fa-arrow-left'} text-[10px]`} />
+                    {isReprocess ? <span>{tIssue('reprocess')}</span> : <>
+                      <span className="pad:hidden">{backTarget}</span>
+                      <span className="hidden pad:inline">{tIssue('rerun')}</span>
+                    </>}
                   </>
                 )}
               </button>
@@ -413,50 +424,52 @@ function CommentModeInput({
         </div>
 
         {/* 가운데: 단계를 옮기지 않는 일 — 코멘트만(stay) · 에이전트 호출(지금 단계의 검증·확인을 에이전트에게 맡긴다) */}
-        <div className="flex items-center gap-1.5">
+        <div className="order-last w-full pad:order-none pad:w-auto flex items-center gap-1.5">
         <button
           onClick={onPostComment}
           disabled={posting || !comment.trim()}
-          className="shrink-0 h-10 w-10 pad:w-auto pad:px-3 rounded-lg bg-ive-green text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-40 text-xs font-bold whitespace-nowrap"
+          className="flex-1 pad:flex-none h-10 px-3 rounded-lg bg-ive-green text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-40 text-xs font-bold whitespace-nowrap"
           title={tIssue('postCommentOnly')}
           aria-label={tIssue('postComment')}
         >
-          {postingType === 'comment' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-paper-plane" /><span className="hidden pad:inline">{tIssue('postCommentShort')}</span></>}
+          {postingType === 'comment' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-paper-plane" /><span>{tIssue('postCommentShort')}</span></>}
         </button>
         {handOff && canProgressStage && forwardOk && <HandOffButton handOff={handOff} disabled={posting} />}
         </div>
 
         {/* 전진 →: 다음 단계 진입 (검증완료/다음단계로) */}
-        <div className="flex-1 flex justify-end">
+        <div className="flex-1 flex items-center justify-end gap-1.5 empty:hidden pad:empty:flex">
           {(() => {
             // 검증대기·확인대기는 늘 「검증 시작 →」·「확인 시작 →」 — 에이전트가 맡았어도 MR 없음 등으로 못 맡으면 사람이 진행한다
             const showNext = (preferredAgent?.assignMode === 'assignee' || issue.stage === 'none' || issue.stage === 'verify_waiting' || issue.stage === 'confirm_waiting') && !!NEXT_STAGE[issue.stage] && canProgressStage && forwardOk
             const showDone = !((preferredAgent?.assignMode === 'assignee' || issue.stage === 'none') && NEXT_STAGE[issue.stage]) && canProgressStage && forwardOk && (issue.stage === 'verifying' || issue.stage === 'confirming')
+            if (!showNext && !showDone) return null
+            const nextTarget = targetLabel(showNext ? NEXT_STAGE[issue.stage].action : issue.stage === 'confirming' ? 'accept' : 'approve')
             return (
-              <div className="flex items-center gap-1.5">
+              <>
                 {showNext && (
                   <button
                     onClick={onCommentAndNextStage}
                     disabled={posting}
-                    className={`shrink-0 h-10 w-10 pad:w-auto pad:px-3 rounded-lg bg-ive-cyan text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-40 text-xs font-bold whitespace-nowrap`}
-                    title={issue.stage === 'none' ? tIssue('startProcessingHint') : NEXT_STAGE[issue.stage].label}
+                    className={`shrink-0 h-10 px-3 rounded-lg bg-ive-cyan text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-40 text-xs font-bold whitespace-nowrap`}
+                    title={withTarget(issue.stage === 'none' ? tIssue('startProcessingHint') : NEXT_STAGE[issue.stage].label, nextTarget)}
                     aria-label={NEXT_STAGE[issue.stage].label}
                   >
-                    {postingType === 'next' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><span className="hidden pad:inline">{NEXT_STAGE[issue.stage].label}</span><i className="fa-solid fa-arrow-right text-sm pad:text-[10px]" /></>}
+                    {postingType === 'next' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><span className="pad:hidden">{nextTarget}</span><span className="hidden pad:inline">{NEXT_STAGE[issue.stage].label}</span><i className="fa-solid fa-arrow-right text-[10px]" /></>}
                   </button>
                 )}
                 {showDone && (
                   <button
                     onClick={onCommentAndDone}
                     disabled={posting || !comment.trim()}
-                    className={`shrink-0 h-10 w-10 pad:w-auto pad:px-3 rounded-lg bg-ive-cyan text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-40 text-xs font-bold whitespace-nowrap`}
-                    title={tIssue('postAndDoneHint')}
+                    className={`shrink-0 h-10 px-3 rounded-lg bg-ive-cyan text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-40 text-xs font-bold whitespace-nowrap`}
+                    title={withTarget(tIssue('postAndDoneHint'), nextTarget)}
                     aria-label={tIssue('postAndDone')}
                   >
-                    {postingType === 'done' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><span className="hidden pad:inline">{NEXT_STAGE[issue.stage]?.label || tIssue('done')}</span><i className="fa-solid fa-arrow-right text-sm pad:text-[10px]" /></>}
+                    {postingType === 'done' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><span className="pad:hidden">{nextTarget}</span><span className="hidden pad:inline">{NEXT_STAGE[issue.stage]?.label || tIssue('done')}</span><i className="fa-solid fa-arrow-right text-[10px]" /></>}
                   </button>
                 )}
-              </div>
+              </>
             )
           })()}
         </div>
@@ -628,16 +641,15 @@ function HandOffButton({ handOff, disabled }: { handOff: StageHandOff; disabled:
       type="button"
       onClick={handOff.onCall}
       disabled={disabled || handOff.busy}
-      className={`shrink-0 h-10 w-10 pad:w-auto pad:px-3 rounded-lg border bg-ive-bg-card flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold whitespace-nowrap ${handOff.kind === 'verify'
+      className={`shrink-0 h-10 px-3 rounded-lg border bg-ive-bg-card flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold whitespace-nowrap ${handOff.kind === 'verify'
         ? 'border-ive-stage-verify/40 text-ive-stage-verify hover:bg-ive-stage-verify/10'
         : 'border-ive-stage-confirm/40 text-ive-stage-confirm hover:bg-ive-stage-confirm/10'}`}
       title={title}
       aria-label={hint}
     >
-      {/* 폰 폭은 하단 버튼 모두 아이콘만(줄 폭 확보) — 넓은 칸에서 글자까지 */}
       {handOff.busy ? <i className="fa-solid fa-circle-notch fa-spin" /> : <>
-        <i className="fa-solid fa-robot text-sm pad:text-[10px]" />
-        <span className="hidden pad:inline">{tIssue('callAgent')}</span>
+        <i className="fa-solid fa-robot text-[10px]" />
+        <span>{tIssue('callAgent')}</span>
       </>}
     </button>
   )

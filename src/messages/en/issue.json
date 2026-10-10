@@ -218,6 +218,7 @@
     "verify": "verifying",
     "confirm": "confirming"
   },
+  "currentStage": "Current stage: {stage}",
   "inflowShort": "Inflow",
   "inflowHint": "Reset to inflow with this comment",
   "nextStage": {
