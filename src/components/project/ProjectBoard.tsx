@@ -16,8 +16,10 @@ import IssueBadges, { hasIssueBadges } from '@/components/tabs/issues/IssueBadge
 import type { ToolActivity } from '@/lib/tool-activity'
 import { measureFly, flyMoved, type FlySpots } from '@/lib/board-fly'
 
-/** 칸 안 묶음의 성격 — 정렬 순서(실패 → 대기 → 진행 중)대로 바뀌는 자리에 구분선을 긋는다 */
+/** 칸 안 묶음의 성격 — 정렬 순서(진행 중 → 실패 → 대기)대로 바뀌는 자리에 구분선을 긋는다 */
 const groupKind = (g: { waiting: boolean; failed: boolean }) => g.failed ? 'fail' : g.waiting ? 'wait' : 'active'
+/** 칸 안 순서 — 지금 손에 있는 일(진행 중)이 맨 위, 그다음 처리 실패, 아직 아무도 잡지 않은 대기가 맨 아래 */
+const GROUP_ORDER = { active: 0, fail: 1, wait: 2 } as const
 
 type Col = 'process' | 'verify' | 'confirm' | 'done'
 /**
@@ -29,7 +31,7 @@ type Col = 'process' | 'verify' | 'confirm' | 'done'
 const STALE_EXEC_GRACE_MS = 60_000
 const COLS: Col[] = ['process', 'verify', 'confirm', 'done']
 const COL_LABEL: Record<Col, string> = { process: 'boardProcess', verify: 'boardVerify', confirm: 'boardConfirm', done: 'boardDoneToday' }
-/** 단계 칸 안의 대기 묶음 — 그 단계에서 아직 아무도 잡지 않은 건. 칸 맨 위에 둔다 */
+/** 단계 칸 안의 대기 묶음 — 그 단계에서 아직 아무도 잡지 않은 건. 진행 중인 일 아래에 둔다 */
 const WAIT_LABEL: Record<Exclude<Col, 'done'>, string> = { process: 'waitGroupProcess', verify: 'waitGroupVerify', confirm: 'waitGroupConfirm' }
 
 /** /api/projects/[id]/issues 에서 보드가 쓰는 필드 */
@@ -184,7 +186,7 @@ export default function ProjectBoard({ projects, onOpenTrace, filterSlot }: { pr
       // 처리 대기에 들어온 시각(단계 사건) — 카드의 대기 목록과 같은 기준. 사건 기록 이전이면 이슈 작성 시각
       cols.process.push({ ...base, who: tp(WAIT_LABEL.process), startedAt: i.stageSince ?? i.createdAt ?? null, waiting: true })
     } else if (i.stage === 'dev_fail') {
-      // 처리 실패 — 실패 뒤 아무도 다시 처리하지 않은 일. 진행 숫자에는 넣지 않고 처리 칸 맨 위 묶음으로 드러낸다
+      // 처리 실패 — 실패 뒤 아무도 다시 처리하지 않은 일. 진행 숫자에는 넣지 않고 처리 칸에 따로 묶어 드러낸다(진행 중 아래, 대기 위)
       cols.process.push({ ...base, who: tp('failGroupProcess'), startedAt: i.stageSince ?? null, failed: true })
     } else if (i.stage === 'dev') {
       const e = execFor(i.pid, i.iid, 'process')
@@ -291,13 +293,13 @@ export default function ProjectBoard({ projects, onOpenTrace, filterSlot }: { pr
       <div className="flex-1 min-h-0 grid grid-cols-3 wide:grid-cols-4 items-start content-start gap-3">
         {COLS.map(col => {
           const items = cols[col]
-          // 묶음: 그 단계의 대기 묶음이 맨 위, 그다음 맡은 사람(건수 많은 순)
+          // 묶음: 맡은 사람(건수 많은 순)이 맨 위, 그다음 처리 실패, 그 단계의 대기 묶음이 맨 아래
           const groups = [...new Set(items.map(i => i.who ?? ''))]
             .map(who => {
               const mine = items.filter(i => (i.who ?? '') === who)
               return { who, waiting: mine.some(i => i.waiting), failed: mine.some(i => i.failed), face: mine.find(i => i.face)?.face ?? null, items: mine }
             })
-            .sort((a, b) => Number(b.failed) - Number(a.failed) || Number(b.waiting) - Number(a.waiting) || b.items.length - a.items.length)
+            .sort((a, b) => GROUP_ORDER[groupKind(a)] - GROUP_ORDER[groupKind(b)] || b.items.length - a.items.length)
           const waitN = items.filter(i => i.waiting).length
           const failN = items.filter(i => i.failed).length
           const activeN = items.length - waitN - failN
