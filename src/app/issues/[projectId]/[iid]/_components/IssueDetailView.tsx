@@ -61,6 +61,7 @@ interface IssueDetail {
   forwardCounts?: { toProcess: number; toVerify: number; toConfirm: number; toDone: number }
   /** 단계 작업자(에이전트)가 기동하지 못한 사유 — 있으면 사람이 직접 시작할 수 있게 안내 줄에 보인다 */
   stageWorkerNote?: string | null
+  deployState?: 'unmerged' | 'deploying' | 'deployed' | 'failed' | null
   /** 지금 이 작업을 하고 있는 에이전트 실행 — 있는 동안 단계 버튼을 막는다(겹쳐 처리 방지) */
   agentWork?: { executionId: string; agentName: string | null; kind: 'process' | 'verify' | 'confirm' | 'chat' } | null
   /** 0 보통 · 1 높음 · 2 긴급 (IVE 에만 저장) */

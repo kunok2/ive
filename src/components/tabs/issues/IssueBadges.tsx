@@ -9,6 +9,8 @@ export interface BadgeIssue {
   updatedAt: string
   dueDate?: string | null
   iterationCounts?: { processCount: number; retryTotal: number }
+  /** 확인대기·확인 중인 작업의 배포 상태 — 머지된 수정이 확인할 사이트에 올라갔는가 */
+  deployState?: 'unmerged' | 'deploying' | 'deployed' | 'failed' | null
 }
 
 /**
@@ -17,12 +19,37 @@ export interface BadgeIssue {
  */
 const showProcess = (i: BadgeIssue) => (i.iterationCounts?.processCount ?? 0) >= 2
 
+const showDeploy = (i: BadgeIssue) => !!i.deployState && (i.stage === 'confirm_waiting' || i.stage === 'confirming') && i.state !== 'closed'
+
 export function hasIssueBadges(i: BadgeIssue): boolean {
-  return !!i.dueDate || showProcess(i)
+  return !!i.dueDate || showProcess(i) || showDeploy(i)
+}
+
+const DEPLOY_BADGE: Record<NonNullable<BadgeIssue['deployState']>, { cls: string; icon: string; label: string; hint: string }> = {
+  unmerged:  { cls: 'bg-white/5 text-ive-text-secondary border-ive-border-subtle', icon: 'fa-solid fa-code-merge',        label: 'deployUnmerged',  hint: 'deployUnmergedHint' },
+  deploying: { cls: 'bg-ive-amber/10 text-ive-amber border-ive-amber/20',          icon: 'fa-solid fa-circle-notch fa-spin', label: 'deployDeploying', hint: 'deployDeployingHint' },
+  deployed:  { cls: 'bg-ive-green/10 text-ive-green border-ive-green/20',          icon: 'fa-solid fa-circle-check',      label: 'deployDeployed',  hint: 'deployDeployedHint' },
+  failed:    { cls: 'bg-ive-red/10 text-ive-red border-ive-red/20',                icon: 'fa-solid fa-triangle-exclamation', label: 'deployFailed',   hint: 'deployFailedHint' },
 }
 
 /**
- * 작업 배지 — 마감일(D-N·D+N·일찍/늦게) + 처리 N회(글자로 적는다).
+ * 배포 상태 배지 — 확인대기·확인 중인 작업에만. 머지 뒤 CI·배포(필요하면 재기동)가 끝나야 확인할 수 있으므로,
+ * 지금 확인해도 되는지(배포됨)·아직인지(배포 중·머지 전)·배포가 깨졌는지(배포 실패)를 알린다. 값은 스캐너가 구해 둔 것.
+ */
+export function DeployBadge({ issue }: { issue: BadgeIssue }) {
+  const t = useTranslations('issue')
+  if (!showDeploy(issue)) return null
+  const b = DEPLOY_BADGE[issue.deployState!]
+  return (
+    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-bold whitespace-nowrap ${b.cls}`} title={t(b.hint)}>
+      <i className={b.icon} />
+      {t(b.label)}
+    </span>
+  )
+}
+
+/**
+ * 작업 배지 — 배포 상태(확인 단계) + 마감일(D-N·D+N·일찍/늦게) + 처리 N회(글자로 적는다).
  * 작업 목록 카드와 넓은 화면 프로젝트 보드가 같이 쓴다(한쪽만 바뀌지 않게).
  */
 export default function IssueBadges({ issue }: { issue: BadgeIssue }) {
@@ -30,6 +57,7 @@ export default function IssueBadges({ issue }: { issue: BadgeIssue }) {
   const ic = issue.iterationCounts
   return (
     <>
+      <DeployBadge issue={issue} />
       {renderDueBadge(issue, t)}
       {showProcess(issue) && ic && (
         <span

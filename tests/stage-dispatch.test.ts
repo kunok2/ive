@@ -14,6 +14,7 @@
  *   D-10 명부에서 빠진 에이전트, 소유자가 편집 권한을 잃은 에이전트는 돌리지 않는다.
  *   D-11 IVE 가 봇 계정으로 만든 이슈는 본문의 ive-author(실제 등록자)로 판정한다 — 프로젝트 사람이면 허용.
  *        마커는 Git 작성자가 봇일 때만 믿는다.
+ *   S-1~S-6 배포 상태(화면 표시용) — 확인 단계 작업마다 머지 전·배포 중·배포됨·배포 실패를 구해 두고, 확인 단계를 벗어나면 지운다.
  *   H-1 사람이 「에이전트에게 확인 맡기기」를 누르면 확인 중(C)에서 판단 불가로 멈춘 뒤에도 바로 띄운다.
  *   H-2 맡기기도 배포 사실·작성자 허용·명부는 같은 기준으로 본다 — 못 띄우면 이유만 돌려주고 아무것도 바꾸지 않는다.
  *   H-3 검증도 같다 — 검증 중(V)에서 판단 불가로 멈춘 뒤에도 고른 에이전트로 바로 띄운다.
@@ -26,6 +27,7 @@ const providerMock = vi.hoisted(() => ({
   fetchMRByBranch: vi.fn(),
   isAncestorCommit: vi.fn(),
   readRepoFile: vi.fn(),
+  fetchBranchPipelines: vi.fn(),
 }))
 const workerMock = vi.hoisted(() => ({ runConfirmWorker: vi.fn(() => Promise.resolve()) }))
 const verifyWorkerMock = vi.hoisted(() => ({ runVerifyWorker: vi.fn(() => Promise.resolve()) }))
@@ -34,7 +36,7 @@ vi.mock('@/lib/scanner/confirm-worker', () => workerMock)
 vi.mock('@/lib/scanner/verify-worker', () => verifyWorkerMock)
 
 import { initSchema } from '@/lib/db/schema'
-import { setIssueIntakeChannel, setPresetRoles, updateProjectAutomation, getStageWorkerNote, approveIssueAutomation, replaceProjectMembers, setRosterEntry, getPresetRoles, getRoster, updateProjectShareRole, setAssignMode } from '@/lib/db'
+import { getDeployState, setIssueIntakeChannel, setPresetRoles, updateProjectAutomation, getStageWorkerNote, approveIssueAutomation, replaceProjectMembers, setRosterEntry, getPresetRoles, getRoster, updateProjectShareRole, setAssignMode } from '@/lib/db'
 import { openAgentStageExecution, setStageVerdict } from '@/lib/scanner/stage-records'
 import { dispatchStageWorkers, isAutomationAllowed, checkStageHandOff } from '@/lib/scanner/stage-dispatch'
 import type { Project } from '@/types'
@@ -73,13 +75,13 @@ beforeEach(() => {
 })
 
 describe('확인 작업자 기동 판정', () => {
-  it('D-1 확인자가 사람이면 아무것도 하지 않는다', async () => {
+  it('D-1 확인자가 사람이면 작업자를 띄우지 않는다 — 배포 상태만 구해 둔다', async () => {
     const iid = iidSeq
     configure()
     await dispatchStageWorkers(project, [{ issue: issue(iid), stage: 'confirm_waiting' }], 'tok')
     expect(workerMock.runConfirmWorker).not.toHaveBeenCalled()
-    expect(providerMock.fetchMRByBranch).not.toHaveBeenCalled()
     expect(getStageWorkerNote(P, iid)).toBeNull()
+    expect(getDeployState(P, iid)).toBe('deployed')
   })
 
   it('D-2 staging 설정이 없으면 기동하지 않고 이유를 남긴다 (저장소 파일을 읽지 않는다)', async () => {
@@ -389,5 +391,77 @@ describe('H 에이전트에게 검증 맡기기 (화면)', () => {
     // 소유자가 프로젝트 소유자·editor 가 아닌 에이전트는 골라 두어도 맡기지 않는다
     setAssignMode(P, iid, 'agent', 'a9')
     expect(await checkStageHandOff(project, issue(iid), 'verify_waiting', 'a9', 'tok')).toEqual({ ok: false, reason: expect.stringMatching(/역할 명부에 없어/) })
+  })
+})
+
+describe('S 확인 단계 작업의 배포 상태 (화면 표시용)', () => {
+  const run = (iid: number, stage = 'confirm_waiting') => dispatchStageWorkers(project, [{ issue: issue(iid), stage }], 'tok')
+
+  it('S-1 MR 이 머지 전이면 「머지 전」', async () => {
+    const iid = iidSeq
+    configure()
+    providerMock.fetchMRByBranch.mockResolvedValue({ state: 'opened', merge_commit_sha: null })
+    await run(iid)
+    expect(getDeployState(P, iid)).toBe('unmerged')
+  })
+
+  it('S-2 머지됐지만 배포된 판에 없으면 「배포 중」, 배포되면 「배포됨」으로 바뀐다', async () => {
+    const iid = iidSeq
+    configure()
+    providerMock.isAncestorCommit.mockResolvedValue(false)
+    await run(iid)
+    expect(getDeployState(P, iid)).toBe('deploying')
+    providerMock.isAncestorCommit.mockResolvedValue(true)
+    await run(iid)
+    expect(getDeployState(P, iid)).toBe('deployed')
+  })
+
+  it('S-3 한 번 「배포됨」이면 다시 묻지 않는다 (Git 호출을 되풀이하지 않는다)', async () => {
+    const iid = iidSeq
+    configure()
+    await run(iid)
+    expect(getDeployState(P, iid)).toBe('deployed')
+    providerMock.fetchMRByBranch.mockClear()
+    await run(iid)
+    expect(providerMock.fetchMRByBranch).not.toHaveBeenCalled()
+    expect(getDeployState(P, iid)).toBe('deployed')
+  })
+
+  it('S-4 배포를 파이프라인으로 아는 프로젝트 — 머지 커밋의 파이프라인이 실패하면 「배포 실패」', async () => {
+    const iid = iidSeq
+    updateProjectAutomation(P, { staging: { url: 'https://stg.example.com', versionSource: 'pipeline', branch: 'staging' } }, 'owner')
+    // 마지막으로 성공한 파이프라인은 예전 커밋, 머지 커밋(aaaaaaa1)의 파이프라인은 실패
+    providerMock.fetchBranchPipelines.mockResolvedValue([{ sha: 'aaaaaaa1', status: 'failed' }, { sha: 'ccccccc3', status: 'success' }])
+    providerMock.isAncestorCommit.mockResolvedValue(false)
+    await run(iid)
+    expect(getDeployState(P, iid)).toBe('failed')
+    // 아직 도는 중이면 「배포 중」
+    providerMock.fetchBranchPipelines.mockResolvedValue([{ sha: 'aaaaaaa1', status: 'running' }, { sha: 'ccccccc3', status: 'success' }])
+    await run(iid)
+    expect(getDeployState(P, iid)).toBe('deploying')
+  })
+
+  it('S-5 확인할 사이트 설정이 없거나 코드 변경 없는 작업(MR 없음)이면 표시하지 않는다', async () => {
+    const iid = iidSeq
+    await run(iid)                       // 설정 없음
+    expect(getDeployState(P, iid)).toBeNull()
+    configure()
+    providerMock.fetchMRByBranch.mockResolvedValue(null)   // MR 없음 = 코드 변경 없는 작업
+    await run(iid)
+    expect(getDeployState(P, iid)).toBeNull()
+  })
+
+  it('S-6 확인 단계를 벗어나면 지운다 · MR 조회가 실패하면 지난 값을 그대로 둔다', async () => {
+    const iid = iidSeq
+    configure()
+    providerMock.isAncestorCommit.mockResolvedValue(false)
+    await run(iid)
+    expect(getDeployState(P, iid)).toBe('deploying')
+    providerMock.fetchMRByBranch.mockRejectedValue(new Error('502'))
+    await run(iid)
+    expect(getDeployState(P, iid)).toBe('deploying')
+    // 다른 단계로 넘어감(확인 단계 목록에 없음)
+    await dispatchStageWorkers(project, [{ issue: issue(iid), stage: 'verify_waiting' }], 'tok')
+    expect(getDeployState(P, iid)).toBeNull()
   })
 })

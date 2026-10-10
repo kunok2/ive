@@ -16,12 +16,12 @@ import {
   getPresetRoles, getAgent, countActiveExecutionsByAgent, getProjectAutomation, getStagingSecrets,
   getSystemSetting, setStageWorkerNote, getStageWorkerNote, getIssueAutomationApproval, getRoster, getDb, hasRole,
   getLatestBundleItem, getAssignModeMap, byPriorityThenOldest, getUserById, getProjectAccess, getIssueIntakeChannel, recordWaitIfChanged,
-  getAssignMode, getRoleCandidates, getAgentRoleLoad,
+  getAssignMode, getRoleCandidates, getAgentRoleLoad, setDeployState, getDeployState, clearDeployStatesExcept, type DeployState,
 } from '../db'
 import { isBotName } from '../git-bot'
 import { extractIveAuthorId } from '../ive-author'
 import { isAgentEligibleForProject } from '../project-permissions'
-import { fetchMRByBranch, isAncestorCommit } from '../provider'
+import { fetchMRByBranch, isAncestorCommit, fetchBranchPipelines } from '../provider'
 import { resolveStagingConfig, fetchDeployedCommit, resolveStagingBranch, type StagingConfig, type ConfigResult } from '../staging-config'
 import { hasOpenStageExecution, countAgentStageRuns, countRunningAgentStage, newStageExecutionId, type StageKind } from './stage-records'
 import { runConfirmWorker } from './confirm-worker'
@@ -214,8 +214,10 @@ async function dispatchVerify(project: Project, verifyIssues: StageIssue[], toke
 /** 확인 작업자에게 넘길 확인 기준 — 배포된 커밋·머지 커밋(코드 변경 없는 작업이면 noChange) */
 interface ConfirmTarget { deployedCommit: string; mergeCommit: string | null; mrUrl: string | null; noChange?: boolean; desc: string }
 /** 한 번 훑는 동안 staging 설정·배포 커밋은 한 번만 읽는다 */
-interface ConfirmLookup { staging: ConfigResult<StagingConfig> | null; deployed: ConfigResult<string> | null }
-type TargetResult = { ok: true; target: ConfirmTarget } | { ok: false; reason: string; quiet?: boolean }
+interface ConfirmLookup { staging: ConfigResult<StagingConfig> | null; deployed: ConfigResult<string> | null; pipelines?: any[] | null }
+/** 확인할 수 없는 까닭의 종류 — 배포 상태 표시(deployStateOf)가 문구가 아니라 이것으로 가른다 */
+type TargetBlock = 'lookup_failed' | 'unmerged' | 'no_merge_commit' | 'no_config' | 'deployed_unknown' | 'not_deployed'
+type TargetResult = { ok: true; target: ConfirmTarget } | { ok: false; reason: string; quiet?: boolean; block: TargetBlock; mergeCommit?: string }
 
 /**
  * 지금 확인할 수 있는가 — MR 머지 커밋이 staging 에 배포됐는가(코드 변경 없는 작업은 바로).
@@ -234,27 +236,48 @@ async function resolveConfirmTarget(project: Project, iid: number, token: string
     let mr: any = null
     try { mr = await fetchMRByBranch(project, token, `dev-${iid}`) } catch (e) {
       slog.warn(`MR lookup failed #${iid}: ${(e as Error).message}`)
-      return { ok: false, reason: `MR 조회 실패: ${(e as Error).message}`, quiet: true }
+      return { ok: false, reason: `MR 조회 실패: ${(e as Error).message}`, quiet: true, block: 'lookup_failed' }
     }
     // MR 이 없으면 코드 변경 없이 끝난 작업(질문·조사·보고 등) — 배포를 기다리지 않고 처리 결과가 요건을 충족했는지 확인한다
     if (!mr) return { ok: true, target: { deployedCommit: '', mergeCommit: null, mrUrl: null, noChange: true, desc: '코드 변경 없음 — 처리 결과 확인' } }
     const merged = mr.state === 'merged' || !!mr.merged_at
-    if (!merged) return { ok: false, reason: 'MR 이 아직 머지되지 않았습니다 — 머지되고 배포되면 자동 확인을 시작합니다' }
+    if (!merged) return { ok: false, reason: 'MR 이 아직 머지되지 않았습니다 — 머지되고 배포되면 자동 확인을 시작합니다', block: 'unmerged' }
     // fast-forward 머지는 머지 커밋이 없다 — MR 머리 커밋이 그대로 대상 브랜치에 올라간다
     mergeCommit = mr.merge_commit_sha || mr.squash_commit_sha || mr.sha || null
     mrUrl = mr.web_url || mr.html_url || null
-    if (!mergeCommit) return { ok: false, reason: '머지된 커밋을 찾지 못해 자동 확인을 할 수 없습니다 — 사람이 확인해 주세요' }
+    if (!mergeCommit) return { ok: false, reason: '머지된 커밋을 찾지 못해 자동 확인을 할 수 없습니다 — 사람이 확인해 주세요', block: 'no_merge_commit' }
   }
 
   // 코드 변경이 있는 작업은 staging 에 배포된 뒤 확인한다
   const staging = lookup.staging ??= resolveStagingConfig(project)
-  if (!staging.ok) return { ok: false, reason: staging.reason }
+  if (!staging.ok) return { ok: false, reason: staging.reason, block: 'no_config' }
   const deployed = lookup.deployed ??= await fetchDeployedCommit(staging.value, project, token)
-  if (!deployed.ok) return { ok: false, reason: `지금 배포된 판을 알아내지 못해 자동 확인을 시작하지 못했습니다 — ${deployed.reason}` }
+  if (!deployed.ok) return { ok: false, reason: `지금 배포된 판을 알아내지 못해 자동 확인을 시작하지 못했습니다 — ${deployed.reason}`, block: 'deployed_unknown', mergeCommit }
   const included = await isAncestorCommit(project, token, mergeCommit, deployed.value)
-  if (included === null) return { ok: false, reason: `이 수정이 배포된 판(${deployed.value.slice(0, 8)})에 들어 있는지 아직 알 수 없습니다 — 다시 확인합니다` }
-  if (!included) return { ok: false, reason: `수정이 아직 배포되지 않았습니다 — 배포되면 자동 확인을 시작합니다 (배포된 판 ${deployed.value.slice(0, 8)}, 수정 커밋 ${mergeCommit.slice(0, 8)})` }
+  if (included === null) return { ok: false, reason: `이 수정이 배포된 판(${deployed.value.slice(0, 8)})에 들어 있는지 아직 알 수 없습니다 — 다시 확인합니다`, block: 'deployed_unknown', mergeCommit }
+  if (!included) return { ok: false, reason: `수정이 아직 배포되지 않았습니다 — 배포되면 자동 확인을 시작합니다 (배포된 판 ${deployed.value.slice(0, 8)}, 수정 커밋 ${mergeCommit.slice(0, 8)})`, block: 'not_deployed', mergeCommit }
   return { ok: true, target: { deployedCommit: deployed.value, mergeCommit, mrUrl, desc: `deployed ${deployed.value.slice(0, 8)} ⊇ merge ${mergeCommit.slice(0, 8)}` } }
+}
+
+/**
+ * 확인 판정 결과 → 화면에 보일 배포 상태. undefined = 이번에는 알 수 없다(지난 값을 그대로 둔다).
+ * 「배포 실패」는 배포를 파이프라인으로 아는 프로젝트에서만 — 머지 커밋의 파이프라인이 실패·취소됐을 때.
+ */
+async function deployStateOf(project: Project, token: string, r: TargetResult, lookup: ConfirmLookup): Promise<DeployState | null | undefined> {
+  if (r.ok) return r.target.noChange ? null : 'deployed'   // 코드 변경 없는 작업은 배포할 것이 없다
+  if (r.block === 'unmerged') return 'unmerged'
+  if (r.block === 'no_config' || r.block === 'no_merge_commit') return null
+  if (r.block === 'lookup_failed') return undefined
+  // 머지는 됐고 아직 배포에 들어 있지 않다(또는 배포된 판을 못 읽었다) — 파이프라인으로 아는 프로젝트면 실패했는지 본다
+  const staging = lookup.staging
+  if (r.mergeCommit && staging?.ok && staging.value.versionSource === 'pipeline') {
+    try {
+      const pipelines = lookup.pipelines ??= (await fetchBranchPipelines(project, token, staging.value.branch || await resolveStagingBranch(project, token))) as any[]
+      const mine = (pipelines || []).find(pl => pl?.sha === r.mergeCommit)
+      if (mine && (mine.status === 'failed' || mine.status === 'canceled')) return 'failed'
+    } catch { /* 조회 실패 — 아래 기본값 */ }
+  }
+  return r.block === 'not_deployed' ? 'deploying' : undefined
 }
 
 function launchConfirm(
@@ -278,11 +301,23 @@ function launchConfirm(
 
 /** ④ 확인 — P/C 이고 확인자가 에이전트인 이슈. MR 이 머지(검증 통과 즉시 IVE 가, 또는 사람이)되어 staging 에 배포된 뒤 기동한다 */
 async function dispatchConfirm(project: Project, confirmIssues: StageIssue[], token: string, busy: Set<string>): Promise<void> {
+  // 확인 단계를 벗어난 작업의 배포 상태는 지운다(다시 확인 단계에 오면 새로 구한다)
+  try { clearDeployStatesExcept(project.id, confirmIssues.map(i => i.issue.iid as number)) } catch (e) { slog.warn(`deploy state clear failed: ${(e as Error).message}`) }
   if (confirmIssues.length === 0) return
   const lookup: ConfirmLookup = { staging: null, deployed: null }
 
   for (const { issue, stage } of confirmIssues) {
     const iid: number = issue.iid
+    // 배포 상태 — 확인자가 사람이든 에이전트든 화면에 보인다(머지 뒤 CI·배포가 끝나야 확인할 수 있다). 기동 판정에는 쓰지 않는다.
+    // 한 번 「배포됨」이면 다시 묻지 않는다(확인 단계에 머무는 동안 Git 호출을 되풀이하지 않게)
+    let resolved: TargetResult | null = null
+    try {
+      if (getDeployState(project.id, iid) !== 'deployed') {
+        resolved = await resolveConfirmTarget(project, iid, token, lookup)
+        const state = await deployStateOf(project, token, resolved, lookup)
+        if (state !== undefined) setDeployState(project.id, iid, state)
+      }
+    } catch (e) { slog.warn(`deploy state #${iid} failed: ${(e as Error).message}`) }
     const preset = getPresetRoles(project.id, iid).confirmer
     if (preset.mode !== 'agent' || !preset.agentId) continue       // 사람이 확인 — 종전대로 기다린다
     if (hasOpenStageExecution(project.id, iid, 'confirm')) continue // 이미 누가(사람·에이전트) 확인 중
@@ -290,7 +325,7 @@ async function dispatchConfirm(project: Project, confirmIssues: StageIssue[], to
     const agent = passGate(project, iid, issue, stage, 'confirm', preset.agentId, busy)
     if (!agent) continue
 
-    const r = await resolveConfirmTarget(project, iid, token, lookup)
+    const r = resolved ?? await resolveConfirmTarget(project, iid, token, lookup)
     if (!r.ok) { if (!r.quiet) note(project.id, iid, r.reason); continue }
     launchConfirm(project, issue, stage as 'confirm_waiting' | 'confirming', agent, token, lookup, r.target, busy)
   }

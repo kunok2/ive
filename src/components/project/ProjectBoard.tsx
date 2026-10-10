@@ -47,6 +47,7 @@ interface BoardIssue {
   dueDate?: string | null
   priority?: 0 | 1 | 2
   iterationCounts?: { processCount: number; retryTotal: number }
+  deployState?: 'unmerged' | 'deploying' | 'deployed' | 'failed' | null
   preferredAgentName?: string | null
   actualVerifier?: { name?: string | null; avatar?: string | null; userId?: string | null } | null
   actualConfirmer?: { name?: string | null; avatar?: string | null; userId?: string | null } | null

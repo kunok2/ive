@@ -236,6 +236,14 @@
     "confirm": "confirming"
   },
   "currentStage": "Current stage: {stage}",
+  "deployUnmerged": "Not merged",
+  "deployUnmergedHint": "The MR is not merged yet — it can be confirmed after it is merged and deployed",
+  "deployDeploying": "Deploying",
+  "deployDeployingHint": "Merged; waiting for the deployment (CI) to finish — not ready to confirm yet",
+  "deployDeployed": "Deployed",
+  "deployDeployedHint": "The fix is deployed — ready to confirm",
+  "deployFailed": "Deploy failed",
+  "deployFailedHint": "The pipeline for the merge commit failed or was cancelled, so the fix is not deployed — check the pipeline in Git",
   "inflowShort": "Inflow",
   "inflowHint": "Reset to inflow with this comment",
   "nextStage": {

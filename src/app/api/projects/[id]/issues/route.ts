@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAccess, getProjectAuthToken, getAssignModeMap, setAssignMode, setAssigneeAuto, setIssuePriority, normalizePriority, setPresetRoles, getPresetRoles, getActualRoleAssigneesMap, getAgent, hasActiveExecution, stageFromLabels, touchProjectActivity, getIssueIterationCountsMap, getActiveChatSessionsByProject, findIssueIidsByTitle, getIssueStageSinceMap, hasRole, markRolesInitialized, setStageWorkerNote, getStageWorkerNote, setIssueIntakeChannel, type RoleMode } from '@/lib/db';
+import { getProject, getProjectAccess, getProjectAuthToken, getAssignModeMap, setAssignMode, setAssigneeAuto, setIssuePriority, normalizePriority, setPresetRoles, getPresetRoles, getActualRoleAssigneesMap, getAgent, hasActiveExecution, stageFromLabels, touchProjectActivity, getIssueIterationCountsMap, getActiveChatSessionsByProject, findIssueIidsByTitle, getIssueStageSinceMap, hasRole, markRolesInitialized, setStageWorkerNote, getStageWorkerNote, getDeployState, setIssueIntakeChannel, type RoleMode } from '@/lib/db';
 import { autoAssignAllAgents, agentRoleAvailable } from '@/lib/role-assignment';
 import { isChatAgentRunning } from '@/lib/chat-agent';
 import { triggerScan } from '@/lib/scanner';
@@ -172,6 +172,8 @@ export async function GET(
           stageSince: stageLog?.since ?? null,
           waitReason: stageLog?.waitReason ?? null,
           stageWorkerNote: (stage === 'done' || issue.state === 'closed') ? null : getStageWorkerNote(projectId, issue.iid),
+          // 확인대기·확인 중인 작업의 배포 상태(스캐너가 구해 둔 값) — 머지 뒤 배포가 끝났는지
+          deployState: (stage === 'confirm_waiting' || stage === 'confirming') && issue.state !== 'closed' ? getDeployState(projectId, issue.iid) : null,
           actualProcessor: actuals.processor,
           actualVerifier: actuals.verifier,
           actualConfirmer: actuals.confirmer,

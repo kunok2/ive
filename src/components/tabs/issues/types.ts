@@ -33,6 +33,7 @@ export interface IveIssue {
   presetConfirmer?: PresetRole
   /** 단계 작업자(에이전트)가 기동하지 못한 이유 등 사람이 봐야 할 한 줄 */
   stageWorkerNote?: string | null
+  deployState?: 'unmerged' | 'deploying' | 'deployed' | 'failed' | null
   actualProcessor?: { agentId: string | null; agentName: string | null; agentAvatar: string | null; cliName: string | null } | null
   actualVerifier?: { userId: string | null; name: string | null; avatar: string | null } | null
   actualConfirmer?: { userId: string | null; name: string | null; avatar: string | null } | null

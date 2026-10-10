@@ -1372,6 +1372,8 @@ function migrateStageAutomation(db: Database.Database) {
   try { db.exec(`ALTER TABLE issue_stages ADD COLUMN automation_approved_by TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
   try { db.exec(`ALTER TABLE issue_stages ADD COLUMN author_username TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
   try { db.exec(`ALTER TABLE issue_stages ADD COLUMN stage_worker_note TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
+  // 확인대기·확인 중인 작업의 배포 상태(화면 표시용) — 'unmerged' | 'deploying' | 'deployed' | 'failed'. NULL = 모름·해당 없음. 스캐너가 채운다(stage-dispatch)
+  try { db.exec(`ALTER TABLE issue_stages ADD COLUMN deploy_state TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
   // 이슈가 들어온 경로 — 'ive'(IVE 등록 폼) | 'report'(작업 접수 페이지). NULL = Git 직접·API 등 IVE 밖. 경로별 기본 배정·자동 실행 허용에 쓴다
   try { db.exec(`ALTER TABLE issue_stages ADD COLUMN intake_channel TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
   // 작업 우선순위 — 0 보통 · 1 높음 · 2 긴급. 에이전트가 대기 작업을 집는 순서(높은 것 먼저, 같으면 먼저 들어온 것)

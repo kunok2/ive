@@ -243,6 +243,35 @@ export function setStageWorkerNote(projectId: string, issueIid: number, note: st
   `).run(projectId, issueIid, note)
 }
 
+/**
+ * 확인대기·확인 중인 작업의 배포 상태 — 머지된 수정이 확인할 사이트에 올라갔는가(화면 표시용. 판정에는 쓰지 않는다).
+ *   unmerged  MR 이 아직 머지되지 않음        deploying  머지됐고 배포(CI)를 기다리는 중
+ *   deployed  배포됨 — 확인할 수 있다          failed     머지 커밋의 파이프라인이 실패·취소됨
+ */
+export type DeployState = 'unmerged' | 'deploying' | 'deployed' | 'failed'
+const DEPLOY_STATES: readonly string[] = ['unmerged', 'deploying', 'deployed', 'failed']
+
+export function setDeployState(projectId: string, issueIid: number, state: DeployState | null) {
+  getDb().prepare(`
+    INSERT INTO issue_stages (project_id, issue_iid, stage, deploy_state, updated_at)
+    VALUES (?, ?, '', ?, datetime('now'))
+    ON CONFLICT(project_id, issue_iid) DO UPDATE SET deploy_state = excluded.deploy_state
+  `).run(projectId, issueIid, state)
+}
+
+export function getDeployState(projectId: string, issueIid: number): DeployState | null {
+  const r = getDb().prepare('SELECT deploy_state FROM issue_stages WHERE project_id = ? AND issue_iid = ?').get(projectId, issueIid) as any
+  return DEPLOY_STATES.includes(r?.deploy_state) ? r.deploy_state : null
+}
+
+/** 확인 단계를 벗어난 작업의 배포 상태를 지운다 — keepIids(지금 확인대기·확인 중인 작업)만 남긴다 */
+export function clearDeployStatesExcept(projectId: string, keepIids: number[]) {
+  const keep = keepIids.filter(n => Number.isInteger(n))
+  getDb().prepare(
+    `UPDATE issue_stages SET deploy_state = NULL WHERE project_id = ? AND deploy_state IS NOT NULL${keep.length ? ` AND issue_iid NOT IN (${keep.join(',')})` : ''}`,
+  ).run(projectId)
+}
+
 export function getStageWorkerNote(projectId: string, issueIid: number): string | null {
   const r = getDb().prepare('SELECT stage_worker_note FROM issue_stages WHERE project_id = ? AND issue_iid = ?').get(projectId, issueIid) as any
   return r?.stage_worker_note ?? null

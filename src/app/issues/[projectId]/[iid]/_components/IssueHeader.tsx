@@ -1,5 +1,6 @@
 'use client'
 
+import { DeployBadge } from '@/components/tabs/issues/IssueBadges'
 import { useTranslations } from 'next-intl'
 import { useStore } from '@/lib/store'
 import { formatDateMedium } from '@/lib/format-date'
@@ -29,6 +30,7 @@ interface IssueDetail {
   updatedAt: string
   closedAt?: string | null
   dueDate?: string | null
+  deployState?: 'unmerged' | 'deploying' | 'deployed' | 'failed' | null
   /** 0 보통 · 1 높음 · 2 긴급 (IVE 에만 저장) */
   priority?: 0 | 1 | 2
   stageTimes?: {
@@ -126,6 +128,8 @@ export default function IssueHeader({
         <span className={`text-xs font-bold px-2 py-0.5 rounded-lg shrink-0 whitespace-nowrap ${stageInfo.bg} ${stageInfo.color}`} title={tIssue('currentStage', { stage: stageInfo.label })}>
           <i className={`fa-solid ${stageInfo.icon} mr-1`} />{stageInfo.label}
         </span>
+        {/* 확인 단계면 배포 상태 — 지금 확인해도 되는지(작업 목록·보드와 같은 배지) */}
+        <DeployBadge issue={issue} />
         <PriorityBadge priority={issue.priority} />
         {/* 처리가 2회 이상일 때만 — 1회는 평범하다(카드와 같은 규칙) */}
         {iterationCount >= 2 && (
