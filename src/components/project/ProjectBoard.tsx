@@ -20,6 +20,13 @@ import { measureFly, flyMoved, type FlySpots } from '@/lib/board-fly'
 const groupKind = (g: { waiting: boolean; failed: boolean }) => g.failed ? 'fail' : g.waiting ? 'wait' : 'active'
 
 type Col = 'process' | 'verify' | 'confirm' | 'done'
+/**
+ * 단계 정보(Git 레이블)와 진행 중 실행 기록(DB)은 따로 읽어 잠깐 어긋난다 — 단계는 검증으로 넘어갔는데 처리 실행이 아직 열려 있는 때 등.
+ * 그 사이에는 같은 작업이 두 칸에 보이므로, 어긋난 지 이만큼 될 때까지는 단계 정보 쪽 칸에만 둔다.
+ * 그 뒤에도 실행이 남아 있으면 끝나지 않은 실행(좀비)일 수 있으니 그 실행의 칸에도 다시 보인다 — 숨겨서 놓치지 않게.
+ * 시각은 30초마다 바뀌는 now 로 재므로 실제로는 어긋난 지 30~60초 뒤에 다시 보인다.
+ */
+const STALE_EXEC_GRACE_MS = 60_000
 const COLS: Col[] = ['process', 'verify', 'confirm', 'done']
 const COL_LABEL: Record<Col, string> = { process: 'boardProcess', verify: 'boardVerify', confirm: 'boardConfirm', done: 'boardDoneToday' }
 /** 단계 칸 안의 대기 묶음 — 그 단계에서 아직 아무도 잡지 않은 건. 칸 맨 위에 둔다 */
@@ -87,6 +94,8 @@ export default function ProjectBoard({ projects, onOpenTrace, filterSlot }: { pr
   const canEditOf = (pid: string) => { const x = projectOf(pid); return !!x && (!x.shareRole || x.shareRole === 'editor') }
   const [killing, setKilling] = useState<string | null>(null)
   const [reloadTick, setReloadTick] = useState(0)
+  // 단계 정보와 어긋난 실행을 처음 본 시각(실행 id → now) — 잠깐의 어긋남과 끝나지 않는 실행을 가른다
+  const straySince = useRef(new Map<string, number>())
   const killExecution = useKillExecution()
   const handleKill = async (execId: string) => {
     try {
@@ -166,6 +175,7 @@ export default function ProjectBoard({ projects, onOpenTrace, filterSlot }: { pr
   const traceOf = (e?: TaskExecution) => e && execHref(e, e.projectId).startsWith('/executions/') ? e.id : undefined
 
   const cols: Record<Col, BoardItem[]> = { process: [], verify: [], confirm: [], done: [] }
+  const strayNow = new Set<string>()
   for (const i of issues ?? []) {
     if (!projectOf(i.pid)) continue
     const base = { key: `i-${i.pid}-${i.iid}`, pid: i.pid, iid: i.iid, title: i.title, href: issueHref(i.pid, i.iid), issue: i }
@@ -198,11 +208,19 @@ export default function ProjectBoard({ projects, onOpenTrace, filterSlot }: { pr
     if (kind === 'chat' || !projectOf(e.projectId)) continue
     const col: Col = kind
     if (cols[col].some(it => it.pid === e.projectId && it.iid === e.issueIid)) continue
+    // 단계 정보로는 이미 다른 칸에 있는 작업 — 잠깐의 어긋남이면 두 칸에 보이지 않게 건너뛴다(STALE_EXEC_GRACE_MS)
+    if (COLS.some(c => c !== col && cols[c].some(it => it.pid === e.projectId && it.iid === e.issueIid))) {
+      strayNow.add(e.id)
+      const since = straySince.current.get(e.id) ?? now
+      straySince.current.set(e.id, since)
+      if (now - since < STALE_EXEC_GRACE_MS) continue
+    }
     cols[col].push({
       key: `e-${e.id}`, pid: e.projectId, iid: e.issueIid, title: e.issueTitle ?? '', who: execWho(e), face: execFace(e), startedAt: e.startedAt,
       href: issueHref(e.projectId, e.issueIid), traceExecId: traceOf(e),
     })
   }
+  for (const id of [...straySince.current.keys()]) if (!strayNow.has(id)) straySince.current.delete(id)
   // 완료(오늘) — 카드의 「완료」 숫자와 같은 근거: 오늘 끝낸 완료 사이클(보고서와 같은 판정)과 오늘 반려.
   // 실행 기록으로 세면 어제 시작한 일·사후 등록·최근 실행 목록 밖의 일이 빠진다(60건 처리에 「오늘 완료 1」).
   for (const d of doneToday) {
