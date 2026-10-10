@@ -16,6 +16,7 @@ import {
   getPresetRoles, getAgent, countActiveExecutionsByAgent, getProjectAutomation, getStagingSecrets,
   getSystemSetting, setStageWorkerNote, getStageWorkerNote, getIssueAutomationApproval, getRoster, getDb, hasRole,
   getLatestBundleItem, getAssignModeMap, byPriorityThenOldest, getUserById, getProjectAccess, getIssueIntakeChannel, recordWaitIfChanged,
+  getAssignMode, getRoleCandidates, getAgentRoleLoad,
 } from '../db'
 import { isBotName } from '../git-bot'
 import { extractIveAuthorId } from '../ive-author'
@@ -101,12 +102,13 @@ const ROLE_LABEL: Record<'verify' | 'confirm', string> = { verify: '검증', con
 /**
  * 에이전트가 지금 이 프로젝트의 그 역할을 맡을 수 있는가 — 명부·자격·사용중지·다른 작업·동시 실행 상한.
  * 맡을 수 있으면 null, 아니면 그 이유 한 줄. (스캐너 관문과 화면의 「에이전트에게 맡기기」가 같이 쓴다)
+ * pickedByHand — 사람이 이 작업의 작업자로 직접 고른 에이전트: 명부에 그 역할이 없어도 된다(소유자 자격은 그대로 본다).
  */
-function agentNotReady(project: Project, agent: Agent, kind: 'verify' | 'confirm', busy: Set<string>, now = Date.now()): string | null {
+function agentNotReady(project: Project, agent: Agent, kind: 'verify' | 'confirm', busy: Set<string>, now = Date.now(), pickedByHand = false): string | null {
   const label = ROLE_LABEL[kind]
   const limits = getProjectAutomation(project.id).limits
   // 지금도 이 프로젝트의 명부에 그 역할로 있고, 소유자가 여전히 프로젝트 소유자·editor 인 에이전트만 돌린다
-  if (!hasRole(project.id, kind, 'agent', agent.id) || !isAgentEligibleForProject(project, agent)) {
+  if (!(pickedByHand || hasRole(project.id, kind, 'agent', agent.id)) || !isAgentEligibleForProject(project, agent)) {
     return `${label} 에이전트 '${agent.name}' 이(가) 이 프로젝트 명부에 없습니다 — ${label}자를 다시 지정해 주세요`
   }
   if (!isAgentAvailableNow(agent, now)) return `${label} 에이전트 '${agent.name}' 사용중지/휴가`
@@ -308,7 +310,36 @@ export function handOffKind(stage: string): 'verify' | 'confirm' | null {
 }
 
 /**
+ * 「에이전트에게 맡기기」의 자동 배정 — 명부에서 그 역할을 가진 에이전트 중 지금 맡을 수 있는 것을 고른다.
+ * 그 단계에 지정된 검증자·확인자 에이전트를 먼저 보고, 나머지는 한가한 순. 검증은 이 이슈를 처리한 에이전트를 뺀다.
+ */
+function pickHandOffAgent(project: Project, iid: number, kind: 'verify' | 'confirm'): { ok: true; agent: Agent } | { ok: false; reason: string } {
+  const label = ROLE_LABEL[kind]
+  const processor = kind === 'verify' ? lastProcessorAgentId(project.id, iid) : null
+  const preset = getPresetRoles(project.id, iid)[kind === 'verify' ? 'verifier' : 'confirmer']
+  const presetId = preset.mode === 'agent' ? preset.agentId : null
+  const candidates = getRoleCandidates(project.id, kind)
+    .filter(c => c.subjectType === 'agent' && c.subjectId !== processor)
+    .map(c => ({ agent: getAgent(c.subjectId), load: getAgentRoleLoad(c.subjectId) }))
+    .filter((c): c is { agent: Agent; load: number } => !!c.agent)
+    .sort((a, b) => Number(b.agent.id === presetId) - Number(a.agent.id === presetId) || a.load - b.load || a.agent.name.localeCompare(b.agent.name))
+  if (candidates.length === 0) {
+    return { ok: false, reason: `명부에 ${label} 역할 에이전트가 없습니다 — 프로젝트 설정의 역할 명부에 넣거나, 입력창 위에서 작업자(에이전트)를 골라 주세요` }
+  }
+  const busy = new Set<string>()
+  let firstReason: string | null = null
+  for (const c of candidates) {
+    const notReady = agentNotReady(project, c.agent, kind, busy)
+    if (!notReady) return { ok: true, agent: c.agent }
+    firstReason ??= notReady
+  }
+  return { ok: false, reason: candidates.length === 1 ? firstReason! : `지금 ${label}을 맡을 수 있는 에이전트가 없습니다 (${firstReason})` }
+}
+
+/**
  * 사람이 화면에서 「에이전트에게 맡기기」를 눌렀을 때 — 지금 바로 그 단계(검증·확인) 작업자를 띄울 수 있는지 본다.
+ * agentId 가 없으면 맡을 수 있는 에이전트를 자동으로 고르고(pickHandOffAgent), 있으면 그 에이전트에게 맡긴다
+ * — 이 작업의 작업자로 지정된 에이전트(입력창 위 작업자 선택)는 명부에 그 역할이 없어도 된다.
  *
  * 스캐너 관문(passGate)과 달리 사람이 직접 맡긴 것이라 자동 순환 상한·판단 불가(blocked) 뒤 대기·판정 간격은 보지 않는다.
  * 작성자 허용(외부 이슈 본문은 곧 프롬프트)·에이전트 자격·다른 작업·동시 실행 상한은 같은 기준으로 보고,
@@ -316,16 +347,25 @@ export function handOffKind(stage: string): 'verify' | 'confirm' | null {
  * 아무것도 바꾸지 않는다 — 호출 측이 검증자·확인자 배정과 사람 기록을 정리한 뒤 launch() 를 부른다.
  */
 export async function checkStageHandOff(
-  project: Project, issue: any, stage: HandOffStage, agentId: string, token: string,
+  project: Project, issue: any, stage: HandOffStage, agentId: string | null, token: string,
 ): Promise<HandOffCheck> {
   const iid: number = issue.iid
   const kind = handOffKind(stage)!
   const label = ROLE_LABEL[kind]
-  const agent = getAgent(agentId)
-  if (!agent) return { ok: false, reason: `${label} 에이전트가 삭제되었습니다` }
-  if (kind === 'verify' && lastProcessorAgentId(project.id, iid) === agent.id) return { ok: false, reason: SAME_AS_PROCESSOR }
-  const notReady = agentNotReady(project, agent, kind, new Set())
-  if (notReady) return { ok: false, reason: notReady }
+  let agent: Agent
+  if (agentId) {
+    const picked = getAgent(agentId)
+    if (!picked) return { ok: false, reason: `${label} 에이전트가 삭제되었습니다` }
+    if (kind === 'verify' && lastProcessorAgentId(project.id, iid) === picked.id) return { ok: false, reason: SAME_AS_PROCESSOR }
+    const designated = getAssignMode(project.id, iid)
+    const notReady = agentNotReady(project, picked, kind, new Set(), Date.now(), designated.mode === 'agent' && designated.agentId === picked.id)
+    if (notReady) return { ok: false, reason: notReady }
+    agent = picked
+  } else {
+    const auto = pickHandOffAgent(project, iid, kind)
+    if (!auto.ok) return auto
+    agent = auto.agent
+  }
   const allowed = isAutomationAllowed(project, iid, issue)
   if (!allowed.ok) return { ok: false, reason: `작성자(${allowed.author || '알 수 없음'})가 허용 목록 밖 — 자동 실행 승인 필요` }
 

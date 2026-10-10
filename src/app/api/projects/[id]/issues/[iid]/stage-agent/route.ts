@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
   getDb, getProject, getProjectAuthToken, getProjectAccess, getRunningAgentWork, hasActiveExecution, stageFromLabels,
-  isIssueAssignee, isIssueAuthor, getPresetRoles, setPresetRoles, markRolesInitialized, setStageWorkerNote,
+  isIssueAssignee, isIssueAuthor, getPresetRoles, setPresetRoles, markRolesInitialized, setStageWorkerNote, getAssignMode,
   updateExecutionStatus, markHumanStageEnd, touchProjectActivity,
 } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
@@ -18,7 +18,10 @@ const handOffInFlight = new Set<string>()
  * 검증대기·검증 중·확인대기·확인 중인 작업의 그 단계 일(검증·확인)을 에이전트에게 맡긴다
  * — 검증자/확인자를 그 에이전트로 바꾸고 단계 작업자를 바로 띄운다. 어느 일인지는 실제 단계(Git 라벨)로 정한다.
  *
- * Body: { agentId }  (그 역할(검증·확인) 명부에 있는 에이전트)
+ * Body: { agentId? }
+ *   - agentId 없음: 자동 배정 — 그 역할(검증·확인) 명부의 에이전트 중 지금 맡을 수 있는 것을 서버가 고른다
+ *   - agentId 있음: 그 에이전트에게 — 명부의 그 역할 에이전트이거나, 이 작업의 작업자로 지정된 에이전트(입력창 위 작업자 선택)
+ *   작업자가 사람(담당자가 직접)으로 지정된 작업은 에이전트에게 맡기지 않는다.
  *
  * 스캐너는 검증자·확인자가 에이전트인 작업만 자동으로 띄우고, 진행 단계(V/C)에서 판단 불가로 멈췄거나 사람이 시작한
  * 작업은 다시 띄우지 않는다. 사람이 직접 맡기는 길이 이것이다.
@@ -41,8 +44,12 @@ export async function POST(
   if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
   if (!getProjectAccess(projectId, user.id)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const { agentId } = await req.json().catch(() => ({}))
-  if (!agentId || typeof agentId !== 'string') return NextResponse.json({ error: 'agentId 가 필요합니다.' }, { status: 400 })
+  const body = await req.json().catch(() => ({}))
+  if (body?.agentId != null && typeof body.agentId !== 'string') return NextResponse.json({ error: 'agentId 가 올바르지 않습니다.' }, { status: 400 })
+  const pickedAgentId: string | null = body?.agentId || null
+  if (getAssignMode(projectId, iid).mode === 'assignee') {
+    return NextResponse.json({ error: '작업자가 사람(담당자)으로 지정된 작업은 에이전트에게 맡길 수 없습니다.' }, { status: 409 })
+  }
 
   const agentWork = getRunningAgentWork(projectId, iid)
   if (agentWork) {
@@ -81,10 +88,11 @@ export async function POST(
     const label = kind === 'verify' ? '검증' : '확인'
     if (!agentRoleAvailable(kind)) return NextResponse.json({ error: `${label} 에이전트 작업자를 쓸 수 없습니다` }, { status: 400 })
 
-    const check = await checkStageHandOff(project, issue, stage as HandOffStage, agentId, token)
+    const check = await checkStageHandOff(project, issue, stage as HandOffStage, pickedAgentId, token)
     if (!check.ok) return NextResponse.json({ error: `지금은 에이전트에게 맡길 수 없습니다: ${check.reason}` }, { status: 409 })
 
     // 그 단계의 담당 = 그 에이전트 (다른 단계 배정은 그대로)
+    const agentId = check.agent.id
     const current = getPresetRoles(projectId, iid)
     const picked = { mode: 'agent' as const, userId: null, username: null, agentId }
     setPresetRoles(projectId, iid, kind === 'verify'

@@ -198,14 +198,18 @@
   "handOffToAgent": {
     "verify": {
       "ask": "지금 하던 검증은 취소되고 {agent}이(가) 검증을 시작합니다. 맡길까요?",
+      "askAuto": "지금 하던 검증은 취소되고 맡을 수 있는 에이전트가 검증을 시작합니다. 맡길까요?",
       "done": "{agent}에게 검증을 맡겼습니다"
     },
     "confirm": {
       "ask": "지금 하던 확인은 취소되고 {agent}이(가) 확인을 시작합니다. 맡길까요?",
+      "askAuto": "지금 하던 확인은 취소되고 맡을 수 있는 에이전트가 확인을 시작합니다. 맡길까요?",
       "done": "{agent}에게 확인을 맡겼습니다"
     }
   },
   "callAgent": "에이전트 호출",
+  "callAgentTo": "에이전트 호출 — {agent}에게 맡깁니다",
+  "callAgentAuto": "에이전트 호출 — 맡을 수 있는 에이전트에게 자동 배정합니다",
   "handOffButton": "에이전트에게 맡기기",
   "agentWorking": "{agent}이(가) {work} 중입니다 — 끝나면 단계를 진행할 수 있습니다",
   "agentWorkingUnknown": "에이전트",
