@@ -218,6 +218,7 @@
     "verify": "검증",
     "confirm": "확인"
   },
+  "currentStage": "현재 단계: {stage}",
   "inflowShort": "유입",
   "inflowHint": "코멘트와 함께 유입 상태로 초기화",
   "nextStage": {

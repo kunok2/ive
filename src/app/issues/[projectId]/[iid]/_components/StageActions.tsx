@@ -20,6 +20,15 @@ export function isClosedMidway(issue: { state?: string; stage?: string }): boole
   return issue.state === 'closed' && !!issue.stage && MIDWAY_STAGES.has(issue.stage)
 }
 
+/** 뒤로 가는 버튼(「이전 단계로」·「재처리」)이 보내는 단계 액션 — 버튼에 적는 도착 단계와 실제 전이가 같은 값을 쓴다 */
+export function retryActionOf(stage: string | null | undefined): string {
+  return stage === 'done' ? 'reopen'
+    : stage === 'verifying' ? 'reject'
+    : stage === 'confirming' ? 'return_to_dev'
+    : stage === 'none' ? 'schedule'
+    : 'retry'
+}
+
 export function useStageConfig() {
   const tStage = useTranslations('stage')
   const tIssue = useTranslations('issue')
