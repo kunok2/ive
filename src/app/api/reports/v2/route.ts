@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
     }
     const filter = typeof scope === 'object' && scope ? new Set(scope.projects) : null
     const mine = model.isCurrent ? mineFrom(liveHeldAll(), user.id).filter(i => !filter || filter.has(i.projectId)) : undefined
-    const projectOptions = scopedProjects(user.id).map(({ id, name, color }) => ({ id, name, color }))
+    const projectOptions = scopedProjects(user.id).map(({ id, name, color, provider }) => ({ id, name, color, provider }))
     return NextResponse.json({ ...model, mine, projectOptions })
   } catch (e) {
     console.error('[reports/v2] build failed:', e)

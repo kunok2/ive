@@ -26,6 +26,8 @@ const WAIT_LABEL: Record<Exclude<Col, 'done'>, string> = { process: 'waitGroupPr
 
 /** /api/projects/[id]/issues 에서 보드가 쓰는 필드 */
 interface BoardIssue {
+  /** 어느 프로젝트의 일인지 — 여러 프로젝트를 한 보드에 모을 때 */
+  pid: string
   iid: number
   title: string
   stage: string
@@ -47,15 +49,24 @@ interface Face { src: string; userId?: string | null; agentId?: string | null; h
 
 /** issue — 배지(우선순위·마감일·처리 N회·되돌리기 N회)의 근거. 열린 이슈 목록에 없는 실행·오늘 완료 건은 없다 */
 /** href — 카드를 누르면 가는 작업 상세. traceExecId — 에이전트가 돌리고 있으면 그 실행(트레이스·강제종료 버튼) */
-interface BoardItem { key: string; iid: number; title: string; who: string | null; face?: Face | null; startedAt: string | null; href: string; traceExecId?: string; waiting?: boolean; failed?: boolean; issue?: BoardIssue }
+interface BoardItem { key: string; pid: string; iid: number; title: string; who: string | null; face?: Face | null; startedAt: string | null; href: string; traceExecId?: string; waiting?: boolean; failed?: boolean; issue?: BoardIssue }
 
 /**
  * PC 폭의 프로젝트 단계 보드 — 대기 | 처리 | 검증 | 확인 | 완료(오늘).
  * 어느 칸에 있느냐가 곧 그 일의 종류다. 칸 안에서는 맡은 사람으로 묶고(이름은 한 번), 칸마다 따로 스크롤한다.
  * 데이터는 프로젝트 카드와 같은 API(열린 이슈의 단계 + 실행 기록)를 쓴다.
+ * 프로젝트를 여럿 고르면(ProjectsTab 의 프로젝트 필터) 그 프로젝트들의 일을 한 보드에 모으고, 작업마다 프로젝트 이름을 붙인다.
  */
 /** onOpenTrace — 넓은 화면에서 에이전트 실행을 누르면 페이지를 넘기지 않고 오른쪽 칸에 트레이스를 띄운다(ProjectsTab) */
-export default function ProjectBoard({ project, onOpenTrace }: { project: Project & { shareRole?: string | null }; onOpenTrace?: (executionId: string) => void }) {
+type BoardProject = Project & { shareRole?: string | null }
+/** filterSlot — 보드 머리에 제목 대신 놓는 프로젝트 필터(ProjectsTab 이 프로젝트가 둘 이상일 때만 넘긴다) */
+export default function ProjectBoard({ projects, onOpenTrace, filterSlot }: { projects: BoardProject[]; onOpenTrace?: (executionId: string) => void; filterSlot?: React.ReactNode }) {
+  const project = projects[0]
+  const multi = projects.length > 1
+  const projectOf = (pid: string) => projects.find(x => x.id === pid)
+  // 보드가 모으는 프로젝트 묶음 — 바뀌면 다시 읽는다. 새로 마운트하지 않는다(머리의 필터가 열린 채 여럿을 연달아 고르게).
+  // 그래서 방금 뺀 프로젝트의 지난 데이터가 잠깐 남는다 — 그릴 때 지금 고른 프로젝트 것만 쓴다
+  const idsKey = projects.map(x => x.id).join(',')
   const tp = useTranslations('project')
   const te = useTranslations('execution')
   const router = useRouter()
@@ -63,7 +74,7 @@ export default function ProjectBoard({ project, onOpenTrace }: { project: Projec
   const [issues, setIssues] = useState<BoardIssue[] | null>(null)
   const [execs, setExecs] = useState<TaskExecution[]>([])
   // 완료(오늘) — 카드 「완료」 숫자와 같은 근거(오늘 완료·반려로 바뀐 이슈)
-  const [doneToday, setDoneToday] = useState<TodayDoneIssue[]>([])
+  const [doneToday, setDoneToday] = useState<(TodayDoneIssue & { pid: string })[]>([])
   const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null)
   const [boardSyncError, setBoardSyncError] = useState(false)
   const [executionSyncError, setExecutionSyncError] = useState(false)
@@ -72,7 +83,7 @@ export default function ProjectBoard({ project, onOpenTrace }: { project: Projec
   // 에이전트 도구 배지 — 카드와 같은 실시간 도구 활동
   const [activities, setActivities] = useState<Record<string, ToolActivity>>({})
   // 강제종료 — 소유자·편집자만(프로젝트 카드와 같은 기준, 서버도 프로젝트 권한을 본다). 끝나면 실행·이슈를 바로 다시 읽는다
-  const canEdit = !project.shareRole || project.shareRole === 'editor'
+  const canEditOf = (pid: string) => { const x = projectOf(pid); return !!x && (!x.shareRole || x.shareRole === 'editor') }
   const [killing, setKilling] = useState<string | null>(null)
   const [reloadTick, setReloadTick] = useState(0)
   const killExecution = useKillExecution()
@@ -83,35 +94,50 @@ export default function ProjectBoard({ project, onOpenTrace }: { project: Projec
   }
 
   useEffect(() => {
-    // 프로젝트가 바뀌면 보드는 key 로 새로 마운트된다(ProjectsTab) — 여기서 비울 필요가 없다
     let alive = true
+    const ids = idsKey.split(',')
     const loadBoardData = async () => {
-      const [issuesResult, doneResult] = await Promise.allSettled([
-        fetch(`/api/projects/${project.id}/issues`).then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json() }),
-        fetch(`/api/projects/${project.id}/done-today`).then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json() }),
+      const get = (pid: string, path: string) => fetch(`/api/projects/${pid}/${path}`)
+        .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json() })
+        .then(d => (Array.isArray(d) ? d : []).map((x: object) => ({ ...x, pid })))
+      const [issuesResult, doneResult] = await Promise.all([
+        Promise.allSettled(ids.map(pid => get(pid, 'issues'))),
+        Promise.allSettled(ids.map(pid => get(pid, 'done-today'))),
       ])
       if (!alive) return
-      if (issuesResult.status === 'fulfilled') setIssues(Array.isArray(issuesResult.value) ? issuesResult.value : [])
-      if (doneResult.status === 'fulfilled') setDoneToday(Array.isArray(doneResult.value) ? doneResult.value : [])
-      const failed = issuesResult.status === 'rejected' || doneResult.status === 'rejected'
+      // 못 읽은 프로젝트는 지난 값을 그대로 둔다(그 프로젝트 일이 보드에서 사라지지 않게) — 읽은 프로젝트만 바꾼다
+      const merge = <T extends { pid: string }>(prev: T[] | null, results: PromiseSettledResult<T[]>[]): T[] => {
+        const next: T[] = []
+        results.forEach((r, i) => { if (r.status === 'fulfilled') next.push(...r.value); else next.push(...(prev ?? []).filter(x => x.pid === ids[i])) })
+        return next
+      }
+      const issuesFailed = issuesResult.some(r => r.status === 'rejected')
+      const doneFailed = doneResult.some(r => r.status === 'rejected')
+      if (issuesResult.some(r => r.status === 'fulfilled')) setIssues(prev => merge(prev, issuesResult as PromiseSettledResult<BoardIssue[]>[]))
+      if (doneResult.some(r => r.status === 'fulfilled')) setDoneToday(prev => merge(prev, doneResult as PromiseSettledResult<(TodayDoneIssue & { pid: string })[]>[]))
+      const failed = issuesFailed || doneFailed
       setBoardSyncError(failed)
       if (!failed) setLastSyncedAt(Date.now())
     }
-    const loadExecs = () => fetch(`/api/projects/${project.id}/executions`)
+    const loadExecs = () => Promise.allSettled(ids.map(pid => fetch(`/api/projects/${pid}/executions`)
       .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json() })
-      .then(d => { if (alive) { setExecs(Array.isArray(d) ? d : []); setExecutionSyncError(false) } })
-      .catch(() => { if (alive) setExecutionSyncError(true) })
+      .then(d => (Array.isArray(d) ? d : []) as TaskExecution[])))
+      .then(results => {
+        if (!alive) return
+        setExecs(prev => results.flatMap((r, i) => r.status === 'fulfilled' ? r.value : prev.filter(e => e.projectId === ids[i])))
+        setExecutionSyncError(results.some(r => r.status === 'rejected'))
+      })
     loadBoardData(); loadExecs()
     const t1 = setInterval(loadBoardData, 10_000)
     const t2 = setInterval(loadExecs, 5_000)
     const t3 = setInterval(() => setNow(Date.now()), 30_000)
     return () => { alive = false; clearInterval(t1); clearInterval(t2); clearInterval(t3) }
-  }, [project.id, reloadTick])
+  }, [idsKey, reloadTick])
 
   const running = execs.filter(e => e.status === 'running' || e.status === 'assigned')
   // 같은 단계에 사람 배정과 에이전트 실행이 함께 있으면 에이전트 쪽 — 트레이스·강제종료 버튼이 그 실행을 가리켜야 한다
-  const execFor = (iid: number, kind: 'process' | 'verify' | 'confirm') => {
-    const mine = running.filter(e => e.issueIid === iid && execKind(e.id) === kind)
+  const execFor = (pid: string, iid: number, kind: 'process' | 'verify' | 'confirm') => {
+    const mine = running.filter(e => e.projectId === pid && e.issueIid === iid && execKind(e.id) === kind)
     return mine.find(e => e.assigneeType !== 'user') ?? mine[0]
   }
   const execWho = (e?: TaskExecution) => e ? (e.assigneeType === 'user' ? (e.userName ?? null) : (e.agentName ?? null)) : null
@@ -134,13 +160,14 @@ export default function ProjectBoard({ project, onOpenTrace }: { project: Projec
     const t = setInterval(load, 2000)
     return () => { alive = false; clearInterval(t) }
   }, [liveAgents])
-  const issueHref = (iid: number) => `/issues/${project.id}/${iid}`
+  const issueHref = (pid: string, iid: number) => `/issues/${pid}/${iid}`
   // 에이전트가 돌리는 실행이면 트레이스로 갈 실행 id — 사람이 맡은 일·AI 채팅은 트레이스가 없다(execHref 와 같은 규칙)
-  const traceOf = (e?: TaskExecution) => e && execHref(e, project.id).startsWith('/executions/') ? e.id : undefined
+  const traceOf = (e?: TaskExecution) => e && execHref(e, e.projectId).startsWith('/executions/') ? e.id : undefined
 
   const cols: Record<Col, BoardItem[]> = { process: [], verify: [], confirm: [], done: [] }
   for (const i of issues ?? []) {
-    const base = { key: `i-${i.iid}`, iid: i.iid, title: i.title, href: issueHref(i.iid), issue: i }
+    if (!projectOf(i.pid)) continue
+    const base = { key: `i-${i.pid}-${i.iid}`, pid: i.pid, iid: i.iid, title: i.title, href: issueHref(i.pid, i.iid), issue: i }
     if (i.stage === 'waiting') {
       // 처리 대기에 들어온 시각(단계 사건) — 카드의 대기 목록과 같은 기준. 사건 기록 이전이면 이슈 작성 시각
       cols.process.push({ ...base, who: tp(WAIT_LABEL.process), startedAt: i.stageSince ?? i.createdAt ?? null, waiting: true })
@@ -148,40 +175,41 @@ export default function ProjectBoard({ project, onOpenTrace }: { project: Projec
       // 처리 실패 — 실패 뒤 아무도 다시 처리하지 않은 일. 진행 숫자에는 넣지 않고 처리 칸 맨 위 묶음으로 드러낸다
       cols.process.push({ ...base, who: tp('failGroupProcess'), startedAt: i.stageSince ?? null, failed: true })
     } else if (i.stage === 'dev') {
-      const e = execFor(i.iid, 'process')
+      const e = execFor(i.pid, i.iid, 'process')
       // 에이전트가 처리 중이면 실시간 실행 화면으로(검증·확인도 같다 — execHref)
       cols.process.push({ ...base, who: execWho(e), face: execFace(e), startedAt: e?.startedAt ?? null, traceExecId: traceOf(e) })
     } else if (i.stage === 'verify_waiting') {
       // 검증·확인 대기도 그 단계에 들어온 시각(단계 사건)부터 — 카드의 대기 묶음과 같은 기준. 사건 기록 전이면 모름(경과 생략)
       cols.verify.push({ ...base, who: tp(WAIT_LABEL.verify), startedAt: i.stageSince ?? null, waiting: true })
     } else if (i.stage === 'verifying') {
-      const e = execFor(i.iid, 'verify')
+      const e = execFor(i.pid, i.iid, 'verify')
       cols.verify.push({ ...base, who: i.actualVerifier?.name ?? execWho(e), face: i.actualVerifier?.name ? actorFace(i.actualVerifier) : execFace(e), startedAt: e?.startedAt ?? null, traceExecId: traceOf(e) })
     } else if (i.stage === 'confirm_waiting') {
       cols.confirm.push({ ...base, who: tp(WAIT_LABEL.confirm), startedAt: i.stageSince ?? null, waiting: true })
     } else if (i.stage === 'confirming') {
-      const e = execFor(i.iid, 'confirm')
+      const e = execFor(i.pid, i.iid, 'confirm')
       cols.confirm.push({ ...base, who: i.actualConfirmer?.name ?? execWho(e), face: i.actualConfirmer?.name ? actorFace(i.actualConfirmer) : execFace(e), startedAt: e?.startedAt ?? null, traceExecId: traceOf(e) })
     }
   }
   // 이슈 목록(Git 조회)에 없거나 아직 못 받은 진행 중 실행도 그 종류의 칸에 둔다 — 카드의 진행 중 목록과 같은 근거(실행 기록)
   for (const e of running) {
     const kind = execKind(e.id)
-    if (kind === 'chat') continue
+    if (kind === 'chat' || !projectOf(e.projectId)) continue
     const col: Col = kind
-    if (cols[col].some(it => it.iid === e.issueIid)) continue
+    if (cols[col].some(it => it.pid === e.projectId && it.iid === e.issueIid)) continue
     cols[col].push({
-      key: `e-${e.id}`, iid: e.issueIid, title: e.issueTitle ?? '', who: execWho(e), face: execFace(e), startedAt: e.startedAt,
-      href: issueHref(e.issueIid), traceExecId: traceOf(e),
+      key: `e-${e.id}`, pid: e.projectId, iid: e.issueIid, title: e.issueTitle ?? '', who: execWho(e), face: execFace(e), startedAt: e.startedAt,
+      href: issueHref(e.projectId, e.issueIid), traceExecId: traceOf(e),
     })
   }
   // 완료(오늘) — 카드의 「완료」 숫자와 같은 근거: 오늘 끝낸 완료 사이클(보고서와 같은 판정)과 오늘 반려.
   // 실행 기록으로 세면 어제 시작한 일·사후 등록·최근 실행 목록 밖의 일이 빠진다(60건 처리에 「오늘 완료 1」).
   for (const d of doneToday) {
+    if (!projectOf(d.pid)) continue
     cols.done.push({
-      key: `d-${d.iid}-${d.at}`, iid: d.iid, title: d.title, who: d.who?.name ?? null,
+      key: `d-${d.pid}-${d.iid}-${d.at}`, pid: d.pid, iid: d.iid, title: d.title, who: d.who?.name ?? null,
       face: d.who ? { src: d.who.avatar || 'person', userId: d.who.userId, human: true } : null,
-      startedAt: null, href: issueHref(d.iid),
+      startedAt: null, href: issueHref(d.pid, d.iid),
     })
   }
 
@@ -195,13 +223,20 @@ export default function ProjectBoard({ project, onOpenTrace }: { project: Projec
   return (
     <section className="flex-1 min-w-0 flex flex-col gap-4 p-5 overflow-hidden">
       <header className="flex items-center gap-3 shrink-0">
-        <div className="w-9 h-9 rounded-lg bg-ive-bg-deep border flex items-center justify-center shrink-0" style={{ borderColor: `${color}66` }}>
-          <i className={`fa-brands ${project.provider === 'github' ? 'fa-github' : 'fa-gitlab'} text-lg`} style={{ color }} />
-        </div>
-        <div className="min-w-0 flex flex-col">
-          <h2 className="text-lg font-bold leading-tight truncate" style={{ color }}>{project.name}</h2>
-          <span className="text-xs font-bold text-ive-text-dim font-mono truncate">{project.repoUrl.replace(/^https?:\/\//, '').replace(/\.git$/, '')}</span>
-        </div>
+        {!filterSlot && (
+          <div className="w-9 h-9 rounded-lg bg-ive-bg-deep border flex items-center justify-center shrink-0" style={{ borderColor: `${color}66` }}>
+            <i className={`fa-brands ${project.provider === 'github' ? 'fa-github' : 'fa-gitlab'} text-lg`} style={{ color }} />
+          </div>
+        )}
+        {/* 필터가 있으면 필터가 곧 제목이다(고른 프로젝트 이름이 거기 적힌다) — 제목을 따로 두지 않는다. 프로젝트가 하나뿐이면 종전 제목 */}
+        {filterSlot ? (
+          <div className="w-72 shrink-0 [&>div]:mb-0" title={projects.map(x => x.name).join(' · ')}>{filterSlot}</div>
+        ) : (
+          <div className="min-w-0 flex flex-col">
+            <h2 className="text-lg font-bold leading-tight truncate" style={{ color }}>{project.name}</h2>
+            <span className="text-xs font-bold text-ive-text-dim font-mono truncate">{project.repoUrl.replace(/^https?:\/\//, '').replace(/\.git$/, '')}</span>
+          </div>
+        )}
         <div className="ml-auto flex items-center gap-2 shrink-0">
           <span
             role="status"
@@ -217,12 +252,12 @@ export default function ProjectBoard({ project, onOpenTrace }: { project: Projec
           <span className="wide:hidden text-xs font-bold text-ive-text-secondary mr-1">
             {tp('boardDoneToday')} <span className={cols.done.length ? 'text-ive-cyan' : 'text-ive-text-dim'}><CountBump value={cols.done.length} /></span>
           </span>
-          <button onClick={() => navigateToAddIssue(project.id)} className="h-9 px-3 rounded-lg text-sm font-bold bg-ive-bg-card border border-ive-border-subtle text-ive-text hover:border-ive-cyan/40">
+          {!multi && <button onClick={() => navigateToAddIssue(project.id)} className="h-9 px-3 rounded-lg text-sm font-bold bg-ive-bg-card border border-ive-border-subtle text-ive-text hover:border-ive-cyan/40">
             <i className="fa-solid fa-plus mr-1.5 text-xs" />{tp('addIssue')}
-          </button>
-          <button onClick={() => router.push(`/projects/${project.id}`)} aria-label={tp('boardOpenProject')} title={tp('boardOpenProject')} className="w-9 h-9 rounded-lg bg-ive-bg-card border border-ive-border-subtle text-ive-text-dim hover:text-ive-text">
+          </button>}
+          {!multi && <button onClick={() => router.push(`/projects/${project.id}`)} aria-label={tp('boardOpenProject')} title={tp('boardOpenProject')} className="w-9 h-9 rounded-lg bg-ive-bg-card border border-ive-border-subtle text-ive-text-dim hover:text-ive-text">
             <i className="fa-solid fa-ellipsis" />
-          </button>
+          </button>}
         </div>
       </header>
 
@@ -299,6 +334,15 @@ export default function ProjectBoard({ project, onOpenTrace }: { project: Projec
                           <span className={`text-xs font-bold leading-snug line-clamp-2 ${it.waiting ? 'text-ive-text-secondary' : 'text-ive-text'}`}>
                             <span className="font-bold text-ive-text-secondary">#{it.iid}</span> {it.title}
                           </span>
+                          {multi && (() => {
+                            const x = projectOf(it.pid)
+                            return x ? (
+                              <span className="flex items-center gap-1.5 min-w-0 text-xs font-bold text-ive-text-secondary">
+                                <i className={`fa-brands ${x.provider === 'github' ? 'fa-github' : 'fa-gitlab'} shrink-0`} style={{ color: x.color || '#4ade80' }} />
+                                <span className="truncate">{x.name}</span>
+                              </span>
+                            ) : null
+                          })()}
                           {/* 작업 정보 배지(작업 목록 카드와 같은 부품) 왼쪽 · 경과 오른쪽 */}
                           {(badges || age) && (
                             <span className="flex flex-wrap items-center gap-1">
@@ -324,7 +368,7 @@ export default function ProjectBoard({ project, onOpenTrace }: { project: Projec
                               >
                                 <i className="fa-solid fa-terminal mr-1" />{te('viewTrace')}
                               </button>
-                              {canEdit && (
+                              {canEditOf(it.pid) && (
                                 <button
                                   type="button"
                                   onClick={e => { e.stopPropagation(); void handleKill(it.traceExecId!) }}

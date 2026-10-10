@@ -54,7 +54,7 @@ export default function AgentsTab({ onAdd }: { onAdd?: () => void }) {
     setShown(30)
     try { localStorage.setItem(PROJECTS_KEY, JSON.stringify(ids)) } catch { /* 저장 못 해도 이번 화면엔 적용 */ }
   }, [])
-  const projectOptions = useMemo(() => state.projects.map(p => ({ id: p.id, name: p.name, color: p.color })), [state.projects])
+  const projectOptions = useMemo(() => state.projects.map(p => ({ id: p.id, name: p.name, color: p.color, provider: p.provider })), [state.projects])
   // 이제 볼 수 없는 프로젝트(공유 해제 등)는 뺀다 — 프로젝트 목록을 받기 전엔 기억한 값 그대로
   const activeIds = useMemo(() => {
     const ids = projectOptions.length ? projectIds.filter(id => projectOptions.some(o => o.id === id)) : projectIds
