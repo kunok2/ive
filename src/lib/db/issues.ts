@@ -80,6 +80,19 @@ export function countTodayStageTransitions(projectId: string, stage: string, tod
   return r?.count ?? 0
 }
 
+/**
+ * 구간 [startISO, endISO) 안에 특정 cached_stage 로 전이된 이슈 수 — 카드 「완료」 옆 전일 대비 증감의 어제 몫.
+ * 오늘 몫(countTodayStageTransitions)과 같은 소스·같은 단위(이슈 수)로 세어야 둘을 뺄 수 있다.
+ * 실행(task_executions) 수로 세면 한 이슈가 처리·확인 실행을 여러 번 거쳐 어제 15건 완료가 수십 건으로 불어난다(#563).
+ */
+export function countStageTransitionsBetween(projectId: string, stage: string, startISO: string, endISO: string): number {
+  const r = getDb().prepare(`
+    SELECT COUNT(*) as count FROM issue_stages
+    WHERE project_id = ? AND cached_stage = ? AND datetime(updated_at) >= datetime(?) AND datetime(updated_at) < datetime(?)
+  `).get(projectId, stage, startISO, endISO) as any
+  return r?.count ?? 0
+}
+
 /** 오늘 완료·반려로 바뀐 이슈 — 카드 「완료」 숫자(countTodayStageTransitions)와 같은 조건의 목록 */
 export interface TodayDoneIssue {
   iid: number

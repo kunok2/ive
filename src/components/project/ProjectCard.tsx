@@ -590,7 +590,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
               <CountBump value={totalDone} />
             </span>
             {stats && yesterdayDiff !== 0 && (
-              <span className={`text-xs font-bold ${yesterdayDiff > 0 ? 'text-ive-green' : 'text-ive-red'}`}>
+              <span title={tp('yesterdayDiffTooltip', { count: stats.yesterdayCompleted })} className={`text-xs font-bold ${yesterdayDiff > 0 ? 'text-ive-green' : 'text-ive-red'}`}>
                 <CountBump value={yesterdayDiff}>{yesterdayDiff > 0 ? '+' : ''}{yesterdayDiff}</CountBump>
               </span>
             )}
