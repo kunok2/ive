@@ -98,15 +98,26 @@ interface HistRow { started: string; ended: string | null; status: string; verif
  *  완료 시각 = 확인 완료(지금 사이클) 또는 완료 사건(지난 사이클) → 그 사이클 검증 승인 중 가장 늦은 것 → 그 사이클 처리 실행이 끝난 가장 늦은 시각.
  *  (채팅·충돌 검사·검증/확인 실행의 시각은 쓰지 않는다 — 예전에 끝난 이슈가 채팅 한 번으로 이번 주 완료가 되지 않게.)
  */
-export function loadIssueHistory(projectIds: string[], opts: { onlyHeld?: boolean } = {}): Map<string, IssueHistory> {
+export function loadIssueHistory(projectIds: string[], opts: { onlyHeld?: boolean; activeSince?: string } = {}): Map<string, IssueHistory> {
   const out = new Map<string, IssueHistory>()
   if (projectIds.length === 0) return out
   const db = getDb()
   const ph = projectIds.map(() => '?').join(',')
   // 지금 보유 중인 이슈만(보유 나이 계산용 — 매분 도는 수집기도 쓰므로 필요한 이슈만 읽는다)
-  const held = (a: string) => opts.onlyHeld
+  const onlyHeld = (a: string) => opts.onlyHeld
     ? `AND EXISTS (SELECT 1 FROM issue_stages hs WHERE hs.project_id = ${a}.project_id AND hs.issue_iid = ${a}.issue_iid AND hs.cached_stage IN ${HELD_STAGE_SQL})`
     : ''
+  // 그 시각 뒤에 완료 시각이 될 수 있는 기록(확인 완료·단계 사건·처리 실행의 검증 승인/종료)이 있는 이슈만
+  // (프로젝트 카드가 몇 초마다 오늘·어제 완료를 셀 때 — 이력은 이슈 단위로 통째 읽으므로 완료 판정은 전체를 읽을 때와 같다)
+  const since = opts.activeSince ? new Date(opts.activeSince).toISOString() : null
+  const active = (a: string) => since
+    ? `AND (
+        EXISTS (SELECT 1 FROM issue_stages s2 WHERE s2.project_id = ${a}.project_id AND s2.issue_iid = ${a}.issue_iid AND datetime(s2.confirmed_at) >= datetime('${since}'))
+        OR EXISTS (SELECT 1 FROM issue_events e2 WHERE e2.project_id = ${a}.project_id AND e2.issue_iid = ${a}.issue_iid AND +e2.event = 'stage' AND datetime(e2.occurred_at) >= datetime('${since}'))
+        OR EXISTS (SELECT 1 FROM task_executions t2 WHERE t2.project_id = ${a}.project_id AND t2.issue_iid = ${a}.issue_iid AND ${PROCESS_EXEC_SQL('t2')}
+          AND (datetime(t2.verified_at) >= datetime('${since}') OR datetime(t2.ended_at) >= datetime('${since}'))))`
+    : ''
+  const held = (a: string) => `${onlyHeld(a)} ${active(a)}`
   const rows = new Map<string, HistRow[]>()
   const running = new Set<string>()
   for (const r of db.prepare(`
@@ -218,6 +229,14 @@ export function completedInRange(history: Map<string, IssueHistory>, startDay: s
   const out: CycleEvent[] = []
   for (const [key, h] of history) for (const at of h.completions) if (at >= lo && at < hi) out.push({ key, at })
   return out.sort((a, b) => (a.at < b.at ? -1 : 1))
+}
+
+/**
+ * 프로젝트 하나가 KST 날짜 구간(끝 미포함)에 끝낸 사이클 — 프로젝트 카드 「완료」와 전일 대비 증감이 쓴다.
+ * 보고서의 완료(completedInRange)와 같은 이력·같은 판정으로 세어야 카드와 보고서의 숫자가 같다(#563).
+ */
+export function completedOnDays(projectId: string, startDay: string, endDay: string): CycleEvent[] {
+  return completedInRange(loadIssueHistory([projectId], { activeSince: kstDayStartISO(startDay) }), startDay, endDay)
 }
 
 /**
