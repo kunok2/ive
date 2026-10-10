@@ -1,14 +1,11 @@
 'use client'
 
 import { useRef, useEffect, useMemo, useState } from 'react'
-import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { useKillExecution } from '@/lib/use-kill-execution'
 import { useTranslations } from 'next-intl'
 import { createImagePasteHandlers } from '@/lib/paste-upload'
 import AgentPickerDropdown from './AgentPickerDropdown'
-import AgentAvatar from '@/components/agent/AgentAvatar'
-import type { RoleAgentCandidate } from '@/components/issue/RoleAvatarBar'
 import { isClosedMidway } from './StageActions'
 
 interface IssueDetail {
@@ -43,13 +40,12 @@ interface ProjectAgent {
 /** 검증·확인을 에이전트에게 맡기기 — 등록 오른쪽 「에이전트 호출」 버튼 */
 export interface StageHandOff {
   kind: 'verify' | 'confirm'
-  /** 그 역할 명부의 에이전트(검증은 처리한 에이전트 제외) — 지정된 에이전트가 맨 위 */
-  agents: RoleAgentCandidate[]
-  presetAgentId: string | null
-  /** 에이전트가 맡지 못한 사유(MR 없음 등) — 메뉴 안에서만 보인다 */
+  /** 입력창 위 작업자 선택에서 고른 에이전트 — 누르면 이 에이전트에게 맡긴다. null 이면 맡을 수 있는 에이전트에게 자동 배정(서버가 고른다) */
+  target: { id: string; name: string } | null
+  /** 에이전트가 맡지 못한 사유(MR 없음 등) — 버튼 풍선말에 보인다 */
   note: string | null
   busy: boolean
-  onPick: (agent: RoleAgentCandidate) => void
+  onCall: () => void
 }
 
 interface BottomInputAreaProps {
@@ -427,7 +423,7 @@ function CommentModeInput({
         >
           {postingType === 'comment' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-paper-plane" /><span className="hidden pad:inline">{tIssue('postCommentShort')}</span></>}
         </button>
-        {handOff && canProgressStage && forwardOk && <HandOffMenu handOff={handOff} disabled={posting} />}
+        {handOff && canProgressStage && forwardOk && <HandOffButton handOff={handOff} disabled={posting} />}
         </div>
 
         {/* 전진 →: 다음 단계 진입 (검증완료/다음단계로) */}
@@ -619,75 +615,30 @@ function ChatStartPrompt({ onStartChat }: { onStartChat: (force?: boolean) => vo
 
 
 /**
- * 「에이전트 호출」 버튼 — 지금 단계 일(검증·확인)을 에이전트에게 맡긴다. 앞으로 가는 버튼 앞에 따로 둔다. 메뉴는 AgentPickerDropdown 과 같은 모양으로 위로 열린다.
- * 버튼 줄이 overflow-hidden(좁은 폭에서 버튼 넘침 방지)이라 메뉴는 body 로 띄워 버튼 위치에 고정한다 — 줄 안에 두면 잘리고 입력칸이 클릭을 가로챈다.
+ * 「에이전트 호출」 버튼 — 지금 단계 일(검증·확인)을 에이전트에게 맡긴다. 앞으로 가는 버튼 앞에 따로 둔다.
+ * 고르게 하지 않는다: 입력창 위에서 작업자(에이전트)를 골라 두었으면 그 에이전트에게, 아니면 맡을 수 있는 에이전트에게 자동 배정.
  */
-function HandOffMenu({ handOff, disabled }: { handOff: StageHandOff; disabled: boolean }) {
+function HandOffButton({ handOff, disabled }: { handOff: StageHandOff; disabled: boolean }) {
   const tIssue = useTranslations('issue')
-  // 열린 메뉴의 고정 위치(버튼의 오른쪽 끝·윗변 기준) — null 이면 닫힘
-  const [pos, setPos] = useState<{ right: number; bottom: number } | null>(null)
-  const open = pos != null
-  const btnRef = useRef<HTMLButtonElement>(null)
-  const menuRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    const handler = (e: MouseEvent) => {
-      const t = e.target as Node
-      if (!btnRef.current?.contains(t) && !menuRef.current?.contains(t)) setPos(null)
-    }
-    // 스크롤·크기 변경 시 위치가 어긋나므로 닫는다
-    const close = () => setPos(null)
-    document.addEventListener('mousedown', handler)
-    window.addEventListener('resize', close)
-    return () => { document.removeEventListener('mousedown', handler); window.removeEventListener('resize', close) }
-  }, [open])
-
-  const toggle = () => {
-    if (open || !btnRef.current) { setPos(null); return }
-    const r = btnRef.current.getBoundingClientRect()
-    setPos({ right: Math.max(12, window.innerWidth - r.right), bottom: window.innerHeight - r.top + 4 })
-  }
+  const hint = handOff.target ? tIssue('callAgentTo', { agent: handOff.target.name }) : tIssue('callAgentAuto')
+  const title = handOff.note ? `${hint}\n${tIssue('agentBlocked', { note: handOff.note })}` : hint
 
   return (
-    <>
-      <button
-        ref={btnRef}
-        type="button"
-        onClick={toggle}
-        disabled={disabled || handOff.busy}
-        className={`shrink-0 h-10 w-10 pad:w-auto pad:px-3 rounded-lg border bg-ive-bg-card flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold whitespace-nowrap ${handOff.kind === 'verify'
-          ? 'border-ive-stage-verify/40 text-ive-stage-verify hover:bg-ive-stage-verify/10'
-          : 'border-ive-stage-confirm/40 text-ive-stage-confirm hover:bg-ive-stage-confirm/10'}`}
-        title={tIssue('callAgent')}
-        aria-label={tIssue('callAgent')}
-        aria-expanded={open}
-      >
-        {/* 폰 폭은 하단 버튼 모두 아이콘만(줄 폭 확보) — 넓은 칸에서 글자까지 */}
-        {handOff.busy ? <i className="fa-solid fa-circle-notch fa-spin" /> : <>
-          <i className="fa-solid fa-robot text-sm pad:text-[10px]" />
-          <span className="hidden pad:inline">{tIssue('callAgent')}</span>
-        </>}
-      </button>
-      {pos && createPortal(
-        <div ref={menuRef} style={{ position: 'fixed', right: pos.right, bottom: pos.bottom }} className="z-50 bg-ive-bg-deep border border-ive-border-subtle rounded-lg overflow-hidden shadow-lg shadow-black/30 min-w-[220px] max-w-[min(320px,calc(100vw-24px))]">
-          {handOff.note && (
-            <div className="px-3 pt-2.5 pb-1.5 text-xs text-ive-amber break-words">{tIssue('agentBlocked', { note: handOff.note })}</div>
-          )}
-          {handOff.agents.map(a => (
-            <button
-              key={a.id}
-              onClick={() => { setPos(null); handOff.onPick(a) }}
-              className="w-full px-3 py-2.5 text-left text-xs flex items-center gap-2 text-ive-text hover:bg-white/5 transition-colors"
-            >
-              <AgentAvatar avatar={a.avatar} size="xs" />
-              <span className="font-bold min-w-0 truncate">{a.name}</span>
-              {a.id === handOff.presetAgentId && <i className="fa-solid fa-check ml-auto text-ive-green" />}
-            </button>
-          ))}
-        </div>,
-        document.body,
-      )}
-    </>
+    <button
+      type="button"
+      onClick={handOff.onCall}
+      disabled={disabled || handOff.busy}
+      className={`shrink-0 h-10 w-10 pad:w-auto pad:px-3 rounded-lg border bg-ive-bg-card flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold whitespace-nowrap ${handOff.kind === 'verify'
+        ? 'border-ive-stage-verify/40 text-ive-stage-verify hover:bg-ive-stage-verify/10'
+        : 'border-ive-stage-confirm/40 text-ive-stage-confirm hover:bg-ive-stage-confirm/10'}`}
+      title={title}
+      aria-label={hint}
+    >
+      {/* 폰 폭은 하단 버튼 모두 아이콘만(줄 폭 확보) — 넓은 칸에서 글자까지 */}
+      {handOff.busy ? <i className="fa-solid fa-circle-notch fa-spin" /> : <>
+        <i className="fa-solid fa-robot text-sm pad:text-[10px]" />
+        <span className="hidden pad:inline">{tIssue('callAgent')}</span>
+      </>}
+    </button>
   )
 }

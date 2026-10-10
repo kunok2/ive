@@ -34,7 +34,7 @@ vi.mock('@/lib/scanner/confirm-worker', () => workerMock)
 vi.mock('@/lib/scanner/verify-worker', () => verifyWorkerMock)
 
 import { initSchema } from '@/lib/db/schema'
-import { setIssueIntakeChannel, setPresetRoles, updateProjectAutomation, getStageWorkerNote, approveIssueAutomation, replaceProjectMembers, setRosterEntry, getPresetRoles, getRoster, updateProjectShareRole } from '@/lib/db'
+import { setIssueIntakeChannel, setPresetRoles, updateProjectAutomation, getStageWorkerNote, approveIssueAutomation, replaceProjectMembers, setRosterEntry, getPresetRoles, getRoster, updateProjectShareRole, setAssignMode } from '@/lib/db'
 import { openAgentStageExecution, setStageVerdict } from '@/lib/scanner/stage-records'
 import { dispatchStageWorkers, isAutomationAllowed, checkStageHandOff } from '@/lib/scanner/stage-dispatch'
 import type { Project } from '@/types'
@@ -336,5 +336,58 @@ describe('H 에이전트에게 검증 맡기기 (화면)', () => {
 
     expect(verifyWorkerMock.runVerifyWorker).not.toHaveBeenCalled()
     expect(getStageWorkerNote(P, iid)).toBeNull()
+  })
+
+  it('H-5 자동 배정(agentId 없음) — 명부의 검증 에이전트 중 지금 맡을 수 있는 것을 고른다(처리한 에이전트·다른 작업 중 제외)', async () => {
+    const iid = iidSeq
+    providerMock.fetchMRByBranch.mockResolvedValue({ state: 'opened', iid: 7, web_url: 'https://gitlab.com/g/r/-/merge_requests/7' })
+    const none = await checkStageHandOff(project, issue(iid), 'verify_waiting', null, 'tok')
+    expect(none).toEqual({ ok: false, reason: expect.stringMatching(/명부에 검증 역할 에이전트가 없습니다/) })
+
+    for (const [id, name] of [['a2', 'Beta'], ['a3', 'Gamma']]) {
+      db.prepare(`INSERT INTO agents (id, user_id, name, cli_name, cli_path) VALUES (?, 'owner', ?, 'claude', 'claude')`).run(id, name)
+    }
+    verifier('a1'); verifier('a2'); verifier('a3')
+    // a1 = 이 이슈를 처리한 에이전트, a2 = 다른 작업 중 → a3
+    db.prepare(`INSERT INTO task_executions (id, project_id, agent_id, issue_iid, status, started_at) VALUES (?, ?, 'a1', ?, 'success', '2026-10-01T00:00:00Z')`).run(`ex-proc-${iid}`, P, iid)
+    db.prepare(`INSERT INTO task_executions (id, project_id, agent_id, issue_iid, status, started_at) VALUES (?, ?, 'a2', 9999, 'running', '2026-10-01T00:00:00Z')`).run(`ex-busy-${iid}`, P)
+    const r = await checkStageHandOff(project, issue(iid), 'verify_waiting', null, 'tok')
+    expect(r.ok).toBe(true)
+    if (r.ok) { expect(r.agent.id).toBe('a3'); r.launch() }
+    expect(verifyWorkerMock.runVerifyWorker).toHaveBeenCalledTimes(1)
+    expect((verifyWorkerMock.runVerifyWorker.mock.calls[0] as unknown as [any])[0].agent.id).toBe('a3')
+
+    // 지정된 검증자 에이전트가 맡을 수 있으면 그것이 먼저
+    db.prepare(`UPDATE task_executions SET status = 'success' WHERE id = ?`).run(`ex-busy-${iid}`)
+    setPresetRoles(P, iid, { verifier: { mode: 'agent', userId: null, username: null, agentId: 'a2' } })
+    const preset = await checkStageHandOff(project, issue(iid), 'verify_waiting', null, 'tok')
+    expect(preset.ok && preset.agent.id).toBe('a2')
+
+    // 모두 못 맡으면 이유
+    db.prepare(`UPDATE task_executions SET status = 'running' WHERE id = ?`).run(`ex-busy-${iid}`)
+    db.prepare(`INSERT INTO task_executions (id, project_id, agent_id, issue_iid, status, started_at) VALUES (?, ?, 'a3', 9998, 'running', '2026-10-01T00:00:00Z')`).run(`ex-busy3-${iid}`, P)
+    const allBusy = await checkStageHandOff(project, issue(iid), 'verify_waiting', null, 'tok')
+    expect(allBusy).toEqual({ ok: false, reason: expect.stringMatching(/지금 검증을 맡을 수 있는 에이전트가 없습니다/) })
+  })
+
+  it('H-6 작업자로 고른 에이전트는 명부에 그 역할이 없어도 맡긴다 — 고르지 않은 명부 밖 에이전트는 그대로 막는다', async () => {
+    const iid = iidSeq
+    configure()
+    providerMock.fetchMRByBranch.mockResolvedValue({ state: 'opened', iid: 7, web_url: 'https://gitlab.com/g/r/-/merge_requests/7' })
+    db.prepare(`INSERT INTO agents (id, user_id, name, cli_name, cli_path) VALUES ('a2', 'owner', 'Beta', 'claude', 'claude')`).run()
+    db.prepare(`INSERT INTO users (id, email, password, name) VALUES ('stranger', 's@x', '', 'Stranger')`).run()
+    db.prepare(`INSERT INTO agents (id, user_id, name, cli_name, cli_path) VALUES ('a9', 'stranger', 'Outsider', 'claude', 'claude')`).run()
+
+    expect(await checkStageHandOff(project, issue(iid), 'verify_waiting', 'a2', 'tok')).toEqual({ ok: false, reason: expect.stringMatching(/명부에 없습니다/) })
+    setAssignMode(P, iid, 'agent', 'a2')
+    const r = await checkStageHandOff(project, issue(iid), 'verify_waiting', 'a2', 'tok')
+    expect(r.ok && r.agent.id).toBe('a2')
+    providerMock.fetchMRByBranch.mockResolvedValue({ state: 'merged', merge_commit_sha: 'aaaaaaa1', web_url: 'https://gitlab.com/g/r/-/merge_requests/7' })
+    const c = await checkStageHandOff(project, issue(iid), 'confirm_waiting', 'a2', 'tok')
+    expect(c.ok && c.agent.id).toBe('a2')
+
+    // 소유자가 프로젝트 소유자·editor 가 아닌 에이전트는 골라 두어도 맡기지 않는다
+    setAssignMode(P, iid, 'agent', 'a9')
+    expect(await checkStageHandOff(project, issue(iid), 'verify_waiting', 'a9', 'tok')).toEqual({ ok: false, reason: expect.stringMatching(/명부에 없습니다/) })
   })
 })

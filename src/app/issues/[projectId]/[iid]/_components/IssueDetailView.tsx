@@ -153,7 +153,7 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
 
   // --- Stage/edit state ---
   const [stageChanging, setStageChanging] = useState(false)
-  // 검증·확인을 에이전트에게 맡기기 — 고른 에이전트(없으면 검증자/확인자 에이전트 → 명부 첫 에이전트)
+  // 검증·확인을 에이전트에게 맡기기 — 입력창 위에서 고른 작업자(에이전트), 없으면 서버가 맡을 수 있는 에이전트로 자동 배정
   const [handingOff, setHandingOff] = useState(false)
   const [showDesc, setShowDesc] = useState(true)
   const [isClosing, setIsClosing] = useState(false)
@@ -441,12 +441,13 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
   }
 
   // 검증대기·검증 중·확인대기·확인 중인 작업의 그 단계 일을 에이전트에게 맡긴다 — 검증자/확인자를 그 에이전트로 바꾸고 작업자를 바로 띄운다
-  async function handleStageHandOff(kind: 'verify' | 'confirm', agent: RoleAgentCandidate) {
+  // agent 가 null 이면 자동 배정(맡을 수 있는 에이전트를 서버가 고른다)
+  async function handleStageHandOff(kind: 'verify' | 'confirm', agent: { id: string; name: string } | null) {
     if (!issue) return
     // 진행 중(V/C)이면 사람이 하던 검증·확인을 취소하게 된다 — 먼저 묻는다
     if (issue.stage === 'verifying' || issue.stage === 'confirming') {
       const ok = await confirm({
-        title: tIssue('handOffButton'), message: tIssue(`handOffToAgent.${kind}.ask`, { agent: agent.name }),
+        title: tIssue('handOffButton'), message: agent ? tIssue(`handOffToAgent.${kind}.ask`, { agent: agent.name }) : tIssue(`handOffToAgent.${kind}.askAuto`),
         confirmText: tIssue('handOffButton'), cancelText: tc('cancel'), variant: 'warning',
       })
       if (!ok) return
@@ -455,11 +456,11 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
     try {
       const res = await fetch(`/api/projects/${projectId}/issues/${iid}/stage-agent`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agentId: agent.id }),
+        body: JSON.stringify(agent ? { agentId: agent.id } : {}),
       })
       const data = await res.json().catch(() => null)
       if (res.ok) {
-        toast(tIssue(`handOffToAgent.${kind}.done`, { agent: data?.agentName || agent.name }), 'success')
+        toast(tIssue(`handOffToAgent.${kind}.done`, { agent: data?.agentName || agent?.name || tIssue('agentWorkingUnknown') }), 'success')
         window.dispatchEvent(new Event('refresh-counts'))
       } else {
         toast(data?.error || `Error: ${res.status} ${res.statusText}`, 'error')
@@ -1026,15 +1027,16 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
     return isCreator
   }
 
-  // 검증·확인을 에이전트에게 맡기기 — 하단 앞으로 가는 버튼의 ▾ 메뉴(검증대기·검증 중·확인대기·확인 중, 에이전트가 이 작업을 하고 있지 않을 때)
-  const handOffKind: 'verify' | 'confirm' | null = !issue || issue.agentWork ? null
+  // 검증·확인을 에이전트에게 맡기기 — 하단 「에이전트 호출」 버튼(검증대기·검증 중·확인대기·확인 중, 에이전트가 이 작업을 하고 있지 않을 때).
+  // 작업자가 사람(담당자가 직접)으로 선택된 작업에는 내놓지 않는다.
+  const handOffKind: 'verify' | 'confirm' | null = !issue || issue.agentWork || preferredAgent?.assignMode === 'assignee' ? null
     : issue.stage === 'verify_waiting' || issue.stage === 'verifying' ? 'verify'
     : issue.stage === 'confirm_waiting' || issue.stage === 'confirming' ? 'confirm' : null
-  // 자기 작업을 자기가 검증하지 않는다 — 처리한 에이전트는 검증 후보에서 뺀다(서버도 막는다). 지정된 에이전트를 맨 위에
-  const handOffPreset = handOffKind === 'verify' ? issue?.presetVerifier : handOffKind === 'confirm' ? issue?.presetConfirmer : null
-  const handOffAgents = !handOffKind ? []
-    : (handOffKind === 'verify' ? roleAgents.verify.filter(a => a.id !== issue?.actualProcessor?.agentId) : roleAgents.confirm)
-      .slice().sort((x, y) => Number(handOffPreset?.mode === 'agent' && y.id === handOffPreset.agentId) - Number(handOffPreset?.mode === 'agent' && x.id === handOffPreset.agentId))
+  // 입력창 위에서 고른 작업자(에이전트)가 있으면 그 에이전트에게, 없으면 자동 배정.
+  // 자기 작업을 자기가 검증하지 않는다 — 고른 에이전트가 이 작업을 처리한 에이전트면 검증은 자동 배정으로 넘긴다(서버도 막는다)
+  const handOffTarget = handOffKind && preferredAgent?.assignMode === 'agent' && preferredAgent.preferredAgentId
+    && !(handOffKind === 'verify' && preferredAgent.preferredAgentId === issue?.actualProcessor?.agentId)
+    ? { id: preferredAgent.preferredAgentId, name: preferredAgent.preferredAgentName || '' } : null
 
   // Force comment mode if not authorized
   useEffect(() => { if (!canProgressStage && mode === 'chat') setMode('comment') }, [canProgressStage, mode])
@@ -1283,13 +1285,12 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
         onEndChat={handleEndChat}
         onSendChatMessage={handleSendChatMessage}
         onChangePreferredAgent={handleChangePreferredAgent}
-        handOff={handOffKind && handOffAgents.length > 0 ? {
+        handOff={handOffKind ? {
           kind: handOffKind,
-          agents: handOffAgents,
-          presetAgentId: handOffPreset?.mode === 'agent' ? handOffPreset.agentId ?? null : null,
+          target: handOffTarget,
           note: issue.stageWorkerNote ?? null,
           busy: handingOff || stageChanging,
-          onPick: agent => handleStageHandOff(handOffKind, agent),
+          onCall: () => handleStageHandOff(handOffKind, handOffTarget),
         } : null}
         onToast={toast}
 

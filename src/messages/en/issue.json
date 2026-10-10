@@ -198,14 +198,18 @@
   "handOffToAgent": {
     "verify": {
       "ask": "The verification in progress will be cancelled and {agent} will start verifying. Continue?",
+      "askAuto": "The verification in progress will be cancelled and an available agent will start verifying. Continue?",
       "done": "Handed the verification to {agent}"
     },
     "confirm": {
       "ask": "The confirmation in progress will be cancelled and {agent} will start confirming. Continue?",
+      "askAuto": "The confirmation in progress will be cancelled and an available agent will start confirming. Continue?",
       "done": "Handed the confirmation to {agent}"
     }
   },
   "callAgent": "Call agent",
+  "callAgentTo": "Call agent — hand to {agent}",
+  "callAgentAuto": "Call agent — auto-assign to an available agent",
   "handOffButton": "Hand to agent",
   "agentWorking": "{agent} is {work} this — you can move the stage once it finishes",
   "agentWorkingUnknown": "An agent",
