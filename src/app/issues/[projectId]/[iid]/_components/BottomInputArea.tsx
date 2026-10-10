@@ -38,7 +38,7 @@ interface ProjectAgent {
   agent: { id: string; name: string; avatar: string; cliName: string; status: string }
 }
 
-/** 검증·확인을 에이전트에게 맡기기 — 등록 오른쪽 「에이전트 호출」 버튼 */
+/** 검증·확인을 에이전트에게 맡기기 — 하단 가운데 「자동 검증」·「자동 확인」 버튼 */
 export interface StageHandOff {
   kind: 'verify' | 'confirm'
   /** 입력창 위 작업자 선택에서 고른 에이전트 — 누르면 이 에이전트에게 맡긴다. null 이면 맡을 수 있는 에이전트에게 자동 배정(서버가 고른다) */
@@ -255,7 +255,7 @@ function ModeTabs({
     <div className="flex items-center gap-1 mb-2">
       <button
         onClick={() => onSetMode('comment')}
-        className={`text-xs font-bold px-2.5 py-1 rounded-lg transition-all ${
+        className={`shrink-0 whitespace-nowrap text-xs font-bold px-2.5 py-1 rounded-lg transition-all ${
           mode === 'comment' ? 'bg-ive-green/15 text-ive-green' : 'text-ive-text-dim hover:text-ive-text'
         }`}
       >
@@ -273,7 +273,7 @@ function ModeTabs({
             }
           }}
           disabled={chatStarting}
-          className={`text-xs font-bold px-2.5 py-1 rounded-lg transition-all ${
+          className={`shrink-0 whitespace-nowrap text-xs font-bold px-2.5 py-1 rounded-lg transition-all ${
             mode === 'chat' ? 'bg-ive-cyan/15 text-ive-cyan' : 'text-ive-text-dim hover:text-ive-text'
           }`}
         >
@@ -331,8 +331,12 @@ function CommentModeInput({
 }) {
   const tIssue = useTranslations('issue')
   const tStage = useTranslations('stage')
-  // 누르면 가게 되는 단계 이름 — 폰 폭 버튼 글자(「← 대기」·「확인대기 →」)와 풍선말에 쓴다. 전이 표에서 계산해 실제 이동과 어긋나지 않는다
+  // 버튼 글자는 하는 일(「검증 시작」·「확인 완료」·「재처리」) — 단계 이름(「확인 중 →」)을 적으면 상태 표시인지 가는 곳인지 헷갈린다. 폭과 관계없이 같은 글자.
+  // 누르면 가게 되는 단계 이름은 풍선말에 붙인다. 전이 표에서 계산해 실제 이동과 어긋나지 않는다
   const targetLabel = (action: string | undefined) => tStage((action && transitionTarget(issue.stage, action)) || issue.stage)
+  // 뒤로 가는 버튼이 실제로 옮기는 단계 — 없으면(대기: 코멘트만 남긴다 = 「등록」과 같다) 버튼을 내놓지 않는다
+  const backStage = transitionTarget(issue.stage, retryActionOf(issue.stage))
+  const backLabel = backStage === 'verify_waiting' ? tIssue('backTo.verify_waiting') : backStage === 'confirm_waiting' ? tIssue('backTo.confirm_waiting') : tIssue('reprocess')
   const withTarget = (hint: string, target: string) => `${hint} (→ ${target})`
 
   // 에이전트가 이 작업을 하는 동안은 단계 버튼(유입·재실행·검증 시작·확인 등)을 내놓지 않는다 — 누르면 같은 일을 겹쳐 하게 된다.
@@ -351,6 +355,8 @@ function CommentModeInput({
 
   return (
     <div className="flex flex-col gap-2">
+      {/* 입력창 + 등록 — 채팅 모드의 입력창·보내기와 같은 배치. 코멘트만 남기고 단계는 그대로 */}
+      <div className="flex gap-2 items-end">
       <textarea
         ref={commentTextareaRef}
         value={comment}
@@ -376,14 +382,24 @@ function CommentModeInput({
         }}
         placeholder={tIssue('commentPlaceholder')}
         rows={1}
-        className="w-full min-h-10 bg-ive-bg-card border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-green/50 overflow-hidden"
+        className="flex-1 min-w-0 min-h-10 bg-ive-bg-card border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-green/50 overflow-hidden"
       />
-      {/* 폰 폭: 글자까지 다 적으면 한 줄에 안 들어가 두 줄로 — 윗줄 단계 이동(← 뒤 · 앞 →), 아랫줄 단계를 옮기지 않는 일(등록 · 에이전트 호출).
-          단계 이동 버튼은 도착 단계 이름을 적는다(화살표만으로는 어디로 가는지 알 수 없다). 넓은 칸은 종전대로 한 줄 */}
-      <div className="flex flex-wrap pad:flex-nowrap gap-2 items-center">
+        <button
+          onClick={onPostComment}
+          disabled={posting || !comment.trim()}
+          className="shrink-0 w-10 h-10 rounded-lg bg-ive-green text-ive-bg-deep flex items-center justify-center active:scale-95 transition-transform disabled:opacity-40"
+          title={tIssue('postCommentOnly')}
+          aria-label={tIssue('postComment')}
+        >
+          {postingType === 'comment' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <i className="fa-solid fa-paper-plane" />}
+        </button>
+      </div>
+      {/* 폰 폭도 한 줄(줄이 늘면 본문 높이가 준다) — 양끝 단계 이동(← 뒤 · 앞 →)은 하는 일을 글자로 적는다(화살표만으로는 무슨 일인지 알 수 없다).
+          글자가 긴 로케일에서 안 들어가면 앞으로 가는 버튼이 아랫줄로 내려간다(잘리지 않게) */}
+      <div className="flex flex-wrap pad:flex-nowrap gap-1.5 pad:gap-2 items-center">
         {/* ← 후진: 재실행 (현재 stage 를 스케줄로 되돌림). dev/none 단계에선 backward 액션 없음.
             dev_fail 은 처리 단계에서의 실패이므로 '이전 단계'(유입)로 가는 게 아니라 '재처리' 의미. */}
-        <div className="flex-1 flex flex-wrap justify-start gap-1.5 empty:hidden pad:empty:flex">
+        <div className="flex-1 flex justify-start gap-1.5">
           {/* 유입 버튼 — 검증대기/검증 단계에서만 표시 (이전 버튼 앞에 위치) */}
           {canProgressStage && !isClosed && (issue.stage === 'verify_waiting' || issue.stage === 'verifying') && (
             <button
@@ -398,7 +414,7 @@ function CommentModeInput({
               )}
             </button>
           )}
-          {canProgressStage && issue.stage !== 'dev' && issue.stage !== 'none' && !(preferredAgent?.assignMode === 'assignee' && NEXT_STAGE[issue.stage]) && (() => {
+          {canProgressStage && issue.stage !== 'dev' && issue.stage !== 'none' && !!backStage && backStage !== issue.stage && !(preferredAgent?.assignMode === 'assignee' && NEXT_STAGE[issue.stage]) && (() => {
             const isReprocess = issue.stage === 'dev_fail'
             const backTarget = targetLabel(retryActionOf(issue.stage))
             return (
@@ -412,10 +428,7 @@ function CommentModeInput({
                 {postingType === 'retry' ? <i className="fa-solid fa-circle-notch fa-spin" /> : (
                   <>
                     <i className={`fa-solid ${isReprocess ? 'fa-arrow-rotate-right' : 'fa-arrow-left'} text-[10px]`} />
-                    {isReprocess ? <span>{tIssue('reprocess')}</span> : <>
-                      <span className="pad:hidden">{backTarget}</span>
-                      <span className="hidden pad:inline">{tIssue('rerun')}</span>
-                    </>}
+                    <span>{backLabel}</span>
                   </>
                 )}
               </button>
@@ -423,22 +436,13 @@ function CommentModeInput({
           })()}
         </div>
 
-        {/* 가운데: 단계를 옮기지 않는 일 — 코멘트만(stay) · 에이전트 호출(지금 단계의 검증·확인을 에이전트에게 맡긴다) */}
-        <div className="order-last w-full pad:order-none pad:w-auto flex items-center gap-1.5">
-        <button
-          onClick={onPostComment}
-          disabled={posting || !comment.trim()}
-          className="flex-1 pad:flex-none h-10 px-3 rounded-lg bg-ive-green text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-40 text-xs font-bold whitespace-nowrap"
-          title={tIssue('postCommentOnly')}
-          aria-label={tIssue('postComment')}
-        >
-          {postingType === 'comment' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-paper-plane" /><span>{tIssue('postCommentShort')}</span></>}
-        </button>
+        {/* 가운데: 자동 검증/확인 — 단계를 옮기지 않고 지금 단계의 검증·확인을 에이전트에게 맡긴다 */}
+        <div className="flex items-center gap-1.5">
         {handOff && canProgressStage && forwardOk && <HandOffButton handOff={handOff} disabled={posting} />}
         </div>
 
         {/* 전진 →: 다음 단계 진입 (검증완료/다음단계로) */}
-        <div className="flex-1 flex items-center justify-end gap-1.5 empty:hidden pad:empty:flex">
+        <div className="flex-1 flex items-center justify-end gap-1.5">
           {(() => {
             // 검증대기·확인대기는 늘 「검증 시작 →」·「확인 시작 →」 — 에이전트가 맡았어도 MR 없음 등으로 못 맡으면 사람이 진행한다
             const showNext = (preferredAgent?.assignMode === 'assignee' || issue.stage === 'none' || issue.stage === 'verify_waiting' || issue.stage === 'confirm_waiting') && !!NEXT_STAGE[issue.stage] && canProgressStage && forwardOk
@@ -455,7 +459,7 @@ function CommentModeInput({
                     title={withTarget(issue.stage === 'none' ? tIssue('startProcessingHint') : NEXT_STAGE[issue.stage].label, nextTarget)}
                     aria-label={NEXT_STAGE[issue.stage].label}
                   >
-                    {postingType === 'next' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><span className="pad:hidden">{nextTarget}</span><span className="hidden pad:inline">{NEXT_STAGE[issue.stage].label}</span><i className="fa-solid fa-arrow-right text-[10px]" /></>}
+                    {postingType === 'next' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><span>{NEXT_STAGE[issue.stage].label}</span><i className="fa-solid fa-arrow-right text-[10px]" /></>}
                   </button>
                 )}
                 {showDone && (
@@ -466,7 +470,7 @@ function CommentModeInput({
                     title={withTarget(tIssue('postAndDoneHint'), nextTarget)}
                     aria-label={tIssue('postAndDone')}
                   >
-                    {postingType === 'done' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><span className="pad:hidden">{nextTarget}</span><span className="hidden pad:inline">{NEXT_STAGE[issue.stage]?.label || tIssue('done')}</span><i className="fa-solid fa-arrow-right text-[10px]" /></>}
+                    {postingType === 'done' ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><span>{NEXT_STAGE[issue.stage]?.label || tIssue('done')}</span><i className="fa-solid fa-arrow-right text-[10px]" /></>}
                   </button>
                 )}
               </>
@@ -628,12 +632,14 @@ function ChatStartPrompt({ onStartChat }: { onStartChat: (force?: boolean) => vo
 
 
 /**
- * 「에이전트 호출」 버튼 — 지금 단계 일(검증·확인)을 에이전트에게 맡긴다. 앞으로 가는 버튼 앞에 따로 둔다.
+ * 「자동 검증」·「자동 확인」 버튼 — 지금 단계 일(검증·확인)을 에이전트에게 맡긴다. 단계 이동 버튼 사이 가운데에 둔다.
  * 고르게 하지 않는다: 입력창 위에서 작업자(에이전트)를 골라 두었으면 그 에이전트에게, 아니면 맡을 수 있는 에이전트에게 자동 배정.
  */
 function HandOffButton({ handOff, disabled }: { handOff: StageHandOff; disabled: boolean }) {
   const tIssue = useTranslations('issue')
-  const hint = handOff.target ? tIssue('callAgentTo', { agent: handOff.target.name }) : tIssue('callAgentAuto')
+  // 글자는 하는 일 그대로 — 「자동 검증」·「자동 확인」(지금 단계 일을 에이전트가 한다)
+  const work = tIssue(`autoWork.${handOff.kind}`)
+  const hint = handOff.target ? tIssue('autoWorkTo', { work, agent: handOff.target.name }) : tIssue('autoWorkAuto', { work })
   const title = handOff.note ? `${hint}\n${tIssue('agentBlocked', { note: handOff.note })}` : hint
 
   return (
@@ -648,8 +654,8 @@ function HandOffButton({ handOff, disabled }: { handOff: StageHandOff; disabled:
       aria-label={hint}
     >
       {handOff.busy ? <i className="fa-solid fa-circle-notch fa-spin" /> : <>
-        <i className="fa-solid fa-robot text-[10px]" />
-        <span>{tIssue('callAgent')}</span>
+        <i className="fa-solid fa-bolt" />
+        <span>{work}</span>
       </>}
     </button>
   )

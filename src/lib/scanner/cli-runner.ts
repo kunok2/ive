@@ -367,29 +367,29 @@ export async function runCliProcess(
       // 사용량 한도(rate limit/quota)로 추정되면 원인을 최상단에 명시한다.
       // (CLI 종료코드만으로는 "왜 실패했는지" 알기 어려워 사용자 혼란 → #463 후속)
       if (rateLimitHint) {
-        const rlMsg = `🚦 사용량/속도 제한(rate limit·quota) 도달로 추정됩니다 — ${agent.cliName}: ${rateLimitHint}`;
+        const rlMsg = `🚦 ${agent.cliName} 의 사용량 한도에 걸려 중단된 것으로 보입니다 — 한도가 풀린 뒤 「재처리」해 주세요 (원문: ${rateLimitHint})`;
         log(rlMsg, 'error');
         detail.push(rlMsg);
       }
       if (ocErrorMsg) {
         detail.push(`OpenCode 오류: ${ocErrorMsg}`);
       }
-      detail.push(`Agent CLI exited with code ${code}${signal ? ` (signal: ${signal})` : ''}`);
+      detail.push(`에이전트 프로그램이 비정상 종료했습니다 (종료 코드 ${code}${signal ? `, 신호 ${signal}` : ''})`);
       // 사용자 중지(killExecution)는 SIGKILL 을 보내기 전에 상태를 failed 로 적는다 — 러너는 아직 안 적었다.
       const stoppedByUser = !killedByWatchdog && !killedByRunLimit
         && getExecution(executionId)?.status === 'failed';
       if (killedByRunLimit) {
-        detail.push(`힌트: 실행 시간 상한 ${maxRunMinutes}분을 넘겨 강제 종료했습니다(설정 cli.maxRunMinutes). 그때까지의 변경은 패치로 보존됩니다.`);
+        detail.push(`원인: 실행 시간 상한 ${maxRunMinutes}분을 넘겨 IVE 가 실행을 멈췄습니다. 그때까지 고친 내용은 보존해 두었습니다. 상한은 서버 설정(cli.maxRunMinutes)이라 관리자가 바꿀 수 있습니다.`);
       } else if (stoppedByUser) {
-        detail.push('힌트: 사용자가 실행을 중지했습니다. 그때까지의 변경은 패치로 보존됩니다.');
+        detail.push('원인: 사용자가 실행을 중지했습니다. 그때까지 고친 내용은 보존해 두었습니다.');
       } else if (killedByWatchdog) {
-        detail.push(`힌트: ${Math.floor(idleTimeoutSec / 60)}분간 무응답(hang)으로 워치독이 강제 종료했습니다. CLI 인증 상태나 인터랙티브 프롬프트 대기 여부를 확인하세요.`);
+        detail.push(`원인: 에이전트가 ${Math.floor(idleTimeoutSec / 60)}분 동안 아무 반응이 없어 IVE 가 실행을 멈췄습니다. 에이전트 프로그램의 로그인이 풀렸거나, 입력을 기다리며 멈춰 있었을 수 있습니다 — 관리자가 서버에서 로그인 상태를 확인해 주세요.`);
       } else if (signal === 'SIGKILL' || code === 137) {
-        detail.push('힌트: 메모리 부족(OOM) 또는 강제 종료로 추정됩니다.');
+        detail.push('원인: 서버 메모리가 모자랐거나 밖에서 프로세스를 강제로 끝낸 것으로 보입니다 — 「재처리」해 보고, 되풀이되면 관리자에게 서버 메모리 확인을 요청해 주세요.');
       } else if (signal === 'SIGTERM' || code === 143) {
-        detail.push('힌트: 외부 신호로 프로세스가 종료되었습니다 (timeout/kill).');
+        detail.push('원인: IVE 밖에서 실행을 끝냈습니다(서버 재시작·시간 초과 등) — 「재처리」해 주세요.');
       } else if (assistantTurnCount === 0) {
-        detail.push('힌트: 응답을 시작하기 전 종료 — CLI 인증/모델 미설정/인수 오류 가능성.');
+        detail.push('원인: 에이전트가 한 마디도 답하기 전에 끝났습니다. 에이전트 프로그램의 로그인이 풀렸거나 모델·실행 옵션 설정이 잘못됐을 수 있습니다 — 에이전트 설정과 로그인 상태를 확인해 주세요.');
       }
       const stderrTail = stderrBuffer.trim();
       if (stderrTail) {

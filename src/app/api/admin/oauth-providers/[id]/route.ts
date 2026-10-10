@@ -30,7 +30,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (typeof body.name === 'string') patch.name = body.name
   if (typeof body.baseUrl === 'string') {
     try { new URL(body.baseUrl) } catch {
-      return NextResponse.json({ error: 'baseUrl 형식 오류' }, { status: 400 })
+      return NextResponse.json({ error: '주소(URL) 형식이 올바르지 않습니다. https:// 로 시작하는 주소를 넣어 주세요.' }, { status: 400 })
     }
     patch.baseUrl = body.baseUrl.replace(/\/+$/, '')
   }

@@ -30,7 +30,7 @@ export async function POST(req: Request) {
   // 봇 토큰 검증 + team_id/bot_user_id 발견
   const auth = await slackAuthTest(botToken)
   if (!auth.ok || !auth.teamId || !auth.botUserId) {
-    return NextResponse.json({ error: `Slack 토큰 검증 실패: ${auth.error || 'auth_test_failed'}` }, { status: 400 })
+    return NextResponse.json({ error: `Slack에서 Bot Token을 확인하지 못했습니다 (${auth.error || 'auth_test_failed'}). 토큰을 다시 복사해 넣어 주세요.` }, { status: 400 })
   }
 
   if (getSlackWorkspaceByTeamId(auth.teamId)) {

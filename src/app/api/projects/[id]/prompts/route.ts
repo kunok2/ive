@@ -41,7 +41,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
   const body = await req.json().catch(() => ({}))
   const kind = body.kind as PromptKind
-  if (!PROMPT_KINDS.includes(kind) || !WORKER_ACTIVE[kind]) return NextResponse.json({ error: '알 수 없는 역할' }, { status: 400 })
+  if (!PROMPT_KINDS.includes(kind) || !WORKER_ACTIVE[kind]) return NextResponse.json({ error: '프롬프트를 저장할 역할이 올바르지 않습니다. 새로고침한 뒤 다시 시도해 주세요.' }, { status: 400 })
   let text: string | null = typeof body.body === 'string' ? body.body : null
   // 기본값과 같은 내용이면 덮어쓰기를 두지 않는다(기본값을 그대로 쓰게 — 처리 프롬프트 문자열 보존).
   if (text !== null && text.trim() === EDITABLE_DEFAULTS[kind].trim()) text = null

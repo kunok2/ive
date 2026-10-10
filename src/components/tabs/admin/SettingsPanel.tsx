@@ -162,7 +162,7 @@ const SETTING_GROUPS: SettingGroup[] = [
 
 // CLI 경로/모델은 CLI 단위로 묶어서 렌더 (가독성). 아이콘은 단순 형태 구분용(중립색).
 const CLI_ITEMS: { cliName: string; label: string; icon: string; pathKey: string; modelKey: string; pathPlaceholder: string }[] = [
-  { cliName: 'claude', label: 'Claude Code', icon: 'fa-solid fa-robot', pathKey: 'cli.claude.path', modelKey: 'cli.claude.model', pathPlaceholder: '/usr/local/bin/claude' },
+  { cliName: 'claude', label: 'Claude Code', icon: 'fa-solid fa-bolt', pathKey: 'cli.claude.path', modelKey: 'cli.claude.model', pathPlaceholder: '/usr/local/bin/claude' },
   { cliName: 'codex', label: 'Codex', icon: 'fa-solid fa-code', pathKey: 'cli.codex.path', modelKey: 'cli.codex.model', pathPlaceholder: '/usr/local/bin/codex' },
   { cliName: 'agy', label: 'agy (Antigravity CLI)', icon: 'fa-solid fa-gem', pathKey: 'cli.agy.path', modelKey: 'cli.agy.model', pathPlaceholder: '/usr/local/bin/agy' },
   { cliName: 'opencode', label: 'OpenCode', icon: 'fa-solid fa-cube', pathKey: 'cli.opencode.path', modelKey: 'cli.opencode.model', pathPlaceholder: '/usr/local/bin/opencode' },

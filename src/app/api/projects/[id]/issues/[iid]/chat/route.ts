@@ -17,10 +17,10 @@ export async function GET(
 
   const { id: projectId, iid } = await params
   const project = getProject(projectId)
-  if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+  if (!project) return NextResponse.json({ error: '프로젝트를 찾을 수 없습니다. 삭제되었을 수 있습니다 — 새로고침해 주세요.' }, { status: 404 })
 
   if (!getProjectAccess(projectId, user.id)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    return NextResponse.json({ error: '이 프로젝트에서 이 작업을 할 권한이 없습니다. 프로젝트 소유자에게 권한을 요청해 주세요.' }, { status: 403 })
   }
 
   const session = getActiveChatSession(projectId, Number(iid))
@@ -58,11 +58,11 @@ export async function POST(
 
   const { id: projectId, iid } = await params
   const project = getProject(projectId)
-  if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+  if (!project) return NextResponse.json({ error: '프로젝트를 찾을 수 없습니다. 삭제되었을 수 있습니다 — 새로고침해 주세요.' }, { status: 404 })
 
   const access = getProjectAccess(projectId, user.id)
   if (!access) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    return NextResponse.json({ error: '이 프로젝트에서 이 작업을 할 권한이 없습니다. 프로젝트 소유자에게 권한을 요청해 주세요.' }, { status: 403 })
   }
   // 채팅 시작은 담당자 또는 관리자만 (viewer도 assignee면 허용)
   const token = getProjectAuthToken(projectId)
@@ -146,6 +146,6 @@ export async function POST(
     // 작업 디렉토리 준비(git clone) 실패 메시지에는 clone URL 의 접근 토큰이 섞인다 — 화면·로그로 내보내기 전에 가린다
     let knownSecrets: string[] = []
     try { knownSecrets = [getProjectAuthToken(projectId)].filter(Boolean) } catch { /* 토큰 없음 */ }
-    return NextResponse.json({ error: err instanceof Error ? maskSecrets(err.message, knownSecrets) : 'Failed to start chat' }, { status: 500 })
+    return NextResponse.json({ error: err instanceof Error ? maskSecrets(err.message, knownSecrets) : 'AI 채팅을 시작하지 못했습니다. 잠시 후 다시 시도해 주세요.' }, { status: 500 })
   }
 }

@@ -122,7 +122,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const b: Partial<MergeSettings> = {}
     if (body.merge.checkTimeoutMin !== undefined) {
       const n = Math.floor(Number(body.merge.checkTimeoutMin))
-      if (!Number.isFinite(n) || n < 1 || n > 120) return NextResponse.json({ error: 'checkTimeoutMin 값 범위: 1~120' }, { status: 400 })
+      if (!Number.isFinite(n) || n < 1 || n > 120) return NextResponse.json({ error: '검사 시간 제한은 1~120분 사이로 넣어 주세요.' }, { status: 400 })
       b.checkTimeoutMin = n
     }
     if (body.merge.agentMerge !== undefined) b.agentMerge = !!body.merge.agentMerge

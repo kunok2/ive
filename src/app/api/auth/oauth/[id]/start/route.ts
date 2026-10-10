@@ -9,10 +9,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const { id } = await params
   const provider = loadProvider(id)
   if (!provider) {
-    return NextResponse.json({ error: 'Provider not found' }, { status: 404 })
+    return NextResponse.json({ error: '이 로그인 수단을 찾을 수 없습니다. 로그인 화면으로 돌아가 다시 시도해 주세요.' }, { status: 404 })
   }
   if (!provider.enabled) {
-    return NextResponse.json({ error: 'Provider disabled' }, { status: 403 })
+    return NextResponse.json({ error: '이 로그인 수단은 관리자가 꺼 두었습니다. 다른 방법으로 로그인해 주세요.' }, { status: 403 })
   }
 
   const redirectUri = buildRedirectUri(id, req)

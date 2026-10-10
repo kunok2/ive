@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
   const project = getProject(projectId)
   if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
   if (!project.reportSecret) {
-    return NextResponse.json({ error: 'Report page is not enabled' }, { status: 403 })
+    return NextResponse.json({ error: '이 프로젝트의 접수 페이지가 꺼져 있어 접수하지 못했습니다. 이 주소를 전달한 담당자에게 문의해 주세요.' }, { status: 403 })
   }
 
   const tokenVerify = verifyReportTokenSignature(
@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
     expires,
   )
   if (!tokenVerify.valid) {
-    return NextResponse.json({ error: 'Invalid or expired token' }, { status: 403 })
+    return NextResponse.json({ error: '접수 주소가 만료되었거나 이미 사용되었습니다. 이 주소를 전달한 담당자에게 새 주소를 받아 다시 접수해 주세요.' }, { status: 403 })
   }
 
   const blob = file as File
@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
 
   const authToken = getProjectAuthToken(projectId)
   if (!authToken) {
-    return NextResponse.json({ error: '프로젝트 토큰이 설정되지 않았습니다.' }, { status: 500 })
+    return NextResponse.json({ error: '이 프로젝트의 Git 접근 토큰이 없어 접수하지 못했습니다. 이 주소를 전달한 담당자에게 알려 주세요.' }, { status: 500 })
   }
 
   try {

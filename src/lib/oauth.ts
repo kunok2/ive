@@ -223,9 +223,9 @@ async function fetchSlackProfile(accessToken: string): Promise<OAuthUserProfile>
     headers: { Authorization: `Bearer ${accessToken}` },
   })
   const u = await res.json().catch(() => ({ ok: false })) as any
-  if (!u.ok) throw new Error(`Slack userInfo 실패: ${u.error || res.status}`)
+  if (!u.ok) throw new Error(`Slack 에서 계정 정보를 가져오지 못했습니다 — 잠시 뒤 다시 로그인해 주세요 (${u.error || res.status})`)
   const email: string | null = u.email || null
-  if (!email) throw new Error('Slack 계정 이메일을 가져오지 못했습니다 (email scope 확인 필요)')
+  if (!email) throw new Error('Slack 계정의 이메일을 받지 못했습니다 — 관리자에게 Slack 로그인 설정의 이메일 권한(email scope) 확인을 요청해 주세요')
   if (u.email_verified === false) {
     throw new Error('Slack 이메일이 확인되지 않았습니다')
   }
@@ -286,7 +286,7 @@ async function fetchGitHubProfile(p: ResolvedProvider, accessToken: string): Pro
   }
 
   if (!email || !emailVerified) {
-    throw new Error('GitHub 이메일이 확인되지 않았습니다 (verified primary email 필요)')
+    throw new Error('GitHub 계정의 기본 이메일이 인증되지 않았습니다 — GitHub 설정에서 이메일을 인증한 뒤 다시 로그인해 주세요')
   }
 
   return {
@@ -310,7 +310,7 @@ async function fetchGitLabProfile(p: ResolvedProvider, accessToken: string): Pro
   // GitLab: confirmed_at이 null이면 미확인 이메일
   if (!user.email) throw new Error('GitLab 계정에 이메일이 없습니다')
   if (!user.confirmed_at) {
-    throw new Error('GitLab 이메일이 확인되지 않았습니다 (email confirmation 필요)')
+    throw new Error('GitLab 계정의 이메일이 인증되지 않았습니다 — GitLab 에서 이메일 인증을 마친 뒤 다시 로그인해 주세요')
   }
 
   return {

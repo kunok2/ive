@@ -38,7 +38,7 @@ interface RolesInfo {
   automation: { allowed: boolean; author: string | null; approvedAt: string | null }
   canApprove: boolean
   candidates: Record<'process' | 'verify' | 'confirm', { subjectType: 'user' | 'agent' }[]>
-  roles: { confirmer: { mode: string } }
+  roles: { processor: { mode: string }; verifier: { mode: string }; confirmer: { mode: string } }
 }
 
 /** 증적 폴더 시각(UTC, 2026-10-01T05-07-47-694Z) → 사용자 설정 시간대(없으면 브라우저)의 「월/일 시:분」 — 다른 시각 표시와 같은 기준 */
@@ -122,6 +122,8 @@ export default function IssueAutomationPanel({
   // 명부에 에이전트가 있을 때만 — 사람(Git 멤버)은 모든 프로젝트 명부에 기본으로 들어 있으므로 세지 않는다
   const hasAgents = !!info && (['process', 'verify', 'confirm'] as const).some(k => info.candidates[k].some(c => c.subjectType === 'agent'))
   const canAutoAll = canEditRoles && !isDone && stage !== 'dev' && hasAgents
+  // 세 역할이 이미 에이전트면 다시 누를 일이 없다 — 누를 때마다 가장 한가한 에이전트를 새로 골라 배정이 바뀌어 버린다. 버튼 대신 「배정됨」 표시
+  const allAgents = !!info && info.roles.processor.mode === 'agent' && info.roles.verifier.mode === 'agent' && info.roles.confirmer.mode === 'agent'
   if ((!info?.workerNote || isDone) && !needsApproval && runs.length === 0 && !canAutoAll) return null
 
   const fileUrl = (run: EvidenceRun, file: string) =>
@@ -131,15 +133,19 @@ export default function IssueAutomationPanel({
     <div className="mt-1.5 mr-2 text-sm text-ive-text bg-ive-bg-card rounded-lg p-2.5 space-y-2">
       <div className="flex items-center gap-2">
         <span className="text-xs font-bold text-ive-text-dim uppercase tracking-widest flex-1">
-          <i className="fa-solid fa-robot mr-1" />{t('issuePanelTitle')}
+          <i className="fa-solid fa-bolt mr-1" />{t('issuePanelTitle')}
         </span>
-        {canAutoAll && (
+        {canAutoAll && (allAgents ? (
+          <span className="text-xs font-bold text-ive-text-muted"><i className="fa-solid fa-check mr-1 text-ive-green" />{t('autoAllAssigned')}</span>
+        ) : (
           <button type="button" disabled={!!busy} onClick={() => post('auto_all')}
             className="text-sm font-bold text-ive-cyan border border-ive-cyan/30 px-3 py-1.5 rounded-lg hover:bg-ive-cyan/10 transition-all disabled:opacity-40">
             <i className={`fa-solid ${busy === 'auto_all' ? 'fa-circle-notch fa-spin' : 'fa-wand-magic-sparkles'} mr-1`} />{t('autoAllAgents')}
           </button>
-        )}
+        ))}
       </div>
+      {/* 누르면 무슨 일이 일어나는지 — 버튼이 있을 때만 */}
+      {canAutoAll && !allAgents && <p className="text-xs text-ive-text-muted">{t('autoAllIssueHint')}</p>}
 
       {info?.workerNote && !isDone && (
         <div className="bg-ive-amber/10 border border-ive-amber/30 rounded-lg px-3 py-2.5 text-xs text-ive-amber leading-relaxed">
@@ -166,7 +172,7 @@ export default function IssueAutomationPanel({
             <div className="flex items-center gap-1.5 flex-wrap">
               <span className="text-xs font-bold px-2 py-0.5 rounded-lg bg-ive-cyan/20 text-ive-cyan">{t(`kind_${run.stage}`)}</span>
               {v && <span className={`text-xs font-bold px-2 py-0.5 rounded-lg ${VERDICT_BADGE[v]}`}>{t(`verdict_${v}`)}</span>}
-              {run.result?.agent && <span className="text-xs text-ive-text-muted"><i className="fa-solid fa-robot mr-1" />{run.result.agent}</span>}
+              {run.result?.agent && <span className="text-xs text-ive-text-muted"><i className="fa-solid fa-bolt mr-1" />{run.result.agent}</span>}
               <span className="text-xs text-ive-text-muted ml-auto">{stampLabel(run.stamp, state.user?.timezone)}</span>
             </div>
             {run.result?.summary && <p className="text-xs text-ive-text whitespace-pre-wrap leading-relaxed">{run.result.summary}</p>}

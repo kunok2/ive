@@ -14,7 +14,7 @@ import AgentAvatar from '@/components/agent/AgentAvatar'
 const CATEGORY_META: Record<string, { labelKey: string; icon: string; color: string }> = {
   auth: { labelKey: 'categoryAuth', icon: 'fa-solid fa-right-to-bracket', color: 'text-ive-cyan' },
   project: { labelKey: 'categoryProject', icon: 'fa-solid fa-folder', color: 'text-ive-text-muted' },
-  agent: { labelKey: 'categoryAgent', icon: 'fa-solid fa-robot', color: 'text-ive-text-muted' },
+  agent: { labelKey: 'categoryAgent', icon: 'fa-solid fa-bolt', color: 'text-ive-text-muted' },
   execution: { labelKey: 'categoryExecution', icon: 'fa-solid fa-play', color: 'text-ive-text-muted' },
   task: { labelKey: 'categoryTask', icon: 'fa-solid fa-list-check', color: 'text-ive-text-muted' },
   admin: { labelKey: 'categoryAdmin', icon: 'fa-solid fa-shield', color: 'text-ive-red' },

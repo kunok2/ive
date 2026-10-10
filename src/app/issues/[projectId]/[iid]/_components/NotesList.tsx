@@ -202,7 +202,7 @@ export default function NotesList({
                           note.iveAuthorAvatar ? (
                             <><AgentAvatar avatar={note.iveAuthorAvatar} size="xs" /><span className="text-ive-cyan">{note.author}</span></>
                           ) : (
-                            <><i className="fa-solid fa-robot mr-0.5" />{tIssue('iveBot')}</>
+                            <><i className="fa-solid fa-bolt mr-0.5" />{tIssue('iveBot')}</>
                           )
                         ) : (
                           <>

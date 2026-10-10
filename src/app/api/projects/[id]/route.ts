@@ -38,7 +38,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   // 소유자 또는 editor 권한 확인
   const access = getProjectAccess(id, user.id)
   if (!access || access === 'viewer') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    return NextResponse.json({ error: '이 프로젝트에서 이 작업을 할 권한이 없습니다. 프로젝트 소유자에게 권한을 요청해 주세요.' }, { status: 403 })
   }
 
   // accessToken이 비어있거나 마스킹된 값이면 기존 토큰 유지

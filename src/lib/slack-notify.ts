@@ -235,7 +235,7 @@ function buildInitiatorMergeMessage(status: MergeNotifyStatus, locale: 'ko' | 'e
     ko: {
       success: `🚀 *배포 완료* — ${head}\n머지 후 파이프라인이 성공했습니다.${linkBlock}`,
       merged: `✅ *머지 완료* — ${head}\n머지가 완료됐습니다.${linkBlock}`,
-      failed: `⚠️ *배포 실패* — ${head}\n머지 후 파이프라인이 실패했습니다. 확인이 필요합니다.${linkBlock}`,
+      failed: `⚠️ *배포 실패* — ${head}\n머지는 됐지만 그 뒤 파이프라인이 실패해 수정이 아직 배포되지 않았습니다. Git 에서 파이프라인 오류를 확인해 주세요.${linkBlock}`,
     },
     en: {
       success: `🚀 *Deploy complete* — ${head}\nThe post-merge pipeline succeeded.${linkBlock}`,

@@ -209,7 +209,7 @@ function InlineRolePicker({ mode, userId, agentId, agents, gitMembers, search, o
         </button>
         {(agents || []).filter(a => !search || a.name.toLowerCase().includes(search.toLowerCase())).length > 0 && (
           <>
-            <div className="px-4 pt-2.5 pb-1 text-xs font-bold text-ive-text-dim"><i className="fa-solid fa-robot mr-1" />{tIssue('pickerAgents')}</div>
+            <div className="px-4 pt-2.5 pb-1 text-xs font-bold text-ive-text-dim"><i className="fa-solid fa-bolt mr-1" />{tIssue('pickerAgents')}</div>
             {(agents || []).filter(a => !search || a.name.toLowerCase().includes(search.toLowerCase())).map(a => {
               const isPicked = mode === 'agent' && agentId === a.id
               return (

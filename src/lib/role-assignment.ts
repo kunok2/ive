@@ -79,7 +79,7 @@ export function autoAssignAllAgents(projectId: string, iid: number | null, opts:
   const ko = opts.isKo !== false
   const warnings: string[] = []
   const processor = pickLeastLoadedAgent(projectId, 'process')
-  if (!processor) warnings.push(ko ? '처리 역할 에이전트가 명부에 없습니다 — 처리자는 기존 방식(의뢰자 에이전트)으로 둡니다' : 'No processor agent in the roster')
+  if (!processor) warnings.push(ko ? '역할 명부에 처리를 맡을 에이전트가 없어 처리자는 바꾸지 않았습니다 — 프로젝트 화면 → 역할·단계 자동화 → 역할에서 처리 역할에 에이전트를 넣어 주세요' : 'No processor agent in the roster')
   // 실제로 처리할 에이전트 — 새로 고르지 못했으면 이슈에 이미 지정된 처리 에이전트
   const current = iid != null ? getAssignMode(projectId, iid) : null
   const effectiveProcessor = processor ?? (current?.mode === 'agent' ? current.agentId : null)
@@ -87,21 +87,21 @@ export function autoAssignAllAgents(projectId: string, iid: number | null, opts:
   let verifier: string | null = null
   if (!agentRoleAvailable('verify')) {
     if (getRoleCandidates(projectId, 'verify').some(c => c.subjectType === 'agent')) {
-      warnings.push(ko ? '검증 에이전트 작업자는 아직 없어(다음 단계에서 붙음) 검증자는 사람 기본값으로 둡니다' : 'Verify agents are not available yet — verifier stays a person')
+      warnings.push(ko ? '에이전트 자동 검증은 아직 쓸 수 없어 검증자는 사람으로 두었습니다' : 'Verify agents are not available yet — verifier stays a person')
     }
   } else {
     verifier = pickLeastLoadedAgent(projectId, 'verify', effectiveProcessor ? [effectiveProcessor] : [])
     if (!verifier) {
       const onlySame = effectiveProcessor && hasRole(projectId, 'verify', 'agent', effectiveProcessor)
       warnings.push(onlySame
-        ? (ko ? '검증 역할 에이전트가 처리자와 같은 것뿐이라 배정하지 않았습니다(처리자 ≠ 검증자)' : 'Only the processor agent can verify — not assigned (processor ≠ verifier)')
-        : (ko ? '검증 역할 에이전트가 명부에 없습니다 — 검증자는 사람 기본값으로 둡니다' : 'No verifier agent in the roster'))
+        ? (ko ? '검증을 맡을 수 있는 에이전트가 처리자와 같은 에이전트뿐이라 검증자로 배정하지 않았습니다(자기 작업은 스스로 검증할 수 없습니다) — 역할 명부의 검증 역할에 다른 에이전트를 넣어 주세요' : 'Only the processor agent can verify — not assigned (processor ≠ verifier)')
+        : (ko ? '역할 명부에 검증을 맡을 에이전트가 없어 검증은 사람이 맡도록 두었습니다' : 'No verifier agent in the roster'))
     }
   }
   // 확인자는 처리자와 다른 에이전트를 우선(처리자가 자기 결과를 확인하지 않도록), 없으면 처리자라도 쓴다.
   const confirmer = pickLeastLoadedAgent(projectId, 'confirm', effectiveProcessor ? [effectiveProcessor] : [])
     ?? pickLeastLoadedAgent(projectId, 'confirm')
-  if (!confirmer) warnings.push(ko ? '확인 역할 에이전트가 명부에 없습니다 — 확인자는 사람 기본값으로 둡니다' : 'No confirmer agent in the roster')
+  if (!confirmer) warnings.push(ko ? '역할 명부에 확인을 맡을 에이전트가 없어 확인은 사람이 맡도록 두었습니다' : 'No confirmer agent in the roster')
 
   if (!opts.dryRun && iid != null) {
     if (processor) setAssignMode(projectId, iid, 'agent', processor)

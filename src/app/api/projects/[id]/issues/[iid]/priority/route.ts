@@ -19,13 +19,13 @@ export async function PUT(
 
   const { id: projectId, iid } = await params
   const project = getProject(projectId)
-  if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+  if (!project) return NextResponse.json({ error: '프로젝트를 찾을 수 없습니다. 삭제되었을 수 있습니다 — 새로고침해 주세요.' }, { status: 404 })
   const access = getProjectAccess(projectId, user.id)
-  if (!access || access === 'viewer') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!access || access === 'viewer') return NextResponse.json({ error: '이 프로젝트에서 이 작업을 할 권한이 없습니다. 프로젝트 소유자에게 권한을 요청해 주세요.' }, { status: 403 })
 
   const { priority } = await req.json().catch(() => ({})) as { priority?: unknown }
   if (priority !== 0 && priority !== 1 && priority !== 2) {
-    return NextResponse.json({ error: 'priority 는 0(보통)·1(높음)·2(긴급) 중 하나입니다' }, { status: 400 })
+    return NextResponse.json({ error: '우선순위 값이 올바르지 않습니다. 새로고침한 뒤 다시 골라 주세요.' }, { status: 400 })
   }
   const before = getAssignMode(projectId, Number(iid)).priority
   if (before !== priority) {

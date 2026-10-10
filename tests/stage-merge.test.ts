@@ -122,7 +122,7 @@ describe('M-1 검증 통과 즉시 머지', () => {
     providerMock.mergeMR.mockRejectedValueOnce(new Error('머지 불가 (405): pipeline must succeed'))
     expect(await run()).toMatchObject({ merged: false, reason: 'failed' })
     expect(providerMock.mergeMR).toHaveBeenCalledTimes(1)
-    expect(getStageWorkerNote(P, 7)).toMatch(/MR 머지 실패/)
+    expect(getStageWorkerNote(P, 7)).toMatch(/MR 을 머지하지 못했습니다/)
     expect(String((providerMock.addIssueComment.mock.calls[0] as unknown[])[3])).toMatch(/사람이 머지/)
   })
   it('이미 머지된 MR 은 건드리지 않는다', async () => {
@@ -155,7 +155,7 @@ describe('C-1 확인 기동', () => {
     providerMock.fetchMRByBranch.mockResolvedValue({ iid: 9, state: 'opened' })
     await dispatchStageWorkers(project, [{ issue: issue(31), stage: 'confirm_waiting' }], 'tok')
     expect(workerMock.runConfirmWorker).not.toHaveBeenCalled()
-    expect(getStageWorkerNote(P, 31)).toMatch(/아직 머지되지 않음/)
+    expect(getStageWorkerNote(P, 31)).toMatch(/아직 머지되지 않았습니다/)
   })
   it('머지 커밋이 배포 커밋에 들어 있으면 기동한다', async () => {
     confirmer(32)
@@ -276,7 +276,7 @@ describe('V-2 검증 기동 판정', () => {
     createExecution({ id: 'ex-1', projectId: P, agentId: 'a2', issueIid: 22, issueTitle: 't', status: 'success', startedAt: new Date().toISOString(), logPath: '', inputTokens: 0, outputTokens: 0, costUsd: 0, turns: 0, issueCreatedAt: new Date().toISOString() } as any)
     await dispatchStageWorkers(project, [{ issue: issue(22), stage: 'verify_waiting' }], 'tok')
     expect(workerMock.runVerifyWorker).not.toHaveBeenCalled()
-    expect(getStageWorkerNote(P, 22)).toMatch(/처리한 에이전트와 같습니다/)
+    expect(getStageWorkerNote(P, 22)).toMatch(/처리한 에이전트가 검증자로 지정되어/)
   })
   it('MR 이 없으면(코드 변경 없는 작업) 작업자 보고를 검증하도록 띄운다', async () => {
     agentVerifier(23)

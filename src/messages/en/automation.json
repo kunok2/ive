@@ -57,6 +57,8 @@
   "agentRoleBadge": "{role} {count}",
   "issuePanelTitle": "Stage automation & evidence",
   "evidenceCount": "{count} evidence runs",
+  "autoAllIssueHint": "Hands this task's processing, verification and confirmation at once to the least busy agents in the roster. Processor and verifier are always different agents.",
+  "autoAllAssigned": "Processing, verification and confirmation are all assigned to agents",
   "autoAllDone": "All three roles assigned to agents",
   "approvedAutomation": "Automation approved for this issue",
   "outsideAllowlist": "Author @{author} is not on the allowlist — agents run no stage until approved",

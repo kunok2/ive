@@ -118,7 +118,7 @@ export default function RolesPanel({ projectId }: { projectId: string }) {
               { value: 'all', label: `${t('filterAll')} ${data.roster.length}` },
               ...ROLE_KEYS.map(k => ({ value: k, label: `${t(`role_${k}`)} ${data.roster.filter(e => e.roles?.[k]).length}` })),
               // 좁은 화면에서 한 줄에 맞도록 에이전트는 아이콘 + 수
-              { value: 'agent' as const, label: `${data.roster.filter(e => e.subjectType === 'agent').length}`, icon: 'fa-robot' },
+              { value: 'agent' as const, label: `${data.roster.filter(e => e.subjectType === 'agent').length}`, icon: 'fa-bolt' },
             ]}
           />
         </div>
@@ -136,7 +136,7 @@ export default function RolesPanel({ projectId }: { projectId: string }) {
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-bold text-ive-text truncate">
                     {e.name}
-                    {e.subjectType === 'agent' && <i className="fa-solid fa-robot text-xs text-ive-text-dim ml-1.5" />}
+                    {e.subjectType === 'agent' && <i className="fa-solid fa-bolt text-xs text-ive-text-dim ml-1.5" />}
                   </div>
                   <div className="text-xs text-ive-text-dim truncate">
                     {e.subjectType === 'agent' ? (e.cliName || '') : `@${e.subjectId}${e.source === 'sync' ? ` · ${t('rosterAutoSynced')}` : ''}`}

@@ -21,7 +21,7 @@ describe('enforceConfirmVerdict', () => {
   })
   it('C-2: 증거 없는 pass 는 blocked', () => {
     expect(enforceConfirmVerdict({ ...base, items: [gone] }, 0)).toMatchObject({ verdict: 'blocked', reason: expect.stringMatching(/스크린샷이 없습니다/) })
-    expect(enforceConfirmVerdict(base, 1)).toMatchObject({ verdict: 'blocked', reason: expect.stringMatching(/확인 항목/) })
+    expect(enforceConfirmVerdict(base, 1)).toMatchObject({ verdict: 'blocked', reason: expect.stringMatching(/항목을 남기지 않았습니다/) })
     expect(enforceConfirmVerdict({ ...base, items: [gone, { ...gone, evidence: [] }] }, 1)).toMatchObject({ verdict: 'blocked', reason: expect.stringMatching(/증거로 보이지 못한 항목 1개/) })
     expect(enforceConfirmVerdict({ ...base, items: [{ ...gone, result: 'unverified' }] }, 1).verdict).toBe('blocked')
   })

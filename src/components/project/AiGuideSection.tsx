@@ -26,7 +26,7 @@ export default function AiGuideSection({ existing }: AiGuideSectionProps) {
   return (
     <div className="border-t border-ive-border-dark pt-3">
       <p className="text-sm font-bold text-ive-text-muted mb-1">
-        <i className="fa-solid fa-robot mr-1.5 text-xs" />
+        <i className="fa-solid fa-bolt mr-1.5 text-xs" />
         {t('aiGuide')}
       </p>
       <p className="text-xs text-ive-text-dim mb-3 ml-5">{t('aiGuideDescription')}</p>

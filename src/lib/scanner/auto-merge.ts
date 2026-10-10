@@ -59,10 +59,10 @@ export async function mergeVerified(input: MergeVerifiedInput): Promise<MergeVer
   }
 
   let mr: any = null
-  try { mr = await fetchMRByBranch(project, token, `dev-${iid}`) } catch (e) { return handOff(t(`MR 조회 실패: ${(e as Error).message}`, `MR lookup failed: ${(e as Error).message}`), 'failed') }
-  if (!mr) return handOff(t(`dev-${iid} MR 이 없습니다`, `No MR for dev-${iid}`), 'skipped')
+  try { mr = await fetchMRByBranch(project, token, `dev-${iid}`) } catch (e) { return handOff(t(`MR 을 조회하지 못해 자동 머지를 하지 않았습니다: ${(e as Error).message}`, `MR lookup failed: ${(e as Error).message}`), 'failed') }
+  if (!mr) return handOff(t(`이 작업의 MR(dev-${iid})을 찾지 못해 자동 머지를 하지 않았습니다`, `No MR for dev-${iid}`), 'skipped')
   if (mr.state === 'merged' || mr.merged_at) { log('MR 이 이미 머지됨', 'system'); return { merged: false, reason: 'already' } }
-  if (mr.state === 'closed') return handOff(t(`dev-${iid} MR 이 닫혀 있습니다`, `MR for dev-${iid} is closed`), 'skipped')
+  if (mr.state === 'closed') return handOff(t(`이 작업의 MR(dev-${iid})이 닫혀 있어 자동 머지를 하지 않았습니다`, `MR for dev-${iid} is closed`), 'skipped')
   if (mr.target_branch && mr.target_branch !== targetBranch) {
     return handOff(t(`MR 대상(\`${mr.target_branch}\`)이 검증한 staging 브랜치(\`${targetBranch}\`)와 다릅니다 — 머지해도 staging 배포에 실리지 않습니다`,
       `MR targets \`${mr.target_branch}\`, not the verified staging branch \`${targetBranch}\``), 'skipped')
@@ -77,7 +77,7 @@ export async function mergeVerified(input: MergeVerifiedInput): Promise<MergeVer
   try {
     res = await mergeMR(project, token, mrIid, { sha: sourceSha })
   } catch (e) {
-    return handOff(t(`MR 머지 실패: ${maskSecrets((e as Error).message).slice(0, 300)}`, `MR merge failed: ${maskSecrets((e as Error).message).slice(0, 300)}`), 'failed')
+    return handOff(t(`MR 을 머지하지 못했습니다: ${maskSecrets((e as Error).message).slice(0, 300)}`, `MR merge failed: ${maskSecrets((e as Error).message).slice(0, 300)}`), 'failed')
   }
   const mergeCommit: string | null = res?.merge_commit_sha || res?.squash_commit_sha || (project.provider === 'github' ? res?.sha : null) || null
   setStageWorkerNote(project.id, iid, null)
@@ -86,7 +86,7 @@ export async function mergeVerified(input: MergeVerifiedInput): Promise<MergeVer
     await addIssueComment(project, iid, token, `<!-- ive-bot -->\n## 🔀 ${t('검증 통과 — MR 머지', 'Verified — MR merged')}\n\n`
       + `- MR: ${maskSecrets(mr.web_url || mr.html_url || `!${mrIid}`)}\n`
       + `- ${t('검증한 커밋', 'Verified commit')}: \`${sourceSha.slice(0, 12)}\` → \`${targetBranch}\`${mergeCommit ? ` · ${t('머지 커밋', 'Merge commit')} \`${mergeCommit.slice(0, 12)}\`` : ''}\n\n`
-      + t('staging 에 배포되면 확인(④)이 시작됩니다.', 'Confirmation starts once staging is deployed.'))
+      + t('수정이 확인할 사이트에 배포되면 확인 단계가 시작됩니다.', 'Confirmation starts once staging is deployed.'))
   } catch { /* 코멘트 실패는 무시 */ }
   // 확인자가 사람이면 「이제 확인하세요」 DM — MR 이 머지된 뒤에만 보낸다(종전 승인 경로와 같은 함수)
   void notifyConfirmerOnApprove(project, iid, token)
@@ -135,7 +135,7 @@ export async function reopenIfClosedBeforeConfirm(project: Project, token: strin
   slog.info(`${project.name} #${iid} reopened — closed by Git before confirmation`)
   try {
     await addIssueComment(project, iid, token, isKo
-      ? `<!-- ive-bot -->\n## 🔓 이슈를 다시 열었습니다\n\n검증 통과로 MR 을 머지하면서 닫기 키워드로 Git 이 이 이슈를 닫았습니다. 아직 확인(④) 전이라 다시 엽니다 — 확인이 끝나 완료되면 IVE 가 닫습니다.`
+      ? `<!-- ive-bot -->\n## 🔓 이슈를 다시 열었습니다\n\n검증을 통과해 MR 을 머지하자, 커밋 메시지의 「resolve #번호」 문구 때문에 Git 이 이 이슈를 자동으로 닫았습니다. 아직 확인 단계가 남아 있어 다시 열었습니다 — 확인까지 끝나면 IVE 가 닫습니다.`
       : `<!-- ive-bot -->\n## 🔓 Reopened\n\nGit closed this issue via a closing keyword when the verified MR was merged. Confirmation is still pending — IVE closes it when it is done.`)
   } catch { /* 코멘트 실패는 무시 */ }
   return true

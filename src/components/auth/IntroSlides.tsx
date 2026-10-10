@@ -52,7 +52,7 @@ export default function IntroSlides({ onComplete }: IntroSlidesProps) {
       description: t('projectDesc'),
     },
     {
-      icon: 'fa-solid fa-robot',
+      icon: 'fa-solid fa-bolt',
       iconColor: 'text-ive-cyan',
       title: t('agentTitle'),
       description: t('agentDesc'),

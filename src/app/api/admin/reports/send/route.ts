@@ -23,7 +23,7 @@ export async function POST(req: Request) {
   }
 
   if (schedule.recipients.length === 0) {
-    return NextResponse.json({ error: '수신자가 설정되지 않았습니다.' }, { status: 400 })
+    return NextResponse.json({ error: '이 보고서에 수신자가 없어 보내지 못했습니다. 수신자를 추가한 뒤 다시 보내 주세요.' }, { status: 400 })
   }
 
   try {

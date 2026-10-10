@@ -37,6 +37,8 @@ import { runStageWorker, type StageKindSpec, type StageContext } from './stage-w
 import { mergeVerified } from './auto-merge'
 
 const execFile = promisify(require('child_process').execFile)
+const verdictKo = (v: string) => (v === 'pass' ? '통과' : v === 'fail' ? '반려' : '판정 못 함')
+
 const slog = getLogger('VerifyWorker')
 const OUT_DIR = '.ive-out'
 const GIT_ID = ['-c', 'user.name=IVE', '-c', 'user.email=ive@localhost']
@@ -113,7 +115,7 @@ export function parseVerifyResult(workspacePath: string, logPath: string): Verif
   if (!raw) {
     return {
       verdict: 'blocked', summary: '', requirements: [], findings: [], toConfirm: [], commands: [],
-      reason: marker ? `결과 파일(result.json)이 없습니다 (마지막 출력: ${marker})` : '검증 작업자가 결과 파일(result.json)을 남기지 않았습니다',
+      reason: marker ? `에이전트가 검증 결과를 정해진 형식으로 남기지 않고 끝났습니다(마지막으로 말한 판정: ${marker})` : '에이전트가 검증 결과를 남기지 않고 끝났습니다',
     }
   }
   const v = String(raw.verdict || '').toLowerCase()
@@ -122,7 +124,7 @@ export function parseVerifyResult(workspacePath: string, logPath: string): Verif
   return {
     verdict,
     summary: String(raw.summary || ''),
-    reason: String(raw.reason || (verdict === 'blocked' && !v ? '판정 값이 없습니다' : '')),
+    reason: String(raw.reason || (verdict === 'blocked' && !v ? '에이전트가 남긴 결과에 통과·반려 판정이 빠져 있습니다' : '')),
     requirements: arr(raw.requirements).map((q: any) => ({
       item: String(q?.item || ''), status: String(q?.status || '').toLowerCase() === 'done' ? 'done' as const : 'missing' as const, where: String(q?.where || ''),
     })).filter(q => q.item),
@@ -155,7 +157,7 @@ export function enforceVerifyVerdict(r: VerifyResult, checks: CheckResult[], con
   }
   const failed = checks.find(c => !c.ok)
   if (failed) reasons.push(isKo ? `검사 명령 실패: \`${failed.command}\`${failed.timedOut ? ' (시간 초과)' : ` (종료 코드 ${failed.exitCode})`}` : `Check failed: \`${failed.command}\``)
-  if (conflictFiles.length) reasons.push(isKo ? `staging 최신본과 충돌: ${conflictFiles.join(', ')}` : `Conflicts with staging: ${conflictFiles.join(', ')}`)
+  if (conflictFiles.length) reasons.push(isKo ? `머지할 브랜치의 최신 코드와 충돌합니다 — 최신 코드를 받아 충돌을 풀어야 합니다 (충돌 파일: ${conflictFiles.join(', ')})` : `Conflicts with staging: ${conflictFiles.join(', ')}`)
   if (!reasons.length) return r
   return { ...r, verdict: 'fail', reason: [reasons.join(' / '), r.verdict === 'fail' ? r.reason : ''].filter(Boolean).join(' — ') }
 }
@@ -232,7 +234,7 @@ async function buildComment(ctx: StageContext, input: VerifyInput, prep: VerifyP
   if (input.noChange) {
     lines.push(`- ${t('검증 대상', 'Verified')}: ${t('작업자 보고 (코드 변경 없는 작업)', "the worker's report (no code change)")}${prep.hasReport ? '' : ` — ${t('보고 없음', 'no report')}`}`)
   } else {
-    lines.push(`- ${t('검증한 커밋', 'Verified commit')}: \`${prep.sourceSha.slice(0, 12)}\` · ${t('대상', 'Target')}: \`${input.targetBranch}\` (${prep.behindTarget ? t('최신본 미포함 — 머지 때 최신본 위에 합쳐짐', 'behind — merged on top of the latest') : t('최신본 위', 'up to date')})`)
+    lines.push(`- ${t('검증한 커밋', 'Verified commit')}: \`${prep.sourceSha.slice(0, 12)}\` · ${t('머지할 브랜치', 'Target')}: \`${input.targetBranch}\` (${prep.behindTarget ? t('그 브랜치의 최신 코드는 아직 들어 있지 않음 — 머지할 때 합쳐집니다', 'behind — merged on top of the latest') : t('최신 코드 반영됨', 'up to date')})`)
     lines.push(`- ${t('바뀐 파일', 'Changed files')}: ${prep.changedFiles.length}`)
   }
   lines.push(`- ${t('검증 에이전트', 'Verifier agent')}: ${agent.name}`)
@@ -444,7 +446,7 @@ function verifySpec(input: VerifyInput): StageKindSpec<VerifyPrep> {
 
       if (nowStage !== 'verifying') {
         log(`단계가 이미 바뀌어(${nowStage ?? '조회 실패'}) 라벨은 옮기지 않고 결과만 기록합니다`, 'warn')
-        setStageWorkerNote(project.id, iid, `${isKo ? '검증 결과' : 'Verify result'}: ${result.verdict} — ${isKo ? '검증 중 단계가 바뀌어 단계는 옮기지 않았습니다' : 'stage changed meanwhile, not moved'}`)
+        setStageWorkerNote(project.id, iid, isKo ? `자동 검증은 끝났지만(결과: ${verdictKo(result.verdict)}) 그 사이 사람이 단계를 바꿔서 단계는 그대로 두었습니다` : `Verify result: ${result.verdict} — stage changed meanwhile, not moved`)
         return
       }
 
@@ -455,7 +457,7 @@ function verifySpec(input: VerifyInput): StageKindSpec<VerifyPrep> {
           return true
         } catch (e) {
           log(`단계 이동 실패: ${(e as Error).message}`, 'error')
-          setStageWorkerNote(project.id, iid, `${isKo ? '검증 결과' : 'Verify result'}: ${result.verdict} — ${isKo ? '단계 이동 실패, 사람이 옮겨 주세요' : 'stage move failed, move it manually'}`)
+          setStageWorkerNote(project.id, iid, isKo ? `자동 검증은 끝났지만(결과: ${verdictKo(result.verdict)}) 단계를 옮기지 못했습니다 — 사람이 단계를 옮겨 주세요` : `Verify result: ${result.verdict} — stage move failed, move it manually`)
           return false
         }
       }
@@ -471,13 +473,13 @@ function verifySpec(input: VerifyInput): StageKindSpec<VerifyPrep> {
         // 반려 = 처리 재요청(스케줄). 결과 코멘트가 다음 처리의 피드백이 된다.
         if (await move('reject', '단계: 검증 중 → 스케줄 (재작업)')) resetIssueScheduledAt(project.id, iid)
       } else {
-        setStageWorkerNote(project.id, iid, `${isKo ? '검증 불가' : 'Could not verify'}: ${result.reason || '-'}`)
+        setStageWorkerNote(project.id, iid, isKo ? `자동 검증이 판정을 내리지 못했습니다 — 사람이 검증해 주세요 (사유: ${result.reason || '-'})` : `Could not verify: ${result.reason || '-'}`)
         log('단계: 검증 중에 머무름 — 사람 검증 필요', 'warn')
       }
     },
 
     async onError(ctx, _prep, err) {
-      setStageWorkerNote(ctx.project.id, ctx.iid, `${ctx.isKo ? '검증 작업자 오류' : 'Verify worker error'}: ${maskSecrets(err.message, ctx.secrets).slice(0, 300)}`)
+      setStageWorkerNote(ctx.project.id, ctx.iid, ctx.isKo ? `자동 검증이 오류로 중단됐습니다 — 다시 시도하거나 사람이 검증해 주세요 (오류: ${maskSecrets(err.message, ctx.secrets).slice(0, 300)})` : `Verify worker error: ${maskSecrets(err.message, ctx.secrets).slice(0, 300)}`)
     },
   }
 }

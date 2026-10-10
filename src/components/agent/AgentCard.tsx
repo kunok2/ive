@@ -374,7 +374,7 @@ export default function AgentCard({ agent, onDelete, compact, assignedProjects, 
             <div className="text-sm text-ive-text-muted truncate">{cli.label} · {agent.modelName || cli.desc}</div>
             <div className="flex flex-wrap items-center gap-1 mt-1.5">
               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-lg text-xs font-bold bg-white/5 text-ive-text-secondary border border-ive-border-subtle">
-                <i className="fa-solid fa-robot" />{t('workerBadge')}
+                <i className="fa-solid fa-bolt" />{t('workerBadge')}
               </span>
               {/* 역할 명부에서 맡은 역할 — 단계색(처리·검증·확인), 뒤 숫자는 그 역할의 대기·진행 건수 */}
               {([

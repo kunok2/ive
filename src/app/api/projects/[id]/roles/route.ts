@@ -45,7 +45,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const body = await req.json().catch(() => ({}))
   const subjectType = body.subjectType === 'agent' ? 'agent' : body.subjectType === 'user' ? 'user' : null
   const subjectId = typeof body.subjectId === 'string' ? body.subjectId.trim() : ''
-  if (!subjectType || !subjectId) return NextResponse.json({ error: 'subjectType, subjectId 가 필요합니다' }, { status: 400 })
+  if (!subjectType || !subjectId) return NextResponse.json({ error: '요청이 올바르지 않습니다. 새로고침한 뒤 다시 시도해 주세요.' }, { status: 400 })
 
   // 단가 배수만 바꾸는 요청 (역할은 그대로)
   if (body.rates && typeof body.rates === 'object' && body.roles === undefined) {

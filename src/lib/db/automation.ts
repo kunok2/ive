@@ -172,7 +172,7 @@ export function updateProjectAutomation(projectId: string, patch: ProjectAutomat
   if (patch.stagingSecrets) {
     if (secretsRaw && decrypt(secretsRaw) === secretsRaw) {
       // 암호화 키가 바뀌는 등으로 기존 비밀값을 풀 수 없다 — 조용히 지우지 않고 막는다
-      throw new Error('저장된 staging 비밀값을 복호화할 수 없습니다(ENCRYPTION_KEY 확인). 기존 값을 지키기 위해 저장하지 않았습니다')
+      throw new Error('이미 저장된 비밀값(테스트 계정 등)을 읽을 수 없어 새 값을 저장하지 않았습니다 — 기존 값을 지우지 않기 위해서입니다. 서버의 암호화 키(ENCRYPTION_KEY)가 바뀌었는지 관리자에게 확인해 주세요')
     }
     const secrets = readSecrets(secretsRaw)
     for (const [name, value] of Object.entries(patch.stagingSecrets)) {

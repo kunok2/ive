@@ -32,12 +32,12 @@ export async function POST(
 
   const { id: projectId, iid } = await params;
   const project = getProject(projectId);
-  if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+  if (!project) return NextResponse.json({ error: '프로젝트를 찾을 수 없습니다. 삭제되었을 수 있습니다 — 새로고침해 주세요.' }, { status: 404 });
 
   // 프로젝트 접근 권한 체크 (viewer여도 허용 — 워크플로우 액션은 assignee 기반으로 판단)
   const access = getProjectAccess(projectId, user.id);
   if (!access) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    return NextResponse.json({ error: '이 프로젝트에서 이 작업을 할 권한이 없습니다. 프로젝트 소유자에게 권한을 요청해 주세요.' }, { status: 403 });
   }
 
   // dryRun: 아래 검사(에이전트 작업 중·권한·실제 단계)만 하고 아무것도 바꾸지 않는다.
@@ -45,17 +45,17 @@ export async function POST(
   // 코멘트(「검증 완료:」 같은 말머리 포함)부터 올려 두면 일어나지 않은 전이를 적은 코멘트가 남는다.
   const { stage, action, dryRun } = await req.json();
   if (!stage || !action) {
-    return NextResponse.json({ error: 'stage와 action이 필요합니다.' }, { status: 400 });
+    return NextResponse.json({ error: '요청이 올바르지 않습니다. 새로고침한 뒤 다시 시도해 주세요.' }, { status: 400 });
   }
 
   const available = TRANSITIONS[stage];
   if (!available) {
-    return NextResponse.json({ error: '알 수 없는 단계입니다.' }, { status: 400 });
+    return NextResponse.json({ error: '화면의 단계 정보가 맞지 않습니다. 새로고침한 뒤 다시 시도해 주세요.' }, { status: 400 });
   }
 
   const transition = available.find(t => t.action === action);
   if (!transition) {
-    return NextResponse.json({ error: '허용되지 않는 액션입니다.' }, { status: 400 });
+    return NextResponse.json({ error: '지금 단계에서는 할 수 없는 동작입니다. 새로고침한 뒤 다시 시도해 주세요.' }, { status: 400 });
   }
 
   // 에이전트가 이 작업을 하고 있는 동안은 사람이 단계를 옮기지 못한다 — 옮기면 같은 검증·확인을 두 번 하게 되고,
@@ -103,7 +103,7 @@ export async function POST(
     if (actualStage !== stage) {
       return NextResponse.json(
         {
-          error: `이슈 상태가 이미 변경되었습니다. (요청: ${stage}, 현재: ${actualStage}) 화면을 새로고침한 후 다시 시도해주세요.`,
+          error: '다른 사람이나 에이전트가 이 작업의 단계를 먼저 바꿨습니다. 새로고침한 뒤 다시 시도해 주세요.',
           actualStage,
         },
         { status: 409 }

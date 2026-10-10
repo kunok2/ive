@@ -33,6 +33,8 @@ import { downloadIssueImages, extractImageUrls } from './issue-images'
 import { openAgentStageExecution, setStageVerdict } from './stage-records'
 import { runStageWorker, type StageKindSpec, type StageContext } from './stage-worker'
 
+const verdictKo = (v: string) => (v === 'pass' ? '통과' : v === 'fail' ? '반려' : '판정 못 함')
+
 const slog = getLogger('ConfirmWorker')
 
 /** 확인 탐색에 쓰는 Playwright MCP 판 — IVE 컨테이너에 전역 설치(Dockerfile)된 것과 같아야 한다 */
@@ -171,7 +173,7 @@ export function parseResult(workspacePath: string, logPath: string): ConfirmResu
     if (m && m.length) marker = m[m.length - 1].split(/\s+/).pop()!.toLowerCase() as Verdict
   } catch { /* ignore */ }
   if (!raw) {
-    return { ...empty, verdict: 'blocked', reason: marker ? `결과 파일(result.json)이 없습니다 (마지막 출력: ${marker})` : '확인 작업자가 결과 파일(result.json)을 남기지 않았습니다' }
+    return { ...empty, verdict: 'blocked', reason: marker ? `에이전트가 확인 결과를 정해진 형식으로 남기지 않고 끝났습니다(마지막으로 말한 판정: ${marker})` : '에이전트가 확인 결과를 남기지 않고 끝났습니다' }
   }
   const v = String(raw.verdict || '').toLowerCase()
   const verdict: Verdict = v === 'pass' || v === 'fail' || v === 'blocked' ? v : 'blocked'
@@ -179,7 +181,7 @@ export function parseResult(workspacePath: string, logPath: string): ConfirmResu
   return {
     verdict,
     summary: String(raw.summary || ''),
-    reason: String(raw.reason || (verdict === 'blocked' && !v ? '판정 값이 없습니다' : '')),
+    reason: String(raw.reason || (verdict === 'blocked' && !v ? '에이전트가 남긴 결과에 통과·반려 판정이 빠져 있습니다' : '')),
     items: arr(raw.items).map((c: any) => {
       const r = String(c?.result || '').toLowerCase()
       return {
@@ -208,7 +210,7 @@ export function enforceConfirmVerdict(r: ConfirmResult, savedScreens: number, is
   if (r.verdict !== 'pass') return r
   const reasons: string[] = []
   if (requireScreens && savedScreens === 0) reasons.push(isKo ? '증거 스크린샷이 없습니다' : 'no evidence screenshots')
-  if (!r.items.length) reasons.push(isKo ? '확인 항목(items)이 없습니다' : 'no items listed')
+  if (!r.items.length) reasons.push(isKo ? '에이전트가 무엇을 확인했는지 항목을 남기지 않았습니다' : 'no items listed')
   const unproven = r.items.filter(c => c.result !== 'gone' || !c.evidence.length)
   if (unproven.length) reasons.push(isKo ? `증거로 보이지 못한 항목 ${unproven.length}개` : `${unproven.length} item(s) without evidence`)
   if (!reasons.length) return r
@@ -277,14 +279,14 @@ async function buildEvidenceComment(
   }
 
   if (before.length && after.length) {
-    lines.push(`| ${t('수정 전 (이슈 첨부)', 'Before (issue)')} | ${t('수정 후 (staging)', 'After (staging)')} |`)
+    lines.push(`| ${t('수정 전 (이슈 첨부)', 'Before (issue)')} | ${t('수정 후 (확인한 사이트)', 'After (staging)')} |`)
     lines.push('|---|---|')
     const n = Math.max(before.length, after.length)
     for (let i = 0; i < n; i++) lines.push(`| ${before[i] || ''} | ${after[i] || ''} |`)
     lines.push('')
   } else if (after.length) {
     // 수정 전 이미지가 없으면(이슈에 첨부 없음) 빈 칸 표 대신 수정 후만
-    lines.push(`**${t('수정 후 (staging)', 'After (staging)')}**`, '')
+    lines.push(`**${t('수정 후 (확인한 사이트)', 'After (staging)')}**`, '')
     for (const a of after) lines.push(a, '')
   } else if (evidenceLink) {
     lines.push(`${t('스크린샷', 'Screenshots')}: ${evidenceLink}`, '')
@@ -309,9 +311,9 @@ async function buildEvidenceComment(
   }
   if (result.items.length) lines.push('')
   // IVE 설정 값이라도 주소에 넣은 계정(user:pass@)은 가린다
-  if (input.staging.url) lines.push(`- staging: ${maskSecrets(input.staging.url)}`)
+  if (input.staging.url) lines.push(`- ${t('확인한 사이트', 'Site checked')}: ${maskSecrets(input.staging.url)}`)
   if (input.noChange) lines.push(`- ${t('확인 대상', 'Confirmed')}: ${t('처리 결과 (코드 변경 없는 작업 — 배포 없음)', 'the work result (no code change — nothing deployed)')}`)
-  else lines.push(`- ${t('배포 커밋', 'Deployed commit')}: \`${input.deployedCommit.slice(0, 12)}\` · ${t('머지 커밋', 'Merge commit')}: \`${mergeShort}\` (${t('포함 확인', 'included')})`)
+  else lines.push(`- ${t('배포 커밋', 'Deployed commit')}: \`${input.deployedCommit.slice(0, 12)}\` · ${t('머지 커밋', 'Merge commit')}: \`${mergeShort}\` (${t('배포된 판에 이 수정이 들어 있음을 확인', 'the fix is in the deployed build')})`)
   if (input.mrUrl) lines.push(`- MR: ${maskSecrets(input.mrUrl)}`)
   lines.push(`- ${t('확인 에이전트', 'Confirmer agent')}: ${agent.name} · ${t('재현 스크립트', 'Repro script')}: ${prep.e2eScript || t('없음', 'none')}`)
   for (const c of result.commands.slice(0, 20)) lines.push(`- \`${c.replace(/`/g, "'")}\``)
@@ -485,7 +487,7 @@ function confirmSpec(input: ConfirmInput): StageKindSpec<ConfirmPrep> {
       } catch { /* 조회 실패 — 아래에서 단계를 옮기지 않는다 */ }
       if (nowStage !== 'confirming') {
         log(`단계가 이미 바뀌어(${nowStage ?? '조회 실패'}) 라벨은 옮기지 않고 결과만 기록합니다`, 'warn')
-        setStageWorkerNote(project.id, iid, `${isKo ? '확인 결과' : 'Confirm result'}: ${result.verdict} — ${isKo ? '확인 중 단계가 바뀌어 단계는 옮기지 않았습니다' : 'stage changed meanwhile, not moved'}`)
+        setStageWorkerNote(project.id, iid, isKo ? `자동 확인은 끝났지만(결과: ${verdictKo(result.verdict)}) 그 사이 사람이 단계를 바꿔서 단계는 그대로 두었습니다` : `Confirm result: ${result.verdict} — stage changed meanwhile, not moved`)
         return
       }
 
@@ -496,7 +498,7 @@ function confirmSpec(input: ConfirmInput): StageKindSpec<ConfirmPrep> {
           return true
         } catch (e) {
           log(`단계 이동 실패: ${(e as Error).message}`, 'error')
-          setStageWorkerNote(project.id, iid, `${isKo ? '확인 결과' : 'Confirm result'}: ${result.verdict} — ${isKo ? '단계 이동 실패, 사람이 옮겨 주세요' : 'stage move failed, move it manually'}`)
+          setStageWorkerNote(project.id, iid, isKo ? `자동 확인은 끝났지만(결과: ${verdictKo(result.verdict)}) 단계를 옮기지 못했습니다 — 사람이 단계를 옮겨 주세요` : `Confirm result: ${result.verdict} — stage move failed, move it manually`)
           return false
         }
       }
@@ -509,13 +511,13 @@ function confirmSpec(input: ConfirmInput): StageKindSpec<ConfirmPrep> {
         //   검증자가 확인자의 화면 단서를 읽어 코드에서 원인을 짚고, 재작업 지시(findings)로 처리자에게 돌린다.
         await move(confirmStageAction('fail')!, '단계: 확인 중 → 검증대기 (재검증)')
       } else {
-        setStageWorkerNote(project.id, iid, `${isKo ? '확인 불가' : 'Could not confirm'}: ${result.reason || '-'}`)
+        setStageWorkerNote(project.id, iid, isKo ? `자동 확인이 판정을 내리지 못했습니다 — 사람이 확인해 주세요 (사유: ${result.reason || '-'})` : `Could not confirm: ${result.reason || '-'}`)
         log('단계: 확인 중에 머무름 — 사람 확인 필요', 'warn')
       }
     },
 
     async onError(ctx, _prep, err) {
-      setStageWorkerNote(ctx.project.id, ctx.iid, `${ctx.isKo ? '확인 작업자 오류' : 'Confirm worker error'}: ${maskSecrets(err.message, ctx.secrets).slice(0, 300)}`)
+      setStageWorkerNote(ctx.project.id, ctx.iid, ctx.isKo ? `자동 확인이 오류로 중단됐습니다 — 다시 시도하거나 사람이 확인해 주세요 (오류: ${maskSecrets(err.message, ctx.secrets).slice(0, 300)})` : `Confirm worker error: ${maskSecrets(err.message, ctx.secrets).slice(0, 300)}`)
     },
 
     afterRun(ctx) {

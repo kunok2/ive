@@ -321,7 +321,7 @@ export default function AgentForm({ onSuccess, onCancel }: Props) {
           disabled={loading || limitReached}
           className="flex-[2] bg-ive-green-dark text-white font-bold py-4 rounded-lg text-sm active:bg-ive-green/80 transition-colors disabled:opacity-50"
         >
-          {loading ? (<><i className="fa-solid fa-spinner fa-spin mr-1.5" />{tc('creating')}</>) : (<><i className="fa-solid fa-robot mr-1.5" />{t('addAgent')}</>)}
+          {loading ? (<><i className="fa-solid fa-spinner fa-spin mr-1.5" />{tc('creating')}</>) : (<><i className="fa-solid fa-bolt mr-1.5" />{t('addAgent')}</>)}
         </button>
       </div>
     </form>

@@ -17,7 +17,7 @@ export async function GET(req: Request) {
 
   const { clientId } = getSlackAppConfig()
   if (!clientId) {
-    return NextResponse.json({ error: 'Slack 앱 client_id가 설정되지 않았습니다. 먼저 앱 자격증명을 저장하세요.' }, { status: 400 })
+    return NextResponse.json({ error: 'Slack 앱 정보가 아직 등록되지 않아 연결할 수 없습니다. 관리자에게 Slack 앱 등록을 요청해 주세요.' }, { status: 400 })
   }
 
   // Slack OAuth redirect는 git 로그인용 oauth.redirect_base와 분리: 요청 origin을 그대로 사용.

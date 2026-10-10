@@ -142,6 +142,7 @@ export default function BulkActionBar({
           {canAutoAll && (
             <button
               onClick={() => onBulkAction('auto_all')}
+              title={tAuto('autoAllIssueHint')}
               className="text-xs font-bold px-3 py-1.5 rounded-lg border text-ive-cyan border-ive-cyan/30 bg-ive-bg-deep hover:bg-ive-cyan/10 transition-all active:scale-95"
             >
               <i className="fa-solid fa-wand-magic-sparkles mr-1" />{tAuto('autoAllAgents')} ({selected.size})
@@ -160,7 +161,7 @@ export default function BulkActionBar({
               onClick={onOpenAgentPicker}
               className="text-xs font-bold px-3 py-1.5 rounded-lg border text-ive-cyan border-ive-cyan/30 bg-ive-bg-deep hover:bg-ive-cyan/10 transition-all active:scale-95"
             >
-              <i className="fa-solid fa-robot mr-1" />{tIssue('preferredAgent')} ({selected.size})
+              <i className="fa-solid fa-bolt mr-1" />{tIssue('preferredAgent')} ({selected.size})
             </button>
           )}
           {/* 검증자·확인자 — 카드의 역할 아바타를 눌러 고르는 것과 같은 창 */}

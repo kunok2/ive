@@ -35,11 +35,11 @@ export async function PATCH(
 
   const { id: projectId, iid } = await params;
   const project = getProject(projectId);
-  if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+  if (!project) return NextResponse.json({ error: '프로젝트를 찾을 수 없습니다. 삭제되었을 수 있습니다 — 새로고침해 주세요.' }, { status: 404 });
 
   const access = getProjectAccess(projectId, user.id);
   if (!access) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    return NextResponse.json({ error: '이 프로젝트에서 이 작업을 할 권한이 없습니다. 프로젝트 소유자에게 권한을 요청해 주세요.' }, { status: 403 });
   }
   // 실행 중(dev)인 이슈는 작업자 변경 불가 + 담당자 권한 확인
   const token = getProjectAuthToken(projectId);
@@ -72,7 +72,7 @@ export async function PATCH(
   // assignMode 유효성 검사
   const mode = assignMode || (agentId ? 'agent' : 'auto');
   if (!['auto', 'assignee', 'agent'].includes(mode)) {
-    return NextResponse.json({ error: 'Invalid assign mode' }, { status: 400 });
+    return NextResponse.json({ error: '작업자 지정 방식이 올바르지 않습니다. 새로고침한 뒤 다시 시도해 주세요.' }, { status: 400 });
   }
 
   // agentId가 있으면 의뢰자 본인의 에이전트 풀에 속하는지 검증

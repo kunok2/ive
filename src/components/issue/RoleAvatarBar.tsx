@@ -438,7 +438,7 @@ export function renderPresetContent(preset: PresetRole, members: GitMember[], cr
   if (preset.mode === 'agent') {
     return preset.agentAvatar
       ? renderAvatar(preset.agentAvatar, preset.agentName ?? null, dim)
-      : <i className={`fa-solid fa-robot text-ive-cyan ${iconSize}`} />
+      : <i className={`fa-solid fa-bolt text-ive-cyan ${iconSize}`} />
   }
   if (preset.mode === 'auto') {
     return <i className={`fa-solid fa-shuffle text-ive-cyan ${iconSize}`} />

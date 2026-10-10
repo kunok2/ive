@@ -139,7 +139,7 @@ export default function IssueCard({
       </div>
       {issue.stageWorkerNote && (
         <div className="mb-1.5 px-2 py-1 rounded-lg bg-ive-amber/10 border border-ive-amber/20 text-xs text-ive-amber truncate" title={issue.stageWorkerNote}>
-          <i className="fa-solid fa-robot mr-1" />
+          <i className="fa-solid fa-bolt mr-1" />
           {issue.stageWorkerNote}
         </div>
       )}

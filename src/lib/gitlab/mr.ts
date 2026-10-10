@@ -162,10 +162,10 @@ export async function mergeGitLabMR(project: Project, decryptedToken: string, mr
     if (res.status === 405) {
       try {
         const parsed = JSON.parse(body);
-        throw new Error(parsed.message || `머지 불가 (405): ${body}`);
+        throw new Error(parsed.message || `GitLab 이 머지를 허용하지 않았습니다 — 보호된 브랜치 권한이나 파이프라인·승인 조건을 확인해 주세요 (405: ${body})`);
       } catch (e) {
         if (e instanceof Error && e.message !== body) throw e;
-        throw new Error(`머지 불가 (405): ${body}`);
+        throw new Error(`GitLab 이 머지를 허용하지 않았습니다 — 보호된 브랜치 권한이나 파이프라인·승인 조건을 확인해 주세요 (405: ${body})`);
       }
     }
     if (res.status === 406) {

@@ -85,5 +85,5 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ ...out, roles: getIssueRoles(id, Number(iid)) })
   }
 
-  return NextResponse.json({ error: '알 수 없는 action' }, { status: 400 })
+  return NextResponse.json({ error: '요청이 올바르지 않습니다. 새로고침한 뒤 다시 시도해 주세요.' }, { status: 400 })
 }

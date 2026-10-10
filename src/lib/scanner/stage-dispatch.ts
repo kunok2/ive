@@ -109,14 +109,14 @@ function agentNotReady(project: Project, agent: Agent, kind: 'verify' | 'confirm
   const limits = getProjectAutomation(project.id).limits
   // 지금도 이 프로젝트의 명부에 그 역할로 있고, 소유자가 여전히 프로젝트 소유자·editor 인 에이전트만 돌린다
   if (!(pickedByHand || hasRole(project.id, kind, 'agent', agent.id)) || !isAgentEligibleForProject(project, agent)) {
-    return `${label} 에이전트 '${agent.name}' 이(가) 이 프로젝트 명부에 없습니다 — ${label}자를 다시 지정해 주세요`
+    return `${label}을 맡기로 한 에이전트 '${agent.name}'이(가) 이 프로젝트의 역할 명부에 없어 자동 ${label}을 시작하지 못했습니다 — ${label}자를 다시 지정해 주세요`
   }
-  if (!isAgentAvailableNow(agent, now)) return `${label} 에이전트 '${agent.name}' 사용중지/휴가`
-  if (busy.has(agent.id) || countActiveExecutionsByAgent(agent.id) > 0) return `${label} 에이전트 '${agent.name}' 다른 작업 중 — 대기`
+  if (!isAgentAvailableNow(agent, now)) return `${label} 에이전트 '${agent.name}'이(가) 사용중지 또는 휴가 중이라 자동 ${label}을 시작하지 못했습니다 — 에이전트를 다시 켜거나 ${label}자를 바꿔 주세요`
+  if (busy.has(agent.id) || countActiveExecutionsByAgent(agent.id) > 0) return `${label} 에이전트 '${agent.name}'이(가) 다른 작업을 하고 있습니다 — 끝나면 자동 ${label}을 시작합니다`
   // 이번 판에 띄운 작업자도 실행 행이 즉시 생기므로 countRunningAgentStage 에 이미 들어 있다(따로 더하지 않는다)
   const projectCap = kind === 'verify' ? limits.verifyMaxConcurrent : limits.confirmMaxConcurrent
   if (countRunningAgentStage(kind) >= globalCap(kind) || countRunningAgentStage(kind, project.id) >= projectCap) {
-    return `${label} 작업자 동시 실행 상한 — 대기`
+    return `동시에 돌릴 수 있는 자동 ${label} 수가 찼습니다 — 자리가 나면 시작합니다`
   }
   return null
 }
@@ -131,8 +131,8 @@ function passGate(
   const limits = getProjectAutomation(project.id).limits
   const label = ROLE_LABEL[kind]
   const runs = countAgentStageRuns(project.id, iid, kind)
-  if (runs.crashed >= limits.maxAutoCycles) { note(project.id, iid, `${label} 작업자 비정상 종료 ${runs.crashed}회 — 사람 ${label} 필요`); return null }
-  if (runs.fail >= limits.maxAutoCycles) { note(project.id, iid, `자동 ${label} 실패 ${runs.fail}회(상한 ${limits.maxAutoCycles}) — 사람 ${label} 필요`); return null }
+  if (runs.crashed >= limits.maxAutoCycles) { note(project.id, iid, `자동 ${label}이 ${runs.crashed}번 중간에 끊겨 더 시도하지 않습니다 — 사람이 ${label}해 주세요`); return null }
+  if (runs.fail >= limits.maxAutoCycles) { note(project.id, iid, `자동 ${label}을 ${runs.fail}번 했지만 통과하지 못해 더 시도하지 않습니다(최대 ${limits.maxAutoCycles}번) — 사람이 ${label}해 주세요`); return null }
   if (stage === (kind === 'verify' ? 'verifying' : 'confirming')) {
     // 진행 단계(V/C)인데 열린 기록이 없다 = 작업자가 중간에 죽었거나(재시작) 판단 불가로 멈춘 것.
     // 죽은 경우만 상한 안에서 다시 띄운다. 판단 불가(blocked)·이동 실패는 사람을 기다린다.
@@ -140,7 +140,7 @@ function passGate(
     if (last && last.verdict) return null
   }
   const allowed = isAutomationAllowed(project, iid, issue)
-  if (!allowed.ok) { note(project.id, iid, `작성자(${allowed.author || '알 수 없음'})가 허용 목록 밖 — 자동 실행 승인 필요`); return null }
+  if (!allowed.ok) { note(project.id, iid, `이 작업을 올린 사람(${allowed.author || '알 수 없음'})이 자동 실행 허용 목록에 없어 에이전트가 시작하지 않았습니다 — 작업 상세에서 자동 실행을 승인해 주세요`); return null }
 
   const key = `${kind}:${project.id}:${iid}`
   const now = Date.now()
@@ -148,7 +148,7 @@ function passGate(
   lastCheckAt.set(key, now)
 
   const agent = getAgent(agentId)
-  if (!agent) { note(project.id, iid, `${label} 에이전트가 삭제되었습니다`); return null }
+  if (!agent) { note(project.id, iid, `${label}을 맡기로 한 에이전트가 삭제되어 자동 ${label}을 시작하지 못했습니다 — ${label}자를 다시 지정해 주세요`); return null }
   const notReady = agentNotReady(project, agent, kind, busy, now)
   if (notReady) { note(project.id, iid, notReady); return null }
   return agent
@@ -164,7 +164,7 @@ export async function dispatchStageWorkers(project: Project, issues: StageIssue[
   await dispatchConfirm(project, issues.filter(i => i.stage === 'confirm_waiting' || i.stage === 'confirming'), token, busy)
 }
 
-const SAME_AS_PROCESSOR = '검증 에이전트가 이 이슈를 처리한 에이전트와 같습니다 — 검증자를 다시 지정해 주세요'
+const SAME_AS_PROCESSOR = '이 작업을 처리한 에이전트가 검증자로 지정되어 있어 자동 검증을 시작하지 못했습니다(자기 작업은 스스로 검증하지 않습니다) — 검증자를 다른 에이전트나 사람으로 바꿔 주세요'
 
 /**
  * 지금 검증할 수 있는가 — dev-{iid} MR 이 닫혀 있지 않은가. 할 수 있으면 그 MR(없으면 null — 코드 변경 없는 작업).
@@ -173,7 +173,7 @@ async function resolveVerifyMR(project: Project, iid: number, token: string): Pr
   let mr: any = null
   try { mr = await fetchMRByBranch(project, token, `dev-${iid}`) } catch (e) { slog.warn(`MR lookup failed #${iid}: ${(e as Error).message}`) }
   // MR 이 없으면 코드 변경 없이 끝난 작업(질문·조사·보고 등) — 코드 대신 작업자가 처리한 결과(마지막 보고)를 검증한다
-  if (mr?.state === 'closed') return { ok: false, reason: `dev-${iid} MR 이 닫혀 있습니다 — 사람 검증 필요` }
+  if (mr?.state === 'closed') return { ok: false, reason: `이 작업의 MR(dev-${iid})이 머지되지 않은 채 닫혀 있어 자동 검증을 할 수 없습니다 — MR 을 다시 열거나 사람이 검증해 주세요` }
   return { ok: true, mr }
 }
 
@@ -239,21 +239,21 @@ async function resolveConfirmTarget(project: Project, iid: number, token: string
     // MR 이 없으면 코드 변경 없이 끝난 작업(질문·조사·보고 등) — 배포를 기다리지 않고 처리 결과가 요건을 충족했는지 확인한다
     if (!mr) return { ok: true, target: { deployedCommit: '', mergeCommit: null, mrUrl: null, noChange: true, desc: '코드 변경 없음 — 처리 결과 확인' } }
     const merged = mr.state === 'merged' || !!mr.merged_at
-    if (!merged) return { ok: false, reason: 'MR 이 아직 머지되지 않음 — 머지·배포 대기' }
+    if (!merged) return { ok: false, reason: 'MR 이 아직 머지되지 않았습니다 — 머지되고 배포되면 자동 확인을 시작합니다' }
     // fast-forward 머지는 머지 커밋이 없다 — MR 머리 커밋이 그대로 대상 브랜치에 올라간다
     mergeCommit = mr.merge_commit_sha || mr.squash_commit_sha || mr.sha || null
     mrUrl = mr.web_url || mr.html_url || null
-    if (!mergeCommit) return { ok: false, reason: '머지 커밋을 알 수 없음 — 자동 확인 불가' }
+    if (!mergeCommit) return { ok: false, reason: '머지된 커밋을 찾지 못해 자동 확인을 할 수 없습니다 — 사람이 확인해 주세요' }
   }
 
   // 코드 변경이 있는 작업은 staging 에 배포된 뒤 확인한다
   const staging = lookup.staging ??= resolveStagingConfig(project)
-  if (!staging.ok) return { ok: false, reason: `${staging.reason} — 자동 확인 불가, 사람 확인 필요` }
+  if (!staging.ok) return { ok: false, reason: staging.reason }
   const deployed = lookup.deployed ??= await fetchDeployedCommit(staging.value, project, token)
-  if (!deployed.ok) return { ok: false, reason: `staging 배포 커밋 확인 실패: ${deployed.reason}` }
+  if (!deployed.ok) return { ok: false, reason: `지금 배포된 판을 알아내지 못해 자동 확인을 시작하지 못했습니다 — ${deployed.reason}` }
   const included = await isAncestorCommit(project, token, mergeCommit, deployed.value)
-  if (included === null) return { ok: false, reason: `배포 커밋(${deployed.value.slice(0, 8)}) 포함 여부 판정 불가 — 대기` }
-  if (!included) return { ok: false, reason: `staging 배포 대기 (현재 ${deployed.value.slice(0, 8)}, 머지 ${mergeCommit.slice(0, 8)} 미포함)` }
+  if (included === null) return { ok: false, reason: `이 수정이 배포된 판(${deployed.value.slice(0, 8)})에 들어 있는지 아직 알 수 없습니다 — 다시 확인합니다` }
+  if (!included) return { ok: false, reason: `수정이 아직 배포되지 않았습니다 — 배포되면 자동 확인을 시작합니다 (배포된 판 ${deployed.value.slice(0, 8)}, 수정 커밋 ${mergeCommit.slice(0, 8)})` }
   return { ok: true, target: { deployedCommit: deployed.value, mergeCommit, mrUrl, desc: `deployed ${deployed.value.slice(0, 8)} ⊇ merge ${mergeCommit.slice(0, 8)}` } }
 }
 
@@ -324,7 +324,7 @@ function pickHandOffAgent(project: Project, iid: number, kind: 'verify' | 'confi
     .filter((c): c is { agent: Agent; load: number } => !!c.agent)
     .sort((a, b) => Number(b.agent.id === presetId) - Number(a.agent.id === presetId) || a.load - b.load || a.agent.name.localeCompare(b.agent.name))
   if (candidates.length === 0) {
-    return { ok: false, reason: `명부에 ${label} 역할 에이전트가 없습니다 — 프로젝트 설정의 역할 명부에 넣거나, 입력창 위에서 작업자(에이전트)를 골라 주세요` }
+    return { ok: false, reason: `${label}을 맡을 에이전트가 정해져 있지 않습니다 — 프로젝트 화면 → 역할·단계 자동화 → 역할에서 ${label} 역할에 에이전트를 넣거나, 입력창 위에서 작업자(에이전트)를 골라 주세요` }
   }
   const busy = new Set<string>()
   let firstReason: string | null = null
@@ -355,7 +355,7 @@ export async function checkStageHandOff(
   let agent: Agent
   if (agentId) {
     const picked = getAgent(agentId)
-    if (!picked) return { ok: false, reason: `${label} 에이전트가 삭제되었습니다` }
+    if (!picked) return { ok: false, reason: `${label}을 맡기로 한 에이전트가 삭제되어 자동 ${label}을 시작하지 못했습니다 — ${label}자를 다시 지정해 주세요` }
     if (kind === 'verify' && lastProcessorAgentId(project.id, iid) === picked.id) return { ok: false, reason: SAME_AS_PROCESSOR }
     const designated = getAssignMode(project.id, iid)
     const notReady = agentNotReady(project, picked, kind, new Set(), Date.now(), designated.mode === 'agent' && designated.agentId === picked.id)
@@ -367,7 +367,7 @@ export async function checkStageHandOff(
     agent = auto.agent
   }
   const allowed = isAutomationAllowed(project, iid, issue)
-  if (!allowed.ok) return { ok: false, reason: `작성자(${allowed.author || '알 수 없음'})가 허용 목록 밖 — 자동 실행 승인 필요` }
+  if (!allowed.ok) return { ok: false, reason: `이 작업을 올린 사람(${allowed.author || '알 수 없음'})이 자동 실행 허용 목록에 없어 에이전트가 시작하지 않았습니다 — 작업 상세에서 자동 실행을 승인해 주세요` }
 
   if (kind === 'verify') {
     const r = await resolveVerifyMR(project, iid, token)

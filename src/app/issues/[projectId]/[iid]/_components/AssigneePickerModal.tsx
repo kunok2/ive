@@ -105,7 +105,7 @@ export default function AssigneePickerModal({ open, gitMembers, initialPick, onC
         )}
         {filteredAgents.length > 0 && (
           <>
-            <div className="px-4 pt-3 pb-1 text-xs font-bold text-ive-text-dim"><i className="fa-solid fa-robot mr-1" />{tIssue('pickerAgents')}</div>
+            <div className="px-4 pt-3 pb-1 text-xs font-bold text-ive-text-dim"><i className="fa-solid fa-bolt mr-1" />{tIssue('pickerAgents')}</div>
             {filteredAgents.map(a => {
               const isPicked = agentId === a.id
               return (

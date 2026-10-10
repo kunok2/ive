@@ -105,7 +105,7 @@ declare global {
 }
 
 /** 명부에서 고른 처리 에이전트의 주인이 편집 권한을 잃었을 때 이슈에 남기는 안내 (처리 시작·재지정 시 지운다) */
-const PROCESSOR_INELIGIBLE_NOTE = '지정 처리 에이전트를 이 이슈에서 쓸 수 없습니다 — 처리자를 다시 지정해 주세요';
+const PROCESSOR_INELIGIBLE_NOTE = '처리자로 지정한 에이전트의 주인이 이 프로젝트 편집 권한을 잃어 처리를 시작하지 못했습니다 — 처리자를 다시 지정해 주세요';
 
 /**
  * 반려 고리 상한 — 검증·확인에서 이만큼 연달아 반려된 이슈는 처리자를 다시 붙이지 않고 검증대기로 넘겨 사람이 판단한다.
@@ -122,13 +122,13 @@ async function holdReworkLoop(project: Project, iid: number, token: string, stre
   const body = `<!-- ive-bot -->
 ## 🔁 반려 반복 — 사람 판단 필요
 
-검증·확인에서 **${streak}회 연달아 반려**되어 처리자를 다시 붙이지 않고 검증대기(\`${w}\`)로 넘깁니다.
-같은 사유가 되풀이되면 처리자를 다시 돌려도 같은 자리에서 멈춥니다.
+검증·확인에서 **${streak}회 연달아 반려**되어, 에이전트에게 다시 맡기지 않고 검증대기(\`${w}\`)로 옮겼습니다.
+같은 이유로 계속 반려되면 다시 맡겨도 같은 곳에서 막힙니다.
 
-사람이 지난 반려 노트들을 보고 하나를 고릅니다.
-- **남은 것이 처리 환경에서 할 수 없는 검수**(화면·실제 DB·운영 접근)뿐이면 → 머지하고 그 항목을 확인자에게 넘깁니다(\`확인자에게\` 목록).
-- **구현이 정말 모자라면** → 무엇을 어느 파일에서 어떻게 고칠지 한 번에 적고 \`${s}\` 로 돌립니다(반려 횟수는 여기서 새로 셉니다).
-- **요건 자체를 정해야 하면** → 의뢰자에게 묻습니다.`;
+지난 반려 코멘트를 보고 아래 중 하나를 골라 주세요.
+- **남은 것이 에이전트가 직접 해 볼 수 없는 검수**(화면·실제 DB·운영 접근)뿐이면 → MR 을 머지하고, 그 항목을 확인자가 볼 수 있게 코멘트로 남겨 주세요.
+- **구현이 정말 모자라면** → 무엇을 어느 파일에서 어떻게 고칠지 한 번에 적은 뒤 단계를 대기(\`${s}\`)로 되돌려 주세요(반려 횟수는 이때부터 새로 셉니다).
+- **요건부터 정해야 하면** → 작업을 요청한 사람에게 물어봐 주세요.`;
   await swapIssueLabels(project, iid, token, [w], [s]);
   recordStageEvent({
     projectId: project.id, issueIid: iid, fromStage: 'waiting', toStage: 'verify_waiting', action: 'rework_loop',
@@ -613,7 +613,7 @@ async function scanProject(project: Project, force: boolean = false) {
             try {
               createActivityLog({
                 userId: project.userId, category: 'task', action: 'detect_external_task',
-                detail: `외부 도구 작업 인식: #${iid} "${issue.title}" (${project.name}, ${isComplete ? '완료' : '진행중'}, 세션 ${created})`,
+                detail: `IVE 밖에서 처리한 작업을 기록했습니다: #${iid} "${issue.title}" (${project.name}, ${isComplete ? '완료' : '진행 중'}, 작업 기록 ${created}건)`,
                 targetType: 'execution', targetId: `${project.id}:${iid}`,
               });
             } catch (e) { slog.error({ err: e }, 'Failed to log external task activity:'); }
@@ -860,7 +860,7 @@ async function scanProject(project: Project, force: boolean = false) {
           try {
             createActivityLog({
               userId: project.userId, category: 'task', action: 'detect_merge_complete',
-              detail: `메인 브랜치 머지로 완료 처리: #${iid} (${project.name}, 이전 단계: ${row.cached_stage})`,
+              detail: `기준 브랜치에 머지된 것을 확인해 완료로 옮겼습니다: #${iid} (${project.name})`,
               targetType: 'issue', targetId: `${project.id}-${iid}`,
             })
           } catch (e) { slog.error({ err: e }, 'Failed to log merge-complete activity:') }
@@ -1256,7 +1256,7 @@ export async function reconcileExternalIssue(
     try {
       createActivityLog({
         userId: project.userId, category: 'task', action: 'resync_ive_meta',
-        detail: `ive-meta 재동기화: #${iid} "${issue.title}" (${project.name}, +${created}/${updated})`,
+        detail: `이슈에 적힌 작업 기록을 다시 읽어 반영했습니다: #${iid} "${issue.title}" (${project.name}, 새로 ${created}건 · 고침 ${updated}건)`,
         targetType: 'execution', targetId: `${project.id}:${iid}`,
       });
     } catch (e) { slog.error({ err: e }, 'Failed to log resync activity:'); }

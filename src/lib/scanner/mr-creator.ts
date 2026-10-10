@@ -205,7 +205,7 @@ export async function commitPushAndCreateMR(params: {
     }
 
     // 완료 노트
-    const mrLine = mrUrl ? `- **${mrLabel}:** ${mrUrl}` : `- **${mrLabel}:** 생성 실패 (권한 부족 또는 API 오류)`;
+    const mrLine = mrUrl ? `- **${mrLabel}:** ${mrUrl}` : `- **${mrLabel}:** 만들지 못했습니다 (권한 부족 또는 Git 서버 오류) — 저장소에서 ${mrLabel} 을 직접 만들어 주세요`;
     const iterLine = iterationCount > 1 ? `\n- **반복 횟수:** ${iterationCount}회` : '';
     const workSummary = workSummaryText;
     const heading = incompleteHeading ?? `## ✅ 개발 완료 — ${agent.name}`;
@@ -260,7 +260,7 @@ export async function commitPushAndCreateMR(params: {
     const workSummary = workSummaryText;
     // 수정 흔적이 있는데 diff가 비면 "확인 필요"로 표면화한다. 깔끔한 "완료"로 덮지 않는다.
     const noChangeHeading = attemptedEdits
-      ? `## ⚠️ 변경사항 없음 — 확인 필요 — ${agent.name}\n\n에이전트가 파일 수정 도구를 사용했으나 저장소에 남은 변경이 없습니다. (변경 미반영·되돌림 또는 잘못된 경로 수정 의심)`
+      ? `## ⚠️ 변경사항 없음 — 확인 필요 — ${agent.name}\n\n에이전트가 파일을 고쳤다고 했지만 저장소에는 바뀐 것이 없습니다. 고친 내용을 스스로 되돌렸거나 엉뚱한 위치의 파일을 고쳤을 수 있습니다 — 아래 결과를 보고 실제로 해결됐는지 확인해 주세요.`
       : `## ✅ 개발 완료 — ${agent.name}\n\n코드 변경사항 없이 완료되었습니다.`;
     const noChangeNote = `<!-- ive-bot -->\n<!-- ive-agent:${agent.id} -->\n${noChangeHeading}\n- **소요 시간:** ${durationStr}${iterLine}${workSummary}`;
     try {
@@ -379,7 +379,7 @@ async function handlePushFailure(
   log(`push 실패: ${pushMsg}`, 'error');
   const pushFailNote = isPermission
     ? `<!-- ive-bot -->\n<!-- ive-agent:${agent.id} -->\n## ⚠️ 푸시 권한 없음 — ${agent.name}\n\n코드 변경은 완료되었으나 저장소에 푸시할 권한이 없습니다.\n토큰 계정에 쓰기 권한을 부여해주세요.\n- **소요 시간:** ${durationStr}`
-    : `<!-- ive-bot -->\n<!-- ive-agent:${agent.id} -->\n## ⚠️ 푸시 실패 — ${agent.name}\n\n- **오류:** ${pushMsg}\n- **소요 시간:** ${durationStr}`;
+    : `<!-- ive-bot -->\n<!-- ive-agent:${agent.id} -->\n## ⚠️ 푸시 실패 — ${agent.name}\n\n코드는 고쳤지만 저장소에 올리지 못했습니다. 아래 오류를 확인한 뒤 「재처리」해 주세요.\n\n- **오류:** ${pushMsg}\n- **소요 시간:** ${durationStr}`;
   try {
     if (isGitHub) {
       await addGitHubIssueComment(project, iid, token, pushFailNote);

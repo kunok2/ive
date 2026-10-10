@@ -12,12 +12,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const access = getProjectAccess(id, user.id)
-  if (!access) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!access) return NextResponse.json({ error: '이 프로젝트에서 이 작업을 할 권한이 없습니다. 프로젝트 소유자에게 권한을 요청해 주세요.' }, { status: 403 })
 
   const token = getProjectAuthToken(id)
 
   if (!user.isAdmin && !(await isIssueAssignee(project, Number(iid), token, user))) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    return NextResponse.json({ error: '이 프로젝트에서 이 작업을 할 권한이 없습니다. 프로젝트 소유자에게 권한을 요청해 주세요.' }, { status: 403 })
   }
   const sourceBranch = `dev-${iid}`
   const mr = await fetchMRByBranch(project, token, sourceBranch)

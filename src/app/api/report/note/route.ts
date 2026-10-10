@@ -58,8 +58,8 @@ export async function POST(req: NextRequest) {
   const body = await req.json()
   const { projectId, token, nonce, timestamp, expires, iid, content } = body
 
-  if (!projectId) return NextResponse.json({ error: '프로젝트 ID가 필요합니다.' }, { status: 400 })
-  if (!token) return NextResponse.json({ error: '접근 토큰이 필요합니다.' }, { status: 400 })
+  if (!projectId) return NextResponse.json({ error: '접수 주소가 온전하지 않습니다. 전달받은 주소 전체를 다시 열어 주세요.' }, { status: 400 })
+  if (!token) return NextResponse.json({ error: '접수 주소가 온전하지 않습니다. 전달받은 주소 전체를 다시 열어 주세요.' }, { status: 400 })
   if (!content?.trim()) return NextResponse.json({ error: '내용을 입력하세요.' }, { status: 400 })
 
   const issueIid = Number(iid)
@@ -79,19 +79,19 @@ export async function POST(req: NextRequest) {
   const project = getProject(projectId)
   if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
   if (!project.reportSecret) {
-    return NextResponse.json({ error: 'Report page is not enabled' }, { status: 403 })
+    return NextResponse.json({ error: '이 프로젝트의 접수 페이지가 꺼져 있어 접수하지 못했습니다. 이 주소를 전달한 담당자에게 문의해 주세요.' }, { status: 403 })
   }
 
   const tokenVerify = verifyReportToken(project.reportSecret, projectId, token, nonce, timestamp, expires)
   if (!tokenVerify.valid) {
-    return NextResponse.json({ error: 'Invalid or expired token' }, { status: 403 })
+    return NextResponse.json({ error: '접수 주소가 만료되었거나 이미 사용되었습니다. 이 주소를 전달한 담당자에게 새 주소를 받아 다시 접수해 주세요.' }, { status: 403 })
   }
 
   const cleanContent = sanitizeContent(String(content).trim().slice(0, MAX_CONTENT_LENGTH))
   if (!cleanContent) return NextResponse.json({ error: '내용을 입력하세요.' }, { status: 400 })
 
   const authToken = getProjectAuthToken(projectId)
-  if (!authToken) return NextResponse.json({ error: '프로젝트 토큰이 설정되지 않았습니다.' }, { status: 500 })
+  if (!authToken) return NextResponse.json({ error: '이 프로젝트의 Git 접근 토큰이 없어 접수하지 못했습니다. 이 주소를 전달한 담당자에게 알려 주세요.' }, { status: 500 })
 
   try {
     // ⛔ 이슈가 실제로 있는지 먼저 본다 — 없는 번호에 코멘트를 달면 Git API 오류가 500 으로

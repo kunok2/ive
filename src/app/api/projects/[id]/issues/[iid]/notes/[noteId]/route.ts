@@ -15,7 +15,7 @@ export async function DELETE(
 
   const { id: projectId, iid, noteId } = await params
   const project = getProject(projectId)
-  if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+  if (!project) return NextResponse.json({ error: '프로젝트를 찾을 수 없습니다. 삭제되었을 수 있습니다 — 새로고침해 주세요.' }, { status: 404 })
 
   try {
     // 1. OAuth 토큰 시도 (본인인지 확인하는 겸 가장 확실한 방법)

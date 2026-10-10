@@ -52,8 +52,8 @@ export async function POST(req: NextRequest) {
   // dueDate 검증 (선택). YYYY-MM-DD 외 값은 무시.
   const dueDateNormalized: string | null = (typeof dueDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dueDate)) ? dueDate : null
 
-  if (!projectId) return NextResponse.json({ error: '프로젝트 ID가 필요합니다.' }, { status: 400 })
-  if (!token) return NextResponse.json({ error: '접근 토큰이 필요합니다.' }, { status: 400 })
+  if (!projectId) return NextResponse.json({ error: '접수 주소가 온전하지 않습니다. 전달받은 주소 전체를 다시 열어 주세요.' }, { status: 400 })
+  if (!token) return NextResponse.json({ error: '접수 주소가 온전하지 않습니다. 전달받은 주소 전체를 다시 열어 주세요.' }, { status: 400 })
   if (!content?.trim()) return NextResponse.json({ error: '내용을 입력하세요.' }, { status: 400 })
 
   // Rate limiting: IP 기준 1분 내 5회
@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
   if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
 
   if (!project.reportSecret) {
-    return NextResponse.json({ error: 'Report page is not enabled' }, { status: 403 })
+    return NextResponse.json({ error: '이 프로젝트의 접수 페이지가 꺼져 있어 접수하지 못했습니다. 이 주소를 전달한 담당자에게 문의해 주세요.' }, { status: 403 })
   }
 
   // HMAC 토큰 검증
@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
     expires
   )
   if (!tokenVerify.valid) {
-    return NextResponse.json({ error: 'Invalid or expired token' }, { status: 403 })
+    return NextResponse.json({ error: '접수 주소가 만료되었거나 이미 사용되었습니다. 이 주소를 전달한 담당자에게 새 주소를 받아 다시 접수해 주세요.' }, { status: 403 })
   }
 
   // 콘텐츠 validation
@@ -135,7 +135,7 @@ export async function POST(req: NextRequest) {
     : baseDescription
 
   const authToken = getProjectAuthToken(projectId)
-  if (!authToken) return NextResponse.json({ error: '프로젝트 토큰이 설정되지 않았습니다.' }, { status: 500 })
+  if (!authToken) return NextResponse.json({ error: '이 프로젝트의 Git 접근 토큰이 없어 접수하지 못했습니다. 이 주소를 전달한 담당자에게 알려 주세요.' }, { status: 500 })
 
   try {
     // IVE-S (스케줄 대기) 레이블만 부착 — 단계 라벨이 곧 IVE 관리 표시라 대상 라벨(IVE)은 함께 달지 않는다
@@ -146,7 +146,7 @@ export async function POST(req: NextRequest) {
     const targetLabel = labelCheck.find(l => l.label === scheduleLabel)
     if (targetLabel && !targetLabel.exists) {
       return NextResponse.json({
-        error: `레이블 "${scheduleLabel}"이 Git에 없습니다. 프로젝트 설정에서 레이블을 생성해주세요.`,
+        error: `저장소에 레이블 "${scheduleLabel}"이 없어 접수하지 못했습니다. 이 주소를 전달한 담당자에게 알려 주세요.`,
         labelMissing: true,
       }, { status: 400 })
     }

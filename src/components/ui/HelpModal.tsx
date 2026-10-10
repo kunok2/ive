@@ -29,7 +29,7 @@ function isNewerVersion(a: string, b: string): boolean {
 // tour: 가이드 투어가 있는 탭만(「넓은 화면」은 탭이 아니라 투어가 없다)
 const tabSections = [
   { key: 'projects', icon: 'fa-solid fa-folder', steps: 8, tour: true },
-  { key: 'agents', icon: 'fa-solid fa-robot', steps: 7, tour: true },
+  { key: 'agents', icon: 'fa-solid fa-bolt', steps: 7, tour: true },
   { key: 'issues', icon: 'fa-solid fa-list-check', steps: 8, tour: true },
   { key: 'reports', icon: 'fa-solid fa-chart-line', steps: 6, tour: true },
   { key: 'admin', icon: 'fa-solid fa-gear', steps: 5, tour: true },

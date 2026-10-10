@@ -280,7 +280,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
       : preset?.mode === 'agent' ? { src: preset.agentAvatar || 'av-01' }
       : (preset?.mode === 'creator' || !preset) && issue.author?.name ? { src: issue.author.avatar || 'person' }
       : { src: 'person' }
-    return { icon: preset?.mode === 'agent' && !actual ? 'fa-robot' : 'fa-user', text: tp(verify ? 'waitForVerifier' : 'waitForConfirmer', { name }), face }
+    return { icon: preset?.mode === 'agent' && !actual ? 'fa-bolt' : 'fa-user', text: tp(verify ? 'waitForVerifier' : 'waitForConfirmer', { name }), face }
   }
 
   // 단계 칸의 진행 중 숫자 옆에 붙는 그 단계 대기 건수 — 점선 숫자(보드의 대기 카드와 같은 표시)

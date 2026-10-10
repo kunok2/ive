@@ -35,15 +35,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'ID는 영숫자와 하이픈만 허용 (예: gh-main, gitlab-com)' }, { status: 400 })
   }
   if (type !== 'github' && type !== 'gitlab' && type !== 'slack') {
-    return NextResponse.json({ error: 'type은 github, gitlab, slack 중 하나여야 합니다' }, { status: 400 })
+    return NextResponse.json({ error: '공급자 종류가 올바르지 않습니다. GitHub, GitLab, Slack 중에서 골라 주세요.' }, { status: 400 })
   }
   if (!name || !effBaseUrl || !clientId || !clientSecret) {
-    return NextResponse.json({ error: '필수 필드 누락 (name, baseUrl, clientId, clientSecret)' }, { status: 400 })
+    return NextResponse.json({ error: '이름, 주소(URL), Client ID, Client Secret을 모두 입력해 주세요.' }, { status: 400 })
   }
   try {
     new URL(effBaseUrl)
   } catch {
-    return NextResponse.json({ error: 'baseUrl이 유효한 URL이 아닙니다' }, { status: 400 })
+    return NextResponse.json({ error: '주소(URL) 형식이 올바르지 않습니다. https:// 로 시작하는 주소를 넣어 주세요.' }, { status: 400 })
   }
   if (getOAuthProviderById(effId)) {
     return NextResponse.json({ error: `이미 존재하는 ID: ${effId}` }, { status: 409 })

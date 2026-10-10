@@ -36,13 +36,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   // MR 조회도 담당자/관리자만 (머지 영역 UI 표시 권한과 동일)
   const access = getProjectAccess(id, user.id)
-  if (!access) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!access) return NextResponse.json({ error: '이 프로젝트에서 이 작업을 할 권한이 없습니다. 프로젝트 소유자에게 권한을 요청해 주세요.' }, { status: 403 })
 
   // 권한 체크용 이슈 조회는 프로젝트 토큰 사용 (접속자 권한과 분리).
   // isIssueAssignee 내부에서 fetchSingleIssue 호출.
   const projectCtx: GitTokenCtx = getProjectTokenCtx(project)
   if (!user.isAdmin && !(await isIssueAssignee(project, Number(iid), projectCtx.token, user))) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    return NextResponse.json({ error: '이 프로젝트에서 이 작업을 할 권한이 없습니다. 프로젝트 소유자에게 권한을 요청해 주세요.' }, { status: 403 })
   }
 
   const sourceBranch = `dev-${iid}`
@@ -87,7 +87,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // 머지/MR 액션은 관리자 또는 이슈 담당자만
   // (viewer 권한이어도 자기에게 할당된 이슈의 MR은 처리할 수 있어야 함)
   const access = getProjectAccess(id, user.id)
-  if (!access) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!access) return NextResponse.json({ error: '이 프로젝트에서 이 작업을 할 권한이 없습니다. 프로젝트 소유자에게 권한을 요청해 주세요.' }, { status: 403 })
 
   // 권한 체크는 프로젝트 토큰 기반 조회
   const projectCtx: GitTokenCtx = getProjectTokenCtx(project)
@@ -112,7 +112,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: friendlyGitError(err, 'MR 조회') }, { status: 400 })
     }
     if (!mr) {
-      return NextResponse.json({ error: 'MR not found' }, { status: 404 })
+      return NextResponse.json({ error: '이 작업의 MR을 찾지 못했습니다. Git에서 MR이 삭제되었는지 확인해 주세요.' }, { status: 404 })
     }
 
     // 이미 머지된 상태라면 그냥 성공으로 응답 (사용자가 Git 에서 직접 머지한 경우 대응)
@@ -154,10 +154,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: friendlyGitError(err, 'MR 조회') }, { status: 400 })
     }
     if (!mr) {
-      return NextResponse.json({ error: 'MR not found' }, { status: 404 })
+      return NextResponse.json({ error: '이 작업의 MR을 찾지 못했습니다. Git에서 MR이 삭제되었는지 확인해 주세요.' }, { status: 404 })
     }
     if (mr.state !== 'opened') {
-      return NextResponse.json({ error: 'MR is not open' }, { status: 400 })
+      return NextResponse.json({ error: '이미 머지되었거나 닫힌 MR이라 닫을 수 없습니다. 새로고침해 주세요.' }, { status: 400 })
     }
 
     try {
@@ -179,5 +179,5 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
   }
 
-  return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
+  return NextResponse.json({ error: '요청이 올바르지 않습니다. 새로고침한 뒤 다시 시도해 주세요.' }, { status: 400 })
 }

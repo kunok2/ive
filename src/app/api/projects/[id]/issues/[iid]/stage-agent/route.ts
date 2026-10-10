@@ -41,11 +41,11 @@ export async function POST(
   const { id: projectId, iid: iidStr } = await params
   const iid = Number(iidStr)
   const project = getProject(projectId)
-  if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
-  if (!getProjectAccess(projectId, user.id)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!project) return NextResponse.json({ error: '프로젝트를 찾을 수 없습니다. 삭제되었을 수 있습니다 — 새로고침해 주세요.' }, { status: 404 })
+  if (!getProjectAccess(projectId, user.id)) return NextResponse.json({ error: '이 프로젝트에서 이 작업을 할 권한이 없습니다. 프로젝트 소유자에게 권한을 요청해 주세요.' }, { status: 403 })
 
   const body = await req.json().catch(() => ({}))
-  if (body?.agentId != null && typeof body.agentId !== 'string') return NextResponse.json({ error: 'agentId 가 올바르지 않습니다.' }, { status: 400 })
+  if (body?.agentId != null && typeof body.agentId !== 'string') return NextResponse.json({ error: '요청이 올바르지 않습니다. 새로고침한 뒤 에이전트를 다시 골라 주세요.' }, { status: 400 })
   const pickedAgentId: string | null = body?.agentId || null
   if (getAssignMode(projectId, iid).mode === 'assignee') {
     return NextResponse.json({ error: '작업자가 사람(담당자)으로 지정된 작업은 에이전트에게 맡길 수 없습니다.' }, { status: 409 })
@@ -83,7 +83,7 @@ export async function POST(
     const stage = stageFromLabels(issue.labels || [], project, { hasActiveExec: hasActive }) ?? 'none'
     const kind = handOffKind(stage)
     if (!kind) {
-      return NextResponse.json({ error: `검증대기·검증 중·확인대기·확인 중인 작업만 에이전트에게 맡길 수 있습니다. (현재: ${stage}) 화면을 새로고침해 주세요.`, actualStage: stage }, { status: 409 })
+      return NextResponse.json({ error: '검증대기·검증 중·확인대기·확인 중인 작업만 에이전트에게 맡길 수 있습니다. 이 작업은 지금 그 단계가 아닙니다 — 새로고침한 뒤 단계를 확인해 주세요.', actualStage: stage }, { status: 409 })
     }
     const label = kind === 'verify' ? '검증' : '확인'
     if (!agentRoleAvailable(kind)) return NextResponse.json({ error: `${label} 에이전트 작업자를 쓸 수 없습니다` }, { status: 400 })

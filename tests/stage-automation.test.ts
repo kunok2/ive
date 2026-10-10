@@ -124,7 +124,7 @@ describe('이슈별 배정', () => {
     const out = autoAssignAllAgents(P, 10)
     expect(out.processor).toBe('a1')
     expect(out.verifier).toBeNull()
-    expect(out.warnings.join(' ')).toMatch(/처리자와 같은 것뿐/)
+    expect(out.warnings.join(' ')).toMatch(/처리자와 같은 에이전트뿐/)
     expect(getPresetRoles(P, 10).verifier.mode).toBe('creator')
   })
 

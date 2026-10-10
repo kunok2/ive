@@ -115,7 +115,7 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
   const goBack = () => { if (embedded) onClose?.(); else router.back() }
   // 넓은 화면 작업 탭의 옆 칸이면 칸 전체 폭을 쓰고 ← 를 그리지 않는다(목록이 바로 옆에 있다)
   const widthCls = embedded ? 'max-w-none' : 'max-w-lg desk:max-w-3xl'
-  const { confirm } = useDialog()
+  const { confirm, choose } = useDialog()
   const { toast } = useToast()
   const { state } = useStore()
   const tc = useTranslations('common')
@@ -710,6 +710,18 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
     if (!issue || postingRef.current) return
     const next = NEXT_STAGE[issue.stage]
     if (!next) return
+    // 검증대기·확인대기에서 코멘트와 함께 누르면 — 시작만 할지, 검증(확인)을 마친 것으로 보고 끝까지 넘길지 고르게 한다(버튼을 두 번 누르지 않게)
+    const finish = issue.stage === 'verify_waiting' ? { mid: 'verifying', action: 'approve', kind: 'verify' as const }
+      : issue.stage === 'confirm_waiting' ? { mid: 'confirming', action: 'accept', kind: 'confirm' as const } : null
+    if (finish && comment.trim()) {
+      const picked = await choose({
+        title: tIssue(`startOrFinish.${finish.kind}.title`), message: tIssue(`startOrFinish.${finish.kind}.message`),
+        altText: next.label, confirmText: NEXT_STAGE[finish.mid].label, cancelText: tc('cancel'),
+      })
+      if (!picked) return
+      if (picked === 'confirm') { await startAndFinish(next, finish); return }
+    }
+    if (postingRef.current) return
     postingRef.current = true; setPosting(true); setPostingType('next')
     try {
       const noteBody = comment.trim() ? stageTransitionPrefix(issue.stage, next.action) + comment.trim() : null
@@ -735,6 +747,44 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
       if (next.stage === 'verifying' && next.action === 'approve') { await runApproveWithMRCheck(doNextStage) }
       else { await doNextStage() }
     } finally { postingRef.current = false; setPosting(false); setPostingType(null) }
+  }
+
+  // 시작과 완료를 이어서 — 검증대기 → (검증 중) → 확인대기, 확인대기 → (확인 중) → 완료. 단계 기록은 두 번 누른 것과 같게 남는다
+  async function startAndFinish(start: { stage: string; action: string }, finish: { mid: string; action: string; kind: 'verify' | 'confirm' }) {
+    if (postingRef.current) return
+    postingRef.current = true; setPosting(true); setPostingType('next')
+    try {
+      if (!(await precheckStage(start.stage, start.action))) return
+      const postStage = async (stage: string, action: string) => {
+        const res = await fetch(`/api/projects/${projectId}/issues/${iid}/stage`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stage, action }),
+        })
+        if (res.ok) return true
+        const errorData = await res.json().catch(() => null)
+        toast(errorData?.error || `Error: ${res.status} ${res.statusText}`, 'error')
+        return false
+      }
+      const noteBody = stageTransitionPrefix(finish.mid, finish.action) + comment.trim()
+      // 열린 MR 확인 창에서 취소하면 시작도 하지 않는다(단계·코멘트 그대로)
+      const run = async () => {
+        if (!(await postStage(start.stage, start.action))) return
+        const res = await fetch(`/api/projects/${projectId}/issues/${iid}/notes`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ body: noteBody }),
+        })
+        // 코멘트가 실패하면 시작한 단계(검증 중·확인 중)에 머문다 — 입력한 글은 남아 있어 그 단계의 완료 버튼으로 다시 넘길 수 있다
+        if (!res.ok) { const data = await res.json().catch(() => ({})); toast(data.error || tIssue('commentPostFailed'), 'error'); await refreshAll(); return }
+        setComment(''); localStorage.removeItem(commentKey)
+        pendingScrollToBottomRef.current = true
+        if (!(await postStage(finish.mid, finish.action))) { await refreshAll(); return }
+        await refreshAll()
+        toast(finish.kind === 'confirm' ? tIssue('confirmDone') : tIssue('approveDone'), 'success')
+      }
+      if (finish.kind === 'verify') await runApproveWithMRCheck(run)
+      else await run()
+    } catch (err: any) { toast(err.message || tc('networkError'), 'error') }
+    finally { postingRef.current = false; setPosting(false); setPostingType(null) }
   }
 
   // ===================== Edit handlers =====================
@@ -1023,7 +1073,7 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
     return isCreator
   }
 
-  // 검증·확인을 에이전트에게 맡기기 — 하단 「에이전트 호출」 버튼(검증대기·검증 중·확인대기·확인 중, 에이전트가 이 작업을 하고 있지 않을 때).
+  // 검증·확인을 에이전트에게 맡기기 — 하단 「자동 검증」·「자동 확인」 버튼(검증대기·검증 중·확인대기·확인 중, 에이전트가 이 작업을 하고 있지 않을 때).
   // 작업자가 사람(담당자가 직접)으로 선택된 작업에는 내놓지 않는다.
   const handOffKind: 'verify' | 'confirm' | null = !issue || issue.agentWork || preferredAgent?.assignMode === 'assignee' ? null
     : issue.stage === 'verify_waiting' || issue.stage === 'verifying' ? 'verify'

@@ -31,7 +31,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   if (newBotToken) {
     const auth = await slackAuthTest(newBotToken)
     if (!auth.ok || !auth.teamId || !auth.botUserId) {
-      return NextResponse.json({ error: `Slack 토큰 검증 실패: ${auth.error || 'auth_test_failed'}` }, { status: 400 })
+      return NextResponse.json({ error: `Slack에서 Bot Token을 확인하지 못했습니다 (${auth.error || 'auth_test_failed'}). 토큰을 다시 복사해 넣어 주세요.` }, { status: 400 })
     }
     // 다른 워크스페이스가 같은 team_id를 이미 쓰고 있으면 충돌
     const dup = getSlackWorkspaceByTeamId(auth.teamId)

@@ -312,7 +312,7 @@ export default function UsersPanel() {
                 <div className="text-xs text-ive-text-dim">{new Date(u.createdAt).toLocaleDateString('ko-KR')} {t('joined')}</div>
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs mt-0.5 text-ive-text-muted min-w-0">
                   <span className="inline-flex items-center">
-                    <i className="fa-solid fa-robot mr-0.5" />{u.maxAgents || '∞'}
+                    <i className="fa-solid fa-bolt mr-0.5" />{u.maxAgents || '∞'}
                   </span>
                   <span className="inline-flex items-center">
                     <i className="fa-solid fa-repeat mr-0.5" />{u.maxTurns || '∞'}
@@ -358,7 +358,7 @@ export default function UsersPanel() {
               <div className="mt-3 pt-3 border-t border-ive-border-dark space-y-3 animate-in fade-in slide-in-from-top-1">
                 <div className="flex items-center gap-3">
                   <label className="text-xs font-bold text-ive-text-muted w-24 shrink-0">
-                    <i className="fa-solid fa-robot mr-1" />{t('maxDevelopers')}
+                    <i className="fa-solid fa-bolt mr-1" />{t('maxDevelopers')}
                   </label>
                   <div className="flex items-center gap-1.5 flex-1">
                     <div className="flex bg-ive-bg-input border border-ive-border rounded-lg overflow-hidden">

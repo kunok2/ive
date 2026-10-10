@@ -164,7 +164,7 @@ export default function AgentsTab({ onAdd }: { onAdd?: () => void }) {
               <ProjectFilter options={projectOptions} selected={activeIds} onChange={changeProjects} tr={trFilter} />
               <SegmentTabs<FilterKey> dataTour="agents-filter" value={filter} onChange={changeFilter} items={[
                 { key: 'all', label: t('filterAll'), count: allCount },
-                { key: 'process', icon: 'fa-robot', label: ta('role_process'), count: processCount, badge: processBacklog },
+                { key: 'process', icon: 'fa-bolt', label: ta('role_process'), count: processCount, badge: processBacklog },
                 { key: 'verify', icon: 'fa-user-check', label: ta('role_verify'), count: verifyCount, badge: verifyBacklog },
                 { key: 'confirm', icon: 'fa-circle-check', label: ta('role_confirm'), count: confirmCount, badge: confirmBacklog },
               ]} />
@@ -265,7 +265,7 @@ export default function AgentsTab({ onAdd }: { onAdd?: () => void }) {
                   )}
                   {filter === 'process' && processCount === 0 && (
                     <div className="desk:col-span-full text-center py-8 text-sm font-bold text-ive-text-dim">
-                      <i className="fa-solid fa-robot text-2xl text-ive-text-dim mb-2 block" />
+                      <i className="fa-solid fa-bolt text-2xl text-ive-text-dim mb-2 block" />
                       {t('noAgents')}
                     </div>
                   )}

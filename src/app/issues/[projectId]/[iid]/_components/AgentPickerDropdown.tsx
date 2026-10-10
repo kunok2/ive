@@ -43,22 +43,22 @@ export default function AgentPickerDropdown({
   }, [open])
 
   return (
-    <div ref={ref} className="relative flex items-center ml-auto">
+    <div ref={ref} className="relative flex items-center ml-auto min-w-0">
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
-        className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg border border-dashed border-ive-border-subtle hover:border-ive-green/30 transition-all"
+        className="min-w-0 flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg border border-dashed border-ive-border-subtle hover:border-ive-green/30 transition-all"
       >
         <i className="fa-solid fa-user-gear text-ive-green" />
         {preferredAgent?.assignMode === 'assignee' ? (
-          <span className="font-bold text-ive-cyan"><i className="fa-solid fa-user mr-0.5" />{tIssue('assigneeHandles')}</span>
+          <span className="truncate font-bold text-ive-cyan"><i className="fa-solid fa-user mr-0.5" />{tIssue('assigneeHandles')}</span>
         ) : preferredAgent?.preferredAgentId ? (
           <>
             <AgentAvatar avatar={preferredAgent.preferredAgentAvatar || ''} size="xs" />
-            <span className="font-bold text-ive-text">{preferredAgent.preferredAgentName}</span>
+            <span className="truncate font-bold text-ive-text">{preferredAgent.preferredAgentName}</span>
           </>
         ) : (
-          <span className="text-ive-text-muted font-bold">{tIssue('noPreference')}</span>
+          <span className="truncate text-ive-text-muted font-bold">{tIssue('noPreference')}</span>
         )}
         <i className="fa-solid fa-chevron-down text-[10px] text-ive-text-dim ml-0.5" />
       </button>

@@ -32,8 +32,8 @@ export function resolveStagingConfig(project: Project, s?: StagingSettings): Con
   const url = (st.url || project.testSiteUrl || '').trim()
   const versionUrl = (st.versionUrl || '').trim()
   const versionSource = st.versionSource === 'pipeline' ? 'pipeline' : 'url'
-  if (!url) return { ok: false, reason: 'staging 주소가 설정되지 않았습니다(프로젝트 화면 → 역할·단계 자동화 → 자동화)' }
-  if (versionSource === 'url' && !versionUrl) return { ok: false, reason: '배포 커밋 확인 주소가 설정되지 않았습니다(프로젝트 화면 → 역할·단계 자동화 → 자동화)' }
+  if (!url) return { ok: false, reason: '확인할 사이트 주소가 없어 자동 확인을 시작하지 못했습니다 — 프로젝트 화면 → 역할·단계 자동화 → 자동화의 「확인할 사이트 주소」에 넣어 주세요' }
+  if (versionSource === 'url' && !versionUrl) return { ok: false, reason: '수정이 배포됐는지 알 방법이 설정되지 않아 자동 확인을 시작하지 못했습니다 — 프로젝트 화면 → 역할·단계 자동화 → 자동화의 「수정이 배포됐는지 아는 방법」을 「CI 파이프라인 성공」으로 바꾸거나 「배포된 커밋을 알려 주는 주소」를 넣어 주세요' }
   return {
     ok: true,
     value: {
@@ -69,10 +69,10 @@ export async function fetchDeployedCommit(cfg: StagingConfig, project?: Project,
       const branch = cfg.branch || await resolveStagingBranch(project, token)
       const pipelines = (await fetchBranchPipelines(project, token, branch)) as any[]
       const ok = (pipelines || []).find(p => p?.status === 'success' && p?.sha)
-      if (!ok) return { ok: false, reason: `${branch} 브랜치에 성공한 파이프라인이 아직 없습니다` }
+      if (!ok) return { ok: false, reason: `${branch} 브랜치에 성공한 파이프라인이 아직 없습니다(배포가 한 번도 끝나지 않았습니다)` }
       return { ok: true, value: String(ok.sha) }
     } catch (e) {
-      return { ok: false, reason: `파이프라인 조회 실패: ${(e as Error).message}` }
+      return { ok: false, reason: `배포 파이프라인을 조회하지 못했습니다: ${(e as Error).message}` }
     }
   }
   try {
@@ -80,12 +80,12 @@ export async function fetchDeployedCommit(cfg: StagingConfig, project?: Project,
     const u = new URL(cfg.versionUrl)
     u.searchParams.set('t', String(Date.now()))
     const res = await fetch(u, { signal: AbortSignal.timeout(10_000), cache: 'no-store' })
-    if (!res.ok) return { ok: false, reason: `버전 주소 응답 ${res.status}` }
+    if (!res.ok) return { ok: false, reason: `「배포된 커밋을 알려 주는 주소」가 ${res.status} 로 응답했습니다` }
     const data = await res.json()
     const sha = String(pickField(data, cfg.commitField) || '').trim()
-    if (!/^[0-9a-f]{7,40}$/i.test(sha)) return { ok: false, reason: `버전 응답에 커밋(${cfg.commitField})이 없습니다` }
+    if (!/^[0-9a-f]{7,40}$/i.test(sha)) return { ok: false, reason: `「배포된 커밋을 알려 주는 주소」의 응답에 커밋 해시(「${cfg.commitField}」 항목)가 없습니다` }
     return { ok: true, value: sha }
   } catch (e) {
-    return { ok: false, reason: `버전 주소 접속 실패: ${(e as Error).message}` }
+    return { ok: false, reason: `「배포된 커밋을 알려 주는 주소」에 접속하지 못했습니다: ${(e as Error).message}` }
   }
 }

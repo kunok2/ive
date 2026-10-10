@@ -88,7 +88,7 @@ describe('확인 작업자 기동 판정', () => {
     await dispatchStageWorkers(project, [{ issue: issue(iid), stage: 'confirm_waiting' }], 'tok')
     expect(workerMock.runConfirmWorker).not.toHaveBeenCalled()
     expect(providerMock.readRepoFile).not.toHaveBeenCalled()
-    expect(getStageWorkerNote(P, iid)).toMatch(/staging 주소가 설정되지 않았습니다/)
+    expect(getStageWorkerNote(P, iid)).toMatch(/확인할 사이트 주소가 없어/)
   })
 
   it('D-3 MR 이 머지 전이면 기다린다', async () => {
@@ -97,7 +97,7 @@ describe('확인 작업자 기동 판정', () => {
     providerMock.fetchMRByBranch.mockResolvedValue({ state: 'opened', merge_commit_sha: null })
     await dispatchStageWorkers(project, [{ issue: issue(iid), stage: 'confirm_waiting' }], 'tok')
     expect(workerMock.runConfirmWorker).not.toHaveBeenCalled()
-    expect(getStageWorkerNote(P, iid)).toMatch(/머지되지 않음/)
+    expect(getStageWorkerNote(P, iid)).toMatch(/머지되지 않았습니다/)
   })
 
   it('D-4 배포 커밋에 머지 커밋이 없으면 기다린다', async () => {
@@ -107,7 +107,7 @@ describe('확인 작업자 기동 판정', () => {
     await dispatchStageWorkers(project, [{ issue: issue(iid), stage: 'confirm_waiting' }], 'tok')
     expect(workerMock.runConfirmWorker).not.toHaveBeenCalled()
     expect(providerMock.isAncestorCommit).toHaveBeenCalledWith(project, 'tok', 'aaaaaaa1', 'bbbbbbb2')
-    expect(getStageWorkerNote(P, iid)).toMatch(/staging 배포 대기/)
+    expect(getStageWorkerNote(P, iid)).toMatch(/수정이 아직 배포되지 않았습니다/)
   })
 
   it('D-5 모두 갖춰지면 기동 — IVE 설정의 staging 값과 비밀값을 넘긴다', async () => {
@@ -151,7 +151,7 @@ describe('확인 작업자 기동 판정', () => {
     db.prepare(`UPDATE task_executions SET status = 'failed' WHERE id = ?`).run(id)
     await dispatchStageWorkers(project, [{ issue: issue(iid), stage: 'confirm_waiting' }], 'tok')
     expect(workerMock.runConfirmWorker).not.toHaveBeenCalled()
-    expect(getStageWorkerNote(P, iid)).toMatch(/자동 확인 실패 1회/)
+    expect(getStageWorkerNote(P, iid)).toMatch(/자동 확인을 1번 했지만 통과하지 못해/)
   })
 
   it('D-8 허용 목록 밖 작성자는 승인 전에는 기동하지 않는다', async () => {
@@ -159,7 +159,7 @@ describe('확인 작업자 기동 판정', () => {
     agentConfirmer(iid); configure()
     await dispatchStageWorkers(project, [{ issue: issue(iid, 'support-bot'), stage: 'confirm_waiting' }], 'tok')
     expect(workerMock.runConfirmWorker).not.toHaveBeenCalled()
-    expect(getStageWorkerNote(P, iid)).toMatch(/허용 목록 밖/)
+    expect(getStageWorkerNote(P, iid)).toMatch(/자동 실행 허용 목록에 없어/)
     approveIssueAutomation(P, iid, 'owner')
     // 같은 이슈의 외부 확인은 1분에 한 번 — 승인 직후 바로 다시 판정되도록 다른 iid 로 확인하지 않고 시간 제한을 넘긴다
     vi.useFakeTimers({ now: Date.now() + 120_000, toFake: ['Date'] })
@@ -195,7 +195,7 @@ describe('확인 작업자 기동 판정', () => {
     db.prepare(`INSERT INTO issue_stages (project_id, issue_iid, stage, preset_confirmer_mode, preset_confirmer_agent_id) VALUES (?, ?, '', 'agent', 'a2')`).run(P, iid)
     await dispatchStageWorkers(project, [{ issue: issue(iid), stage: 'confirm_waiting' }], 'tok')
     expect(workerMock.runConfirmWorker).not.toHaveBeenCalled()
-    expect(getStageWorkerNote(P, iid)).toMatch(/명부에 없습니다/)
+    expect(getStageWorkerNote(P, iid)).toMatch(/역할 명부에 없어/)
   })
 
   it('D-10 공유 해제·viewer 하향 시 그 사람의 에이전트는 명부에서 빠지고 배정은 사람으로', async () => {
@@ -278,15 +278,15 @@ describe('H 에이전트에게 확인 맡기기 (화면)', () => {
     configure()
     providerMock.isAncestorCommit.mockResolvedValue(false)
     const notDeployed = await checkStageHandOff(project, issue(iid), 'confirm_waiting', 'a1', 'tok')
-    expect(notDeployed).toEqual({ ok: false, reason: expect.stringMatching(/staging 배포 대기/) })
+    expect(notDeployed).toEqual({ ok: false, reason: expect.stringMatching(/수정이 아직 배포되지 않았습니다/) })
     providerMock.isAncestorCommit.mockResolvedValue(true)
 
     const outsider = await checkStageHandOff(project, issue(iid, 'outsider'), 'confirm_waiting', 'a1', 'tok')
-    expect(outsider).toEqual({ ok: false, reason: expect.stringMatching(/자동 실행 승인 필요/) })
+    expect(outsider).toEqual({ ok: false, reason: expect.stringMatching(/자동 실행 허용 목록에 없어/) })
 
     db.prepare(`INSERT INTO agents (id, user_id, name, cli_name, cli_path) VALUES ('a2', 'owner', 'Beta', 'claude', 'claude')`).run()
     const offRoster = await checkStageHandOff(project, issue(iid), 'confirm_waiting', 'a2', 'tok')
-    expect(offRoster).toEqual({ ok: false, reason: expect.stringMatching(/명부에 없습니다/) })
+    expect(offRoster).toEqual({ ok: false, reason: expect.stringMatching(/역할 명부에 없어/) })
 
     expect(workerMock.runConfirmWorker).not.toHaveBeenCalled()
     expect(getPresetRoles(P, iid).confirmer.mode).not.toBe('agent')
@@ -323,16 +323,16 @@ describe('H 에이전트에게 검증 맡기기 (화면)', () => {
     verifier('a1')
     db.prepare(`INSERT INTO task_executions (id, project_id, agent_id, issue_iid, status, started_at) VALUES (?, ?, 'a1', ?, 'success', '2026-10-01T00:00:00Z')`).run(`ex-proc-${iid}`, P, iid)
     const self = await checkStageHandOff(project, issue(iid), 'verify_waiting', 'a1', 'tok')
-    expect(self).toEqual({ ok: false, reason: expect.stringMatching(/처리한 에이전트와 같습니다/) })
+    expect(self).toEqual({ ok: false, reason: expect.stringMatching(/처리한 에이전트가 검증자로 지정되어/) })
 
     db.prepare(`INSERT INTO agents (id, user_id, name, cli_name, cli_path) VALUES ('a2', 'owner', 'Beta', 'claude', 'claude')`).run()
     const offRoster = await checkStageHandOff(project, issue(iid), 'verify_waiting', 'a2', 'tok')
-    expect(offRoster).toEqual({ ok: false, reason: expect.stringMatching(/검증 에이전트 'Beta' .*명부에 없습니다/) })
+    expect(offRoster).toEqual({ ok: false, reason: expect.stringMatching(/에이전트 'Beta'.*역할 명부에 없어/) })
 
     verifier('a2')
     providerMock.fetchMRByBranch.mockResolvedValue({ state: 'closed' })
     const closed = await checkStageHandOff(project, issue(iid), 'verify_waiting', 'a2', 'tok')
-    expect(closed).toEqual({ ok: false, reason: expect.stringMatching(/MR 이 닫혀 있습니다/) })
+    expect(closed).toEqual({ ok: false, reason: expect.stringMatching(/닫혀 있어 자동 검증을 할 수 없습니다/) })
 
     expect(verifyWorkerMock.runVerifyWorker).not.toHaveBeenCalled()
     expect(getStageWorkerNote(P, iid)).toBeNull()
@@ -342,7 +342,7 @@ describe('H 에이전트에게 검증 맡기기 (화면)', () => {
     const iid = iidSeq
     providerMock.fetchMRByBranch.mockResolvedValue({ state: 'opened', iid: 7, web_url: 'https://gitlab.com/g/r/-/merge_requests/7' })
     const none = await checkStageHandOff(project, issue(iid), 'verify_waiting', null, 'tok')
-    expect(none).toEqual({ ok: false, reason: expect.stringMatching(/명부에 검증 역할 에이전트가 없습니다/) })
+    expect(none).toEqual({ ok: false, reason: expect.stringMatching(/검증을 맡을 에이전트가 정해져 있지 않습니다/) })
 
     for (const [id, name] of [['a2', 'Beta'], ['a3', 'Gamma']]) {
       db.prepare(`INSERT INTO agents (id, user_id, name, cli_name, cli_path) VALUES (?, 'owner', ?, 'claude', 'claude')`).run(id, name)
@@ -378,7 +378,7 @@ describe('H 에이전트에게 검증 맡기기 (화면)', () => {
     db.prepare(`INSERT INTO users (id, email, password, name) VALUES ('stranger', 's@x', '', 'Stranger')`).run()
     db.prepare(`INSERT INTO agents (id, user_id, name, cli_name, cli_path) VALUES ('a9', 'stranger', 'Outsider', 'claude', 'claude')`).run()
 
-    expect(await checkStageHandOff(project, issue(iid), 'verify_waiting', 'a2', 'tok')).toEqual({ ok: false, reason: expect.stringMatching(/명부에 없습니다/) })
+    expect(await checkStageHandOff(project, issue(iid), 'verify_waiting', 'a2', 'tok')).toEqual({ ok: false, reason: expect.stringMatching(/역할 명부에 없어/) })
     setAssignMode(P, iid, 'agent', 'a2')
     const r = await checkStageHandOff(project, issue(iid), 'verify_waiting', 'a2', 'tok')
     expect(r.ok && r.agent.id).toBe('a2')
@@ -388,6 +388,6 @@ describe('H 에이전트에게 검증 맡기기 (화면)', () => {
 
     // 소유자가 프로젝트 소유자·editor 가 아닌 에이전트는 골라 두어도 맡기지 않는다
     setAssignMode(P, iid, 'agent', 'a9')
-    expect(await checkStageHandOff(project, issue(iid), 'verify_waiting', 'a9', 'tok')).toEqual({ ok: false, reason: expect.stringMatching(/명부에 없습니다/) })
+    expect(await checkStageHandOff(project, issue(iid), 'verify_waiting', 'a9', 'tok')).toEqual({ ok: false, reason: expect.stringMatching(/역할 명부에 없어/) })
   })
 })

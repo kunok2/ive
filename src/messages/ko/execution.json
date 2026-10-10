@@ -35,11 +35,11 @@
   "fullscreen": "전체화면",
   "endChatAction": "채팅 종료",
   "loadingHistory": "실행 이력 로딩 중...",
-  "noTasksYet": "아직 실행된 태스크가 없습니다",
+  "noTasksYet": "아직 에이전트가 실행한 작업이 없습니다",
   "agentLog": "에이전트 실행 로그",
   "backToList": "목록으로",
   "connected": "연결됨",
   "terminated": "종료됨",
-  "executionTrace": "Execution Trace",
-  "lines": "{count} lines"
+  "executionTrace": "실행 트레이스",
+  "lines": "{count}줄"
 }

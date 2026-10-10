@@ -60,7 +60,7 @@ export async function applyRoleAssignee(
   if (preset.mode === 'agent') {
     try {
       const agent = preset.agentId ? getAgent(preset.agentId) : null
-      const note = `<!-- ive-bot -->\n## 🤖 ${roleLabel} 배정\n\n에이전트 **${agent?.name || preset.agentId || '-'}** 이(가) ${roleLabel}로 지정되어 있어 이 단계를 맡습니다.${roleLabel === '확인자' ? ' staging 에 배포된 것이 확인되면 자동으로 시작합니다.' : ''}`
+      const note = `<!-- ive-bot -->\n## 🤖 ${roleLabel} 배정\n\n에이전트 **${agent?.name || preset.agentId || '-'}** 이(가) ${roleLabel}로 지정되어 있어 이 단계를 맡습니다.${roleLabel === '확인자' ? ' 수정이 확인할 사이트에 배포된 것이 확인되면 자동으로 시작합니다.' : ''}`
       await addIssueComment(project, iid, token, note)
     } catch (e) { console.warn(`[RoleAssignee] agent note failed for #${iid}:`, e) }
     return { success: true, mode: 'agent', username: null, userId: null }
@@ -84,7 +84,7 @@ export async function applyRoleAssignee(
       })
       // 안내 코멘트
       try {
-        const note = `<!-- ive-bot -->\n## 🎯 ${roleLabel} 배정\n\n@${preset.username || preset.userId} 님이 ${roleLabel}로 지정되어 있어 단계 전이와 함께 담당자로 배정되었습니다.`
+        const note = `<!-- ive-bot -->\n## 🎯 ${roleLabel} 배정\n\n@${preset.username || preset.userId} 님이 ${roleLabel}로 지정되어 있어, 단계가 넘어오면서 담당자로 배정했습니다.`
         await addIssueComment(project, iid, token, note)
       } catch (e) { console.warn(`[RoleAssignee] note add failed for #${iid}:`, e) }
       return { success: true, mode: 'specific', username: preset.username, userId: preset.userId }

@@ -1,6 +1,6 @@
 {
-  "monitoringTimeout": "파이프라인 모니터링 시간 초과 — !{mrIid}",
-  "deploySuccess": "파이프라인 완료 — {label} 배포 성공",
-  "deployFailed": "파이프라인 실패 — {label} 확인 필요",
-  "deployCancelled": "파이프라인 취소됨 — {label}"
+  "monitoringTimeout": "MR !{mrIid}의 파이프라인이 끝나기를 기다리다 시간이 초과되어 확인을 멈췄습니다 — Git에서 직접 확인해 주세요",
+  "deploySuccess": "{label} 파이프라인이 끝나 배포되었습니다",
+  "deployFailed": "{label} 파이프라인이 실패했습니다 — Git의 파이프라인 로그를 확인해 주세요",
+  "deployCancelled": "{label} 파이프라인이 취소되었습니다"
 }

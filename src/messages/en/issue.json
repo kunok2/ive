@@ -72,6 +72,20 @@
   "done": "Done",
   "rerun": "Step back",
   "reprocess": "Reprocess",
+  "startOrFinish": {
+    "verify": {
+      "title": "How far should verification go?",
+      "message": "\"Start verify\" moves the task to Verifying.\n\"Verified\" treats verification as finished and moves it straight to Confirm Wait.\nYour comment is posted either way."
+    },
+    "confirm": {
+      "title": "How far should confirmation go?",
+      "message": "\"Start confirm\" moves the task to Confirming.\n\"Confirmed\" treats confirmation as finished and marks the task done.\nYour comment is posted either way."
+    }
+  },
+  "backTo": {
+    "verify_waiting": "Re-verify",
+    "confirm_waiting": "Re-confirm"
+  },
   "run": "Run",
   "viewDescription": "View Description",
   "iterationCount": "{count} iterations completed",
@@ -207,9 +221,12 @@
       "done": "Handed the confirmation to {agent}"
     }
   },
-  "callAgent": "Call agent",
-  "callAgentTo": "Call agent — hand to {agent}",
-  "callAgentAuto": "Call agent — auto-assign to an available agent",
+  "autoWork": {
+    "verify": "Auto-verify",
+    "confirm": "Auto-confirm"
+  },
+  "autoWorkTo": "{work} — hand to {agent}",
+  "autoWorkAuto": "{work} — auto-assign to an available agent",
   "handOffButton": "Hand to agent",
   "agentWorking": "{agent} is {work} this — you can move the stage once it finishes",
   "agentWorkingUnknown": "An agent",
@@ -225,10 +242,10 @@
     "none": "Process",
     "waiting": "Start dev",
     "dev": "Ready to verify",
-    "verify_waiting": "Start verification",
-    "verifying": "Approve",
-    "confirm_waiting": "Start confirmation",
-    "confirming": "Done"
+    "verify_waiting": "Start verify",
+    "verifying": "Verified",
+    "confirm_waiting": "Start confirm",
+    "confirming": "Confirmed"
   },
   "commentPostFailed": "Failed to post the comment",
   "stageChanged": "Updated",

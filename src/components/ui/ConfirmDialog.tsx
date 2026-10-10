@@ -11,6 +11,8 @@ interface DialogOptions {
   message: string | ReactNode
   confirmText?: string
   cancelText?: string
+  /** 두 번째 선택지 — choose() 에서만. 취소와 확인 사이에 놓인다 */
+  altText?: string
   variant?: 'danger' | 'warning' | 'info'
 }
 
@@ -23,11 +25,14 @@ interface AlertOptions {
 interface DialogContext {
   confirm: (options: DialogOptions) => Promise<boolean>
   alert: (options: AlertOptions) => Promise<void>
+  /** 둘 중 하나를 고르게 한다 — confirmText 를 고르면 'confirm', altText 를 고르면 'alt', 취소·바깥·Esc 는 null. Enter 로는 고르지 않는다(잘못 고르지 않게) */
+  choose: (options: DialogOptions & { altText: string }) => Promise<'confirm' | 'alt' | null>
 }
 
 const DialogCtx = createContext<DialogContext>({
   confirm: async () => false,
   alert: async () => {},
+  choose: async () => null,
 })
 
 export function useDialog() {
@@ -41,6 +46,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     options: DialogOptions | AlertOptions
     resolve: (value: any) => void
     anchor: Anchor | null
+    choose?: boolean
   } | null>(null)
 
   // 마지막 포인터(클릭) 위치 추적 — 팝업을 누른 버튼 근처에 띄우기 위함.
@@ -71,14 +77,21 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
-  const handleClose = (result: boolean) => {
+  const choose = useCallback((options: DialogOptions & { altText: string }) => {
+    return new Promise<'confirm' | 'alt' | null>((resolve) => {
+      setDialog({ type: 'confirm', options, resolve, anchor: grabAnchor(), choose: true })
+    })
+  }, [])
+
+  const handleClose = (result: boolean | 'alt') => {
     if (!dialog) return
-    dialog.resolve(dialog.type === 'confirm' ? result : undefined)
+    if (dialog.choose) dialog.resolve(result === 'alt' ? 'alt' : result ? 'confirm' : null)
+    else dialog.resolve(dialog.type === 'confirm' ? result === true : undefined)
     setDialog(null)
   }
 
   return (
-    <DialogCtx.Provider value={{ confirm, alert }}>
+    <DialogCtx.Provider value={{ confirm, alert, choose }}>
       {children}
       {dialog && (
         <DialogOverlay
@@ -102,12 +115,13 @@ function DialogOverlay({
   type: 'confirm' | 'alert'
   options: DialogOptions | AlertOptions
   anchor: Anchor | null
-  onClose: (result: boolean) => void
+  onClose: (result: boolean | 'alt') => void
 }) {
   const backdropRef = useRef<HTMLDivElement>(null)
   const boxRef = useRef<HTMLDivElement>(null)
   const tDialog = useTranslations('dialog')
   const tCommon = useTranslations('common')
+  const hasAlt = type === 'confirm' && !!(options as DialogOptions).altText
 
   // 앵커가 있으면 클릭 지점 근처에 팝오버로 배치. 렌더 후 실제 크기를 재서 뷰포트 안으로 클램프.
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
@@ -131,11 +145,11 @@ function DialogOverlay({
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose(false)
-      if (e.key === 'Enter') onClose(type === 'alert' ? false : true)
+      if (e.key === 'Enter' && !hasAlt) onClose(type === 'alert' ? false : true)
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [onClose, type])
+  }, [onClose, type, hasAlt])
 
   const isConfirm = type === 'confirm'
   const opts = options as any
@@ -194,14 +208,22 @@ function DialogOverlay({
             <>
               <button
                 onClick={() => onClose(false)}
-                className="flex-1 py-2.5 rounded-lg text-sm font-bold bg-ive-bg-deep text-ive-text-dim border border-ive-border-subtle active:scale-[0.98] transition-all"
+                className={`${hasAlt ? 'shrink-0 px-3' : 'flex-1'} py-2.5 rounded-lg text-sm font-bold bg-ive-bg-deep text-ive-text-dim border border-ive-border-subtle active:scale-[0.98] transition-all`}
               >
                 {(opts as DialogOptions).cancelText || tCommon('cancel')}
               </button>
+              {hasAlt && (
+                <button
+                  onClick={() => onClose('alt')}
+                  className="flex-1 py-2.5 rounded-lg text-sm font-bold bg-ive-bg-deep text-ive-text border border-ive-border active:scale-[0.98] transition-all"
+                >
+                  {(opts as DialogOptions).altText}
+                </button>
+              )}
               <button
                 onClick={() => onClose(true)}
                 className={`flex-1 py-2.5 rounded-lg text-sm font-bold active:scale-[0.98] transition-all ${confirmBtnClass[variant] || confirmBtnClass.info}`}
-                autoFocus
+                autoFocus={!hasAlt}
               >
                 {(opts as DialogOptions).confirmText || tCommon('confirm')}
               </button>

@@ -50,12 +50,12 @@ export async function POST(req: Request) {
   if (body.useOAuthToken) {
     const raw = getUserOAuthTokenRaw(user.id)
     if (!raw || !raw.encrypted) {
-      return NextResponse.json({ error: '연결된 OAuth 토큰이 없습니다' }, { status: 400 })
+      return NextResponse.json({ error: 'GitLab/GitHub 계정이 연결되어 있지 않습니다. GitLab/GitHub 계정으로 다시 로그인해 주세요.' }, { status: 400 })
     }
     try {
       plainToken = decrypt(raw.encrypted)
     } catch {
-      return NextResponse.json({ error: 'OAuth 토큰 복호화 실패' }, { status: 500 })
+      return NextResponse.json({ error: '저장된 Git 계정 연결 정보를 읽지 못했습니다. 로그아웃한 뒤 GitLab/GitHub 계정으로 다시 로그인해 주세요.' }, { status: 500 })
     }
   }
 
