@@ -6,6 +6,9 @@
  * (카드 자체를 transform 으로 옮기면 칸의 overflow 에 잘린다 — 그래서 복제본을 body 에 띄운다.)
  *
  * 카드에는 data-fly(카드 식별자)·data-fly-col(칸)을 단다.
+ *
+ * 같은 일이 두 칸에 함께 보이는 동안(단계는 검증으로 넘어갔는데 처리 실행 기록이 아직 열려 있는 때 등)은 옮겨진 것이 아니다 —
+ * 그 카드는 날리지 않는다. 한 칸에만 있던 카드가 다른 한 칸에만 있게 됐을 때만 날린다.
  */
 export interface FlySpot { col: string; left: number; top: number; width: number; height: number }
 export type FlySpots = Map<string, FlySpot>
@@ -16,11 +19,16 @@ const DURATION_MS = 450
 export function measureFly(root: HTMLElement | null): FlySpots {
   const spots: FlySpots = new Map()
   if (!root) return spots
+  const twice = new Set<string>()
   root.querySelectorAll<HTMLElement>('[data-fly]').forEach(el => {
     const r = el.getBoundingClientRect()
     if (r.width === 0 || r.height === 0) return
-    spots.set(el.dataset.fly!, { col: el.dataset.flyCol || '', left: r.left, top: r.top, width: r.width, height: r.height })
+    const key = el.dataset.fly!
+    if (spots.has(key)) twice.add(key)
+    spots.set(key, { col: el.dataset.flyCol || '', left: r.left, top: r.top, width: r.width, height: r.height })
   })
+  // 두 칸에 함께 있던 카드는 「어디서 왔는지」가 없다
+  twice.forEach(key => spots.delete(key))
   return spots
 }
 
@@ -28,7 +36,12 @@ export function measureFly(root: HTMLElement | null): FlySpots {
 export function flyMoved(root: HTMLElement | null, before: FlySpots): void {
   if (!root || before.size === 0 || typeof window === 'undefined') return
   if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
-  root.querySelectorAll<HTMLElement>('[data-fly]').forEach(el => {
+  const cards = [...root.querySelectorAll<HTMLElement>('[data-fly]')]
+  const count = new Map<string, number>()
+  for (const el of cards) count.set(el.dataset.fly!, (count.get(el.dataset.fly!) ?? 0) + 1)
+  cards.forEach(el => {
+    // 지금 두 칸에 함께 보이는 카드는 옮겨진 것이 아니다
+    if ((count.get(el.dataset.fly!) ?? 0) > 1) return
     const from = before.get(el.dataset.fly!)
     if (!from || from.col === (el.dataset.flyCol || '')) return
     // 날아가는 중에 또 옮겨졌으면 앞선 복제본은 치운다
