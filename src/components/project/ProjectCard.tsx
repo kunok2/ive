@@ -827,7 +827,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
             <div className="space-y-2 p-3">
               {doneToday.map(d => (
                 <div
-                  key={d.iid}
+                  key={`${d.iid}-${d.at}`}
                   onClick={() => router.push(`/issues/${project.id}/${d.iid}`)}
                   className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-3 hover:border-ive-cyan/40 transition-all cursor-pointer active:scale-[0.98]"
                 >

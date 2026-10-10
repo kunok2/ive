@@ -175,11 +175,11 @@ export default function ProjectBoard({ project, onOpenTrace }: { project: Projec
       href: issueHref(e.issueIid), traceExecId: traceOf(e),
     })
   }
-  // 완료(오늘) — 카드의 「완료」 숫자와 같은 근거: 오늘 완료·반려로 바뀐 이슈(issue_stages).
+  // 완료(오늘) — 카드의 「완료」 숫자와 같은 근거: 오늘 끝낸 완료 사이클(보고서와 같은 판정)과 오늘 반려.
   // 실행 기록으로 세면 어제 시작한 일·사후 등록·최근 실행 목록 밖의 일이 빠진다(60건 처리에 「오늘 완료 1」).
   for (const d of doneToday) {
     cols.done.push({
-      key: `d-${d.iid}`, iid: d.iid, title: d.title, who: d.who?.name ?? null,
+      key: `d-${d.iid}-${d.at}`, iid: d.iid, title: d.title, who: d.who?.name ?? null,
       face: d.who ? { src: d.who.avatar || 'person', userId: d.who.userId, human: true } : null,
       startedAt: null, href: issueHref(d.iid),
     })

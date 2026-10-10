@@ -63,7 +63,9 @@ export function getCachedStage(projectId: string, issueIid: number): string | nu
 
 /**
  * 오늘(KST 자정 이후) 특정 cached_stage 로 전이된 이슈 수.
- * 프로젝트 카드의 "완료(done)"/"반려(rejected)" 카운트 집계에 사용.
+ * 프로젝트 카드의 "반려(rejected)" 카운트 집계에 사용.
+ * 완료(done)는 이것으로 세지 않는다 — updated_at 은 단계가 그대로여도 스냅샷을 다시 쓸 때마다 바뀌어
+ * 어제 끝난 일이 오늘로 넘어오고, 보고서(완료 사이클)와 숫자가 어긋난다(#563). 완료는 report-model 의 completedOnDays.
  *
  * ⚠️ datetime()로 양변을 정규화하는 것이 핵심이다. issue_stages.updated_at 은
  * datetime('now') 포맷('YYYY-MM-DD HH:MM:SS', 공백 구분)이고 todayStartISO 는
@@ -81,19 +83,9 @@ export function countTodayStageTransitions(projectId: string, stage: string, tod
 }
 
 /**
- * 구간 [startISO, endISO) 안에 특정 cached_stage 로 전이된 이슈 수 — 카드 「완료」 옆 전일 대비 증감의 어제 몫.
- * 오늘 몫(countTodayStageTransitions)과 같은 소스·같은 단위(이슈 수)로 세어야 둘을 뺄 수 있다.
- * 실행(task_executions) 수로 세면 한 이슈가 처리·확인 실행을 여러 번 거쳐 어제 15건 완료가 수십 건으로 불어난다(#563).
+ * 오늘 완료·반려된 이슈 목록 — 카드 「완료」 숫자와 같은 근거의 목록.
+ * 완료는 보고서와 같은 완료 사이클(report-model 의 completedOnDays)을 받아 그대로 싣고, 반려만 단계 기록에서 읽는다.
  */
-export function countStageTransitionsBetween(projectId: string, stage: string, startISO: string, endISO: string): number {
-  const r = getDb().prepare(`
-    SELECT COUNT(*) as count FROM issue_stages
-    WHERE project_id = ? AND cached_stage = ? AND datetime(updated_at) >= datetime(?) AND datetime(updated_at) < datetime(?)
-  `).get(projectId, stage, startISO, endISO) as any
-  return r?.count ?? 0
-}
-
-/** 오늘 완료·반려로 바뀐 이슈 — 카드 「완료」 숫자(countTodayStageTransitions)와 같은 조건의 목록 */
 export interface TodayDoneIssue {
   iid: number
   title: string
@@ -102,21 +94,27 @@ export interface TodayDoneIssue {
   /** 마지막에 맡은 사람 — 확인자 > 담당자 */
   who: { name: string; avatar: string | null; userId: string | null } | null
 }
-export function listTodayDoneIssues(projectId: string, todayStartISO: string): TodayDoneIssue[] {
-  const rows = getDb().prepare(`
-    SELECT issue_iid AS iid, issue_title AS title, cached_stage AS stage, updated_at AS at,
-           confirmer_name, confirmer_avatar, confirmer_user_id, assignee_name, assignee_avatar
-    FROM issue_stages
-    WHERE project_id = ? AND cached_stage IN ('done', 'rejected') AND datetime(updated_at) >= datetime(?)
-    ORDER BY datetime(updated_at) DESC
+export function listTodayDoneIssues(projectId: string, todayStartISO: string, done: { iid: number; at: string }[]): TodayDoneIssue[] {
+  const db = getDb()
+  const COLS = 'issue_iid AS iid, issue_title AS title, updated_at AS at, confirmer_name, confirmer_avatar, confirmer_user_id, assignee_name, assignee_avatar'
+  const who = (r: any): TodayDoneIssue['who'] =>
+    r?.confirmer_name ? { name: r.confirmer_name, avatar: r.confirmer_avatar ?? null, userId: r.confirmer_user_id ?? null }
+      : r?.assignee_name ? { name: r.assignee_name, avatar: r.assignee_avatar ?? null, userId: null }
+      : null
+  const one = db.prepare(`SELECT ${COLS} FROM issue_stages WHERE project_id = ? AND issue_iid = ?`)
+  const out: TodayDoneIssue[] = done.map(c => {
+    const r = one.get(projectId, c.iid) as any
+    return { iid: c.iid, title: r?.title || `#${c.iid}`, stage: 'done', at: c.at, who: who(r) }
+  })
+  const rejected = db.prepare(`
+    SELECT ${COLS} FROM issue_stages
+    WHERE project_id = ? AND cached_stage = 'rejected' AND datetime(updated_at) >= datetime(?)
   `).all(projectId, todayStartISO) as any[]
-  return rows.map(r => ({
+  for (const r of rejected) {
     // updated_at 은 datetime('now') 의 UTC 'YYYY-MM-DD HH:MM:SS' — 화면이 시간대를 오해하지 않게 ISO(Z)로
-    iid: r.iid, title: r.title || `#${r.iid}`, stage: r.stage, at: String(r.at).includes('T') ? r.at : `${String(r.at).replace(' ', 'T')}Z`,
-    who: r.confirmer_name ? { name: r.confirmer_name, avatar: r.confirmer_avatar ?? null, userId: r.confirmer_user_id ?? null }
-      : r.assignee_name ? { name: r.assignee_name, avatar: r.assignee_avatar ?? null, userId: null }
-      : null,
-  }))
+    out.push({ iid: r.iid, title: r.title || `#${r.iid}`, stage: 'rejected', at: String(r.at).includes('T') ? r.at : `${String(r.at).replace(' ', 'T')}Z`, who: who(r) })
+  }
+  return out.sort((x, y) => Date.parse(y.at) - Date.parse(x.at))
 }
 
 export function recordIssueScheduledAt(projectId: string, issueIid: number, scheduledAt: string) {

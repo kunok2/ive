@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { getProject, getProjectAccess, getDb } from '@/lib/db'
-import { countTodayStageTransitions, countStageTransitionsBetween } from '@/lib/db/issues'
-import { getKSTTodayStartISO, getKSTYesterdayStartISO } from '@/lib/date-utils'
+import { countTodayStageTransitions } from '@/lib/db/issues'
+import { getKSTTodayStartISO } from '@/lib/date-utils'
+import { completedOnDays } from '@/lib/report-model/load'
+import { addDays, kstToday, kstDayStartISO } from '@/lib/report-model/period'
 
 export async function GET(
   _req: Request,
@@ -45,12 +47,16 @@ export async function GET(
   `).get(id) as any
   const verifying = verifyingCount?.count ?? 0
 
-  // 오늘 완료/반려된 이슈 수 — 권위적 소스(issue_stages.cached_stage)에서 집계.
-  // task_execution 기반은 (a) 수동 라벨 전환을 놓치고 (b) ex-verify/ex-confirm 등
-  // 실행 종류별 필터링이 끼어들어 "오늘 완료 N건"이 실제 done 이슈 수와 어긋남.
-  // countTodayStageTransitions 는 updated_at/todayStartISO 포맷 불일치를 datetime()
-  // 정규화로 흡수한다(#448 — 단순 문자열 비교 시 KST 오전 완료 건이 0으로 누락됐음).
-  const completed = countTodayStageTransitions(id, 'done', todayStartISO)
+  // 오늘·어제 완료 — 보고서와 같은 완료 사이클(completedOnDays)로 센다.
+  // 단계 스냅샷(issue_stages.updated_at)으로 세면 단계가 그대로여도 스냅샷을 다시 쓸 때마다 시각이 바뀌어
+  // 어제 끝난 일이 오늘로 넘어오고, 버려진(머지 없이 닫힌) 일까지 섞여 보고서와 숫자가 어긋났다(#563).
+  const today = kstToday()
+  const doneCycles = completedOnDays(id, addDays(today, -1), addDays(today, 1))
+  const todayCut = kstDayStartISO(today)
+  const completed = doneCycles.filter(c => c.at >= todayCut).length
+  // 카드의 전일 대비 증감(오늘 완료 − 어제 완료)의 어제 몫 — 보고서의 그날 완료와 같은 숫자
+  const yesterdayCompleted = doneCycles.length - completed
+  // 오늘 반려 — 단계 기록(issue_stages)에서. datetime() 정규화로 updated_at/todayStartISO 포맷 차이를 흡수한다(#448)
   const failed = countTodayStageTransitions(id, 'rejected', todayStartISO)
 
   // 대기 중인 issue 수 (waiting 단계)
@@ -93,12 +99,6 @@ export async function GET(
     WHERE project_id = ? AND cached_stage = 'merge'
   `).get(id) as any
   const conflicts = mergeCount?.count ?? 0
-
-  // 어제 완료/반려된 이슈 수 — 오늘 몫(completed + failed)과 같은 소스(issue_stages)·같은 단위(이슈 수).
-  // 실행 수로 세면 이슈 하나가 여러 실행을 거쳐 부풀어, 카드의 전일 대비 증감이 어긋났다(#563).
-  const yesterdayStartISO = getKSTYesterdayStartISO()
-  const yesterdayCompleted = countStageTransitionsBetween(id, 'done', yesterdayStartISO, todayStartISO)
-    + countStageTransitionsBetween(id, 'rejected', yesterdayStartISO, todayStartISO)
 
   // 금일 토큰
   const tokensResult = db.prepare(`

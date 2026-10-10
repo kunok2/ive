@@ -15,7 +15,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import Database from 'better-sqlite3'
 import { setupTestDb, teardownTestDb, seedUser, seedProject } from './helpers/test-db'
-import { countTodayStageTransitions, countStageTransitionsBetween } from '@/lib/db/issues'
+import { countTodayStageTransitions } from '@/lib/db/issues'
 
 /** issue_stages 행을 cached_stage / updated_at(SQLite datetime 포맷) 지정해 직접 삽입 */
 function insertStageRow(db: Database.Database, projectId: string, iid: number, cachedStage: string, updatedAt: string) {
@@ -78,31 +78,5 @@ describe('countTodayStageTransitions — 포맷 불일치 방어 (#448)', () => 
     expect(countTodayStageTransitions('p1', 'rejected', todayStartISO)).toBe(1)
     // done 카운트에는 섞이지 않음
     expect(countTodayStageTransitions('p1', 'done', todayStartISO)).toBe(0)
-  })
-})
-
-describe('countStageTransitionsBetween — 전일 대비 증감의 어제 몫 (#563)', () => {
-  let db: Database.Database
-  // KST 2026-06-04 00:00 ~ 2026-06-05 00:00
-  const yesterdayStartISO = '2026-06-03T15:00:00.000Z'
-  const todayStartISO = '2026-06-04T15:00:00.000Z'
-
-  beforeEach(() => {
-    db = setupTestDb()
-    seedUser(db, 'u1', '정균옥')
-    seedProject(db, 'p1', 'u1', 'IVE')
-  })
-  afterEach(() => teardownTestDb())
-
-  it('어제 구간에 done 이 된 이슈만 센다 — 그제·오늘 건은 빠진다', () => {
-    insertStageRow(db, 'p1', 301, 'done', '2026-06-03 14:59:59') // 그제(KST 23:59)
-    insertStageRow(db, 'p1', 302, 'done', '2026-06-03 15:00:00') // 어제 00:00
-    insertStageRow(db, 'p1', 303, 'done', '2026-06-04 14:59:59') // 어제 23:59
-    insertStageRow(db, 'p1', 304, 'done', '2026-06-04 15:00:00') // 오늘 00:00
-    insertStageRow(db, 'p1', 305, 'rejected', '2026-06-04 01:00:00')
-    expect(countStageTransitionsBetween('p1', 'done', yesterdayStartISO, todayStartISO)).toBe(2)
-    expect(countStageTransitionsBetween('p1', 'rejected', yesterdayStartISO, todayStartISO)).toBe(1)
-    // 오늘 몫과 겹치지 않는다
-    expect(countTodayStageTransitions('p1', 'done', todayStartISO)).toBe(1)
   })
 })
