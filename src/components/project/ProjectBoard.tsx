@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { useKillExecution } from '@/lib/use-kill-execution'
@@ -14,6 +14,7 @@ import AgentAvatar from '@/components/agent/AgentAvatar'
 import { PriorityBadge } from '@/components/tabs/issues/Priority'
 import IssueBadges, { hasIssueBadges } from '@/components/tabs/issues/IssueBadges'
 import type { ToolActivity } from '@/lib/tool-activity'
+import { measureFly, flyMoved, type FlySpots } from '@/lib/board-fly'
 
 /** 칸 안 묶음의 성격 — 정렬 순서(실패 → 대기 → 진행 중)대로 바뀌는 자리에 구분선을 긋는다 */
 const groupKind = (g: { waiting: boolean; failed: boolean }) => g.failed ? 'fail' : g.waiting ? 'wait' : 'active'
@@ -214,6 +215,12 @@ export default function ProjectBoard({ projects, onOpenTrace, filterSlot }: { pr
   }
 
   const color = project.color || '#4ade80'
+  // 단계가 바뀌어 다른 칸으로 옮겨진 카드는 옛 자리에서 새 자리로 날아간다(board-fly).
+  // 그리기 직전의 자리를 재 두고(지금 DOM 은 아직 지난 그림이다), 그린 뒤 견준다
+  const boardRef = useRef<HTMLElement>(null)
+  const spotsBefore = useRef<FlySpots>(new Map())
+  spotsBefore.current = measureFly(boardRef.current)
+  useLayoutEffect(() => { flyMoved(boardRef.current, spotsBefore.current) })
   const syncError = boardSyncError || executionSyncError
   const syncTime = lastSyncedAt == null ? null : new Date(lastSyncedAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
   const syncMessage = syncError
@@ -221,7 +228,7 @@ export default function ProjectBoard({ projects, onOpenTrace, filterSlot }: { pr
     : lastSyncedAt == null ? tp('boardSyncLoading') : tp('boardSyncAt', { time: syncTime! })
 
   return (
-    <section className="flex-1 min-w-0 flex flex-col gap-4 p-5 overflow-hidden">
+    <section ref={boardRef} className="flex-1 min-w-0 flex flex-col gap-4 p-5 overflow-hidden">
       <header className="flex items-center gap-3 shrink-0">
         {!filterSlot && (
           <div className="w-9 h-9 rounded-lg bg-ive-bg-deep border flex items-center justify-center shrink-0" style={{ borderColor: `${color}66` }}>
@@ -248,9 +255,10 @@ export default function ProjectBoard({ projects, onOpenTrace, filterSlot }: { pr
             <i className={`fa-solid ${syncError ? 'fa-triangle-exclamation' : lastSyncedAt == null ? 'fa-circle-notch fa-spin' : 'fa-rotate'}`} />
             <span className="max-w-[160px] truncate">{syncMessage}</span>
           </span>
-          {/* 1440px 아래에서는 완료 칸을 접고 오늘 완료 건수만 보인다 */}
-          <span className="wide:hidden text-xs font-bold text-ive-text-secondary mr-1">
-            {tp('boardDoneToday')} <span className={cols.done.length ? 'text-ive-cyan' : 'text-ive-text-dim'}><CountBump value={cols.done.length} /></span>
+          {/* 1440px 아래에서는 완료 칸을 접고 오늘 완료 건수만 보인다 — 접힌 칸이라는 것이 읽히게 칸 머리와 같은 모양(바탕·테두리·아래 색 줄·이름·큰 숫자)의 배지로 */}
+          <span className="wide:hidden h-9 px-3 mr-1 inline-flex items-center gap-1.5 rounded-lg bg-ive-bg-card/60 border border-ive-border-subtle border-b-2 border-b-ive-cyan" title={tp('boardDoneToday')}>
+            <span className="text-sm font-bold text-ive-text">{tp('boardDoneToday')}</span>
+            <span className={`text-xl font-bold leading-none tabular-nums ${cols.done.length ? 'text-ive-cyan' : 'text-ive-text-dim'}`}><CountBump value={cols.done.length} /></span>
           </span>
           {!multi && <button onClick={() => navigateToAddIssue(project.id)} className="h-9 px-3 rounded-lg text-sm font-bold bg-ive-bg-card border border-ive-border-subtle text-ive-text hover:border-ive-cyan/40">
             <i className="fa-solid fa-plus mr-1.5 text-xs" />{tp('addIssue')}
@@ -324,6 +332,8 @@ export default function ProjectBoard({ projects, onOpenTrace, filterSlot }: { pr
                         // 카드 = 작업 상세. 에이전트가 돌리는 중이면 아래 줄의 「트레이스」로 실행 화면을, 「강제종료」로 중지(카드 안에 버튼이 있어 div 로 둔다)
                         <div
                           key={it.key}
+                          data-fly={`${it.pid}-${it.iid}`}
+                          data-fly-col={col}
                           role="button"
                           tabIndex={0}
                           onClick={() => router.push(it.href)}
