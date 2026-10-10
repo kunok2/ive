@@ -137,6 +137,7 @@
   "verifyingTooltip": "검증 중인 작업",
   "confirmingTooltip": "확인 중인 작업",
   "completedTooltip": "금일 완료된 작업",
+  "yesterdayDiffTooltip": "어제 완료 {count}건 대비 증감",
   "conflictTooltip": "병합 대기 MR (충돌 포함)",
   "chatLabel": "채팅",
   "noWaitingIssues": "대기 중인 작업이 없습니다",

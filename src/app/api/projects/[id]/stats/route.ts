@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { getProject, getProjectAccess, getDb } from '@/lib/db'
-import { countTodayStageTransitions } from '@/lib/db/issues'
-import { getKSTTodayStartISO } from '@/lib/date-utils'
+import { countTodayStageTransitions, countStageTransitionsBetween } from '@/lib/db/issues'
+import { getKSTTodayStartISO, getKSTYesterdayStartISO } from '@/lib/date-utils'
 
 export async function GET(
   _req: Request,
@@ -94,14 +94,11 @@ export async function GET(
   `).get(id) as any
   const conflicts = mergeCount?.count ?? 0
 
-  // 어제 완료한 execution 수
-  // - 검증 완료(verified_at/rejected_at) OR 외부 도구 작업(agent_id 비어있음) → 완료로 카운트
-  const yesterdayStartISO = new Date(new Date(todayStartISO).getTime() - 24 * 60 * 60 * 1000).toISOString()
-  const yesterdayExec = db.prepare(`
-    SELECT COUNT(*) as count FROM task_executions
-    WHERE project_id = ? AND status = 'success' AND started_at >= ? AND started_at < ? AND id NOT LIKE 'ex-verify-%' AND (verified_at IS NOT NULL OR rejected_at IS NOT NULL OR agent_id IS NULL OR agent_id = '')
-  `).get(id, yesterdayStartISO, todayStartISO) as any
-  const yesterdayCompleted = yesterdayExec?.count ?? 0
+  // 어제 완료/반려된 이슈 수 — 오늘 몫(completed + failed)과 같은 소스(issue_stages)·같은 단위(이슈 수).
+  // 실행 수로 세면 이슈 하나가 여러 실행을 거쳐 부풀어, 카드의 전일 대비 증감이 어긋났다(#563).
+  const yesterdayStartISO = getKSTYesterdayStartISO()
+  const yesterdayCompleted = countStageTransitionsBetween(id, 'done', yesterdayStartISO, todayStartISO)
+    + countStageTransitionsBetween(id, 'rejected', yesterdayStartISO, todayStartISO)
 
   // 금일 토큰
   const tokensResult = db.prepare(`
