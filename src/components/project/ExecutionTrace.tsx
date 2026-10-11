@@ -156,7 +156,7 @@ export default function ExecutionTrace({ projectId, className = 'h-[70vh]' }: { 
                       >
                         {killing === ex.id
                           ? <i className="fa-solid fa-circle-notch fa-spin" />
-                          : <><i className="fa-solid fa-skull-crossbones mr-1" />{tExec('forceStop')}</>
+                          : <><i className="fa-solid fa-circle-stop mr-1" />{tExec('forceStop')}</>
                         }
                       </button>
                     </div>

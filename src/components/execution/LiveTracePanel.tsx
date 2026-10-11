@@ -286,7 +286,7 @@ export default function LiveTracePanel({ agents, projectId, onKill, onAllComplet
                   {isChat ? (
                     <><i className="fa-solid fa-xmark mr-1" />{tExec('endChatAction')}</>
                   ) : (
-                    <><i className="fa-solid fa-skull-crossbones mr-1" />{tExec('forceStop')}</>
+                    <><i className="fa-solid fa-circle-stop mr-1" />{tExec('forceStop')}</>
                   )}
                 </button>
               )}

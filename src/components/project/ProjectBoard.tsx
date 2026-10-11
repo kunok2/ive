@@ -409,7 +409,7 @@ export default function ProjectBoard({ projects, onOpenTrace, filterSlot }: { pr
                                   disabled={killing === it.traceExecId}
                                   className="ml-auto text-xs font-bold px-2 py-1 rounded-lg bg-ive-bg-deep border border-ive-red/30 text-ive-red/70 hover:bg-ive-red/10 transition-colors disabled:opacity-40"
                                 >
-                                  {killing === it.traceExecId ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-skull-crossbones mr-1" />{te('forceStop')}</>}
+                                  {killing === it.traceExecId ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-circle-stop mr-1" />{te('forceStop')}</>}
                                 </button>
                               )}
                             </span>

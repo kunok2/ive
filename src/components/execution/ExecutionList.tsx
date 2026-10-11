@@ -146,7 +146,7 @@ export default function ExecutionList({ executions, showAgent = true, onKill, ki
               >
                 {killing === ex.id
                   ? <i className="fa-solid fa-circle-notch fa-spin" />
-                  : <><i className="fa-solid fa-skull-crossbones mr-1" />{te('forceStop')}</>
+                  : <><i className="fa-solid fa-circle-stop mr-1" />{te('forceStop')}</>
                 }
               </button>
             </div>

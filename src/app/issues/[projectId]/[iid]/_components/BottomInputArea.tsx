@@ -155,7 +155,7 @@ export default function BottomInputArea({
               disabled={killing}
               className="shrink-0 text-ive-red/70 border border-ive-red/30 px-3 py-1.5 rounded-lg bg-ive-bg-deep hover:bg-ive-red/10 transition-colors disabled:opacity-40"
             >
-              {killing ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-skull-crossbones mr-1" />{te('forceStop')}</>}
+              {killing ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-circle-stop mr-1" />{te('forceStop')}</>}
             </button>
           )}
         </div>
