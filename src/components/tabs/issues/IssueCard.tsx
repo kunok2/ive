@@ -2,10 +2,10 @@
 
 import { PriorityBadge } from './Priority'
 import IssueBadges, { hasIssueBadges } from './IssueBadges'
+import { roleBarPropsOf } from './role-bar-props'
 import type { PresetRole, RoleAgentCandidate } from '@/components/issue/RoleAvatarBar'
 import { useTranslations } from 'next-intl'
 import RoleAvatarBar from '@/components/issue/RoleAvatarBar'
-import { macroIndexFromStage } from '@/app/issues/[projectId]/[iid]/_components/StageProgress'
 import { formatDateMedium } from '@/lib/format-date'
 import type { IveIssue, StageInfo } from './types'
 
@@ -155,30 +155,11 @@ export default function IssueCard({
           <RoleAvatarBar
             size="sm"
             canEdit={canEditAssignees && !bulkMode && gitMembers.length > 0}
-            currentMacro={macroIndexFromStage(issue.stage)}
+            {...roleBarPropsOf(issue)}
             gitMembers={gitMembers}
             confirmerMembers={confirmerMembers}
             verifierAgents={roleAgents?.verify}
             confirmerAgents={roleAgents?.confirm}
-            creator={{
-              name: issue.author?.name ?? null,
-              avatar: issue.author?.avatar ?? null,
-              avatarUrl: issue.author?.avatarUrl ?? null,
-            }}
-            processor={{
-              assignMode: (issue.assignMode as 'agent' | 'auto' | 'assignee' | 'none' | undefined) ?? 'auto',
-              agentName: issue.preferredAgentName ?? null,
-              agentAvatar: issue.preferredAgentAvatar ?? null,
-              username: issue.assignees?.[0]?.username ?? null,
-              name: issue.assignees?.[0]?.name ?? null,
-              avatarUrl: issue.assignees?.[0]?.avatarUrl ?? null,
-              pendingAuto: !!issue.assigneeAuto,
-            }}
-            verifier={issue.presetVerifier ?? { mode: 'creator', userId: null, username: null }}
-            confirmer={issue.presetConfirmer ?? { mode: 'creator', userId: null, username: null }}
-            actualProcessor={issue.actualProcessor ?? null}
-            actualVerifier={issue.actualVerifier ?? null}
-            actualConfirmer={issue.actualConfirmer ?? null}
             onProcessorClick={() => onOpenAgentPicker(issue.iid)}
             onVerifierChange={onPresetVerifierChange ? (preset) => onPresetVerifierChange(issue.iid, preset) : undefined}
             onConfirmerChange={onPresetConfirmerChange ? (preset) => onPresetConfirmerChange(issue.iid, preset) : undefined}

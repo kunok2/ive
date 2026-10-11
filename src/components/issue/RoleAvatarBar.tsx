@@ -92,6 +92,8 @@ export interface RoleAvatarBarProps {
   /** 검증·확인을 맡길 수 있는 에이전트 (역할 명부) */
   verifierAgents?: RoleAgentCandidate[]
   confirmerAgents?: RoleAgentCandidate[]
+  /** 단계별 진입 횟수 — 2회 이상인 단계만 그 역할 아바타 옆에 적는다(1회는 평범하다) */
+  stageCounts?: { process: number; verify: number; confirm: number }
 }
 
 /**
@@ -107,6 +109,7 @@ export default function RoleAvatarBar({
   currentMacro = 0,
   verifierAgents,
   confirmerAgents,
+  stageCounts,
 }: RoleAvatarBarProps) {
   const tIssue = useTranslations('issue')
   // 확인자 picker/표시 목록 — IVE 사용자 후보(미지정 시 프로젝트 멤버 fallback). 검증자는 항상 gitMembers.
@@ -179,7 +182,8 @@ export default function RoleAvatarBar({
 
   return (
     <>
-      <div className="flex items-center">
+      {/* 아바타 테두리(ring-2)는 상자 밖으로 2px 나간다 — 줄의 왼쪽 끝이 위아래 글자·배지와 맞도록 그만큼 들인다 */}
+      <div className="flex items-center pl-0.5">
         {/* 작성자 — 항상 avatar, 읽기 전용 */}
         <RoleSlot
           dim={dim}
@@ -209,6 +213,7 @@ export default function RoleAvatarBar({
             ? renderAvatar(actualProcessor.agentAvatar, actualProcessor.agentName, dim)
             : renderProcessorContent(processor, creator, dim, iconSize)}
         />
+        <StageCount count={stageCounts?.process} cls={ISSUE_STAGE_STYLE.dev.text} title={tIssue('badgeProcess', { count: stageCounts?.process ?? 0 })} label={tIssue('stageCountShort', { count: stageCounts?.process ?? 0 })} />
 
         <Chevron size={size} />
 
@@ -226,6 +231,7 @@ export default function RoleAvatarBar({
             ? renderAvatar(actualVerifier.avatar, actualVerifier.name, dim)
             : renderPresetContent(verifier, gitMembers, creator, dim, iconSize)}
         />
+        <StageCount count={stageCounts?.verify} cls={ISSUE_STAGE_STYLE.verifying.text} title={tIssue('badgeVerify', { count: stageCounts?.verify ?? 0 })} label={tIssue('stageCountShort', { count: stageCounts?.verify ?? 0 })} />
 
         <Chevron size={size} />
 
@@ -243,6 +249,7 @@ export default function RoleAvatarBar({
             ? renderAvatar(actualConfirmer.avatar, actualConfirmer.name, dim)
             : renderPresetContent(confirmer, confirmerList, creator, dim, iconSize)}
         />
+        <StageCount count={stageCounts?.confirm} cls={ISSUE_STAGE_STYLE.confirming.text} title={tIssue('badgeConfirm', { count: stageCounts?.confirm ?? 0 })} label={tIssue('stageCountShort', { count: stageCounts?.confirm ?? 0 })} />
       </div>
 
       <AssigneePickerModal
@@ -304,6 +311,12 @@ function Chevron({ size = 'md' }: { size?: 'sm' | 'md' }) {
       <span className={`w-0 h-0 ${triBorder} border-y-transparent border-l-ive-text-dim/40`} />
     </span>
   )
+}
+
+/** 그 단계를 몇 번 거쳤는지 — 2회부터, 그 단계 색 글씨로 아바타 바로 옆에 */
+function StageCount({ count, cls, title, label }: { count?: number; cls: string; title: string; label: string }) {
+  if (!count || count < 2) return null
+  return <span className={`ml-1 shrink-0 text-[10px] font-bold tabular-nums whitespace-nowrap ${cls}`} title={title}>{label}</span>
 }
 
 interface RoleSlotProps {

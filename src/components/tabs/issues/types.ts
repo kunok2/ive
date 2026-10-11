@@ -37,8 +37,8 @@ export interface IveIssue {
   actualProcessor?: { agentId: string | null; agentName: string | null; agentAvatar: string | null; cliName: string | null } | null
   actualVerifier?: { userId: string | null; name: string | null; avatar: string | null } | null
   actualConfirmer?: { userId: string | null; name: string | null; avatar: string | null } | null
-  /** 회차 — 처리 시도 횟수 / 되돌리기 합계. 카드 뱃지용. */
-  iterationCounts?: { processCount: number; retryTotal: number }
+  /** 회차 — 단계별(처리·검증·확인) 진입 횟수 / 되돌리기 합계. 카드의 역할 아바타 옆 숫자 */
+  iterationCounts?: { processCount: number; verifyCount?: number; confirmCount?: number; retryTotal: number }
 }
 
 export interface ProjectAgent {

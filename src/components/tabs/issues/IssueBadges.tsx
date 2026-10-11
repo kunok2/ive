@@ -8,21 +8,26 @@ export interface BadgeIssue {
   stage?: string
   updatedAt: string
   dueDate?: string | null
-  iterationCounts?: { processCount: number; retryTotal: number }
+  iterationCounts?: { processCount: number; verifyCount?: number; confirmCount?: number; retryTotal: number }
   /** 확인대기·확인 중인 작업의 배포 상태 — 머지된 수정이 확인할 사이트에 올라갔는가 */
   deployState?: 'unmerged' | 'deploying' | 'deployed' | 'failed' | null
 }
 
 /**
- * 처리 N회는 1회가 평범하니 2회부터. 되돌림 배지는 두지 않는다 — 되돌리면 다시 처리하므로 「처리 2회」가 이미 말해 준다(같은 말을 두 배지로 하며 자리만 차지했다).
- * 되돌림 이력은 작업 상세의 진행 막대(되돌림 화살표)에서 본다.
+ * 단계별 횟수 — 역할 아바타(RoleAvatarBar) 옆에 적는다. 작업 목록 카드와 넓은 화면 보드가 같이 쓴다.
+ * 예전에는 「처리 N회」 배지 하나였다 — 어느 단계에서 몇 번 돌았는지(검증에서 되돌렸는지, 확인에서 되돌렸는지)가 보이지 않았다.
+ * 되돌림 이력 자체는 작업 상세의 진행 막대(되돌림 화살표)에서 본다.
  */
-const showProcess = (i: BadgeIssue) => (i.iterationCounts?.processCount ?? 0) >= 2
+export const stageCountsOf = (i: BadgeIssue) => ({
+  process: i.iterationCounts?.processCount ?? 0,
+  verify: i.iterationCounts?.verifyCount ?? 0,
+  confirm: i.iterationCounts?.confirmCount ?? 0,
+})
 
 const showDeploy = (i: BadgeIssue) => !!i.deployState && (i.stage === 'confirm_waiting' || i.stage === 'confirming') && i.state !== 'closed'
 
 export function hasIssueBadges(i: BadgeIssue): boolean {
-  return !!i.dueDate || showProcess(i) || showDeploy(i)
+  return !!i.dueDate || showDeploy(i)
 }
 
 const DEPLOY_BADGE: Record<NonNullable<BadgeIssue['deployState']>, { cls: string; icon: string; label: string; hint: string }> = {
@@ -49,25 +54,15 @@ export function DeployBadge({ issue }: { issue: BadgeIssue }) {
 }
 
 /**
- * 작업 배지 — 배포 상태(확인 단계) + 마감일(D-N·D+N·일찍/늦게) + 처리 N회(글자로 적는다).
+ * 작업 배지 — 배포 상태(확인 단계) + 마감일(D-N·D+N·일찍/늦게). 단계별 횟수는 역할 아바타 옆에 적는다(stageCountsOf).
  * 작업 목록 카드와 넓은 화면 프로젝트 보드가 같이 쓴다(한쪽만 바뀌지 않게).
  */
 export default function IssueBadges({ issue }: { issue: BadgeIssue }) {
   const t = useTranslations('issue')
-  const ic = issue.iterationCounts
   return (
     <>
       <DeployBadge issue={issue} />
       {renderDueBadge(issue, t)}
-      {showProcess(issue) && ic && (
-        <span
-          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border bg-ive-cyan/10 text-ive-cyan border-ive-cyan/20 text-[10px] font-bold"
-          title={t('iterationCount', { count: ic.processCount })}
-        >
-          <i className="fa-solid fa-repeat" />
-          {t('badgeProcess', { count: ic.processCount })}
-        </span>
-      )}
     </>
   )
 }

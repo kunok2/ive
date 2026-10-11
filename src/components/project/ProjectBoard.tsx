@@ -13,6 +13,9 @@ import CountBump from '@/components/ui/CountBump'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 import { PriorityBadge } from '@/components/tabs/issues/Priority'
 import IssueBadges, { hasIssueBadges } from '@/components/tabs/issues/IssueBadges'
+import RoleAvatarBar, { type GitMember } from '@/components/issue/RoleAvatarBar'
+import { roleBarPropsOf } from '@/components/tabs/issues/role-bar-props'
+import type { IveIssue } from '@/components/tabs/issues/types'
 import type { ToolActivity } from '@/lib/tool-activity'
 import { measureFly, flyMoved, type FlySpots } from '@/lib/board-fly'
 
@@ -34,25 +37,12 @@ const COL_LABEL: Record<Col, string> = { process: 'boardProcess', verify: 'board
 /** 단계 칸 안의 대기 묶음 — 그 단계에서 아직 아무도 잡지 않은 건. 진행 중인 일 아래에 둔다 */
 const WAIT_LABEL: Record<Exclude<Col, 'done'>, string> = { process: 'waitGroupProcess', verify: 'waitGroupVerify', confirm: 'waitGroupConfirm' }
 
-/** /api/projects/[id]/issues 에서 보드가 쓰는 필드 */
-interface BoardIssue {
+/** /api/projects/[id]/issues 응답 — 작업 목록 카드와 같은 작업 정보(역할 아바타 줄·배지를 같은 부품으로 그린다) */
+interface BoardIssue extends IveIssue {
   /** 어느 프로젝트의 일인지 — 여러 프로젝트를 한 보드에 모을 때 */
   pid: string
-  iid: number
-  title: string
-  stage: string
-  state: string
-  createdAt?: string
-  updatedAt: string
   /** 지금 단계에 들어온 시각(단계 사건) — 처리 대기·처리 실패가 얼마나 기다렸는지 */
   stageSince?: string | null
-  dueDate?: string | null
-  priority?: 0 | 1 | 2
-  iterationCounts?: { processCount: number; retryTotal: number }
-  deployState?: 'unmerged' | 'deploying' | 'deployed' | 'failed' | null
-  preferredAgentName?: string | null
-  actualVerifier?: { name?: string | null; avatar?: string | null; userId?: string | null } | null
-  actualConfirmer?: { name?: string | null; avatar?: string | null; userId?: string | null } | null
 }
 
 /** 맡은 사람·에이전트의 아바타 — 카드의 진행 중 목록과 같은 부품(AgentAvatar)으로 그린다 */
@@ -86,6 +76,8 @@ export default function ProjectBoard({ projects, onOpenTrace, filterSlot }: { pr
   const [execs, setExecs] = useState<TaskExecution[]>([])
   // 완료(오늘) — 카드 「완료」 숫자와 같은 근거(오늘 완료·반려로 바뀐 이슈)
   const [doneToday, setDoneToday] = useState<(TodayDoneIssue & { pid: string })[]>([])
+  // 역할 아바타 줄이 지정된 검증자·확인자의 얼굴을 찾는 명부(프로젝트별) — 작업 목록과 같은 API. 사람이 자주 바뀌지 않으므로 프로젝트 묶음이 바뀔 때만 읽는다
+  const [members, setMembers] = useState<Record<string, { git: GitMember[]; confirmer: GitMember[] }>>({})
   const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null)
   const [boardSyncError, setBoardSyncError] = useState(false)
   const [executionSyncError, setExecutionSyncError] = useState(false)
@@ -146,6 +138,17 @@ export default function ProjectBoard({ projects, onOpenTrace, filterSlot }: { pr
     const t3 = setInterval(() => setNow(Date.now()), 30_000)
     return () => { alive = false; clearInterval(t1); clearInterval(t2); clearInterval(t3) }
   }, [idsKey, reloadTick])
+
+  useEffect(() => {
+    let alive = true
+    const list = (pid: string, path: string) => fetch(`/api/projects/${pid}/${path}`).then(r => r.ok ? r.json() : []).then(d => (Array.isArray(d) ? d : []) as GitMember[]).catch(() => [] as GitMember[])
+    for (const pid of idsKey.split(',')) {
+      Promise.all([list(pid, 'members'), list(pid, 'confirmer-candidates')]).then(([git, confirmer]) => {
+        if (alive) setMembers(prev => ({ ...prev, [pid]: { git, confirmer } }))
+      })
+    }
+    return () => { alive = false }
+  }, [idsKey])
 
   const running = execs.filter(e => e.status === 'running' || e.status === 'assigned')
   // 같은 단계에 사람 배정과 에이전트 실행이 함께 있으면 에이전트 쪽 — 트레이스·강제종료 버튼이 그 실행을 가리켜야 한다
@@ -377,15 +380,18 @@ export default function ProjectBoard({ projects, onOpenTrace, filterSlot }: { pr
                               </span>
                             ) : null
                           })()}
-                          {/* 작업 정보 배지(작업 목록 카드와 같은 부품) 왼쪽 · 경과 오른쪽 */}
-                          {(badges || age) && (
+                          {/* 줄마다 한 가지만 둔다(섞여 줄바꿈되면 무엇이 어디 있는지 읽히지 않는다) — 작업 목록 카드와 같은 부품 */}
+                          {/* 상태 배지: 우선순위 · 배포 상태 · 마감일 — 있을 때만 */}
+                          {badges && it.issue && (
                             <span className="flex flex-wrap items-center gap-1">
-                              {badges && it.issue && (
-                                <>
-                                  <PriorityBadge priority={it.issue.priority} />
-                                  <IssueBadges issue={it.issue} />
-                                </>
-                              )}
+                              <PriorityBadge priority={it.issue.priority} />
+                              <IssueBadges issue={it.issue} />
+                            </span>
+                          )}
+                          {/* 사람: 역할 아바타 줄(작성자 › 처리자 › 검증자 › 확인자 + 단계별 횟수) 왼쪽 · 경과 오른쪽. 보드에서는 보기만 한다(바꾸는 것은 작업 상세·작업 목록에서) */}
+                          {(it.issue || age) && (
+                            <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                              {it.issue && <RoleAvatarBar size="sm" canEdit={false} gitMembers={members[it.pid]?.git ?? []} confirmerMembers={members[it.pid]?.confirmer} {...roleBarPropsOf(it.issue)} />}
                               {age && (
                                 <span className={`ml-auto text-xs font-bold tabular-nums ${age.aged ? 'px-1.5 py-0.5 rounded-lg bg-ive-red/15 text-ive-red' : 'text-ive-text-secondary'}`}>
                                   {ageText(tp, age)}
@@ -398,7 +404,7 @@ export default function ProjectBoard({ projects, onOpenTrace, filterSlot }: { pr
                               <button
                                 type="button"
                                 onClick={e => { e.stopPropagation(); const id = it.traceExecId!; if (onOpenTrace) onOpenTrace(id); else router.push(`/executions/${id}`) }}
-                                className="text-xs font-bold px-2 py-1 rounded-lg bg-ive-bg-deep border border-ive-border-dark text-ive-text-secondary hover:text-ive-text transition-colors"
+                                className="text-xs font-bold px-2 py-1 rounded-lg bg-ive-bg-deep border border-ive-border-subtle text-ive-text-secondary hover:text-ive-text transition-colors"
                               >
                                 <i className="fa-solid fa-terminal mr-1" />{te('viewTrace')}
                               </button>

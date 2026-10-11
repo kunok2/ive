@@ -177,12 +177,16 @@ export async function GET(
           actualProcessor: actuals.processor,
           actualVerifier: actuals.verifier,
           actualConfirmer: actuals.confirmer,
-          // 회차 정보 — 처리 시도 횟수 + 되돌리기 합계 (카드 뱃지용)
+          // 회차 정보 — 단계별 진입 횟수 + 되돌리기 합계 (카드의 역할 아바타 옆 숫자)
           iterationCounts: (() => {
             const c = iterationMap.get(issue.iid);
             const fwd = c?.forward ?? { toProcess: 0, toVerify: 0, toConfirm: 0, toDone: 0 };
+            // 되돌아 들어온 횟수 — 작업 상세 진행 막대(StageProgress)의 칸 숫자와 같은 식
+            const backInto = (idx: number) => (c?.retry ?? []).reduce((n, m) => n + (m.to === idx && m.to < m.from ? m.count : 0), 0);
             return {
-              processCount: fwd.toProcess,                                          // 처리 진입 횟수
+              processCount: fwd.toProcess,                                          // 처리 진입 횟수(되돌림 뒤 재처리 포함)
+              verifyCount: fwd.toVerify + backInto(3),                              // 검증 진입 횟수
+              confirmCount: fwd.toConfirm + backInto(4),                            // 확인 진입 횟수
               retryTotal: (c?.retry ?? []).reduce((n, m) => n + m.count, 0),      // 총 되돌리기 횟수
             };
           })(),
