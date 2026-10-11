@@ -12,7 +12,7 @@ import LiveTracePanel from '@/components/execution/LiveTracePanel'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 import MarqueeText from '@/components/ui/MarqueeText'
 import ActiveWorkList, { type ActiveItem } from '@/components/project/ActiveWorkList'
-import WaitPill, { FailPill } from '@/components/project/WaitPill'
+import WaitPill, { FailPill, ConflictPill } from '@/components/project/WaitPill'
 import CountBump from '@/components/ui/CountBump'
 import { execKind, execHref, ageOf, ageText } from '@/lib/active-work'
 import ConflictResolutionPanel from '@/components/mr/ConflictResolutionPanel'
@@ -285,8 +285,14 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
 
   // 단계 칸의 진행 중 숫자 옆에 붙는 그 단계 대기 건수 — 점선 숫자(보드의 대기 카드와 같은 표시)
   // 단계 칸: 큰 숫자(진행 중) 아래 한 줄에 대기·실패를 작게 — 옆에 나란히 두면 세 숫자가 한 줄에 뒤섞여 읽힌다.
-  // 오늘완료의 어제 대비 증감도 같은 줄에 둔다. 어느 칸이든 그 줄에 적을 것이 있으면 다섯 칸 모두 줄 높이를 비워 둔다(아래 추이선·이름이 어긋나지 않게)
-  const anySub = processWaitCount + verifyWaitCount + confirmWaitCount + devFailedCount > 0 || (!!stats && yesterdayDiff !== 0)
+  // 단계 칸 어디든 그 줄에 적을 것(대기·실패)이 있으면 다섯 칸 모두 줄 높이를 비워 둔다(아래 추이선·이름이 어긋나지 않게).
+  // 오늘완료의 어제 대비 증감은 그 줄이 있을 때만 거기에 두고, 없으면 큰 숫자 옆에 한 줄로 붙인다(「98 +77」) — 증감 하나 때문에 카드 전체가 한 줄 높아지지 않게
+  const anySub = processWaitCount + verifyWaitCount + confirmWaitCount + devFailedCount > 0
+  const diffTag = stats && yesterdayDiff !== 0 ? (
+    <span title={tp('yesterdayDiffTooltip', { count: stats.yesterdayCompleted })} className={`text-xs font-bold tabular-nums ${yesterdayDiff > 0 ? 'text-ive-green' : 'text-ive-red'}`}>
+      <CountBump value={yesterdayDiff}>{yesterdayDiff > 0 ? '+' : ''}{yesterdayDiff}</CountBump>
+    </span>
+  ) : null
   const subRow = (children: React.ReactNode) => anySub ? <div className="h-4 flex items-center justify-center gap-1.5">{children}</div> : null
   const waitTag = (n: number, kind: 'process' | 'verify' | 'confirm') => <WaitPill n={n} kind={kind} title={tp('stageWaitingHint', { n })} />
 
@@ -592,13 +598,11 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
             <span className={`text-lg font-bold leading-none ${totalDone > 0 ? 'text-ive-green' : 'text-ive-text-dim'}`}>
               <CountBump value={totalDone} />
             </span>
+            {/* 어제 대비 증감 — 다른 칸에 둘째 줄(대기·실패)이 없으면 큰 숫자 옆에 */}
+            {!anySub && diffTag}
           </div>
-          {/* 어제 대비 증감 — 단계 칸의 대기·실패와 같은 자리(큰 숫자 아래 줄) */}
-          {subRow(stats && yesterdayDiff !== 0 && (
-            <span title={tp('yesterdayDiffTooltip', { count: stats.yesterdayCompleted })} className={`text-xs font-bold tabular-nums ${yesterdayDiff > 0 ? 'text-ive-green' : 'text-ive-red'}`}>
-              <CountBump value={yesterdayDiff}>{yesterdayDiff > 0 ? '+' : ''}{yesterdayDiff}</CountBump>
-            </span>
-          ))}
+          {/* 둘째 줄이 있으면 단계 칸의 대기·실패와 같은 자리(큰 숫자 아래 줄)에 */}
+          {subRow(diffTag)}
           <Sparkline data={snapshots.map(s => s.completed + s.failed)} width={40} height={12} />
           <span className="max-w-full truncate text-xs text-ive-text-dim font-bold">{tp('completedLabel')}</span>
         </button>
@@ -609,10 +613,14 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
           title={tp('conflictTooltip')}
           className={`flex-1 min-w-0 py-2.5 px-1 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'conflicts' ? 'bg-ive-amber/5' : 'hover:bg-white/[0.02]'}`}
         >
-          <span className={`text-lg font-bold leading-none ${mergeCount === null ? 'text-ive-text-dim/40' : conflictCount > 0 ? 'text-ive-red animate-pulse' : mergeCount > 0 ? 'text-ive-amber' : 'text-ive-text-dim'}`}>
-            <CountBump value={mergeCount}>{mergeCount === null ? '–' : mergeCount}</CountBump>
-          </span>
-          {subRow(null)}
+          <div className="flex items-baseline gap-1">
+            <span className={`text-lg font-bold leading-none ${mergeCount === null ? 'text-ive-text-dim/40' : conflictCount > 0 ? 'text-ive-red animate-pulse' : mergeCount > 0 ? 'text-ive-amber' : 'text-ive-text-dim'}`}>
+              <CountBump value={mergeCount}>{mergeCount === null ? '–' : mergeCount}</CountBump>
+            </span>
+            {/* 충돌 건수 — 오늘완료의 증감과 같은 규칙: 둘째 줄이 없으면 큰 숫자 옆에, 있으면 그 줄에 */}
+            {!anySub && <ConflictPill n={conflictCount} />}
+          </div>
+          {subRow(<ConflictPill n={conflictCount} />)}
           {/* Sparkline(40x12)과 동일 박스로 감싸야 <i> baseline 정렬이 위 숫자와 붙어 보이는 현상 방지 */}
           <div className="flex items-center justify-center" style={{ width: 40, height: 12 }}>
             <i className={`fa-solid fa-code-merge text-[10px] leading-none ${conflictCount > 0 ? 'text-ive-red' : (mergeCount ?? 0) > 0 ? 'text-ive-amber' : 'text-ive-text-dim'}`} />
