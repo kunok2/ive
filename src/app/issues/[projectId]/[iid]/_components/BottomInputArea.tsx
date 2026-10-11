@@ -8,6 +8,7 @@ import { createImagePasteHandlers } from '@/lib/paste-upload'
 import AgentPickerDropdown from './AgentPickerDropdown'
 import { isClosedMidway, retryActionOf } from './StageActions'
 import { transitionTarget } from '@/lib/stage-transitions'
+import { useToast } from '@/components/ui/Toast'
 
 interface IssueDetail {
   iid: number
@@ -348,6 +349,22 @@ function CommentModeInput({
   const forwardOk = !isClosed || isClosedMidway(issue)
   // 등록 뒤(입력이 비면) 늘어난 높이를 되돌린다
   const commentTextareaRef = useRef<HTMLTextAreaElement>(null)
+  // 코멘트가 있어야 하는 단계 버튼(재처리·되돌리기·유입·완료)을 빈 입력으로 누른 경우 — 버튼을 막아 두면(disabled) 눌러도 아무 일이 없어
+  // 고장으로 보인다(터치 기기는 풍선말도 없고 흐린 버튼이 잘 구분되지 않는다). 누르면 무엇을 해야 하는지 알리고 입력창으로 데려간다.
+  const { toast } = useToast()
+  const [commentNudge, setCommentNudge] = useState(false)
+  const nudgeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => { if (nudgeTimer.current) clearTimeout(nudgeTimer.current) }, [])
+  const withComment = (action: string, run: () => void) => () => {
+    if (comment.trim()) { run(); return }
+    toast(tIssue('commentFirst', { action }), 'warning')
+    commentTextareaRef.current?.focus()
+    setCommentNudge(true)
+    if (nudgeTimer.current) clearTimeout(nudgeTimer.current)
+    nudgeTimer.current = setTimeout(() => setCommentNudge(false), 2000)
+  }
+  // 코멘트가 비면 흐리게(아직 준비 안 됨) 보이되 누를 수는 있다
+  const needsCommentCls = comment.trim() ? '' : 'opacity-40'
   useEffect(() => {
     const el = commentTextareaRef.current
     if (!comment && el) { el.style.height = ''; el.style.overflow = 'hidden' }
@@ -382,7 +399,7 @@ function CommentModeInput({
         }}
         placeholder={tIssue('commentPlaceholder')}
         rows={1}
-        className="flex-1 min-w-0 min-h-10 bg-ive-bg-card border border-ive-border rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none focus:border-ive-green/50 overflow-hidden"
+        className={`flex-1 min-w-0 min-h-10 bg-ive-bg-card border rounded-lg px-3 py-2 text-sm text-ive-text placeholder-ive-text-dim resize-none focus:outline-none overflow-hidden transition-colors ${commentNudge && !comment.trim() ? 'border-ive-amber' : 'border-ive-border focus:border-ive-green/50'}`}
       />
         <button
           onClick={onPostComment}
@@ -403,9 +420,10 @@ function CommentModeInput({
           {/* 유입 버튼 — 검증대기/검증 단계에서만 표시 (이전 버튼 앞에 위치) */}
           {canProgressStage && !isClosed && (issue.stage === 'verify_waiting' || issue.stage === 'verifying') && (
             <button
-              onClick={onCommentAndInflow}
-              disabled={posting || !comment.trim()}
-              className="shrink-0 h-10 px-3 rounded-lg border border-ive-red/40 text-ive-red bg-ive-bg-card hover:bg-ive-red/10 flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold whitespace-nowrap"
+              onClick={withComment(tIssue('inflowShort'), onCommentAndInflow)}
+              disabled={posting}
+              aria-disabled={!comment.trim()}
+              className={`shrink-0 h-10 px-3 rounded-lg border border-ive-red/40 text-ive-red bg-ive-bg-card hover:bg-ive-red/10 flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold whitespace-nowrap ${needsCommentCls}`}
               title={tIssue('inflowHint')}
               aria-label={tIssue('inflowShort')}
             >
@@ -419,9 +437,10 @@ function CommentModeInput({
             const backTarget = targetLabel(retryActionOf(issue.stage))
             return (
               <button
-                onClick={() => onCommentAndRetry()}
-                disabled={posting || !comment.trim()}
-                className="shrink-0 h-10 px-3 rounded-lg border border-ive-amber/40 text-ive-amber bg-ive-bg-card hover:bg-ive-amber/10 flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold whitespace-nowrap"
+                onClick={withComment(backLabel, () => onCommentAndRetry())}
+                disabled={posting}
+                aria-disabled={!comment.trim()}
+                className={`shrink-0 h-10 px-3 rounded-lg border border-ive-amber/40 text-ive-amber bg-ive-bg-card hover:bg-ive-amber/10 flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold whitespace-nowrap ${needsCommentCls}`}
                 title={withTarget(tIssue(isReprocess ? 'postAndReprocessHint' : 'postAndRetryHint'), backTarget)}
                 aria-label={tIssue(isReprocess ? 'postAndReprocess' : 'postAndRetry')}
               >
@@ -464,9 +483,10 @@ function CommentModeInput({
                 )}
                 {showDone && (
                   <button
-                    onClick={onCommentAndDone}
-                    disabled={posting || !comment.trim()}
-                    className={`shrink-0 h-10 px-3 rounded-lg bg-ive-cyan text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-40 text-xs font-bold whitespace-nowrap`}
+                    onClick={withComment(NEXT_STAGE[issue.stage]?.label || tIssue('done'), onCommentAndDone)}
+                    disabled={posting}
+                    aria-disabled={!comment.trim()}
+                    className={`shrink-0 h-10 px-3 rounded-lg bg-ive-cyan text-ive-bg-deep flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-40 text-xs font-bold whitespace-nowrap ${needsCommentCls}`}
                     title={withTarget(tIssue('postAndDoneHint'), nextTarget)}
                     aria-label={tIssue('postAndDone')}
                   >

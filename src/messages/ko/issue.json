@@ -60,6 +60,7 @@
   "system": "시스템",
   "iveBot": "IVE 봇",
   "commentPlaceholder": "코멘트...",
+  "commentFirst": "「{action}」 전에 코멘트를 먼저 적어 주세요. 적은 내용이 함께 등록됩니다.",
   "postCommentOnly": "코멘트만 등록",
   "postComment": "코멘트 등록",
   "postCommentShort": "등록",

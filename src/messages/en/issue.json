@@ -60,6 +60,7 @@
   "system": "System",
   "iveBot": "IVE Bot",
   "commentPlaceholder": "Comment...",
+  "commentFirst": "Write a comment before “{action}”. It will be posted together.",
   "postCommentOnly": "Post Comment Only",
   "postComment": "Post Comment",
   "postCommentShort": "Post",
