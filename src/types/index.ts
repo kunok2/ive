@@ -375,3 +375,6 @@ export interface UserActivityLog {
   userAgent?: string   // 브라우저 UA
   createdAt: string
 }
+
+/** 브랜치 파이프라인 조회 조건 — status: 그 상태인 것만 / sha: 그 커밋의 것만 */
+export interface PipelineFilter { status?: string; sha?: string }

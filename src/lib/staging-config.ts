@@ -67,7 +67,8 @@ export async function fetchDeployedCommit(cfg: StagingConfig, project?: Project,
     if (!project || !token) return { ok: false, reason: '파이프라인으로 배포 커밋을 확인하려면 프로젝트 정보가 필요합니다' }
     try {
       const branch = cfg.branch || await resolveStagingBranch(project, token)
-      const pipelines = (await fetchBranchPipelines(project, token, branch)) as any[]
+      // 성공한 것만 묻는다 — 최근 목록에서 고르면 실패가 이어질 때 그 앞의 성공(지금 배포된 판)을 놓친다
+      const pipelines = (await fetchBranchPipelines(project, token, branch, { status: 'success' })) as any[]
       const ok = (pipelines || []).find(p => p?.status === 'success' && p?.sha)
       if (!ok) return { ok: false, reason: `${branch} 브랜치에 성공한 파이프라인이 아직 없습니다(배포가 한 번도 끝나지 않았습니다)` }
       return { ok: true, value: String(ok.sha) }

@@ -1,4 +1,4 @@
-import { Project } from "@/types";
+import { Project, PipelineFilter } from "@/types";
 import { getProjectPath, getAuthHeaders, apiUrl } from "./common";
 
 /**
@@ -255,8 +255,10 @@ export async function fetchGitLabMRPipelines(project: Project, decryptedToken: s
 /**
  * 특정 브랜치(ref)의 최신 파이프라인을 조회합니다.
  * 머지 후 타겟 브랜치의 배포 파이프라인 조회에 사용됩니다.
+ * 최근 5건만 읽으므로, 특정 커밋의 파이프라인이나 마지막으로 성공한 파이프라인을 찾을 때는 filter 로 직접 묻는다
+ * (실패가 5번 이어지면 그 앞의 성공·그 앞 커밋의 파이프라인이 목록에서 밀려난다).
  */
-export async function fetchGitLabBranchPipelines(project: Project, decryptedToken: string, ref: string) {
+export async function fetchGitLabBranchPipelines(project: Project, decryptedToken: string, ref: string, filter?: PipelineFilter) {
   const projectPath = getProjectPath(project.repoUrl);
   if (!projectPath) return [];
 
@@ -264,7 +266,7 @@ export async function fetchGitLabBranchPipelines(project: Project, decryptedToke
 
   try {
     const res = await fetch(
-      apiUrl(project, `/pipelines?ref=${encodeURIComponent(ref)}&order_by=id&sort=desc&per_page=5`),
+      apiUrl(project, `/pipelines?ref=${encodeURIComponent(ref)}&order_by=id&sort=desc&per_page=5${filter?.status ? `&status=${encodeURIComponent(filter.status)}` : ''}${filter?.sha ? `&sha=${encodeURIComponent(filter.sha)}` : ''}`),
       { headers }
     );
     if (!res.ok) return [];

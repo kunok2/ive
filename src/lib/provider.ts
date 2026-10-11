@@ -1,7 +1,7 @@
 /**
  * Provider dispatch — GitLab/GitHub 함수를 프로젝트 provider에 따라 선택합니다.
  */
-import { Project } from "@/types";
+import { Project, PipelineFilter } from "@/types";
 import * as gitlab from "./gitlab";
 import * as github from "./github";
 import type { ClosedIssuePageOptions } from "./closed-issues";
@@ -141,10 +141,10 @@ export function fetchMRPipelines(project: Project, token: string, mrIid: number)
     : gitlab.fetchGitLabMRPipelines(project, token, mrIid);
 }
 
-export function fetchBranchPipelines(project: Project, token: string, ref: string) {
+export function fetchBranchPipelines(project: Project, token: string, ref: string, filter?: PipelineFilter) {
   return project.provider === 'github'
-    ? github.fetchGitHubBranchCheckRuns(project, token, ref)
-    : gitlab.fetchGitLabBranchPipelines(project, token, ref);
+    ? github.fetchGitHubBranchCheckRuns(project, token, ref, filter)
+    : gitlab.fetchGitLabBranchPipelines(project, token, ref, filter);
 }
 
 // Single issue fetch (for GET /issues/[iid])

@@ -272,8 +272,11 @@ async function deployStateOf(project: Project, token: string, r: TargetResult, l
   const staging = lookup.staging
   if (r.mergeCommit && staging?.ok && staging.value.versionSource === 'pipeline') {
     try {
-      const pipelines = lookup.pipelines ??= (await fetchBranchPipelines(project, token, staging.value.branch || await resolveStagingBranch(project, token))) as any[]
+      const branch = staging.value.branch || await resolveStagingBranch(project, token)
+      const pipelines = lookup.pipelines ??= (await fetchBranchPipelines(project, token, branch)) as any[]
+      // 최근 목록에 없으면 그 커밋으로 직접 묻는다 — 뒤에 푸시가 이어지면 내 파이프라인이 목록에서 밀려난다
       const mine = (pipelines || []).find(pl => pl?.sha === r.mergeCommit)
+        ?? ((await fetchBranchPipelines(project, token, branch, { sha: r.mergeCommit })) as any[] || []).find(pl => pl?.sha === r.mergeCommit)
       if (mine && (mine.status === 'failed' || mine.status === 'canceled')) return 'failed'
     } catch { /* 조회 실패 — 아래 기본값 */ }
   }

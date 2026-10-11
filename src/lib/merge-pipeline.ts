@@ -23,7 +23,8 @@ export async function getMergePipeline(project: Project, token: string, iid: num
 
   const mergeSha = mr.merge_commit_sha
   const targetBranch = mr.target_branch || 'main'
-  const pipelines = await fetchBranchPipelines(project, token, targetBranch)
+  // 머지 커밋을 알면 그 커밋으로 직접 묻는다 — 최근 목록에서 찾으면 뒤에 푸시가 이어질 때 놓친다
+  const pipelines = await fetchBranchPipelines(project, token, targetBranch, mergeSha ? { sha: mergeSha } : undefined)
   if (!pipelines || pipelines.length === 0) return null
 
   const matched = mergeSha

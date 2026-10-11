@@ -332,7 +332,7 @@ describe('S-1 배포 커밋 — 브랜치 파이프라인', () => {
     if (!cfg.ok) return
     providerMock.fetchBranchPipelines.mockResolvedValue([{ sha: 'run', status: 'running' }, { sha: 'abc1234', status: 'success' }])
     expect(await fetchDeployedCommit(cfg.value, project, 'tok')).toEqual({ ok: true, value: 'abc1234' })
-    expect(providerMock.fetchBranchPipelines).toHaveBeenCalledWith(project, 'tok', 'main')
+    expect(providerMock.fetchBranchPipelines).toHaveBeenCalledWith(project, 'tok', 'main', { status: 'success' })
     providerMock.fetchBranchPipelines.mockResolvedValue([{ sha: 'run', status: 'running' }])
     expect((await fetchDeployedCommit(cfg.value, project, 'tok')).ok).toBe(false)
   })
