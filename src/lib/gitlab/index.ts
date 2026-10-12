@@ -27,6 +27,7 @@ export {
 // MR: lifecycle (create, update, merge, close, diff, pipelines)
 export {
   createGitLabMR,
+  addGitLabMRLabels,
   getGitLabMR,
   addGitLabMRNote,
   fetchGitLabMRByBranch,

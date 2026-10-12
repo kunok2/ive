@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { getProject, getProjectAuthToken, getProjectAccess, updateProjectConflictCount, markIssueVerified, touchProjectActivity, getDb, updateExecutionStatus, upsertIssueStageSnapshot, recordStageEvent } from '@/lib/db'
 import { userActor } from '@/lib/event-actor'
-import { fetchOpenMRs, mergeMR, closeMR, fetchSingleIssue, addIssueLabels, removeIssueLabels, swapIssueLabels } from '@/lib/provider'
+import { iveMrLabel, fetchOpenMRs, mergeMR, closeMR, fetchSingleIssue, addIssueLabels, removeIssueLabels, swapIssueLabels } from '@/lib/provider'
 import { logActivity } from '@/lib/activity'
 import { DEFAULT_LABELS } from '@/lib/labels'
 
@@ -26,7 +26,9 @@ export async function GET(
     return NextResponse.json({ error: 'Token decryption failed' }, { status: 500 })
   }
 
-  const openMRs = await fetchOpenMRs(project, decryptedToken)
+  // IVE 가 만든(표시 레이블이 달린) MR/PR 만 — 저장소의 다른 MR 은 카드에 세지 않는다
+  const iveLabel = iveMrLabel(project)
+  const openMRs = (await fetchOpenMRs(project, decryptedToken)).filter((mr: any) => mr.labels?.includes(iveLabel))
   const conflicts = openMRs.filter((mr: any) => mr.has_conflicts)
 
   // DB 캐시도 실시간 값으로 동기화 — 카드 통계에 반영

@@ -11,6 +11,7 @@ export async function createGitHubPR(project: Project, decryptedToken: string, p
   target_branch: string;
   title: string;
   description?: string;
+  labels?: string[];
 }) {
   const ownerRepo = getOwnerRepo(project.repoUrl);
   if (!ownerRepo) return null;
@@ -34,6 +35,7 @@ export async function createGitHubPR(project: Project, decryptedToken: string, p
       throw new Error(errBody.message || `Create PR failed: ${res.statusText}`);
     }
     const pr = await res.json();
+    if (payload.labels?.length) await addGitHubPRLabels(project, decryptedToken, pr.number, payload.labels);
     return normalizePR(pr);
   } catch (err) {
     console.error(`[GitHub] Error creating PR for ${project.name}:`, err);
@@ -224,7 +226,24 @@ export async function fetchOpenGitHubPRs(project: Project, decryptedToken: strin
     target_branch: pr.base?.ref,
     has_conflicts: pr.mergeable === false,
     web_url: pr.html_url,
+    labels: (pr.labels || []).map((l: any) => l.name) as string[],
   }));
+}
+
+/**
+ * 기존 PR에 레이블을 더합니다 (PR 은 이슈 API 로 레이블을 다룬다).
+ */
+export async function addGitHubPRLabels(project: Project, decryptedToken: string, prNumber: number, labels: string[]) {
+  const headers = getGitHubAuthHeaders(project, decryptedToken);
+  try {
+    await fetch(apiUrl(project, `/issues/${prNumber}/labels`), {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ labels }),
+    });
+  } catch (err) {
+    console.error(`[GitHub] PR 레이블 추가 실패 (${project.name} #${prNumber}):`, err);
+  }
 }
 
 /**

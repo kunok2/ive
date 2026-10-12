@@ -227,7 +227,24 @@ export async function fetchOpenGitLabMRs(project: Project, decryptedToken: strin
     target_branch: mr.target_branch,
     has_conflicts: mr.has_conflicts === true || mr.merge_status === 'cannot_be_merged',
     web_url: mr.web_url,
+    labels: (mr.labels || []) as string[],
   }));
+}
+
+/**
+ * 기존 MR에 레이블을 더합니다 (이미 있으면 그대로).
+ */
+export async function addGitLabMRLabels(project: Project, decryptedToken: string, mrIid: number, labels: string[]) {
+  const headers = getAuthHeaders(project, decryptedToken);
+  try {
+    await fetch(apiUrl(project, `/merge_requests/${mrIid}`), {
+      method: 'PUT',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ add_labels: labels.join(',') }),
+    });
+  } catch (err) {
+    console.error(`[GitLab] MR 레이블 추가 실패 (${project.name} !${mrIid}):`, err);
+  }
 }
 
 /**

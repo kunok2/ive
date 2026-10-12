@@ -8,7 +8,7 @@ import { promisify } from "util";
 import { Project, Agent } from "@/types";
 import { updateExecutionStatus, updateAgentStatus, getAssigneeAuto, getPresetRoles, getProjectAutomation, recordStageEvent } from "../db";
 import { agentActor, executionPromptVersion } from "../event-actor";
-import { addIssueLabels, removeIssueLabels, swapIssueLabels } from "../provider";
+import { addIssueLabels, removeIssueLabels, swapIssueLabels, iveMrLabel, markMRAsIve } from "../provider";
 import { notifyStageTransition } from "../slack-notify";
 import { runAutoAssign } from "./auto-assign";
 import type { PreservedChanges } from "./git-ops";
@@ -176,6 +176,7 @@ export async function commitPushAndCreateMR(params: {
       const existingPR = await getGitHubPR(project, token, branchName);
       if (existingPR) {
         mrUrl = existingPR.web_url;
+        await markMRAsIve(project, token, existingPR.iid);
         await addGitHubPRNote(project, token, existingPR.iid, `## Iteration #${iterationCount}\nApplied feedback and made additional changes.`);
       } else {
         const prResult = await createGitHubPR(project, token, {
@@ -183,6 +184,7 @@ export async function commitPushAndCreateMR(params: {
           target_branch: baseBranch,
           title: commitTitle,
           description: mrDescription('PR'),
+          labels: [iveMrLabel(project)],
         });
         mrUrl = prResult?.web_url || "";
       }
@@ -190,6 +192,7 @@ export async function commitPushAndCreateMR(params: {
       const existingMR = await getGitLabMR(project, token, branchName);
       if (existingMR) {
         mrUrl = existingMR.web_url;
+        await markMRAsIve(project, token, existingMR.iid);
         await addGitLabMRNote(project, token, existingMR.iid, `## Iteration #${iterationCount}\nApplied feedback and made additional changes.`);
       } else {
         const mrResult = await createGitLabMR(project, token, {
@@ -197,6 +200,7 @@ export async function commitPushAndCreateMR(params: {
           target_branch: baseBranch,
           title: commitTitle,
           description: mrDescription('MR'),
+          labels: iveMrLabel(project),
           remove_source_branch: false,
           squash: true,
         });

@@ -6,6 +6,7 @@ import * as gitlab from "./gitlab";
 import * as github from "./github";
 import type { ClosedIssuePageOptions } from "./closed-issues";
 import { withTargetLabelSwap } from "./stage-transitions";
+import { DEFAULT_LABELS } from "./labels";
 
 // Issues
 export function fetchAllProjectIssues(project: Project, token: string) {
@@ -248,10 +249,25 @@ export function createBranch(project: Project, token: string, branchName: string
     : gitlab.createGitLabBranch(project, token, branchName, ref);
 }
 
+/** IVE 가 만든 MR/PR 에 다는 표시 레이블 — 단계 없이 프로젝트의 대상 레이블(기본 ive) 하나. */
+export function iveMrLabel(project: Project): string {
+  return project.labelTarget || DEFAULT_LABELS.target;
+}
+
+// 생성 시 IVE 표시 레이블을 함께 단다 (GitLab 은 생성 payload, GitHub 은 생성 직후 이슈 API)
 export function createMR(project: Project, token: string, payload: { source_branch: string; target_branch: string; title: string; description?: string }) {
+  const label = iveMrLabel(project);
   return project.provider === 'github'
-    ? github.createGitHubPR(project, token, payload)
-    : gitlab.createGitLabMR(project, token, payload);
+    ? github.createGitHubPR(project, token, { ...payload, labels: [label] })
+    : gitlab.createGitLabMR(project, token, { ...payload, labels: label });
+}
+
+// 이미 있는 MR/PR(재처리로 갱신되는 것, 레이블 도입 전에 만든 것)에도 표시 레이블을 단다
+export function markMRAsIve(project: Project, token: string, mrIid: number) {
+  const label = iveMrLabel(project);
+  return project.provider === 'github'
+    ? github.addGitHubPRLabels(project, token, mrIid, [label])
+    : gitlab.addGitLabMRLabels(project, token, mrIid, [label]);
 }
 
 export function getDefaultBranch(project: Project, token: string) {
