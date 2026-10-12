@@ -49,38 +49,30 @@ export async function fetchGitHubPRByBranch(project: Project, decryptedToken: st
   if (!ownerRepo) return null;
 
   const headers = getGitHubAuthHeaders(project, decryptedToken);
+  const head = encodeURIComponent(`${ownerRepo.split('/')[0]}:${sourceBranch}`);
 
-  try {
-    // open 먼저
-    let res = await fetch(
-      apiUrl(project, `/pulls?head=${ownerRepo.split('/')[0]}:${sourceBranch}&state=open&per_page=1`),
-      { headers }
-    );
-    if (res.ok) {
-      const prs = await res.json();
-      if (prs.length > 0) return normalizePR(prs[0]);
-    }
-    // closed (merged 포함)
-    res = await fetch(
-      apiUrl(project, `/pulls?head=${ownerRepo.split('/')[0]}:${sourceBranch}&state=closed&per_page=1`),
-      { headers }
-    );
-    if (res.ok) {
-      const prs = await res.json();
-      if (prs.length > 0) return normalizePR(prs[0]);
-    }
-    return null;
-  } catch (err) {
-    console.error(`[GitHub] Error fetching PR by branch ${sourceBranch}:`, err);
-    return null;
+  // 조회 실패는 throw 해서 withGitToken fallback 발동시킴 — 「PR 없음」(200 with [])과 구분한다.
+  // GitHub 은 토큰에 권한이 없는 비공개 저장소에 401/403 이 아니라 404 를 준다.
+  // open 먼저, 없으면 closed (merged 포함)
+  for (const state of ['open', 'closed']) {
+    const res = await fetch(apiUrl(project, `/pulls?head=${head}&state=${state}&per_page=1`), { headers });
+    if (!res.ok) throw new Error(`GitHub PR fetch failed: ${res.status} ${res.statusText}`);
+    const prs = await res.json();
+    if (prs.length > 0) return normalizePR(prs[0]);
   }
+  return null;
 }
 
 /**
  * 기존 PR을 조회합니다 (source_branch로).
  */
 export async function getGitHubPR(project: Project, decryptedToken: string, sourceBranch: string) {
-  return fetchGitHubPRByBranch(project, decryptedToken, sourceBranch);
+  try {
+    return await fetchGitHubPRByBranch(project, decryptedToken, sourceBranch);
+  } catch (err) {
+    console.error(`[GitHub] Error fetching PR for ${project.name}:`, err);
+    return null;
+  }
 }
 
 /**

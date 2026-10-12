@@ -492,6 +492,7 @@ async function scanProject(project: Project, force: boolean = false) {
             name: actor?.name || '',
             avatar: actor?.avatar || undefined,
             username: actor?.username,
+            userId: actorUser?.id ?? null,
           });
         }
         if (markers.rejected) {
@@ -499,6 +500,7 @@ async function scanProject(project: Project, force: boolean = false) {
             name: actor?.name,
             avatar: actor?.avatar,
             username: actor?.username,
+            userId: actorUser?.id ?? null,
           });
         }
         if (markers.confirmStarted) {

@@ -3,7 +3,7 @@
 // 종전에는 검증/확인 실행 기록(ex-verify-/ex-confirm-)을 IVE 화면의 단계 버튼만 만들었다.
 // CLI 로 라벨만 옮기면 행이 없어 검증·확인이 보고서에서 통째로 빠졌다.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { getDb } from '@/lib/db'
+import { getDb, createExecution, updateExecutionStatus, markIssueVerifyStarted, markIssueVerified, markIssueVerifyRejected, getActualRoleAssignees, getActualRoleAssigneesMap } from '@/lib/db'
 import { setupTestDb, teardownTestDb, seedUser, seedProject } from './helpers/test-db'
 import { openStageExecution, closeStageExecutions, hasOpenStageExecution, pickStageMeta } from '@/lib/scanner/stage-records'
 import { parseIveMetaSessions } from '@/lib/scanner/formatters'
@@ -91,5 +91,39 @@ describe('CLI 경로의 검증/확인 실행 기록', () => {
   it('stage 가 없는 블록은 개발(dev)로 본다 — 기존 이슈 본문 하위호환', () => {
     const [s] = parseIveMetaSessions('<!-- ive-meta\nmodel: x\ninput_tokens: 10\n-->')
     expect(s.stage).toBe('dev')
+  })
+})
+
+// 사람이 Git 에서 레이블을 직접 옮겨 검증한 경우 — 상태 그래프(actualVerifier)는 verifier_user_id 가 있는 기록만 읽는다.
+// 스캐너가 이름·아바타만 남기고 사용자 id 를 빼면 화면 버튼으로 검증했을 때와 달리 아바타가 비었다.
+describe('레이블로 진행한 검증의 검증자 표시', () => {
+  beforeEach(() => {
+    const db = setupTestDb()
+    seedUser(db, 'user-1', '검증자', { gitlabUsername: 'verifier1' })
+    seedProject(db, PROJ, 'user-1', 'P')
+    createExecution({
+      id: 'ex-dev-1', projectId: PROJ, agentId: '', issueIid: IID, issueTitle: '이슈', status: 'assigned',
+      startedAt: '2026-10-01T00:00:00.000Z', logPath: '', inputTokens: 0, outputTokens: 0, costUsd: 0, turns: 0,
+      issueCreatedAt: '2026-10-01T00:00:00.000Z',
+    } as Parameters<typeof createExecution>[0])
+    updateExecutionStatus('ex-dev-1', 'success', '2026-10-01T01:00:00.000Z')
+    markIssueVerifyStarted(PROJ, IID)
+  })
+  afterEach(() => teardownTestDb())
+
+  it('통과 — 사용자 id 를 함께 기록하면 검증자로 나온다', () => {
+    markIssueVerified(PROJ, IID, { name: '검증자', avatar: 'av-03', username: 'verifier1', userId: 'user-1' })
+    expect(getActualRoleAssignees(PROJ, IID).verifier).toEqual({ userId: 'user-1', name: '검증자', avatar: 'av-03' })
+    expect(getActualRoleAssigneesMap(PROJ).get(IID)?.verifier?.userId).toBe('user-1')
+  })
+
+  it('반려 — 사용자 id 를 함께 기록하면 검증자로 나온다', () => {
+    markIssueVerifyRejected(PROJ, IID, { name: '검증자', avatar: 'av-03', username: 'verifier1', userId: 'user-1' })
+    expect(getActualRoleAssignees(PROJ, IID).verifier?.userId).toBe('user-1')
+  })
+
+  it('사용자 id 없이 이름만 기록하면 검증자가 비어 있다 (종전 스캐너 동작)', () => {
+    markIssueVerified(PROJ, IID, { name: '검증자', avatar: 'av-03', username: 'verifier1' })
+    expect(getActualRoleAssignees(PROJ, IID).verifier).toBeNull()
   })
 })
