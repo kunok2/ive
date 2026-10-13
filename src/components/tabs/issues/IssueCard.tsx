@@ -1,7 +1,7 @@
 'use client'
 
 import { PriorityBadge } from './Priority'
-import IssueBadges, { hasIssueBadges } from './IssueBadges'
+import IssueBadges, { hasIssueBadges, ProgressBar } from './IssueBadges'
 import { roleBarPropsOf } from './role-bar-props'
 import type { PresetRole, RoleAgentCandidate } from '@/components/issue/RoleAvatarBar'
 import { useTranslations } from 'next-intl'
@@ -149,6 +149,8 @@ export default function IssueCard({
           {issue.failReason}
         </div>
       )}
+      {/* 지금 단계 체크리스트 진행률 — 카드 폭 전체(체크박스가 있는 작업만) */}
+      <div className="mb-2 empty:hidden"><ProgressBar issue={issue} /></div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ive-text-dim">
         {/* 4 역할 아바타 — 작성자 › 처리자 › 검증자 › 확인자 (작업 #271) */}
         <span onClick={e => { if (canEdit && !bulkMode) e.stopPropagation() }}>

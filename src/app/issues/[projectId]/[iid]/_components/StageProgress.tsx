@@ -86,6 +86,8 @@ interface StageProgressProps {
   retryCounts?: RetryCounts | null
   /** 정방향 진입 횟수 — 각 단계로 들어간 횟수 */
   forwardCounts?: ForwardCounts | null
+  /** 단계별 체크리스트 진행률 — 본문의 체크박스에서 읽은 값. 있는 단계의 칩 아래에 작은 막대로 보인다 */
+  stageChecklist?: Partial<Record<'process' | 'verify' | 'confirm', { done: number; total: number; percent: number }>> | null
   /** 역할 데이터 — 제공 시 각 칩에 담당자 아바타 표시 */
   roles?: {
     creator: CreatorInfo
@@ -108,7 +110,7 @@ interface StageProgressProps {
   }
 }
 
-export default function StageProgress({ stage, createdAt, closedAt, stageTimes, retryCounts, forwardCounts, roles }: StageProgressProps) {
+export default function StageProgress({ stage, createdAt, closedAt, stageTimes, retryCounts, forwardCounts, stageChecklist, roles }: StageProgressProps) {
   const tStage = useTranslations('stage')
   const tIssue = useTranslations('issue')
   const { state } = useStore()
@@ -406,6 +408,9 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
 
           // 지금 단계·대기 화살표 색 = 앱 전체 단계 색(처리 노랑·검증 보라·확인 분홍, 그 단계 대기는 회색빛)
           const tone = MACRO_TONE[m.idx]
+          // 이 단계의 체크리스트 진행률(처리·검증·확인) — 본문에 그 단계 체크박스가 있을 때만. 칩 이름 옆 숫자 + 칩 아랫변 막대
+          const ckKey = m.idx === 2 ? 'process' : m.idx === 3 ? 'verify' : m.idx === 4 ? 'confirm' : null
+          const cl = ckKey ? stageChecklist?.[ckKey] : null
           let chipCls = ''
           if (isError) chipCls = 'bg-ive-red/15 text-ive-red border-ive-red/40 ring-1 ring-ive-red/20'
           else if (isCurrent) chipCls = `${tone.active.bg} ${tone.active.text} ${tone.active.border} ring-1 ${tone.active.ring}`
@@ -486,8 +491,8 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
                )}
               <div className="flex flex-col items-center shrink-0" ref={el => { pillRefs.current[m.idx] = el }}>
                <div
-                 className={`inline-flex items-center gap-1.5 pl-1 pr-2.5 h-7 rounded-lg border text-[11px] font-bold transition-all ${chipCls}`}
-                 title={!showAvatar ? m.label : undefined}
+                 className={`relative overflow-hidden inline-flex items-center gap-1.5 pl-1 pr-2.5 h-7 rounded-lg border text-[11px] font-bold transition-all ${chipCls}`}
+                 title={cl ? `${m.label} ${cl.done}/${cl.total}` : (!showAvatar ? m.label : undefined)}
                >
                  {isError ? (
                    <span className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-lg text-[10px] bg-ive-red/15 ring-2 ring-ive-red/40">
@@ -521,6 +526,12 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
                   </span>
                 )}
                 <span>{m.label}</span>
+                {cl && <span className="tabular-nums">{cl.done}/{cl.total}</span>}
+                {cl && (
+                  <span className="absolute inset-x-0 bottom-0 h-[3px] bg-ive-border-subtle" aria-hidden>
+                    <span className="block h-full bg-ive-green" style={{ width: `${cl.percent}%` }} />
+                  </span>
+                )}
               </div>
               <span className={`text-[10px] mt-1 leading-none text-ive-text-muted h-3 whitespace-nowrap ${stageLabelAlign}`}>{stageLabel ?? ''}</span>
               </div>

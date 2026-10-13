@@ -6,6 +6,7 @@ import { useStore } from '@/lib/store'
 import { formatDateMedium } from '@/lib/format-date'
 import { type StageAction } from './StageActions'
 import StageProgress from './StageProgress'
+import { computeProgress, appendChecklist } from '@/lib/stage-progress'
 import DeadlineProgress from './DeadlineProgress'
 import { PriorityBadge, PriorityPicker, type Priority } from '@/components/tabs/issues/Priority'
 import { type PresetRole, type RoleAgentCandidate } from '@/components/issue/RoleAvatarBar'
@@ -104,6 +105,9 @@ export default function IssueHeader({
   const { state } = useStore()
   const tc = useTranslations('common')
   const tIssue = useTranslations('issue')
+  const insertChecklist = (text: string) => appendChecklist(text, {
+    process: tIssue('checklistHeadProcess'), verify: tIssue('checklistHeadVerify'), confirm: tIssue('checklistHeadConfirm'),
+  })
 
   // Image paste handler for edit description textarea
   const editDescRef = useRef(editDesc)
@@ -116,7 +120,7 @@ export default function IssueHeader({
   }), [projectId, onSetEditDesc, onToast])
 
   return (
-    <header className={`sticky top-0 z-40 w-full ${widthCls} mx-auto bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark shrink-0`}>
+    <header className={`sticky top-0 z-40 w-full ${widthCls} mx-auto bg-ive-bg-deep/95 backdrop-blur-sm border-b border-ive-border-dark ${editMode ? 'flex-1 min-h-0 flex flex-col' : 'shrink-0'}`}>
       <div className="flex items-center gap-2 px-3 py-2">
         {onBack && (
           <button onClick={onBack} className="text-ive-green font-bold p-1 hover:bg-ive-green/5 rounded shrink-0">
@@ -165,9 +169,9 @@ export default function IssueHeader({
         )}
       </div>
       {/* 제목 + 설명 토글 + 단계 변경 */}
-      <div className="px-3 pb-2">
+      <div className={`px-3 pb-2 ${editMode ? 'flex-1 min-h-0 flex flex-col' : ''}`}>
         {editMode ? (
-          <div className="space-y-2">
+          <div className="flex-1 min-h-0 flex flex-col gap-2">
             <div className="flex gap-2 items-center">
               <input
                 type="text"
@@ -178,18 +182,27 @@ export default function IssueHeader({
                 autoFocus
               />
             </div>
-            <div className="flex gap-2 items-end">
+            {/* 편집 중에는 작업 내용·입력줄을 감추고 남는 높이를 본문 입력칸이 다 쓴다 */}
+            <div className="flex gap-2 flex-1 min-h-0">
               <textarea
                 value={editDesc}
                 onChange={e => onSetEditDesc(e.target.value)}
                 onPaste={editDescPasteHandlers.onPaste}
                 onDrop={editDescPasteHandlers.onDrop}
                 onDragOver={editDescPasteHandlers.onDragOver}
-                className="flex-1 bg-ive-bg-input border border-ive-border rounded-lg px-3 py-1.5 text-sm text-ive-text resize-none focus:outline-none focus:border-ive-green"
+                className="flex-1 bg-ive-bg-input border border-ive-border rounded-lg px-3 py-1.5 text-sm text-ive-text resize-none focus:outline-none focus:border-ive-green h-full min-h-40 leading-relaxed"
                 placeholder={tIssue('descriptionOptional')}
-                rows={4}
+                rows={8}
               />
             </div>
+            <button
+              type="button"
+              onClick={() => onSetEditDesc(insertChecklist(editDesc))}
+              title={tIssue('insertChecklistHint')}
+              className="self-start text-xs font-bold text-ive-text-dim hover:text-ive-green border border-ive-border-subtle hover:border-ive-green/30 px-2.5 py-1 rounded-lg transition-all"
+            >
+              <i className="fa-regular fa-square-check mr-1" />{tIssue('insertChecklist')}
+            </button>
             <div className="flex gap-2">
               <button
                 onClick={onSaveEdit}
@@ -268,6 +281,7 @@ export function IssueProgressSection({
 }: IssueProgressSectionProps) {
   // 완료된 작업(닫힘 또는 done 단계)은 담당자/검증자/확인자/마감일 모두 수정 불가.
   // 이미 종결된 흐름을 사후 변경하면 통계와 보고서가 어그러진다.
+  const tIssue = useTranslations('issue')
   const isCompleted = issue.state === 'closed' || issue.stage === 'done'
   const effectiveCanEditAssignees = canEditAssignees && !isCompleted
 
@@ -282,6 +296,7 @@ export function IssueProgressSection({
         stageTimes={issue.stageTimes ?? null}
         retryCounts={issue.retryCounts ?? null}
         forwardCounts={issue.forwardCounts ?? null}
+        stageChecklist={isCompleted ? null : computeProgress(issue.description, issue.stage).byStage}
         roles={{
           creator: {
             name: issue.author,
@@ -315,6 +330,20 @@ export function IssueProgressSection({
           confirmerAgents: roleAgents?.confirm,
         }}
       />
+      {/* 전체 진행률 — 끝난 단계와 지금 단계의 체크리스트로 계산. 체크박스가 있는 작업에만 한 줄 */}
+      {!isCompleted && (() => {
+        const p = computeProgress(issue.description, issue.stage)
+        if (!p.stage || p.overall == null) return null
+        return (
+          <div className="mt-2 flex items-center gap-2 text-[11px] font-bold text-ive-text-secondary">
+            <span className="shrink-0">{tIssue('progressOverall')}</span>
+            <div className="flex-1 h-1.5 rounded-lg bg-ive-border-subtle overflow-hidden">
+              <div className="h-full bg-ive-green" style={{ width: `${p.overall}%` }} />
+            </div>
+            <span className="tabular-nums">{p.overall}%</span>
+          </div>
+        )
+      })()}
       </div>
       {/* 마감일 진행 — 시작일시 → 마감일시 + 소진율. 작성자만 수정 가능.
           완료된 작업(closed/done)은 마감일 대비 조기/지연을 표시하므로 마감일이 있어야만 노출. */}

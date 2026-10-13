@@ -13,6 +13,7 @@ import { transitionTarget } from '@/lib/stage-transitions'
 import { useStore } from '@/lib/store'
 import IssueHeader, { IssueProgressSection } from './IssueHeader'
 import NotesList from './NotesList'
+import { toggleCheckboxInBody, computeProgress } from '@/lib/stage-progress'
 import BottomInputArea from './BottomInputArea'
 import MrActionModal from './MrActionModal'
 import AssigneePickerModal from './AssigneePickerModal'
@@ -69,6 +70,8 @@ interface IssueDetail {
   canEditPriority?: boolean
   title: string
   description: string
+  /** 본문 체크박스를 눌러 바꿀 수 있는 사용자(조회 전용 제외) */
+  canEditBody?: boolean
   stage: string
   state: string
   labels: string[]
@@ -126,6 +129,8 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
 
   // --- Core state ---
   const [issue, setIssue] = useState<IssueDetail | null>(null)
+  const issueRef = useRef<IssueDetail | null>(null)
+  issueRef.current = issue
   const [notes, setNotes] = useState<Note[]>([])
   const notesRef = useRef<Note[]>([])
   useEffect(() => { notesRef.current = notes }, [notes])
@@ -243,6 +248,19 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
     return isAssignee || isCreator
   })()
 
+  // 본문 체크박스 저장 상태 — 저장은 한 줄로 차례대로 보내고, 저장과 겹친 목록 응답은 버린다
+  const checkboxEpochRef = useRef(0)
+  const checkboxPendingRef = useRef(0)
+  const checkboxQueueRef = useRef<Promise<void>>(Promise.resolve())
+
+  // 열려 있는 작업의 진행률을 옆 목록 카드에 바로 알린다 — 체크박스를 누르는 즉시, 깃에서 바뀐 것을 폴링이 가져온 즉시
+  useEffect(() => {
+    if (!issue || issue.state === 'closed') return
+    window.dispatchEvent(new CustomEvent('issue-progress', {
+      detail: { projectId, iid: Number(iid), progress: computeProgress(issue.description, issue.stage) },
+    }))
+  }, [issue?.description, issue?.stage, issue?.state, projectId, iid]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const fetchIssue = useCallback(async () => {
     const cacheKey = `issue-detail-${projectId}-${iid}`
     const cached = sessionStorage.getItem(cacheKey)
@@ -253,10 +271,13 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
       return
     }
     // 네트워크 오류여도 로딩은 끝낸다 — 스피너가 끝없이 돌지 않게(이미 보이던 내용은 그대로 둔다)
+    const epoch = checkboxEpochRef.current
     try {
       const res = await fetch(`/api/projects/${projectId}/issues/${iid}`, { cache: 'no-store' })
       if (res.ok) {
         const data = await res.json()
+        // 체크박스 저장과 겹친 응답은 저장 전 본문일 수 있다 — 버려서 방금 켠 체크가 도로 꺼지지 않게 한다
+        if (epoch !== checkboxEpochRef.current || checkboxPendingRef.current > 0) return
         setIssue(prev => (prev && JSON.stringify(prev) === JSON.stringify(data)) ? prev : data)
       }
     } catch { /* 다음 폴링에서 다시 시도 */ }
@@ -809,6 +830,44 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
     finally { setSaving(false) }
   }
 
+  /** 본문 체크박스 — 저장소 본문을 고쳐 쓰고, 화면은 먼저 바꿔 둔다(실패하면 그 칸만 되돌림) */
+  function handleToggleCheckbox(index: number, checked: boolean) {
+    const cur = issueRef.current?.description ?? ''
+    const next = toggleCheckboxInBody(cur, index, checked)
+    if (next === null) return
+    issueRef.current = issueRef.current ? { ...issueRef.current, description: next } : issueRef.current
+    setIssue(curr => curr ? { ...curr, description: next } : curr)
+    checkboxEpochRef.current++
+    checkboxPendingRef.current++
+    const undo = () => setIssue(curr => {
+      const back = curr ? toggleCheckboxInBody(curr.description || '', index, !checked) : null
+      return curr && back !== null ? { ...curr, description: back } : curr
+    })
+    // 연속으로 눌러도 서버에는 누른 순서대로 하나씩 — 동시에 보내면 서로의 저장을 덮어쓴다
+    checkboxQueueRef.current = checkboxQueueRef.current.then(async () => {
+      try {
+        const res = await fetch(`/api/projects/${projectId}/issues/${iid}/checkbox`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ index, checked }),
+        })
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}))
+          toast(data.error || tIssue('checkboxSaveFailed'), 'error')
+          undo()
+        }
+      } catch (e: any) {
+        toast(e?.message || tc('networkError'), 'error')
+        undo()
+      } finally {
+        checkboxEpochRef.current++
+        if (--checkboxPendingRef.current === 0) {
+          // 옆 칸의 작업 카드·보드 진행률도 바뀌도록 목록을 다시 가져오게 한다
+          window.dispatchEvent(new CustomEvent('refresh-counts'))
+        }
+      }
+    })
+  }
+
   async function handleDueDateChange(next: string | null) {
     // 낙관적 갱신 — 즉시 UI 반영, 실패 시 롤백.
     const prev = issue?.dueDate ?? null
@@ -1242,6 +1301,7 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
         onToast={toast}
       />
 
+      <div className={editMode ? 'hidden' : 'contents'}>
       <NotesList
         widthCls={widthCls}
         issue={issue}
@@ -1265,6 +1325,7 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
         notesEndRef={notesEndRef}
         onRefreshAll={refreshAll}
         onDeleteNote={handleDeleteNote}
+        onToggleCheckbox={issue.canEditBody && issue.state !== 'closed' ? handleToggleCheckbox : undefined}
         // 진행막대·마감일·우선순위는 고정 머리가 아니라 내용 스크롤 영역 맨 위 — 함께 스크롤되어 내용 보기 높이가 커진다(폭과 무관)
         headSlot={!editMode ? (
           <div className="pt-2 pb-1 pr-2">
@@ -1296,6 +1357,8 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
         }
       />
 
+      </div>
+      <div className={editMode ? 'hidden' : 'contents'}>
       <BottomInputArea
         widthCls={widthCls}
         issue={issue}
@@ -1342,6 +1405,7 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
         onToast={toast}
 
       />
+      </div>
 
       <MrActionModal
         open={!!mrActionModal}
@@ -1371,7 +1435,7 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
         onClose={() => setAgentPickerOpen(false)}
       />
 
-      {!embedded && <MobileTabBar />}
+      {!embedded && !editMode && <MobileTabBar />}
     </div>
   )
 }

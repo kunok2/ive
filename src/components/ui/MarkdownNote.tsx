@@ -37,7 +37,7 @@ export function cleanNoteBody(body: string): string {
     .trim()
 }
 
-export default function MarkdownNote({ body, projectId }: { body: string; projectId?: string }) {
+export default function MarkdownNote({ body, projectId, onToggleCheckbox }: { body: string; projectId?: string; onToggleCheckbox?: (index: number, checked: boolean) => void }) {
   const rootRef = useRef<HTMLDivElement>(null)
   const [viewer, setViewer] = useState<{ images: ViewerImage[]; index: number } | null>(null)
 
@@ -46,6 +46,12 @@ export default function MarkdownNote({ body, projectId }: { body: string; projec
     const nodes = Array.from(rootRef.current?.querySelectorAll<HTMLImageElement>('img[data-zoomable]') || [])
     const images = nodes.map(n => ({ src: n.currentSrc || n.src, alt: n.alt }))
     setViewer({ images, index: Math.max(0, nodes.indexOf(target)) })
+  }
+
+  const toggleAt = (target: Element, next: boolean) => {
+    const nodes = Array.from(rootRef.current?.querySelectorAll('[data-task-checkbox]') || [])
+    const index = nodes.indexOf(target)
+    if (index >= 0) onToggleCheckbox?.(index, next)
   }
 
   return (
@@ -60,7 +66,21 @@ export default function MarkdownNote({ body, projectId }: { body: string; projec
           p: ({ children }) => <p className="mb-1.5 last:mb-0">{children}</p>,
           ul: ({ children }) => <ul className="list-disc list-inside mb-1.5 space-y-0.5">{children}</ul>,
           ol: ({ children }) => <ol className="list-decimal list-inside mb-1.5 space-y-0.5">{children}</ol>,
-          li: ({ children }) => <li>{children}</li>,
+          // 체크리스트(- [x]) — 전역 스타일이 input 의 기본 모양을 지워 체크박스가 안 보이므로 아이콘으로 그린다(보기 전용)
+          li: ({ children, className }) => <li className={className?.includes('task-list-item') ? 'list-none' : undefined}>{children}</li>,
+          // onToggleCheckbox 가 있으면 눌러서 켜고 끈다 — 몇 번째인지는 화면에 그려진 체크박스 순서로 센다(본문 N번째와 같다)
+          input: ({ type, checked }) => {
+            if (type !== 'checkbox') return null
+            const icon = `${checked ? 'fa-solid fa-square-check text-ive-green' : 'fa-regular fa-square text-ive-text-secondary'} mr-1.5 align-middle`
+            if (!onToggleCheckbox) return <i className={icon} role="checkbox" aria-checked={!!checked} aria-readonly="true" />
+            return (
+              <i
+                className={`${icon} cursor-pointer`} role="checkbox" aria-checked={!!checked} tabIndex={0} data-task-checkbox=""
+                onClick={e => toggleAt(e.currentTarget, !checked)}
+                onKeyDown={e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggleAt(e.currentTarget, !checked) } }}
+              />
+            )
+          },
           strong: ({ children }) => <strong className="font-bold text-ive-text">{children}</strong>,
           em: ({ children }) => <em className="italic">{children}</em>,
           code: ({ children, className }) => {

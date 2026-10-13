@@ -286,6 +286,19 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
       .finally(() => setLoading(false))
   }, [selectedProjectId])
 
+  // 조용한 갱신 — 스피너 없이 데이터만 바꾼다(주기 갱신용). 내용이 같으면 상태를 건드리지 않아 화면이 깜빡이지 않는다
+  const refreshIssuesQuietly = useCallback(() => {
+    if (!selectedProjectId) return
+    fetch(`/api/projects/${selectedProjectId}/issues`)
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (!data) return
+        setIssues(prev => JSON.stringify(prev) === JSON.stringify(data) ? prev : data)
+        try { sessionStorage.setItem('issues-cache', JSON.stringify({ projectId: selectedProjectId, issues: data })) } catch { /* 용량 초과 등 — 캐시만 포기 */ }
+      })
+      .catch(() => { /* 다음 주기에 다시 */ })
+  }, [selectedProjectId])
+
   const fetchGitMembers = useCallback(() => {
     if (!selectedProjectId) { setGitMembers([]); setConfirmerMembers([]); setRoleAgents({ verify: [], confirm: [], process: [] }); return }
     fetch(`/api/projects/${selectedProjectId}/roles`).then(res => res.ok ? res.json() : null).then(d => {
@@ -353,15 +366,37 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
   useEffect(() => { if (filter === 'history' && selectedProjectId) fetchClosedIssues() }, [filter, selectedProjectId, fetchClosedIssues])
   useEffect(() => { if (activeTab === 'issues' && selectedProjectId) { fetchIssues(); fetchGitMembers() } }, [activeTab])
 
-  // 이슈 목록은 git 호출이 비싸 자동 갱신하지 않는다.
-  // 사용자가 직접 새로고침 버튼/Pull-to-Refresh 를 누르거나, 본인이 수행한 액션 직후
-  // (close/bulk 등에서 dispatch 되는 'refresh-counts')에만 다시 가져온다.
+  // 본인이 수행한 액션 직후(close/bulk 등에서 dispatch 되는 'refresh-counts')와
+  // 새로고침 버튼/Pull-to-Refresh 는 즉시 다시 가져온다. 그 밖에는 아래 60초 조용한 갱신이 맡는다.
   useEffect(() => {
     if (activeTab !== 'issues' || !selectedProjectId) return
     const refresh = () => { if (filter === 'history') fetchClosedIssues(); else fetchIssues() }
     window.addEventListener('refresh-counts', refresh)
     return () => { window.removeEventListener('refresh-counts', refresh) }
   }, [activeTab, selectedProjectId, filter, fetchIssues, fetchClosedIssues])
+
+  // 옆 칸에 열린 작업이 알려 주는 진행률 — 목록을 다시 가져오지 않고 그 카드만 바로 바꾼다(체크박스 클릭·폴링으로 바뀐 값)
+  useEffect(() => {
+    const onProgress = (e: Event) => {
+      const d = (e as CustomEvent<{ projectId: string; iid: number; progress: IveIssue['progress'] }>).detail
+      if (!d || d.projectId !== selectedProjectId) return
+      setIssues(prev => prev.some(i => i.iid === d.iid && JSON.stringify(i.progress) !== JSON.stringify(d.progress))
+        ? prev.map(i => i.iid === d.iid ? { ...i, progress: d.progress } : i)
+        : prev)
+    }
+    window.addEventListener('issue-progress', onProgress)
+    return () => window.removeEventListener('issue-progress', onProgress)
+  }, [selectedProjectId])
+
+  // 목록 자동 갱신 — 화면이 보이는 동안 60초마다. GitLab·GitHub 에서 직접 바꾼 체크·단계도 따라온다.
+  // 탭을 가리면 멈추고, 다시 보이는 순간 한 번 가져온다. 이력 탭은 닫힌 작업이라 바뀔 일이 적어 제외.
+  useEffect(() => {
+    if (activeTab !== 'issues' || !selectedProjectId || filter === 'history') return
+    const tick = () => { if (document.visibilityState === 'visible') refreshIssuesQuietly() }
+    const id = setInterval(tick, 60_000)
+    document.addEventListener('visibilitychange', tick)
+    return () => { clearInterval(id); document.removeEventListener('visibilitychange', tick) }
+  }, [activeTab, selectedProjectId, filter, refreshIssuesQuietly])
 
   useEffect(() => {
     const previousActiveTab = previousActiveTabRef.current

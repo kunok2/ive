@@ -34,6 +34,8 @@ export interface IveIssue {
   /** 단계 작업자(에이전트)가 기동하지 못한 이유 등 사람이 봐야 할 한 줄 */
   stageWorkerNote?: string | null
   deployState?: 'unmerged' | 'deploying' | 'deployed' | 'failed' | null
+  /** 본문 체크박스에서 읽은 진행률 — 지금 단계 / 전체(%) */
+  progress?: { stage: { done: number; total: number; percent: number } | null; overall: number | null } | null
   actualProcessor?: { agentId: string | null; agentName: string | null; agentAvatar: string | null; cliName: string | null } | null
   actualVerifier?: { userId: string | null; name: string | null; avatar: string | null } | null
   actualConfirmer?: { userId: string | null; name: string | null; avatar: string | null } | null

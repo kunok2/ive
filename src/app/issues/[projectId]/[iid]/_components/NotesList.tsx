@@ -83,6 +83,8 @@ interface NotesListProps {
   // Handlers
   onRefreshAll: () => Promise<void>
   onDeleteNote: (noteId: number) => void
+  /** 본문 체크박스를 누르면 호출 — 없으면 보기 전용 */
+  onToggleCheckbox?: (index: number, checked: boolean) => void
 }
 
 export default function NotesList({
@@ -92,7 +94,7 @@ export default function NotesList({
   mode, chatSessionId, chatHistoryOnly, chatMessages, chatAgentName, chatAgentAvatar,
   chatSending, chatSendingStartTime, chatStreamText,
   scrollContainerRef, notesEndRef,
-  onRefreshAll, onDeleteNote, headSlot, topSlot,
+  onRefreshAll, onDeleteNote, onToggleCheckbox, headSlot, topSlot,
 }: NotesListProps) {
   const { state } = useStore()
   const tc = useTranslations('common')
@@ -143,7 +145,7 @@ export default function NotesList({
           {/* 이슈 본문 - 스크롤 영역 안에 배치 */}
           {showDesc && issue.description && (
             <div className="mt-1.5 mr-2 text-sm text-ive-text bg-ive-bg-card rounded-lg p-2.5 break-words leading-relaxed">
-              <MarkdownNote body={cleanNoteBody(issue.description)} projectId={projectId} />
+              <MarkdownNote body={cleanNoteBody(issue.description)} projectId={projectId} onToggleCheckbox={onToggleCheckbox} />
             </div>
           )}
           {topSlot}

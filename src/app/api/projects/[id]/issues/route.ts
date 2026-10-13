@@ -1,3 +1,4 @@
+import { computeProgress } from '@/lib/stage-progress'
 import { NextRequest, NextResponse } from 'next/server';
 import { getProject, getProjectAccess, getProjectAuthToken, getAssignModeMap, setAssignMode, setAssigneeAuto, setIssuePriority, normalizePriority, setPresetRoles, getPresetRoles, getActualRoleAssigneesMap, getAgent, hasActiveExecution, stageFromLabels, touchProjectActivity, getIssueIterationCountsMap, getActiveChatSessionsByProject, findIssueIidsByTitle, getIssueStageSinceMap, hasRole, markRolesInitialized, setStageWorkerNote, getStageWorkerNote, getDeployState, setIssueIntakeChannel, type RoleMode } from '@/lib/db';
 import { autoAssignAllAgents, agentRoleAvailable } from '@/lib/role-assignment';
@@ -144,6 +145,8 @@ export async function GET(
           description: isClosed ? '' : stripIveDueMarker(stripIveAuthorMarker(issue.description || '')),
           state: issue.state,
           stage,
+          // 본문 체크박스에서 읽은 진행률 — 단계별(지금 단계)·전체. 본문에 체크박스가 없으면 stage 가 null
+          progress: isClosed ? null : computeProgress(issue.description, stage),
           // 진행 중 AI 채팅 표시 — 세션 있으면 대화중, 에이전트가 돌고 있으면 생각중
           chatActive: activeChatMap.has(issue.iid),
           chatProcessing: activeChatMap.has(issue.iid) && isChatAgentRunning(activeChatMap.get(issue.iid)!),

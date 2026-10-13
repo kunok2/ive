@@ -216,6 +216,7 @@ export async function GET(
       assigneeAuto,
       priority: getAssignMode(projectId, Number(iid)).priority,
       // 우선순위는 편집 권한자(뷰어 제외) 누구나 — priority 라우트와 같은 기준
+      canEditBody: (() => { const a = getProjectAccess(projectId, user.id); return !!a && a !== 'viewer' })(),
       canEditPriority: (() => { const a = getProjectAccess(projectId, user.id); return !!a && a !== 'viewer' })(),
       presetVerifier: presetRoles.verifier,
       presetConfirmer: presetRoles.confirmer,

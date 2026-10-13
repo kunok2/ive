@@ -12,7 +12,7 @@ import WaitPill, { FailPill } from '@/components/project/WaitPill'
 import CountBump from '@/components/ui/CountBump'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 import { PriorityBadge } from '@/components/tabs/issues/Priority'
-import IssueBadges, { hasIssueBadges } from '@/components/tabs/issues/IssueBadges'
+import IssueBadges, { hasIssueBadges, ProgressBar } from '@/components/tabs/issues/IssueBadges'
 import RoleAvatarBar, { type GitMember } from '@/components/issue/RoleAvatarBar'
 import { roleBarPropsOf } from '@/components/tabs/issues/role-bar-props'
 import type { IveIssue } from '@/components/tabs/issues/types'
@@ -388,6 +388,8 @@ export default function ProjectBoard({ projects, onOpenTrace, filterSlot }: { pr
                               <IssueBadges issue={it.issue} />
                             </span>
                           )}
+                          {/* 지금 단계 체크리스트 진행률 — 카드 폭 전체(체크박스가 있는 작업만) */}
+                          {it.issue && <ProgressBar issue={it.issue} />}
                           {/* 사람: 역할 아바타 줄(작성자 › 처리자 › 검증자 › 확인자 + 단계별 횟수) 왼쪽 · 경과 오른쪽. 보드에서는 보기만 한다(바꾸는 것은 작업 상세·작업 목록에서) */}
                           {(it.issue || age) && (
                             <span className="flex flex-wrap items-center gap-x-2 gap-y-1">

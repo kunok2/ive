@@ -6,6 +6,7 @@ import AgentAvatar from '@/components/agent/AgentAvatar'
 import CliLogo from '@/components/ui/CliLogo'
 import { useTranslations } from 'next-intl'
 import { createImagePasteHandlers } from '@/lib/paste-upload'
+import { appendChecklist } from '@/lib/stage-progress'
 import { getKSTTodayString } from '@/lib/date-utils'
 import { useToast } from '@/components/ui/Toast'
 import { CLI_CONFIG } from './types'
@@ -294,6 +295,9 @@ export default function IssueAddForm({
   onPriorityChange,
 }: IssueAddFormProps) {
   const tIssue = useTranslations('issue')
+  const insertChecklist = (text: string) => appendChecklist(text, {
+    process: tIssue('checklistHeadProcess'), verify: tIssue('checklistHeadVerify'), confirm: tIssue('checklistHeadConfirm'),
+  })
   const tCommon = useTranslations('common')
   const ta = useTranslations('automation')
   const { toast } = useToast()
@@ -365,6 +369,14 @@ export default function IssueAddForm({
           autoFocus
         />
       </div>
+            <button
+              type="button"
+              onClick={() => onBodyChange(insertChecklist(newBody))}
+              title={tIssue('insertChecklistHint')}
+              className="mb-2 text-xs font-bold text-ive-text-dim hover:text-ive-green border border-ive-border-subtle hover:border-ive-green/30 px-2.5 py-1 rounded-lg transition-all"
+            >
+              <i className="fa-regular fa-square-check mr-1" />{tIssue('insertChecklist')}
+            </button>
       {/* 마감일 (선택) */}
       <div className="mb-2 flex flex-wrap items-center gap-1.5">
         <label className="text-xs font-bold text-ive-text-dim shrink-0">
