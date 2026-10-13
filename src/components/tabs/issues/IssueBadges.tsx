@@ -39,9 +39,13 @@ export function hasIssueBadges(i: BadgeIssue): boolean {
  * 깃 화면에서 체크해도 따라 바뀐다. 체크박스가 없는 작업에는 그리지 않는다. 작업 목록 카드와 넓은 화면 보드가 같이 쓴다.
  */
 export function ProgressBar({ issue }: { issue: BadgeIssue }) {
-  const t = useTranslations('issue')
   if (!showProgress(issue)) return null
-  const p = issue.progress!.total!
+  return <ProgressLine p={issue.progress!.total!} />
+}
+
+/** 진행 막대 한 줄 — 이슈 없이 값만 가진 곳(프로젝트 카드의 진행 중 목록)도 쓴다 */
+export function ProgressLine({ p }: { p: { done: number; total: number; percent: number } }) {
+  const t = useTranslations('issue')
   return (
     <div
       className="flex items-center gap-2 text-xs font-bold text-ive-text-secondary"

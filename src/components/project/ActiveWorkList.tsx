@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import { WORK_KINDS, STAGE_TONE, ageOf, ageText, type WorkKind } from '@/lib/active-work'
 import MarqueeText from '@/components/ui/MarqueeText'
 import AgentAvatar from '@/components/agent/AgentAvatar'
+import { ProgressLine } from '@/components/tabs/issues/IssueBadges'
 
 export interface ActiveItem {
   key: string
@@ -17,6 +18,8 @@ export interface ActiveItem {
   avatar?: ReactNode
   /** 이 단계를 시작한 시각 — 모르면(라벨만 바뀐 경우) 경과를 쓰지 않는다 */
   startedAt?: string | null
+  /** 본문 체크박스 진행률 — 있는 작업만 줄 아래에 막대로 */
+  progress?: { done: number; total: number; percent: number } | null
   onClick: () => void
 }
 
@@ -61,8 +64,8 @@ export default function ActiveWorkList({ items, maxPerKind = 3, onMore }: {
             {shown.map(it => {
               const age = it.startedAt ? ageOf(it.startedAt, now) : null
               return (
+                <div key={it.key} className="flex flex-col">
                 <button
-                  key={it.key}
                   type="button"
                   onClick={it.onClick}
                   className="flex items-center gap-1.5 min-h-8 text-xs font-bold text-left rounded-lg -mx-1 px-1 hover:bg-white/[0.04] transition-colors"
@@ -77,6 +80,8 @@ export default function ActiveWorkList({ items, maxPerKind = 3, onMore }: {
                     </span>
                   )}
                 </button>
+                {it.progress && <div className="pb-1"><ProgressLine p={it.progress} /></div>}
+                </div>
               )
             })}
             {rest > 0 && (

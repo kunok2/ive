@@ -466,14 +466,15 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
   // agent 가 null 이면 자동 배정(맡을 수 있는 에이전트를 서버가 고른다)
   async function handleStageHandOff(kind: 'verify' | 'confirm', agent: { id: string; name: string } | null) {
     if (!issue) return
-    // 진행 중(V/C)이면 사람이 하던 검증·확인을 취소하게 된다 — 먼저 묻는다
-    if (issue.stage === 'verifying' || issue.stage === 'confirming') {
-      const ok = await confirm({
-        title: tIssue('handOffButton'), message: agent ? tIssue(`handOffToAgent.${kind}.ask`, { agent: agent.name }) : tIssue(`handOffToAgent.${kind}.askAuto`),
-        confirmText: tIssue('handOffButton'), cancelText: tc('cancel'), variant: 'warning',
-      })
-      if (!ok) return
-    }
+    // 눌렀다고 바로 맡기지 않는다 — 에이전트가 일을 시작하므로 먼저 묻는다.
+    // 진행 중(V/C)이면 사람이 하던 검증·확인이 취소된다는 안내를 더한다
+    const running = issue.stage === 'verifying' || issue.stage === 'confirming'
+    const askKey = `handOffToAgent.${kind}.${running ? 'ask' : 'askWaiting'}${agent ? '' : 'Auto'}`
+    const ok = await confirm({
+      title: tIssue(`autoWork.${kind}`), message: tIssue(askKey, { agent: agent?.name || '' }),
+      confirmText: tIssue(`autoWork.${kind}`), cancelText: tc('cancel'), variant: 'warning',
+    })
+    if (!ok) return
     setHandingOff(true)
     try {
       const res = await fetch(`/api/projects/${projectId}/issues/${iid}/stage-agent`, {

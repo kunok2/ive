@@ -105,6 +105,8 @@ npm run deploy       # Docker 빌드 + 푸시 (수동 시에만, CI/CD가 자동
 - 굵직한 변경은 [CHANGELOG.md](CHANGELOG.md)에 기록한다. 형식은 Keep a Changelog, 버전은 SemVer.
 - 작업 중에는 `## [Unreleased]` 섹션에 항목을 누적하고, 릴리스 시 버전·날짜 섹션으로 승격한다.
 - 버전 올리는 기준: 새 통합/주요 기능 = minor(예: Slack 추가 → 1.5.0), 호환 깨짐 = major, 버그픽스 = patch.
+- **도움말도 같이 갱신한다**: 사용자에게 보이는 기능을 추가·변경하는 버전을 올릴 때는 도움말(`src/messages/{ko,en}/help.json`)에 그 내용을 반영하고, 반영을 마친 뒤 `src/components/ui/HelpModal.tsx` 의 `HELP_BASED_ON` 을 그 버전으로 올린다. 도움말 창 아래의 「이 도움말은 IVE vX.Y.Z 기준입니다」가 이 값이라, 도움말을 고치지 않고 올리면 안 맞는 내용을 최신이라고 알리게 된다. 도움말에 반영할 내용이 없는 버그픽스(patch)는 올리지 않아도 된다.
+  - 항목을 추가하면 `HelpModal.tsx` 의 `tabSections` 단계 수(`steps`)와 ko/en 두 파일의 `<탭>StepN` 키를 함께 맞춘다.
 
 <!-- ive:begin -->
 ## IVE 작업 등록

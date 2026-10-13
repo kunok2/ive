@@ -3,7 +3,8 @@
 import { ReactNode, useEffect, useLayoutEffect, useRef, useState, createContext, useContext, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 
-type Anchor = { x: number; y: number }
+/** x,y = 클릭 좌표. el·dx·dy = 누른 요소와 그 안에서의 위치 — 키보드가 접히는 등 화면이 다시 짜일 때 요소를 따라가기 위함 */
+type Anchor = { x: number; y: number; el?: Element | null; dx?: number; dy?: number }
 
 // ── Types ──
 interface DialogOptions {
@@ -50,10 +51,12 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   } | null>(null)
 
   // 마지막 포인터(클릭) 위치 추적 — 팝업을 누른 버튼 근처에 띄우기 위함.
-  const lastPointerRef = useRef<{ x: number; y: number; t: number } | null>(null)
+  const lastPointerRef = useRef<{ x: number; y: number; t: number; el: Element | null; dx: number; dy: number } | null>(null)
   useEffect(() => {
     const onDown = (e: PointerEvent) => {
-      lastPointerRef.current = { x: e.clientX, y: e.clientY, t: Date.now() }
+      const el = e.target instanceof Element ? e.target : null
+      const r = el?.getBoundingClientRect()
+      lastPointerRef.current = { x: e.clientX, y: e.clientY, t: Date.now(), el, dx: r ? e.clientX - r.left : 0, dy: r ? e.clientY - r.top : 0 }
     }
     window.addEventListener('pointerdown', onDown, true)
     return () => window.removeEventListener('pointerdown', onDown, true)
@@ -62,7 +65,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   // 최근(2초 이내) 클릭이 있으면 그 좌표를 앵커로. 자동 트리거 팝업은 앵커 없음 → 가운데 표시.
   const grabAnchor = (): Anchor | null => {
     const p = lastPointerRef.current
-    return p && Date.now() - p.t < 2000 ? { x: p.x, y: p.y } : null
+    return p && Date.now() - p.t < 2000 ? { x: p.x, y: p.y, el: p.el, dx: p.dx, dy: p.dy } : null
   }
 
   const confirm = useCallback((options: DialogOptions) => {
@@ -126,20 +129,43 @@ function DialogOverlay({
   // 앵커가 있으면 클릭 지점 근처에 팝오버로 배치. 렌더 후 실제 크기를 재서 뷰포트 안으로 클램프.
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
   useLayoutEffect(() => {
-    if (!anchor || !boxRef.current) return
-    const b = boxRef.current.getBoundingClientRect()
-    const vw = window.innerWidth
-    const vh = window.innerHeight
-    const margin = 8
-    const gap = 10
-    let left = anchor.x - b.width / 2
-    left = Math.max(margin, Math.min(left, vw - b.width - margin))
-    let top = anchor.y + gap // 클릭 아래
-    if (top + b.height > vh - margin) {
-      top = anchor.y - gap - b.height // 공간 부족 시 위쪽
-      if (top < margin) top = Math.max(margin, vh - b.height - margin)
+    if (!anchor) return
+    const place = () => {
+      if (!boxRef.current) return
+      const b = boxRef.current.getBoundingClientRect()
+      // 화면이 다시 짜였으면(모바일 키보드가 접히는 등) 누른 요소의 지금 위치를 따라간다. 요소가 사라졌으면 처음 좌표
+      let ax = anchor.x
+      let ay = anchor.y
+      if (anchor.el && anchor.el.isConnected) {
+        const r = anchor.el.getBoundingClientRect()
+        ax = r.left + (anchor.dx ?? 0)
+        ay = r.top + (anchor.dy ?? 0)
+      }
+      const vv = window.visualViewport
+      const vw = vv?.width ?? window.innerWidth
+      const vh = vv?.height ?? window.innerHeight
+      const margin = 8
+      const gap = 10
+      let left = ax - b.width / 2
+      left = Math.max(margin, Math.min(left, vw - b.width - margin))
+      let top = ay + gap // 클릭 아래
+      if (top + b.height > vh - margin) {
+        top = ay - gap - b.height // 공간 부족 시 위쪽
+        if (top < margin) top = Math.max(margin, vh - b.height - margin)
+      }
+      setPos(prev => prev && prev.left === left && prev.top === top ? prev : { left, top })
     }
-    setPos({ left, top })
+    place()
+    // 키보드가 열리고 닫히면 보이는 화면 크기가 바뀐다 — 그때마다 다시 계산
+    const vv = window.visualViewport
+    window.addEventListener('resize', place)
+    vv?.addEventListener('resize', place)
+    vv?.addEventListener('scroll', place)
+    return () => {
+      window.removeEventListener('resize', place)
+      vv?.removeEventListener('resize', place)
+      vv?.removeEventListener('scroll', place)
+    }
   }, [anchor])
 
   useEffect(() => {

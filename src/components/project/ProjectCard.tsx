@@ -91,6 +91,8 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
   const [waitingIssues, setWaitingIssues] = useState<any[]>([])
   const [verifyingIssues, setVerifyingIssues] = useState<any[]>([])
   const [confirmingIssues, setConfirmingIssues] = useState<any[]>([])
+  // 작업번호 → 본문 체크박스 진행률 — 진행 중 목록(처리·검증·확인)의 막대용. 체크박스가 있는 작업만 담는다
+  const [progressByIid, setProgressByIid] = useState<Record<number, { done: number; total: number; percent: number }>>({})
   const [activities, setActivities] = useState<Record<string, ToolActivity>>({})
   const [liveMRCount, setLiveMRCount] = useState<number | null>(null)
   const [liveConflictCount, setLiveConflictCount] = useState<number | null>(null)
@@ -156,14 +158,18 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
   // 검증/확인 이슈 목록 로드 — 라벨 기반(task_execution 없어도 표시).
   // 패널이 열렸거나, 카드 닫힌 상태에서 인라인 요약에 라벨 기반 행을 표시하기 위해
   // 통계 카운트 > 0 이면 백그라운드로도 폴링.
+  const hasRunning = executions.some(e => e.status === 'running' || e.status === 'assigned')
   useEffect(() => {
     const vCount = stats?.verifying ?? 0
     const cCount = stats?.confirming ?? 0
     const needForVerify = expandedPanel === 'verifying' || (vCount > 0 && !expandedPanel)
     const needForConfirm = expandedPanel === 'confirming' || (cCount > 0 && !expandedPanel)
-    if (!needForVerify && !needForConfirm) {
+    // 처리 중인 일만 있어도 진행 막대를 그리려고 목록을 읽는다(목록 요약이 보일 때만)
+    const needForProgress = hasRunning && !expandedPanel && !hideActiveList
+    if (!needForVerify && !needForConfirm && !needForProgress) {
       setVerifyingIssues([])
       setConfirmingIssues([])
+      setProgressByIid({})
       return
     }
     const fetchIssues = async () => {
@@ -173,13 +179,17 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
           const all = await res.json()
           if (needForVerify) setVerifyingIssues(all.filter((i: any) => i.stage === 'verifying'))
           if (needForConfirm) setConfirmingIssues(all.filter((i: any) => i.stage === 'confirming'))
+          const next: Record<number, { done: number; total: number; percent: number }> = {}
+          for (const i of all) if (i.progress?.total) next[i.iid] = i.progress.total
+          setProgressByIid(prev => JSON.stringify(prev) === JSON.stringify(next) ? prev : next)
         }
       } catch { /* ignore */ }
     }
     fetchIssues()
-    const timer = setInterval(fetchIssues, 10000)
+    // 검증·확인 요약은 10초, 처리 막대만 필요하면 1분 — 목록 조회가 가볍지 않아 덜 부른다
+    const timer = setInterval(fetchIssues, needForVerify || needForConfirm ? 10000 : 60000)
     return () => clearInterval(timer)
-  }, [expandedPanel, project.id, stats?.verifying, stats?.confirming])
+  }, [expandedPanel, project.id, stats?.verifying, stats?.confirming, hasRunning, hideActiveList])
 
   const toggleScanner = async (e: React.MouseEvent) => {
     e.preventDefault(); e.stopPropagation()
@@ -652,6 +662,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
               avatar: isUser ? userAvatar(ex.userAvatar, ex.userId)
                 : <AgentAvatar avatar={ex.agentAvatar ?? 'av-01'} size="sm" toolBadge={kind === 'chat' ? null : (activity?.category ?? null)} />,
               startedAt: ex.startedAt,
+              progress: kind === 'chat' ? null : progressByIid[ex.issueIid] ?? null,
               // 에이전트 → 실시간 실행 화면(LiveTracePanel 「전체화면」과 같은 곳), 사람·채팅 → 이슈 상세(검증·확인 버튼이 있는 곳)
               onClick: () => router.push(execHref(ex, project.id)),
             }
@@ -665,6 +676,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
                   key: `${kind}-${i.iid}`, kind, iid: i.iid, title: i.title,
                   who: actor?.name ?? null, avatar: userAvatar(actor?.avatar, actor?.userId),
                   startedAt: null,
+                  progress: i.progress?.total ?? null,
                   onClick: () => router.push(`/issues/${project.id}/${i.iid}`),
                 }
               })),

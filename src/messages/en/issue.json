@@ -217,11 +217,15 @@
     "verify": {
       "ask": "The verification in progress will be cancelled and {agent} will start verifying. Continue?",
       "askAuto": "The verification in progress will be cancelled and an available agent will start verifying. Continue?",
+      "askWaiting": "{agent} will start verifying. Continue?",
+      "askWaitingAuto": "An available agent will start verifying. Continue?",
       "done": "Handed the verification to {agent}"
     },
     "confirm": {
       "ask": "The confirmation in progress will be cancelled and {agent} will start confirming. Continue?",
       "askAuto": "The confirmation in progress will be cancelled and an available agent will start confirming. Continue?",
+      "askWaiting": "{agent} will start confirming. Continue?",
+      "askWaitingAuto": "An available agent will start confirming. Continue?",
       "done": "Handed the confirmation to {agent}"
     }
   },

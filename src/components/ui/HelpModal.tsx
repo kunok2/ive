@@ -30,7 +30,7 @@ function isNewerVersion(a: string, b: string): boolean {
 const tabSections = [
   { key: 'projects', icon: 'fa-solid fa-folder', steps: 8, tour: true },
   { key: 'agents', icon: 'fa-solid fa-bolt', steps: 7, tour: true },
-  { key: 'issues', icon: 'fa-solid fa-list-check', steps: 8, tour: true },
+  { key: 'issues', icon: 'fa-solid fa-list-check', steps: 9, tour: true },
   { key: 'reports', icon: 'fa-solid fa-chart-line', steps: 6, tour: true },
   { key: 'admin', icon: 'fa-solid fa-gear', steps: 5, tour: true },
   { key: 'layout', icon: 'fa-solid fa-desktop', steps: 4, tour: false },
