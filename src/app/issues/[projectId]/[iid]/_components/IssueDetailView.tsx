@@ -257,7 +257,7 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
   useEffect(() => {
     if (!issue || issue.state === 'closed') return
     window.dispatchEvent(new CustomEvent('issue-progress', {
-      detail: { projectId, iid: Number(iid), progress: computeProgress(issue.description, issue.stage) },
+      detail: { projectId, iid: Number(iid), progress: computeProgress(issue.description) },
     }))
   }, [issue?.description, issue?.stage, issue?.state, projectId, iid]) // eslint-disable-line react-hooks/exhaustive-deps
 

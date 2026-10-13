@@ -12,7 +12,7 @@ export interface BadgeIssue {
   /** 확인대기·확인 중인 작업의 배포 상태 — 머지된 수정이 확인할 사이트에 올라갔는가 */
   deployState?: 'unmerged' | 'deploying' | 'deployed' | 'failed' | null
   /** 본문 체크박스에서 읽은 진행률 — 지금 단계 / 전체(%) */
-  progress?: { stage: { done: number; total: number; percent: number } | null; overall: number | null } | null
+  progress?: { total: { done: number; total: number; percent: number } | null } | null
 }
 
 /**
@@ -28,31 +28,29 @@ export const stageCountsOf = (i: BadgeIssue) => ({
 
 const showDeploy = (i: BadgeIssue) => !!i.deployState && (i.stage === 'confirm_waiting' || i.stage === 'confirming') && i.state !== 'closed'
 
-const showProgress = (i: BadgeIssue) => !!i.progress?.stage && i.state !== 'closed' && i.stage !== 'done'
+const showProgress = (i: BadgeIssue) => !!i.progress?.total && i.state !== 'closed' && i.stage !== 'done'
 
 export function hasIssueBadges(i: BadgeIssue): boolean {
   return !!i.dueDate || showDeploy(i)
 }
 
 /**
- * 단계 진행률 — 지금 단계의 체크박스 완료 수(예 2/5)와 전체 진행률(막대)을 카드 폭 전체로. 작업 본문의 `- [x]` 에서 읽은 값이라
+ * 진행률 — 본문 체크박스의 완료 수(예 2/5)와 비율을 카드 폭 전체 막대로. 상태(단계)와는 별개 값. 작업 본문의 `- [x]` 에서 읽은 값이라
  * 깃 화면에서 체크해도 따라 바뀐다. 체크박스가 없는 작업에는 그리지 않는다. 작업 목록 카드와 넓은 화면 보드가 같이 쓴다.
  */
 export function ProgressBar({ issue }: { issue: BadgeIssue }) {
   const t = useTranslations('issue')
   if (!showProgress(issue)) return null
-  const p = issue.progress!.stage!
-  // 막대는 전체 진행률 — 지금 단계가 6/6 이어도 남은 단계가 있으면 100% 로 보이지 않게 한다
-  const overall = issue.progress!.overall
+  const p = issue.progress!.total!
   return (
     <div
       className="flex items-center gap-2 text-xs font-bold text-ive-text-secondary"
-      title={t('progressHint', { done: p.done, total: p.total, overall: issue.progress!.overall ?? 0 })}
+      title={t('progressHint', { done: p.done, total: p.total, percent: p.percent })}
     >
       <div className="flex-1 h-1.5 rounded-lg bg-ive-border-subtle overflow-hidden">
-        <div className="h-full bg-ive-green" style={{ width: `${overall ?? p.percent}%` }} />
+        <div className="h-full bg-ive-green" style={{ width: `${p.percent}%` }} />
       </div>
-      <span className="tabular-nums shrink-0">{p.done}/{p.total}{overall != null && <> · {t('progressOverallShort', { percent: overall })}</>}</span>
+      <span className="tabular-nums shrink-0">{p.done}/{p.total} · {p.percent}%</span>
     </div>
   )
 }

@@ -296,7 +296,7 @@ export function IssueProgressSection({
         stageTimes={issue.stageTimes ?? null}
         retryCounts={issue.retryCounts ?? null}
         forwardCounts={issue.forwardCounts ?? null}
-        stageChecklist={isCompleted ? null : computeProgress(issue.description, issue.stage).byStage}
+        stageChecklist={isCompleted ? null : computeProgress(issue.description).byStage}
         roles={{
           creator: {
             name: issue.author,
@@ -330,17 +330,17 @@ export function IssueProgressSection({
           confirmerAgents: roleAgents?.confirm,
         }}
       />
-      {/* 전체 진행률 — 끝난 단계와 지금 단계의 체크리스트로 계산. 체크박스가 있는 작업에만 한 줄 */}
+      {/* 진행률 — 본문 체크박스 전체의 완료율(상태와 별개). 체크박스가 있는 작업에만 한 줄 */}
       {!isCompleted && (() => {
-        const p = computeProgress(issue.description, issue.stage)
-        if (!p.stage || p.overall == null) return null
+        const p = computeProgress(issue.description)
+        if (!p.total) return null
         return (
           <div className="mt-2 flex items-center gap-2 text-[11px] font-bold text-ive-text-secondary">
             <span className="shrink-0">{tIssue('progressOverall')}</span>
             <div className="flex-1 h-1.5 rounded-lg bg-ive-border-subtle overflow-hidden">
-              <div className="h-full bg-ive-green" style={{ width: `${p.overall}%` }} />
+              <div className="h-full bg-ive-green" style={{ width: `${p.total.percent}%` }} />
             </div>
-            <span className="tabular-nums">{p.overall}%</span>
+            <span className="tabular-nums">{p.total.done}/{p.total.total} · {p.total.percent}%</span>
           </div>
         )
       })()}

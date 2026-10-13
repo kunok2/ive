@@ -18,9 +18,9 @@ export interface StageProgress {
 }
 
 export interface IssueProgress {
-  /** 지금 단계의 체크박스 진행률. 체크박스가 없으면 null */
-  stage: StageProgress | null
-  /** 단계별 진행률(본문에 그 단계 제목이 있는 것만) */
+  /** 본문 전체 체크박스의 진행률 — 작업의 진척. 체크박스가 없으면 null */
+  total: StageProgress | null
+  /** 단계 제목(`## 검증` 등) 아래 체크박스의 단계별 진행률 — 단계 칩에 곁들여 보이는 참고값(있는 단계만) */
   byStage: Partial<Record<ProgressStage, StageProgress>>
 }
 
@@ -43,11 +43,12 @@ function toProgress(done: number, total: number): StageProgress {
 
 /**
  * 본문에서 체크박스를 센다. 코드 블록 안은 건너뛴다(예시로 적은 `- [ ]` 를 세지 않기 위해).
- * 단계 제목이 아닌 제목(`## 배경` 등)을 만나면 그 아래 체크박스는 어느 단계에도 넣지 않고 「제목 없는 묶음」으로 센다.
+ * 진척은 상태(IVE 단계)와 무관하게 본문 체크박스만으로 정한다 — 전체 개수 중 몇 개가 끝났는가.
  */
-export function parseIssueProgress(body: string | null | undefined, currentStage: ProgressStage | null): IssueProgress {
+export function parseIssueProgress(body: string | null | undefined): IssueProgress {
   const counts: Partial<Record<ProgressStage, { done: number; total: number }>> = {}
-  const loose = { done: 0, total: 0 }
+  let done = 0
+  let total = 0
   let section: ProgressStage | null = null
   let inFence = false
 
@@ -59,71 +60,23 @@ export function parseIssueProgress(body: string | null | undefined, currentStage
     const m = CHECKBOX.exec(line)
     if (!m) continue
     const checked = m[1] !== ' '
-    const bucket = section ? (counts[section] ??= { done: 0, total: 0 }) : loose
-    bucket.total += 1
-    if (checked) bucket.done += 1
+    total += 1
+    if (checked) done += 1
+    if (section) {
+      const c = (counts[section] ??= { done: 0, total: 0 })
+      c.total += 1
+      if (checked) c.done += 1
+    }
   }
 
   const byStage: IssueProgress['byStage'] = {}
   for (const k of Object.keys(counts) as ProgressStage[]) byStage[k] = toProgress(counts[k]!.done, counts[k]!.total)
-
-  // 지금 단계: 그 단계 제목 아래 체크박스 → 없으면 제목 없는 체크박스(단계 구분 없이 적은 목록)
-  let stage: StageProgress | null = null
-  if (currentStage && byStage[currentStage]) stage = byStage[currentStage]!
-  else if (loose.total > 0) stage = toProgress(loose.done, loose.total)
-  return { stage, byStage }
+  return { total: total > 0 ? toProgress(done, total) : null, byStage }
 }
 
-/** 단계 순서(처리 → 검증 → 확인) */
-const ORDER: ProgressStage[] = ['process', 'verify', 'confirm']
-
-/**
- * 전체 진행률(0~100) — 끝난 단계 수 + 지금 단계 진행률로 대략 계산한다.
- * 지금 단계에 체크박스가 없으면 그 단계는 0 으로 둔다(진행 중이라는 사실만 반영).
- */
-export function overallPercent(currentStage: ProgressStage | 'done' | null, stageFraction: number | null): number {
-  if (currentStage === 'done') return 100
-  if (!currentStage) return 0
-  const idx = ORDER.indexOf(currentStage)
-  const frac = Math.min(1, Math.max(0, stageFraction ?? 0))
-  return Math.round(((idx + frac) / ORDER.length) * 100)
-}
-
-/** IVE 단계 → 진행률 단계. 대기·진행 중을 한 단계로 본다 */
-export function progressStageOf(stage: string | null | undefined): ProgressStage | 'done' | null {
-  switch (stage) {
-    case 'waiting': case 'dev': case 'dev_fail': return 'process'
-    case 'verify_waiting': case 'verifying': return 'verify'
-    case 'confirm_waiting': case 'confirming': return 'confirm'
-    case 'done': return 'done'
-    default: return null
-  }
-}
-
-/**
- * 전체 진행률 — 세 단계의 평균. 지난 단계는 100%, 지금·앞으로 올 단계는 그 단계 체크박스 진행률(체크박스가 없으면 0).
- * 그래서 모든 체크박스를 다 체크하면 아직 단계가 안 넘어갔어도 100% 가 된다.
- */
-function overallFromStages(current: ProgressStage | 'done', byStage: IssueProgress['byStage'], currentFraction: number | null): number {
-  if (current === 'done') return 100
-  const idx = ORDER.indexOf(current)
-  const sum = ORDER.reduce((acc, k, i) => {
-    if (i < idx) return acc + 1
-    if (i === idx) return acc + Math.min(1, Math.max(0, currentFraction ?? 0))
-    return acc + (byStage[k] ? byStage[k]!.percent / 100 : 0)
-  }, 0)
-  return Math.round((sum / ORDER.length) * 100)
-}
-
-/** 화면·API 가 쓰는 한 덩어리 — 이슈 본문과 현재 IVE 단계에서 바로 구한다 */
-export function computeProgress(body: string | null | undefined, ivestage: string | null | undefined) {
-  const ps = progressStageOf(ivestage)
-  const parsed = parseIssueProgress(body, ps && ps !== 'done' ? ps : null)
-  return {
-    stage: parsed.stage,
-    byStage: parsed.byStage,
-    overall: ps ? overallFromStages(ps, parsed.byStage, parsed.stage ? parsed.stage.percent / 100 : null) : null,
-  }
+/** 화면·API 가 쓰는 한 덩어리 — 이슈 본문에서 바로 구한다 */
+export function computeProgress(body: string | null | undefined): IssueProgress {
+  return parseIssueProgress(body)
 }
 
 /**

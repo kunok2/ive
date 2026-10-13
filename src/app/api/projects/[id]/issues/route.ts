@@ -146,7 +146,7 @@ export async function GET(
           state: issue.state,
           stage,
           // 본문 체크박스에서 읽은 진행률 — 단계별(지금 단계)·전체. 본문에 체크박스가 없으면 stage 가 null
-          progress: isClosed ? null : computeProgress(issue.description, stage),
+          progress: isClosed ? null : computeProgress(issue.description),
           // 진행 중 AI 채팅 표시 — 세션 있으면 대화중, 에이전트가 돌고 있으면 생각중
           chatActive: activeChatMap.has(issue.iid),
           chatProcessing: activeChatMap.has(issue.iid) && isChatAgentRunning(activeChatMap.get(issue.iid)!),
