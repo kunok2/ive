@@ -6,6 +6,7 @@
  *   D-1: 어제 끝낸 일은 스냅샷을 오늘 다시 써도 어제 완료다 — 보고서의 그날 완료와 같은 숫자
  *   D-2: 좁혀 읽어도(activeSince) 전체 이력으로 센 것과 같다
  *   D-3: 머지 없이 닫힌(버려진) 일은 완료가 아니다, 다시 열렸다 다시 끝난 일은 사이클마다 한 건
+ *   D-5: 머지로 닫혀 완료됐다가 확인 단계로 되돌린 일은 잘못된 완료의 취소 — 확인을 마친 한 건(운영 #2115)
  *   D-4: 목록은 숫자와 건수가 같고, 시각은 ISO(Z), 확인자 > 담당자 순으로 처리한 사람
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
@@ -91,6 +92,23 @@ describe('카드 완료 수 = 보고서 완료 수 (#563)', () => {
     exec('ex-2b', 2, 'success', `${TODAY}T09:00:00`, `${TODAY}T09:30:00`)
     ev(2, 'dev', 'done', `${TODAY}T11:00:00`)
     expect(counts()).toEqual({ today: 1, yesterday: 1 })
+  })
+
+  it('D-5: 확인 전에 머지로 닫혀 완료가 됐다가 확인 단계로 되돌린 일은 확인을 마친 한 건 (운영 Meta-Shop #2115)', () => {
+    exec('ex-1', 1, 'success', `${TODAY}T10:43:58`, `${TODAY}T10:48:54`)
+    ev(1, null, 'waiting', `${TODAY}T10:43:57`)
+    ev(1, 'waiting', 'dev', `${TODAY}T10:43:58`)
+    ev(1, 'dev', 'verify_waiting', `${TODAY}T10:48:54`)
+    ev(1, 'verify_waiting', 'confirm_waiting', `${TODAY}T11:19:35`)
+    recordStageEvent({ projectId: 'p', issueIid: 1, fromStage: 'confirm_waiting', toStage: 'done', action: 'merged', source: 'scanner', occurredAt: at(`${TODAY}T11:26:59`) })
+    ev(1, 'done', 'confirm_waiting', `${TODAY}T12:59:25`)
+    ev(1, 'confirm_waiting', 'confirming', `${TODAY}T13:15:15`)
+    ev(1, 'confirming', 'done', `${TODAY}T13:15:17`)
+    stage(1, 'done', { confirmed_at: at(`${TODAY}T13:15:16`) })
+    expect(counts()).toEqual({ today: 1, yesterday: 0 })
+    const h = loadIssueHistory(['p']).get('p:1')!
+    expect(h.reopens).toEqual([]) // 다시 들어온 일(유입)로도 세지 않는다
+    expect(h.completions).toEqual([at(`${TODAY}T13:15:16`)])
   })
 })
 

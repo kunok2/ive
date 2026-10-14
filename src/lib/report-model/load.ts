@@ -140,7 +140,7 @@ export function loadIssueHistory(projectIds: string[], opts: { onlyHeld?: boolea
     stages.set(`${r.project_id}:${r.issue_iid}`, { stage: r.cached_stage || null, confirmedAt: isoTime(r.confirmed_at), scheduledAt: isoTime(r.scheduled_at) })
   }
   // +x.event: 사건 종류 인덱스(전체 사건을 훑는다) 대신 이슈 인덱스를 타게 한다
-  const events = new Map<string, { from: string | null; to: string | null; at: string; external: boolean }[]>()
+  const events = new Map<string, { from: string | null; to: string | null; at: string; external: boolean; action: string | null }[]>()
   for (const r of db.prepare(`
     SELECT project_id, issue_iid, from_stage, to_stage, occurred_at, action FROM issue_events x
     WHERE +x.event = 'stage' AND project_id IN (${ph}) ${held('x')} ORDER BY id
@@ -149,7 +149,7 @@ export function loadIssueHistory(projectIds: string[], opts: { onlyHeld?: boolea
     if (!at) continue
     const k = `${r.project_id}:${r.issue_iid}`
     const list = events.get(k) ?? []
-    list.push({ from: r.from_stage ?? null, to: r.to_stage ?? null, at, external: r.action === 'external' })
+    list.push({ from: r.from_stage ?? null, to: r.to_stage ?? null, at, external: r.action === 'external', action: r.action ?? null })
     events.set(k, list)
   }
 
@@ -159,7 +159,11 @@ export function loadIssueHistory(projectIds: string[], opts: { onlyHeld?: boolea
     const rs = rows.get(k) ?? []
     const st = stages.get(k)
     const ev = events.get(k) ?? []
-    const reopenEv = ev.filter(e => (e.from === 'done' || e.from === 'closed') && isOpen(e.to)).sort((a, b) => (a.at < b.at ? -1 : 1))
+    // 확인 없이 머지로 닫혀 완료가 됐다가(merged) 완료 전 단계로 되돌린 것은 다시 작업이 아니라 잘못된 완료의 취소다
+    // — 새 사이클로 세면 확인을 마친 뒤 같은 일이 완료 두 건이 된다(운영 Meta-Shop #2115)
+    const undoesMergeClose = (i: number) => i > 0 && ev[i - 1].to === 'done' && ev[i - 1].action === 'merged'
+    const reopenEv = ev.filter((e, i) => (e.from === 'done' || e.from === 'closed') && isOpen(e.to) && !undoesMergeClose(i))
+      .sort((a, b) => (a.at < b.at ? -1 : 1))
     const firstHeldEvent = ev.filter(e => isOpen(e.to)).map(e => e.at).sort()[0]
     const firstReceipt = [st?.scheduledAt, ...rs.filter(r => !r.external).map(r => r.started), firstHeldEvent]
       .filter((t): t is string => !!t).sort()[0] ?? null
