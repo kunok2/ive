@@ -858,6 +858,12 @@ async function scanProject(project: Project, force: boolean = false) {
         })
 
         if (mergeComplete) {
+          // 닫힌 이슈에 종료 레이블(IVE-E)을 붙인다 — 단계 레이블만 남은 채 닫히면 이력 탭(대상·종료 레이블로 거른다)에 안 나와
+          // DB 에선 완료인데 어디서도 조회되지 않는다(운영 2115). 실패해도 완료 처리는 그대로 둔다.
+          try {
+            const labelE = project.labelEnd || DEFAULT_LABELS.end
+            await swapIssueLabels(project, iid, decryptedToken, [labelE], allStageLabels(project).filter(l => l !== labelE))
+          } catch (e) { slog.warn(`종료 레이블 부착 실패 (#${iid}):`, (e as Error).message) }
           // completeMergedIssue 가 이미 잔류 활성 execution 을 success 로 마감함.
           try {
             createActivityLog({
