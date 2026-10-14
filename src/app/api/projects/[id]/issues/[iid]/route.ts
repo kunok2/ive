@@ -207,6 +207,8 @@ export async function GET(
       stageTimes,
       // 확인 없이 머지로 닫혀 완료가 된 작업 — 화면이 열 때 다시 열지 묻는다
       completedByMerge: stage === 'done' && wasCompletedByMergeClose(projectId, Number(iid)),
+      // 검증·확인 도중에 닫힌 작업 — 같은 팝업으로 다시 연다(단계는 그대로)
+      closedMidway: issue.state === 'closed' && ['verify_waiting', 'verifying', 'confirm_waiting', 'confirming'].includes(stage as string),
       retryCounts,
       forwardCounts,
       webUrl: issue.web_url,

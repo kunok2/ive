@@ -96,6 +96,16 @@ describe('L-4 이력 탭: 대상 라벨 OR 종료 라벨', () => {
     expect(r.hasMore).toBe(true)
   })
 
+  it('GitLab: 단계 라벨만 달고 닫힌 이슈도 — 라벨마다 앞선 라벨을 뺀 조회', async () => {
+    const fn = vi.fn(async () => new Response('[]', { headers: { 'x-total': '0', 'x-next-page': '' } }))
+    vi.stubGlobal('fetch', fn)
+    await gitlabPage(project, 't', { page: 1, perPage: 2, sort: 'desc', label: 'ive', orLabel: 'ive:done', orLabels: ['ive:confirm-wait', 'ive:done'] })
+    const urls = fn.mock.calls.map(c => new URL(String((c as unknown[])[0])))
+    expect(urls.map(u => [u.searchParams.get('labels'), u.searchParams.get('not[labels]')])).toEqual([
+      ['ive', null], ['ive:done', 'ive'], ['ive:confirm-wait', 'ive,ive:done'],
+    ])
+  })
+
   it('GitHub: Search API 한 번, label:"ive","ive:done"', async () => {
     const fn = vi.fn().mockResolvedValue(new Response(JSON.stringify({ total_count: 0, items: [] })))
     vi.stubGlobal('fetch', fn)

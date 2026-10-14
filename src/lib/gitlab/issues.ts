@@ -1,5 +1,5 @@
 import { Project } from "@/types";
-import { parseIidSearch, mergeClosedIssueStreams, type ClosedIssuePage, type ClosedIssuePageOptions } from "@/lib/closed-issues";
+import { parseIidSearch, mergeClosedIssueStreams, closedLabelSet, type ClosedIssuePage, type ClosedIssuePageOptions } from "@/lib/closed-issues";
 import { getProjectPath, getAuthHeaders, apiUrl } from "./common";
 import { fetchAllPages } from "@/lib/git-paging";
 
@@ -226,13 +226,14 @@ export async function fetchClosedProjectIssuesPage(
   const projectPath = getProjectPath(project.repoUrl);
   if (!projectPath) return { issues: [], total: 0, hasMore: false };
 
-  // GitLab REST 는 라벨 OR 조회가 없다 — label 인 것 + (orLabel 이면서 label 은 없는 것) 두 조회를 합친다(겹치지 않음)
-  if (opts.label && opts.orLabel && opts.orLabel !== opts.label) {
-    const { label, orLabel } = opts;
-    return mergeClosedIssueStreams(opts, [
-      (page, perPage) => fetchClosedProjectIssuesPage(project, decryptedToken, { ...opts, page, perPage, orLabel: undefined }),
-      (page, perPage) => fetchClosedProjectIssuesPage(project, decryptedToken, { ...opts, page, perPage, label: orLabel, orLabel: undefined, notLabel: label }),
-    ]);
+  // GitLab REST 는 라벨 OR 조회가 없다 — 라벨마다 「그 라벨이 있고 앞선 라벨은 없는」 조회를 만들어 합친다(서로 겹치지 않음)
+  const labelSet = closedLabelSet(opts)
+  if (labelSet.length > 1 && !opts.notLabel) {
+    return mergeClosedIssueStreams(opts, labelSet.map((label, k) =>
+      (page, perPage) => fetchClosedProjectIssuesPage(project, decryptedToken, {
+        ...opts, page, perPage, label, orLabel: undefined, orLabels: undefined,
+        notLabel: k === 0 ? undefined : labelSet.slice(0, k).join(','),
+      })))
   }
 
   const q = new URLSearchParams({

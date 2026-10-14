@@ -279,6 +279,11 @@
     "confirm": "Reopen",
     "done": "Reopened and returned to Awaiting confirmation"
   },
+  "reopenMidway": {
+    "title": "Closed before finishing",
+    "message": "Git closed this issue before the stage finished (closing keyword on merge). Reopening reopens the issue at the current stage so you can continue.",
+    "done": "Issue reopened"
+  },
   "stageChanged": "Updated",
   "confirmDone": "Confirmed",
   "approveDone": "Approved",

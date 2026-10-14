@@ -12,7 +12,7 @@ import { parseClosedPageOptions, parseIidSearch, isGitLabSearchable } from '@/li
 import { withGitToken, friendlyGitError } from '@/lib/git-token';
 import { prependIveAuthorMarker, stripIveAuthorMarker, stripIveDueMarker, resolveIveAuthorFromBody } from '@/lib/ive-author';
 import { DEFAULT_LABELS } from '@/lib/labels';
-import { isIveManaged } from '@/lib/stage-transitions';
+import { isIveManaged, allStageLabels } from '@/lib/stage-transitions';
 
 export async function GET(
   req: NextRequest,
@@ -36,7 +36,7 @@ export async function GET(
     const token = getProjectAuthToken(projectId);
     // 닫힌 이슈(이력 탭)는 한 페이지만 — 전체를 받으면 이슈가 쌓일수록 수십 초가 걸린다.
     const closedOpts = stateParam === 'closed'
-      ? { ...parseClosedPageOptions(req.nextUrl.searchParams), label: project.labelTarget, orLabel: project.labelEnd || DEFAULT_LABELS.end }
+      ? { ...parseClosedPageOptions(req.nextUrl.searchParams), label: project.labelTarget, orLabel: project.labelEnd || DEFAULT_LABELS.end, orLabels: allStageLabels(project) }
       : null;
     // GitLab 검색은 3글자 미만 단어를 무시한다 → 짧은 검색어는 IVE 가 기록한 제목으로 번호를 찾아 한정한다.
     if (closedOpts?.search && project.provider !== 'github'

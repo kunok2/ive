@@ -54,7 +54,7 @@ export async function POST(
   }
 
   const transition = available.find(t => t.action === action);
-  if (!transition) {
+  if (!transition && action !== 'reopen_closed') {
     return NextResponse.json({ error: '지금 단계에서는 할 수 없는 동작입니다. 새로고침한 뒤 다시 시도해 주세요.' }, { status: 400 });
   }
 
@@ -110,6 +110,20 @@ export async function POST(
       );
     }
     if (dryRun) return NextResponse.json({ ok: true, dryRun: true });
+
+    // 단계는 그대로 두고 닫힌 이슈만 다시 연다 — 검증·확인 도중에 머지의 닫기 키워드로 닫힌 작업(운영 2115)
+    if (action === 'reopen_closed') {
+      if (currentIssue?.state !== 'closed' || !['verify_waiting', 'verifying', 'confirm_waiting', 'confirming'].includes(stage)) {
+        return NextResponse.json({ error: '이 작업은 닫힌 상태가 아닙니다. 새로고침한 뒤 다시 확인해 주세요.' }, { status: 409 });
+      }
+      await reopenIssue(project, Number(iid), token);
+      recordStageEvent({
+        projectId, issueIid: Number(iid), fromStage: stage, toStage: stage, action,
+        actor: userActor(user), source: 'ui',
+      });
+      return NextResponse.json({ ok: true });
+    }
+    if (!transition) return NextResponse.json({ error: '지금 단계에서는 할 수 없는 동작입니다.' }, { status: 400 });
 
     // 레이블 전환 수행 + 안전망: 전이 결과로 단계 라벨이 정확히 한 개만 남도록
     // 이전 단계의 라벨이 의도치 않게 잔류하면 stage 가 잘못 판정되므로 항상 정리.

@@ -22,6 +22,11 @@ export interface ClosedIssuePageOptions {
    * 종료 라벨(IVE-E)만 남는다 — 예전 이슈(IVE 부착)와 함께 보려고 둘 중 하나라도 있으면 포함한다.
    */
   orLabel?: string
+  /**
+   * 그 밖에도 이 라벨 중 하나라도 있으면 포함 — 단계 라벨(IVE-C 등)만 달고 닫힌 이슈(머지의 닫기 키워드로 닫힘, 완료 전)를 이력에 보이려고.
+   * 단계 라벨을 붙이면 대상 라벨(ive)을 떼므로 이들은 ive 도 ive:done 도 없다(운영 2115).
+   */
+  orLabels?: string[]
   /** 이 이슈 번호들로 한정 (GitLab 이 못 하는 짧은 검색어를 IVE DB 제목으로 찾은 결과). 빈 배열이면 결과 없음. */
   iids?: number[]
 }
@@ -93,4 +98,9 @@ export async function mergeClosedIssueStreams(
     total: totals.every(t => t != null) ? totals.reduce((n, t) => n + (t as number), 0) : null,
     hasMore: merged.length > need || streams.some(s => s.more),
   }
+}
+
+/** 이력 조회가 받아들이는 라벨 전체 — label 과 orLabel·orLabels, 겹침 없이 */
+export function closedLabelSet(opts: Pick<ClosedIssuePageOptions, 'label' | 'orLabel' | 'orLabels'>): string[] {
+  return Array.from(new Set([opts.label, opts.orLabel, ...(opts.orLabels || [])].filter((l): l is string => !!l)))
 }
