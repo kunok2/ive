@@ -1,13 +1,13 @@
 import { computeProgress } from '@/lib/stage-progress'
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAccess, getProjectAuthToken, getAssignModeMap, setAssignMode, setAssigneeAuto, setIssuePriority, normalizePriority, setPresetRoles, getPresetRoles, getActualRoleAssigneesMap, getAgent, hasActiveExecution, stageFromLabels, touchProjectActivity, getIssueIterationCountsMap, getActiveChatSessionsByProject, findIssueIidsByTitle, getIssueStageSinceMap, hasRole, markRolesInitialized, setStageWorkerNote, getStageWorkerNote, getDeployState, setIssueIntakeChannel, type RoleMode } from '@/lib/db';
+import { getProject, getProjectAccess, getProjectAuthToken, getAssignModeMap, setAssignMode, setAssigneeAuto, setIssuePriority, normalizePriority, setPresetRoles, getPresetRoles, getActualRoleAssigneesMap, getAgent, hasActiveExecution, stageFromLabels, touchProjectActivity, getIssueIterationCountsMap, getActiveChatSessionsByProject, findIssueIidsByTitle, getIssueStageSinceMap, hasRole, markRolesInitialized, setStageWorkerNote, getStageWorkerNote, getDeployState, setIssueIntakeChannel, type RoleMode, getDb } from '@/lib/db';
 import { autoAssignAllAgents, agentRoleAvailable } from '@/lib/role-assignment';
 import { isChatAgentRunning } from '@/lib/chat-agent';
 import { triggerScan } from '@/lib/scanner';
 import { getCurrentUser } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import { checkLabelsExist, addIssueComment } from '@/lib/provider';
-import { fetchAllProjectIssues, fetchClosedProjectIssuesPage, createIssue } from '@/lib/provider';
+import { fetchAllProjectIssues, fetchClosedProjectIssuesPage, createIssue, fetchSingleIssue } from '@/lib/provider';
 import { parseClosedPageOptions, parseIidSearch, isGitLabSearchable } from '@/lib/closed-issues';
 import { withGitToken, friendlyGitError } from '@/lib/git-token';
 import { prependIveAuthorMarker, stripIveAuthorMarker, stripIveDueMarker, resolveIveAuthorFromBody } from '@/lib/ive-author';
@@ -45,6 +45,18 @@ export async function GET(
     }
     const closedPage = closedOpts ? await fetchClosedProjectIssuesPage(project, token, closedOpts) : null;
     const issues = closedPage ? closedPage.issues : await fetchAllProjectIssues(project, token);
+    // 완료 단계에 닿기 전에 Git 이 닫은 작업(MR 머지의 닫기 키워드)은 스캐너가 완료로 바꾸지 않고 그 단계에 둔다(다시 열 수 있게).
+    // 열린 이슈 목록에도, 이력 탭(대상·종료 레이블)에도 안 잡히므로 작업 목록에 따로 더한다.
+    if (!closedPage) {
+      try {
+        const have = new Set(issues.map((i: any) => i.iid));
+        const stranded = (getDb().prepare(
+          `SELECT issue_iid FROM issue_stages WHERE project_id = ? AND cached_stage IS NOT NULL AND cached_stage NOT IN ('done', 'none') ORDER BY issue_iid DESC`
+        ).all(projectId) as { issue_iid: number }[]).map(r => r.issue_iid).filter(n => !have.has(n)).slice(0, 20);
+        const extra = await Promise.all(stranded.map(n => fetchSingleIssue(project, n, token).catch(() => null)));
+        for (const e of extra) if (e && e.state === 'closed') issues.push(e);
+      } catch (e) { console.warn('[issues] 닫힌 미완료 작업 조회 실패:', (e as Error).message) }
+    }
 
     // 배정 모드 맵 + 실제 수행자 맵 로드 (둘 다 batch 쿼리)
     const assignModeMap = getAssignModeMap(projectId);
