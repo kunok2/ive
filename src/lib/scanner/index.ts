@@ -53,7 +53,7 @@ import { gitActor } from "../event-actor";
 import { recordScannedStageChange } from "./stage-events";
 import { fetchProjectMembers } from "../provider";
 import { decrypt, encrypt } from "../crypto";
-import { removeIssueLabels, swapIssueLabels, addIssueComment, createBranch, getDefaultBranch, closeIssue, fetchSingleIssue, fetchMRByBranch, fetchIssueNotes } from "../provider";
+import { removeIssueLabels, swapIssueLabels, addIssueComment, createBranch, getDefaultBranch, closeIssue, fetchSingleIssue, fetchMRByBranch, fetchIssueNotes, isIssueClosedByGit } from "../provider";
 import {
   fetchGitLabIssues,
   refreshGitLabToken,
@@ -815,15 +815,21 @@ async function scanProject(project: Project, force: boolean = false) {
     for (const row of staleRows) {
       if (!processedIids.has(row.issue_iid)) {
         const iid = row.issue_iid
-        // 확인(④)을 기다리던 이슈 — IVE 가 검증 통과로 머지하면서 Git 이 닫기 키워드로 닫았으면 다시 열고 정리하지 않는다.
+        // 완료 단계에 닿기 전에 Git 이 닫기 키워드로 닫은 이슈(MR 머지로 닫힘)는 완료로 바꾸지 않고 지금 단계를 그대로 둔다.
+        // 완료로 바꾸면 확인을 거치지 않았다는 흔적이 사라져 다시 열 길이 없다. 확인(④) 단계면 다시 열고,
+        // 그 밖의 단계는 사람이 작업 상세에서 이어 간다. 사람이 직접 닫았거나 여는 데 실패한 경우만 아래 정리로 간다.
         // (이번 스캔 목록을 받은 뒤 다시 열렸을 수도 있으니 한 건 조회해 열려 있으면 그대로 둔다)
-        if (row.cached_stage === 'confirm_waiting' || row.cached_stage === 'confirming') {
-          try {
-            const cur = await fetchSingleIssue(project, iid, decryptedToken)
-            if (cur && cur.state !== 'closed') continue
-            if (cur && await reopenIfClosedBeforeConfirm(project, decryptedToken, iid, cur)) continue
-          } catch (e) { slog.warn(`reopen check failed (#${iid}):`, (e as Error).message) }
-        }
+        try {
+          const cur = await fetchSingleIssue(project, iid, decryptedToken)
+          if (cur && cur.state !== 'closed') continue
+          if (cur) {
+            if (await reopenIfClosedBeforeConfirm(project, decryptedToken, iid, cur)) continue
+            if ((await isIssueClosedByGit(project, iid, decryptedToken)) === true) {
+              slog.info(`${project.name} #${iid} — Git 이 닫았으나 완료 단계 전(${row.cached_stage}), 완료로 바꾸지 않고 그대로 둠`)
+              continue
+            }
+          }
+        } catch (e) { slog.warn(`closed-before-done check failed (#${iid}):`, (e as Error).message) }
         // 이번 스캔 결과(Open 이슈)에 없음 -> Closed 되었거나 IVE 레이블이 제거됨.
         // 단순 실패로 마감하기 전에 "메인 브랜치 머지로 닫힌 완료 작업"인지 먼저 판정한다. (#467)
         let mergeComplete = false
