@@ -117,6 +117,9 @@ function addMove(c: IterationCounts, from: number, to: number, n: number) {
   }
 }
 
+/** 「단계 없음」 순간을 사이에 둔 두 단계 기록을 한 이동으로 합치는 최대 간격 */
+const LABEL_GAP_MERGE_MS = 5 * 60_000
+
 /** 사건 로그가 생기기 전 활동 로그 action → 칸 이동 */
 const LEGACY_ACTION_MOVE: Record<string, [number, number]> = {
   task_approve: [3, 4], task_accept: [4, 5],
@@ -153,6 +156,14 @@ function getIterationCounts(projectId: string, issueIid?: number): Map<number, I
     // 옮긴 기록이 뒤따른다. 실제 이동이 아니므로 세지 않는다(예전에 떼기·붙이기를 따로 하던 때 남은 기록 — swapIssueLabels 로 막음)
     if (r.source === 'scanner' && r.to_stage == null && r.from_stage != null && next && next.issue_iid === r.issue_iid
       && next.from_stage === r.from_stage && new Date(next.occurred_at).getTime() - new Date(r.occurred_at).getTime() < 60_000) continue
+    // 라벨 교체 도중에 읽힌 「단계 없음」을 사이에 둔 두 기록(A → 없음, 없음 → B)은 실제로는 A → B 한 번의 이동이다.
+    // 둘로 세면 「A → 유입」 되돌림이 생기고 정방향 이동은 빠진다. 간격은 스캔 주기를 넘길 수 있어 넉넉히 잡는다.
+    if (r.source === 'scanner' && r.to_stage == null && r.from_stage != null && next && next.issue_iid === r.issue_iid
+      && next.from_stage == null && next.to_stage != null && new Date(next.occurred_at).getTime() - new Date(r.occurred_at).getTime() < LABEL_GAP_MERGE_MS) {
+      addMove(entry(r.issue_iid), macroOf(r.from_stage), macroOf(next.to_stage), 1)
+      i++
+      continue
+    }
     addMove(entry(r.issue_iid), macroOf(r.from_stage), macroOf(r.to_stage), 1)
   }
 

@@ -6,6 +6,7 @@
  * C-3: 화면 버튼은 활동 로그·사건 로그 둘 다 남기므로 두 번 세지 않는다.
  * C-4: 사건 로그가 생기기 전 활동 로그는 그 이슈의 첫 단계 사건 이전 것만 보충한다.
  * C-5: 목록용 맵도 같은 값을 낸다.
+ * C-6: 라벨 교체 중 「단계 없음」으로 읽힌 순간을 사이에 둔 두 기록은 한 번의 이동이다(운영 spider-framework #1419).
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import Database from 'better-sqlite3'
@@ -24,7 +25,7 @@ afterEach(() => { db.close(); (globalThis as any).db = undefined })
 
 const agent = { type: 'agent' as const, agentId: 'a1' }
 let t = Date.parse('2026-10-02T00:00:00Z')
-function move(iid: number, from: string | null, to: string, action: string | null, source: 'worker' | 'ui' | 'scanner' = 'worker') {
+function move(iid: number, from: string | null, to: string | null, action: string | null, source: 'worker' | 'ui' | 'scanner' = 'worker') {
   t += 60_000
   recordStageEvent({ projectId: 'p', issueIid: iid, fromStage: from, toStage: to, action, source, actor: agent, occurredAt: new Date(t).toISOString() })
 }
@@ -75,6 +76,15 @@ describe('진행 막대 횟수', () => {
     activity(4, 'task_accept', '2026-09-19 10:00:00')
     expect(getIssueRetryCounts('p', 4)).toEqual([{ from: 5, to: 4, count: 1 }])
     expect(getIssueForwardCounts('p', 4).toDone).toBe(1)
+  })
+
+  it('C-6: 검증 중 → (단계 없음) → 확인대기는 검증 → 유입 되돌림이 아니라 검증 → 확인 정방향 한 번이다', () => {
+    move(6, 'verify_waiting', 'verifying', null, 'scanner')
+    move(6, 'verifying', null, null, 'scanner')
+    move(6, null, 'confirm_waiting', null, 'scanner')   // 1분 넘게 지나 이어짐
+    move(6, 'confirm_waiting', 'confirming', null, 'scanner')
+    expect(getIssueRetryCounts('p', 6)).toEqual([])
+    expect(getIssueForwardCounts('p', 6)).toMatchObject({ toConfirm: 1 })
   })
 
   it('C-5: 목록용 맵도 단건 조회와 같다', () => {
