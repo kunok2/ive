@@ -98,6 +98,15 @@ export function getLastStageEvent(projectId: string, issueIid: number): { to: st
   return r ? { to: r.to_stage ?? null, at: r.occurred_at } : null
 }
 
+/** 확인을 거치지 않고 머지로 닫혀 완료가 된 작업인가 — 마지막 단계 사건이 「→ 완료」이고 동작이 merged(스캐너의 머지로 닫힘 정리)다 */
+export function wasCompletedByMergeClose(projectId: string, issueIid: number): boolean {
+  const r = getDb().prepare(`
+    SELECT to_stage, action FROM issue_events WHERE project_id = ? AND issue_iid = ? AND event = 'stage'
+    ORDER BY id DESC LIMIT 1
+  `).get(projectId, issueIid) as { to_stage: string | null; action: string | null } | undefined
+  return r?.to_stage === 'done' && r?.action === 'merged'
+}
+
 /**
  * 검증·확인에서 연달아 반려된 횟수 — 반려 고리(핑퐁) 끊기용.
  * 마지막으로 확인대기·완료에 닿았거나 반려 고리로 사람에게 넘긴(action rework_loop) 뒤에 남은

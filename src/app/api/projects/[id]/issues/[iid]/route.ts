@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getProject, getProjectAccess, getProjectAuthToken, hasActiveExecution, stageFromLabels, getPresetRoles, getAssigneeAuto, getAssignMode, getActualRoleAssignees, getIssueStageTimes, getIssueRetryCounts, getIssueForwardCounts, getStageWorkerNote, getDeployState, getRunningAgentWork } from '@/lib/db'
+import { getProject, getProjectAccess, getProjectAuthToken, hasActiveExecution, stageFromLabels, getPresetRoles, getAssigneeAuto, getAssignMode, getActualRoleAssignees, getIssueStageTimes, getIssueRetryCounts, getIssueForwardCounts, getStageWorkerNote, getDeployState, getRunningAgentWork, wasCompletedByMergeClose } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { execKind } from '@/lib/active-work'
 import { logActivity } from '@/lib/activity'
@@ -205,6 +205,8 @@ export async function GET(
       closedAt: issue.closed_at ?? null,
       dueDate: issue.due_date ?? null,
       stageTimes,
+      // 확인 없이 머지로 닫혀 완료가 된 작업 — 화면이 열 때 다시 열지 묻는다
+      completedByMerge: stage === 'done' && wasCompletedByMergeClose(projectId, Number(iid)),
       retryCounts,
       forwardCounts,
       webUrl: issue.web_url,

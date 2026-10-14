@@ -74,6 +74,8 @@ interface IssueDetail {
   canEditBody?: boolean
   stage: string
   state: string
+  /** 확인 없이 머지로 닫혀 완료가 된 작업 — 열면 다시 열지 묻는다 */
+  completedByMerge?: boolean
   labels: string[]
   createdAt: string
   updatedAt: string
@@ -247,6 +249,34 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
     // dev/waiting/dev_fail 등: 기존 룰 (assignee 또는 creator)
     return isAssignee || isCreator
   })()
+
+  // 확인을 거치지 않고 머지로 닫혀 완료가 된 작업 — 열면 확인 대기로 되돌려 다시 열지 묻는다(자동으로 다시 여는 길이 놓친 경우의 수기 길).
+  // 한 번 물어 아니라고 했으면 이 브라우저 탭에서는 다시 묻지 않는다. 같은 작업을 겹쳐 묻지 않게 ref 로 막는다.
+  const reopenAskedRef = useRef('')
+  useEffect(() => {
+    if (!issue || issue.stage !== 'done' || !issue.completedByMerge || !canProgressStage) return
+    const key = `ive:reopen-asked:${projectId}:${iid}`
+    if (reopenAskedRef.current === key) return
+    try { if (sessionStorage.getItem(key)) return } catch { /* 저장소를 못 쓰면 매번 묻는다 */ }
+    reopenAskedRef.current = key
+    ;(async () => {
+      const ok = await confirm({
+        title: tIssue('reopenMerged.title'), message: tIssue('reopenMerged.message'),
+        confirmText: tIssue('reopenMerged.confirm'), cancelText: tc('cancel'), variant: 'warning',
+      })
+      try { sessionStorage.setItem(key, '1') } catch { /* 무시 */ }
+      if (!ok) return
+      try {
+        const res = await fetch(`/api/projects/${projectId}/issues/${iid}/stage`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stage: 'done', action: 'reopen' }),
+        })
+        if (!res.ok) { const d = await res.json().catch(() => null); toast(d?.error || `Error: ${res.status} ${res.statusText}`, 'error'); return }
+        await refreshAll(); toast(tIssue('reopenMerged.done'), 'success')
+        window.dispatchEvent(new Event('refresh-counts'))
+      } catch (e: any) { toast(e?.message || tc('networkError'), 'error') }
+    })()
+  }, [issue?.stage, issue?.completedByMerge, canProgressStage, projectId, iid]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // 본문 체크박스 저장 상태 — 저장은 한 줄로 차례대로 보내고, 저장과 겹친 목록 응답은 버린다
   const checkboxEpochRef = useRef(0)

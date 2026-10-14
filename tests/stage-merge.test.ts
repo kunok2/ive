@@ -211,10 +211,15 @@ describe('R-1 확인 전에 Git 이 닫은 이슈', () => {
     expect(await reopenIfClosedBeforeConfirm(project, 'tok', 51, closed)).toBe(true)
     expect(providerMock.reopenIssue).toHaveBeenCalledWith(project, 51, 'tok')
   })
-  it('사람이 검증·머지했거나 사람이 직접 닫았으면 두고 본다', async () => {
+  it('사람이 검증·머지한 이슈도 Git 이 닫았으면 다시 연다', async () => {
     verifyRow('user', 'pass')
-    expect(await reopenIfClosedBeforeConfirm(project, 'tok', 51, closed)).toBe(false)
-    db.prepare(`DELETE FROM task_executions`).run()
+    expect(await reopenIfClosedBeforeConfirm(project, 'tok', 51, closed)).toBe(true)
+    expect(providerMock.reopenIssue).toHaveBeenCalledWith(project, 51, 'tok')
+  })
+  it('검증 기록이 전혀 없어도(사람이 라벨만 옮김) Git 이 닫았으면 다시 연다', async () => {
+    expect(await reopenIfClosedBeforeConfirm(project, 'tok', 51, closed)).toBe(true)
+  })
+  it('사람이 직접 닫았으면 두고 본다', async () => {
     verifyRow('agent', 'pass')
     providerMock.isIssueClosedByGit.mockResolvedValueOnce(false)
     expect(await reopenIfClosedBeforeConfirm(project, 'tok', 51, closed)).toBe(false)

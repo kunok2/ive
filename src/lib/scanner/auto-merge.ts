@@ -12,7 +12,7 @@
  */
 import { getLogger } from '../logger'
 import { Project } from '@/types'
-import { getProjectAutomation, setStageWorkerNote, takeLegacyQueuedItems, getLatestBundleItem, stageFromLabels, getDb } from '../db'
+import { getProjectAutomation, setStageWorkerNote, takeLegacyQueuedItems, stageFromLabels, getDb } from '../db'
 import { addIssueComment, fetchMRByBranch, mergeMR, isIssueClosedByGit, reopenIssue } from '../provider'
 import { resolveStagingBranch } from '../staging-config'
 import { resolveProjectLocale } from './stage-worker'
@@ -109,34 +109,23 @@ export async function handOffLegacyBundleQueue(project: Project, token: string, 
   }
 }
 
-/** 확인 전에 IVE 가 머지한 이슈인가 — 마지막 검증이 에이전트 통과였거나, 예전 묶음으로 staging 에 푸시됐다(DB 기록) */
-function mergedByIveBeforeConfirm(projectId: string, iid: number): boolean {
-  const v = getDb().prepare(`
-    SELECT assignee_type, stage_verdict FROM task_executions
-    WHERE project_id = ? AND issue_iid = ? AND id LIKE 'ex-verify-%' ORDER BY started_at DESC LIMIT 1
-  `).get(projectId, iid) as { assignee_type: string | null; stage_verdict: string | null } | undefined
-  if (v?.assignee_type === 'agent' && v.stage_verdict === 'pass') return true
-  return getLatestBundleItem(projectId, iid)?.status === 'pushed'
-}
-
 /**
- * 확인(④)을 기다리는 이슈를 IVE 의 머지 직후 Git 이 닫았으면(MR·커밋의 닫기 키워드) 다시 연다.
- * 이슈는 확인이 끝나 완료(E)가 될 때 IVE 가 닫는다. 사람이 직접 닫았거나 사람이 머지한 이슈는 건드리지 않는다.
+ * 확인(④)을 기다리는 이슈를 머지 직후 Git 이 닫았으면(MR·커밋의 닫기 키워드) 다시 연다. 머지한 쪽이 IVE 든 사람이든 같다.
+ * 이슈는 확인이 끝나 완료(E)가 될 때 IVE 가 닫는다. 사람이 직접 닫은 이슈는 건드리지 않는다(isIssueClosedByGit 이 가른다).
  * @returns 다시 열었으면 true
  */
 export async function reopenIfClosedBeforeConfirm(project: Project, token: string, iid: number, issue: any): Promise<boolean> {
   if (!issue || issue.state !== 'closed') return false
   const st = stageFromLabels(issue.labels || [], project, { hasActiveExec: false })
   if (st !== 'confirm_waiting' && st !== 'confirming') return false
-  if (!mergedByIveBeforeConfirm(project.id, iid)) return false
   if ((await isIssueClosedByGit(project, iid, token)) !== true) return false
   const { isKo } = resolveProjectLocale(project)
   await reopenIssue(project, iid, token)
   slog.info(`${project.name} #${iid} reopened — closed by Git before confirmation`)
   try {
     await addIssueComment(project, iid, token, isKo
-      ? `<!-- ive-bot -->\n## 🔓 이슈를 다시 열었습니다\n\n검증을 통과해 MR 을 머지하자, 커밋 메시지의 「resolve #번호」 문구 때문에 Git 이 이 이슈를 자동으로 닫았습니다. 아직 확인 단계가 남아 있어 다시 열었습니다 — 확인까지 끝나면 IVE 가 닫습니다.`
-      : `<!-- ive-bot -->\n## 🔓 Reopened\n\nGit closed this issue via a closing keyword when the verified MR was merged. Confirmation is still pending — IVE closes it when it is done.`)
+      ? `<!-- ive-bot -->\n## 🔓 이슈를 다시 열었습니다\n\n검증을 마치고 MR 을 머지하자, 커밋 메시지의 「resolve #번호」 문구 때문에 Git 이 이 이슈를 자동으로 닫았습니다. 아직 확인 단계가 남아 있어 다시 열었습니다 — 확인까지 끝나면 IVE 가 닫습니다.`
+      : `<!-- ive-bot -->\n## 🔓 Reopened\n\nGit closed this issue via a closing keyword when the MR was merged. Confirmation is still pending — IVE closes it when it is done.`)
   } catch { /* 코멘트 실패는 무시 */ }
   return true
 }

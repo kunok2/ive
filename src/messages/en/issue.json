@@ -273,6 +273,12 @@
     "confirming": "Confirmed"
   },
   "commentPostFailed": "Failed to post the comment",
+  "reopenMerged": {
+    "title": "Completed without confirmation",
+    "message": "This task was marked done when the merge closed the issue, without going through confirmation. Reopening opens the issue and returns it to Awaiting confirmation. Cancel if it has already been confirmed.",
+    "confirm": "Reopen",
+    "done": "Reopened and returned to Awaiting confirmation"
+  },
   "stageChanged": "Updated",
   "confirmDone": "Confirmed",
   "approveDone": "Approved",
