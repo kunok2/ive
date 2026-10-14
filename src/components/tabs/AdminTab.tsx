@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
+import { updateMainUrl, useTab } from '@/lib/tab-context'
 import PullToRefresh from '@/components/ui/PullToRefresh'
 import UsersPanel from './admin/UsersPanel'
 import MailPanel from './admin/MailPanel'
@@ -14,6 +15,8 @@ export default function AdminTab() {
   const t = useTranslations('admin')
   const [subTab, setSubTab] = useState<SubTab>(() => {
     if (typeof window !== 'undefined') {
+      const fromUrl = new URLSearchParams(window.location.search).get('sub')
+      if (window.location.pathname === '/' && fromUrl && ['users', 'mail', 'settings', 'logs'].includes(fromUrl)) return fromUrl as SubTab
       const saved = localStorage.getItem('ive-admin-subtab')
       if (saved && ['users', 'mail', 'settings', 'logs'].includes(saved)) return saved as SubTab
       if (saved === 'activity' || saved === 'cli') return 'users'
@@ -27,6 +30,12 @@ export default function AdminTab() {
   useEffect(() => {
     localStorage.setItem('ive-admin-subtab', subTab)
   }, [subTab])
+
+  // 관리 탭을 보는 동안만 하위 탭을 주소에 담는다
+  const { activeTab } = useTab()
+  useEffect(() => {
+    updateMainUrl({ sub: activeTab === 'admin' ? subTab : null })
+  }, [activeTab, subTab])
 
   const handleRefresh = useCallback(async () => {
     setRefreshKey(k => k + 1)

@@ -14,7 +14,7 @@ import { useDialog } from '@/components/ui/ConfirmDialog'
 import PullToRefresh from '@/components/ui/PullToRefresh'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { getKSTTodayString } from '@/lib/date-utils'
-import { useTab } from '@/lib/tab-context'
+import { useTab, updateMainUrl } from '@/lib/tab-context'
 import type { ReportModel, HeldIssue } from '@/lib/report-model/types'
 import { periodOf, previousPeriod, nextPeriod, addDays, FINALIZE_AFTER_DAYS, type ReportType } from '@/lib/report-model/period'
 import {
@@ -130,6 +130,11 @@ export default function ReportsTab() {
   const isTodayPeriod = shown.start <= today && today < shown.end
   // 진행 중인 기간은 저절로 다시 받는다 — 주간 10초, 월간·연간 1분(범위가 넓어 계산이 무겁고 덜 자주 바뀐다)(보고서 탭을 보고 있을 때만). 끝난 기간은 고정
   const { activeTab } = useTab()
+  // 보는 기간을 주소에 담는다(보고서 탭을 보는 동안만) — 북마크하면 그 기간이 열린다
+  useEffect(() => {
+    const on = activeTab === 'reports'
+    updateMainUrl({ rtype: on ? type : null, rdate: on ? date : null })
+  }, [activeTab, type, date])
   const live = isTodayPeriod && activeTab === 'reports'
   const liveSec = type === 'weekly' ? 10 : 60
   useEffect(() => {
