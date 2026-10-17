@@ -153,15 +153,21 @@ export function loadIssueHistory(projectIds: string[], opts: { onlyHeld?: boolea
     events.set(k, list)
   }
 
+  const SKIPPED_CONFIRM_FROM = new Set(['verify_waiting', 'verifying', 'confirm_waiting'])
   const isOpen = (s: string | null) => !!s && s !== 'done' && s !== 'closed'
   const keys = new Set([...rows.keys(), ...stages.keys(), ...events.keys()])
   for (const k of keys) {
     const rs = rows.get(k) ?? []
     const st = stages.get(k)
     const ev = events.get(k) ?? []
-    // 확인 없이 머지로 닫혀 완료가 됐다가(merged) 완료 전 단계로 되돌린 것은 다시 작업이 아니라 잘못된 완료의 취소다
-    // — 새 사이클로 세면 확인을 마친 뒤 같은 일이 완료 두 건이 된다(운영 Meta-Shop #2115)
-    const undoesMergeClose = (i: number) => i > 0 && ev[i - 1].to === 'done' && ev[i - 1].action === 'merged'
+    // 확인을 거치지 않고 완료가 됐다가 완료 전 단계로 되돌린 것은 다시 작업이 아니라 잘못된 완료의 취소다
+    // — 새 사이클로 세면 확인을 마친 뒤 같은 일이 완료 두 건이 된다(운영 Meta-Shop #2115·#2129).
+    // 확인 없는 완료: 머지로 닫힘 정리(merged), 또는 검증·확인 대기 단계에서 확인 중(confirming)을 거치지 않고 곧장 완료로 닫힌 것(사람이 Git 에서 먼저 닫음)
+    const undoesMergeClose = (i: number) => {
+      const prev = i > 0 ? ev[i - 1] : null
+      if (!prev || prev.to !== 'done') return false
+      return prev.action === 'merged' || (prev.action !== 'external' && SKIPPED_CONFIRM_FROM.has(prev.from ?? ''))
+    }
     const reopenEv = ev.filter((e, i) => (e.from === 'done' || e.from === 'closed') && isOpen(e.to) && !undoesMergeClose(i))
       .sort((a, b) => (a.at < b.at ? -1 : 1))
     const firstHeldEvent = ev.filter(e => isOpen(e.to)).map(e => e.at).sort()[0]

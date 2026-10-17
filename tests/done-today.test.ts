@@ -110,6 +110,21 @@ describe('카드 완료 수 = 보고서 완료 수 (#563)', () => {
     expect(h.reopens).toEqual([]) // 다시 들어온 일(유입)로도 세지 않는다
     expect(h.completions).toEqual([at(`${TODAY}T13:15:16`)])
   })
+
+  it('D-6: 확인 중을 거치지 않고 사람이 Git 에서 먼저 닫아 완료가 됐다가 되돌린 일도 확인을 마친 한 건 (운영 Meta-Shop #2129)', () => {
+    exec('ex-1', 1, 'success', `${TODAY}T10:43:58`, `${TODAY}T10:48:54`)
+    ev(1, null, 'waiting', `${TODAY}T10:43:57`)
+    ev(1, 'waiting', 'dev', `${TODAY}T10:43:58`)
+    ev(1, 'dev', 'verify_waiting', `${TODAY}T10:48:54`)
+    ev(1, 'verify_waiting', 'done', `${TODAY}T11:18:05`)
+    ev(1, 'done', 'verify_waiting', `${TODAY}T11:24:58`)
+    ev(1, 'verify_waiting', 'confirm_waiting', `${TODAY}T11:44:10`)
+    ev(1, 'confirm_waiting', 'confirming', `${TODAY}T13:15:15`)
+    ev(1, 'confirming', 'done', `${TODAY}T13:15:17`)
+    stage(1, 'done', { confirmed_at: at(`${TODAY}T13:15:16`) })
+    expect(counts()).toEqual({ today: 1, yesterday: 0 })
+    expect(loadIssueHistory(['p']).get('p:1')!.reopens).toEqual([])
+  })
 })
 
 describe('listTodayDoneIssues', () => {
