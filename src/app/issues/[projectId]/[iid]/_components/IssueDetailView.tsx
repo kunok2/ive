@@ -1360,9 +1360,9 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
         onRefreshAll={refreshAll}
         onDeleteNote={handleDeleteNote}
         onToggleCheckbox={issue.canEditBody && issue.state !== 'closed' ? handleToggleCheckbox : undefined}
-        // 진행막대·마감일·우선순위는 고정 머리가 아니라 내용 스크롤 영역 맨 위 — 함께 스크롤되어 내용 보기 높이가 커진다(폭과 무관)
-        headSlot={!editMode ? (
-          <div className="pt-2 pb-1 pr-2">
+        // 5단계 막대는 넓은 화면(desk)에선 스크롤 영역 위에 고정, 좁은 화면에선 headSlot 안에서 함께 스크롤. 마감일·우선순위는 어디서든 스크롤
+        pinnedSlot={!editMode ? (
+          <div className="pt-2 pb-1">
             <IssueProgressSection
               issue={issue}
               canEditAssignees={canEditAssignees}
@@ -1377,6 +1377,45 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
               onPresetConfirmerChange={handlePresetConfirmerChange}
               onDueDateChange={handleDueDateChange}
               onPriorityChange={issue.canEditPriority ? handlePriorityChange : undefined}
+              part="graph"
+            />
+          </div>
+        ) : undefined}
+        headSlot={!editMode ? (
+          <div className="pt-2 pb-1 pr-2">
+            <div className="desk:hidden">
+              <IssueProgressSection
+                issue={issue}
+                canEditAssignees={canEditAssignees}
+                isCreator={isCreator}
+                gitMembers={gitMembers}
+                confirmerMembers={confirmerMembers}
+                roleAgents={roleAgents}
+                preferredAgent={preferredAgent}
+                onOpenAssigneePicker={() => setAssigneePickerOpen(true)}
+                onOpenAgentPicker={() => setAgentPickerOpen(true)}
+                onPresetVerifierChange={handlePresetVerifierChange}
+                onPresetConfirmerChange={handlePresetConfirmerChange}
+                onDueDateChange={handleDueDateChange}
+                onPriorityChange={issue.canEditPriority ? handlePriorityChange : undefined}
+                part="graph"
+              />
+            </div>
+            <IssueProgressSection
+              issue={issue}
+              canEditAssignees={canEditAssignees}
+              isCreator={isCreator}
+              gitMembers={gitMembers}
+              confirmerMembers={confirmerMembers}
+              roleAgents={roleAgents}
+              preferredAgent={preferredAgent}
+              onOpenAssigneePicker={() => setAssigneePickerOpen(true)}
+              onOpenAgentPicker={() => setAgentPickerOpen(true)}
+              onPresetVerifierChange={handlePresetVerifierChange}
+              onPresetConfirmerChange={handlePresetConfirmerChange}
+              onDueDateChange={handleDueDateChange}
+              onPriorityChange={issue.canEditPriority ? handlePriorityChange : undefined}
+              part="rest"
             />
           </div>
         ) : undefined}

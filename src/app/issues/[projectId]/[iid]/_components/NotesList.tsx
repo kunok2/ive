@@ -77,6 +77,8 @@ interface NotesListProps {
   scrollContainerRef: RefObject<HTMLDivElement | null>
   /** 스크롤 영역 맨 위(본문 앞)에 끼울 블록 — 진행막대를 내용과 함께 스크롤시킬 때 */
   headSlot?: React.ReactNode
+  /** 스크롤 영역 위에 고정할 블록 — 넓은 화면(desk)에서만 보인다(좁은 화면은 headSlot 쪽이 함께 스크롤) */
+  pinnedSlot?: React.ReactNode
   /** 본문과 활동 기록 사이에 끼울 블록 (단계 자동화·증적 패널) */
   topSlot?: React.ReactNode
   notesEndRef: RefObject<HTMLDivElement | null>
@@ -94,7 +96,7 @@ export default function NotesList({
   mode, chatSessionId, chatHistoryOnly, chatMessages, chatAgentName, chatAgentAvatar,
   chatSending, chatSendingStartTime, chatStreamText,
   scrollContainerRef, notesEndRef,
-  onRefreshAll, onDeleteNote, onToggleCheckbox, headSlot, topSlot,
+  onRefreshAll, onDeleteNote, onToggleCheckbox, headSlot, pinnedSlot, topSlot,
 }: NotesListProps) {
   const { state } = useStore()
   const tc = useTranslations('common')
@@ -139,6 +141,7 @@ export default function NotesList({
 
   return (
     <div className={`flex-1 flex flex-col min-h-0 ${widthCls} mx-auto w-full`}>
+      {pinnedSlot && <div className="hidden desk:block shrink-0 pl-3 pr-3">{pinnedSlot}</div>}
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto pb-2 pl-3 pr-1">
         <PullToRefresh onRefresh={onRefreshAll} scrollContainerRef={scrollContainerRef}>
           {headSlot}

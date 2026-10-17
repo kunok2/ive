@@ -269,6 +269,8 @@ interface IssueProgressSectionProps extends Pick<IssueHeaderProps, 'issue' | 'ca
   onPriorityChange?: (next: Priority) => Promise<void> | void
   /** 작성자(생성자) 권한 — DeadlineProgress 노출/편집 제어. */
   isCreator: boolean
+  /** 'graph' = 5단계 막대+체크 진행률만, 'rest' = 마감일·우선순위만, 기본 전부. 넓은 화면에서 막대만 고정하려고 나눈다 */
+  part?: 'all' | 'graph' | 'rest'
 }
 
 /**
@@ -277,7 +279,7 @@ interface IssueProgressSectionProps extends Pick<IssueHeaderProps, 'issue' | 'ca
  */
 export function IssueProgressSection({
   issue, canEditAssignees, isCreator, gitMembers, confirmerMembers, roleAgents, preferredAgent,
-  onOpenAssigneePicker, onOpenAgentPicker, onPresetVerifierChange, onPresetConfirmerChange, onDueDateChange, onPriorityChange,
+  onOpenAssigneePicker, onOpenAgentPicker, onPresetVerifierChange, onPresetConfirmerChange, onDueDateChange, onPriorityChange, part = 'all',
 }: IssueProgressSectionProps) {
   // 완료된 작업(닫힘 또는 done 단계)은 담당자/검증자/확인자/마감일 모두 수정 불가.
   // 이미 종결된 흐름을 사후 변경하면 통계와 보고서가 어그러진다.
@@ -287,6 +289,7 @@ export function IssueProgressSection({
 
   return (
     <>
+      {part !== 'rest' && (<>
       {/* 넓은 칸에서도 막대는 보기 좋은 폭(최대 768px)까지만, 가운데 */}
       <div className="w-full max-w-3xl mx-auto">
       <StageProgress
@@ -345,6 +348,8 @@ export function IssueProgressSection({
         )
       })()}
       </div>
+      </>)}
+      {part !== 'graph' && (<>
       {/* 마감일 진행 — 시작일시 → 마감일시 + 소진율. 작성자만 수정 가능.
           완료된 작업(closed/done)은 마감일 대비 조기/지연을 표시하므로 마감일이 있어야만 노출. */}
       {(() => {
@@ -372,6 +377,7 @@ export function IssueProgressSection({
           <PriorityPicker value={issue.priority ?? 0} onChange={onPriorityChange} />
         </div>
       )}
+      </>)}
     </>
   )
 }
