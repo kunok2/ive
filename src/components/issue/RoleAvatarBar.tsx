@@ -135,6 +135,8 @@ export default function RoleAvatarBar({
   const [confirmerAuto, setConfirmerAuto] = useState(false)
   const [confirmerAgentPick, setConfirmerAgentPick] = useState<string | null>(null)
 
+  // 횟수는 아바타 아래에 적으므로, 있을 때만 그 줄만큼 아래를 비워 둔다
+  const hasCounts = !!stageCounts && (stageCounts.process >= 2 || stageCounts.verify >= 2 || stageCounts.confirm >= 2)
   const dim = size === 'sm' ? 'w-[18px] h-[18px]' : 'w-[22px] h-[22px]'
   const iconSize = size === 'sm' ? 'text-[8px]' : 'text-[10px]'
 
@@ -183,7 +185,7 @@ export default function RoleAvatarBar({
   return (
     <>
       {/* 아바타 테두리(ring-2)는 상자 밖으로 2px 나간다 — 줄의 왼쪽 끝이 위아래 글자·배지와 맞도록 그만큼 들인다 */}
-      <div className="flex items-center pl-0.5">
+      <div className={`flex items-center pl-0.5 ${hasCounts ? 'pb-3.5' : ''}`}>
         {/* 작성자 — 항상 avatar, 읽기 전용 */}
         <RoleSlot
           dim={dim}
@@ -197,6 +199,7 @@ export default function RoleAvatarBar({
         <Chevron size={size} />
 
         {/* 처리자 — 실제 처리 에이전트가 있으면 그걸, 없으면 preset(assignMode) */}
+        <span className="relative inline-flex shrink-0">
         <RoleSlot
           dim={dim}
           ringClass={ISSUE_STAGE_STYLE.dev.ring}
@@ -214,10 +217,12 @@ export default function RoleAvatarBar({
             : renderProcessorContent(processor, creator, dim, iconSize)}
         />
         <StageCount count={stageCounts?.process} cls={ISSUE_STAGE_STYLE.dev.text} title={tIssue('badgeProcess', { count: stageCounts?.process ?? 0 })} label={tIssue('stageCountShort', { count: stageCounts?.process ?? 0 })} />
+        </span>
 
         <Chevron size={size} />
 
         {/* 검증자 — 실제 검증자(시작/완료) 우선, 없으면 preset */}
+        <span className="relative inline-flex shrink-0">
         <RoleSlot
           dim={dim}
           ringClass={ISSUE_STAGE_STYLE.verifying.ring}
@@ -232,10 +237,12 @@ export default function RoleAvatarBar({
             : renderPresetContent(verifier, gitMembers, creator, dim, iconSize)}
         />
         <StageCount count={stageCounts?.verify} cls={ISSUE_STAGE_STYLE.verifying.text} title={tIssue('badgeVerify', { count: stageCounts?.verify ?? 0 })} label={tIssue('stageCountShort', { count: stageCounts?.verify ?? 0 })} />
+        </span>
 
         <Chevron size={size} />
 
         {/* 확인자 — 실제 확인자(시작/완료) 우선, 없으면 preset */}
+        <span className="relative inline-flex shrink-0">
         <RoleSlot
           dim={dim}
           ringClass={ISSUE_STAGE_STYLE.confirming.ring}
@@ -250,6 +257,7 @@ export default function RoleAvatarBar({
             : renderPresetContent(confirmer, confirmerList, creator, dim, iconSize)}
         />
         <StageCount count={stageCounts?.confirm} cls={ISSUE_STAGE_STYLE.confirming.text} title={tIssue('badgeConfirm', { count: stageCounts?.confirm ?? 0 })} label={tIssue('stageCountShort', { count: stageCounts?.confirm ?? 0 })} />
+        </span>
       </div>
 
       <AssigneePickerModal
@@ -313,10 +321,10 @@ function Chevron({ size = 'md' }: { size?: 'sm' | 'md' }) {
   )
 }
 
-/** 그 단계를 몇 번 거쳤는지 — 2회부터, 그 단계 색 글씨로 아바타 바로 옆에 */
+/** 그 단계를 몇 번 거쳤는지 — 2회부터, 그 단계 색 글씨로 아바타 바로 아래에(너비를 늘리지 않는다) */
 function StageCount({ count, cls, title, label }: { count?: number; cls: string; title: string; label: string }) {
   if (!count || count < 2) return null
-  return <span className={`ml-1 shrink-0 text-[10px] font-bold tabular-nums whitespace-nowrap ${cls}`} title={title}>{label}</span>
+  return <span className={`absolute left-1/2 top-full -translate-x-1/2 mt-[3px] text-[10px] leading-none font-bold tabular-nums whitespace-nowrap ${cls}`} title={title}>{label}</span>
 }
 
 interface RoleSlotProps {
