@@ -1364,6 +1364,7 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
         pinnedSlot={!editMode ? (
           <div className="pt-2 pb-1">
             <IssueProgressSection
+              projectId={projectId}
               issue={issue}
               canEditAssignees={canEditAssignees}
               isCreator={isCreator}
@@ -1385,6 +1386,7 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
           <div className="pt-2 pb-1 pr-2">
             <div className="desk:hidden">
               <IssueProgressSection
+              projectId={projectId}
                 issue={issue}
                 canEditAssignees={canEditAssignees}
                 isCreator={isCreator}
@@ -1402,6 +1404,7 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
               />
             </div>
             <IssueProgressSection
+              projectId={projectId}
               issue={issue}
               canEditAssignees={canEditAssignees}
               isCreator={isCreator}

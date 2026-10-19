@@ -245,7 +245,7 @@ export default function IssueHeader({
   )
 }
 
-interface IssueProgressSectionProps extends Pick<IssueHeaderProps, 'issue' | 'canEditAssignees'> {
+interface IssueProgressSectionProps extends Pick<IssueHeaderProps, 'issue' | 'canEditAssignees' | 'projectId'> {
   gitMembers: IssueAssignee[]
   /** 확인자 후보 — 검증자/담당자(프로젝트 멤버)와 달리 provider 로 식별되는 모든 IVE 사용자. */
   confirmerMembers?: IssueAssignee[]
@@ -278,7 +278,7 @@ interface IssueProgressSectionProps extends Pick<IssueHeaderProps, 'issue' | 'ca
  * 고정 머리가 아니라 내용 스크롤 영역 맨 위에 그려 함께 스크롤된다 — 화면 폭과 관계없이 내용 보기 높이 확보(IVE #540).
  */
 export function IssueProgressSection({
-  issue, canEditAssignees, isCreator, gitMembers, confirmerMembers, roleAgents, preferredAgent,
+  projectId, issue, canEditAssignees, isCreator, gitMembers, confirmerMembers, roleAgents, preferredAgent,
   onOpenAssigneePicker, onOpenAgentPicker, onPresetVerifierChange, onPresetConfirmerChange, onDueDateChange, onPriorityChange, part = 'all',
 }: IssueProgressSectionProps) {
   // 완료된 작업(닫힘 또는 done 단계)은 담당자/검증자/확인자/마감일 모두 수정 불가.
@@ -293,6 +293,7 @@ export function IssueProgressSection({
       {/* 넓은 칸에서도 막대는 보기 좋은 폭(최대 768px)까지만, 가운데 */}
       <div className="w-full max-w-3xl mx-auto">
       <StageProgress
+        projectId={projectId}
         stage={issue.stage}
         createdAt={issue.createdAt}
         closedAt={issue.closedAt ?? null}
@@ -310,6 +311,7 @@ export function IssueProgressSection({
           },
           processor: {
             assignMode: (preferredAgent?.assignMode as 'agent' | 'auto' | 'assignee' | 'none' | undefined) ?? 'auto',
+            agentId: preferredAgent?.preferredAgentId ?? null,
             agentName: preferredAgent?.preferredAgentName ?? null,
             agentAvatar: preferredAgent?.preferredAgentAvatar ?? null,
             username: issue.assignees?.[0]?.username ?? null,

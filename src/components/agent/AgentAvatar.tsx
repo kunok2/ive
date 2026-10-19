@@ -16,7 +16,7 @@ interface Props {
   avatar: string
   /** avatar==='photo' 일 때만 사용. 사진 fetch URL 생성용 */
   userId?: string | null
-  size?: 'xs' | 'sm' | 'md' | 'lg'
+  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl'
   className?: string
   /** 진행 중 배지 — 에이전트는 도구 종류, 사람은 'human'(사람이 작업 중) */
   toolBadge?: BadgeKind | null
@@ -29,6 +29,7 @@ const sizeMap = {
   sm: 'w-7 h-7 text-sm',
   md: 'w-9 h-9 text-lg',
   lg: 'w-12 h-12 text-2xl',
+  xl: 'w-16 h-16 text-3xl',
 }
 
 const badgeSizeMap = {
@@ -36,6 +37,7 @@ const badgeSizeMap = {
   sm: 'w-3.5 h-3.5 text-[7px] -bottom-0.5 -right-0.5',
   md: 'w-4 h-4 text-[8px] -bottom-0.5 -right-0.5',
   lg: 'w-5 h-5 text-xs -bottom-0.5 -right-0.5',
+  xl: 'w-6 h-6 text-sm -bottom-0.5 -right-0.5',
 }
 
 // 도구 종류는 아이콘 형태로만 구분. 색은 통일 (브랜드 cyan).
@@ -59,7 +61,7 @@ const BADGE_ICON: Record<BadgeKind, string> = {
   human: 'fa-solid fa-user-pen',
 }
 
-function ToolBadge({ category, size }: { category: BadgeKind; size: 'xs' | 'sm' | 'md' | 'lg' }) {
+function ToolBadge({ category, size }: { category: BadgeKind; size: 'xs' | 'sm' | 'md' | 'lg' | 'xl' }) {
   // 배지는 항상 불투명·아바타 위(z-10). 'thinking' 표시는 배지 자체를 흔들지 않고
   // 외곽으로 퍼지는 별도 ring(animate-ping)으로 표현해야 아이콘이 사라지지 않음.
   return (
@@ -100,7 +102,7 @@ export default function AgentAvatar({ avatar, userId, size = 'md', className = '
     return (
       <div className={`relative shrink-0 ${wh} ${className}`}>
         <div className="w-full h-full rounded-lg flex items-center justify-center bg-ive-bg-deep border border-ive-border-subtle">
-          <i className={`fa-solid fa-user ${size === 'xs' ? 'text-[8px]' : 'text-[10px]'} text-ive-text-dim`} />
+          <i className={`fa-solid fa-user ${size === 'xs' ? 'text-[8px]' : size === 'xl' ? 'text-2xl' : 'text-[10px]'} text-ive-text-dim`} />
         </div>
         {toolBadge && <ToolBadge category={toolBadge} size={size} />}
       </div>

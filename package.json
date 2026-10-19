@@ -1,6 +1,6 @@
 {
   "name": "springware-ive",
-  "version": "1.22.3",
+  "version": "1.23.0",
   "private": true,
   "scripts": {
     "dev": "tsx server.ts",

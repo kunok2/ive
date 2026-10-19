@@ -28,6 +28,7 @@ import {
   getProcessorDisplay,
   presetTooltip,
 } from '@/components/issue/RoleAvatarBar'
+import PersonPopover, { type ProfileTarget } from '@/components/issue/PersonPopover'
 import AssigneePickerModal from './AssigneePickerModal'
 
 /**
@@ -88,6 +89,8 @@ interface StageProgressProps {
   forwardCounts?: ForwardCounts | null
   /** 단계별 체크리스트 진행률 — 본문의 체크박스에서 읽은 값. 있는 단계의 칩 아래에 작은 막대로 보인다 */
   stageChecklist?: Partial<Record<'process' | 'verify' | 'confirm', { done: number; total: number; percent: number }>> | null
+  /** 프로젝트 id — 있으면 아바타를 눌렀을 때 그 사람·에이전트 정보 팝오버를 연다 */
+  projectId?: string
   /** 역할 데이터 — 제공 시 각 칩에 담당자 아바타 표시 */
   roles?: {
     creator: CreatorInfo
@@ -110,7 +113,7 @@ interface StageProgressProps {
   }
 }
 
-export default function StageProgress({ stage, createdAt, closedAt, stageTimes, retryCounts, forwardCounts, stageChecklist, roles }: StageProgressProps) {
+export default function StageProgress({ stage, createdAt, closedAt, stageTimes, retryCounts, forwardCounts, stageChecklist, roles, projectId }: StageProgressProps) {
   const tStage = useTranslations('stage')
   const tIssue = useTranslations('issue')
   const { state } = useStore()
@@ -286,8 +289,30 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
     { idx: 5, label: tStage('macroComplete') },
   ]
 
+  // 아바타를 눌렀을 때 정보를 보여 줄 대상 — 실제로 맡은 사람·에이전트가 정해졌을 때만(미배정·자동배정·처리 안 함은 정보가 없다)
+  function processorTarget(): ProfileTarget | null {
+    if (!roles) return null
+    const label = tIssue('processor')
+    const a = roles.actualProcessor
+    if (a?.agentId) return { roleLabel: label, agentId: a.agentId, name: a.agentName, avatar: a.agentAvatar }
+    const p = roles.processor
+    if (p.assignMode === 'agent' && p.agentId) return { roleLabel: label, agentId: p.agentId, name: p.agentName, avatar: p.agentAvatar }
+    if (p.assignMode === 'assignee' && p.username) return { roleLabel: label, username: p.username, name: p.name, avatar: p.avatarUrl }
+    return null
+  }
+  function roleTarget(label: string, actual: ActualPerson | null | undefined, preset: PresetRole, members: GitMember[]): ProfileTarget | null {
+    if (actual?.userId) return { roleLabel: label, userId: actual.userId, name: actual.name, avatar: actual.avatar }
+    if (preset.mode === 'agent' && preset.agentId) return { roleLabel: label, agentId: preset.agentId, name: preset.agentName ?? null, avatar: preset.agentAvatar ?? null }
+    if (preset.mode === 'specific') {
+      const m = preset.userId ? members.find(x => String(x.id) === preset.userId) : null
+      const username = m?.username || preset.username || null
+      if (m || username) return { roleLabel: label, username, name: m?.name ?? null, avatar: m?.avatarUrl || null }
+    }
+    return null
+  }
+
   // macro 인덱스별 칩의 아바타 슬롯 렌더 — roles 가 있을 때만
-  function renderRoleSlot(idx: MacroIndex): { node: React.ReactNode; title: string; clickable: boolean; onClick?: () => void; ringCls: string } {
+  function renderRoleSlot(idx: MacroIndex): { node: React.ReactNode; title: string; clickable: boolean; onClick?: () => void; ringCls: string; target?: ProfileTarget | null } {
     const dim = 'w-[18px] h-[18px]'
     const iconSize = 'text-[9px]'
     if (!roles) {
@@ -299,6 +324,9 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
         title: tIssue('roleTooltipFormat', { role: tIssue('roleAuthor'), value: roles.creator.name || '-' }),
         clickable: false,
         ringCls: 'ring-ive-green/40',
+        target: roles.creator.name
+          ? { roleLabel: tIssue('roleAuthor'), name: roles.creator.name, avatar: roles.creator.avatar || roles.creator.avatarUrl }
+          : null,
       }
     }
     // 단계 진행에 따른 게이팅: 이미 지나간 단계(m.idx < current)는 편집 불가
@@ -315,6 +343,7 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
         clickable: stageEditable && !!roles.onProcessorClick,
         onClick: roles.onProcessorClick,
         ringCls: ISSUE_STAGE_STYLE.dev.ring,
+        target: processorTarget(),
       }
     }
     if (idx === 3) {
@@ -328,6 +357,7 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
         clickable: stageEditable,
         onClick: () => setVerifierModalOpen(true),
         ringCls: ISSUE_STAGE_STYLE.verifying.ring,
+        target: roleTarget(tIssue('verifier'), roles.actualVerifier, roles.verifier, roles.gitMembers),
       }
     }
     if (idx === 4) {
@@ -341,6 +371,7 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
         clickable: stageEditable,
         onClick: () => setConfirmerModalOpen(true),
         ringCls: ISSUE_STAGE_STYLE.confirming.ring,
+        target: roleTarget(tIssue('confirmer'), roles.actualConfirmer, roles.confirmer, confirmerList),
       }
     }
     // idx === 5 → 완료: 아이콘만
@@ -499,7 +530,17 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
                      <i className="fa-solid fa-circle-xmark text-ive-red" />
                    </span>
                  ) : showAvatar ? (
-                   slot.clickable && slot.onClick ? (
+                   projectId && slot.target ? (
+                     <PersonPopover
+                       projectId={projectId}
+                       target={slot.target}
+                       title={slot.title}
+                       onChange={slot.clickable ? slot.onClick : undefined}
+                       className={`inline-flex items-center justify-center w-[18px] h-[18px] rounded-lg overflow-hidden bg-ive-bg-deep ${avatarRing} hover:ring-ive-green transition-all`}
+                     >
+                       {slot.node}
+                     </PersonPopover>
+                   ) : slot.clickable && slot.onClick ? (
                      <button
                        type="button"
                        onClick={slot.onClick}

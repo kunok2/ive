@@ -45,6 +45,7 @@ export interface CreatorInfo {
 export interface ProcessorInfo {
   assignMode: 'agent' | 'auto' | 'assignee' | 'none' | null
   /** 에이전트 정보 — assignMode='agent' 일 때 사용 */
+  agentId?: string | null
   agentName?: string | null
   agentAvatar?: string | null   // 'av-XX' 또는 URL
   /** assignMode='assignee' 일 때 현재 Git assignee */
