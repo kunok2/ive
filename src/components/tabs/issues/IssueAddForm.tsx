@@ -41,6 +41,8 @@ interface IssueAddFormProps {
   selectedAssignees: GitMember[]
   autoAssign: boolean
   onOpenAssigneeModal: (iids: number[]) => void
+  /** 처리자로 사람을 고르면 그 사람이 이슈 담당자(=처리자)가 된다 — 에이전트·배정안함 등으로 바꾸면 비운다 */
+  onSelectedAssigneesChange: (members: GitMember[]) => void
   // 검증자/확인자 사전 배정
   verifierMode: RoleMode
   verifierUserId: string | null
@@ -274,6 +276,8 @@ export default function IssueAddForm({
   projectAgents,
   gitMembers,
   confirmerMembers,
+  selectedAssignees,
+  onSelectedAssigneesChange,
   verifierMode,
   verifierUserId,
   verifierUsername,
@@ -314,6 +318,15 @@ export default function IssueAddForm({
   const [confirmerSearch, setConfirmerSearch] = useState('')
   // 확인자 picker 목록 — IVE 사용자 후보(미지정 시 프로젝트 멤버로 fallback). 검증자는 항상 gitMembers.
   const confirmerList = confirmerMembers ?? gitMembers
+
+  // 처리자 선택 — 사람을 고르면 'assignee' 모드 + 그 사람이 담당자, 그 밖에는 사람 지정을 비운다
+  const pickProcessor = (id: string | null, person?: GitMember) => {
+    onPreferredAgentIdChange(id)
+    if (person) onSelectedAssigneesChange([person])
+    else if (preferredAgentId === 'assignee') onSelectedAssigneesChange([])
+    setAgentDropdownOpen(false)
+  }
+  const processorPerson = preferredAgentId === 'assignee' ? selectedAssignees[0] ?? null : null
 
   const openVerifierPicker = () => {
     setVerifierSearch('')
@@ -478,7 +491,8 @@ export default function IssueAddForm({
           ) : preferredAgentId === 'assignee' ? (
             <>
               <span className="w-4 h-4 inline-flex items-center justify-center shrink-0 text-ive-cyan"><i className="fa-solid fa-user" /></span>
-              <span className="text-ive-text font-bold">{tIssue('assigneeHandles')}</span>
+              {processorPerson?.avatarUrl && <img src={processorPerson.avatarUrl} className="w-4 h-4 rounded-lg" alt="" />}
+              <span className="text-ive-text font-bold">{processorPerson ? (processorPerson.name || processorPerson.username) : tIssue('assigneeHandles')}</span>
             </>
           ) : preferredAgentId ? (() => {
             const pa = projectAgents.find(a => a.agentId === preferredAgentId)
@@ -498,9 +512,9 @@ export default function IssueAddForm({
           <i className={`fa-solid fa-chevron-down text-xs text-ive-text-dim ml-auto transition-transform ${agentDropdownOpen ? 'rotate-180' : ''}`} />
         </button>
         {agentDropdownOpen && (
-          <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-ive-bg-solid border border-ive-border-subtle rounded-lg overflow-hidden shadow-lg">
+          <div className="absolute z-50 top-full left-0 right-0 mt-1 max-h-72 overflow-y-auto bg-ive-bg-solid border border-ive-border-subtle rounded-lg overflow-hidden shadow-lg">
             <button
-              onClick={() => { onPreferredAgentIdChange('none'); setAgentDropdownOpen(false) }}
+              onClick={() => pickProcessor('none')}
               className={`w-full px-3 py-2.5 text-left text-sm flex items-center gap-2 transition-colors ${
                 preferredAgentId === 'none' ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text-dim hover:bg-white/5'
               }`}
@@ -509,7 +523,7 @@ export default function IssueAddForm({
               <span className="font-bold">{tIssue('noAssignment')}</span>
             </button>
             <button
-              onClick={() => { onPreferredAgentIdChange(null); setAgentDropdownOpen(false) }}
+              onClick={() => pickProcessor(null)}
               className={`w-full px-3 py-2.5 text-left text-sm flex items-center gap-2 transition-colors ${
                 preferredAgentId === null ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text-dim hover:bg-white/5'
               }`}
@@ -518,9 +532,9 @@ export default function IssueAddForm({
               <span className="font-bold">{tIssue('noPreference')}</span>
             </button>
             <button
-              onClick={() => { onPreferredAgentIdChange('assignee'); setAgentDropdownOpen(false) }}
+              onClick={() => pickProcessor('assignee')}
               className={`w-full px-3 py-2.5 text-left text-sm flex items-center gap-2 transition-colors ${
-                preferredAgentId === 'assignee' ? 'bg-ive-cyan/10 text-ive-cyan' : 'text-ive-text-dim hover:bg-white/5'
+                preferredAgentId === 'assignee' && !processorPerson ? 'bg-ive-cyan/10 text-ive-cyan' : 'text-ive-text-dim hover:bg-white/5'
               }`}
             >
               <span className="w-4 h-4 inline-flex items-center justify-center shrink-0"><i className="fa-solid fa-user" /></span>
@@ -533,7 +547,7 @@ export default function IssueAddForm({
               return (
                 <button
                   key={pa.agentId}
-                  onClick={() => { onPreferredAgentIdChange(pa.agentId); setAgentDropdownOpen(false) }}
+                  onClick={() => pickProcessor(pa.agentId)}
                   className={`w-full px-3 py-2.5 text-left text-sm flex items-center gap-2 transition-colors ${
                     preferredAgentId === pa.agentId ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text hover:bg-white/5'
                   }`}
@@ -550,6 +564,27 @@ export default function IssueAddForm({
                   ) : pa.agent.status === 'available' ? (
                     <span className="ml-auto w-2 h-2 rounded-full bg-ive-green" />
                   ) : null}
+                </button>
+              )
+            })}
+            {gitMembers.length > 0 && (
+              <div className="px-3 pt-2.5 pb-1 text-xs font-bold text-ive-text-dim border-t border-ive-border-subtle"><i className="fa-solid fa-user mr-1" />{tIssue('pickerPeople')}</div>
+            )}
+            {gitMembers.map(m => {
+              const isPicked = processorPerson?.id === m.id
+              return (
+                <button
+                  key={`person-${m.id}`}
+                  onClick={() => pickProcessor('assignee', m)}
+                  className={`w-full px-3 py-2.5 text-left text-sm flex items-center gap-2 transition-colors ${
+                    isPicked ? 'bg-ive-cyan/10 text-ive-cyan' : 'text-ive-text hover:bg-white/5'
+                  }`}
+                >
+                  {m.avatarUrl
+                    ? <img src={m.avatarUrl} className="w-4 h-4 rounded-lg shrink-0" alt="" />
+                    : <span className="w-4 h-4 inline-flex items-center justify-center shrink-0 text-ive-text-dim"><i className="fa-solid fa-user" /></span>}
+                  <span className="font-bold truncate">{m.name || m.username}</span>
+                  {m.name && m.name !== m.username && <span className="text-xs text-ive-text-dim truncate">@{m.username}</span>}
                 </button>
               )
             })}

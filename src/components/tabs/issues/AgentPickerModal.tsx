@@ -118,7 +118,7 @@ export default function AgentPickerModal({
         {/* AI 에이전트 섹션 */}
         {filteredAgents.length > 0 && (
           <div className="px-4 pt-3 pb-1 text-[10px] font-bold text-ive-text-dim uppercase tracking-wider border-t border-ive-border-subtle">
-            <i className="fa-solid fa-bolt mr-1" />AI {tIssue('preferredAgent')}
+            <i className="fa-solid fa-bolt mr-1" />AI {tIssue('pickerAgents')}
           </div>
         )}
         {filteredAgents.map(pa => {
