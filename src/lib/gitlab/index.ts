@@ -37,6 +37,7 @@ export {
   fetchOpenGitLabMRs,
   fetchGitLabMRPipelines,
   fetchGitLabBranchPipelines,
+  fetchGitLabPipelineJobs,
 } from './mr';
 
 // Repository: branches, file read/write, uploads

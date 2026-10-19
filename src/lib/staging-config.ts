@@ -14,7 +14,7 @@
  */
 import { Project } from '@/types'
 import { getProjectAutomation, type StagingSettings } from './db'
-import { fetchBranchPipelines, getDefaultBranch } from './provider'
+import { fetchBranchPipelines, fetchPipelineJobs, getDefaultBranch } from './provider'
 
 export interface StagingConfig {
   url: string
@@ -69,7 +69,18 @@ export async function fetchDeployedCommit(cfg: StagingConfig, project?: Project,
       const branch = cfg.branch || await resolveStagingBranch(project, token)
       // 성공한 것만 묻는다 — 최근 목록에서 고르면 실패가 이어질 때 그 앞의 성공(지금 배포된 판)을 놓친다
       const pipelines = (await fetchBranchPipelines(project, token, branch, { status: 'success' })) as any[]
-      const ok = (pipelines || []).find(p => p?.status === 'success' && p?.sha)
+      // 파이프라인이 success 여도 배포 잡이 돌지 않았으면(규칙으로 잡이 생략되거나 스킵) 그 커밋은 배포된 것이 아니다.
+      // 배포 잡(단계·이름에 deploy/pages)이 성공한 파이프라인만 센다. 그런 잡이 하나도 없는 설정이면 종전처럼 파이프라인 성공만 본다.
+      const isDeployJob = (j: { name: string; stage: string }) => /deploy|pages/i.test(`${j.stage} ${j.name}`)
+      let ok: any = null
+      let fallback: any = null
+      for (const p of (pipelines || [])) {
+        if (p?.status !== 'success' || !p?.sha) continue
+        const jobs = p.id ? await fetchPipelineJobs(project, token, p.id) : null
+        if (!jobs || !jobs.some(isDeployJob)) { fallback ??= p; continue }
+        if (jobs.some(j => isDeployJob(j) && j.status === 'success')) { ok = p; break }
+      }
+      ok ??= fallback
       if (!ok) return { ok: false, reason: `${branch} 브랜치에 성공한 파이프라인이 아직 없습니다(배포가 한 번도 끝나지 않았습니다)` }
       return { ok: true, value: String(ok.sha) }
     } catch (e) {

@@ -312,14 +312,12 @@ async function dispatchConfirm(project: Project, confirmIssues: StageIssue[], to
   for (const { issue, stage } of confirmIssues) {
     const iid: number = issue.iid
     // 배포 상태 — 확인자가 사람이든 에이전트든 화면에 보인다(머지 뒤 CI·배포가 끝나야 확인할 수 있다). 기동 판정에는 쓰지 않는다.
-    // 한 번 「배포됨」이면 다시 묻지 않는다(확인 단계에 머무는 동안 Git 호출을 되풀이하지 않게)
+    // 「배포됨」도 매번 다시 확인한다 — 잘못 찍힌 표시가 남지 않게(배포 커밋 조회는 한 번 훑는 동안 한 번만)
     let resolved: TargetResult | null = null
     try {
-      if (getDeployState(project.id, iid) !== 'deployed') {
-        resolved = await resolveConfirmTarget(project, iid, token, lookup)
-        const state = await deployStateOf(project, token, resolved, lookup)
-        if (state !== undefined) setDeployState(project.id, iid, state)
-      }
+      resolved = await resolveConfirmTarget(project, iid, token, lookup)
+      const state = await deployStateOf(project, token, resolved, lookup)
+      if (state !== undefined) setDeployState(project.id, iid, state)
     } catch (e) { slog.warn(`deploy state #${iid} failed: ${(e as Error).message}`) }
     const preset = getPresetRoles(project.id, iid).confirmer
     if (preset.mode !== 'agent' || !preset.agentId) continue       // 사람이 확인 — 종전대로 기다린다

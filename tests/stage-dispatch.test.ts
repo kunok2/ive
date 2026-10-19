@@ -416,14 +416,14 @@ describe('S 확인 단계 작업의 배포 상태 (화면 표시용)', () => {
     expect(getDeployState(P, iid)).toBe('deployed')
   })
 
-  it('S-3 한 번 「배포됨」이면 다시 묻지 않는다 (Git 호출을 되풀이하지 않는다)', async () => {
+  it('S-3 「배포됨」도 매번 다시 확인한다 — 잘못 찍힌 표시가 남지 않는다', async () => {
     const iid = iidSeq
     configure()
     await run(iid)
     expect(getDeployState(P, iid)).toBe('deployed')
     providerMock.fetchMRByBranch.mockClear()
     await run(iid)
-    expect(providerMock.fetchMRByBranch).not.toHaveBeenCalled()
+    expect(providerMock.fetchMRByBranch).toHaveBeenCalled()
     expect(getDeployState(P, iid)).toBe('deployed')
   })
 

@@ -293,3 +293,15 @@ export async function fetchGitLabBranchPipelines(project: Project, decryptedToke
     return [];
   }
 }
+
+/**
+ * 파이프라인 잡 목록(이름·단계·상태) — 파이프라인이 success 여도 배포 잡이 돌지 않았으면(규칙으로 생략·스킵) 배포된 것이 아니다.
+ * 조회 실패는 null (모른다).
+ */
+export async function fetchGitLabPipelineJobs(project: Project, decryptedToken: string, pipelineId: number): Promise<{ name: string; stage: string; status: string }[] | null> {
+  try {
+    const res = await fetch(apiUrl(project, `/pipelines/${pipelineId}/jobs?per_page=100`), { headers: getAuthHeaders(project, decryptedToken) });
+    if (!res.ok) return null;
+    return ((await res.json()) as any[]).map(j => ({ name: String(j?.name), stage: String(j?.stage), status: String(j?.status) }));
+  } catch { return null; }
+}

@@ -148,6 +148,11 @@ export function fetchBranchPipelines(project: Project, token: string, ref: strin
     : gitlab.fetchGitLabBranchPipelines(project, token, ref, filter);
 }
 
+/** 파이프라인 잡 목록 (GitLab 만 — GitHub 는 null) */
+export async function fetchPipelineJobs(project: Project, token: string, pipelineId: number): Promise<{ name: string; stage: string; status: string }[] | null> {
+  return project.provider === 'github' ? null : gitlab.fetchGitLabPipelineJobs(project, token, pipelineId);
+}
+
 // Single issue fetch (for GET /issues/[iid])
 export async function fetchSingleIssue(project: Project, iid: number, token: string) {
   if (project.provider === 'github') {

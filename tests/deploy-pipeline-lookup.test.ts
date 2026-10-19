@@ -17,11 +17,18 @@ const ALL = [
   { id: 2, status: 'canceled', sha: 'old' }, { id: 1, status: 'success', sha: 'good' },
 ]
 
+// 파이프라인별 잡 — 배포 잡이 없는(규칙으로 생략된) 파이프라인은 success 여도 배포된 것이 아니다
+let JOBS: Record<number, { name: string; stage: string; status: string }[]> = {}
+const DEPLOYED = [{ name: 'deploy-staging', stage: 'deploy', status: 'success' }]
+
 describe('staging 파이프라인 조회 — 최근 5건 밖', () => {
   beforeEach(() => {
     // GitLab 처럼 status·sha 로 거른 뒤 per_page 만큼만 돌려준다
     vi.stubGlobal('fetch', vi.fn(async (input: unknown) => {
-      const q = new URL(String(input)).searchParams
+      const url = new URL(String(input))
+      const jobsOf = url.pathname.match(/pipelines\/(\d+)\/jobs/)
+      if (jobsOf) return new Response(JSON.stringify(JOBS[Number(jobsOf[1])] ?? []), { status: 200 })
+      const q = url.searchParams
       const rows = ALL.filter(p => (!q.get('status') || p.status === q.get('status')) && (!q.get('sha') || p.sha === q.get('sha')))
       return new Response(JSON.stringify(rows.slice(0, Number(q.get('per_page') || 20))), { status: 200 })
     }))
@@ -42,5 +49,17 @@ describe('staging 파이프라인 조회 — 최근 5건 밖', () => {
   it('커밋으로 물으면 목록에서 밀려난 파이프라인도 찾는다', async () => {
     const mine = await fetchGitLabBranchPipelines(project, 't', 'staging', { sha: 'old' }) as { status: string; sha: string }[]
     expect(mine.map(p => p.status)).toEqual(['canceled'])
+  })
+
+  it('success 여도 배포 잡이 돌지 않은 파이프라인은 배포된 판이 아니다 — 그 앞의 배포 성공을 쓴다', async () => {
+    ALL.unshift({ id: 9, status: 'success', sha: 'skipped-deploy' })
+    JOBS = { 9: [{ name: 'requirements-manifest', stage: 'test', status: 'success' }, { name: 'deploy-staging', stage: 'deploy', status: 'skipped' }], 1: DEPLOYED }
+    try {
+      const r = await fetchDeployedCommit({ url: 'https://s', versionSource: 'pipeline', versionUrl: '', commitField: 'commit', branch: 'staging', notes: null }, project, 't')
+      expect(r).toEqual({ ok: true, value: 'good' })
+      // 배포 잡 자체가 없는 경우도 같다
+      JOBS = { 9: [{ name: 'requirements-manifest', stage: 'test', status: 'success' }], 1: DEPLOYED }
+      expect(await fetchDeployedCommit({ url: 'https://s', versionSource: 'pipeline', versionUrl: '', commitField: 'commit', branch: 'staging', notes: null }, project, 't')).toEqual({ ok: true, value: 'good' })
+    } finally { ALL.shift(); JOBS = {} }
   })
 })
