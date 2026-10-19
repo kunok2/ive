@@ -166,7 +166,9 @@ export function loadIssueHistory(projectIds: string[], opts: { onlyHeld?: boolea
     const undoesMergeClose = (i: number) => {
       const prev = i > 0 ? ev[i - 1] : null
       if (!prev || prev.to !== 'done') return false
-      return prev.action === 'merged' || (prev.action !== 'external' && SKIPPED_CONFIRM_FROM.has(prev.from ?? ''))
+      if (prev.action === 'merged') return true
+      // 개발로 되돌린 것은 진짜 재작업이다 — 검증·확인 단계로 되돌아온 경우만 잘못된 완료의 취소
+      return prev.action !== 'external' && SKIPPED_CONFIRM_FROM.has(prev.from ?? '') && SKIPPED_CONFIRM_FROM.has(ev[i].to ?? '')
     }
     const reopenEv = ev.filter((e, i) => (e.from === 'done' || e.from === 'closed') && isOpen(e.to) && !undoesMergeClose(i))
       .sort((a, b) => (a.at < b.at ? -1 : 1))
