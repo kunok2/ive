@@ -548,3 +548,22 @@ export function assignIssueAtomically(
   })
   return tx()
 }
+
+/**
+ * 처리 실패(dev_fail) 단계의 사유 — 화면이 「처리 실패」만 덩그러니 보이지 않게 DB 의 실행 기록만으로 풀어 쓴다.
+ * 모르는 경우(에이전트가 직접 실패를 코멘트로 남긴 경우 등)는 null — 사유는 이슈 코멘트에서 본다.
+ */
+export function getDevFailReason(projectId: string, issueIid: number): string | null {
+  const last = getDb().prepare(`
+    SELECT end_reason FROM task_executions
+    WHERE project_id = ? AND issue_iid = ? AND ${PROCESS_ROW_SQL}
+    ORDER BY julianday(started_at) DESC LIMIT 1
+  `).get(projectId, issueIid) as { end_reason: string | null } | undefined
+  if (!last) {
+    return '처리가 시작되지 않았습니다. 실행 기록 없이 단계만 「처리」로 바뀐 상태입니다. 「재처리」를 누르면 대기로 돌아가 처리자가 다시 시작합니다.'
+  }
+  if (last.end_reason === 'restart' || last.end_reason === 'restart_requeued' || last.end_reason === 'restart_gave_up') {
+    return 'IVE 서버가 다시 시작되면서 처리가 중간에 끊겼습니다. 「재처리」를 누르면 처음부터 다시 시작합니다.'
+  }
+  return null
+}

@@ -1,6 +1,6 @@
 import { computeProgress } from '@/lib/stage-progress'
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAccess, getProjectAuthToken, getAssignModeMap, setAssignMode, setAssigneeAuto, setIssuePriority, normalizePriority, setPresetRoles, getPresetRoles, getActualRoleAssigneesMap, getAgent, hasActiveExecution, stageFromLabels, touchProjectActivity, getIssueIterationCountsMap, getActiveChatSessionsByProject, findIssueIidsByTitle, getIssueStageSinceMap, hasRole, markRolesInitialized, setStageWorkerNote, getStageWorkerNote, getDeployState, setIssueIntakeChannel, type RoleMode, getDb } from '@/lib/db';
+import { getProject, getProjectAccess, getProjectAuthToken, getAssignModeMap, setAssignMode, setAssigneeAuto, setIssuePriority, normalizePriority, setPresetRoles, getPresetRoles, getActualRoleAssigneesMap, getAgent, hasActiveExecution, stageFromLabels, touchProjectActivity, getIssueIterationCountsMap, getActiveChatSessionsByProject, findIssueIidsByTitle, getIssueStageSinceMap, hasRole, markRolesInitialized, setStageWorkerNote, getStageWorkerNote, getDevFailReason, getDeployState, setIssueIntakeChannel, type RoleMode, getDb } from '@/lib/db';
 import { autoAssignAllAgents, agentRoleAvailable } from '@/lib/role-assignment';
 import { isChatAgentRunning } from '@/lib/chat-agent';
 import { triggerScan } from '@/lib/scanner';
@@ -162,7 +162,7 @@ export async function GET(
           // 진행 중 AI 채팅 표시 — 세션 있으면 대화중, 에이전트가 돌고 있으면 생각중
           chatActive: activeChatMap.has(issue.iid),
           chatProcessing: activeChatMap.has(issue.iid) && isChatAgentRunning(activeChatMap.get(issue.iid)!),
-          failReason: null, // 실패 사유는 이슈 코멘트에서 확인
+          failReason: stage === 'dev_fail' ? getDevFailReason(projectId, issue.iid) : null, // 기록으로 알 수 없는 사유는 이슈 코멘트에서 확인
           assignMode: assignInfo.mode,
           preferredAgentId,
           preferredAgentName,

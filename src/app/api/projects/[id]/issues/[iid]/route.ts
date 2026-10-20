@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getProject, getProjectAccess, getProjectAuthToken, hasActiveExecution, stageFromLabels, getPresetRoles, getAssigneeAuto, getAssignMode, getActualRoleAssignees, getIssueStageTimes, getIssueRetryCounts, getIssueForwardCounts, getStageWorkerNote, getDeployState, getRunningAgentWork, wasCompletedByMergeClose } from '@/lib/db'
+import { getProject, getProjectAccess, getProjectAuthToken, hasActiveExecution, stageFromLabels, getPresetRoles, getAssigneeAuto, getAssignMode, getActualRoleAssignees, getIssueStageTimes, getIssueRetryCounts, getIssueForwardCounts, getStageWorkerNote, getDevFailReason, getDeployState, getRunningAgentWork, wasCompletedByMergeClose } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { execKind } from '@/lib/active-work'
 import { logActivity } from '@/lib/activity'
@@ -224,6 +224,7 @@ export async function GET(
       canEditPriority: (() => { const a = getProjectAccess(projectId, user.id); return !!a && a !== 'viewer' })(),
       presetVerifier: presetRoles.verifier,
       presetConfirmer: presetRoles.confirmer,
+      failReason: stage === 'dev_fail' ? getDevFailReason(projectId, Number(iid)) : null,
       stageWorkerNote: (stage === 'done' || issue.state === 'closed') ? null : getStageWorkerNote(projectId, Number(iid)),
           // 확인대기·확인 중인 작업의 배포 상태(스캐너가 구해 둔 값) — 머지 뒤 배포가 끝났는지
           deployState: (stage === 'confirm_waiting' || stage === 'confirming') && issue.state !== 'closed' ? getDeployState(projectId, Number(iid)) : null,

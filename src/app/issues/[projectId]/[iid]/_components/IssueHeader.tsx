@@ -292,6 +292,12 @@ export function IssueProgressSection({
       {part !== 'rest' && (<>
       {/* 넓은 칸에서도 막대는 보기 좋은 폭(최대 768px)까지만, 가운데 */}
       <div className="w-full max-w-3xl mx-auto">
+      {issue.stage === 'dev_fail' && (issue as any).failReason && (
+        <div className="mb-2 px-2 py-1 rounded-lg bg-ive-red/10 border border-ive-red/20 text-xs text-ive-red">
+          <i className="fa-solid fa-triangle-exclamation mr-1" />
+          {(issue as any).failReason}
+        </div>
+      )}
       <StageProgress
         projectId={projectId}
         stage={issue.stage}
