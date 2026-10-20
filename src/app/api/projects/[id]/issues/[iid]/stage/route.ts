@@ -125,6 +125,14 @@ export async function POST(
     }
     if (!transition) return NextResponse.json({ error: '지금 단계에서는 할 수 없는 동작입니다.' }, { status: 400 });
 
+    // 처리자가 에이전트(지정·자동)인 대기 작업의 「처리」 — 레이블(IVE-S→IVE-D)을 사람이 바꾸면 안 된다.
+    // 실행 기록 없이 IVE-D 만 붙어 「처리 실패」(dev_fail)가 된다(운영 메타샵 2274). 대기 상태 그대로 두고 스캐너를 깨워
+    // 스캐너가 DB 상태(처리자·대기)로 바로 시작하게 한다. 레이블을 직접 붙이는 건 사람 처리(assignee 모드)뿐이다.
+    if (action === 'start_dev' && getAssignModeMap(projectId).get(Number(iid))?.mode !== 'assignee') {
+      try { triggerScan(projectId); } catch (e) { console.warn(`[Stage] Failed to trigger scanner:`, e); }
+      return NextResponse.json({ success: true, stage: 'waiting' });
+    }
+
     // 레이블 전환 수행 + 안전망: 전이 결과로 단계 라벨이 정확히 한 개만 남도록
     // 이전 단계의 라벨이 의도치 않게 잔류하면 stage 가 잘못 판정되므로 항상 정리.
     const explicitRemove = transition.removeLabels(project);
