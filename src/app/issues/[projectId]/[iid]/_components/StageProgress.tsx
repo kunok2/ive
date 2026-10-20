@@ -29,6 +29,7 @@ import {
   presetTooltip,
 } from '@/components/issue/RoleAvatarBar'
 import PersonPopover, { type ProfileTarget } from '@/components/issue/PersonPopover'
+import { creatorTarget, processorTargetOf, roleTargetOf } from '@/components/issue/role-targets'
 import AssigneePickerModal from './AssigneePickerModal'
 
 /**
@@ -291,25 +292,9 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
 
   // 아바타를 눌렀을 때 정보를 보여 줄 대상 — 실제로 맡은 사람·에이전트가 정해졌을 때만(미배정·자동배정·처리 안 함은 정보가 없다)
   function processorTarget(): ProfileTarget | null {
-    if (!roles) return null
-    const label = tIssue('processor')
-    const a = roles.actualProcessor
-    if (a?.agentId) return { roleLabel: label, agentId: a.agentId, name: a.agentName, avatar: a.agentAvatar }
-    const p = roles.processor
-    if (p.assignMode === 'agent' && p.agentId) return { roleLabel: label, agentId: p.agentId, name: p.agentName, avatar: p.agentAvatar }
-    if (p.assignMode === 'assignee' && p.username) return { roleLabel: label, username: p.username, name: p.name, avatar: p.avatarUrl }
-    return null
+    return roles ? processorTargetOf(tIssue('processor'), roles.actualProcessor, roles.processor) : null
   }
-  function roleTarget(label: string, actual: ActualPerson | null | undefined, preset: PresetRole, members: GitMember[]): ProfileTarget | null {
-    if (actual?.userId) return { roleLabel: label, userId: actual.userId, name: actual.name, avatar: actual.avatar }
-    if (preset.mode === 'agent' && preset.agentId) return { roleLabel: label, agentId: preset.agentId, name: preset.agentName ?? null, avatar: preset.agentAvatar ?? null }
-    if (preset.mode === 'specific') {
-      const m = preset.userId ? members.find(x => String(x.id) === preset.userId) : null
-      const username = m?.username || preset.username || null
-      if (m || username) return { roleLabel: label, username, name: m?.name ?? null, avatar: m?.avatarUrl || null }
-    }
-    return null
-  }
+  const roleTarget = roleTargetOf
 
   // macro 인덱스별 칩의 아바타 슬롯 렌더 — roles 가 있을 때만
   function renderRoleSlot(idx: MacroIndex): { node: React.ReactNode; title: string; clickable: boolean; onClick?: () => void; ringCls: string; target?: ProfileTarget | null } {
@@ -324,9 +309,7 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
         title: tIssue('roleTooltipFormat', { role: tIssue('roleAuthor'), value: roles.creator.name || '-' }),
         clickable: false,
         ringCls: 'ring-ive-green/40',
-        target: roles.creator.name
-          ? { roleLabel: tIssue('roleAuthor'), name: roles.creator.name, avatar: roles.creator.avatar || roles.creator.avatarUrl }
-          : null,
+        target: creatorTarget(tIssue('roleAuthor'), roles.creator),
       }
     }
     // 단계 진행에 따른 게이팅: 이미 지나간 단계(m.idx < current)는 편집 불가

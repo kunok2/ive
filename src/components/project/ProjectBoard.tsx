@@ -393,7 +393,7 @@ export default function ProjectBoard({ projects, onOpenTrace, filterSlot }: { pr
                           {/* 사람: 역할 아바타 줄(작성자 › 처리자 › 검증자 › 확인자 + 단계별 횟수) 왼쪽 · 경과 오른쪽. 보드에서는 보기만 한다(바꾸는 것은 작업 상세·작업 목록에서) */}
                           {(it.issue || age) && (
                             <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                              {it.issue && <RoleAvatarBar size="sm" canEdit={false} gitMembers={members[it.pid]?.git ?? []} confirmerMembers={members[it.pid]?.confirmer} {...roleBarPropsOf(it.issue)} />}
+                              {it.issue && <RoleAvatarBar size="sm" canEdit={false} profileProjectId={it.pid} gitMembers={members[it.pid]?.git ?? []} confirmerMembers={members[it.pid]?.confirmer} {...roleBarPropsOf(it.issue)} />}
                               {age && (
                                 <span className={`ml-auto text-xs font-bold tabular-nums ${age.aged ? 'px-1.5 py-0.5 rounded-lg bg-ive-red/15 text-ive-red' : 'text-ive-text-secondary'}`}>
                                   {ageText(tp, age)}

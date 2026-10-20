@@ -137,7 +137,7 @@ export default function PersonPopover({ projectId, target, children, className, 
       <button
         ref={btnRef}
         type="button"
-        onClick={() => { if (!open) { setCard(null); setFailed(false) } setOpen(o => !o) }}
+        onClick={e => { e.stopPropagation(); if (!open) { setCard(null); setFailed(false) } setOpen(o => !o) }}
         title={title}
         aria-label={title}
         aria-haspopup="dialog"
@@ -149,6 +149,8 @@ export default function PersonPopover({ projectId, target, children, className, 
       {open && typeof document !== 'undefined' && createPortal(
         <div
           ref={popRef}
+          // Portal 이라도 React 이벤트는 부모 트리로 올라간다 — 카드(=작업 상세로 가는 면) 안에서 열렸을 때 카드 클릭으로 새지 않게
+          onClick={e => e.stopPropagation()}
           role="dialog"
           aria-label={target.name ?? target.roleLabel}
           style={{ position: 'fixed', width: WIDTH, left: pos?.left ?? -9999, top: pos?.top ?? -9999 }}

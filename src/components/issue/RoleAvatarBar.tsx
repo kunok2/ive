@@ -5,6 +5,8 @@ import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { DEFAULT_AVATARS } from '@/types'
 import AssigneePickerModal from '@/components/tabs/issues/AssigneePickerModal'
+import PersonPopover, { type ProfileTarget } from '@/components/issue/PersonPopover'
+import { creatorTarget, processorTargetOf, roleTargetOf } from '@/components/issue/role-targets'
 import CliLogo, { CLI_LOGO_NAMES } from '@/components/ui/CliLogo'
 
 export type RoleMode = 'creator' | 'auto' | 'specific' | 'agent'
@@ -95,6 +97,8 @@ export interface RoleAvatarBarProps {
   confirmerAgents?: RoleAgentCandidate[]
   /** 단계별 진입 횟수 — 2회 이상인 단계만 그 역할 아바타 옆에 적는다(1회는 평범하다) */
   stageCounts?: { process: number; verify: number; confirm: number }
+  /** 있으면 바꿀 수 없는 아바타를 누를 때 그 사람·에이전트 정보를 띄운다(보드 카드 — 아바타는 작업 상세로 보내지 않는다) */
+  profileProjectId?: string
 }
 
 /**
@@ -111,6 +115,7 @@ export default function RoleAvatarBar({
   verifierAgents,
   confirmerAgents,
   stageCounts,
+  profileProjectId,
 }: RoleAvatarBarProps) {
   const tIssue = useTranslations('issue')
   // 확인자 picker/표시 목록 — IVE 사용자 후보(미지정 시 프로젝트 멤버 fallback). 검증자는 항상 gitMembers.
@@ -123,6 +128,12 @@ export default function RoleAvatarBar({
     if (currentMacro === 0) return true
     return idx >= currentMacro
   }
+
+  const pid = profileProjectId
+  const creatorT = pid ? creatorTarget(tIssue('roleAuthor'), creator) : null
+  const processorT = pid ? processorTargetOf(tIssue('processor'), actualProcessor, processor) : null
+  const verifierT = pid ? roleTargetOf(tIssue('verifier'), actualVerifier, verifier, gitMembers) : null
+  const confirmerT = pid ? roleTargetOf(tIssue('confirmer'), actualConfirmer, confirmer, confirmerList) : null
 
   const [verifierModalOpen, setVerifierModalOpen] = useState(false)
   const [verifierSearch, setVerifierSearch] = useState('')
@@ -194,6 +205,7 @@ export default function RoleAvatarBar({
           isCurrent={currentMacro === 1}
           title={tIssue('roleTooltipFormat', { role: tIssue('roleAuthor'), value: creator.name || '-' })}
           interactive={false}
+          profile={creatorT && pid ? { projectId: pid, target: creatorT } : undefined}
           content={renderAvatar(creator.avatar || creator.avatarUrl, creator.name, dim)}
         />
 
@@ -213,6 +225,7 @@ export default function RoleAvatarBar({
           })}
           interactive={stageEditableFor(2) && !!onProcessorClick}
           onClick={onProcessorClick}
+          profile={processorT && pid ? { projectId: pid, target: processorT } : undefined}
           content={actualProcessor?.agentName
             ? renderAvatar(actualProcessor.agentAvatar, actualProcessor.agentName, dim)
             : renderProcessorContent(processor, creator, dim, iconSize)}
@@ -233,6 +246,7 @@ export default function RoleAvatarBar({
             : presetTooltip(tIssue('verifier'), verifier, gitMembers, creator, tIssue)}
           interactive={stageEditableFor(3)}
           onClick={openVerifier}
+          profile={verifierT && pid ? { projectId: pid, target: verifierT } : undefined}
           content={actualVerifier?.userId
             ? renderAvatar(actualVerifier.avatar, actualVerifier.name, dim)
             : renderPresetContent(verifier, gitMembers, creator, dim, iconSize)}
@@ -253,6 +267,7 @@ export default function RoleAvatarBar({
             : presetTooltip(tIssue('confirmer'), confirmer, confirmerList, creator, tIssue)}
           interactive={stageEditableFor(4)}
           onClick={openConfirmer}
+          profile={confirmerT && pid ? { projectId: pid, target: confirmerT } : undefined}
           content={actualConfirmer?.userId
             ? renderAvatar(actualConfirmer.avatar, actualConfirmer.name, dim)
             : renderPresetContent(confirmer, confirmerList, creator, dim, iconSize)}
@@ -336,10 +351,12 @@ interface RoleSlotProps {
   /** 현재 진행 중인 단계의 슬롯이면 ring pulse 애니메이션. */
   isCurrent?: boolean
   onClick?: () => void
+  /** 바꿀 수 없는 슬롯을 누르면 정보를 띄울 대상 */
+  profile?: { projectId: string; target: ProfileTarget }
   content: React.ReactNode
 }
 
-function RoleSlot({ dim, ringClass, title, interactive, isCurrent, onClick, content }: RoleSlotProps) {
+function RoleSlot({ dim, ringClass, title, interactive, isCurrent, onClick, profile, content }: RoleSlotProps) {
   const animCls = isCurrent ? 'animate-pulse' : ''
   const baseCls = `inline-flex items-center justify-center ${dim} rounded-lg overflow-hidden ring-2 ${ringClass} ${animCls} bg-ive-bg-deep shrink-0`
   if (interactive && onClick) {
@@ -347,6 +364,13 @@ function RoleSlot({ dim, ringClass, title, interactive, isCurrent, onClick, cont
       <button type="button" onClick={onClick} title={title} aria-label={title} className={`${baseCls} hover:ring-ive-green transition-all`}>
         {content}
       </button>
+    )
+  }
+  if (profile) {
+    return (
+      <PersonPopover projectId={profile.projectId} target={profile.target} title={title} className={`${baseCls} hover:ring-ive-green transition-all`}>
+        {content}
+      </PersonPopover>
     )
   }
   return (
