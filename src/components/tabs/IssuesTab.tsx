@@ -932,6 +932,7 @@ export default function IssuesTab({ addTrigger }: { addTrigger?: number }) {
       gitMembers={gitMembers}
       confirmerMembers={confirmerMembers}
       selectedAssignees={selectedAssignees}
+      onSelectedAssigneesChange={setSelectedAssignees}
       autoAssign={autoAssign}
       onOpenAssigneeModal={openAssigneeModal}
       verifierMode={verifierMode}
