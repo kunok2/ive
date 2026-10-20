@@ -673,7 +673,9 @@ async function scanProject(project: Project, force: boolean = false) {
         const assignModeMap = getAssignModeMap(project.id);
         const assignInfo = assignModeMap.get(iid);
         if (assignInfo?.mode === 'assignee') {
-          const issueAssignees = issue.assignees || [];
+          // Git 담당자가 비어 있으면 작성자를 담당자로 본다 — 화면(위 스냅샷)이 이미 그렇게 보여주므로 같은 기준.
+          // 이걸 안 하면 Git 에 직접 등록한 이슈(담당자 없음)는 「처리」가 IVE-D 만 붙이고 시작을 못 해 처리 실패↔대기를 오간다(운영 메타샵 2111·2281).
+          const issueAssignees = (issue.assignees && issue.assignees.length > 0) ? issue.assignees : (issue.author ? [issue.author] : []);
           if (issueAssignees.length > 0) {
             const assignee = issueAssignees[0];
             const executionId = `ex-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
