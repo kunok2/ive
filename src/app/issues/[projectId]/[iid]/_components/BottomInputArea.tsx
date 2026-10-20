@@ -137,7 +137,7 @@ export default function BottomInputArea({
   }
 
   return (
-    <div className={`shrink-0 px-3 pb-20 pad:pb-4 pt-2 border-t border-ive-border-dark bg-ive-bg-deep ${widthCls} mx-auto w-full`}>
+    <div className={`relative z-30 shrink-0 px-3 pb-20 pad:pb-4 pt-2 border-t border-ive-border-dark bg-ive-bg-deep ${widthCls} mx-auto w-full`}>
       {/* 에이전트가 이 작업을 하는 중 — 코멘트·대화 어느 모드에서도 보이고, 이상하면 바로 트레이스로 가거나 멈춘다 */}
       {agentWork && (
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-ive-bg-card border border-ive-border-subtle text-xs font-bold text-ive-text-secondary mb-2">
@@ -473,8 +473,8 @@ function CommentModeInput({
         {/* 전진 →: 다음 단계 진입 (검증완료/다음단계로) */}
         <div className="flex-1 flex items-center justify-end gap-1.5">
           {(() => {
-            // 검증대기·확인대기는 늘 「검증 시작 →」·「확인 시작 →」 — 에이전트가 맡았어도 MR 없음 등으로 못 맡으면 사람이 진행한다
-            const showNext = (preferredAgent?.assignMode === 'assignee' || issue.stage === 'none' || issue.stage === 'verify_waiting' || issue.stage === 'confirm_waiting') && !!NEXT_STAGE[issue.stage] && canProgressStage && forwardOk
+            // 처리대기·검증대기·확인대기는 늘 「개발 시작 →」·「검증 시작 →」·「확인 시작 →」(처리자를 에이전트로 바꿔도 버튼이 사라지지 않는다) — 에이전트가 맡았어도 MR 없음 등으로 못 맡으면 사람이 진행한다
+            const showNext = (preferredAgent?.assignMode === 'assignee' || issue.stage === 'none' || issue.stage === 'waiting' || issue.stage === 'verify_waiting' || issue.stage === 'confirm_waiting') && !!NEXT_STAGE[issue.stage] && canProgressStage && forwardOk
             const showDone = !((preferredAgent?.assignMode === 'assignee' || issue.stage === 'none') && NEXT_STAGE[issue.stage]) && canProgressStage && forwardOk && (issue.stage === 'verifying' || issue.stage === 'confirming')
             if (!showNext && !showDone) return null
             const nextTarget = targetLabel(showNext ? NEXT_STAGE[issue.stage].action : issue.stage === 'confirming' ? 'accept' : 'approve')
