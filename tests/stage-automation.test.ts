@@ -115,6 +115,7 @@ describe('이슈별 배정', () => {
   it('A-1 기본 배정의 검증 에이전트가 적용된다 (검증 작업자 ③)', () => {
     agentRoles('a3', { verify: true })
     updateProjectAutomation(P, { defaultRoles: { autoAllAgents: false, verifier: { mode: 'agent', userId: null, username: null, agentId: 'a3' } } }, 'owner')
+    setIssueIntakeChannel(P, 9, 'ive')
     expect(applyDefaultRoles(project, 9, getRolesInitializedAt(P, 9))).toBe(true)
     expect(getPresetRoles(P, 9).verifier).toMatchObject({ mode: 'agent', agentId: 'a3' })
   })
@@ -169,6 +170,7 @@ describe('이슈별 배정', () => {
   })
 
   it('A-2 기본 배정이 없으면 아무것도 하지 않고, 있으면 한 번만 적용', () => {
+    setIssueIntakeChannel(P, 10, 'ive')
     expect(applyDefaultRoles(project, 10, getRolesInitializedAt(P, 10))).toBe(false)
     expect(getRolesInitializedAt(P, 10)).toBeNull()
     expect(getPresetRoles(P, 10).confirmer.mode).toBe('creator')
@@ -280,10 +282,26 @@ describe('경로별 기본 배정', () => {
     expect(getPresetRoles(P, 22).confirmer.agentId).toBe('a2')
     expect(getPresetRoles(P, 23).confirmer.agentId).toBe('a2')   // 경로 기록 없음 = Git 직접·API
   })
-  it('접수 기본 배정이 없으면 IVE 등록과 같게 (종전 동작)', () => {
+  it('Git 직접 등록 이슈는 접수 기본 배정이 없으면 IVE 기본 배정을 물려받지 않고 사람 처리로 둔다 (자동 시작 안 함)', () => {
     updateProjectAutomation(P, { defaultRoles: { autoAllAgents: false, confirmer: { mode: 'agent', userId: null, username: null, agentId: 'a1' } } }, 'owner')
-    applyDefaultRoles(project, 24, getRolesInitializedAt(P, 24))
-    expect(getPresetRoles(P, 24).confirmer.agentId).toBe('a1')
+    expect(applyDefaultRoles(project, 24, getRolesInitializedAt(P, 24))).toBe(true)
+    expect(getAssignMode(P, 24).mode).toBe('assignee')
+    expect(getPresetRoles(P, 24).confirmer.mode).toBe('creator')   // IVE 기본 배정(확인자 a1)을 안 받는다
+    expect(getRolesInitializedAt(P, 24)).not.toBeNull()
+    // 사람이 처리자를 바꾼 뒤에는 다시 덮어쓰지 않는다
+    setAssignMode(P, 24, 'auto')
+    expect(applyDefaultRoles(project, 24, getRolesInitializedAt(P, 24))).toBe(false)
+    expect(getAssignMode(P, 24).mode).toBe('auto')
+  })
+  it('IVE 등록 이슈는 접수 기본 배정과 무관하게 처리자 모드를 건드리지 않는다 (자동 처리)', () => {
+    setIssueIntakeChannel(P, 25, 'ive')
+    applyDefaultRoles(project, 25, getRolesInitializedAt(P, 25))
+    expect(getAssignMode(P, 25).mode).toBe('auto')
+  })
+  it('Git 직접 등록이라도 이미 처리자(에이전트)가 정해진 이슈는 덮어쓰지 않는다', () => {
+    setAssignMode(P, 26, 'agent', 'a1')
+    applyDefaultRoles(project, 26, getRolesInitializedAt(P, 26))
+    expect(getAssignMode(P, 26)).toMatchObject({ mode: 'agent', agentId: 'a1' })
   })
   it('에이전트가 명부에서 빠지면 접수 기본 배정에서도 지운다', () => {
     updateProjectAutomation(P, { defaultRoles: { autoAllAgents: false, intake: { autoAllAgents: false, confirmer: { mode: 'agent', userId: null, username: null, agentId: 'a2' } } } }, 'owner')

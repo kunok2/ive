@@ -126,7 +126,17 @@ function hasDefaults(d: RoleDefaults): boolean {
  */
 export function applyDefaultRoles(project: Project, iid: number, rolesInitializedAt: string | null, isKo = true): boolean {
   if (rolesInitializedAt) return false
-  const d = roleDefaultsFor(getProjectAutomation(project.id).defaultRoles, getIssueIntakeChannel(project.id, iid))
+  const channel = getIssueIntakeChannel(project.id, iid)
+  const defaultRoles = getProjectAutomation(project.id).defaultRoles
+  // Git 에서 직접 등록한 이슈(경로 기록 없음)는 IVE 등록 기본 배정을 물려받지 않는다.
+  // 접수 경로 기본 배정(intake)을 따로 켠 프로젝트만 자동 처리하고, 아니면 사람이 처리(담당자 모드)로 두어 자동 시작하지 않는다.
+  // 사람이 처리자를 지정하거나 바꾸면 그때부터 시작한다.
+  if (channel === null && !(defaultRoles.intake && hasDefaults(defaultRoles.intake))) {
+    if (getAssignMode(project.id, iid).mode === 'auto') setAssignMode(project.id, iid, 'assignee')
+    markRolesInitialized(project.id, iid)
+    return true
+  }
+  const d = roleDefaultsFor(defaultRoles, channel)
   if (!hasDefaults(d)) return false
   const notes: string[] = []
   if (d.autoAllAgents) {
