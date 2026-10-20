@@ -18,18 +18,27 @@ interface ProjectAgent {
   agent: { id: string; name: string; avatar: string; cliName: string; status: string; enabled?: boolean; pausedUntil?: string | null }
 }
 
+interface Person { id: number; username: string; name: string; avatarUrl: string }
+
 interface AgentPickerDropdownProps {
+  /** 프로젝트 Git 멤버 — 처리자로 지정할 수 있는 사람 */
+  gitMembers?: Person[]
+  /** 지금 이슈의 Git 담당자 — 사람 처리일 때 트리거에 이름을 보인다 */
+  assignees?: Person[]
+  onPickPerson?: (person: Person) => void
   preferredAgent: PreferredAgent | null
   projectAgents: ProjectAgent[]
   onChangePreferredAgent: (agentIdOrMode: string | null) => void
 }
 
 export default function AgentPickerDropdown({
-  preferredAgent, projectAgents, onChangePreferredAgent,
+  preferredAgent, projectAgents, onChangePreferredAgent, gitMembers = [], assignees = [], onPickPerson,
 }: AgentPickerDropdownProps) {
   const tIssue = useTranslations('issue')
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const isPerson = preferredAgent?.assignMode === 'assignee'
+  const currentPerson = isPerson ? assignees[0] ?? null : null
 
   useEffect(() => {
     if (!open) return
@@ -51,7 +60,7 @@ export default function AgentPickerDropdown({
       >
         <i className="fa-solid fa-user-gear text-ive-green" />
         {preferredAgent?.assignMode === 'assignee' ? (
-          <span className="truncate font-bold text-ive-cyan"><i className="fa-solid fa-user mr-0.5" />{tIssue('assigneeHandles')}</span>
+          <span className="truncate font-bold text-ive-cyan"><i className="fa-solid fa-user mr-0.5" />{currentPerson ? (currentPerson.name || currentPerson.username) : tIssue('assigneeHandles')}</span>
         ) : preferredAgent?.preferredAgentId ? (
           <>
             <AgentAvatar avatar={preferredAgent.preferredAgentAvatar || ''} size="xs" />
@@ -63,7 +72,7 @@ export default function AgentPickerDropdown({
         <i className="fa-solid fa-chevron-down text-[10px] text-ive-text-dim ml-0.5" />
       </button>
       {open && (
-        <div className="absolute z-50 bottom-full right-0 mb-1 bg-ive-bg-deep border border-ive-border-subtle rounded-lg overflow-hidden shadow-lg shadow-black/30 min-w-[200px]">
+        <div className="absolute z-50 bottom-full right-0 mb-1 bg-ive-bg-deep border border-ive-border-subtle rounded-lg overflow-hidden shadow-lg shadow-black/30 min-w-[200px] max-h-72 overflow-y-auto">
           <button
             onClick={() => { setOpen(false); onChangePreferredAgent(null) }}
             className={`w-full px-3 py-2.5 text-left text-xs flex items-center gap-2 transition-colors ${
@@ -76,7 +85,7 @@ export default function AgentPickerDropdown({
           <button
             onClick={() => { setOpen(false); onChangePreferredAgent('assignee') }}
             className={`w-full px-3 py-2.5 text-left text-xs flex items-center gap-2 transition-colors ${
-              preferredAgent?.assignMode === 'assignee' ? 'bg-ive-cyan/10 text-ive-cyan' : 'text-ive-text hover:bg-white/5'
+              isPerson && !currentPerson ? 'bg-ive-cyan/10 text-ive-cyan' : 'text-ive-text hover:bg-white/5'
             }`}
           >
             <span className="w-4 h-4 inline-flex items-center justify-center shrink-0"><i className="fa-solid fa-user" /></span>
@@ -107,6 +116,24 @@ export default function AgentPickerDropdown({
               </button>
             )
           })}
+          {onPickPerson && gitMembers.length > 0 && (
+            <div className="px-3 pt-2.5 pb-1 text-xs font-bold text-ive-text-dim border-t border-ive-border-subtle"><i className="fa-solid fa-user mr-1" />{tIssue('pickerPeople')}</div>
+          )}
+          {onPickPerson && gitMembers.map(m => (
+            <button
+              key={`person-${m.id}`}
+              onClick={() => { setOpen(false); onPickPerson(m) }}
+              className={`w-full px-3 py-2.5 text-left text-xs flex items-center gap-2 transition-colors ${
+                currentPerson?.id === m.id ? 'bg-ive-cyan/10 text-ive-cyan' : 'text-ive-text hover:bg-white/5'
+              }`}
+            >
+              {m.avatarUrl
+                ? <img src={m.avatarUrl} className="w-4 h-4 rounded-lg shrink-0" alt="" />
+                : <span className="w-4 h-4 inline-flex items-center justify-center shrink-0 text-ive-text-dim"><i className="fa-solid fa-user" /></span>}
+              <span className="font-bold truncate">{m.name || m.username}</span>
+              {m.name && m.name !== m.username && <span className="text-ive-text-dim truncate">@{m.username}</span>}
+            </button>
+          ))}
         </div>
       )}
     </div>

@@ -1471,6 +1471,8 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
         onEndChat={handleEndChat}
         onSendChatMessage={handleSendChatMessage}
         onChangePreferredAgent={handleChangePreferredAgent}
+        gitMembers={gitMembers}
+        onPickPerson={m => { void handleAgentPickerSelect(issue.iid, 'assignee', null, m) }}
         handOff={handOffKind ? {
           kind: handOffKind,
           target: handOffTarget,

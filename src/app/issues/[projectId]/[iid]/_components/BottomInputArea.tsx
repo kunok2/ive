@@ -94,6 +94,9 @@ interface BottomInputAreaProps {
   onEndChat: () => void
   onSendChatMessage: () => void
   onChangePreferredAgent: (agentIdOrMode: string | null) => void
+  /** 처리자로 지정할 수 있는 사람(프로젝트 Git 멤버)과, 고르면 호출되는 콜백 */
+  gitMembers?: { id: number; username: string; name: string; avatarUrl: string }[]
+  onPickPerson?: (person: { id: number; username: string; name: string; avatarUrl: string }) => void
   handOff?: StageHandOff | null
   onToast: (msg: string, type: 'success' | 'error') => void
 }
@@ -106,7 +109,7 @@ export default function BottomInputArea({
   preferredAgent, projectAgents, NEXT_STAGE,
   onSetMode, onSetComment, onSetChatInput, onAddChatImages, onRemoveChatImage,
   onPostComment, onCommentAndRetry, onCommentAndDone, onCommentAndNextStage, onCommentAndInflow, onAgentWorkStopped,
-  onStartChat, onEndChat, onSendChatMessage, onChangePreferredAgent, handOff = null, onToast,
+  onStartChat, onEndChat, onSendChatMessage, onChangePreferredAgent, gitMembers = [], onPickPerson, handOff = null, onToast,
 }: BottomInputAreaProps) {
   // Image paste handler for comment textarea
   const commentRef = useRef(comment)
@@ -176,6 +179,8 @@ export default function BottomInputArea({
         onStartChat={onStartChat}
         onEndChat={onEndChat}
         onChangePreferredAgent={onChangePreferredAgent}
+        gitMembers={gitMembers}
+        onPickPerson={onPickPerson}
       />
 
       {/* Comment mode input */}
@@ -234,7 +239,7 @@ function ModeTabs({
   issue, mode, canProgressStage,
   chatSessionId, chatHistoryOnly, chatStarting, chatAgentName,
   preferredAgent, projectAgents,
-  onSetMode, onStartChat, onEndChat, onChangePreferredAgent,
+  onSetMode, onStartChat, onEndChat, onChangePreferredAgent, gitMembers, onPickPerson,
 }: {
   issue: BottomInputAreaProps['issue']
   mode: BottomInputAreaProps['mode']
@@ -249,6 +254,8 @@ function ModeTabs({
   onStartChat: (force?: boolean) => void
   onEndChat: () => void
   onChangePreferredAgent: (v: string | null) => void
+  gitMembers: BottomInputAreaProps['gitMembers']
+  onPickPerson: BottomInputAreaProps['onPickPerson']
 }) {
   const tIssue = useTranslations('issue')
 
@@ -296,11 +303,14 @@ function ModeTabs({
         </button>
       )}
       {/* 작업자 선택 — 탭 행 우측 (코멘트 모드에서만, 권한 있는 경우에만) */}
-      {canProgressStage && issue.stage !== 'dev' && projectAgents.length > 0 && mode === 'comment' && (
+      {canProgressStage && issue.stage !== 'dev' && (projectAgents.length > 0 || (gitMembers?.length ?? 0) > 0) && mode === 'comment' && (
         <AgentPickerDropdown
           preferredAgent={preferredAgent}
           projectAgents={projectAgents}
           onChangePreferredAgent={onChangePreferredAgent}
+          gitMembers={gitMembers}
+          assignees={issue.assignees}
+          onPickPerson={onPickPerson}
         />
       )}
     </div>
