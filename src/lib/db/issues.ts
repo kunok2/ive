@@ -102,9 +102,12 @@ export function listTodayDoneIssues(projectId: string, todayStartISO: string, do
       : r?.assignee_name ? { name: r.assignee_name, avatar: r.assignee_avatar ?? null, userId: null }
       : null
   const one = db.prepare(`SELECT ${COLS} FROM issue_stages WHERE project_id = ? AND issue_iid = ?`)
+  // 단계 기록에 제목이 없으면(스냅샷이 제목 없이 갱신된 이슈) 실행 기록의 가장 최근 제목으로 채운다
+  const execTitle = db.prepare(`SELECT issue_title AS title FROM task_executions WHERE project_id = ? AND issue_iid = ? AND issue_title IS NOT NULL AND issue_title != '' ORDER BY started_at DESC LIMIT 1`)
+  const titleOf = (iid: number, r: any): string => r?.title || (execTitle.get(projectId, iid) as any)?.title || `#${iid}`
   const out: TodayDoneIssue[] = done.map(c => {
     const r = one.get(projectId, c.iid) as any
-    return { iid: c.iid, title: r?.title || `#${c.iid}`, stage: 'done', at: c.at, who: who(r) }
+    return { iid: c.iid, title: titleOf(c.iid, r), stage: 'done', at: c.at, who: who(r) }
   })
   const rejected = db.prepare(`
     SELECT ${COLS} FROM issue_stages
@@ -112,7 +115,7 @@ export function listTodayDoneIssues(projectId: string, todayStartISO: string, do
   `).all(projectId, todayStartISO) as any[]
   for (const r of rejected) {
     // updated_at 은 datetime('now') 의 UTC 'YYYY-MM-DD HH:MM:SS' — 화면이 시간대를 오해하지 않게 ISO(Z)로
-    out.push({ iid: r.iid, title: r.title || `#${r.iid}`, stage: 'rejected', at: String(r.at).includes('T') ? r.at : `${String(r.at).replace(' ', 'T')}Z`, who: who(r) })
+    out.push({ iid: r.iid, title: titleOf(r.iid, r), stage: 'rejected', at: String(r.at).includes('T') ? r.at : `${String(r.at).replace(' ', 'T')}Z`, who: who(r) })
   }
   return out.sort((x, y) => Date.parse(y.at) - Date.parse(x.at))
 }
@@ -580,7 +583,7 @@ export function upsertIssueStageSnapshot(
       assignee_avatar = excluded.assignee_avatar,
       assignee_provider = excluded.assignee_provider,
       assignee_git_user_id = excluded.assignee_git_user_id,
-      issue_title = excluded.issue_title,
+      issue_title = COALESCE(excluded.issue_title, issue_stages.issue_title),
       verify_waiting_since = CASE
         WHEN excluded.cached_stage IN ('verify_waiting', 'verifying') THEN
           COALESCE(issue_stages.verify_waiting_since, datetime('now'))

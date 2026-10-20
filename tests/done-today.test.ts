@@ -147,4 +147,15 @@ describe('listTodayDoneIssues', () => {
     expect(done.at).toBe(at(`${TODAY}T08:50:27`))
     expect(done.who).toEqual({ name: '확인자', avatar: null, userId: 'u1' })
   })
+
+  it('D-5: 단계 기록에 제목이 없으면 실행 기록의 제목으로 채우고, 제목 없는 스냅샷이 기존 제목을 지우지 않는다', () => {
+    finished(5, `${TODAY}T08:50:27`, '2026-10-02 23:50:27')
+    d.prepare(`UPDATE issue_stages SET issue_title = NULL WHERE issue_iid = 5`).run()
+    d.prepare(`UPDATE task_executions SET issue_title = '실행 제목' WHERE issue_iid = 5`).run()
+    expect(listTodayDoneIssues('p', TODAY_START, todayDone())[0].title).toBe('실행 제목')
+
+    finished(6, `${TODAY}T08:55:00`, '2026-10-02 23:55:00')
+    upsertIssueStageSnapshot('p', 6, { cachedStage: 'done', assigneeUsername: null, assigneeName: null, assigneeAvatar: null, assigneeProvider: 'gitlab', assigneeGitUserId: null, issueTitle: null })
+    expect(listTodayDoneIssues('p', TODAY_START, todayDone()).find(x => x.iid === 6)?.title).toBe('이슈 6')
+  })
 })
