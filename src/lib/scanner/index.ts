@@ -651,6 +651,21 @@ async function scanProject(project: Project, force: boolean = false) {
           slog.info(`[USER-COMPLETE] Issue #${iid} — 레이블 전환 감지, 활성 사용자 execution ${lingering.length}건 완료 처리 (${stage})`);
         }
       }
+      // 처리를 건너뛰고 검증·확인으로 레이블만 옮긴 경우(Git 에서 직접) — 끝나지 않은 사람 처리 실행이 남아
+      // 보드에 처리 칸과 검증 칸 양쪽에 보인다. 처리는 이미 끝난 일이므로 그 처리 실행만 닫는다.
+      // 검증·확인 실행(ex-verify-/ex-confirm-)과 AI 채팅은 그 단계의 진행 기록이라 건드리지 않는다.
+      if (activeExec && (stage === 'verifying' || stage === 'confirm_waiting' || stage === 'confirming')) {
+        const lingeringDev = getDb().prepare(
+          "SELECT id FROM task_executions WHERE project_id = ? AND issue_iid = ? AND status IN ('running', 'assigned') AND assignee_type = 'user' " +
+          "AND id NOT LIKE 'ex-verify-%' AND id NOT LIKE 'ex-confirm-%' AND id NOT LIKE 'exec-chat-%'"
+        ).all(project.id, iid) as { id: string }[];
+        for (const ex of lingeringDev) {
+          updateExecutionStatus(ex.id, 'success', new Date().toISOString());
+        }
+        if (lingeringDev.length > 0) {
+          slog.info(`[USER-COMPLETE] Issue #${iid} — 처리 건너뛰고 ${stage} 로 이동 감지, 남은 처리 execution ${lingeringDev.length}건 완료 처리`);
+        }
+      }
       // 사람 작업 실패 감지: IVE-D가 제거되어 dev_fail, waiting, 또는 레이블 없음(null) 상태가 된 경우
       // ※ verifying 단계는 검증 중이므로 실패 처리하지 않음
       if (activeExec && stage !== 'verifying' && (stage === 'dev_fail' || stage === 'waiting' || stage === null)) {
