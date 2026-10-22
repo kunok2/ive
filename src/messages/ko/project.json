@@ -228,6 +228,7 @@
     "no_agent": "지금 쉬고 있는 에이전트가 없습니다 — 먼저 끝나는 에이전트가 맡습니다"
   },
   "boardDoneToday": "오늘완료",
+  "activeHumanProcessHeader": "사람이 처리 중 {n}",
   "activeVerifyingHeader": "검증 중 {n}",
   "activeConfirmingHeader": "확인 중 {n}",
   "failGroupProcess": "처리 실패",

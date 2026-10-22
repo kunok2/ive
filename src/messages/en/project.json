@@ -228,6 +228,7 @@
     "no_agent": "No idle agent"
   },
   "boardDoneToday": "Done today",
+  "activeHumanProcessHeader": "Handled by people {n}",
   "activeVerifyingHeader": "Verifying {n}",
   "activeConfirmingHeader": "Confirming {n}",
   "failGroupProcess": "Processing failed",
