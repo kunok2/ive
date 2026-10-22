@@ -89,6 +89,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
   const [doneToday, setDoneToday] = useState<TodayDoneIssue[]>([])
   const [killing, setKilling] = useState<string | null>(null)
   const [waitingIssues, setWaitingIssues] = useState<any[]>([])
+  const [devIssues, setDevIssues] = useState<any[]>([])
   const [verifyingIssues, setVerifyingIssues] = useState<any[]>([])
   const [confirmingIssues, setConfirmingIssues] = useState<any[]>([])
   // 작업번호 → 본문 체크박스 진행률 — 진행 중 목록(처리·검증·확인)의 막대용. 체크박스가 있는 작업만 담는다
@@ -147,6 +148,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
         if (res.ok) {
           const all = await res.json()
           setWaitingIssues(all.filter((i: any) => i.stage === 'dev_fail' || i.stage === 'waiting' || i.stage === 'verify_waiting' || i.stage === 'confirm_waiting'))
+          setDevIssues(all.filter((i: any) => i.stage === 'dev'))
         }
       } catch { /* ignore */ }
     }
@@ -693,6 +695,9 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
       {expandedPanel === 'running' && (() => {
         const liveProcess = runningExecs.filter(e => e.assigneeType !== 'user' && !stageKindOf(e.id))
         const hasWaitList = devFailedCount > 0 || processWaitCount > 0
+        // 사람이 처리 중인 건 — 실행 기록 없이 처리 단계로만 남으므로, 에이전트가 돌리는 건을 뺀 처리 단계 이슈
+        const agentIids = new Set(liveProcess.map(e => e.issueIid))
+        const humanDev = devIssues.filter((i: any) => !agentIids.has(i.iid))
         return (
           <div className="flex-1 flex flex-col min-h-0">
             {/* 돌고 있는 에이전트가 없으면 대기·실패 목록이 패널 전체를 쓴다 — 45% 로 묶어 두면 아래가 비어 있는데도 목록이 잘려 스크롤된다(검증·확인 패널과 같은 규칙) */}
@@ -702,13 +707,45 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
                 {renderWaitGroup('waiting')}
               </div>
             )}
-            {(liveProcess.length > 0 || !hasWaitList) && (
+            {humanDev.length > 0 && (
+              <div className={`${liveProcess.length > 0 ? 'shrink-0 max-h-[45%]' : 'flex-1 min-h-0'} overflow-y-auto border-t border-ive-stage-process/30`}>
+                <div className="px-3 py-2 bg-ive-bg-deep/50 border-b border-ive-border-dark">
+                  <span className="text-xs font-bold uppercase tracking-widest text-ive-stage-process">
+                    {tp('activeHumanProcessHeader', { n: humanDev.length })}
+                  </span>
+                </div>
+                <div className="space-y-2 p-3">
+                  {humanDev.map((issue: any) => {
+                    const who = issue.assignees?.[0] ?? issue.author
+                    return (
+                      <div
+                        key={issue.iid}
+                        onClick={() => router.push(`/issues/${project.id}/${issue.iid}`)}
+                        className="bg-ive-bg-card border border-ive-border-subtle rounded-lg p-3 hover:border-ive-text-dim transition-all cursor-pointer active:scale-[0.98]"
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-sm font-bold text-ive-text-secondary">#{issue.iid}</span>
+                        </div>
+                        <MarqueeText className="text-sm text-ive-text font-bold">{issue.title}</MarqueeText>
+                        {who?.name && (
+                          <div className="flex items-center gap-1 text-xs text-ive-text-secondary mt-1 min-w-0">
+                            <AgentAvatar avatar={who.avatar || who.avatarUrl || 'person'} size="xs" toolBadge="human" />
+                            <span className="truncate">{who.name}</span>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+            {(liveProcess.length > 0 || (!hasWaitList && humanDev.length === 0)) && (
               <LiveTracePanel
                 agents={toAgentTabs(liveProcess)}
                 projectId={project.id}
                 onKill={handleKill}
                 // 처리 대기가 남아 있으면 진행이 끝나도 패널을 닫지 않는다(대기 목록을 계속 보인다)
-                onAllCompleted={hasWaitList ? undefined : () => setExpandedPanel(null)}
+                onAllCompleted={hasWaitList || humanDev.length > 0 ? undefined : () => setExpandedPanel(null)}
               />
             )}
           </div>
