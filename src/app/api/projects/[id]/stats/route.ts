@@ -30,7 +30,19 @@ export async function GET(
     WHERE project_id = ? AND status IN ('running', 'assigned') AND (assignee_type IS NULL OR assignee_type != 'user')
       AND id NOT LIKE 'ex-verify-%' AND id NOT LIKE 'ex-confirm-%' AND id NOT LIKE 'ex-reproduce-%' AND id NOT LIKE 'exec-chat-%'
   `).get(id) as any
-  const agentWorking = agentWorkingExec?.count ?? 0
+  // 사람이 처리 중인 작업 — 실행 기록 없이 issue_stages 의 dev 단계로만 남는다(검증·확인 중과 같은 소스).
+  // 에이전트 실행이 이미 잡은 이슈는 위에서 셌으니 빼고 센다.
+  const humanWorking = (db.prepare(`
+    SELECT COUNT(*) as count FROM issue_stages s
+    WHERE s.project_id = ? AND s.cached_stage = 'dev'
+      AND NOT EXISTS (
+        SELECT 1 FROM task_executions e
+        WHERE e.project_id = s.project_id AND e.issue_iid = s.issue_iid AND e.status IN ('running', 'assigned')
+          AND (e.assignee_type IS NULL OR e.assignee_type != 'user')
+          AND e.id NOT LIKE 'ex-verify-%' AND e.id NOT LIKE 'ex-confirm-%' AND e.id NOT LIKE 'ex-reproduce-%' AND e.id NOT LIKE 'exec-chat-%'
+      )
+  `).get(id) as { count: number } | undefined)?.count ?? 0
+  const agentWorking = (agentWorkingExec?.count ?? 0) + humanWorking
   // 열려 있는 AI 대화 수 — 처리 숫자에는 넣지 않지만, 카드가 진행 목록(대화 항목 포함)을 불러올지 정하는 데 쓴다
   const chatting = (db.prepare(
     "SELECT COUNT(*) as count FROM task_executions WHERE project_id = ? AND status IN ('running', 'assigned') AND id LIKE 'exec-chat-%'"
