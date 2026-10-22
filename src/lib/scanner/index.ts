@@ -836,9 +836,11 @@ async function scanProject(project: Project, force: boolean = false) {
         // 완료로 바꾸면 확인을 거치지 않았다는 흔적이 사라져 다시 열 길이 없다. 확인(④) 단계면 다시 열고,
         // 그 밖의 단계는 사람이 작업 상세에서 이어 간다. 사람이 직접 닫았거나 여는 데 실패한 경우만 아래 정리로 간다.
         // (이번 스캔 목록을 받은 뒤 다시 열렸을 수도 있으니 한 건 조회해 열려 있으면 그대로 둔다)
+        let closedCur: any = null
         try {
           const cur = await fetchSingleIssue(project, iid, decryptedToken)
           if (cur && cur.state !== 'closed') continue
+          closedCur = cur
           if (cur) {
             if (await reopenIfClosedBeforeConfirm(project, decryptedToken, iid, cur)) continue
             if ((await isIssueClosedByGit(project, iid, decryptedToken)) === true) {
@@ -863,7 +865,13 @@ async function scanProject(project: Project, force: boolean = false) {
           slog.warn(`reconcileClosedIssue failed (#${iid}):`, (e as Error).message)
         }
 
-        slog.info(`Cleaning stale issue #${iid} in project ${project.name} (last stage: ${row.cached_stage}, ${mergeComplete ? 'merged-complete' : 'abandoned'})`)
+        // 종료 레이블(IVE-E)을 붙여 닫은 이슈는 버려진 것이 아니라 사람이 끝낸 것이다 — MR 머지 없이 로컬 브랜치 등으로 직접 처리한 작업.
+        // 열린 채 종료 레이블이 붙은 이슈는 스캔에서 확인 완료로 잡히지만, 레이블을 붙이자마자 닫으면 이 정리 경로로 온다(운영 메타샵 2297).
+        const endLabelDone = !mergeComplete && Array.isArray(closedCur?.labels)
+          && closedCur.labels.some((l: any) => (typeof l === 'string' ? l : l?.name) === (project.labelEnd || DEFAULT_LABELS.end))
+        const completed = mergeComplete || endLabelDone
+
+        slog.info(`Cleaning stale issue #${iid} in project ${project.name} (last stage: ${row.cached_stage}, ${mergeComplete ? 'merged-complete' : endLabelDone ? 'end-label-done' : 'abandoned'})`)
         upsertIssueStageSnapshot(project.id, iid, {
           cachedStage: 'done',
           assigneeUsername: null,
@@ -876,7 +884,7 @@ async function scanProject(project: Project, force: boolean = false) {
         // 사건 로그 — 스냅샷은 두 경우 모두 'done' 이지만, 머지 없이 닫힌(버려진) 이슈를 완료로 세지 않도록 구분해 남긴다
         recordStageEvent({
           projectId: project.id, issueIid: iid, fromStage: row.cached_stage,
-          toStage: mergeComplete ? 'done' : 'closed', action: mergeComplete ? 'merged' : 'abandoned',
+          toStage: completed ? 'done' : 'closed', action: mergeComplete ? 'merged' : endLabelDone ? null : 'abandoned',
           actor: SYSTEM_ACTOR, source: 'scanner',
         })
 
@@ -895,6 +903,11 @@ async function scanProject(project: Project, force: boolean = false) {
               targetType: 'issue', targetId: `${project.id}-${iid}`,
             })
           } catch (e) { slog.error({ err: e }, 'Failed to log merge-complete activity:') }
+        } else if (endLabelDone) {
+          // 종료 레이블이 이미 붙어 있다 — 남은 활성 실행만 성공으로 마감한다
+          for (const ex of getDb().prepare(
+            "SELECT id FROM task_executions WHERE project_id = ? AND issue_iid = ? AND status IN ('running', 'assigned')"
+          ).all(project.id, iid) as { id: string }[]) updateExecutionStatus(ex.id, 'success', new Date().toISOString())
         } else {
           // 머지 흔적 없음(수동 닫기/라벨 제거) -> 잔류 활성 execution 을 failed 로 마감 (기존 동작)
           const lingeringExecs = getDb().prepare(
