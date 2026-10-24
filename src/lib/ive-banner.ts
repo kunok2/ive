@@ -9,9 +9,11 @@ import type { Project } from '@/types'
  */
 
 export const BANNER_FILE = '.claude/ive-banner.json'
+export const BANNER_CHAT_FILE = '.claude/ive-banner-chat.json'
 export const CLAUDE_SETTINGS_FILE = '.claude/settings.json'
 
-const HOOK_COMMAND = `cat "$CLAUDE_PROJECT_DIR/${BANNER_FILE}"`
+// 터미널은 systemMessage(화면 표시)를, VS Code 확장은 훅 메시지를 화면에 그리지 않아 첫 응답에 배너를 싣게 하는 컨텍스트 쪽을 쓴다.
+const HOOK_COMMAND = `f=${BANNER_FILE.split('/')[1]}; [ "$CLAUDE_CODE_ENTRYPOINT" = claude-vscode ] && f=${BANNER_CHAT_FILE.split('/')[1]}; cat "$CLAUDE_PROJECT_DIR/.claude/$f"`
 const HOOK_MATCHER = 'startup|resume|clear'
 
 const LOGO = [
@@ -45,6 +47,19 @@ export function buildBannerFile(project: Pick<Project, 'name'>): string {
   return JSON.stringify({ systemMessage: buildBannerText(project) }, null, 2) + '\n'
 }
 
+/** VS Code 용 — AI 컨텍스트에 넣어 첫 응답 맨 앞에 배너를 보여 주게 한다 */
+export function buildBannerChatFile(project: Pick<Project, 'name'>): string {
+  const additionalContext = [
+    'IVE 안내: 이 세션의 첫 응답 맨 앞에, 사용자의 요청에 답하기 전에 아래 배너를 코드 블록 그대로 한 번만 보여 주세요.',
+    '그 다음 줄부터 평소처럼 요청에 답합니다. 두 번째 응답부터는 배너를 반복하지 않습니다.',
+    '',
+    '```',
+    buildBannerText(project).trim(),
+    '```',
+  ].join('\n')
+  return JSON.stringify({ hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext } }, null, 2) + '\n'
+}
+
 type HookEntry = { matcher?: string; hooks?: { type?: string; command?: string }[] }
 
 /**
@@ -62,8 +77,15 @@ export function mergeBannerHook(existing: string | null): string {
   const hooks = (settings.hooks && typeof settings.hooks === 'object' && !Array.isArray(settings.hooks) ? settings.hooks : {}) as Record<string, unknown>
   const sessionStart: HookEntry[] = Array.isArray(hooks.SessionStart) ? (hooks.SessionStart as HookEntry[]) : []
 
-  const has = sessionStart.some(e => e?.hooks?.some(h => h?.command?.includes('ive-banner.json')))
-  if (has && existing) return existing
+  // 이미 IVE 훅이 있으면 명령만 현재 것으로 맞춘다(옛 설치본 → VS Code 대응 명령)
+  const isIve = (h?: { command?: string }) => !!h?.command?.includes('ive-banner')
+  if (sessionStart.some(e => e?.hooks?.some(isIve))) {
+    const updated = sessionStart.map(e => e?.hooks?.some(isIve)
+      ? { ...e, hooks: e.hooks!.map(h => isIve(h) ? { ...h, command: HOOK_COMMAND } : h) }
+      : e)
+    const out = JSON.stringify({ ...settings, hooks: { ...hooks, SessionStart: updated } }, null, 2) + '\n'
+    return existing && JSON.stringify(JSON.parse(existing)) === JSON.stringify(JSON.parse(out)) ? existing : out
+  }
 
   const next = {
     ...settings,

@@ -2,7 +2,7 @@ import { readRepoFile, upsertRepoFile, createBranch, createMR, getDefaultBranch 
 import { Project } from '@/types'
 import { DEFAULT_LABELS } from '@/lib/labels'
 import { generateIveSkills } from '@/lib/ai-skills'
-import { BANNER_FILE, CLAUDE_SETTINGS_FILE, buildBannerFile, mergeBannerHook } from '@/lib/ive-banner'
+import { BANNER_FILE, BANNER_CHAT_FILE, CLAUDE_SETTINGS_FILE, buildBannerFile, buildBannerChatFile, mergeBannerHook } from '@/lib/ive-banner'
 
 export const IVE_MARKER_BEGIN = '<!-- ive:begin -->'
 export const IVE_MARKER_END = '<!-- ive:end -->'
@@ -682,13 +682,14 @@ ${generateAgentStageGuide(project)}`
 
   // Claude Code 시작 배너(.claude/ive-banner.json + settings.json 훅) — 레이블 이름 갱신(onlyInstalled)에는 해당 없음
   if (!opts.onlyInstalled) {
-    try {
-      const banner = buildBannerFile(project)
-      const existingBanner = await readRepoFile(project, token, BANNER_FILE)
-      if (existingBanner?.content === banner) results.push({ path: BANNER_FILE, created: false, updated: false, unchanged: true })
-      else filesToWrite.push({ path: BANNER_FILE, content: banner, isNew: !existingBanner })
-    } catch (e) {
-      results.push({ path: BANNER_FILE, created: false, updated: false, unchanged: false, error: e instanceof Error ? e.message : String(e) })
+    for (const [bannerPath, banner] of [[BANNER_FILE, buildBannerFile(project)], [BANNER_CHAT_FILE, buildBannerChatFile(project)]] as const) {
+      try {
+        const existingBanner = await readRepoFile(project, token, bannerPath)
+        if (existingBanner?.content === banner) results.push({ path: bannerPath, created: false, updated: false, unchanged: true })
+        else filesToWrite.push({ path: bannerPath, content: banner, isNew: !existingBanner })
+      } catch (e) {
+        results.push({ path: bannerPath, created: false, updated: false, unchanged: false, error: e instanceof Error ? e.message : String(e) })
+      }
     }
     try {
       const existingSettings = await readRepoFile(project, token, CLAUDE_SETTINGS_FILE)

@@ -49,7 +49,7 @@ describe('스킬 설치', () => {
   it('설치하면 가이드·배너·훅·스킬 3종이 한 번에 올라간다', async () => {
     await installAiGuide(gl, 't')
     const paths = upserts.map(u => u.path)
-    for (const p of ['CLAUDE.md', '.claude/ive-banner.json', '.claude/settings.json', '.claude/skills/ive-handle/SKILL.md', '.claude/skills/ive-verify/SKILL.md', '.claude/skills/ive-confirm/SKILL.md']) expect(paths).toContain(p)
+    for (const p of ['CLAUDE.md', '.claude/ive-banner.json', '.claude/ive-banner-chat.json', '.claude/settings.json', '.claude/skills/ive-handle/SKILL.md', '.claude/skills/ive-verify/SKILL.md', '.claude/skills/ive-confirm/SKILL.md']) expect(paths).toContain(p)
   })
   it('레이블 갱신은 이미 있는 스킬만 고친다', async () => {
     files['CLAUDE.md'] = '<!-- ive:begin -->\nx\n<!-- ive:end -->'
