@@ -29,6 +29,7 @@ describe('IVE 시작 배너', () => {
     expect(j.hookSpecificOutput.hookEventName).toBe('SessionStart')
     expect(j.hookSpecificOutput.additionalContext).toContain('첫 응답')
     expect(j.hookSpecificOutput.additionalContext).toContain('IVE 작업으로 정리해줘')
+    expect(j.hookSpecificOutput.additionalContext).toContain('```\n ___ __     __ _____\n|_ _|') // 로고 첫 줄 앞 공백 보존
   })
   it('옛 설치본의 훅 명령은 현재 명령으로 바뀌고, 다시 돌리면 그대로다', () => {
     const old = JSON.stringify({ hooks: { SessionStart: [{ matcher: 'startup', hooks: [{ type: 'command', command: 'cat "$CLAUDE_PROJECT_DIR/.claude/ive-banner.json"' }] }] } })

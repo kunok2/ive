@@ -28,7 +28,7 @@ export function buildBannerText(project: Pick<Project, 'name'>): string {
   return [
     '',
     ...LOGO,
-    ` :: Springware IVE ::   ${project.name}`,
+    project.name.trim() === 'Springware IVE' ? ' :: Springware IVE ::' : ` :: Springware IVE ::   ${project.name}`,
     '',
     ' 작업 내용을 IVE 에 남기면 보고서·통계에 자동으로 반영됩니다.',
     '',
@@ -59,7 +59,7 @@ export function buildBannerChatFile(project: Pick<Project, 'name'>): string {
     '그 다음 줄부터 평소처럼 요청에 답합니다. 두 번째 응답부터는 배너를 반복하지 않습니다.',
     '',
     '```',
-    buildBannerText(project).trim(),
+    buildBannerText(project).replace(/^\n+|\s+$/g, ''), // 앞 공백은 로고 첫 줄 정렬이라 지우지 않는다
     '```',
   ].join('\n')
   return JSON.stringify({ hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext } }, null, 2) + '\n'
