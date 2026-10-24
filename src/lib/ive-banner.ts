@@ -12,8 +12,10 @@ export const BANNER_FILE = '.claude/ive-banner.json'
 export const BANNER_CHAT_FILE = '.claude/ive-banner-chat.json'
 export const CLAUDE_SETTINGS_FILE = '.claude/settings.json'
 
+// 개발자마다 프로젝트당 한 번만 보여 준다(매번 뜨면 성가시다). 봤다는 표시는 저장소가 아니라 개발자 홈(~/.claude)에 남긴다.
+// 다시 보고 싶으면 ~/.claude/ive-banner-seen-* 파일을 지우면 된다.
 // 터미널은 systemMessage(화면 표시)를, VS Code 확장은 훅 메시지를 화면에 그리지 않아 첫 응답에 배너를 싣게 하는 컨텍스트 쪽을 쓴다.
-const HOOK_COMMAND = `f=${BANNER_FILE.split('/')[1]}; [ "$CLAUDE_CODE_ENTRYPOINT" = claude-vscode ] && f=${BANNER_CHAT_FILE.split('/')[1]}; cat "$CLAUDE_PROJECT_DIR/.claude/$f"`
+const HOOK_COMMAND = `m="$HOME/.claude/ive-banner-seen-$(printf %s "$CLAUDE_PROJECT_DIR" | cksum | cut -d' ' -f1)"; [ -e "$m" ] && exit 0; mkdir -p "$HOME/.claude"; : > "$m"; f=${BANNER_FILE.split('/')[1]}; [ "$CLAUDE_CODE_ENTRYPOINT" = claude-vscode ] && f=${BANNER_CHAT_FILE.split('/')[1]}; cat "$CLAUDE_PROJECT_DIR/.claude/$f"`
 const HOOK_MATCHER = 'startup|resume|clear'
 
 const LOGO = [

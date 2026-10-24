@@ -9,7 +9,7 @@ Springware IVE의 굵직한 변경 이력입니다.
 ## [Unreleased]
 
 ### Added
-- **Claude Code 를 열 때 IVE 마크와 사용법이 보인다** — AI 도구 가이드를 설치하면 CLAUDE.md/AGENTS.md 와 함께 `.claude/ive-banner.json` 과 `.claude/settings.json` 의 시작 훅(SessionStart)이 MR 에 담긴다. 세션을 시작·재개·초기화할 때 Spring Boot 같은 IVE 로고와 「지금까지 한 작업을 IVE 작업으로 정리해줘.」 같은 예시 문장이 화면에 뜬다(AI 컨텍스트에는 들어가지 않는다). 기존 settings.json 의 다른 설정·훅은 그대로 두고, JSON 으로 읽을 수 없으면 건드리지 않는다. 터미널 Claude Code 는 시작 메시지로, VS Code 확장은 훅 메시지를 화면에 그리지 않아 첫 응답 맨 앞에 배너를 싣는 방식(`.claude/ive-banner-chat.json`)으로 보여 준다. Claude Code 에만 해당한다(Codex·agy·OpenCode 는 시작 훅이 없다).
+- **Claude Code 를 열 때 IVE 마크와 사용법이 보인다** — AI 도구 가이드를 설치하면 CLAUDE.md/AGENTS.md 와 함께 `.claude/ive-banner.json` 과 `.claude/settings.json` 의 시작 훅(SessionStart)이 MR 에 담긴다. 세션을 시작·재개·초기화할 때 Spring Boot 같은 IVE 로고와 「지금까지 한 작업을 IVE 작업으로 정리해줘.」 같은 예시 문장이 화면에 뜬다(AI 컨텍스트에는 들어가지 않는다). 기존 settings.json 의 다른 설정·훅은 그대로 두고, JSON 으로 읽을 수 없으면 건드리지 않는다. 터미널 Claude Code 는 시작 메시지로, VS Code 확장은 훅 메시지를 화면에 그리지 않아 첫 응답 맨 앞에 배너를 싣는 방식(`.claude/ive-banner-chat.json`)으로 보여 준다. 배너는 개발자마다 프로젝트당 **처음 한 번만** 뜬다(봤다는 표시는 저장소가 아니라 `~/.claude/ive-banner-seen-*`; 다시 보려면 그 파일을 지운다). Claude Code 에만 해당한다(Codex·agy·OpenCode 는 시작 훅이 없다).
 - **개발자가 자기 프롬프트에서 처리·검증·확인을 시킬 수 있도록 스킬 3종(`ive-handle`·`ive-verify`·`ive-confirm`)을 함께 설치한다** — IVE 가 에이전트를 자동 배정하는 길과 별개로, 「IVE 처리해줘/검증해줘/확인해줘」 한마디면 AI 가 단계 라벨 이동 → 요건 대조 → 검수/머지/증거 확인 → 노트·`ive-meta` 순서를 그대로 밟는다. 프로젝트의 단계 레이블 이름·저장소·GitLab/GitHub 명령이 채워져 설치되고, 레이블 이름을 바꾸면 이미 설치된 스킬도 같이 갱신된다. 기본은 사람이 말한 건만 처리하고, 「IVE 처리 루틴 돌려」·「IVE 검증 루틴 돌려」 라고 하면 `/loop 5m` 으로 대기 건을 주기적으로 찾아 건마다 서브에이전트(동시 최대 3)에 맡긴다(처리 루틴은 내가 담당자인 건만 — IVE 의 에이전트 배정과 겹치지 않게). 시작 배너에도 세 가지 사용법을 안내한다.
 
 ### Fixed

@@ -38,4 +38,10 @@ describe('IVE 시작 배너', () => {
     expect(JSON.parse(once).hooks.SessionStart).toHaveLength(1)
     expect(mergeBannerHook(once)).toBe(once)
   })
+
+  it('훅은 개발자마다 한 번만 배너를 보여 준다(봤다는 표시는 홈 폴더)', () => {
+    const cmd = JSON.parse(mergeBannerHook(null)).hooks.SessionStart[0].hooks[0].command as string
+    expect(cmd).toContain('$HOME/.claude/ive-banner-seen-')
+    expect(cmd).toContain('[ -e "$m" ] && exit 0')
+  })
 })

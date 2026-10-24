@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "f=ive-banner.json; [ \"$CLAUDE_CODE_ENTRYPOINT\" = claude-vscode ] && f=ive-banner-chat.json; cat \"$CLAUDE_PROJECT_DIR/.claude/$f\""
+            "command": "m=\"$HOME/.claude/ive-banner-seen-$(printf %s \"$CLAUDE_PROJECT_DIR\" | cksum | cut -d' ' -f1)\"; [ -e \"$m\" ] && exit 0; mkdir -p \"$HOME/.claude\"; : > \"$m\"; f=ive-banner.json; [ \"$CLAUDE_CODE_ENTRYPOINT\" = claude-vscode ] && f=ive-banner-chat.json; cat \"$CLAUDE_PROJECT_DIR/.claude/$f\""
           }
         ]
       }
