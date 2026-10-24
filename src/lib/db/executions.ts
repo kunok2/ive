@@ -439,7 +439,7 @@ export function hasActiveExecution(projectId: string, issueIid: number, opts: { 
  * 에이전트가 맡은 작업은 실행 없이 처리 레이블만 있으면 진짜 실패라 그대로 둔다.
  */
 export function hasActiveExecutionForStage(projectId: string, issueIid: number, opts: { ignoreChat?: boolean } = {}): boolean {
-  return hasActiveExecution(projectId, issueIid, opts) || getAssignMode(projectId, issueIid).mode === 'assignee'
+  return hasActiveExecution(projectId, issueIid, opts) || getAssignMode(projectId, issueIid).mode === 'assignee' || !hasAnyExecution(projectId, issueIid)
 }
 
 /**

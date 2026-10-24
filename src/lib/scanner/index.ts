@@ -571,8 +571,8 @@ async function scanProject(project: Project, force: boolean = false) {
         // 담당자가 없으면 이슈 작성자를 담당자로 간주
         const assignee = (issue.assignees && issue.assignees.length > 0) ? issue.assignees[0] : (issue.author || null);
         upsertIssueStageSnapshot(project.id, iid, {
-          // 담당자 모드의 「처리 레이블만 있고 실행 없음」은 처리 실패가 아니다 — 아래에서 곧 사람 실행을 만든다(화면 판정과 같은 기준: hasActiveExecutionForStage)
-          cachedStage: stage === 'dev_fail' && assignModes.get(iid)?.mode === 'assignee' ? 'dev' : stage,
+          // 담당자 모드, 또는 실행 기록이 한 번도 없는 「처리 레이블만 있고 실행 없음」은 처리 실패가 아니다 — 아래에서 곧 사람 실행을 만든다(화면 판정과 같은 기준: hasActiveExecutionForStage)
+          cachedStage: stage === 'dev_fail' && (assignModes.get(iid)?.mode === 'assignee' || !hasAnyExecution(project.id, iid)) ? 'dev' : stage,
           assigneeUsername: assignee ? (assignee.username || assignee.login || null) : null,
           assigneeName: assignee ? (assignee.name || assignee.username || assignee.login || null) : null,
           assigneeAvatar: assignee ? (assignee.avatar_url || null) : null,

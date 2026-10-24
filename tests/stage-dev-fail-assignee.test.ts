@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { getDb, createProject, setAssignMode, stageFromLabels, hasActiveExecution, hasActiveExecutionForStage, getProject } from '@/lib/db'
+import { getDb, createProject, setAssignMode, stageFromLabels, hasActiveExecution, hasActiveExecutionForStage, getProject, createExecution, updateExecutionStatus } from '@/lib/db'
 import { setupTestDb, teardownTestDb } from './helpers/test-db'
 
 // 운영 메타샵: 담당자(사람) 모드 작업을 시작할 때 잠깐 「처리 실패」가 떴다가 정상이 된다.
@@ -14,9 +14,17 @@ describe('담당자 모드 처리 시작 — 실행이 아직 없어도 처리 �
 
   const stage = (iid: number, active: boolean) => stageFromLabels(['ive:doing'], getProject('p1')!, { hasActiveExec: active })
 
-  it('에이전트(자동) 모드: 처리 레이블만 있고 실행이 없으면 처리 실패', () => {
+  it('에이전트(자동) 모드: 실행 기록이 한 번이라도 있었는데 지금 없으면 처리 실패', () => {
+    getDb().prepare("INSERT INTO agents (id, user_id, name, cli_name) VALUES ('a1', 'u1', 'A', 'claude')").run()
+    createExecution({ id: 'ex-f', projectId: 'p1', agentId: 'a1', issueIid: 1, issueTitle: 'T', startedAt: '2026-06-09T10:00:00Z', issueCreatedAt: '2026-06-09T09:00:00Z', status: 'assigned', logPath: '' })
+    updateExecutionStatus('ex-f', 'failed', '2026-06-09T10:10:00Z')
     expect(hasActiveExecutionForStage('p1', 1)).toBe(false)
     expect(stage(1, hasActiveExecutionForStage('p1', 1))).toBe('dev_fail')
+  })
+
+  it('실행 기록이 한 번도 없는 건(외부 도구·사람이 Git 에서 레이블만 옮긴 처리)은 처리 실패가 아니다', () => {
+    expect(hasActiveExecution('p1', 3)).toBe(false)
+    expect(stage(3, hasActiveExecutionForStage('p1', 3))).toBe('dev')
   })
 
   it('담당자 모드: 처리 레이블만 있고 실행이 아직 없어도 처리 중', () => {

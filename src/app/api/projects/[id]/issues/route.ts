@@ -1,6 +1,6 @@
 import { computeProgress } from '@/lib/stage-progress'
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAccess, getProjectAuthToken, getAssignModeMap, setAssignMode, setAssigneeAuto, setIssuePriority, normalizePriority, setPresetRoles, getPresetRoles, getActualRoleAssigneesMap, getAgent, hasActiveExecution, stageFromLabels, touchProjectActivity, getIssueIterationCountsMap, getActiveChatSessionsByProject, findIssueIidsByTitle, getIssueStageSinceMap, hasRole, markRolesInitialized, setStageWorkerNote, getStageWorkerNote, getDevFailReason, getDeployState, setIssueIntakeChannel, type RoleMode, getDb } from '@/lib/db';
+import { getProject, getProjectAccess, getProjectAuthToken, getAssignModeMap, setAssignMode, setAssigneeAuto, setIssuePriority, normalizePriority, setPresetRoles, getPresetRoles, getActualRoleAssigneesMap, getAgent, hasActiveExecution, hasAnyExecution, stageFromLabels, touchProjectActivity, getIssueIterationCountsMap, getActiveChatSessionsByProject, findIssueIidsByTitle, getIssueStageSinceMap, hasRole, markRolesInitialized, setStageWorkerNote, getStageWorkerNote, getDevFailReason, getDeployState, setIssueIntakeChannel, type RoleMode, getDb } from '@/lib/db';
 import { autoAssignAllAgents, agentRoleAvailable } from '@/lib/role-assignment';
 import { isChatAgentRunning } from '@/lib/chat-agent';
 import { triggerScan } from '@/lib/scanner';
@@ -77,8 +77,8 @@ export async function GET(
       .map((issue: any) => {
         // 레이블에서 stage 판정
         const issueLabels = issue.labels || [];
-        // 담당자 모드는 실행이 아직 없어도 처리 실패가 아니다(hasActiveExecutionForStage)
-        const activeExec = hasActiveExecution(projectId, issue.iid) || assignModeMap.get(issue.iid)?.mode === 'assignee';
+        // 담당자 모드, 그리고 실행 기록이 한 번도 없는 건(외부 도구·사람이 Git 에서 레이블만 옮긴 처리)은 실패가 아니다(hasActiveExecutionForStage)
+        const activeExec = hasActiveExecution(projectId, issue.iid) || assignModeMap.get(issue.iid)?.mode === 'assignee' || !hasAnyExecution(projectId, issue.iid);
         const stage = stageFromLabels(issueLabels, project, { hasActiveExec: activeExec })
           || (isClosed ? 'done' : 'none');
 
