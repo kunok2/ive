@@ -1,6 +1,8 @@
 import { readRepoFile, upsertRepoFile, createBranch, createMR, getDefaultBranch } from '@/lib/provider'
 import { Project } from '@/types'
 import { DEFAULT_LABELS } from '@/lib/labels'
+import { generateIveSkills } from '@/lib/ai-skills'
+import { BANNER_FILE, CLAUDE_SETTINGS_FILE, buildBannerFile, mergeBannerHook } from '@/lib/ive-banner'
 
 export const IVE_MARKER_BEGIN = '<!-- ive:begin -->'
 export const IVE_MARKER_END = '<!-- ive:end -->'
@@ -666,6 +668,38 @@ ${generateAgentStageGuide(project)}`
     }
   }
 
+  // 처리·검증·확인 스킬 — 전체가 IVE 소유 파일이라 통째로 다시 쓴다. 레이블 이름이 박혀 있어 갱신(onlyInstalled) 때는 이미 있는 것만 고친다.
+  for (const skill of generateIveSkills(project)) {
+    try {
+      const existing = await readRepoFile(project, token, skill.path)
+      if (opts.onlyInstalled && !existing) continue
+      if (existing?.content === skill.content) results.push({ path: skill.path, created: false, updated: false, unchanged: true })
+      else filesToWrite.push({ path: skill.path, content: skill.content, isNew: !existing })
+    } catch (e) {
+      results.push({ path: skill.path, created: false, updated: false, unchanged: false, error: e instanceof Error ? e.message : String(e) })
+    }
+  }
+
+  // Claude Code 시작 배너(.claude/ive-banner.json + settings.json 훅) — 레이블 이름 갱신(onlyInstalled)에는 해당 없음
+  if (!opts.onlyInstalled) {
+    try {
+      const banner = buildBannerFile(project)
+      const existingBanner = await readRepoFile(project, token, BANNER_FILE)
+      if (existingBanner?.content === banner) results.push({ path: BANNER_FILE, created: false, updated: false, unchanged: true })
+      else filesToWrite.push({ path: BANNER_FILE, content: banner, isNew: !existingBanner })
+    } catch (e) {
+      results.push({ path: BANNER_FILE, created: false, updated: false, unchanged: false, error: e instanceof Error ? e.message : String(e) })
+    }
+    try {
+      const existingSettings = await readRepoFile(project, token, CLAUDE_SETTINGS_FILE)
+      const merged = mergeBannerHook(existingSettings?.content ?? null)
+      if (existingSettings && existingSettings.content === merged) results.push({ path: CLAUDE_SETTINGS_FILE, created: false, updated: false, unchanged: true })
+      else filesToWrite.push({ path: CLAUDE_SETTINGS_FILE, content: merged, isNew: !existingSettings })
+    } catch (e) {
+      results.push({ path: CLAUDE_SETTINGS_FILE, created: false, updated: false, unchanged: false, error: e instanceof Error ? e.message : String(e) })
+    }
+  }
+
   // 변경할 파일이 없으면 바로 반환
   if (filesToWrite.length === 0) return { results, mrUrl: null }
 
@@ -697,7 +731,7 @@ ${generateAgentStageGuide(project)}`
         'IVE에서 자동 생성된 MR입니다.',
         isLabels
           ? 'IVE 프로젝트 설정에서 단계 레이블 이름을 바꿔(저장소 레이블도 함께 이름 변경됨) 가이드의 레이블 표기를 맞춥니다.'
-          : '외부 AI CLI(Claude Code 등)가 IVE 이슈 등록을 인식하도록 가이드 파일을 추가/갱신합니다.',
+          : '외부 AI CLI(Claude Code 등)가 IVE 이슈 등록을 인식하도록 가이드 파일을 추가/갱신하고, Claude Code 를 열 때 IVE 마크와 사용 예시가 보이도록 시작 배너와 처리·검증·확인 스킬(`.claude/`)을 넣습니다.',
         '',
         '### 변경 파일',
         ...committed.map(r => `- \`${r.path}\` — ${r.created ? '신규 생성' : '갱신'}`),
