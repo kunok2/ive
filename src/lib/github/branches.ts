@@ -1,3 +1,4 @@
+import { gitFetch } from "@/lib/git-fetch";
 import { Project } from "@/types";
 import { getGitHubAuthHeaders, apiUrl } from "./common";
 import { isGitHubAttachmentUrl } from "@/lib/github-attachment";
@@ -8,7 +9,7 @@ import { isGitHubAttachmentUrl } from "@/lib/github-attachment";
 export async function createGitHubBranch(project: Project, decryptedToken: string, branchName: string, ref: string): Promise<boolean> {
   const headers = getGitHubAuthHeaders(project, decryptedToken);
   // 먼저 ref의 SHA를 가져옴
-  const refRes = await fetch(apiUrl(project, `/git/ref/heads/${ref}`), { headers });
+  const refRes = await gitFetch(apiUrl(project, `/git/ref/heads/${ref}`), { headers });
   if (!refRes.ok) {
     console.warn(`[GitHub] Failed to get ref SHA for ${ref}: ${refRes.status}`);
     return false;
@@ -17,7 +18,7 @@ export async function createGitHubBranch(project: Project, decryptedToken: strin
   const sha = refData.object?.sha;
   if (!sha) return false;
 
-  const res = await fetch(apiUrl(project, '/git/refs'), {
+  const res = await gitFetch(apiUrl(project, '/git/refs'), {
     method: 'POST',
     headers: { ...headers, 'Content-Type': 'application/json' },
     body: JSON.stringify({ ref: `refs/heads/${branchName}`, sha }),
@@ -34,7 +35,7 @@ export async function createGitHubBranch(project: Project, decryptedToken: strin
  */
 export async function getGitHubDefaultBranch(project: Project, decryptedToken: string): Promise<string> {
   const headers = getGitHubAuthHeaders(project, decryptedToken);
-  const res = await fetch(apiUrl(project, ''), { headers });
+  const res = await gitFetch(apiUrl(project, ''), { headers });
   if (res.ok) {
     const data = await res.json();
     return data.default_branch || 'main';
@@ -56,7 +57,7 @@ export async function readGitHubRepoFile(
 ): Promise<{ content: string; sha: string } | null> {
   const headers = getGitHubAuthHeaders(project, decryptedToken);
   const ref = branch || (await getGitHubDefaultBranch(project, decryptedToken));
-  const res = await fetch(apiUrl(project, `/contents/${encodeURIComponent(filePath)}?ref=${encodeURIComponent(ref)}`), { headers });
+  const res = await gitFetch(apiUrl(project, `/contents/${encodeURIComponent(filePath)}?ref=${encodeURIComponent(ref)}`), { headers });
   if (res.status === 404) return null;
   if (!res.ok) {
     const text = await res.text().catch(() => '');
@@ -96,7 +97,7 @@ export async function upsertGitHubRepoFile(
   };
   if (existing) body.sha = existing.sha;
 
-  const res = await fetch(apiUrl(project, `/contents/${encodeURIComponent(filePath)}`), {
+  const res = await gitFetch(apiUrl(project, `/contents/${encodeURIComponent(filePath)}`), {
     method: 'PUT',
     headers,
     body: JSON.stringify(body),
@@ -128,7 +129,7 @@ export async function uploadGitHubFile(
   const path = `.ive-assets/${ts}-${rand}-${safe}`;
 
   const content = buffer.toString('base64');
-  const putRes = await fetch(apiUrl(project, `/contents/${path}`), {
+  const putRes = await gitFetch(apiUrl(project, `/contents/${path}`), {
     method: 'PUT',
     headers: { ...headers, 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -159,7 +160,7 @@ export async function downloadGitHubFile(
 ): Promise<{ buffer: Buffer; contentType: string } | null> {
   // 토큰은 GitHub 호스트에만 — 본문에 박힌 외부 이미지 URL 로 토큰이 새지 않게
   const headers = isGitHubAttachmentUrl(url) ? getGitHubAuthHeaders(project, decryptedToken) : {};
-  const res = await fetch(url, { headers });
+  const res = await gitFetch(url, { headers });
   if (!res.ok) {
     console.error(`[GitHub] file download failed (${res.status}) ${url}`);
     return null;
@@ -178,7 +179,7 @@ export async function isGitHubAncestorCommit(
   project: Project, decryptedToken: string, ancestor: string, descendant: string,
 ): Promise<boolean | null> {
   const headers = getGitHubAuthHeaders(project, decryptedToken);
-  const res = await fetch(apiUrl(project, `/compare/${encodeURIComponent(ancestor)}...${encodeURIComponent(descendant)}`), { headers });
+  const res = await gitFetch(apiUrl(project, `/compare/${encodeURIComponent(ancestor)}...${encodeURIComponent(descendant)}`), { headers });
   if (!res.ok) return null;
   const data = await res.json().catch(() => null);
   const status = String(data?.status || '');

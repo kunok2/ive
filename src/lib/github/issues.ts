@@ -1,3 +1,4 @@
+import { gitFetch } from "@/lib/git-fetch";
 import { Project } from "@/types";
 import { getOwnerRepo, getGitHubAuthHeaders, getGitHubApiBase, apiUrl, normalizeIssue } from "./common";
 import { closedLabelSet, type ClosedIssuePage, type ClosedIssuePageOptions } from "@/lib/closed-issues";
@@ -45,7 +46,7 @@ export async function addGitHubIssueComment(project: Project, issueNumber: numbe
   const headers = getGitHubAuthHeaders(project, decryptedToken);
 
   try {
-    await fetch(apiUrl(project, `/issues/${issueNumber}/comments`), {
+    await gitFetch(apiUrl(project, `/issues/${issueNumber}/comments`), {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ body }),
@@ -88,7 +89,7 @@ export async function fetchGitHubIssueNotes(project: Project, issueNumber: numbe
 export async function deleteGitHubIssueComment(project: Project, _issueNumber: number, commentId: number, decryptedToken: string) {
   const headers = getGitHubAuthHeaders(project, decryptedToken);
   try {
-    const res = await fetch(apiUrl(project, `/issues/comments/${commentId}`), {
+    const res = await gitFetch(apiUrl(project, `/issues/comments/${commentId}`), {
       method: 'DELETE',
       headers
     });
@@ -149,7 +150,7 @@ export async function fetchAllProjectIssues(project: Project, decryptedToken: st
     const allIssues: any[] = [];
     let page = 1;
     while (true) {
-      const res = await fetch(
+      const res = await gitFetch(
         apiUrl(project, `/issues?state=open&per_page=100&page=${page}`),
         { headers }
       );
@@ -190,7 +191,7 @@ export async function fetchClosedProjectIssuesPage(
   const iidMatch = search.match(/^#?(\d+)$/);
   if (iidMatch) {
     if (opts.page > 1) return { issues: [], total: null, hasMore: false };
-    const res = await fetch(apiUrl(project, `/issues/${iidMatch[1]}`), { headers });
+    const res = await gitFetch(apiUrl(project, `/issues/${iidMatch[1]}`), { headers });
     if (res.status === 404) return { issues: [], total: 0, hasMore: false };
     if (!res.ok) throw new Error(`닫힌 이슈 조회 실패: ${res.status} ${res.statusText}`);
     const issue = await res.json();
@@ -209,7 +210,7 @@ export async function fetchClosedProjectIssuesPage(
     const params = new URLSearchParams({
       q, sort: 'updated', order: opts.sort, per_page: String(opts.perPage), page: String(opts.page),
     });
-    const res = await fetch(`${getGitHubApiBase(project.repoUrl)}/search/issues?${params.toString()}`, { headers });
+    const res = await gitFetch(`${getGitHubApiBase(project.repoUrl)}/search/issues?${params.toString()}`, { headers });
     if (!res.ok) throw new Error(`닫힌 이슈 검색 실패: ${res.status} ${res.statusText}`);
     const data = await res.json();
     const total = typeof data.total_count === 'number' ? data.total_count : null;
@@ -221,7 +222,7 @@ export async function fetchClosedProjectIssuesPage(
     state: 'closed', sort: 'updated', direction: opts.sort, per_page: String(opts.perPage), page: String(opts.page),
   });
   if (opts.label) params.set('labels', opts.label);
-  const res = await fetch(apiUrl(project, `/issues?${params.toString()}`), { headers });
+  const res = await gitFetch(apiUrl(project, `/issues?${params.toString()}`), { headers });
   if (!res.ok) throw new Error(`닫힌 이슈 조회 실패: ${res.status} ${res.statusText}`);
   const raw = await res.json();
   const link = res.headers.get('link') || '';
@@ -241,7 +242,7 @@ export async function closeGitHubIssue(project: Project, issueNumber: number, de
 
   const headers = getGitHubAuthHeaders(project, decryptedToken);
 
-  const res = await fetch(apiUrl(project, `/issues/${issueNumber}`), {
+  const res = await gitFetch(apiUrl(project, `/issues/${issueNumber}`), {
     method: 'PATCH',
     headers: { ...headers, 'Content-Type': 'application/json' },
     body: JSON.stringify({ state: 'closed' }),
@@ -260,7 +261,7 @@ export async function reopenGitHubIssue(project: Project, issueNumber: number, d
 
   const headers = getGitHubAuthHeaders(project, decryptedToken);
 
-  const res = await fetch(apiUrl(project, `/issues/${issueNumber}`), {
+  const res = await gitFetch(apiUrl(project, `/issues/${issueNumber}`), {
     method: 'PATCH',
     headers: { ...headers, 'Content-Type': 'application/json' },
     body: JSON.stringify({ state: 'open' }),
@@ -291,7 +292,7 @@ export async function updateGitHubIssue(
     if (bodyToWrite !== undefined) {
       bodyToWrite = setIveDueMarker(bodyToWrite, updates.dueDate);
     } else {
-      const cur = await fetch(apiUrl(project, `/issues/${issueNumber}`), { headers });
+      const cur = await gitFetch(apiUrl(project, `/issues/${issueNumber}`), { headers });
       if (cur.ok) {
         const data = await cur.json().catch(() => ({} as any));
         const baseBody = (data?.body as string | undefined) ?? '';
@@ -305,7 +306,7 @@ export async function updateGitHubIssue(
   if (bodyToWrite !== undefined) payload.body = bodyToWrite;
   if (updates.assignees !== undefined) payload.assignees = updates.assignees;
 
-  const res = await fetch(apiUrl(project, `/issues/${issueNumber}`), {
+  const res = await gitFetch(apiUrl(project, `/issues/${issueNumber}`), {
     method: 'PATCH',
     headers: { ...headers, 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -355,7 +356,7 @@ export async function createGitHubIssue(
   const body: any = { title, body: bodyText, labels: validLabels };
   if (assignees && assignees.length > 0) body.assignees = assignees;
 
-  const res = await fetch(apiUrl(project, '/issues'), {
+  const res = await gitFetch(apiUrl(project, '/issues'), {
     method: 'POST',
     headers: { ...headers, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -393,7 +394,7 @@ export async function fetchGitHubIssue(project: Project, issueNumber: number, de
 
   const headers = getGitHubAuthHeaders(project, decryptedToken);
 
-  const res = await fetch(apiUrl(project, `/issues/${issueNumber}`), { headers });
+  const res = await gitFetch(apiUrl(project, `/issues/${issueNumber}`), { headers });
   if (!res.ok) {
     if (res.status === 404) return null;
     throw new Error(`GitHub API 오류: ${res.statusText}`);

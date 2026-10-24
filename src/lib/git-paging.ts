@@ -1,3 +1,4 @@
+import { gitFetch } from "@/lib/git-fetch";
 /**
  * GitHub·GitLab 목록 API를 끝 페이지까지 받는다.
  *
@@ -23,7 +24,7 @@ export async function fetchAllPages(
     const u = new URL(url)
     u.searchParams.set('per_page', String(PAGE_SIZE))
     u.searchParams.set('page', String(page))
-    const res = await fetch(u.toString(), { headers })
+    const res = await gitFetch(u.toString(), { headers })
     if (!res.ok) return { ok: false, status: res.status, statusText: res.statusText, items: [] }
     const batch = await res.json()
     if (!Array.isArray(batch)) return { ok: false, status: 500, statusText: 'Unexpected response', items: [] }

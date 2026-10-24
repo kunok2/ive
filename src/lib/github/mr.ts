@@ -1,3 +1,4 @@
+import { gitFetch } from "@/lib/git-fetch";
 import { Project, PipelineFilter } from "@/types";
 import { getOwnerRepo, getGitHubAuthHeaders, apiUrl, normalizePR } from "./common";
 import { addGitHubIssueComment } from "./issues";
@@ -19,7 +20,7 @@ export async function createGitHubPR(project: Project, decryptedToken: string, p
   const headers = getGitHubAuthHeaders(project, decryptedToken);
 
   try {
-    const res = await fetch(apiUrl(project, '/pulls'), {
+    const res = await gitFetch(apiUrl(project, '/pulls'), {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -57,7 +58,7 @@ export async function fetchGitHubPRByBranch(project: Project, decryptedToken: st
   // GitHub 은 토큰에 권한이 없는 비공개 저장소에 401/403 이 아니라 404 를 준다.
   // open 먼저, 없으면 closed (merged 포함)
   for (const state of ['open', 'closed']) {
-    const res = await fetch(apiUrl(project, `/pulls?head=${head}&state=${state}&per_page=1`), { headers });
+    const res = await gitFetch(apiUrl(project, `/pulls?head=${head}&state=${state}&per_page=1`), { headers });
     if (!res.ok) throw new Error(`GitHub PR fetch failed: ${res.status} ${res.statusText}`);
     const prs = await res.json();
     if (prs.length > 0) return normalizePR(prs[0]);
@@ -114,7 +115,7 @@ export async function fetchGitHubPRChanges(project: Project, decryptedToken: str
  */
 async function getAllowedMergeMethod(project: Project, headers: Record<string, string>): Promise<'squash' | 'merge' | 'rebase'> {
   try {
-    const res = await fetch(apiUrl(project, ''), { headers });
+    const res = await gitFetch(apiUrl(project, ''), { headers });
     if (!res.ok) return 'squash';
     const repo = await res.json();
     if (repo.allow_squash_merge !== false) return 'squash';
@@ -134,7 +135,7 @@ export async function mergeGitHubPR(project: Project, decryptedToken: string, pr
   const headers = getGitHubAuthHeaders(project, decryptedToken);
   const mergeMethod = await getAllowedMergeMethod(project, headers);
 
-  const res = await fetch(
+  const res = await gitFetch(
     apiUrl(project, `/pulls/${prNumber}/merge`),
     {
       method: 'PUT',
@@ -166,7 +167,7 @@ export async function mergeGitHubPR(project: Project, decryptedToken: string, pr
  */
 export async function closeGitHubPR(project: Project, decryptedToken: string, prNumber: number) {
   const headers = getGitHubAuthHeaders(project, decryptedToken);
-  const res = await fetch(
+  const res = await gitFetch(
     apiUrl(project, `/pulls/${prNumber}`),
     {
       method: 'PATCH',
@@ -203,7 +204,7 @@ export async function fetchOpenGitHubPRs(project: Project, decryptedToken: strin
   while (true) {
     let res: Response;
     try {
-      res = await fetch(
+      res = await gitFetch(
         apiUrl(project, `/pulls?state=open&per_page=100&page=${page}`),
         { headers }
       );
@@ -236,7 +237,7 @@ export async function fetchOpenGitHubPRs(project: Project, decryptedToken: strin
 export async function addGitHubPRLabels(project: Project, decryptedToken: string, prNumber: number, labels: string[]) {
   const headers = getGitHubAuthHeaders(project, decryptedToken);
   try {
-    await fetch(apiUrl(project, `/issues/${prNumber}/labels`), {
+    await gitFetch(apiUrl(project, `/issues/${prNumber}/labels`), {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ labels }),
@@ -258,14 +259,14 @@ export async function fetchGitHubPRCheckRuns(project: Project, decryptedToken: s
 
   try {
     // PR의 최신 커밋 SHA 조회
-    const prRes = await fetch(apiUrl(project, `/pulls/${prNumber}`), { headers });
+    const prRes = await gitFetch(apiUrl(project, `/pulls/${prNumber}`), { headers });
     if (!prRes.ok) return [];
     const prData = await prRes.json();
     const sha = prData.head?.sha;
     if (!sha) return [];
 
     // 해당 커밋의 check runs 조회
-    const checksRes = await fetch(apiUrl(project, `/commits/${sha}/check-runs`), { headers });
+    const checksRes = await gitFetch(apiUrl(project, `/commits/${sha}/check-runs`), { headers });
     if (!checksRes.ok) return [];
     const checksData = await checksRes.json();
 
@@ -297,14 +298,14 @@ export async function fetchGitHubBranchCheckRuns(project: Project, decryptedToke
   const headers = getGitHubAuthHeaders(project, decryptedToken);
 
   try {
-    const branchRes = await fetch(apiUrl(project, `/branches/${encodeURIComponent(ref)}`), { headers });
+    const branchRes = await gitFetch(apiUrl(project, `/branches/${encodeURIComponent(ref)}`), { headers });
     if (!branchRes.ok) return [];
     const branchData = await branchRes.json();
     // filter.sha — 브랜치 머리가 아니라 그 커밋의 check runs
     const sha = filter?.sha || branchData.commit?.sha;
     if (!sha) return [];
 
-    const checksRes = await fetch(apiUrl(project, `/commits/${sha}/check-runs`), { headers });
+    const checksRes = await gitFetch(apiUrl(project, `/commits/${sha}/check-runs`), { headers });
     if (!checksRes.ok) return [];
     const checksData = await checksRes.json();
 

@@ -216,6 +216,8 @@ export default function ProjectBoard({ projects, onOpenTrace, filterSlot }: { pr
     if (cols[col].some(it => it.pid === e.projectId && it.iid === e.issueIid)) continue
     // 단계 정보로는 이미 다른 칸에 있는 작업 — 잠깐의 어긋남이면 두 칸에 보이지 않게 건너뛴다(STALE_EXEC_GRACE_MS)
     if (COLS.some(c => c !== col && cols[c].some(it => it.pid === e.projectId && it.iid === e.issueIid))) {
+      // 사람이 맡은 실행은 좀비가 아니다 — Git 에서 레이블을 옮기면 스캐너가 닫을 때까지 열려 있을 뿐이라, 단계 칸에만 둔다
+      if (e.assigneeType === 'user') continue
       strayNow.add(e.id)
       const since = straySince.current.get(e.id) ?? now
       straySince.current.set(e.id, since)

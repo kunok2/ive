@@ -1,3 +1,4 @@
+import { gitFetch } from "@/lib/git-fetch";
 /**
  * Provider dispatch — GitLab/GitHub 함수를 프로젝트 provider에 따라 선택합니다.
  */
@@ -162,7 +163,7 @@ export async function fetchSingleIssue(project: Project, iid: number, token: str
   const base = gitlab.getApiBaseUrl(project.repoUrl);
   const projectPath = gitlab.getProjectPath(project.repoUrl);
   const headers = gitlab.getAuthHeaders(project, token);
-  const res = await fetch(`${base}/projects/${projectPath}/issues/${iid}`, { headers });
+  const res = await gitFetch(`${base}/projects/${projectPath}/issues/${iid}`, { headers });
   if (!res.ok) {
     if (res.status === 404) return null;
     throw new Error(`GitLab API 오류: ${res.statusText}`);

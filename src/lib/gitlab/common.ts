@@ -1,3 +1,4 @@
+import { gitFetch } from "@/lib/git-fetch";
 import { Project } from "@/types";
 
 /**
@@ -21,7 +22,7 @@ export async function refreshGitLabToken(repoUrl: string, clientId: string, clie
   const url = new URL(repoUrl);
   const tokenUrl = `${url.protocol}//${url.host}/oauth/token`;
 
-  const res = await fetch(tokenUrl, {
+  const res = await gitFetch(tokenUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

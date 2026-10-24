@@ -1,3 +1,4 @@
+import { gitFetch } from "@/lib/git-fetch";
 import { Project } from "@/types";
 import { parseIidSearch, mergeClosedIssueStreams, closedLabelSet, type ClosedIssuePage, type ClosedIssuePageOptions } from "@/lib/closed-issues";
 import { getProjectPath, getAuthHeaders, apiUrl } from "./common";
@@ -44,7 +45,7 @@ export async function addGitLabIssueComment(project: Project, issueIid: number, 
   try {
     // CLI 출력에 포함될 수 있는 제어 문자(ANSI 이스케이프, null 바이트 등) 제거
     const sanitized = body.replace(/\x00/g, '').replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').replace(/[\x01-\x08\x0b\x0c\x0e-\x1f]/g, '');
-    const res = await fetch(apiUrl(project, `/issues/${issueIid}/notes`), {
+    const res = await gitFetch(apiUrl(project, `/issues/${issueIid}/notes`), {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ body: sanitized })
@@ -95,7 +96,7 @@ export async function deleteGitLabIssueNote(project: Project, issueIid: number, 
   const headers = getAuthHeaders(project, decryptedToken, options);
 
   try {
-    const res = await fetch(apiUrl(project, `/issues/${issueIid}/notes/${noteId}`), {
+    const res = await gitFetch(apiUrl(project, `/issues/${issueIid}/notes/${noteId}`), {
       method: 'DELETE',
       headers
     });
@@ -117,7 +118,7 @@ export async function fetchGitLabIssueTimeSpentSec(project: Project, issueIid: n
   if (!getProjectPath(project.repoUrl)) return 0;
   const headers = getAuthHeaders(project, decryptedToken);
   try {
-    const res = await fetch(apiUrl(project, `/issues/${issueIid}`), { headers });
+    const res = await gitFetch(apiUrl(project, `/issues/${issueIid}`), { headers });
     if (!res.ok) return 0;
     const issue = await res.json();
     const sec = issue?.time_stats?.total_time_spent;
@@ -137,7 +138,7 @@ export async function addGitLabSpentTime(project: Project, issueIid: number, dec
   const headers = getAuthHeaders(project, decryptedToken, options);
 
   try {
-    await fetch(apiUrl(project, `/issues/${issueIid}/add_spent_time`), {
+    await gitFetch(apiUrl(project, `/issues/${issueIid}/add_spent_time`), {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ duration })
@@ -192,7 +193,7 @@ export async function fetchAllProjectIssues(project: Project, decryptedToken: st
     const allIssues: any[] = [];
     let page = 1;
     while (true) {
-      const res = await fetch(
+      const res = await gitFetch(
         apiUrl(project, `/issues?state=opened&per_page=100&page=${page}`),
         { headers }
       );
@@ -255,7 +256,7 @@ export async function fetchClosedProjectIssuesPage(
   } else if (iid != null) q.append('iids[]', String(iid));
   else if (search) q.set('search', search);
 
-  const res = await fetch(apiUrl(project, `/issues?${q.toString()}`), { headers: getAuthHeaders(project, decryptedToken) });
+  const res = await gitFetch(apiUrl(project, `/issues?${q.toString()}`), { headers: getAuthHeaders(project, decryptedToken) });
   if (!res.ok) throw new Error(`닫힌 이슈 조회 실패: ${res.status} ${res.statusText}`);
   const issues = await res.json();
   const totalHeader = res.headers.get('x-total');
@@ -276,7 +277,7 @@ export async function closeGitLabIssue(project: Project, issueIid: number, decry
 
   const headers = getAuthHeaders(project, decryptedToken);
 
-  const res = await fetch(apiUrl(project, `/issues/${issueIid}`), {
+  const res = await gitFetch(apiUrl(project, `/issues/${issueIid}`), {
     method: 'PUT',
     headers: { ...headers, 'Content-Type': 'application/json' },
     body: JSON.stringify({ state_event: 'close' }),
@@ -295,7 +296,7 @@ export async function reopenGitLabIssue(project: Project, issueIid: number, decr
 
   const headers = getAuthHeaders(project, decryptedToken);
 
-  const res = await fetch(apiUrl(project, `/issues/${issueIid}`), {
+  const res = await gitFetch(apiUrl(project, `/issues/${issueIid}`), {
     method: 'PUT',
     headers: { ...headers, 'Content-Type': 'application/json' },
     body: JSON.stringify({ state_event: 'reopen' }),
@@ -326,7 +327,7 @@ export async function updateGitLabIssue(
   // due_date: 'YYYY-MM-DD' 또는 빈 문자열(해제). GitLab은 null을 받지 않고 ''로 해제.
   if (updates.dueDate !== undefined) payload.due_date = updates.dueDate ?? '';
 
-  const res = await fetch(apiUrl(project, `/issues/${issueIid}`), {
+  const res = await gitFetch(apiUrl(project, `/issues/${issueIid}`), {
     method: 'PUT',
     headers: { ...headers, 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -359,7 +360,7 @@ export async function createGitLabIssue(
   if (assigneeIds && assigneeIds.length > 0) body.assignee_ids = assigneeIds;
   if (options?.dueDate) body.due_date = options.dueDate;
 
-  const res = await fetch(apiUrl(project, '/issues'), {
+  const res = await gitFetch(apiUrl(project, '/issues'), {
     method: 'POST',
     headers: { ...headers, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),

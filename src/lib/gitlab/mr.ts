@@ -1,3 +1,4 @@
+import { gitFetch } from "@/lib/git-fetch";
 import { Project, PipelineFilter } from "@/types";
 import { getProjectPath, getAuthHeaders, apiUrl } from "./common";
 
@@ -11,7 +12,7 @@ export async function createGitLabMR(project: Project, decryptedToken: string, p
   const headers = getAuthHeaders(project, decryptedToken);
 
   try {
-    const res = await fetch(apiUrl(project, '/merge_requests'), {
+    const res = await gitFetch(apiUrl(project, '/merge_requests'), {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -34,7 +35,7 @@ export async function getGitLabMR(project: Project, decryptedToken: string, sour
   const headers = getAuthHeaders(project, decryptedToken);
 
   try {
-    const res = await fetch(apiUrl(project, `/merge_requests?source_branch=${sourceBranch}&state=opened`), { headers });
+    const res = await gitFetch(apiUrl(project, `/merge_requests?source_branch=${sourceBranch}&state=opened`), { headers });
     if (!res.ok) throw new Error(`Fetch MR failed: ${res.statusText}`);
     const mrs = await res.json();
     return mrs.length > 0 ? mrs[0] : null;
@@ -54,7 +55,7 @@ export async function addGitLabMRNote(project: Project, decryptedToken: string, 
   const headers = getAuthHeaders(project, decryptedToken);
 
   try {
-    await fetch(apiUrl(project, `/merge_requests/${mrIid}/notes`), {
+    await gitFetch(apiUrl(project, `/merge_requests/${mrIid}/notes`), {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ body })
@@ -75,7 +76,7 @@ export async function fetchGitLabMRByBranch(project: Project, decryptedToken: st
 
   // opened 먼저 조회 — 인증 실패(401/403)는 throw 해서 withGitToken fallback 발동시킴.
   // 빈 결과(200 with [])일 때만 다음 단계(merged)로 진행.
-  let res = await fetch(
+  let res = await gitFetch(
     apiUrl(project, `/merge_requests?source_branch=${encodeURIComponent(sourceBranch)}&state=opened&per_page=1`),
     { headers }
   );
@@ -87,7 +88,7 @@ export async function fetchGitLabMRByBranch(project: Project, decryptedToken: st
     if (mrs.length > 0) return mrs[0];
   }
   // merged도 조회
-  res = await fetch(
+  res = await gitFetch(
     apiUrl(project, `/merge_requests?source_branch=${encodeURIComponent(sourceBranch)}&state=merged&per_page=1`),
     { headers }
   );
@@ -111,7 +112,7 @@ export async function fetchGitLabMRChanges(project: Project, decryptedToken: str
   const headers = getAuthHeaders(project, decryptedToken);
 
   try {
-    const res = await fetch(
+    const res = await gitFetch(
       apiUrl(project, `/merge_requests/${mrIid}/changes`),
       { headers }
     );
@@ -133,7 +134,7 @@ export async function mergeGitLabMR(project: Project, decryptedToken: string, mr
   const headers = getAuthHeaders(project, decryptedToken, options);
 
   // MR 상태 확인 — checking 중이면 대기 후 재시도
-  const checkRes = await fetch(
+  const checkRes = await gitFetch(
     apiUrl(project, `/merge_requests/${mrIid}`),
     { headers }
   );
@@ -144,7 +145,7 @@ export async function mergeGitLabMR(project: Project, decryptedToken: string, mr
     }
   }
 
-  const res = await fetch(
+  const res = await gitFetch(
     apiUrl(project, `/merge_requests/${mrIid}/merge`),
     {
       method: 'PUT',
@@ -181,7 +182,7 @@ export async function mergeGitLabMR(project: Project, decryptedToken: string, mr
  */
 export async function closeGitLabMR(project: Project, decryptedToken: string, mrIid: number, options?: { isOAuth?: boolean }) {
   const headers = getAuthHeaders(project, decryptedToken, options);
-  const res = await fetch(
+  const res = await gitFetch(
     apiUrl(project, `/merge_requests/${mrIid}`),
     {
       method: 'PUT',
@@ -208,7 +209,7 @@ export async function fetchOpenGitLabMRs(project: Project, decryptedToken: strin
   let page = 1;
 
   while (true) {
-    const res = await fetch(
+    const res = await gitFetch(
       apiUrl(project, `/merge_requests?state=opened&per_page=100&page=${page}`),
       { headers }
     );
@@ -237,7 +238,7 @@ export async function fetchOpenGitLabMRs(project: Project, decryptedToken: strin
 export async function addGitLabMRLabels(project: Project, decryptedToken: string, mrIid: number, labels: string[]) {
   const headers = getAuthHeaders(project, decryptedToken);
   try {
-    await fetch(apiUrl(project, `/merge_requests/${mrIid}`), {
+    await gitFetch(apiUrl(project, `/merge_requests/${mrIid}`), {
       method: 'PUT',
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ add_labels: labels.join(',') }),
@@ -257,7 +258,7 @@ export async function fetchGitLabMRPipelines(project: Project, decryptedToken: s
   const headers = getAuthHeaders(project, decryptedToken);
 
   try {
-    const res = await fetch(
+    const res = await gitFetch(
       apiUrl(project, `/merge_requests/${mrIid}/pipelines`),
       { headers }
     );
@@ -282,7 +283,7 @@ export async function fetchGitLabBranchPipelines(project: Project, decryptedToke
   const headers = getAuthHeaders(project, decryptedToken);
 
   try {
-    const res = await fetch(
+    const res = await gitFetch(
       apiUrl(project, `/pipelines?ref=${encodeURIComponent(ref)}&order_by=id&sort=desc&per_page=5${filter?.status ? `&status=${encodeURIComponent(filter.status)}` : ''}${filter?.sha ? `&sha=${encodeURIComponent(filter.sha)}` : ''}`),
       { headers }
     );
@@ -300,7 +301,7 @@ export async function fetchGitLabBranchPipelines(project: Project, decryptedToke
  */
 export async function fetchGitLabPipelineJobs(project: Project, decryptedToken: string, pipelineId: number): Promise<{ name: string; stage: string; status: string }[] | null> {
   try {
-    const res = await fetch(apiUrl(project, `/pipelines/${pipelineId}/jobs?per_page=100`), { headers: getAuthHeaders(project, decryptedToken) });
+    const res = await gitFetch(apiUrl(project, `/pipelines/${pipelineId}/jobs?per_page=100`), { headers: getAuthHeaders(project, decryptedToken) });
     if (!res.ok) return null;
     return ((await res.json()) as any[]).map(j => ({ name: String(j?.name), stage: String(j?.stage), status: String(j?.status) }));
   } catch { return null; }

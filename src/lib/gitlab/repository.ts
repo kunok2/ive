@@ -1,3 +1,4 @@
+import { gitFetch } from "@/lib/git-fetch";
 import { Project } from "@/types";
 import { getAuthHeaders, apiUrl } from "./common";
 
@@ -7,7 +8,7 @@ import { getAuthHeaders, apiUrl } from "./common";
 export async function createGitLabBranch(project: Project, decryptedToken: string, branchName: string, ref: string): Promise<boolean> {
   const headers = getAuthHeaders(project, decryptedToken);
   const url = apiUrl(project, '/repository/branches');
-  const res = await fetch(url, {
+  const res = await gitFetch(url, {
     method: 'POST',
     headers: { ...headers, 'Content-Type': 'application/json' },
     body: JSON.stringify({ branch: branchName, ref }),
@@ -28,7 +29,7 @@ export async function createGitLabBranch(project: Project, decryptedToken: strin
 export async function getGitLabDefaultBranch(project: Project, decryptedToken: string): Promise<string> {
   const headers = getAuthHeaders(project, decryptedToken);
   const url = apiUrl(project, '');
-  const res = await fetch(url, { headers });
+  const res = await gitFetch(url, { headers });
   if (res.ok) {
     const data = await res.json();
     return data.default_branch || 'main';
@@ -51,7 +52,7 @@ export async function readGitLabRepoFile(
   const headers = getAuthHeaders(project, decryptedToken);
   const ref = branch || (await getGitLabDefaultBranch(project, decryptedToken));
   const encoded = encodeURIComponent(filePath);
-  const res = await fetch(apiUrl(project, `/repository/files/${encoded}?ref=${encodeURIComponent(ref)}`), { headers });
+  const res = await gitFetch(apiUrl(project, `/repository/files/${encoded}?ref=${encodeURIComponent(ref)}`), { headers });
   if (res.status === 404) return null;
   if (!res.ok) {
     const text = await res.text().catch(() => '');
@@ -96,7 +97,7 @@ export async function upsertGitLabRepoFile(
   });
 
   const method = existing ? 'PUT' : 'POST';
-  const res = await fetch(apiUrl(project, `/repository/files/${encoded}`), {
+  const res = await gitFetch(apiUrl(project, `/repository/files/${encoded}`), {
     method,
     headers,
     body,
@@ -125,7 +126,7 @@ export async function uploadGitLabFile(
   const ab = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
   const blob = new Blob([ab], { type: mimeType || 'application/octet-stream' });
   form.append('file', blob, filename);
-  const res = await fetch(apiUrl(project, '/uploads'), {
+  const res = await gitFetch(apiUrl(project, '/uploads'), {
     method: 'POST',
     headers, // Content-Type는 FormData가 자동으로 boundary 포함해 지정
     body: form,
@@ -160,7 +161,7 @@ export async function downloadGitLabUpload(
   const sameOrigin = (() => {
     try { return new URL(abs).origin === new URL(project.repoUrl.replace(/\.git$/, '')).origin } catch { return false }
   })();
-  const res = await fetch(abs, { headers: sameOrigin ? getAuthHeaders(project, decryptedToken) : {} });
+  const res = await gitFetch(abs, { headers: sameOrigin ? getAuthHeaders(project, decryptedToken) : {} });
   if (!res.ok) {
     console.error(`[GitLab] upload download failed (${res.status}) ${abs}`);
     return null;
@@ -181,7 +182,7 @@ export async function isGitLabAncestorCommit(
 ): Promise<boolean | null> {
   const headers = getAuthHeaders(project, decryptedToken);
   const q = `refs[]=${encodeURIComponent(ancestor)}&refs[]=${encodeURIComponent(descendant)}`;
-  const res = await fetch(apiUrl(project, `/repository/merge_base?${q}`), { headers });
+  const res = await gitFetch(apiUrl(project, `/repository/merge_base?${q}`), { headers });
   if (!res.ok) return null;
   const data = await res.json().catch(() => null);
   const base = String(data?.id || '');

@@ -1,3 +1,4 @@
+import { gitFetch } from "@/lib/git-fetch";
 import { Project } from "@/types";
 import { getOwnerRepo, getGitHubAuthHeaders, apiUrl } from "./common";
 import { fetchAllPages } from "@/lib/git-paging";
@@ -38,7 +39,7 @@ export async function ensureGitHubLabels(project: Project, decryptedToken: strin
       if (!existing) {
         // 신규 생성
         console.log(`[GitHub] Creating label: ${label.name} for project: ${project.name}`);
-        await fetch(apiUrl(project, '/labels'), {
+        await gitFetch(apiUrl(project, '/labels'), {
           method: 'POST',
           headers: { ...headers, 'Content-Type': 'application/json' },
           body: JSON.stringify(label),
@@ -46,7 +47,7 @@ export async function ensureGitHubLabels(project: Project, decryptedToken: strin
       } else if ((existing.description || '') !== label.description) {
         // 기존 레이블의 설명이 비어있거나 다르면 덮어씀 (색상은 사용자 커스텀을 존중해 건드리지 않음)
         console.log(`[GitHub] Updating label description: ${label.name}`);
-        await fetch(apiUrl(project, `/labels/${encodeURIComponent(label.name)}`), {
+        await gitFetch(apiUrl(project, `/labels/${encodeURIComponent(label.name)}`), {
           method: 'PATCH',
           headers: { ...headers, 'Content-Type': 'application/json' },
           body: JSON.stringify({ description: label.description }),
@@ -61,7 +62,7 @@ export async function ensureGitHubLabels(project: Project, decryptedToken: strin
 
 export async function addGitHubIssueLabels(project: Project, issueNumber: number, decryptedToken: string, labels: string[]) {
   const headers = getGitHubAuthHeaders(project, decryptedToken);
-  const res = await fetch(apiUrl(project, `/issues/${issueNumber}/labels`), {
+  const res = await gitFetch(apiUrl(project, `/issues/${issueNumber}/labels`), {
     method: 'POST',
     headers: { ...headers, 'Content-Type': 'application/json' },
     body: JSON.stringify({ labels }),
@@ -71,7 +72,7 @@ export async function addGitHubIssueLabels(project: Project, issueNumber: number
 
 export async function removeGitHubIssueLabels(project: Project, issueNumber: number, decryptedToken: string, label: string) {
   const headers = getGitHubAuthHeaders(project, decryptedToken);
-  const res = await fetch(apiUrl(project, `/issues/${issueNumber}/labels/${encodeURIComponent(label)}`), {
+  const res = await gitFetch(apiUrl(project, `/issues/${issueNumber}/labels/${encodeURIComponent(label)}`), {
     method: 'DELETE',
     headers,
   });
@@ -158,7 +159,7 @@ export async function renameGitHubLabel(project: Project, decryptedToken: string
   if (newL && !sameIgnoringCase) {
     throw new Error(`저장소에 「${oldL.name}」과 「${newL.name}」 레이블이 둘 다 있어 이름을 바꿀 수 없습니다 — 하나를 정리한 뒤 다시 저장하세요.`);
   }
-  const res = await fetch(apiUrl(project, `/labels/${encodeURIComponent(oldL.name)}`), {
+  const res = await gitFetch(apiUrl(project, `/labels/${encodeURIComponent(oldL.name)}`), {
     method: 'PATCH',
     headers: { ...headers, 'Content-Type': 'application/json' },
     body: JSON.stringify({ new_name: to }),
