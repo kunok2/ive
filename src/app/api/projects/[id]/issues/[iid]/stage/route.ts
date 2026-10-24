@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb, getProject, getProjectAuthToken, getProjectAccess, hasActiveExecution, getRunningAgentWork, stageFromLabels, markIssueVerifyStarted, markIssueVerified, markIssueVerifyRejected, markIssueConfirmed, markIssueConfirmStarted, resetIssueCycleMarkers, resetIssueScheduledAt, recordIssueScheduledAt, touchProjectActivity, assignIssueAtomically, getAssignModeMap, getIssueScheduledAt, isIssueAssignee, isIssueAuthor, upsertIssueStageSnapshot, updateExecutionStatus, getVerifyWaitingCount, updateProjectLastChecked, getPresetRoles, recordStageEvent, markHumanStageEnd } from '@/lib/db';
+import { getDb, getProject, getProjectAuthToken, getProjectAccess, hasActiveExecution, hasActiveExecutionForStage, getRunningAgentWork, stageFromLabels, markIssueVerifyStarted, markIssueVerified, markIssueVerifyRejected, markIssueConfirmed, markIssueConfirmStarted, resetIssueCycleMarkers, resetIssueScheduledAt, recordIssueScheduledAt, touchProjectActivity, assignIssueAtomically, getAssignModeMap, getIssueScheduledAt, isIssueAssignee, isIssueAuthor, upsertIssueStageSnapshot, updateExecutionStatus, getVerifyWaitingCount, updateProjectLastChecked, getPresetRoles, recordStageEvent, markHumanStageEnd } from '@/lib/db';
 import { userActor } from '@/lib/event-actor';
 import { execKind } from '@/lib/active-work';
 import { triggerScan } from '@/lib/scanner';
@@ -14,6 +14,7 @@ import { TRANSITIONS, staleStageLabelsToRemove } from '@/lib/stage-transitions';
 import fs from 'fs';
 import path from 'path';
 import { DEFAULT_LABELS } from '@/lib/labels';
+import { beginStageChange, endStageChange, stageChangeKey } from '@/lib/stage-inflight';
 
 // 단계 전이 표는 src/lib/stage-transitions.ts 로 분리됨 (테스트 가능).
 // IVE-S 스케줄 → IVE-D 개발 → IVE-W 검증대기 → IVE-V 검증 → IVE-P 확인대기 → IVE-C 확인 → IVE-E 완료
@@ -21,7 +22,7 @@ import { DEFAULT_LABELS } from '@/lib/labels';
 // 같은 작업의 단계 변경이 동시에 두 번 들어오는 것을 막는다(버튼 두 곳을 거의 동시에 누름·더블클릭).
 // 둘 다 Git 단계 확인을 통과하면 두 번째가 첫 번째의 검증자 기록을 닫고 새로 만들며 사건도 두 번 남았다.
 // 서버는 한 프로세스라 메모리 잠금으로 충분하다. 검사만 하는 dryRun 은 잠그지 않는다.
-const stageChangeInFlight = new Set<string>();
+// 스캐너도 이 표시를 본다(stage-inflight.ts) — 실행을 먼저 만들고 레이블을 바꾸는 사이를 「레이블 되돌림」으로 오해하지 않게.
 
 export async function POST(
   req: NextRequest,
@@ -69,12 +70,11 @@ export async function POST(
     );
   }
 
-  const lockKey = `${projectId}:${iid}`;
+  const lockKey = stageChangeKey(projectId, iid);
   if (!dryRun) {
-    if (stageChangeInFlight.has(lockKey)) {
+    if (!beginStageChange(lockKey)) {
       return NextResponse.json({ error: '이 작업의 단계 변경을 처리하는 중입니다. 잠시 후 다시 시도해 주세요.' }, { status: 409 });
     }
-    stageChangeInFlight.add(lockKey);
   }
 
   try {
@@ -97,7 +97,7 @@ export async function POST(
       );
     }
     const currentLabels: string[] = currentIssue?.labels || [];
-    const hasActive = hasActiveExecution(projectId, Number(iid), { ignoreChat: true }); // 화면(GET 상세)과 같은 기준
+    const hasActive = hasActiveExecutionForStage(projectId, Number(iid), { ignoreChat: true }); // 화면(GET 상세)과 같은 기준
     // stageFromLabels: IVE 라벨만 있고 단계 라벨이 없으면 null → 클라이언트의 'none' 으로 정규화.
     const actualStage = stageFromLabels(currentLabels, project, { hasActiveExec: hasActive }) ?? 'none';
     if (actualStage !== stage) {
@@ -491,6 +491,6 @@ export async function POST(
       { status: 500 }
     );
   } finally {
-    if (!dryRun) stageChangeInFlight.delete(lockKey);
+    if (!dryRun) endStageChange(lockKey);
   }
 }

@@ -77,7 +77,8 @@ export async function GET(
       .map((issue: any) => {
         // 레이블에서 stage 판정
         const issueLabels = issue.labels || [];
-        const activeExec = hasActiveExecution(projectId, issue.iid);
+        // 담당자 모드는 실행이 아직 없어도 처리 실패가 아니다(hasActiveExecutionForStage)
+        const activeExec = hasActiveExecution(projectId, issue.iid) || assignModeMap.get(issue.iid)?.mode === 'assignee';
         const stage = stageFromLabels(issueLabels, project, { hasActiveExec: activeExec })
           || (isClosed ? 'done' : 'none');
 

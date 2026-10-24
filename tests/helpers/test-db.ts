@@ -181,6 +181,8 @@ export function setupTestDb(): Database.Database {
       preferred_agent_id TEXT DEFAULT NULL,
       scheduled_at TEXT DEFAULT NULL,
       assign_mode TEXT DEFAULT 'auto',
+      assignee_auto INTEGER DEFAULT 0,
+      priority INTEGER DEFAULT 0,
       assignee_username TEXT DEFAULT NULL,
       assignee_name TEXT DEFAULT NULL,
       assignee_avatar TEXT DEFAULT NULL,

@@ -1,3 +1,4 @@
+import { stageChangedSince, stageChangeKey } from "../stage-inflight";
 import { getLogger } from "../logger";
 const slog = getLogger("Scanner");
 import {
@@ -313,6 +314,7 @@ async function scanProject(project: Project, force: boolean = false) {
     }
 
     slog.info(`${force ? 'FORCED ' : ''}Scanning project: ${project.name}`);
+    const scanStartedAt = Date.now(); // 이슈를 읽기 전 — 이 뒤에 끝난 단계 변경은 읽은 레이블에 반영돼 있지 않을 수 있다
 
     let decryptedToken = decrypt(project.accessToken);
 
@@ -668,7 +670,10 @@ async function scanProject(project: Project, force: boolean = false) {
       }
       // 사람 작업 실패 감지: IVE-D가 제거되어 dev_fail, waiting, 또는 레이블 없음(null) 상태가 된 경우
       // ※ verifying 단계는 검증 중이므로 실패 처리하지 않음
-      if (activeExec && stage !== 'verifying' && (stage === 'dev_fail' || stage === 'waiting' || stage === null)) {
+      // ※ 화면에서 단계를 옮기는 중이거나 이 스캔이 이슈를 읽은 뒤에 끝난 변경이면 건너뛴다 — 실행은 레이블보다 먼저 만들어져,
+      //   읽어 온 옛 레이블(대기)과 방금 만든 실행이 「레이블 되돌림」으로 보여 시작하는 실행을 실패로 닫았다(처리 시작 때 잠깐 처리 실패).
+      if (activeExec && stage !== 'verifying' && (stage === 'dev_fail' || stage === 'waiting' || stage === null)
+        && !stageChangedSince(stageChangeKey(project.id, iid), scanStartedAt)) {
         const userExec = getAssignedUserExecution(project.id, iid);
         if (userExec) {
           updateExecutionStatus(userExec.id, 'failed', new Date().toISOString());

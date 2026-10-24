@@ -1,7 +1,7 @@
 import { TaskExecution, TaskStatus } from '@/types'
 import { getDb, inProjectsSql } from './connection'
 import { getKSTTodayStartISO, getKSTYesterdayStartISO } from '../date-utils'
-import { getIssueAssigneeUsername } from './issues'
+import { getIssueAssigneeUsername, getAssignMode } from './issues'
 import type { IssueStage } from './issues'
 import { getLogger } from '../logger'
 
@@ -430,6 +430,16 @@ export function hasActiveExecution(projectId: string, issueIid: number, opts: { 
     `SELECT id FROM task_executions WHERE project_id = ? AND issue_iid = ? AND status IN ('running', 'assigned')${opts.ignoreChat ? " AND id NOT LIKE 'exec-chat-%'" : ''} LIMIT 1`
   ).get(projectId, issueIid)
   return !!r
+}
+
+/**
+ * 화면의 단계 판정용 — 「처리(IVE-D) 레이블이 있는데 진행 중 실행이 없음」(처리 실패)을 가를 때 쓴다.
+ * 담당자(사람) 모드는 그 상태가 실패가 아니다. 스캐너가 레이블만 있고 실행이 없는 담당자 모드 작업에 곧바로 사람 실행을 만들어 주므로
+ * (Git 에서 레이블을 직접 옮긴 경우 다음 스캔까지), 실행이 아직 없는 그 사이를 「처리 실패」로 보이면 시작할 때마다 잠깐 실패가 떴다.
+ * 에이전트가 맡은 작업은 실행 없이 처리 레이블만 있으면 진짜 실패라 그대로 둔다.
+ */
+export function hasActiveExecutionForStage(projectId: string, issueIid: number, opts: { ignoreChat?: boolean } = {}): boolean {
+  return hasActiveExecution(projectId, issueIid, opts) || getAssignMode(projectId, issueIid).mode === 'assignee'
 }
 
 /**
