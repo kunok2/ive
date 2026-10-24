@@ -160,7 +160,7 @@ export default function AgentsTab({ onAdd }: { onAdd?: () => void }) {
         ) : (
           <>
             {/* 위쪽 순서·모양은 보고서와 같다: 프로젝트 필터 → 종류(전체·처리·검증·확인) */}
-            <div className="desk:max-w-lg desk:mx-auto">
+            <div className="desk:flex desk:items-start desk:gap-2 desk:max-w-3xl desk:mx-auto">
               <ProjectFilter options={projectOptions} selected={activeIds} onChange={changeProjects} tr={trFilter} />
               <SegmentTabs<FilterKey> dataTour="agents-filter" value={filter} onChange={changeFilter} items={[
                 { key: 'all', label: t('filterAll'), count: allCount },

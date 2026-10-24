@@ -21,6 +21,8 @@ import {
   resetStuckExecutions,
   hasActiveExecution,
   hasAnyExecution,
+  hasOnlyHumanHistory,
+  setAssignMode,
   countActiveExecutionsByAgent,
   getLastCompletedAt,
   stageFromLabels,
@@ -984,6 +986,15 @@ async function processIssues(project: Project, issues: any[], decryptedToken: st
     // 이 상태는 "사람이 직접 처리 중"이므로 진짜 대기가 아님
     if (assignInfo.mode === 'assignee') {
       slog.info(`[WAIT] Issue #${issue.iid} — assignee 모드, 담당자가 IVE-D 레이블 부여 대기`);
+      recordWaitIfChanged(project.id, issue.iid, 'assignee_mode');
+      continue;
+    }
+
+    // ── 사람 손으로만 돌던 건 ── 지정(에이전트·담당자)이 없는 채 반려로 대기에 돌아온 이슈라도, 에이전트가 처리한 적 없이
+    // 사람이 처리·검증·확인해 온 건이면 사람이 이어 맡는다. 에이전트를 붙이면 사람 세션과 겹쳐 곧바로 처리 실패가 난다(운영 메타샵 2325).
+    if (assignInfo.mode === 'auto' && hasOnlyHumanHistory(project.id, issue.iid)) {
+      setAssignMode(project.id, issue.iid, 'assignee');
+      slog.info(`[WAIT] Issue #${issue.iid} — 에이전트 처리 이력 없이 사람이 처리해 온 건, 담당자 모드로 고정`);
       recordWaitIfChanged(project.id, issue.iid, 'assignee_mode');
       continue;
     }

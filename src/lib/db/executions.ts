@@ -417,6 +417,24 @@ export function resetIssueScheduledAt(projectId: string, issueIid: number) {
   ).run(now, projectId, issueIid)
 }
 
+/**
+ * 이 이슈가 지금까지 사람 손으로만 돌았는가 — 사람 실행 기록(처리·검증·확인)은 있고, 에이전트가 처리한 기록은 한 번도 없다.
+ * 검증·확인·재현 기록과 AI 채팅은 처리 이력이 아니라 제외한다(에이전트가 검증한 건을 에이전트 처리로 보지 않는다).
+ * 반려로 대기(S)에 돌아온 사람 담당 건에 스캐너가 에이전트를 붙이지 않게 하는 DB 기준이다.
+ */
+export function hasOnlyHumanHistory(projectId: string, issueIid: number): boolean {
+  const db = getDb()
+  const human = db.prepare(
+    "SELECT 1 FROM task_executions WHERE project_id = ? AND issue_iid = ? AND assignee_type = 'user' AND id NOT LIKE 'exec-chat-%' LIMIT 1"
+  ).get(projectId, issueIid)
+  if (!human) return false
+  const agentProcessed = db.prepare(
+    "SELECT 1 FROM task_executions WHERE project_id = ? AND issue_iid = ? AND assignee_type = 'agent' " +
+    "AND id NOT LIKE 'ex-verify-%' AND id NOT LIKE 'ex-confirm-%' AND id NOT LIKE 'ex-reproduce-%' AND id NOT LIKE 'exec-chat-%' LIMIT 1"
+  ).get(projectId, issueIid)
+  return !agentProcessed
+}
+
 export function hasAnyExecution(projectId: string, issueIid: number): boolean {
   const r = getDb().prepare(
     "SELECT id FROM task_executions WHERE project_id = ? AND issue_iid = ? LIMIT 1"

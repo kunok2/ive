@@ -156,12 +156,14 @@ export default function ReportsTab() {
 
   return (
     <PullToRefresh onRefresh={() => fetchReport()} className="w-full flex-1 flex flex-col max-w-lg desk:max-w-[1360px] mx-auto px-4 desk:px-6 overflow-hidden">
-      <div className="shrink-0 pt-4 pb-2 w-full desk:max-w-lg desk:mx-auto" data-tour="reports-period">
+      <div className="shrink-0 pt-4 pb-2 w-full desk:max-w-3xl desk:mx-auto" data-tour="reports-period">
         {/* 위쪽 순서는 개발자 탭과 같다: 프로젝트 필터 → 종류(주간·월간·연간) → 기간 이동 */}
-        <ProjectFilter options={projectOptions} selected={activeIds} onChange={changeProjects} tr={tr} />
-        <SegmentTabs<ReportType> value={type} onChange={setType}
-          items={(['weekly', 'monthly', 'yearly'] as const).map(rt => ({ key: rt, label: tr(`type.${rt}`) }))} />
-        <div className="flex items-center justify-between">
+        <div className="desk:flex desk:items-start desk:gap-2">
+          <ProjectFilter options={projectOptions} selected={activeIds} onChange={changeProjects} tr={tr} />
+          <SegmentTabs<ReportType> value={type} onChange={setType}
+            items={(['weekly', 'monthly', 'yearly'] as const).map(rt => ({ key: rt, label: tr(`type.${rt}`) }))} />
+        </div>
+        <div className="flex items-center justify-between desk:max-w-lg desk:mx-auto">
           <button aria-label={tr('prevPeriod')} onClick={() => setDate(previousPeriod(shown).start)} className="w-11 h-11 flex items-center justify-center rounded-lg text-ive-text-secondary hover:text-ive-text"><i className="fa-solid fa-chevron-left" /></button>
           <div className="flex items-center gap-2">
             <span className="text-sm font-bold text-ive-text">{periodLabel()}</span>

@@ -49,7 +49,7 @@ export default function ProjectFilter({ options, selected, onChange, tr }: {
   const toggle = (id: string) => onChange(selected.includes(id) ? selected.filter(x => x !== id) : [...selected, id])
 
   return (
-    <div ref={ref} className="relative mb-2">
+    <div ref={ref} className="relative mb-2 desk:w-64 desk:shrink-0">
       <button
         type="button"
         aria-label={tr('projectFilterLabel')}

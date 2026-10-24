@@ -20,7 +20,7 @@ export default function SegmentTabs<K extends string>({ items, value, onChange, 
   dataTour?: string
 }) {
   return (
-    <div data-tour={dataTour} className="flex gap-1 mb-2" role="tablist">
+    <div data-tour={dataTour} className="flex gap-1 mb-2 desk:flex-1 desk:min-w-0" role="tablist">
       {items.map(it => {
         const on = it.key === value
         return (

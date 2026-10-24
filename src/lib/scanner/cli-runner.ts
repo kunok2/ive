@@ -23,6 +23,7 @@ import {
   formatStreamEventMarkdown,
   formatToolInput,
 } from "./formatters";
+import { maskSecrets } from "../secret-mask";
 import { stripBenignOpencodeStderr, stripBenignAgyStderr, stripBenignClaudeStderr, detectRateLimit } from "./cli-noise";
 
 // resolveCliPath는 cli-invocation으로 이동. 기존 import 경로(execute.ts) 호환을 위해 re-export.
@@ -165,6 +166,8 @@ export async function runCliProcess(
     let assistantTurnCount = 0;
     // opencode 오류 이벤트 메시지(있으면 종료 시 표면화)
     let ocErrorMsg = '';
+    // Claude Code 가 result 이벤트(is_error)로 stdout 에 남기는 오류 사유 — stderr 가 비어도 원인이 보이게 종료 때 표면화한다.
+    let claudeErrorMsg = '';
     // 사용량 한도(rate limit/quota) 의심 줄. 실패 종료 시 원인으로 표면화한다.
     let rateLimitHint = '';
     // agy: agent_response 가 text_delta 로 여러 번 쪼개져 오므로, 연속 구간을 1턴으로 묶기 위한 플래그
@@ -284,6 +287,14 @@ export async function runCliProcess(
         // 턴 (토큰/비용은 accumulateCliUsage)
         if (event.type === 'result') {
           totalTurns = Math.max(totalTurns, Number(event.num_turns ?? event.numTurns ?? 0));
+          if (event.is_error === true || (typeof event.subtype === 'string' && event.subtype.startsWith('error'))) {
+            const raw = typeof event.result === 'string' && event.result.trim()
+              ? event.result
+              : Array.isArray(event.errors) ? event.errors.map(String).join(' / ') : String(event.subtype ?? '');
+            claudeErrorMsg = maskSecrets(raw.trim()).slice(0, 600);
+            const rl = detectRateLimit(raw);
+            if (rl) rateLimitHint = rl;
+          }
         }
       }
     };
@@ -373,6 +384,9 @@ export async function runCliProcess(
       }
       if (ocErrorMsg) {
         detail.push(`OpenCode 오류: ${ocErrorMsg}`);
+      }
+      if (claudeErrorMsg) {
+        detail.push(`에이전트 오류: ${claudeErrorMsg}`);
       }
       detail.push(`에이전트 프로그램이 비정상 종료했습니다 (종료 코드 ${code}${signal ? `, 신호 ${signal}` : ''})`);
       // 사용자 중지(killExecution)는 SIGKILL 을 보내기 전에 상태를 failed 로 적는다 — 러너는 아직 안 적었다.
