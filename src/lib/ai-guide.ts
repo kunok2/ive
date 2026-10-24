@@ -2,7 +2,7 @@ import { readRepoFile, upsertRepoFile, createBranch, createMR, getDefaultBranch 
 import { Project } from '@/types'
 import { DEFAULT_LABELS } from '@/lib/labels'
 import { generateIveSkills } from '@/lib/ai-skills'
-import { BANNER_FILE, BANNER_CHAT_FILE, CLAUDE_SETTINGS_FILE, buildBannerFile, buildBannerChatFile, mergeBannerHook } from '@/lib/ive-banner'
+import { BANNER_FILE, BANNER_CHAT_FILE, CLAUDE_SETTINGS_FILE, buildBannerFile, buildBannerChatFile, buildBannerGuide, mergeBannerHook } from '@/lib/ive-banner'
 
 export const IVE_MARKER_BEGIN = '<!-- ive:begin -->'
 export const IVE_MARKER_END = '<!-- ive:end -->'
@@ -637,6 +637,8 @@ export async function installAiGuide(
   opts: { onlyInstalled?: boolean; reason?: 'install' | 'labels' } = {},
 ): Promise<{ results: GuideFileResult[]; mrUrl: string | null }> {
   const iveSection = `${generateIveGuide(project)}
+
+${buildBannerGuide(project)}
 
 ${generateStageLabelGuide(project)}
 

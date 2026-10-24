@@ -67,6 +67,32 @@ export function buildBannerChatFile(project: Pick<Project, 'name'>): string {
   return JSON.stringify({ hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext } }, null, 2) + '\n'
 }
 
+/**
+ * 시작 훅이 없는 도구(Codex·agy·OpenCode)용 — 가이드 문서(AGENTS.md)에 "처음이면 배너를 보여 달라"고 적는다.
+ * AI 가 지시를 따르는 방식이라 훅만큼 확실하지는 않다. 봤다는 표시는 훅과 같은 파일을 써서, 어느 도구에서든 한 번만 보이게 한다.
+ */
+export function buildBannerGuide(project: Pick<Project, 'name'>): string {
+  const check = `m="$HOME/.claude/ive-banner-seen-$(printf %s "$(git rev-parse --show-toplevel)" | cksum | cut -d' ' -f1)"; if [ -e "$m" ]; then echo seen; else mkdir -p "$HOME/.claude"; : > "$m"; echo show; fi`
+  return `## IVE 시작 안내 (Claude Code 가 아닌 도구)
+
+> Claude Code 는 시작 훅이 대신 보여 주므로 이 절을 건너뜁니다. Codex·agy·OpenCode 등 그 밖의 도구만 따릅니다.
+
+세션의 첫 응답을 하기 전에 아래 명령을 한 번 실행하세요.
+
+\`\`\`bash
+${check}
+\`\`\`
+
+- \`seen\` 이 나오면 아무 말 없이 평소처럼 요청에 답합니다(이 개발자는 이미 봤습니다).
+- \`show\` 가 나오면 첫 응답 맨 앞에 아래 안내를 코드 블록 그대로 한 번 보여 주고, 그 다음 줄부터 요청에 답합니다.
+- 명령을 실행할 수 없으면 안내를 건너뜁니다. 이 안내 때문에 요청 처리가 늦어지거나 막히면 안 됩니다.
+
+\`\`\`
+${buildBannerText(project).replace(/^\n+|\s+$/g, '')}
+\`\`\`
+`
+}
+
 type HookEntry = { matcher?: string; hooks?: { type?: string; command?: string }[] }
 
 /**

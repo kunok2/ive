@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildBannerFile, buildBannerChatFile, mergeBannerHook } from '@/lib/ive-banner'
+import { buildBannerGuide, buildBannerFile, buildBannerChatFile, mergeBannerHook } from '@/lib/ive-banner'
 
 describe('IVE 시작 배너', () => {
   it('배너 파일은 systemMessage JSON 이고 로고·사용 예시·프로젝트명을 담는다', () => {
