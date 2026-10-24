@@ -34,6 +34,10 @@ describe('IVE 스킬 생성', () => {
     expect(sk[0].content).toContain('remove_labels=ive:todo')
     expect(sk[1].content).toContain('`staging`')
     expect(sk[2].content).toContain('add_labels=ive:done')
+    expect(sk[0].content).toContain('## 처리 루틴')
+    expect(sk[0].content).toContain('/loop 5m')
+    expect(sk[1].content).toContain('## 검증 루틴')
+    expect(sk[2].content).not.toContain('/loop')
   })
   it('GitHub 은 gh 명령을 쓰고 목표 브랜치 미등록이면 묻게 한다', () => {
     const sk = generateIveSkills(gh)
