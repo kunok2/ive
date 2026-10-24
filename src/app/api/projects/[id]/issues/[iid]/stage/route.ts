@@ -133,41 +133,15 @@ export async function POST(
       return NextResponse.json({ success: true, stage: 'waiting' });
     }
 
-    // 레이블 전환 수행 + 안전망: 전이 결과로 단계 라벨이 정확히 한 개만 남도록
-    // 이전 단계의 라벨이 의도치 않게 잔류하면 stage 가 잘못 판정되므로 항상 정리.
-    const explicitRemove = transition.removeLabels(project);
-    const labelsToAdd = transition.addLabels(project);
-    const keepLabel = labelsToAdd[0] || ''; // 전이 후 유지할 단일 단계 라벨
-    const sanitizedRemove = keepLabel
-      ? Array.from(new Set([...explicitRemove, ...staleStageLabelsToRemove(project, keepLabel)]))
-      : explicitRemove;
-
-    // 한 번에 바꾼다 — 떼고 붙이는 사이에 스캐너가 「단계 없음」을 읽지 않게(swapIssueLabels)
-    await swapIssueLabels(project, Number(iid), token, labelsToAdd, sanitizedRemove);
-
-    // 닫힌 이슈를 종료 라벨(IVE-E) 외 단계로 옮기면 다시 연다 — 닫힌 채로는 스캐너가 보지 않아 다음 단계가 돌지 않는다.
-    //   - 스케줄(IVE-S)로 되돌리는 retry/cancel, done → 확인(IVE-C)으로 되돌리는 reopen
-    //   - 단계 도중(검증·확인)에 MR 머지의 닫기 키워드로 Git 이 닫은 이슈를 사람이 다음 단계로 이어 가는 경우
-    const labelEnd = project.labelEnd || DEFAULT_LABELS.end;
-    const isLeavingDone = sanitizedRemove.includes(labelEnd) && !labelsToAdd.includes(labelEnd);
-    const isBackToSchedule = labelsToAdd.some(l => l === (project.labelSchedule || DEFAULT_LABELS.schedule));
-    const toOpenStage = isLeavingDone || (!!keepLabel && keepLabel !== labelEnd);
-    // 완료를 떠나면 새 사이클 — 이전 사이클의 확인 마커를 비운다 (보고서 완료 시각이 옛 날짜에 고정되지 않게).
-    if (isLeavingDone) resetIssueCycleMarkers(projectId, Number(iid));
-    if (toOpenStage && currentIssue?.state === 'closed') {
-      try {
-        await reopenIssue(project, Number(iid), token);
-      } catch (err) {
-        console.error(`[Stage] 이슈 #${iid} 다시 열기 실패:`, err);
-      }
-    }
-
-    // 담당자 모드 개발 시작: execution 생성 + 브랜치 생성
+    // 담당자 모드 처리 시작: 실행 기록을 레이블(IVE-D)보다 먼저 만든다.
+    // 레이블이 먼저 붙고 실행이 늦게 생기면 그 사이(Git 호출 시간)에 「처리 중인데 진행 중 실행이 없음」으로 읽혀 처리 실패로 잠깐 보인다.
+    let humanDevExecId: string | null = null;
+    let humanDevUserName: string | undefined;
     if (action === 'start_dev') {
       const assignModeMap = getAssignModeMap(projectId);
       const assignInfo = assignModeMap.get(Number(iid));
       if (assignInfo?.mode === 'assignee') {
-        const issue = await fetchSingleIssue(project, Number(iid), token);
+        const issue = currentIssue;
         const assignees = issue?.assignees || [];
         const assignee = assignees[0];
         const executionId = `ex-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
@@ -194,21 +168,58 @@ export async function POST(
           userAvatar: assignee?.avatar_url || user.avatar,
         };
 
-        assignIssueAtomically(projectId, Number(iid), 'dev', execution, { ignoreChat: true });
-
-        // 브랜치 생성
-        const branchName = `dev-${iid}`;
-        try {
-          const defaultBranch = await getDefaultBranch(project, token);
-          await createBranch(project, token, branchName, defaultBranch);
-        } catch (e) { console.warn(`[Stage] Failed to create branch for #${iid}:`, e); }
-
-        // 브랜치 안내 코멘트
-        try {
-          const commentBody = `<!-- ive-bot -->\n## 🌿 작업 브랜치 생성됨\n\n- **브랜치:** \`${branchName}\`\n- **담당자:** ${execution.userName}`;
-          await addIssueComment(project, Number(iid), token, commentBody);
-        } catch (e) { console.warn(`[Stage] Failed to add branch comment on #${iid}:`, e); }
+        if (assignIssueAtomically(projectId, Number(iid), 'dev', execution, { ignoreChat: true })) { humanDevExecId = executionId; humanDevUserName = execution.userName ?? undefined; }
       }
+    }
+
+
+    // 레이블 전환 수행 + 안전망: 전이 결과로 단계 라벨이 정확히 한 개만 남도록
+    // 이전 단계의 라벨이 의도치 않게 잔류하면 stage 가 잘못 판정되므로 항상 정리.
+    const explicitRemove = transition.removeLabels(project);
+    const labelsToAdd = transition.addLabels(project);
+    const keepLabel = labelsToAdd[0] || ''; // 전이 후 유지할 단일 단계 라벨
+    const sanitizedRemove = keepLabel
+      ? Array.from(new Set([...explicitRemove, ...staleStageLabelsToRemove(project, keepLabel)]))
+      : explicitRemove;
+
+    // 한 번에 바꾼다 — 떼고 붙이는 사이에 스캐너가 「단계 없음」을 읽지 않게(swapIssueLabels)
+    try {
+      await swapIssueLabels(project, Number(iid), token, labelsToAdd, sanitizedRemove);
+    } catch (err) {
+      // 레이블이 안 바뀌었는데 실행만 남으면 단계와 어긋난다 — 방금 만든 처리 실행을 닫는다
+      if (humanDevExecId) updateExecutionStatus(humanDevExecId, 'failed', new Date().toISOString());
+      throw err;
+    }
+
+    // 닫힌 이슈를 종료 라벨(IVE-E) 외 단계로 옮기면 다시 연다 — 닫힌 채로는 스캐너가 보지 않아 다음 단계가 돌지 않는다.
+    //   - 스케줄(IVE-S)로 되돌리는 retry/cancel, done → 확인(IVE-C)으로 되돌리는 reopen
+    //   - 단계 도중(검증·확인)에 MR 머지의 닫기 키워드로 Git 이 닫은 이슈를 사람이 다음 단계로 이어 가는 경우
+    const labelEnd = project.labelEnd || DEFAULT_LABELS.end;
+    const isLeavingDone = sanitizedRemove.includes(labelEnd) && !labelsToAdd.includes(labelEnd);
+    const isBackToSchedule = labelsToAdd.some(l => l === (project.labelSchedule || DEFAULT_LABELS.schedule));
+    const toOpenStage = isLeavingDone || (!!keepLabel && keepLabel !== labelEnd);
+    // 완료를 떠나면 새 사이클 — 이전 사이클의 확인 마커를 비운다 (보고서 완료 시각이 옛 날짜에 고정되지 않게).
+    if (isLeavingDone) resetIssueCycleMarkers(projectId, Number(iid));
+    if (toOpenStage && currentIssue?.state === 'closed') {
+      try {
+        await reopenIssue(project, Number(iid), token);
+      } catch (err) {
+        console.error(`[Stage] 이슈 #${iid} 다시 열기 실패:`, err);
+      }
+    }
+
+    // 담당자 모드 처리 시작: 브랜치 생성 + 안내 코멘트 (실행 기록은 위에서 이미 만들었다)
+    if (humanDevExecId) {
+      const branchName = `dev-${iid}`;
+      try {
+        const defaultBranch = await getDefaultBranch(project, token);
+        await createBranch(project, token, branchName, defaultBranch);
+      } catch (e) { console.warn(`[Stage] Failed to create branch for #${iid}:`, e); }
+
+      try {
+        const commentBody = `<!-- ive-bot -->\n## 🌿 작업 브랜치 생성됨\n\n- **브랜치:** \`${branchName}\`\n- **담당자:** ${humanDevUserName}`;
+        await addIssueComment(project, Number(iid), token, commentBody);
+      } catch (e) { console.warn(`[Stage] Failed to add branch comment on #${iid}:`, e); }
     }
 
     // dev 단계 종료 시 사람 작업 execution 닫기 (여러 개 있을 수 있으므로 전부 처리)

@@ -229,8 +229,11 @@ export default function ProjectBoard({ projects, onOpenTrace, filterSlot }: { pr
   for (const id of [...straySince.current.keys()]) if (!strayNow.has(id)) straySince.current.delete(id)
   // 완료(오늘) — 카드의 「완료」 숫자와 같은 근거: 오늘 끝낸 완료 사이클(보고서와 같은 판정)과 오늘 반려.
   // 실행 기록으로 세면 어제 시작한 일·사후 등록·최근 실행 목록 밖의 일이 빠진다(60건 처리에 「오늘 완료 1」).
+  // 지금 열려 있어 다른 칸에 있는 작업은 뺀다 — 반려·완료 기록(단계 캐시)은 레이블로 읽는 단계보다 늦게 따라와,
+  // 확인에서 처리로 되돌린 직후 같은 작업이 처리 칸과 완료 칸에 함께 보였다
   for (const d of doneToday) {
     if (!projectOf(d.pid)) continue
+    if (COLS.some(c => c !== 'done' && cols[c].some(it => it.pid === d.pid && it.iid === d.iid))) continue
     cols.done.push({
       key: `d-${d.pid}-${d.iid}-${d.at}`, pid: d.pid, iid: d.iid, title: d.title, who: d.who?.name ?? null,
       face: d.who ? { src: d.who.avatar || 'person', userId: d.who.userId, human: true } : null,
