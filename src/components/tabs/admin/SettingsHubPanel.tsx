@@ -1,5 +1,6 @@
 'use client'
 
+import SegmentTabs from '@/components/ui/SegmentTabs'
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import SettingsPanel from './SettingsPanel'
@@ -35,20 +36,9 @@ export default function SettingsHubPanel() {
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <div className="pb-2 shrink-0">
-        <div className="flex gap-1.5 desk:max-w-xl desk:mx-auto">
-          {views.map(v => (
-            <button
-              key={v.key}
-              onClick={() => setView(v.key)}
-              className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
-                view === v.key
-                  ? 'bg-ive-green text-ive-bg-deep'
-                  : 'bg-ive-bg-card text-ive-text-dim active:scale-[0.96]'
-              }`}
-            >
-              <i className={`${v.icon} mr-1`} />{v.label}
-            </button>
-          ))}
+        <div className="desk:max-w-xl desk:mx-auto">
+          <SegmentTabs<SettingsSubView> value={view} onChange={setView}
+            items={views.map(({ key, label, icon }) => ({ key, label, icon: icon.replace('fa-solid ', '') }))} />
         </div>
       </div>
       {view === 'settings' && <SettingsPanel />}

@@ -1,5 +1,6 @@
 'use client'
 
+import SegmentTabs from '@/components/ui/SegmentTabs'
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import BroadcastView from './BroadcastView'
@@ -39,21 +40,9 @@ export default function MailPanel() {
     <main className="flex-1 flex flex-col min-h-0">
       {/* 서브뷰 토글 */}
       <div className="pb-2 shrink-0">
-        <div className="flex gap-1.5 desk:max-w-xl desk:mx-auto">
-          {views.map(v => (
-            <button
-              key={v.key}
-              onClick={() => handleSetView(v.key)}
-              title={v.label}
-              className={`flex-1 min-w-0 py-2 rounded-lg text-[11px] font-bold transition-all flex items-center justify-center gap-1 ${
-                view === v.key
-                  ? 'bg-ive-green text-ive-bg-deep'
-                  : 'bg-ive-bg-card text-ive-text-dim'
-              }`}
-            >
-              <i className={`${v.icon} shrink-0`} /><span className="truncate">{v.label}</span>
-            </button>
-          ))}
+        <div className="desk:max-w-xl desk:mx-auto">
+          <SegmentTabs<typeof views[number]['key']> value={view} onChange={handleSetView}
+            items={views.map(({ key, label, icon }) => ({ key, label, icon: icon.replace('fa-solid ', '') }))} />
         </div>
       </div>
 
