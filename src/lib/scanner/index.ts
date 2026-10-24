@@ -429,6 +429,7 @@ async function scanProject(project: Project, force: boolean = false) {
     // 이번 스캔에서 본 열린 이슈의 단계 — 예전 묶음 대기열을 바로 머지로 넘길 때 지금 단계를 본다
     const scanStages = new Map<number, string | null>()
     const processedIids = new Set<number>()
+    const assignModes = getAssignModeMap(project.id)
     for (const [iid, issue] of issueMap) {
       processedIids.add(iid)
       const labels: string[] = issue.labels || []
@@ -570,7 +571,8 @@ async function scanProject(project: Project, force: boolean = false) {
         // 담당자가 없으면 이슈 작성자를 담당자로 간주
         const assignee = (issue.assignees && issue.assignees.length > 0) ? issue.assignees[0] : (issue.author || null);
         upsertIssueStageSnapshot(project.id, iid, {
-          cachedStage: stage,
+          // 담당자 모드의 「처리 레이블만 있고 실행 없음」은 처리 실패가 아니다 — 아래에서 곧 사람 실행을 만든다(화면 판정과 같은 기준: hasActiveExecutionForStage)
+          cachedStage: stage === 'dev_fail' && assignModes.get(iid)?.mode === 'assignee' ? 'dev' : stage,
           assigneeUsername: assignee ? (assignee.username || assignee.login || null) : null,
           assigneeName: assignee ? (assignee.name || assignee.username || assignee.login || null) : null,
           assigneeAvatar: assignee ? (assignee.avatar_url || null) : null,
