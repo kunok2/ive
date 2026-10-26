@@ -134,6 +134,7 @@
   "completedLabel": "Done today",
   "waitingTooltip": "Tasks waiting",
   "workingTooltip": "Tasks in progress (AI agents)",
+  "closePanel": "Close details",
   "verifyingTooltip": "Tasks under verification",
   "confirmingTooltip": "Tasks under confirmation",
   "completedTooltip": "Tasks completed today",

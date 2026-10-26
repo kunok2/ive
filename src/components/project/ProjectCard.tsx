@@ -641,6 +641,16 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
         </button>
       </div>
 
+      {/* 펼친 상세 영역 닫기 — 숫자를 다시 눌러야 닫힌다는 걸 모르는 사용자를 위해 눈에 보이는 버튼을 둔다 (취합 패널은 자체 닫기 버튼이 있다) */}
+      {expandedPanel && expandedPanel !== 'conflicts' && (
+        <button
+          onClick={() => setExpandedPanel(null)}
+          className="shrink-0 w-full py-1.5 flex items-center justify-center gap-1.5 text-xs font-bold text-ive-text-secondary hover:text-ive-text hover:bg-white/[0.02] border-t border-ive-border-dark transition-all"
+        >
+          <i className="fa-solid fa-chevron-up" />{tp('closePanel')}
+        </button>
+      )}
+
       {/* 진행 중 작업 요약 (패널 펼치지 않았을 때) — 종류(처리·검증·확인)로 묶는다.
           runningExecs(=task_executions 기반) 외에 라벨만 verifying/confirming 인 이슈도 표시.
           GitLab UI 등 외부에서 라벨을 직접 바꾼 경우 exec 가 없어도 한 줄 표시되도록 보강.
