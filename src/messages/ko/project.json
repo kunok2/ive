@@ -134,6 +134,7 @@
   "completedLabel": "오늘완료",
   "waitingTooltip": "대기 중인 작업",
   "workingTooltip": "처리 중인 작업 (AI 에이전트)",
+  "closePanel": "상세 닫기",
   "verifyingTooltip": "검증 중인 작업",
   "confirmingTooltip": "확인 중인 작업",
   "completedTooltip": "금일 완료된 작업",
