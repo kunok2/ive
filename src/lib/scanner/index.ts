@@ -614,7 +614,19 @@ async function scanProject(project: Project, force: boolean = false) {
           // ive-meta 세션(블록)마다 execution 행을 생성한다. 다일 작업이면 세션이 여러 개라
           // 날짜(주)별로 행이 쪼개져 보고서가 각 주에 그 주의 수행분을 집계한다.
           const isComplete = stage === 'done' || stage === 'verify_waiting';
-          const { created } = syncExternalToolSessions(project, issue as ExternalIssueLike, stage);
+          // 기존 이슈에 결과를 코멘트로 남기고 ive-meta 도 거기 적은 경우 — 본문에 개발(dev) 블록이 없을 때만 코멘트의 블록을 같이 읽는다.
+          // (읽지 않으면 실행 기록이 0건이라 완료·작업시간·토큰이 통계에 잡히지 않는다)
+          let externalIssue = issue as ExternalIssueLike;
+          if (!parseIveMetaSessions(externalIssue.description || '').some(s => s.stage === 'dev')) {
+            try {
+              const notes = await fetchIssueNotes(project, iid, decryptedToken, { silent: true });
+              const metaNotes = (notes as Array<{ body?: string | null }>).map(n => n?.body || '').filter(b => b.includes('ive-meta'));
+              if (metaNotes.length > 0) externalIssue = { ...externalIssue, description: [externalIssue.description || '', ...metaNotes].join('\n\n') };
+            } catch (e) {
+              slog.warn(`external ive-meta comment lookup failed (#${iid}):`, (e as Error).message);
+            }
+          }
+          const { created } = syncExternalToolSessions(project, externalIssue, stage);
 
           if (created > 0) {
             touchProjectActivity(project.id);

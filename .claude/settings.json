@@ -11,5 +11,13 @@
         ]
       }
     ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p /private/tmp/claude-501/-Users-koj-MyProjects-IVE/557b93a3-6263-4877-8181-4465165ad5de/scratchpad)",
+      "Bash(gh issue *)",
+      "Bash(cp body_orig.md body_new.md)",
+      "Bash(printf '\\\\n\\\\n<!-- ive-meta\\\\nmodel: claude-sonnet-5-5\\\\ninput_tokens: 4684316\\\\noutput_tokens: 38411\\\\ncost_usd: 0\\\\nturns: 51\\\\nstarted_at: 2026-10-27T09:59:24+09:00\\\\nended_at: 2026-10-27T10:40:09+09:00\\\\n-->\\\\n')"
+    ]
   }
 }

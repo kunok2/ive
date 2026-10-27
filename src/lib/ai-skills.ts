@@ -6,12 +6,14 @@ import { DEFAULT_LABELS } from '@/lib/labels'
  *
  * IVE 가 에이전트를 자동 배정해 처리하는 길과 별개로, 개발자가 자기 프롬프트를 띄우고
  * 「IVE 건 처리해줘 / 검증해줘 / 확인해줘」 라고 시킬 때 AI 가 같은 절차를 밟게 한다.
- * 사람이 요청한 건을 그 자리에서 하는 것이 기본이고, 「루틴 돌려」 라고 하면 /loop 로 대기 건을 주기적으로 찾아 서브에이전트에 맡긴다(처리·검증).
- * 세부 규칙(왜 그렇게 하는지)은 CLAUDE.md 의 IVE 구간이 원본이고, 스킬은 그 순서만 체크리스트로 뽑은 것이다.
+ * 사람이 요청한 건을 그 자리에서 하는 것이 기본이고, 「루틴 돌려」 라고 하면 모델을 부르지 않는 폴러(Monitor)가 대기 건을 감시하고 ive-worker 서브에이전트에 맡긴다(처리·검증).
+ * 세부 규칙(왜 그렇게 하는지)은 ive-stages 스킬이 원본이고, 스킬은 그 순서만 체크리스트로 뽑은 것이다.
  */
 
 export const SKILL_DIR = '.claude/skills'
 export const SKILL_NAMES = ['ive-handle', 'ive-verify', 'ive-confirm'] as const
+export const ROUTINE_POLL_PATH = '.claude/ive-routine-poll.sh'
+export const WORKER_AGENT_PATH = '.claude/agents/ive-worker.md'
 export const skillPath = (name: string) => `${SKILL_DIR}/${name}/SKILL.md`
 
 type Ctx = {
@@ -67,7 +69,7 @@ function buildCtx(project: Project): Ctx {
 const frontMatter = (name: string, description: string) =>
   `---\nname: ${name}\ndescription: ${JSON.stringify(description)}\n---\n`
 
-const SIBLINGS = '짝 스킬: 처리 `ive-handle` · 검증 `ive-verify` · 확인 `ive-confirm`. 단계 라벨의 뜻과 규칙의 이유는 CLAUDE.md 의 「IVE 단계 라벨」 절이 원본이다 — 이 스킬과 다르게 적혀 있거나 프로젝트 자체 규칙이 있으면 그쪽을 따르고 라벨 이름·단계 순서만 이 스킬을 따른다.'
+const SIBLINGS = '짝 스킬: 처리 `ive-handle` · 검증 `ive-verify` · 확인 `ive-confirm`. 단계 라벨의 뜻과 규칙의 이유는 `ive-stages` 스킬(.claude/skills/ive-stages/SKILL.md)이 원본이다 — 이 스킬과 다르게 적혀 있거나 프로젝트 자체 규칙이 있으면 그쪽을 따르고 라벨 이름·단계 순서만 이 스킬을 따른다.'
 
 function handleSkill(x: Ctx): string {
   return `${frontMatter('ive-handle', `IVE 이슈를 «처리자»로서 고치는 절차 — 요건 정리 → 구현 → 가능한 검수 → 커밋 → 결과 노트 → 「${x.w}」. 「IVE 건 처리해줘」, 「${x.s}」 라벨 이슈를 맡길 때 쓴다. 검증은 ive-verify, 확인은 ive-confirm.`)}
@@ -96,21 +98,22 @@ function handleSkill(x: Ctx): string {
     ${x.note}
     ${x.move(x.d, x.w)}
     \`\`\`
-11. **\`ive-meta\` 를 남긴다.** 이슈 본문 또는 노트 끝에 처리 시간·토큰을 \`ive-meta\` 블록으로 남긴다(형식과 idle 제외 방법은 CLAUDE.md 「메타데이터」). 없으면 이 작업의 시간이 0 으로 집계된다.
+11. **\`ive-meta\` 를 남긴다.** 이슈 본문 또는 노트 끝에 처리 시간·토큰을 \`ive-meta\` 블록으로 남긴다(형식과 idle 제외 방법은 \`ive-register\` 스킬 「메타데이터」). 없으면 이 작업의 시간이 0 으로 집계된다.
 12. **막히면 우회하지 말고 멈춘다.** 권한 거부·요건 모호·환경 없음이면 라벨은 \`${x.d}\` 에 두고 필요한 것과 이유를 노트·보고에 적는다.
 13. **보고는 10줄 이내.** 첫 줄에 결과(완료·보류) + 현재 라벨 + 브랜치·커밋. 확인한 것만 쓴다.
 
 ## 처리 루틴 — 「IVE 처리 루틴 돌려」 라고 했을 때만
 
-**나에게 담당자로 지정된** \`${x.s}\` 이슈를 5분마다 찾아 위 체크리스트로 처리한다. 담당자가 없거나 다른 사람·에이전트인 건은 건드리지 않는다(IVE 가 에이전트에 배정한 건과 겹치지 않게).
+**나에게 담당자로 지정된** \`${x.s}\` 이슈를 찾아 위 체크리스트로 처리한다. 담당자가 없거나 다른 사람·에이전트인 건은 건드리지 않는다(IVE 가 에이전트에 배정한 건과 겹치지 않게).
 
-1. 사용자가 간격을 따로 말하지 않으면 \`/loop 5m <아래 프롬프트>\` 로 등록한다(세션이 열려 있는 동안만, 7일 뒤 만료). 등록 전에 \`CronList\` 로 같은 루틴이 이미 있는지 보고 있으면 중복 등록하지 않는다. 등록 직후 한 번 바로 돌린다.
-2. 매 회차: \`${x.list(x.s)}\` 로 조회해 **내가 담당자인 건**만 고른다. 이미 \`dev-<번호>\` 브랜치가 있는 건(진행 중)과 제목이 «[진척 관리]» 인 추적 이슈는 제외한다. 반려돼 \`${x.s}\` 로 돌아온 건은 제외하지 않고 기존 브랜치에서 이어서 한다.
-3. **건마다 서브에이전트 하나, 동시에 최대 3개.** 서브에이전트 지시문에 위 **2번(단계 이동)·5번(브랜치)·12번(막히면 멈춤)** 을 한 줄씩 다시 적는다 — 「스킬대로」 한마디로 맡기지 않는다. 서브에이전트는 머지하지 않는다.
-4. 대상이 없으면 「대기 없음」 한 줄만 보고한다. 사용자 판단이 꼭 필요한 건은 루틴이 멈추지 말고 회차마다 「결정 필요: #번호 — 무엇을 고르면 되는지」 한 줄로 올린다.
+**대기열 감시는 모델을 부르지 않는 폴러로 한다.** \`/loop\` 는 대상이 없는 회차에도 모델이 2턴 이상 돌아, 실측으로 비용의 절반 이상이 «대상 없음»에 들어갔다.
+
+1. \`Monitor\` 로 \`bash ${ROUTINE_POLL_PATH} ${x.s} 60 mine\` 을 건다(\`timeout_ms\` 1800000, 만료 알림이 오면 다시 건다). 폴러는 새 대상이 생길 때만 한 줄(\`대상 #번호 제목\`)을 내고, 그동안 모델 호출은 0번이다. 걸기 직전 한 번 \`${x.list(x.s)}\` 로 조회해 이미 있는 내 건을 먼저 처리한다. 같은 Monitor 가 이미 돌고 있으면 중복으로 걸지 않는다. 사용자가 \`/loop\` 간격을 명시하면 그것을 따른다.
+2. 줄이 오면 그 건을 처리한다. 이미 \`dev-<번호>\` 브랜치가 있는 건(진행 중)과 제목이 «[진척 관리]» 인 추적 이슈는 제외한다. 반려돼 \`${x.s}\` 로 돌아온 건은 제외하지 않고 기존 브랜치에서 이어서 한다.
+3. **건마다 \`subagent_type=ive-worker\` 서브에이전트 하나, 동시에 최대 3개.** \`ive-worker\`(${WORKER_AGENT_PATH})는 도구를 좁혀 매 턴 읽는 고정 컨텍스트를 줄인 에이전트다. ⛔ general-purpose 로 맡기지 않는다. 지시문에 위 **2번(단계 이동)·5번(브랜치)·12번(막히면 멈춤)** 을 한 줄씩 다시 적는다 — 「스킬대로」 한마디로 맡기지 않는다. 서브에이전트는 머지하지 않는다. 본 세션은 결과 한 줄만 받는다.
+4. 사용자 판단이 꼭 필요한 건은 멈추지 말고 「결정 필요: #번호 — 무엇을 고르면 되는지」 한 줄로 올린다.
 5. 루틴 허락은 이 요청에 한한다: 사용자가 루틴을 요청한 것이 \`dev-<번호>\` 브랜치 생성의 허락이다. 푸시·MR 생성은 루틴에서도 하지 않고 로컬 커밋에서 멈춘 뒤 보고한다.
-
-> 등록할 프롬프트: IVE 처리 루틴: ive-handle 스킬의 «처리 루틴»대로 \`${x.s}\` 이슈 중 내가 담당자인 건을 찾아 서브에이전트로 처리한다. 대상 없으면 한 줄로만 보고.
+6. **세션 운용(비용):** 세션이 하루를 넘기거나 컨텍스트가 커지면(\`/context\` 100k 이상) 건 사이에 \`/clear\` 또는 새 세션으로 옮긴다.
 `
 }
 
@@ -145,7 +148,7 @@ function verifySkill(x: Ctx): string {
     ${x.note}
     ${x.move(x.v, x.pw)}
     \`\`\`
-11. **\`ive-meta\` 에 \`stage: verify\` 를 넣어 노트 끝에 남긴다.** 이 블록이 있어야 검증이 AI 가 한 일로 집계된다(없으면 라벨이 열려 있던 근무시간이 사람 비용이 된다). 형식은 CLAUDE.md 「검증·확인에 쓴 시간과 토큰 남기기」.
+11. **\`ive-meta\` 에 \`stage: verify\` 를 넣어 노트 끝에 남긴다.** 이 블록이 있어야 검증이 AI 가 한 일로 집계된다(없으면 라벨이 열려 있던 근무시간이 사람 비용이 된다). 형식은 \`ive-stages\` 스킬 「검증·확인에 쓴 시간과 토큰 남기기」.
 12. **막히면 멈춘다.** 판단 근거를 만들 수 없으면 통과가 아니라 멈춤이다 — \`${x.v}\` 에 두고 무엇이 필요한지 노트에 적는다.
 13. **보고는 10줄 이내.** 첫 줄에 결과(통과·반려·보류) + 현재 라벨.
 
@@ -154,14 +157,13 @@ function verifySkill(x: Ctx): string {
 
 ## 검증 루틴 — 「IVE 검증 루틴 돌려」 라고 했을 때만
 
-\`${x.w}\`(검증 대기) 이슈를 5분마다 찾아 위 체크리스트로 검증한다.
+\`${x.w}\`(검증 대기) 이슈를 찾아 위 체크리스트로 검증한다. 대기열 감시는 모델을 부르지 않는 폴러로 한다(\`/loop\` 는 빈 회차에도 모델이 돌아 비용이 컸다).
 
-1. 간격을 따로 말하지 않으면 \`/loop 5m <아래 프롬프트>\` 로 등록한다(세션이 열려 있는 동안만, 7일 뒤 만료). \`CronList\` 로 중복 등록을 막고, 등록 직후 한 번 바로 돌린다.
-2. 매 회차: \`${x.list(x.w)}\` 로 조회해 있으면 **건마다 서브에이전트 하나(동시 최대 3개)** 에 맡긴다. 검증은 서브에이전트가 새 문맥에서 하므로 «자기가 처리한 것을 자기가 통과시키지 않는다»는 원칙이 지켜진다. 대기가 없으면 「대기 없음」 한 줄만 보고한다.
-3. 서브에이전트 지시문에 **2번(단계 이동)·12번(막히면 멈춤)** 을 한 줄씩 다시 적는다. 코드 재검토·대조·머지·단계 이동·노트는 그 건의 서브에이전트가 끝까지 하고, 결과(머지 sha 또는 재작업 요지)를 돌려주면 거기서 끝낸다. 다음 건은 새로 띄운다.
-4. 막혀서 사용자 결정을 기다리는 건은 회차마다 「결정 필요: #번호 — 무엇을 고르면 되는지」 한 줄로 다시 올린다(조용히 멈춰 서로 기다리는 일을 막는다). 심각한 문제나 꼭 필요한 판단이 아니면 멈추지 않고 끝까지 진행한다.
-
-> 등록할 프롬프트: IVE 검증 루틴: ive-verify 스킬의 «검증 루틴»대로 \`${x.w}\` 이슈를 찾아 서브에이전트로 검증한다. 대기 없으면 한 줄로만 보고.
+1. \`Monitor\` 로 \`bash ${ROUTINE_POLL_PATH} ${x.w} 60 any\` 를 건다(\`timeout_ms\` 1800000, 만료 알림이 오면 다시 건다). 폴러는 새 대기 건이 생길 때만 한 줄을 내며, 없는 동안 모델 호출은 0번이다. 걸기 직전 \`${x.list(x.w)}\` 로 한 번 조회해 이미 있는 대기 건을 먼저 처리한다. 같은 Monitor 가 이미 돌고 있으면 중복으로 걸지 않는다.
+2. 줄이 오면 **건마다 \`subagent_type=ive-worker\` 서브에이전트 하나(동시 최대 3개)** 에 맡긴다. ⛔ general-purpose 로 맡기지 않는다. 검증은 서브에이전트가 새 문맥에서 하므로 «자기가 처리한 것을 자기가 통과시키지 않는다»는 원칙이 지켜진다.
+3. 서브에이전트 지시문에 **2번(단계 이동)·12번(막히면 멈춤)** 을 한 줄씩 다시 적는다. 코드 재검토·대조·머지·단계 이동·노트는 그 건의 서브에이전트가 끝까지 하고, 결과(머지 sha 또는 재작업 요지)를 한 줄로 돌려주면 거기서 끝낸다. 다음 건은 새로 띄운다.
+4. 막혀서 사용자 결정을 기다리는 건은 「결정 필요: #번호 — 무엇을 고르면 되는지」 한 줄로 다시 올린다(조용히 멈춰 서로 기다리는 일을 막는다). 심각한 문제나 꼭 필요한 판단이 아니면 멈추지 않고 끝까지 진행한다.
+5. 세션이 하루를 넘기거나 컨텍스트가 커지면 건 사이에 \`/clear\` 또는 새 세션으로 옮긴다.
 
 확인(\`ive-confirm\`)은 반영된 환경을 직접 밟아야 해서 루틴으로 돌리지 않는다.
 `
@@ -196,7 +198,7 @@ function confirmSkill(x: Ctx): string {
    ${x.note}
    ${x.move(x.c, x.e)}
    \`\`\`
-10. **\`ive-meta\` 에 \`stage: confirm\` 을 넣어 노트 끝에 남긴다.** 형식은 CLAUDE.md 「검증·확인에 쓴 시간과 토큰 남기기」.
+10. **\`ive-meta\` 에 \`stage: confirm\` 을 넣어 노트 끝에 남긴다.** 형식은 \`ive-stages\` 스킬 「검증·확인에 쓴 시간과 토큰 남기기」.
 11. **내보내기 전 마무리.** 코드만 들어가서는 안 바뀌는 것(기존 데이터 재처리·설정)이 남았으면 대상 건수를 적는다. 후속 작업은 이 이슈에 붙이지 말고 새 이슈로 나눈다.
 12. **보고는 10줄 이내.** 첫 줄에 결과(완료·반려·보류) + 현재 라벨.
 `
@@ -209,5 +211,70 @@ export function generateIveSkills(project: Project): { path: string; content: st
     { path: skillPath('ive-handle'), content: handleSkill(x) },
     { path: skillPath('ive-verify'), content: verifySkill(x) },
     { path: skillPath('ive-confirm'), content: confirmSkill(x) },
+  ]
+}
+
+/**
+ * 루틴이 쓰는 비용 절감 부품 두 가지 — 대기열 폴러(모델 호출 0)와 도구를 좁힌 서브에이전트(ive-worker).
+ * 전체가 IVE 소유라 설치할 때마다 통째로 다시 쓴다. 폴러는 저장소·제공자를 박아 넣어 별도 설정이 없다.
+ */
+export function generateIveRoutineFiles(project: Project): { path: string; content: string }[] {
+  const x = buildCtx(project)
+  const fetchLine = x.isGitHub
+    ? `gh issue list -R ${x.repo} --label "$label" --state open --limit 100 --json number,title,updatedAt,assignees 2>/dev/null`
+    : `glab api "projects/${encodeURIComponent(x.repo)}/issues?state=opened&labels=$label&per_page=100" 2>/dev/null`
+  const meLine = x.isGitHub
+    ? `gh api user --jq .login 2>/dev/null`
+    : `glab api user 2>/dev/null | python3 -c 'import sys,json;print(json.load(sys.stdin)["username"])' 2>/dev/null`
+  const poll = `#!/usr/bin/env bash
+# IVE 루틴 대기열 감시 — 모델을 부르지 않고 ${x.isGitHub ? 'gh' : 'glab'} 만으로 조사한다. IVE 가 설치·갱신하는 파일이다(직접 고치지 않는다).
+# 새 대상이 생길 때만 한 줄을 출력한다(Monitor 의 이벤트). 대상이 없으면 아무것도 출력하지 않는다.
+# 사용: bash ${ROUTINE_POLL_PATH} <라벨> [간격초=60] [mine|any=any]   (mine: 내가 담당자인 건만)
+set -u
+label="\${1:?라벨 필요}"
+every="\${2:-60}"
+who="\${3:-any}"
+me=""
+[ "$who" = "mine" ] && me="$(${meLine})"
+seen=" "
+while true; do
+  out="$(${fetchLine} \
+    | ME="$me" python3 -c '
+import sys, json, os
+me = os.environ.get("ME", "")
+try:
+    for d in json.load(sys.stdin):
+        names = [a.get("username") or a.get("login") for a in (d.get("assignees") or [])]
+        if me and me not in names:
+            continue
+        iid = d.get("iid") or d.get("number")
+        upd = d.get("updated_at") or d.get("updatedAt")
+        print(iid, upd, d["title"][:60].replace("\\n", " "))
+except Exception:
+    pass' || true)"
+  while IFS= read -r line; do
+    [ -z "$line" ] && continue
+    iid="\${line%% *}"; rest="\${line#* }"; upd="\${rest%% *}"; title="\${rest#* }"
+    case "$title" in *"[진척 관리]"*) continue ;; esac
+    key="$iid@$upd"   # 갱신 시각이 바뀌면(반려·요건 추가 노트) 같은 건도 다시 알린다
+    case "$seen" in *" $key "*) continue ;; esac
+    seen="$seen$key "
+    echo "대상 #$iid $title"
+  done <<<"$out"
+  sleep "$every"
+done
+`
+  const worker = `---
+name: ive-worker
+description: IVE 이슈 처리·검증 루틴 전용 서브에이전트. 도구를 Bash·Read·Edit·Write·Grep·Glob 으로 좁혀 매 턴 읽는 고정 컨텍스트를 줄인다. ive-handle·ive-verify 스킬대로 건 하나를 맡길 때 쓴다.
+tools: Bash, Read, Edit, Write, Grep, Glob
+---
+
+IVE 건 하나를 맡아 지시문의 스킬(\`.claude/skills/ive-handle/SKILL.md\` 또는 \`ive-verify/SKILL.md\`)대로 처리한다.
+지시문에 적힌 규칙(라벨 이동, 브랜치 허락 범위, 막히면 멈춤)을 그대로 따르고, 끝나면 결과를 한 줄로 돌려준다.
+`
+  return [
+    { path: ROUTINE_POLL_PATH, content: poll },
+    { path: WORKER_AGENT_PATH, content: worker },
   ]
 }

@@ -1,7 +1,7 @@
 import { readRepoFile, upsertRepoFile, createBranch, createMR, getDefaultBranch } from '@/lib/provider'
 import { Project } from '@/types'
 import { DEFAULT_LABELS } from '@/lib/labels'
-import { generateIveSkills } from '@/lib/ai-skills'
+import { generateIveSkills, generateIveRoutineFiles } from '@/lib/ai-skills'
 import { BANNER_FILE, BANNER_CHAT_FILE, CLAUDE_SETTINGS_FILE, buildBannerFile, buildBannerChatFile, buildBannerGuide, mergeBannerHook } from '@/lib/ive-banner'
 
 export const IVE_MARKER_BEGIN = '<!-- ive:begin -->'
@@ -571,6 +571,8 @@ IVE 는 이슈 **본문**의 체크박스(\`- [ ]\` / \`- [x]\`)를 세어 작�
 > GitLab의 \`/spend\`(Time tracking)는 GitLab 전용 보조 표시일 뿐 시스템이 의존하지 않으며, GitHub에는 그런 기능 자체가 없습니다.
 > 따라서 **GitLab·GitHub 모두에서 작업시간을 남기는 방법은 ive-meta의 \`started_at\`/\`ended_at\` 뿐**입니다. 매 이슈에 반드시 넣으세요. (이슈가 열려 있던 기간이 아니라, 이 두 시각의 차이가 곧 작업시간으로 산정됩니다.)
 
+**이미 있던 이슈에 처리 결과를 더하는 경우에도** 같습니다 — 이슈 본문은 남이 쓴 원문이어도 그 **맨 끝에** ive-meta 를 덧붙이세요. 결과 코멘트에만 적으면 본문 기록이 없는 이슈로 보일 수 있습니다.
+
 \`\`\`
 <!-- ive-meta
 model: <모델명 (예: claude-opus-4-6)>
@@ -612,6 +614,49 @@ ended_at: <ISO 시각>
 - **GitHub**: native time tracking이 없으므로 **ive-meta가 유일한 작업시간 소스**입니다. ive-meta 누락 시 그 작업의 시간은 0으로 잡힙니다.`
 }
 
+/** 긴 가이드를 담는 스킬 경로. CLAUDE.md·AGENTS.md 는 매 턴 컨텍스트에 실리므로 본문은 스킬로 옮기고 요지만 남긴다. */
+export const GUIDE_SKILL_REGISTER = '.claude/skills/ive-register/SKILL.md'
+export const GUIDE_SKILL_STAGES = '.claude/skills/ive-stages/SKILL.md'
+
+/**
+ * CLAUDE.md·AGENTS.md 에 실리는 IVE 구간 — 라벨 표와 스킬 안내만 둔 요약.
+ * 등록·검토·확인 절차의 본문은 스킬(ive-register · ive-stages)에 있어 필요할 때만 읽힌다.
+ */
+function generateIveCompact(project: Project): string {
+  const s = project.labelSchedule || DEFAULT_LABELS.schedule
+  const d = project.labelDev || DEFAULT_LABELS.dev
+  const w = project.labelVerifyWait || DEFAULT_LABELS.verifyWait
+  const v = project.labelVerify || DEFAULT_LABELS.verify
+  const pw = project.labelConfirmWait || DEFAULT_LABELS.confirmWait
+  const c = project.labelConfirm || DEFAULT_LABELS.confirm
+  const e = project.labelEnd || DEFAULT_LABELS.end
+  return `## IVE (Springware IVE 관리 대상: ${project.name})
+
+이슈의 진행 단계는 라벨로 표시하며 **단계 라벨은 이슈마다 정확히 하나만** 남긴다(옛 라벨을 함께 뗀다).
+흐름: \`${s}\`(처리 대기) → \`${d}\`(개발 중) → \`${w}\`(검증 대기) → \`${v}\`(검증 중) → \`${pw}\`(확인 대기) → \`${c}\`(확인 중) → \`${e}\`(완료)
+
+- "IVE용 이슈로 정리해줘"·"IVE에 등록해줘" 요청 → \`.claude/skills/ive-register/SKILL.md\` 를 읽고 따른다(레이블·제목·\`ive-meta\`·작업시간 측정). **\`ive-meta\` 가 없으면 작업시간이 0 으로 집계된다.**
+- 이슈를 처리·검증·확인하거나 단계 라벨을 옮길 때 → \`ive-handle\` · \`ive-verify\` · \`ive-confirm\` 스킬을 따르고, 담당자별 규칙·검토 절차·\`stage:\` 가 든 \`ive-meta\` 는 \`.claude/skills/ive-stages/SKILL.md\` 를 읽는다.`
+}
+
+function frontMatter(name: string, description: string): string {
+  return `---\nname: ${name}\ndescription: ${JSON.stringify(description)}\n---\n\n`
+}
+
+/** 긴 가이드를 옮겨 담은 스킬 2종 — 전체가 IVE 소유라 설치할 때마다 통째로 다시 쓴다. */
+function generateGuideSkills(project: Project): { path: string; content: string }[] {
+  return [
+    {
+      path: GUIDE_SKILL_REGISTER,
+      content: frontMatter('ive-register', '작업 내용을 IVE 용 Git 이슈로 등록한다 — 「IVE용 이슈로 정리해줘」, 「IVE에 등록해줘」, 「작업 정리」 요청 때 쓴다. 이슈 생성 규칙(레이블·제목·본문), 진행률 체크리스트, ive-meta 메타데이터, 실제 작업시간 측정(idle 제외)이 들어 있다.') + generateIveGuide(project) + '\n',
+    },
+    {
+      path: GUIDE_SKILL_STAGES,
+      content: frontMatter('ive-stages', 'IVE 단계 라벨의 뜻과 단계별 담당자(처리·검증·확인) 규칙, 검토 절차, 에이전트가 검증·확인할 때의 증거 기준, stage 가 든 ive-meta 형식. IVE 이슈를 처리·검증·확인하거나 라벨을 옮기기 전에 읽는다.') + `${generateStageLabelGuide(project)}\n\n${generateAgentStageGuide(project)}\n`,
+    },
+  ]
+}
+
 export type GuideFileResult = { path: string; created: boolean; updated: boolean; unchanged: boolean; error?: string }
 
 /** 저장소의 가이드 파일마다 IVE 구간(ive:begin~ive:end)이 설치돼 있는가 */
@@ -637,13 +682,9 @@ export async function installAiGuide(
   token: string,
   opts: { onlyInstalled?: boolean; reason?: 'install' | 'labels' } = {},
 ): Promise<{ results: GuideFileResult[]; mrUrl: string | null }> {
-  const iveSection = `${generateIveGuide(project)}
+  const iveSection = `${generateIveCompact(project)}
 
-${buildBannerGuide(project)}
-
-${generateStageLabelGuide(project)}
-
-${generateAgentStageGuide(project)}`
+${buildBannerGuide(project)}`
   const isLabels = opts.reason === 'labels'
   const commitMsg = isLabels
     ? `chore(ive): update stage label names in AI tool guide for ${project.name}`
@@ -654,12 +695,14 @@ ${generateAgentStageGuide(project)}`
   // 1. 기본 브랜치에서 기존 파일 읽고, 변경 사항이 있는지 확인
   const defaultBranch = await getDefaultBranch(project, token)
   const filesToWrite: { path: string; content: string; isNew: boolean }[] = []
+  let anyInstalled = false
 
   for (const filePath of TARGET_FILES) {
     try {
       const existing = await readRepoFile(project, token, filePath)
       const installed = !!existing && existing.content.includes(IVE_MARKER_BEGIN) && existing.content.includes(IVE_MARKER_END)
       if (opts.onlyInstalled && !installed) continue
+      if (installed) anyInstalled = true
       const merged = mergeIveSection(existing?.content ?? null, iveSection)
       if (existing && existing.content === merged) {
         results.push({ path: filePath, created: false, updated: false, unchanged: true })
@@ -672,10 +715,12 @@ ${generateAgentStageGuide(project)}`
   }
 
   // 처리·검증·확인 스킬 — 전체가 IVE 소유 파일이라 통째로 다시 쓴다. 레이블 이름이 박혀 있어 갱신(onlyInstalled) 때는 이미 있는 것만 고친다.
-  for (const skill of generateIveSkills(project)) {
+  // 요약 구간이 가리키는 ive-register·ive-stages 와 루틴 부품(폴러·ive-worker)은 갱신 때도 없으면 만든다(옛 긴 구간이 요약으로 바뀌므로).
+  const guideSkills = [...generateGuideSkills(project), ...generateIveRoutineFiles(project)]
+  for (const skill of [...generateIveSkills(project), ...guideSkills]) {
     try {
       const existing = await readRepoFile(project, token, skill.path)
-      if (opts.onlyInstalled && !existing) continue
+      if (opts.onlyInstalled && !existing && !(anyInstalled && guideSkills.includes(skill))) continue
       if (existing?.content === skill.content) results.push({ path: skill.path, created: false, updated: false, unchanged: true })
       else filesToWrite.push({ path: skill.path, content: skill.content, isNew: !existing })
     } catch (e) {

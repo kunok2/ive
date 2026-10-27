@@ -29,7 +29,7 @@ describe('가이드 갱신 (onlyInstalled)', () => {
     files['CLAUDE.md'] = `# 내 규칙\n\n${IVE_MARKER_BEGIN}\n옛 구간 \`IVE-W\`\n${IVE_MARKER_END}\n\n끝 문단\n`
     files['AGENTS.md'] = '# 에이전트 규칙 (IVE 구간 없음)\n'
     const { mrUrl } = await installAiGuide(project, 't', { onlyInstalled: true, reason: 'labels' })
-    expect(upserts.map(u => u.path)).toEqual(['CLAUDE.md'])
+    expect(upserts.map(u => u.path)).toEqual(['CLAUDE.md', '.claude/skills/ive-register/SKILL.md', '.claude/skills/ive-stages/SKILL.md', '.claude/ive-routine-poll.sh', '.claude/agents/ive-worker.md'])
     const c = upserts[0].content
     expect(c.startsWith('# 내 규칙')).toBe(true)
     expect(c.trimEnd().endsWith('끝 문단')).toBe(true)
