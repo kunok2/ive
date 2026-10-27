@@ -56,7 +56,7 @@ import { gitActor } from "../event-actor";
 import { recordScannedStageChange } from "./stage-events";
 import { fetchProjectMembers } from "../provider";
 import { decrypt, encrypt } from "../crypto";
-import { removeIssueLabels, swapIssueLabels, addIssueComment, createBranch, getDefaultBranch, closeIssue, fetchSingleIssue, fetchMRByBranch, fetchIssueNotes, isIssueClosedByGit } from "../provider";
+import { fetchClosedProjectIssuesPage, removeIssueLabels, swapIssueLabels, addIssueComment, createBranch, getDefaultBranch, closeIssue, fetchSingleIssue, fetchMRByBranch, fetchIssueNotes, isIssueClosedByGit } from "../provider";
 import {
   fetchGitLabIssues,
   refreshGitLabToken,
@@ -614,18 +614,7 @@ async function scanProject(project: Project, force: boolean = false) {
           // ive-meta 세션(블록)마다 execution 행을 생성한다. 다일 작업이면 세션이 여러 개라
           // 날짜(주)별로 행이 쪼개져 보고서가 각 주에 그 주의 수행분을 집계한다.
           const isComplete = stage === 'done' || stage === 'verify_waiting';
-          // 기존 이슈에 결과를 코멘트로 남기고 ive-meta 도 거기 적은 경우 — 본문에 개발(dev) 블록이 없을 때만 코멘트의 블록을 같이 읽는다.
-          // (읽지 않으면 실행 기록이 0건이라 완료·작업시간·토큰이 통계에 잡히지 않는다)
-          let externalIssue = issue as ExternalIssueLike;
-          if (!parseIveMetaSessions(externalIssue.description || '').some(s => s.stage === 'dev')) {
-            try {
-              const notes = await fetchIssueNotes(project, iid, decryptedToken, { silent: true });
-              const metaNotes = (notes as Array<{ body?: string | null }>).map(n => n?.body || '').filter(b => b.includes('ive-meta'));
-              if (metaNotes.length > 0) externalIssue = { ...externalIssue, description: [externalIssue.description || '', ...metaNotes].join('\n\n') };
-            } catch (e) {
-              slog.warn(`external ive-meta comment lookup failed (#${iid}):`, (e as Error).message);
-            }
-          }
+          const externalIssue = await withCommentIveMeta(project, decryptedToken, issue as ExternalIssueLike);
           const { created } = syncExternalToolSessions(project, externalIssue, stage);
 
           if (created > 0) {
@@ -843,6 +832,11 @@ async function scanProject(project: Project, force: boolean = false) {
     try {
       await handOffLegacyBundleQueue(project, decryptedToken, scanStages);
     } catch (e) { slog.warn(`handOffLegacyBundleQueue failed (${project.name}):`, (e as Error).message); }
+
+    // 열린 채 스캔되기 전에 닫힌 완료 이슈(Git 자동 닫기)를 사후 기록한다
+    try {
+      await recoverClosedDoneIssues(project, decryptedToken);
+    } catch (e) { slog.warn(`recoverClosedDoneIssues failed (${project.name}):`, (e as Error).message); }
 
     // 이번 스캔에서 발견되지 않은 기존 이슈(좀비) 정리
     const staleRows = getDb().prepare(`
@@ -1163,6 +1157,94 @@ type ExternalIssueLike = {
   author?: { name?: string; username?: string; login?: string; avatar_url?: string } | null;
   time_stats?: { total_time_spent?: number } | null;
 };
+
+/**
+ * 기존 이슈에 결과를 코멘트로 남기고 ive-meta 도 거기 적은 경우 — 본문에 개발(dev) 블록이 없을 때만 코멘트의 블록을 본문 뒤에 이어 붙여 돌려준다.
+ * (읽지 않으면 실행 기록이 0건이라 완료·작업시간·토큰이 통계에 잡히지 않는다)
+ */
+async function withCommentIveMeta(
+  project: Project,
+  token: string,
+  issue: ExternalIssueLike,
+  fetchNotes: typeof fetchIssueNotes = fetchIssueNotes,
+): Promise<ExternalIssueLike> {
+  if (parseIveMetaSessions(issue.description || '').some(s => s.stage === 'dev')) return issue;
+  try {
+    const notes = await fetchNotes(project, issue.iid, token, { silent: true });
+    const metaNotes = (notes as Array<{ body?: string | null }>).map(n => n?.body || '').filter(b => b.includes('ive-meta'));
+    if (metaNotes.length > 0) return { ...issue, description: [issue.description || '', ...metaNotes].join('\n\n') };
+  } catch (e) {
+    slog.warn(`external ive-meta comment lookup failed (#${issue.iid}):`, (e as Error).message);
+  }
+  return issue;
+}
+
+/** 닫힌 완료 이슈 복구 — 한 번에 보는 최근 갱신 이슈 수와 그 기간(일). Git 호출을 한 스캔에 한 번으로 묶는다 */
+const RECOVER_PAGE_SIZE = 30;
+const RECOVER_WINDOW_DAYS = 7;
+/** 이미 본 닫힌 이슈 — 갱신 시각이 그대로면 코멘트를 다시 받지 않는다(ive-meta 가 없는 이슈를 스캔마다 되읽지 않게) */
+const recoverChecked = new Map<string, string>();
+
+/**
+ * 열린 채 스캔되기 전에 닫힌 완료(ive:done) 이슈를 사후 인식한다.
+ *
+ * 스캐너는 열린 이슈만 읽으므로, Git 설정(머지 시 자동 닫기 등)으로 완료 레이블이 붙자마자 닫힌 이슈는
+ * IVE 가 한 번도 못 본 채 통계에서 빠졌다. 최근 갱신된 닫힌 완료 이슈 중 **실행 기록이 하나도 없는 것**
+ * (DB 상태로만 판단)을 열린 이슈의 외부 도구 인식과 같은 절차(본문·코멘트 ive-meta → 실행 기록)로 기록한다.
+ * 담당자 모드 이슈·봇이 만든 이슈는 그 인식과 같이 제외한다. 이슈 상태·레이블은 건드리지 않는다.
+ *
+ * @returns 실행 기록을 만든 이슈 수
+ */
+export async function recoverClosedDoneIssues(
+  project: Project,
+  token: string,
+  deps: {
+    fetchClosed?: (opts: { page: number; perPage: number; sort: 'desc'; label: string }) => Promise<{ issues: any[] }>;
+    fetchNotes?: typeof fetchIssueNotes;
+    now?: number;
+  } = {},
+): Promise<number> {
+  const labelE = project.labelEnd || DEFAULT_LABELS.end;
+  const fetchClosed = deps.fetchClosed ?? ((o) => fetchClosedProjectIssuesPage(project, token, o));
+  const since = (deps.now ?? Date.now()) - RECOVER_WINDOW_DAYS * 86_400_000;
+
+  let page: { issues: any[] };
+  try {
+    page = await fetchClosed({ page: 1, perPage: RECOVER_PAGE_SIZE, sort: 'desc', label: labelE });
+  } catch (e) {
+    slog.warn(`recoverClosedDoneIssues: fetch failed (${project.name}):`, (e as Error).message);
+    return 0;
+  }
+
+  const assignModes = getAssignModeMap(project.id);
+  let recovered = 0;
+  for (const issue of page.issues) {
+    const iid = issue.iid as number;
+    const updated = String(issue.updated_at || '');
+    if (!updated || Date.parse(updated) < since) continue;
+    if (!(issue.labels || []).some((l: any) => (typeof l === 'string' ? l : l?.name) === labelE)) continue;
+    if (hasAnyExecution(project.id, iid)) continue;
+    if (assignModes.get(iid)?.mode === 'assignee' || isGitBotUser(issue.author)) continue;
+    const key = `${project.id}:${iid}`;
+    if (recoverChecked.get(key) === updated) continue;
+    recoverChecked.set(key, updated);
+
+    const withMeta = await withCommentIveMeta(project, token, issue as ExternalIssueLike, deps.fetchNotes);
+    const { created } = syncExternalToolSessions(project, withMeta, 'done');
+    if (created <= 0) continue;
+    recovered++;
+    touchProjectActivity(project.id);
+    try {
+      createActivityLog({
+        userId: project.userId, category: 'task', action: 'detect_external_task',
+        detail: `이미 닫힌 완료 작업을 뒤늦게 기록했습니다: #${iid} "${issue.title}" (${project.name}, 작업 기록 ${created}건)`,
+        targetType: 'execution', targetId: `${project.id}:${iid}`,
+      });
+    } catch (e) { slog.error({ err: e }, 'Failed to log recovered closed task activity:'); }
+    slog.info(`[RECOVER-CLOSED] Project: ${project.name}, Issue: #${iid}, Sessions: ${created}`);
+  }
+  return recovered;
+}
 
 /**
  * 외부 도구 이슈의 ive-meta 세션(블록)들을 task_executions 행 집합으로 멱등 동기화한다.
