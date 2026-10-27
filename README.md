@@ -8,8 +8,17 @@
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-38bdf8.svg)](https://tailwindcss.com/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6.svg)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![YouTube Demo](https://img.shields.io/badge/YouTube-Demo_Video-red.svg?logo=youtube)](https://www.youtube.com/watch?v=ue74hXRKOB0)
 
 An integrated automation and orchestration platform where AI agents autonomously resolve GitLab and GitHub issues. From issue polling and automated code generation to testing, MR/PR creation, and structured human-in-the-loop verification, IVE automates the mechanical pipeline so software engineers can focus on architecture, direction, and value judgment.
+
+---
+
+## 🎬 Product Demo Video
+
+[![Springware IVE Demo Video](https://img.youtube.com/vi/ue74hXRKOB0/maxresdefault.jpg)](https://www.youtube.com/watch?v=ue74hXRKOB0)
+
+> 🍿 **[Watch the full demo on YouTube](https://www.youtube.com/watch?v=ue74hXRKOB0)** — See how IVE orchestrates autonomous AI CLI agents, monitors live terminal sessions, and streamlines issue verification.
 
 ---
 
