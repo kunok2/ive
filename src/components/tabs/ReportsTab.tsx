@@ -165,7 +165,7 @@ export default function ReportsTab() {
         </div>
         <div className="flex items-center justify-between desk:max-w-lg desk:mx-auto">
           <button aria-label={tr('prevPeriod')} onClick={() => setDate(previousPeriod(shown).start)} className="w-11 h-11 flex items-center justify-center rounded-lg text-ive-text-secondary hover:text-ive-text"><i className="fa-solid fa-chevron-left" /></button>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-center flex-wrap gap-1.5 sm:gap-2">
             <span className="text-sm font-bold text-ive-text">{periodLabel()}</span>
             {!isTodayPeriod && (
               <button onClick={() => setDate(today)} className="px-2 py-0.5 text-xs font-bold rounded-lg bg-ive-cyan/20 text-ive-cyan hover:bg-ive-cyan/30">{tr('today')}</button>

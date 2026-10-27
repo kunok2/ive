@@ -27,9 +27,9 @@ export function Card({ children, highlight = false }: { children: ReactNode; hig
 
 export function SectionTitle({ children, right }: { children: ReactNode; right?: ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-2">
-      <span className="text-base font-bold text-ive-text">{children}</span>
-      {right != null && <span className="text-xs font-bold text-ive-text-muted">{right}</span>}
+    <div className="flex items-baseline justify-between gap-2 flex-wrap">
+      <span className="text-base font-bold text-ive-text shrink-0">{children}</span>
+      {right != null && <span className="text-xs font-bold text-ive-text-muted text-right">{right}</span>}
     </div>
   )
 }
@@ -86,7 +86,7 @@ export function HeldCard({ held, tr, prevLabel, tracking }: { held: Held; tr: Tr
               {held.end === 0 ? tr('drainNone') : held.drainDays != null ? tr('drainDays', { d: held.drainDays < 1 ? 1 : Math.round(held.drainDays) }) : tr('drainUnknown')}
               {' · '}
               {held.over7 ? tr('over7', { n: held.over7 }) : tr('over7None')}
-              {held.over7 != null && <> <MiniDelta cur={held.over7} prev={held.prevOver7} goodWhenUp={false} /></>}
+              {held.over7 != null && <MiniDelta cur={held.over7} prev={held.prevOver7} goodWhenUp={false} className="ml-1" />}
             </div>
           )}
         </>
@@ -95,20 +95,20 @@ export function HeldCard({ held, tr, prevLabel, tracking }: { held: Held; tr: Tr
       {held.start != null && (() => {
         // 연산자·괄호는 숫자와 같은 줄에 — 아래에 이름 줄 높이만큼 빈 칸을 둬 숫자 줄에 맞춘다
         const op = (o: string) => (
-          <div className="flex flex-col" aria-hidden="true">
-            <span className="text-base font-bold text-ive-text-muted">{o}</span>
-            <span className="text-xs invisible">·</span>
+          <div className="flex flex-col shrink-0" aria-hidden="true">
+            <span className="text-sm sm:text-base font-bold text-ive-text-muted">{o}</span>
+            <span className="text-[10px] sm:text-xs invisible">·</span>
           </div>
         )
         const term = (v: number | null, l: string) => (
-          <div className="flex flex-col">
-            <span className="text-base font-bold text-ive-text tabular-nums">{v == null ? '—' : v.toLocaleString()}</span>
-            <span className="text-xs font-bold text-ive-text-muted">{l}</span>
+          <div className="flex flex-col min-w-0">
+            <span className="text-sm sm:text-base font-bold text-ive-text tabular-nums">{v == null ? '—' : v.toLocaleString()}</span>
+            <span className="text-[10px] sm:text-xs font-bold text-ive-text-muted truncate">{l}</span>
           </div>
         )
         const dropped = held.gap != null && held.gap > 0
         return (
-          <div className="bg-ive-bg/50 border border-ive-border-dark rounded-lg p-3 flex items-center justify-between text-center">
+          <div className="bg-ive-bg/50 border border-ive-border-dark rounded-lg p-2.5 sm:p-3 flex items-center justify-between text-center gap-1 sm:gap-2">
             {term(held.start, tr('eqStart', { label: prevLabel }))}
             {op('+')}
             {term(held.inflow, tr('eqInflow'))}
@@ -450,31 +450,54 @@ export function ProjectsSection({ projects, cost, tr, prevLabel }: { projects: P
       ) : (
         <span className="text-sm font-bold text-ive-text-secondary">{tr('hoursNone')}</span>
       )}
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm font-bold">
+      <div className="overflow-x-auto -mx-1 px-1">
+        <table className="w-full text-sm font-bold border-collapse">
           <thead>
-            <tr className="text-ive-text-muted">
-              <th className="text-left py-1.5 pr-2">{tr('colProject')}</th>
-              <th className="text-right py-1.5 px-1">{tr('colHours')}</th>
-              <th className="text-right py-1.5 px-1">{tr('colDone')}</th>
-              <th className="text-right py-1.5 pl-1">{tr('colHeld')}</th>
+            <tr className="text-ive-text-muted text-xs border-b border-ive-border-dark">
+              <th className="text-left py-2 pr-2 font-bold">{tr('colProject')}</th>
+              <th className="text-right py-2 px-1.5 font-bold">{tr('colHours')}</th>
+              <th className="text-right py-2 px-1.5 font-bold">{tr('colDone')}</th>
+              <th className="text-right py-2 pl-1.5 font-bold">{tr('colHeld')}</th>
             </tr>
           </thead>
           <tbody>
             {projects.map(p => (
               <tr key={p.id} {...hoverHandlers(p.id, setHov)}
                 className={`border-t border-ive-border-dark transition-colors ${hov === p.id ? 'bg-white/[0.05]' : ''}`}>
-                <td className="text-left py-1.5 pr-2 text-ive-text">
-                  <div className="flex items-center gap-1.5 max-w-36">
+                <td className="text-left py-2 pr-2 text-ive-text align-top">
+                  <div className="flex items-center gap-1.5 min-w-0 pt-0.5">
                     <span className="w-2 h-2 rounded-full shrink-0" style={swatchOf.get(p.id)} />
-                    <span className="truncate">{p.name}</span>
+                    <span className="truncate max-w-[7rem] sm:max-w-36" title={p.name}>{p.name}</span>
                   </div>
                 </td>
-                <td className="text-right py-1.5 px-1 tabular-nums text-ive-text">{p.humanHours > 0 || p.prevHumanHours > 0
-                  ? <>{p.humanHours > 0 ? `${Math.round(p.humanHours)}h · ${pct(p.share)}` : '0h'} <MiniDelta cur={Math.round(p.humanHours)} prev={Math.round(p.prevHumanHours)} goodWhenUp={null} /></>
-                  : '—'}</td>
-                <td className="text-right py-1.5 px-1 tabular-nums text-ive-text">{p.completed} <MiniDelta cur={p.completed} prev={p.prevCompleted} goodWhenUp /></td>
-                <td className="text-right py-1.5 pl-1 tabular-nums text-ive-text">{p.held == null ? '—' : <>{p.held} <MiniDelta cur={p.held} prev={p.prevHeld} goodWhenUp={false} /></>}</td>
+                <td className="text-right py-2 px-1.5 align-top">
+                  {p.humanHours > 0 || p.prevHumanHours > 0 ? (
+                    <div className="flex flex-col items-end leading-tight">
+                      <span className="text-sm font-bold text-ive-text tabular-nums">
+                        {p.humanHours > 0 ? `${Math.round(p.humanHours)}h · ${pct(p.share)}` : '0h'}
+                      </span>
+                      <MiniDelta cur={Math.round(p.humanHours)} prev={Math.round(p.prevHumanHours)} goodWhenUp={null} className="mt-0.5" />
+                    </div>
+                  ) : (
+                    <span className="text-sm font-bold text-ive-text-muted tabular-nums">—</span>
+                  )}
+                </td>
+                <td className="text-right py-2 px-1.5 align-top">
+                  <div className="flex flex-col items-end leading-tight">
+                    <span className="text-sm font-bold text-ive-text tabular-nums">{p.completed}</span>
+                    <MiniDelta cur={p.completed} prev={p.prevCompleted} goodWhenUp className="mt-0.5" />
+                  </div>
+                </td>
+                <td className="text-right py-2 pl-1.5 align-top">
+                  {p.held == null ? (
+                    <span className="text-sm font-bold text-ive-text-muted tabular-nums">—</span>
+                  ) : (
+                    <div className="flex flex-col items-end leading-tight">
+                      <span className="text-sm font-bold text-ive-text tabular-nums">{p.held}</span>
+                      <MiniDelta cur={p.held} prev={p.prevHeld} goodWhenUp={false} className="mt-0.5" />
+                    </div>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -486,11 +509,16 @@ export function ProjectsSection({ projects, cost, tr, prevLabel }: { projects: P
 }
 
 /** 표 안의 작은 증감 — 화살표에만 의미색. goodWhenUp 이 null 이면 좋고 나쁨이 없는 값(사람 시간)이라 색 없음 */
-function MiniDelta({ cur, prev, goodWhenUp }: { cur: number; prev: number | null | undefined; goodWhenUp: boolean | null }) {
+function MiniDelta({ cur, prev, goodWhenUp, className = '' }: { cur: number; prev: number | null | undefined; goodWhenUp: boolean | null; className?: string }) {
   if (prev == null || cur === prev) return null
   const up = cur > prev
   const color = goodWhenUp == null ? 'text-ive-text-muted' : up === goodWhenUp ? 'text-ive-cyan' : 'text-ive-red'
-  return <span className="text-ive-text-secondary"><span className={color}>{up ? '▲' : '▼'}</span>{Math.abs(cur - prev)}</span>
+  return (
+    <span className={`inline-flex items-center text-xs font-bold tabular-nums text-ive-text-secondary whitespace-nowrap ${className}`}>
+      <span className={`${color} mr-0.5 text-[10px] leading-none`}>{up ? '▲' : '▼'}</span>
+      {Math.abs(cur - prev).toLocaleString()}
+    </span>
+  )
 }
 
 // ─── ⑥ 끝낸 일 ───

@@ -11,6 +11,7 @@ if [ ! -x "$CHROME" ]; then
 fi
 
 node build-brochure.js
+node build-brochure-en.js
 
 # 멀티페이지 브로셔 + 개별 슬라이드 PDF
 for n in ive-cover ive-overview ive-screens ive-record ive-impact ive-why ive-poc ive-brochure; do
@@ -20,7 +21,7 @@ for n in ive-cover ive-overview ive-screens ive-record ive-impact ive-why ive-po
 done
 
 # 미리보기 PNG (개별 슬라이드, 2x)
-for n in ive-cover ive-overview ive-screens ive-record ive-impact ive-why ive-poc; do
+for n in ive-cover ive-overview ive-screens ive-record ive-impact ive-why ive-poc ive-overview-en ive-screens-en; do
   "$CHROME" --headless --disable-gpu --screenshot="$n.png" \
     --window-size=1280,720 --force-device-scale-factor=2 "file://$PWD/$n.html" 2>/dev/null
   echo "PNG  → $n.png"
