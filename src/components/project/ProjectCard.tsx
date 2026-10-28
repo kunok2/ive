@@ -441,7 +441,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
                   <span className="text-sm font-bold text-ive-text-secondary">#{issue.iid}</span>
                   {age && (
                     <span className={`ml-auto shrink-0 text-xs font-bold tabular-nums ${age.aged ? 'px-1.5 py-0.5 rounded-lg bg-ive-red/15 text-ive-red' : 'text-ive-text-secondary'}`}>
-                      {tp('waitedFor', { t: ageText(tp, age) })}
+                      {age.unit === 'now' ? ageText(tp, age) : tp('waitedFor', { t: ageText(tp, age) })}
                     </span>
                   )}
                 </div>
