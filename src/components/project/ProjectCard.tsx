@@ -84,10 +84,27 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
   }
   const cardRef = useRef<HTMLDivElement>(null)
   // 숫자 칸을 눌러 패널을 펼치면 카드를 화면 한가운데로 — 아래쪽 프로젝트의 상세 영역이 화면 밖에 남지 않게(PC 보드 배치는 제외)
+  // 실제로 보이는 영역(스크롤 부모 윗변 ~ 하단 고정 탭 윗변)의 가운데에 카드 중심을 맞춘다 — 고정 탭에 가린 만큼 하단이 잘리지 않게
+  const centerCard = () => {
+    const card = cardRef.current
+    if (!card) return
+    let sc: HTMLElement | null = card.parentElement
+    while (sc && !(sc.scrollHeight > sc.clientHeight && /(auto|scroll)/.test(getComputedStyle(sc).overflowY))) sc = sc.parentElement
+    const top = sc ? sc.getBoundingClientRect().top : 0
+    let bottom = sc ? sc.getBoundingClientRect().bottom : window.innerHeight
+    document.querySelectorAll('nav.fixed.bottom-0').forEach(n => {
+      const r = (n as HTMLElement).getBoundingClientRect()
+      if (r.height > 0 && r.top > top && r.top < bottom) bottom = r.top
+    })
+    const r = card.getBoundingClientRect()
+    const delta = (r.top + r.height / 2) - (top + bottom) / 2
+    if (sc) sc.scrollBy({ top: delta, behavior: 'smooth' })
+    else window.scrollBy({ top: delta, behavior: 'smooth' })
+  }
   const togglePanel = (p: NonNullable<typeof expandedPanel>) => {
     const opening = expandedPanel !== p
     setExpandedPanel(opening ? p : null)
-    if (opening && !hideActiveList) setTimeout(() => cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 60)
+    if (opening && !hideActiveList) setTimeout(centerCard, 60)
   }
   const [stats, setStats] = useState<ProjectStats | null>(null)
   const [snapshots, setSnapshots] = useState<StatSnapshot[]>([])
