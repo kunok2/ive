@@ -12,7 +12,7 @@ import LiveTracePanel from '@/components/execution/LiveTracePanel'
 import AgentAvatar from '@/components/agent/AgentAvatar'
 import MarqueeText from '@/components/ui/MarqueeText'
 import ActiveWorkList, { type ActiveItem } from '@/components/project/ActiveWorkList'
-import WaitPill, { FailPill, ConflictPill } from '@/components/project/WaitPill'
+import WaitPill, { FailPill, ConflictPill, CiPill } from '@/components/project/WaitPill'
 import CountBump from '@/components/ui/CountBump'
 import { execKind, execHref, ageOf, ageText } from '@/lib/active-work'
 import ConflictResolutionPanel from '@/components/mr/ConflictResolutionPanel'
@@ -120,6 +120,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
   const [progressByIid, setProgressByIid] = useState<Record<number, { done: number; total: number; percent: number }>>({})
   const [activities, setActivities] = useState<Record<string, ToolActivity>>({})
   const [liveMRCount, setLiveMRCount] = useState<number | null>(null)
+  const [ciCounts, setCiCounts] = useState({ running: 0, waiting: 0 })
   const [liveConflictCount, setLiveConflictCount] = useState<number | null>(null)
 
   const fetchStats = useCallback(async () => {
@@ -366,8 +367,19 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
         }
       } catch { /* ignore */ }
     }
+    // 머지 대상 브랜치의 CI 동작 건수 — 작업취합 패널 상세와 같은 API
+    const fetchCiCount = async () => {
+      try {
+        const res = await fetch(`/api/projects/${project.id}/ci-runs`)
+        if (res.ok) {
+          const data = await res.json()
+          setCiCounts({ running: data.runningCount ?? 0, waiting: data.waitingCount ?? 0 })
+        }
+      } catch { /* ignore */ }
+    }
     fetchConflictCount()
-    const timer = setInterval(fetchConflictCount, 60000)
+    fetchCiCount()
+    const timer = setInterval(() => { fetchConflictCount(); fetchCiCount() }, 60000)
     return () => clearInterval(timer)
   }, [project.id])
 
@@ -655,9 +667,9 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
               <CountBump value={mergeCount}>{mergeCount === null ? '–' : mergeCount}</CountBump>
             </span>
             {/* 충돌 건수 — 오늘완료의 증감과 같은 규칙: 둘째 줄이 없으면 큰 숫자 옆에, 있으면 그 줄에 */}
-            {!anySub && <ConflictPill n={conflictCount} />}
+            {!anySub && <><CiPill running={ciCounts.running} waiting={ciCounts.waiting} /><ConflictPill n={conflictCount} /></>}
           </div>
-          {subRow(<ConflictPill n={conflictCount} />)}
+          {subRow(<><CiPill running={ciCounts.running} waiting={ciCounts.waiting} /><ConflictPill n={conflictCount} /></>)}
           {/* Sparkline(40x12)과 동일 박스로 감싸야 <i> baseline 정렬이 위 숫자와 붙어 보이는 현상 방지 */}
           <div className="flex items-center justify-center" style={{ width: 40, height: 12 }}>
             <i className={`fa-solid fa-code-merge text-[10px] leading-none ${conflictCount > 0 ? 'text-ive-red' : (mergeCount ?? 0) > 0 ? 'text-ive-amber' : 'text-ive-text-dim'}`} />

@@ -38,6 +38,21 @@ export function FailPill({ n }: { n: number }) {
 }
 
 /**
+ * 머지 대상 브랜치에서 돌고 있거나 대기 중인 CI(파이프라인) 건수 — 작업취합 패널 상세와 같은 값. 0이면 그리지 않는다.
+ */
+export function CiPill({ running, waiting }: { running: number; waiting: number }) {
+  const tp = useTranslations('project')
+  const n = running + waiting
+  if (n <= 0) return null
+  const title = tp('mergeCiHint', { running, waiting })
+  return (
+    <span title={title} aria-label={title} className={`${PILL} ${running > 0 ? 'text-ive-cyan' : 'text-ive-amber'}`}>
+      <i className="fa-solid fa-gears mr-0.5" /><CountBump value={n} />
+    </span>
+  )
+}
+
+/**
  * 작업취합에서 충돌이 난 MR 건수 — 머지를 기다리는 MR 숫자에 묻히지 않게 따로 붙인다(사람이 풀어야 넘어간다). 0이면 그리지 않는다.
  */
 export function ConflictPill({ n }: { n: number }) {
