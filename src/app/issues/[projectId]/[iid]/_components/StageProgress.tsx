@@ -231,10 +231,31 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
     })
     return { sourceShifts: sx, targetShifts: tx, yShifts: sy }
   })()
-  const maxYShift = arrows.length > 0 ? Math.max(0, ...yShifts) : 0
-  const overhead = arrows.length > 0 ? 24 + maxYShift : 0
+  // 거치지 않은 단계 — 이미 지나갔는데(칸 번호가 현재보다 앞) 그 단계에 들어간 흔적이 없는 처리·검증·확인.
+  // 기록 자체가 없는 옛 이슈(stageTimes·forwardCounts 둘 다 없음)는 판단할 근거가 없어 건너뛰지 않는다.
+  const hasTrace = !!stageTimes || !!forwardCounts
+  const touchedByArrow = (idx: number) => arrows.some(a => a.sourceIdx === idx || a.targetIdx === idx)
+  const traced: Record<number, boolean> = {
+    2: !!stageTimes?.devStartedAt || !!stageTimes?.devEndedAt || fc.toProcess > 0 || touchedByArrow(2),
+    3: !!stageTimes?.verifyStartedAt || !!stageTimes?.verifyEndedAt || fc.toVerify > 0 || touchedByArrow(3),
+    4: !!stageTimes?.confirmStartedAt || !!stageTimes?.confirmedAt || fc.toConfirm > 0 || touchedByArrow(4),
+  }
+  const isSkipped = (idx: number) => hasTrace && idx >= 2 && idx <= 4 && current > idx && !traced[idx]
+  // 건너뛴 구간을 잇는 화살표 — 건너뛴 칸 직전의 칸 → 건너뛴 칸 직후의 칸
+  const bypasses: { fromIdx: number; toIdx: number }[] = []
+  for (let idx = 2; idx <= 4; idx++) {
+    if (isSkipped(idx) && !isSkipped(idx - 1)) {
+      let to = idx + 1
+      while (to < 5 && isSkipped(to)) to++
+      bypasses.push({ fromIdx: idx - 1, toIdx: to })
+    }
+  }
+  const bypassY = bypasses.length > 0 ? (arrows.length > 0 ? Math.max(0, ...yShifts) + 16 : 0) : 0
+  const maxYShift = Math.max(arrows.length > 0 ? Math.max(0, ...yShifts) : 0, bypasses.length > 0 ? bypassY : 0)
+  const overhead = arrows.length > 0 || bypasses.length > 0 ? 24 + maxYShift : 0
+  const overlayCount = arrows.length + bypasses.length
   useLayoutEffect(() => {
-    if (!containerRef.current || arrows.length === 0) return
+    if (!containerRef.current || overlayCount === 0) return
     const measure = () => {
       if (!containerRef.current) return
       const baseLeft = containerRef.current.getBoundingClientRect().left
@@ -250,7 +271,7 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
     const ro = new ResizeObserver(measure)
     ro.observe(containerRef.current)
     return () => ro.disconnect()
-  }, [arrows.length])
+  }, [overlayCount])
 
   // 확인자 picker/표시 목록 — IVE 사용자 후보(미지정 시 프로젝트 멤버 fallback). 검증자는 항상 gitMembers.
   const confirmerList = roles?.confirmerMembers ?? roles?.gitMembers ?? []
@@ -372,7 +393,23 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
                   <path d="M 0 0 L 8 4 L 0 8 z" fill={ARROW_STROKE} />
                 </marker>
               ))}
+              <marker id="stage-bypass-arrow" viewBox="0 0 8 8" refX="6" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 0 L 8 4 L 0 8 z" fill="#22c55e" fillOpacity="0.6" />
+              </marker>
             </defs>
+            {bypasses.map((b, i) => {
+              const fx = pillCenters[b.fromIdx]
+              const tx = pillCenters[b.toIdx]
+              if (fx == null || tx == null) return null
+              // 건너뛴 칸 위를 지나 이어지는 정방향 화살표 (╭──╮)
+              const ty = overhead - 14 - bypassY
+              const by = overhead
+              const x1 = fx + 9, x2 = tx - 9, r = 5
+              const path = `M ${x1} ${by} L ${x1} ${ty + r} Q ${x1} ${ty} ${x1 + r} ${ty} L ${x2 - r} ${ty} Q ${x2} ${ty} ${x2} ${ty + r} L ${x2} ${by}`
+              return (
+                <path key={`bp-${i}`} d={path} stroke="#22c55e" strokeOpacity="0.5" strokeWidth="1.2" fill="none" strokeLinejoin="round" strokeLinecap="round" markerEnd="url(#stage-bypass-arrow)" />
+              )
+            })}
             {arrows.map((a, i) => {
               const sxCenter = pillCenters[a.sourceIdx]
               const txCenter = pillCenters[a.targetIdx]
@@ -425,8 +462,10 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
           // 이 단계의 체크리스트 진행률(처리·검증·확인) — 본문에 그 단계 체크박스가 있을 때만. 칩 이름 옆 숫자 + 칩 아랫변 막대
           const ckKey = m.idx === 2 ? 'process' : m.idx === 3 ? 'verify' : m.idx === 4 ? 'confirm' : null
           const cl = ckKey ? stageChecklist?.[ckKey] : null
+          const skipped = isSkipped(m.idx)
           let chipCls = ''
-          if (isError) chipCls = 'bg-ive-red/15 text-ive-red border-ive-red/40 ring-1 ring-ive-red/20'
+          if (skipped) chipCls = 'bg-white/[0.02] text-ive-text-dim border-dashed border-ive-border-subtle opacity-40'
+          else if (isError) chipCls = 'bg-ive-red/15 text-ive-red border-ive-red/40 ring-1 ring-ive-red/20'
           else if (isCurrent) chipCls = `${tone.active.bg} ${tone.active.text} ${tone.active.border} ring-1 ${tone.active.ring}`
           else if (isPast) chipCls = 'bg-ive-green/10 text-ive-green/70 border-ive-green/20'
           else if (visitedAhead) chipCls = 'bg-ive-cyan/5 text-ive-cyan/30 border-ive-cyan/15'
@@ -464,7 +503,7 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
             || (m.idx === 4 && stage === 'confirming')
           )
           // 아직 도달하지 않은 단계 — 한 번도 가보지 않은 미래의 단계는 아바타도 흐리게
-          const unreached = !isCurrent && !isPast && !visitedAhead
+          const unreached = (!isCurrent && !isPast && !visitedAhead) || skipped
           const avatarRing = `ring-2 ${slot.ringCls} ${isInProgress ? 'animate-pulse' : ''} ${unreached ? 'opacity-40' : ''}`
 
           // 유입(1) 칩 하단: 이슈 생성 일시
@@ -485,7 +524,11 @@ export default function StageProgress({ stage, createdAt, closedAt, stageTimes, 
 
           return (
              <Fragment key={m.idx}>
-               {i > 0 && (
+               {i > 0 && (skipped || isSkipped(m.idx - 1)) && (
+                 // 건너뛴 칸에 닿는 화살표는 그리지 않는다 — 칸 폭만 유지하고 위쪽 우회 화살표가 대신 잇는다
+                 <div className="flex-1 min-w-3" aria-hidden />
+               )}
+               {i > 0 && !(skipped || isSkipped(m.idx - 1)) && (
                  <div className="flex-1 min-w-3 flex flex-col items-center pt-[10px]">
                    <div className="w-full flex items-center">
                      <div
