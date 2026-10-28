@@ -17,5 +17,12 @@
   "merging": "Merging...",
   "closeMR": "Discard MR",
   "closingMR": "Discarding...",
-  "closed": "Discarded"
+  "closed": "Discarded",
+  "ciTitle": "{branch} CI",
+  "ciRunning": "{count} running",
+  "ciWaiting": "{count} waiting",
+  "ciNone": "No CI running or waiting",
+  "ciStateRunning": "Running",
+  "ciStateWaiting": "Waiting",
+  "ciSince": "started {time}"
 }

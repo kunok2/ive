@@ -13,6 +13,15 @@ interface MRItem {
   web_url: string
 }
 
+interface CiRun {
+  id: number | string
+  status: string
+  state: 'running' | 'waiting'
+  sha: string | null
+  webUrl: string | null
+  createdAt: string | null
+}
+
 interface Props {
   projectId: string
   projectColor: string
@@ -27,6 +36,16 @@ export default function ConflictResolutionPanel({ projectId, projectColor }: Pro
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [merging, setMerging] = useState(false)
   const [mergeResults, setMergeResults] = useState<{ iid: number; success: boolean; error?: string }[]>([])
+
+  const [ci, setCi] = useState<{ branch: string; runningCount: number; waitingCount: number; runs: CiRun[] } | null>(null)
+
+  // 머지해도 CI 가 끝나야 배포된다 — 대상 브랜치에서 돌고 있거나 대기 중인 CI 를 함께 보인다
+  const fetchCi = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/projects/${projectId}/ci-runs`)
+      if (res.ok) setCi(await res.json())
+    } catch { /* ignore */ }
+  }, [projectId])
 
   const fetchConflicts = useCallback(async () => {
     try {
@@ -44,6 +63,12 @@ export default function ConflictResolutionPanel({ projectId, projectColor }: Pro
     const timer = setInterval(fetchConflicts, 60000)
     return () => clearInterval(timer)
   }, [fetchConflicts])
+
+  useEffect(() => {
+    fetchCi()
+    const timer = setInterval(fetchCi, 15000)
+    return () => clearInterval(timer)
+  }, [fetchCi])
 
   const conflicts = mrs.filter(mr => mr.has_conflicts)
   const ready = mrs.filter(mr => !mr.has_conflicts)
@@ -78,7 +103,7 @@ export default function ConflictResolutionPanel({ projectId, projectColor }: Pro
         const data = await res.json()
         setMergeResults(data.results ?? [])
         setSelected(new Set())
-        setTimeout(fetchConflicts, 2000)
+        setTimeout(() => { fetchConflicts(); fetchCi() }, 2000)
       }
     } catch { /* ignore */ }
     finally { setMerging(false) }
@@ -98,7 +123,7 @@ export default function ConflictResolutionPanel({ projectId, projectColor }: Pro
         const data = await res.json()
         setMergeResults(data.results ?? [])
         setSelected(new Set())
-        setTimeout(fetchConflicts, 2000)
+        setTimeout(() => { fetchConflicts(); fetchCi() }, 2000)
       }
     } catch { /* ignore */ }
     finally { setClosing(false) }
@@ -182,8 +207,47 @@ export default function ConflictResolutionPanel({ projectId, projectColor }: Pro
     )
   }
 
+  const renderCi = () => {
+    if (!ci) return null
+    const total = ci.runs.length
+    return (
+      <div className="px-3 py-2 bg-ive-bg-deep/50 border-b border-ive-border-dark shrink-0">
+        <div className="flex items-center gap-2 text-xs font-bold">
+          <i className={`fa-solid fa-gears ${ci.runningCount > 0 ? 'text-ive-cyan' : 'text-ive-text-dim'}`} />
+          <span className="text-ive-text-dim">{t('ciTitle', { branch: ci.branch })}</span>
+          <span className={ci.runningCount > 0 ? 'text-ive-cyan' : 'text-ive-text-dim'}>{t('ciRunning', { count: ci.runningCount })}</span>
+          <span className={ci.waitingCount > 0 ? 'text-ive-amber' : 'text-ive-text-dim'}>{t('ciWaiting', { count: ci.waitingCount })}</span>
+        </div>
+        {total === 0 ? (
+          <p className="text-xs text-ive-text-dim mt-1">{t('ciNone')}</p>
+        ) : (
+          <div className="mt-1.5 space-y-1">
+            {ci.runs.map(r => (
+              <a
+                key={r.id}
+                href={r.webUrl ?? undefined}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-2 text-xs text-ive-text hover:underline"
+              >
+                <span className={`font-bold px-1.5 py-0.5 rounded-lg border ${r.state === 'running' ? 'bg-ive-cyan/15 text-ive-cyan border-ive-cyan/30' : 'bg-ive-amber/15 text-ive-amber border-ive-amber/30'}`}>
+                  {r.state === 'running' && <i className="fa-solid fa-circle-notch fa-spin mr-1" />}
+                  {t(r.state === 'running' ? 'ciStateRunning' : 'ciStateWaiting')}
+                </span>
+                {r.id ? <span className="font-bold">#{r.id}</span> : null}
+                {r.sha && <span className="text-ive-text-dim font-mono">{r.sha}</span>}
+                {r.createdAt && <span className="text-ive-text-dim ml-auto">{t('ciSince', { time: new Date(r.createdAt).toLocaleTimeString() })}</span>}
+              </a>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="flex-1 flex flex-col min-h-0">
+      {renderCi()}
       <div className="flex-1 flex flex-col overflow-y-auto">
         {loading ? (
           <div className="flex-1 flex flex-col items-center justify-center gap-2 text-ive-text-dim text-sm">
