@@ -641,8 +641,8 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
         </button>
       </div>
 
-      {/* 펼친 상세 영역 닫기 — 숫자를 다시 눌러야 닫힌다는 걸 모르는 사용자를 위해 눈에 보이는 버튼을 둔다 (취합 패널은 자체 닫기 버튼이 있다) */}
-      {expandedPanel && expandedPanel !== 'conflicts' && (
+      {/* 펼친 상세 영역 닫기 — 숫자를 다시 눌러야 닫힌다는 걸 모르는 사용자를 위해 눈에 보이는 버튼을 둔다 (취합 패널 포함 모든 패널 공통) */}
+      {expandedPanel && (
         <button
           onClick={() => setExpandedPanel(null)}
           className="shrink-0 w-full py-1.5 flex items-center justify-center gap-1.5 text-xs font-bold text-ive-text-secondary hover:text-ive-text hover:bg-white/[0.02] border-t border-ive-border-dark transition-all"
