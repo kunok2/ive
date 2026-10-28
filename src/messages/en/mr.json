@@ -24,5 +24,10 @@
   "mergeAction": "Merge",
   "discardAction": "Discard",
   "confirmMergeTitle": "Confirm MR merge",
-  "discardTitle": "Discard MR"
+  "discardTitle": "Discard MR",
+  "finishVerifyTitle": "Finish verification",
+  "finishVerifyMessage": "Merged. Finish verification now?",
+  "finishVerifyYes": "Yes",
+  "finishVerifyComment": "!{iid} merged — code reviewed and merged; verification finished.",
+  "finishVerifyDone": "Verification completed"
 }

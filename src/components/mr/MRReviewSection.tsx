@@ -7,6 +7,7 @@ import { useStore } from '@/lib/store'
 import { formatDateFull } from '@/lib/format-date'
 import ConfirmModal from '@/components/ui/ConfirmModal'
 import { useToast } from '@/components/ui/Toast'
+import { transitionTarget } from '@/lib/stage-transitions'
 
 interface MRInfo {
   iid: number
@@ -30,9 +31,13 @@ interface Props {
   issueIid: number
   /** MR 데이터 로드/표시로 섹션 높이가 바뀐 직후 호출 (부모가 채팅 스크롤 보정용) */
   onLayoutChange?: () => void
+  /** 이슈의 현재 단계 — 'verifying' 에서 머지하면 검증을 바로 마무리할지 묻는다 */
+  stage?: string
+  /** 검증 완료 처리 후 이슈·노트 갱신 */
+  onRefreshAll?: () => Promise<void> | void
 }
 
-export default function MRReviewSection({ projectId, issueIid, onLayoutChange }: Props) {
+export default function MRReviewSection({ projectId, issueIid, onLayoutChange, stage, onRefreshAll }: Props) {
   const router = useRouter()
   const { state } = useStore()
   const userLocale = state.user?.locale
@@ -46,6 +51,7 @@ export default function MRReviewSection({ projectId, issueIid, onLayoutChange }:
   const [closing, setClosing] = useState(false)
   const [showMergeConfirm, setShowMergeConfirm] = useState(false)
   const [showCloseConfirm, setShowCloseConfirm] = useState(false)
+  const [showFinishConfirm, setShowFinishConfirm] = useState(false)
   const [notifyOnComplete, setNotifyOnComplete] = useState(true)
   const [error, setError] = useState('')
   const slackConnected = !!state.user?.slackUserId
@@ -84,6 +90,7 @@ export default function MRReviewSection({ projectId, issueIid, onLayoutChange }:
         throw new Error(data.error || 'Merge failed')
       }
       await fetchMR()
+      if (stage === 'verifying') setShowFinishConfirm(true)
       if (mr) {
         watchPipeline({
           projectId,
@@ -96,6 +103,36 @@ export default function MRReviewSection({ projectId, issueIid, onLayoutChange }:
       setError(err instanceof Error ? err.message : 'Merge failed')
     } finally {
       setMerging(false)
+    }
+  }
+
+  // 머지 직후 「예」 — 검증 코멘트를 남기고 검증을 완료(확인 대기)로 올린다
+  async function handleFinishVerify() {
+    setError('')
+    try {
+      const to = transitionTarget('verifying', 'approve')
+      const prefix = to === 'confirm_waiting' ? '**검증 → 확인대기**\n\n' : ''
+      const noteRes = await fetch(`/api/projects/${projectId}/issues/${issueIid}/notes`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: prefix + t('finishVerifyComment', { iid: mr?.iid ?? 0 }) }),
+      })
+      if (!noteRes.ok) {
+        const data = await noteRes.json().catch(() => ({}))
+        toast(data.error || 'Comment failed', 'error'); return
+      }
+      const res = await fetch(`/api/projects/${projectId}/issues/${issueIid}/stage`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stage: 'verifying', action: 'approve' }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        toast(data.error || `Error: ${res.status}`, 'error')
+      } else {
+        toast(t('finishVerifyDone'), 'success')
+      }
+      await onRefreshAll?.()
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Error', 'error')
     }
   }
 
@@ -264,6 +301,14 @@ export default function MRReviewSection({ projectId, issueIid, onLayoutChange }:
             </p>
           )
         }
+      />
+      <ConfirmModal
+        open={showFinishConfirm}
+        onClose={() => setShowFinishConfirm(false)}
+        onConfirm={handleFinishVerify}
+        title={t('finishVerifyTitle')}
+        message={t('finishVerifyMessage')}
+        confirmLabel={t('finishVerifyYes')}
       />
       <ConfirmModal
         open={showCloseConfirm}

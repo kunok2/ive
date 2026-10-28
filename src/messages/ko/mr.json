@@ -24,5 +24,10 @@
   "mergeAction": "머지",
   "discardAction": "버림",
   "confirmMergeTitle": "MR 머지 확인",
-  "discardTitle": "MR 버림"
+  "discardTitle": "MR 버림",
+  "finishVerifyTitle": "검증 마무리",
+  "finishVerifyMessage": "머지가 완료되었습니다. 바로 검증을 마무리하시겠습니까?",
+  "finishVerifyYes": "예",
+  "finishVerifyComment": "!{iid} 머지 완료 — 코드 검토 후 머지하여 검증을 마무리합니다.",
+  "finishVerifyDone": "검증을 완료했습니다"
 }
