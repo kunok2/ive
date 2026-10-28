@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Project, Agent, TaskExecution, StatSnapshot } from '@/types'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useStore } from '@/lib/store'
 import { formatDateShort, formatDateMedium, formatTime } from '@/lib/format-date'
 import Sparkline from '@/components/ui/Sparkline'
@@ -81,6 +81,13 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
     _setExpandedPanel(v)
     if (v) sessionStorage.setItem(`pc-panel-${project.id}`, v)
     else sessionStorage.removeItem(`pc-panel-${project.id}`)
+  }
+  const cardRef = useRef<HTMLDivElement>(null)
+  // 숫자 칸을 눌러 패널을 펼치면 카드를 화면 한가운데로 — 아래쪽 프로젝트의 상세 영역이 화면 밖에 남지 않게(PC 보드 배치는 제외)
+  const togglePanel = (p: NonNullable<typeof expandedPanel>) => {
+    const opening = expandedPanel !== p
+    setExpandedPanel(opening ? p : null)
+    if (opening && !hideActiveList) setTimeout(() => cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 60)
   }
   const [stats, setStats] = useState<ProjectStats | null>(null)
   const [snapshots, setSnapshots] = useState<StatSnapshot[]>([])
@@ -439,6 +446,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
 
   return (
     <div
+      ref={cardRef}
       className={`bg-ive-bg-card rounded-lg border overflow-hidden transition-colors duration-200 flex flex-col ${expandedPanel ? 'border-ive-cyan/30 h-[calc(100vh-160px)]' : selected ? 'border-ive-cyan/60' : 'border-ive-border-subtle hover:border-ive-green/30'}`}
       style={{ background: `linear-gradient(135deg, ${project.color || '#4ade80'}08 0%, transparent 40%), var(--color-ive-bg-card, #121e14)` }}
     >
@@ -554,7 +562,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
       <div data-tour="project-card-stats" className="flex items-stretch border-t border-ive-border-dark">
         {/* 처리 (AI 에이전트) */}
         <button
-          onClick={() => setExpandedPanel(expandedPanel === 'running' ? null : 'running')}
+          onClick={() => togglePanel('running')}
           title={tp('workingTooltip')}
           className={`flex-1 min-w-0 py-2.5 px-1 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'running' ? 'bg-ive-stage-process/5' : 'hover:bg-white/[0.02]'}`}
         >
@@ -570,7 +578,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
 
         {/* 검증 — 단계색(보라) */}
         <button
-          onClick={() => setExpandedPanel(expandedPanel === 'verifying' ? null : 'verifying')}
+          onClick={() => togglePanel('verifying')}
           title={tp('verifyingTooltip')}
           className={`flex-1 min-w-0 py-2.5 px-1 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'verifying' ? 'bg-ive-stage-verify/5' : 'hover:bg-white/[0.02]'}`}
         >
@@ -586,7 +594,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
 
         {/* 확인 — 단계색(분홍) */}
         <button
-          onClick={() => setExpandedPanel(expandedPanel === 'confirming' ? null : 'confirming')}
+          onClick={() => togglePanel('confirming')}
           title={tp('confirmingTooltip')}
           className={`flex-1 min-w-0 py-2.5 px-1 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'confirming' ? 'bg-ive-stage-confirm/5' : 'hover:bg-white/[0.02]'}`}
         >
@@ -602,7 +610,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
 
         {/* 완료 (금일) */}
         <button
-          onClick={() => setExpandedPanel(expandedPanel === 'done' ? null : 'done')}
+          onClick={() => togglePanel('done')}
           title={tp('completedTooltip')}
           className={`flex-1 min-w-0 py-2.5 px-1 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'done' ? 'bg-ive-green/5' : 'hover:bg-white/[0.02]'}`}
         >
@@ -621,7 +629,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
 
         {/* 취합 */}
         <button
-          onClick={() => setExpandedPanel(expandedPanel === 'conflicts' ? null : 'conflicts')}
+          onClick={() => togglePanel('conflicts')}
           title={tp('conflictTooltip')}
           className={`flex-1 min-w-0 py-2.5 px-1 flex flex-col items-center gap-0.5 transition-all ${expandedPanel === 'conflicts' ? 'bg-ive-amber/5' : 'hover:bg-white/[0.02]'}`}
         >
