@@ -17,5 +17,12 @@
   "merging": "머지 중...",
   "closeMR": "MR 버림",
   "closingMR": "버리는 중...",
-  "closed": "버림 완료"
+  "closed": "버림 완료",
+  "ciTitle": "{branch} CI",
+  "ciRunning": "실행 중 {count}건",
+  "ciWaiting": "대기 {count}건",
+  "ciNone": "돌고 있거나 대기 중인 CI가 없습니다",
+  "ciStateRunning": "실행 중",
+  "ciStateWaiting": "대기",
+  "ciSince": "{time} 시작"
 }
