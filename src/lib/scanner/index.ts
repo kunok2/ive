@@ -884,9 +884,11 @@ async function scanProject(project: Project, force: boolean = false) {
         // 열린 채 종료 레이블이 붙은 이슈는 스캔에서 확인 완료로 잡히지만, 레이블을 붙이자마자 닫으면 이 정리 경로로 온다(운영 메타샵 2297).
         const endLabelDone = !mergeComplete && Array.isArray(closedCur?.labels)
           && closedCur.labels.some((l: any) => (typeof l === 'string' ? l : l?.name) === (project.labelEnd || DEFAULT_LABELS.end))
-        const completed = mergeComplete || endLabelDone
+        // IVE 가 외부 도구 완료로 보고 직접 닫은 이슈 — 닫힌 라벨은 그대로 검증대기라 위 두 판정에 안 걸린다
+        const externalDone = !mergeComplete && !endLabelDone && isExternalToolFinished(project, iid, row.cached_stage)
+        const completed = mergeComplete || endLabelDone || externalDone
 
-        slog.info(`Cleaning stale issue #${iid} in project ${project.name} (last stage: ${row.cached_stage}, ${mergeComplete ? 'merged-complete' : endLabelDone ? 'end-label-done' : 'abandoned'})`)
+        slog.info(`Cleaning stale issue #${iid} in project ${project.name} (last stage: ${row.cached_stage}, ${mergeComplete ? 'merged-complete' : endLabelDone ? 'end-label-done' : externalDone ? 'external-done' : 'abandoned'})`)
         upsertIssueStageSnapshot(project.id, iid, {
           cachedStage: 'done',
           assigneeUsername: null,
@@ -899,7 +901,7 @@ async function scanProject(project: Project, force: boolean = false) {
         // 사건 로그 — 스냅샷은 두 경우 모두 'done' 이지만, 머지 없이 닫힌(버려진) 이슈를 완료로 세지 않도록 구분해 남긴다
         recordStageEvent({
           projectId: project.id, issueIid: iid, fromStage: row.cached_stage,
-          toStage: completed ? 'done' : 'closed', action: mergeComplete ? 'merged' : endLabelDone ? null : 'abandoned',
+          toStage: completed ? 'done' : 'closed', action: mergeComplete ? 'merged' : (endLabelDone || externalDone) ? null : 'abandoned',
           actor: SYSTEM_ACTOR, source: 'scanner',
         })
 
@@ -918,8 +920,8 @@ async function scanProject(project: Project, force: boolean = false) {
               targetType: 'issue', targetId: `${project.id}-${iid}`,
             })
           } catch (e) { slog.error({ err: e }, 'Failed to log merge-complete activity:') }
-        } else if (endLabelDone) {
-          // 종료 레이블이 이미 붙어 있다 — 남은 활성 실행만 성공으로 마감한다
+        } else if (endLabelDone || externalDone) {
+          // 종료 레이블이 이미 붙어 있다(또는 외부 도구가 끝낸 건) — 남은 활성 실행만 성공으로 마감한다
           for (const ex of getDb().prepare(
             "SELECT id FROM task_executions WHERE project_id = ? AND issue_iid = ? AND status IN ('running', 'assigned')"
           ).all(project.id, iid) as { id: string }[]) updateExecutionStatus(ex.id, 'success', new Date().toISOString())
@@ -1423,10 +1425,7 @@ export async function reconcileExternalIssue(
   //  IVE-W 는 "외부 도구가 끝냈다"는 뜻일 때만 완료다. 외부 등록 뒤 재태깅돼 IVE 가 직접
   //  실행(에이전트·담당자·검증/확인)을 돌린 이슈라면 IVE-W 는 진짜 검증대기이므로 닫지 않는다.
   //  (종전엔 과거 외부 행만 보고 닫아, 다시 열어도 스캔마다 또 닫혀 대기 목록·통계에서 사라졌다)
-  const iveDriven = stage === 'verify_waiting' && hasExternalRow && !!getDb().prepare(
-    `SELECT 1 FROM task_executions WHERE project_id = ? AND issue_iid = ? AND NOT (${EXTERNAL_EXEC_WHERE}) LIMIT 1`
-  ).get(project.id, iid);
-  if (stage === 'done' || (stage === 'verify_waiting' && hasExternalRow && !iveDriven)) {
+  if (stage === 'done' || isExternalToolFinished(project, iid, stage)) {
     try {
       await closeFn(project, iid);
       closed = true;
@@ -1435,6 +1434,23 @@ export async function reconcileExternalIssue(
   }
 
   return { resynced, closed };
+}
+
+/**
+ * 외부 도구가 끝낸 이슈인가 — IVE-W(검증대기)인데 외부 도구 기록만 있고 IVE 가 직접 돌린 실행은 없다.
+ * IVE 는 이런 이슈를 완료로 보고 스스로 닫는다(reconcileExternalIssue). 닫힌 뒤 스캔에서 사라진 이슈를
+ * 정리하는 쪽도 같은 판정으로 완료로 마감해야 한다 — 아니면 IVE 가 닫은 것을 "사람이 머지 없이 닫았다"로 오인해 버려진 것으로 센다(운영 spider-framework 1697).
+ */
+export function isExternalToolFinished(project: Project, iid: number, stage: string | null): boolean {
+  if (stage !== 'verify_waiting') return false;
+  const db = getDb();
+  const hasExternalRow = !!db.prepare(
+    `SELECT 1 FROM task_executions WHERE project_id = ? AND issue_iid = ? AND ${EXTERNAL_EXEC_WHERE} LIMIT 1`
+  ).get(project.id, iid);
+  if (!hasExternalRow) return false;
+  return !db.prepare(
+    `SELECT 1 FROM task_executions WHERE project_id = ? AND issue_iid = ? AND NOT (${EXTERNAL_EXEC_WHERE}) LIMIT 1`
+  ).get(project.id, iid);
 }
 
 /**

@@ -8,6 +8,10 @@ Springware IVE의 굵직한 변경 이력입니다.
 
 ## [Unreleased]
 
+### Fixed
+
+- **IVE 가 직접 닫은 외부 도구 완료 건이 완료로 안 세지고 '버려짐'으로 남던 것** — 외부 도구가 끝낸 검증대기 이슈를 IVE 는 완료로 보고 스스로 닫는데, 닫힌 이슈를 정리하는 쪽은 그 판정을 몰라 "사람이 머지 없이 닫았다"로 오인해 `closed/abandoned` 로 마감했다(운영 spider-framework #1697). 두 쪽이 같은 판정(`isExternalToolFinished`)을 쓰게 해, 이런 건은 완료로 마감한다. 이미 `abandoned` 로 남은 과거 건은 그대로다.
+
 ## [1.25.4] - 2026-10-27
 
 ### Fixed
