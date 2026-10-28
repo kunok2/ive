@@ -234,5 +234,6 @@
   "activeConfirmingHeader": "확인 중 {n}",
   "failGroupProcess": "처리 실패",
   "stageFailHint": "처리 실패 {n}건 — 작업을 열어 다시 처리시켜 주세요",
-  "mergeConflictHint": "충돌 난 MR {n}건 — 열어서 충돌을 풀어 주세요"
+  "mergeConflictHint": "충돌 난 MR {n}건 — 열어서 충돌을 풀어 주세요",
+  "mergeCiHint": "CI 실행 중 {running}건 · 대기 {waiting}건"
 }
