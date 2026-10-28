@@ -1,6 +1,6 @@
 'use client'
 
-import { use, useEffect, useState, useCallback } from 'react'
+import { use, useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import DiffViewer from '@/components/mr/DiffViewer'
@@ -8,6 +8,7 @@ import ConfirmModal from '@/components/ui/ConfirmModal'
 import MobileTabBar from '@/components/layout/MobileTabBar'
 import { useToast } from '@/components/ui/Toast'
 import { useStore } from '@/lib/store'
+import { transitionTarget } from '@/lib/stage-transitions'
 
 interface MRInfo {
   iid: number
@@ -45,6 +46,8 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
   const [showMergeConfirm, setShowMergeConfirm] = useState(false)
   const [showCloseConfirm, setShowCloseConfirm] = useState(false)
   const [mergeError, setMergeError] = useState('')
+  const [showFinishConfirm, setShowFinishConfirm] = useState(false)
+  const finishingRef = useRef(false)
   const { toast } = useToast()
 
   const fetchChanges = useCallback(async () => {
@@ -77,11 +80,46 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
         toast(data.error || 'Merge failed', 'error')
         throw new Error(data.error || 'Merge failed')
       }
-      router.back()
+      // 검증 중인 이슈면 바로 검증을 마무리할지 묻는다 — 아니면 이전 화면으로
+      const stage = await fetch(`/api/projects/${projectId}/issues/${iid}`, { cache: 'no-store' })
+        .then(r => (r.ok ? r.json() : null)).then(d => d?.stage as string | undefined).catch(() => undefined)
+      if (stage === 'verifying') setShowFinishConfirm(true)
+      else router.back()
     } catch (err) {
       setMergeError(err instanceof Error ? err.message : t('mergeFailed'))
     } finally {
       setMerging(false)
+    }
+  }
+
+  // 머지 직후 「예」 — 검증 코멘트를 남기고 검증을 완료(확인 대기)로 올린다
+  async function handleFinishVerify() {
+    finishingRef.current = true
+    try {
+      const to = transitionTarget('verifying', 'approve')
+      const prefix = to === 'confirm_waiting' ? '**검증 → 확인대기**\n\n' : ''
+      const noteRes = await fetch(`/api/projects/${projectId}/issues/${iid}/notes`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: prefix + t('finishVerifyComment', { iid: mr?.iid ?? 0 }) }),
+      })
+      if (!noteRes.ok) {
+        const data = await noteRes.json().catch(() => ({}))
+        toast(data.error || 'Comment failed', 'error'); return
+      }
+      const res = await fetch(`/api/projects/${projectId}/issues/${iid}/stage`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stage: 'verifying', action: 'approve' }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        toast(data.error || `Error: ${res.status}`, 'error')
+      } else {
+        toast(t('finishVerifyDone'), 'success')
+      }
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Error', 'error')
+    } finally {
+      router.back()
     }
   }
 
@@ -245,6 +283,14 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
             </p>
           )
         }
+      />
+      <ConfirmModal
+        open={showFinishConfirm}
+        onClose={() => { setShowFinishConfirm(false); if (!finishingRef.current) router.back() }}
+        onConfirm={handleFinishVerify}
+        title={t('finishVerifyTitle')}
+        message={t('finishVerifyMessage')}
+        confirmLabel={t('finishVerifyYes')}
       />
       <ConfirmModal
         open={showCloseConfirm}
