@@ -48,6 +48,7 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
   const [mergeError, setMergeError] = useState('')
   const [showFinishConfirm, setShowFinishConfirm] = useState(false)
   const finishingRef = useRef(false)
+  const finishFromRef = useRef<string>('verifying')
   const { toast } = useToast()
 
   const fetchChanges = useCallback(async () => {
@@ -83,7 +84,8 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
       // 검증 중인 이슈면 바로 검증을 마무리할지 묻는다 — 아니면 이전 화면으로
       const stage = await fetch(`/api/projects/${projectId}/issues/${iid}`, { cache: 'no-store' })
         .then(r => (r.ok ? r.json() : null)).then(d => d?.stage as string | undefined).catch(() => undefined)
-      if (stage === 'verifying') setShowFinishConfirm(true)
+      // 검증 대기에서 바로 머지한 경우도 같다 — 「예」면 검증 시작부터 이어서 마무리한다
+      if (stage === 'verifying' || stage === 'verify_waiting') { finishFromRef.current = stage; setShowFinishConfirm(true) }
       else router.back()
     } catch (err) {
       setMergeError(err instanceof Error ? err.message : t('mergeFailed'))
@@ -96,6 +98,16 @@ export default function MRDiffPage({ params }: { params: Promise<{ projectId: st
   async function handleFinishVerify() {
     finishingRef.current = true
     try {
+      if (finishFromRef.current === 'verify_waiting') {
+        const startRes = await fetch(`/api/projects/${projectId}/issues/${iid}/stage`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stage: 'verify_waiting', action: 'start_verification' }),
+        })
+        if (!startRes.ok) {
+          const data = await startRes.json().catch(() => ({}))
+          toast(data.error || `Error: ${startRes.status}`, 'error'); return
+        }
+      }
       const to = transitionTarget('verifying', 'approve')
       const prefix = to === 'confirm_waiting' ? '**검증 → 확인대기**\n\n' : ''
       const noteRes = await fetch(`/api/projects/${projectId}/issues/${iid}/notes`, {

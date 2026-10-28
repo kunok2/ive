@@ -90,7 +90,7 @@ export default function MRReviewSection({ projectId, issueIid, onLayoutChange, s
         throw new Error(data.error || 'Merge failed')
       }
       await fetchMR()
-      if (stage === 'verifying') setShowFinishConfirm(true)
+      if (stage === 'verifying' || stage === 'verify_waiting') setShowFinishConfirm(true)
       if (mr) {
         watchPipeline({
           projectId,
@@ -110,6 +110,16 @@ export default function MRReviewSection({ projectId, issueIid, onLayoutChange, s
   async function handleFinishVerify() {
     setError('')
     try {
+      if (stage === 'verify_waiting') {
+        const startRes = await fetch(`/api/projects/${projectId}/issues/${issueIid}/stage`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stage: 'verify_waiting', action: 'start_verification' }),
+        })
+        if (!startRes.ok) {
+          const data = await startRes.json().catch(() => ({}))
+          toast(data.error || `Error: ${startRes.status}`, 'error'); return
+        }
+      }
       const to = transitionTarget('verifying', 'approve')
       const prefix = to === 'confirm_waiting' ? '**검증 → 확인대기**\n\n' : ''
       const noteRes = await fetch(`/api/projects/${projectId}/issues/${issueIid}/notes`, {
