@@ -250,6 +250,8 @@ export default function NotesList({
                 <MRReviewSection
                   projectId={projectId}
                   issueIid={Number(iid)}
+                  stage={issue.stage}
+                  onRefreshAll={onRefreshAll}
                   onLayoutChange={() => {
                     // MR이 늦게 그려지며 아래 채팅을 뷰 밖으로 밀어내므로, 채팅 모드면 바닥으로 보정
                     if (mode === 'chat') requestAnimationFrame(() => notesEndRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' }))
