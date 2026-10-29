@@ -28,6 +28,7 @@ export {
 export {
   createGitLabMR,
   addGitLabMRLabels,
+  addGitLabMRReviewer,
   getGitLabMR,
   addGitLabMRNote,
   fetchGitLabMRByBranch,

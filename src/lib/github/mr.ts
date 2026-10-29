@@ -248,6 +248,29 @@ export async function addGitHubPRLabels(project: Project, decryptedToken: string
 }
 
 /**
+ * PR 리뷰어에 사람을 더한다 (이미 요청돼 있으면 그대로). 더했으면 true.
+ * PR 작성자 본인 등 GitHub 이 거절하는 경우 false 로 돌려준다(검증 시작을 막지 않는다).
+ */
+export async function addGitHubPRReviewer(project: Project, decryptedToken: string, prNumber: number, login: string): Promise<boolean> {
+  const headers = getGitHubAuthHeaders(project, decryptedToken);
+  try {
+    const cur = await gitFetch(apiUrl(project, `/pulls/${prNumber}`), { headers });
+    if (!cur.ok) return false;
+    const pr = await cur.json();
+    if ((pr.requested_reviewers || []).some((r: any) => String(r.login).toLowerCase() === login.toLowerCase())) return false;
+    const res = await gitFetch(apiUrl(project, `/pulls/${prNumber}/requested_reviewers`), {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reviewers: [login] }),
+    });
+    return res.ok;
+  } catch (err) {
+    console.error(`[GitHub] PR 리뷰어 추가 실패 (${project.name} #${prNumber}):`, err);
+    return false;
+  }
+}
+
+/**
  * PR의 커밋에 연결된 check runs (CI 상태)를 조회합니다.
  * GitLab 파이프라인에 대응하는 GitHub 기능입니다.
  */

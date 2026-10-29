@@ -39,6 +39,11 @@ export default function AgentPickerDropdown({
   const ref = useRef<HTMLDivElement>(null)
   const isPerson = preferredAgent?.assignMode === 'assignee'
   const currentPerson = isPerson ? assignees[0] ?? null : null
+  // 이슈 담당자 객체에는 아바타가 없을 수 있다 — 프로젝트 멤버 목록에서 같은 사람을 찾아 쓴다
+  const currentPersonAvatar = currentPerson
+    ? (currentPerson.avatarUrl || (currentPerson as { avatar_url?: string }).avatar_url
+      || gitMembers.find(m => m.id === currentPerson.id || m.username === currentPerson.username)?.avatarUrl || '')
+    : ''
 
   useEffect(() => {
     if (!open) return
@@ -60,7 +65,12 @@ export default function AgentPickerDropdown({
       >
         <i className="fa-solid fa-user-gear text-ive-green" />
         {preferredAgent?.assignMode === 'assignee' ? (
-          <span className="truncate font-bold text-ive-cyan"><i className="fa-solid fa-user mr-0.5" />{currentPerson ? (currentPerson.name || currentPerson.username) : tIssue('assigneeHandles')}</span>
+          <>
+            {currentPersonAvatar
+              ? <img src={currentPersonAvatar} className="w-4 h-4 rounded-lg shrink-0 object-cover" alt="" />
+              : <i className="fa-solid fa-user text-ive-cyan" />}
+            <span className="truncate font-bold text-ive-cyan">{currentPerson ? (currentPerson.name || currentPerson.username) : tIssue('assigneeHandles')}</span>
+          </>
         ) : preferredAgent?.preferredAgentId ? (
           <>
             <AgentAvatar avatar={preferredAgent.preferredAgentAvatar || ''} size="xs" />

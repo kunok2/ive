@@ -249,6 +249,30 @@ export async function addGitLabMRLabels(project: Project, decryptedToken: string
 }
 
 /**
+ * MR 리뷰어에 사람을 더한다 (이미 리뷰어면 그대로). 더했으면 true.
+ * 리뷰어 지정은 GitLab 의 유료 기능일 수 있어 실패하면 false 로 돌려준다(검증 시작을 막지 않는다).
+ */
+export async function addGitLabMRReviewer(project: Project, decryptedToken: string, mrIid: number, userId: number): Promise<boolean> {
+  const headers = getAuthHeaders(project, decryptedToken);
+  try {
+    const cur = await gitFetch(apiUrl(project, `/merge_requests/${mrIid}`), { headers });
+    if (!cur.ok) return false;
+    const mr = await cur.json();
+    const ids: number[] = (mr.reviewers || []).map((r: any) => Number(r.id));
+    if (ids.includes(userId)) return false;
+    const res = await gitFetch(apiUrl(project, `/merge_requests/${mrIid}`), {
+      method: 'PUT',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reviewer_ids: [...ids, userId] }),
+    });
+    return res.ok;
+  } catch (err) {
+    console.error(`[GitLab] MR 리뷰어 추가 실패 (${project.name} !${mrIid}):`, err);
+    return false;
+  }
+}
+
+/**
  * MR의 파이프라인 목록을 조회합니다.
  */
 export async function fetchGitLabMRPipelines(project: Project, decryptedToken: string, mrIid: number) {

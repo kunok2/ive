@@ -276,6 +276,14 @@ export function markMRAsIve(project: Project, token: string, mrIid: number) {
     : gitlab.addGitLabMRLabels(project, token, mrIid, [label]);
 }
 
+/** MR/PR 리뷰어에 사람을 더한다(이미 있으면 그대로). GitLab 은 숫자 id, GitHub 은 login 으로 지정한다. */
+export function addMRReviewer(project: Project, token: string, mrIid: number, person: { id?: number | null; username?: string | null }): Promise<boolean> {
+  if (project.provider === 'github') {
+    return person.username ? github.addGitHubPRReviewer(project, token, mrIid, person.username) : Promise.resolve(false);
+  }
+  return person.id ? gitlab.addGitLabMRReviewer(project, token, mrIid, Number(person.id)) : Promise.resolve(false);
+}
+
 export function getDefaultBranch(project: Project, token: string) {
   return project.provider === 'github'
     ? github.getGitHubDefaultBranch(project, token)
