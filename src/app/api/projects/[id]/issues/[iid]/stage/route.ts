@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb, getProject, getProjectAuthToken, getProjectAccess, hasActiveExecution, hasActiveExecutionForStage, getRunningAgentWork, stageFromLabels, markIssueVerifyStarted, markIssueVerified, markIssueVerifyRejected, markIssueConfirmed, markIssueConfirmStarted, resetIssueCycleMarkers, resetIssueScheduledAt, recordIssueScheduledAt, touchProjectActivity, assignIssueAtomically, getAssignModeMap, getIssueScheduledAt, isIssueAssignee, isIssueAuthor, upsertIssueStageSnapshot, updateExecutionStatus, getVerifyWaitingCount, updateProjectLastChecked, getPresetRoles, recordStageEvent, markHumanStageEnd } from '@/lib/db';
+import { getDb, getProject, getProjectAuthToken, getProjectAccess, hasActiveExecution, hasActiveExecutionForStage, getRunningAgentWork, stageFromLabels, markIssueVerifyStarted, markIssueVerified, markIssueVerifyRejected, markIssueConfirmed, markIssueConfirmStarted, resetIssueCycleMarkers, resetIssueScheduledAt, recordIssueScheduledAt, touchProjectActivity, assignIssueAtomically, getAssignModeMap, getIssueScheduledAt, isIssueAssignee, isIssueAuthor, upsertIssueStageSnapshot, updateExecutionStatus, getVerifyWaitingCount, updateProjectLastChecked, getPresetRoles, recordStageEvent, markHumanStageEnd, getUserByOAuthId, getUserByGitUsername } from '@/lib/db';
 import { userActor } from '@/lib/event-actor';
 import { execKind } from '@/lib/active-work';
 import { triggerScan } from '@/lib/scanner';
@@ -8,7 +8,7 @@ import { notifyStageTransition } from '@/lib/slack-notify';
 import { notifyConfirmerOnApprove } from '@/lib/merge-watcher';
 import type { TaskExecution } from '@/types';
 import { getCurrentUser } from '@/lib/auth';
-import { reopenIssue, fetchSingleIssue, addIssueLabels, removeIssueLabels, addIssueComment, createBranch, getDefaultBranch, swapIssueLabels } from '@/lib/provider';
+import { reopenIssue, fetchSingleIssue, addIssueLabels, removeIssueLabels, addIssueComment, createBranch, getDefaultBranch, swapIssueLabels, fetchMRByBranch, addMRReviewer } from '@/lib/provider';
 import { logActivity } from '@/lib/activity';
 import { TRANSITIONS, staleStageLabelsToRemove } from '@/lib/stage-transitions';
 import fs from 'fs';
@@ -235,6 +235,8 @@ export async function POST(
     }
 
     // 검증 시작 시 verify_started_at 기록 + 검증자 execution 생성
+    // 검증 시작 시 사람 검증자로 지정된 사람(없으면 null = 버튼을 누른 사람)
+    let verifier: { username: string | null; name: string; avatar: string | null; gitUserId: string } | null = null;
     if (action === 'start_verification') {
       // 1. 아직 실행 중인 dev/기타 작업을 먼저 success로 닫음 (ended_at 찍힘)
       //    — 이 순서가 핵심: 방금 닫힌 execs도 아래 markIssueVerifyStarted 대상에 포함되어야 함
@@ -259,6 +261,21 @@ export async function POST(
         const logPath = path.join(logDir, `${executionId}.log`);
         fs.writeFileSync(logPath, '');
 
+        // 작업자가 사람(담당자)으로 지정된 작업은 그 사람이 검증자다 — 시작 버튼을 누른 사람(작성자·관리자)이 아니라.
+        const pickedPerson = getAssignModeMap(projectId).get(Number(iid))?.mode === 'assignee'
+          ? (verifyIssue?.assignees?.[0] ?? null) : null;
+        const pickedIveUser = pickedPerson
+          ? (getUserByOAuthId(project.provider, String(pickedPerson.id))
+            || (pickedPerson.username ? getUserByGitUsername(project.provider, pickedPerson.username) : null))
+          : null;
+        const verifierName = pickedPerson ? (pickedIveUser?.name || pickedPerson.name || pickedPerson.username || user.name) : user.name;
+        verifier = pickedPerson ? {
+          username: pickedPerson.username || null,
+          name: verifierName,
+          avatar: pickedIveUser?.avatar || pickedPerson.avatar_url || null,
+          gitUserId: String(pickedPerson.id),
+        } : null;
+
         const verifyExecution: TaskExecution = {
           id: executionId,
           projectId,
@@ -271,9 +288,9 @@ export async function POST(
           inputTokens: 0, outputTokens: 0, costUsd: 0, turns: 0,
           issueCreatedAt: new Date().toISOString(),
           assigneeType: 'user',
-          userId: user.id,
-          userName: user.name,
-          userAvatar: user.avatar,
+          userId: pickedPerson ? (pickedIveUser?.id ?? String(pickedPerson.id)) : user.id,
+          userName: verifierName,
+          userAvatar: pickedPerson ? (pickedIveUser?.avatar || pickedPerson.avatar_url) : user.avatar,
         };
         const created = assignIssueAtomically(projectId, Number(iid), 'verifying', verifyExecution, { ignoreChat: true });
         console.log(`[Stage] Verify execution created for #${iid}: ${created}, executionId: ${executionId}`);
@@ -282,6 +299,27 @@ export async function POST(
         }
       } catch (e) {
         console.warn(`[Stage] Failed to create verify execution for #${iid}:`, e);
+      }
+
+      // 사람 검증자 — 이슈 담당자는 이미 그 사람이다. MR/PR 리뷰어에 그 사람을 더하고(이미 있으면 그대로),
+      // 사람이 직접 검증한 뒤 어떻게 마무리하는지 안내 노트를 남긴다.
+      try {
+        const sourceBranch = `dev-${iid}`;
+        const mr = await fetchMRByBranch(project, token, sourceBranch);
+        if (verifier && mr && mr.state !== 'merged' && mr.state !== 'closed') {
+          const mrPerson = { id: Number(verifier.gitUserId), username: verifier.username };
+          await addMRReviewer(project, token, mr.iid ?? mr.number, mrPerson);
+        }
+        const mrLine = mr?.web_url ? `- **MR/PR:** ${mr.web_url}\n` : '';
+        const note = `<!-- ive-bot -->\n## 🔎 검증 시작 — 검증자: ${verifier?.name || user.name}\n\n${mrLine}`
+          + `Git 화면에서 직접 보거나, 본인의 개발 환경(에이전트와 함께)에서 \`${sourceBranch}\` 브랜치를 받아 확인합니다.\n\n`
+          + `### 검증을 마친 뒤\n`
+          + `- **화면 확인이 필요한 작업**: IVE 의 「검증 완료」를 눌러 머지하면 **확인 대기**로 넘어갑니다. 확인자가 반영된 화면에서 직접 확인합니다.\n`
+          + `- **기능 확인이 검증에서 이미 끝난 작업**(화면 확인이 필요 없음): 머지한 뒤 확인 단계를 건너뛰고 \`ive:done\`(완료)로 상태를 바꿉니다.\n`
+          + `- **고칠 곳이 남았으면**: 「검증 반려」로 되돌리고 무엇을 어떻게 고칠지 코멘트에 적습니다.\n`;
+        await addIssueComment(project, Number(iid), token, note);
+      } catch (e) {
+        console.warn(`[Stage] Failed to add reviewer/guide for #${iid}:`, e);
       }
     }
 
@@ -407,7 +445,10 @@ export async function POST(
     // DB 스냅샷 즉시 업데이트 (탑바/목록 즉시 동기화용)
     // verifying 단계라면 검증자 정보 사용, 아니면 Git assignee 사용
     let assigneeInfo = { username: null as string | null, name: null as string | null, avatar: null as string | null, gitUserId: null as string | null };
-    if (newStage === 'verifying' || newStage === 'confirming') {
+    if (newStage === 'verifying' && verifier) {
+      // 사람 검증자로 지정된 사람 — 버튼을 누른 사람이 아니라 그 사람
+      assigneeInfo = { username: verifier.username, name: verifier.name, avatar: verifier.avatar, gitUserId: verifier.gitUserId };
+    } else if (newStage === 'verifying' || newStage === 'confirming') {
       // 검증/확인 단계: 현재 사용자(검증자/확인자) 정보 저장
       assigneeInfo = {
         username: user.email?.split('@')[0] || null,  // email에서 username 추출

@@ -8,7 +8,7 @@ export {
 } from "./issues";
 export {
   createGitHubPR, fetchGitHubPRByBranch, getGitHubPR, fetchGitHubPRChanges,
-  mergeGitHubPR, closeGitHubPR, addGitHubPRNote, fetchOpenGitHubPRs, addGitHubPRLabels,
+  mergeGitHubPR, closeGitHubPR, addGitHubPRNote, fetchOpenGitHubPRs, addGitHubPRLabels, addGitHubPRReviewer,
   fetchGitHubPRCheckRuns, fetchGitHubBranchCheckRuns,
 } from "./mr";
 export {
