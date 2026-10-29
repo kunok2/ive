@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getProject, getProjectAccess, getPresetRoles, setPresetRoles, isIssueAuthor, getProjectAuthToken, hasRole, getAssignMode, markRolesInitialized, setStageWorkerNote } from '@/lib/db'
+import { getDb, getUserByOAuthId, getUserByGitUsername, getProject, getProjectAccess, getPresetRoles, setPresetRoles, isIssueAuthor, getProjectAuthToken, hasRole, getAssignMode, markRolesInitialized, setStageWorkerNote } from '@/lib/db'
 import { violatesSelfReview, agentRoleAvailable } from '@/lib/role-assignment'
 import { getCurrentUser } from '@/lib/auth'
 import { logActivity } from '@/lib/activity'
-import { fetchSingleIssue } from '@/lib/provider'
+import { fetchSingleIssue, updateIssue } from '@/lib/provider'
+import { runAutoAssign } from '@/lib/scanner/auto-assign'
 import { DEFAULT_LABELS } from '@/lib/labels'
 
 /**
@@ -86,7 +87,50 @@ export async function PATCH(
     return NextResponse.json({ error: '처리자와 같은 에이전트를 검증자로 지정할 수 없습니다' }, { status: 400 })
   }
 
+  // 검증 중(사람이 연 검증 기록이 있음)에는 화면의 검증자가 그 기록의 사람이라 규칙만 바꿔서는 반영되지 않는다 —
+  // 새 검증자로 그 기록과 Git 담당자를 함께 옮긴다. 에이전트로의 교체는 취소·기동이 필요한 stage-agent 경로로 안내한다.
+  const openVerify = body.verifier
+    ? getDb().prepare(
+        "SELECT id FROM task_executions WHERE project_id = ? AND issue_iid = ? AND id LIKE 'ex-verify-%' AND status IN ('running', 'assigned') AND COALESCE(assignee_type, '') <> 'agent' ORDER BY started_at DESC"
+      ).all(projectId, Number(iid)) as { id: string }[]
+    : []
+  let newVerifier: { id: string; name: string; avatar: string | null } | null = null
+  if (openVerify.length > 0) {
+    if (next.verifier.mode === 'agent') {
+      return NextResponse.json({ error: '검증 중인 작업의 검증을 에이전트에게 맡기려면 「에이전트에게 맡기기」를 사용해 주세요' }, { status: 409 })
+    }
+    const provider = project.provider as 'github' | 'gitlab'
+    let gitId: string | null = null
+    let gitUsername: string | null = null
+    if (next.verifier.mode === 'specific') {
+      gitId = next.verifier.userId; gitUsername = next.verifier.username
+    } else if (next.verifier.mode === 'creator') {
+      const a = issueNow?.author as any
+      gitId = a?.id != null ? String(a.id) : null; gitUsername = a?.username || a?.login || null
+    }
+    if (next.verifier.mode === 'auto') {
+      const r = await runAutoAssign(project, Number(iid), token, 'verify').catch(() => null)
+      gitUsername = r?.username ?? null
+    } else if (gitId || gitUsername) {
+      try {
+        await updateIssue(project, Number(iid), token, {
+          assigneeIds: gitId ? [Number(gitId)] : undefined,
+          assignees: gitUsername ? [gitUsername] : undefined,
+        })
+      } catch (e) { console.warn(`[PresetRoles] verifier assignee sync failed for #${iid}:`, e) }
+    }
+    const u = (gitId ? getUserByOAuthId(provider, gitId) : null) || (gitUsername ? getUserByGitUsername(provider, gitUsername) : null)
+    if (!u) {
+      return NextResponse.json({ error: '이 검증자는 IVE 사용자와 연결되어 있지 않아 검증 중인 작업의 검증자로 바꿀 수 없습니다' }, { status: 400 })
+    }
+    newVerifier = { id: u.id, name: u.name, avatar: u.avatar ?? null }
+  }
+
   setPresetRoles(projectId, Number(iid), next)
+  if (newVerifier) {
+    const upd = getDb().prepare('UPDATE task_executions SET user_id = ?, user_name = ?, user_avatar = ? WHERE id = ?')
+    for (const ex of openVerify) upd.run(newVerifier.id, newVerifier.name, newVerifier.avatar, ex.id)
+  }
   // 사람이 직접 정한 역할 — 프로젝트 기본 배정이 덮어쓰지 않게
   markRolesInitialized(projectId, Number(iid))
   setStageWorkerNote(projectId, Number(iid), null)   // 역할을 다시 정했으니 이전 안내(배정 불가 등)는 지운다
