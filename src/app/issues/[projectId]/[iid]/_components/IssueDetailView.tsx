@@ -1267,6 +1267,8 @@ export default function IssueDetailView({ projectId, iid, embedded = false, onCl
         // 서버 저장값(에이전트 이름·아바타 포함)으로 맞춘다
         const saved = await res.clone().json().catch(() => null)
         if (saved?.verifier) setIssue(prev => prev ? { ...prev, presetVerifier: saved.verifier } : prev)
+        // 검증 중이면 실제 검증자(actualVerifier)도 바뀌었으니 다시 불러온다
+        void fetchIssue()
       }
       if (!res.ok) {
         const d = await res.json().catch(() => ({}))
