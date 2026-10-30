@@ -36,6 +36,7 @@ export default function AgentPickerDropdown({
 }: AgentPickerDropdownProps) {
   const tIssue = useTranslations('issue')
   const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
   const ref = useRef<HTMLDivElement>(null)
   const isPerson = preferredAgent?.assignMode === 'assignee'
   const currentPerson = isPerson ? assignees[0] ?? null : null
@@ -45,8 +46,15 @@ export default function AgentPickerDropdown({
       || gitMembers.find(m => m.id === currentPerson.id || m.username === currentPerson.username)?.avatarUrl || '')
     : ''
 
+  // 사람·에이전트가 많을 때 이름·아이디로 좁혀 찾는다
+  const q = search.trim().toLowerCase()
+  const filteredAgents = q ? projectAgents.filter(pa => pa.agent.name.toLowerCase().includes(q)) : projectAgents
+  const filteredMembers = q
+    ? gitMembers.filter(m => (m.name || '').toLowerCase().includes(q) || (m.username || '').toLowerCase().includes(q))
+    : gitMembers
+
   useEffect(() => {
-    if (!open) return
+    if (!open) { setSearch(''); return }
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) {
         setOpen(false)
@@ -83,7 +91,17 @@ export default function AgentPickerDropdown({
       </button>
       {open && (
         <div className="absolute z-50 bottom-full right-0 mb-1 bg-ive-bg-deep border border-ive-border-subtle rounded-lg overflow-hidden shadow-lg shadow-black/30 min-w-[200px] max-h-72 overflow-y-auto">
-          <button
+          <div className="sticky top-0 z-10 bg-ive-bg-deep p-1.5 border-b border-ive-border-subtle">
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder={tIssue('searchMember')}
+              className="w-full bg-ive-bg-card border border-ive-border-dark rounded-lg px-2.5 py-1.5 text-xs text-ive-text placeholder-ive-text-dim focus:outline-none focus:border-ive-green/50"
+              autoFocus
+            />
+          </div>
+          {!q && <button
             onClick={() => { setOpen(false); onChangePreferredAgent(null) }}
             className={`w-full px-3 py-2.5 text-left text-xs flex items-center gap-2 transition-colors ${
               preferredAgent?.assignMode !== 'assignee' && !preferredAgent?.preferredAgentId ? 'bg-ive-green/10 text-ive-green' : 'text-ive-text hover:bg-white/5'
@@ -91,8 +109,8 @@ export default function AgentPickerDropdown({
           >
             <span className="w-4 h-4 inline-flex items-center justify-center shrink-0"><i className="fa-solid fa-shuffle" /></span>
             <span className="font-bold">{tIssue('noPreference')}</span>
-          </button>
-          <button
+          </button>}
+          {!q && <button
             onClick={() => { setOpen(false); onChangePreferredAgent('assignee') }}
             className={`w-full px-3 py-2.5 text-left text-xs flex items-center gap-2 transition-colors ${
               isPerson && !currentPerson ? 'bg-ive-cyan/10 text-ive-cyan' : 'text-ive-text hover:bg-white/5'
@@ -100,8 +118,8 @@ export default function AgentPickerDropdown({
           >
             <span className="w-4 h-4 inline-flex items-center justify-center shrink-0"><i className="fa-solid fa-user" /></span>
             <span className="font-bold">{tIssue('assigneeHandles')}</span>
-          </button>
-          {projectAgents.map(pa => {
+          </button>}
+          {filteredAgents.map(pa => {
             const isDisabled = !isAgentAvailableNow(pa.agent)
             const isOffline = pa.agent.status === 'offline'
             return (
@@ -126,10 +144,10 @@ export default function AgentPickerDropdown({
               </button>
             )
           })}
-          {onPickPerson && gitMembers.length > 0 && (
+          {onPickPerson && filteredMembers.length > 0 && (
             <div className="px-3 pt-2.5 pb-1 text-xs font-bold text-ive-text-dim border-t border-ive-border-subtle"><i className="fa-solid fa-user mr-1" />{tIssue('pickerPeople')}</div>
           )}
-          {onPickPerson && gitMembers.map(m => (
+          {onPickPerson && filteredMembers.map(m => (
             <button
               key={`person-${m.id}`}
               onClick={() => { setOpen(false); onPickPerson(m) }}
@@ -144,6 +162,9 @@ export default function AgentPickerDropdown({
               {m.name && m.name !== m.username && <span className="text-ive-text-dim truncate">@{m.username}</span>}
             </button>
           ))}
+          {q && filteredAgents.length === 0 && filteredMembers.length === 0 && (
+            <div className="px-3 py-2.5 text-xs text-ive-text-muted">{tIssue('noSearchResult')}</div>
+          )}
         </div>
       )}
     </div>

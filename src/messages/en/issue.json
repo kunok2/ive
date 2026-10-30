@@ -167,6 +167,7 @@
   "selectConfirmer": "Select confirmer",
   "selectAssignee": "Assign member",
   "searchMember": "Search by name or username",
+  "noSearchResult": "No one matches",
   "searchPlaceholder": "Search title, number, author",
   "deleteComment": "Delete Comment",
   "deleteCommentConfirm": "Are you sure you want to delete this comment?",

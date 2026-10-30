@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProject, getProjectAccess, getProjectAuthToken, setAssigneeAuto, isIssueAuthor } from '@/lib/db';
+import { getProject, getProjectAccess, getProjectAuthToken, setAssigneeAuto, isIssueAuthor, stageFromLabels, hasActiveExecutionForStage } from '@/lib/db';
+import { followGitAssignee } from '@/lib/stage-person';
 import { getCurrentUser } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import { updateIssue, fetchSingleIssue } from '@/lib/provider';
@@ -55,6 +56,14 @@ export async function PATCH(
       assignees: assigneeAuto ? [] : (assigneeUsernames || []),
     });
     setAssigneeAuto(projectId, issueIid, !!assigneeAuto);
+    // 검증 중·확인 중이면 새 담당자가 곧 그 단계를 맡은 사람이다 — 열린 검증·확인 기록도 옮긴다(IVE 계정이 없어도)
+    if (current && !assigneeAuto) {
+      try {
+        const updated = await fetchSingleIssue(project, issueIid, token);
+        const stage = stageFromLabels(updated?.labels || [], project, { hasActiveExec: hasActiveExecutionForStage(projectId, issueIid, { ignoreChat: true }) });
+        followGitAssignee(project.provider as 'github' | 'gitlab', projectId, issueIid, stage, updated?.assignees);
+      } catch (e) { console.warn(`[assignees] stage person sync failed for #${iid}:`, e); }
+    }
     logActivity({
       userId: user.id,
       category: 'task',

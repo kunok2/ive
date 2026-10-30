@@ -83,6 +83,7 @@ import { applyDefaultRoles } from "../role-assignment";
 import { isAgentEligibleForProject } from "../project-permissions";
 import { executeTask } from "./execute";
 import { DEFAULT_LABELS } from "@/lib/labels";
+import { followGitAssignee } from "@/lib/stage-person";
 
 // Re-export for external consumers
 export { executeTask } from "./execute";
@@ -585,6 +586,15 @@ async function scanProject(project: Project, force: boolean = false) {
         });
       } catch (e) {
         slog.warn(`upsertIssueStageSnapshot failed (#${iid}):`, (e as Error).message);
+      }
+
+      // Git 에서 담당자를 바꾼 검증 중·확인 중 작업 — 그 단계를 맡은 사람(열린 기록)도 Git 담당자로 맞춘다
+      try {
+        if (followGitAssignee(project.provider === 'github' ? 'github' : 'gitlab', project.id, iid, stage, issue.assignees)) {
+          slog.info(`#${iid} ${stage} 담당자를 Git 담당자로 맞춤`);
+        }
+      } catch (e) {
+        slog.warn(`followGitAssignee failed (#${iid}):`, (e as Error).message);
       }
 
       // 사건 로그 — 후속 이슈 연결. ive-meta 의 `fixes: #N` 은 "이 작업이 이전 이슈 #N 을 고친다"는 뜻이다

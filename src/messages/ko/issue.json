@@ -167,6 +167,7 @@
   "selectConfirmer": "확인자 지정",
   "selectAssignee": "담당자 지정",
   "searchMember": "이름 또는 아이디로 검색",
+  "noSearchResult": "찾는 사람이 없습니다",
   "searchPlaceholder": "제목, 번호, 작성자 검색",
   "deleteComment": "코멘트 삭제",
   "deleteCommentConfirm": "정말 이 코멘트를 삭제하시겠습니까?",

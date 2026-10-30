@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb, getProject, getProjectAuthToken, getProjectAccess, hasActiveExecution, hasActiveExecutionForStage, getRunningAgentWork, stageFromLabels, markIssueVerifyStarted, markIssueVerified, markIssueVerifyRejected, markIssueConfirmed, markIssueConfirmStarted, resetIssueCycleMarkers, resetIssueScheduledAt, recordIssueScheduledAt, touchProjectActivity, assignIssueAtomically, getAssignModeMap, getIssueScheduledAt, isIssueAssignee, isIssueAuthor, upsertIssueStageSnapshot, updateExecutionStatus, getVerifyWaitingCount, updateProjectLastChecked, getPresetRoles, recordStageEvent, markHumanStageEnd, getUserByOAuthId, getUserByGitUsername } from '@/lib/db';
+import { getDb, getProject, getProjectAuthToken, getProjectAccess, hasActiveExecution, hasActiveExecutionForStage, getRunningAgentWork, stageFromLabels, markIssueVerifyStarted, markIssueVerified, markIssueVerifyRejected, markIssueConfirmed, markIssueConfirmStarted, resetIssueCycleMarkers, resetIssueScheduledAt, recordIssueScheduledAt, touchProjectActivity, assignIssueAtomically, getAssignModeMap, getIssueScheduledAt, isIssueAssignee, isIssueAuthor, upsertIssueStageSnapshot, updateExecutionStatus, getVerifyWaitingCount, updateProjectLastChecked, getPresetRoles, recordStageEvent, markHumanStageEnd } from '@/lib/db';
 import { userActor } from '@/lib/event-actor';
+import { stagePersonFromGit, openStagePerson, type StagePerson } from '@/lib/stage-person';
 import { execKind } from '@/lib/active-work';
 import { triggerScan } from '@/lib/scanner';
 import { applyRoleAssignee } from '@/lib/role-assignee';
@@ -235,8 +236,10 @@ export async function POST(
     }
 
     // 검증 시작 시 verify_started_at 기록 + 검증자 execution 생성
-    // 검증 시작 시 사람 검증자로 지정된 사람(없으면 null = 버튼을 누른 사람)
-    let verifier: { username: string | null; name: string; avatar: string | null; gitUserId: string } | null = null;
+    // 검증·확인 시작 때 그 단계를 맡는 사람 = Git 담당자(없으면 null = 버튼을 누른 사람).
+    // IVE 를 쓰지 않는 사람도 Git 담당자로 지정되면 그 사람이 검증자·확인자다.
+    let verifier: StagePerson | null = null;
+    let confirmer: StagePerson | null = null;
     if (action === 'start_verification') {
       // 1. 아직 실행 중인 dev/기타 작업을 먼저 success로 닫음 (ended_at 찍힘)
       //    — 이 순서가 핵심: 방금 닫힌 execs도 아래 markIssueVerifyStarted 대상에 포함되어야 함
@@ -261,20 +264,8 @@ export async function POST(
         const logPath = path.join(logDir, `${executionId}.log`);
         fs.writeFileSync(logPath, '');
 
-        // 작업자가 사람(담당자)으로 지정된 작업은 그 사람이 검증자다 — 시작 버튼을 누른 사람(작성자·관리자)이 아니라.
-        const pickedPerson = getAssignModeMap(projectId).get(Number(iid))?.mode === 'assignee'
-          ? (verifyIssue?.assignees?.[0] ?? null) : null;
-        const pickedIveUser = pickedPerson
-          ? (getUserByOAuthId(project.provider, String(pickedPerson.id))
-            || (pickedPerson.username ? getUserByGitUsername(project.provider, pickedPerson.username) : null))
-          : null;
-        const verifierName = pickedPerson ? (pickedIveUser?.name || pickedPerson.name || pickedPerson.username || user.name) : user.name;
-        verifier = pickedPerson ? {
-          username: pickedPerson.username || null,
-          name: verifierName,
-          avatar: pickedIveUser?.avatar || pickedPerson.avatar_url || null,
-          gitUserId: String(pickedPerson.id),
-        } : null;
+        // Git 담당자가 검증자다 — 시작 버튼을 누른 사람(작성자·관리자)이 아니라.
+        verifier = stagePersonFromGit(project.provider as 'github' | 'gitlab', verifyIssue?.assignees?.[0]);
 
         const verifyExecution: TaskExecution = {
           id: executionId,
@@ -288,9 +279,9 @@ export async function POST(
           inputTokens: 0, outputTokens: 0, costUsd: 0, turns: 0,
           issueCreatedAt: new Date().toISOString(),
           assigneeType: 'user',
-          userId: pickedPerson ? (pickedIveUser?.id ?? String(pickedPerson.id)) : user.id,
-          userName: verifierName,
-          userAvatar: pickedPerson ? (pickedIveUser?.avatar || pickedPerson.avatar_url) : user.avatar,
+          userId: verifier?.userId ?? user.id,
+          userName: verifier?.name ?? user.name,
+          userAvatar: verifier ? (verifier.avatar ?? undefined) : user.avatar,
         };
         const created = assignIssueAtomically(projectId, Number(iid), 'verifying', verifyExecution, { ignoreChat: true });
         console.log(`[Stage] Verify execution created for #${iid}: ${created}, executionId: ${executionId}`);
@@ -307,7 +298,7 @@ export async function POST(
         const sourceBranch = `dev-${iid}`;
         const mr = await fetchMRByBranch(project, token, sourceBranch);
         if (verifier && mr && mr.state !== 'merged' && mr.state !== 'closed') {
-          const mrPerson = { id: Number(verifier.gitUserId), username: verifier.username };
+          const mrPerson = { id: verifier.gitUserId ? Number(verifier.gitUserId) : null, username: verifier.username };
           await addMRReviewer(project, token, mr.iid ?? mr.number, mrPerson);
         }
         const mrLine = mr?.web_url ? `- **MR/PR:** ${mr.web_url}\n` : '';
@@ -325,7 +316,9 @@ export async function POST(
 
     // 검증 완료 시 실행 기록에 verified_at + 검증자 기록 (verifying 상태에서만)
     if (action === 'approve' || (action === 'complete' && stage === 'verifying')) {
-      markIssueVerified(projectId, Number(iid), { name: user.name, avatar: user.avatar, userId: user.id });
+      // 검증자 = 그 검증을 맡은 사람(열린 검증 기록) — 「검증 완료」를 대신 누른 사람이 아니라
+      const v = openStagePerson(projectId, Number(iid), 'verify');
+      markIssueVerified(projectId, Number(iid), v ? { name: v.name, avatar: v.avatar ?? undefined, userId: v.userId } : { name: user.name, avatar: user.avatar, userId: user.id });
     }
 
     // dev → verify_waiting (수동 'complete') 전이 시 검증자 preset 기반 assignee 교체
@@ -353,7 +346,8 @@ export async function POST(
     // 검증 반려 시 rejected_at 기록
     // (명시적 reject뿐 아니라 검증 단계에서 재실행/유입 초기화 클릭 시에도 반려로 집계 — 검증자가 "통과 못함" 판단)
     if (action === 'reject' || (stage === 'verifying' && (action === 'retry' || action === 'to_inflow'))) {
-      markIssueVerifyRejected(projectId, Number(iid), { name: user.name, avatar: user.avatar, userId: user.id });
+      const v = openStagePerson(projectId, Number(iid), 'verify');
+      markIssueVerifyRejected(projectId, Number(iid), v ? { name: v.name, avatar: v.avatar, userId: v.userId } : { name: user.name, avatar: user.avatar, userId: user.id });
     }
 
     // verifying 단계 종료 시 검증자 execution 닫기 (여러 개 있을 수 있으므로 전부 처리)
@@ -374,6 +368,8 @@ export async function POST(
       markIssueConfirmStarted(projectId, Number(iid));
       try {
         const confirmIssue = await fetchSingleIssue(project, Number(iid), token);
+        // Git 담당자가 확인자다 — 시작 버튼을 누른 사람이 아니라
+        confirmer = stagePersonFromGit(project.provider as 'github' | 'gitlab', confirmIssue?.assignees?.[0]);
         const executionId = `ex-confirm-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
         const logDir = path.join(process.cwd(), 'data', 'logs');
         if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
@@ -392,9 +388,9 @@ export async function POST(
           inputTokens: 0, outputTokens: 0, costUsd: 0, turns: 0,
           issueCreatedAt: new Date().toISOString(),
           assigneeType: 'user',
-          userId: user.id,
-          userName: user.name,
-          userAvatar: user.avatar,
+          userId: confirmer?.userId ?? user.id,
+          userName: confirmer?.name ?? user.name,
+          userAvatar: confirmer ? (confirmer.avatar ?? undefined) : user.avatar,
         };
         const created = assignIssueAtomically(projectId, Number(iid), 'confirming', confirmExecution, { ignoreChat: true });
         console.log(`[Stage] Confirm execution created for #${iid}: ${created}, executionId: ${executionId}`);
@@ -405,7 +401,9 @@ export async function POST(
 
     // 확인 완료(accept): confirmer 정보 기록만 (이슈 close 는 스캐너가 IVE-E 이슈를 닫는다 — reconcileExternalIssue, #487)
     if (action === 'accept' && stage === 'confirming') {
-      markIssueConfirmed(projectId, Number(iid), { name: user.name, avatar: user.avatar, userId: user.id });
+      // 확인자 = 그 확인을 맡은 사람(열린 확인 기록) — 「확인 완료」를 대신 누른 사람이 아니라
+      const c = openStagePerson(projectId, Number(iid), 'confirm');
+      markIssueConfirmed(projectId, Number(iid), c ?? { name: user.name, avatar: user.avatar, userId: user.id });
       // 완료 진입 → 이슈 생성자(사람)에게 DM (fire-and-forget)
       void notifyStageTransition(project, Number(iid), token, 'done');
     }
@@ -445,9 +443,10 @@ export async function POST(
     // DB 스냅샷 즉시 업데이트 (탑바/목록 즉시 동기화용)
     // verifying 단계라면 검증자 정보 사용, 아니면 Git assignee 사용
     let assigneeInfo = { username: null as string | null, name: null as string | null, avatar: null as string | null, gitUserId: null as string | null };
-    if (newStage === 'verifying' && verifier) {
-      // 사람 검증자로 지정된 사람 — 버튼을 누른 사람이 아니라 그 사람
-      assigneeInfo = { username: verifier.username, name: verifier.name, avatar: verifier.avatar, gitUserId: verifier.gitUserId };
+    const stagePerson = newStage === 'verifying' ? verifier : newStage === 'confirming' ? confirmer : null;
+    if (stagePerson) {
+      // 그 단계를 맡은 사람(Git 담당자) — 버튼을 누른 사람이 아니라 그 사람
+      assigneeInfo = { username: stagePerson.username, name: stagePerson.name, avatar: stagePerson.avatar, gitUserId: stagePerson.gitUserId };
     } else if (newStage === 'verifying' || newStage === 'confirming') {
       // 검증/확인 단계: 현재 사용자(검증자/확인자) 정보 저장
       assigneeInfo = {

@@ -6,6 +6,7 @@ import { logActivity } from '@/lib/activity'
 import { updateIssue, fetchSingleIssue } from '@/lib/provider'
 import { resolveIveAuthorFromBody, stripIveAuthorMarker, stripIveDueMarker, extractIveAuthorId, prependIveAuthorMarker } from '@/lib/ive-author'
 import { DEFAULT_LABELS } from '@/lib/labels'
+import { followGitAssignee } from '@/lib/stage-person'
 
 export async function PUT(
   req: NextRequest,
@@ -167,6 +168,9 @@ export async function GET(
     // 검증자/확인자 사전 배정 + 실제 수행자 (이슈 #271)
     const presetRoles = getPresetRoles(projectId, Number(iid))
     const assigneeAuto = getAssigneeAuto(projectId, Number(iid))
+    // Git 에서 담당자를 바꾼 검증 중·확인 중 작업 — 스캔을 기다리지 않고 지금 맞춰 화면에 바로 보이게 한다
+    try { followGitAssignee(project.provider as 'github' | 'gitlab', projectId, Number(iid), stage, issue.assignees) }
+    catch (e) { console.warn(`[Issue] followGitAssignee failed for #${iid}:`, e) }
     const actuals = getActualRoleAssignees(projectId, Number(iid))
 
     // 자동배정/지정 결과 — 단계별 Git assignee 를 해당 역할의 실제 사람으로 fallback (그 역할을 에이전트가 맡았으면 제외)
