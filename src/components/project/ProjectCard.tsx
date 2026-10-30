@@ -83,19 +83,28 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
     else sessionStorage.removeItem(`pc-panel-${project.id}`)
   }
   const cardRef = useRef<HTMLDivElement>(null)
-  // 숫자 칸을 눌러 패널을 펼치면 카드를 화면 한가운데로 — 아래쪽 프로젝트의 상세 영역이 화면 밖에 남지 않게(PC 보드 배치는 제외)
-  // 실제로 보이는 영역(스크롤 부모 윗변 ~ 하단 고정 탭 윗변)의 가운데에 카드 중심을 맞춘다 — 고정 탭에 가린 만큼 하단이 잘리지 않게
-  const centerCard = () => {
+  // PC 왼쪽 목록에서 펼친 카드의 높이 — 그 칸의 보이는 높이에 맞춘다(폰·패드는 클래스의 화면 높이 기준 그대로)
+  const [fitHeight, setFitHeight] = useState<number | null>(null)
+  // 카드가 실제로 보이는 영역(스크롤 부모 윗변 ~ 하단 고정 탭 윗변)
+  const visibleArea = () => {
     const card = cardRef.current
-    if (!card) return
+    if (!card) return null
     let sc: HTMLElement | null = card.parentElement
-    while (sc && !(sc.scrollHeight > sc.clientHeight && /(auto|scroll)/.test(getComputedStyle(sc).overflowY))) sc = sc.parentElement
+    while (sc && !(/(auto|scroll)/.test(getComputedStyle(sc).overflowY))) sc = sc.parentElement
     const top = sc ? sc.getBoundingClientRect().top : 0
     let bottom = sc ? sc.getBoundingClientRect().bottom : window.innerHeight
     document.querySelectorAll('nav.fixed.bottom-0').forEach(n => {
       const r = (n as HTMLElement).getBoundingClientRect()
       if (r.height > 0 && r.top > top && r.top < bottom) bottom = r.top
     })
+    return { card, sc, top, bottom }
+  }
+  // 숫자 칸을 눌러 패널을 펼치면 카드를 화면 한가운데로 — 아래쪽 프로젝트의 상세 영역이 화면 밖에 남지 않게(폰·패드·PC 모두)
+  // 보이는 영역의 가운데에 카드 중심을 맞춘다 — 고정 탭에 가린 만큼 하단이 잘리지 않게
+  const centerCard = () => {
+    const a = visibleArea()
+    if (!a) return
+    const { card, sc, top, bottom } = a
     const r = card.getBoundingClientRect()
     const delta = (r.top + r.height / 2) - (top + bottom) / 2
     if (sc) sc.scrollBy({ top: delta, behavior: 'smooth' })
@@ -104,8 +113,21 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
   const togglePanel = (p: NonNullable<typeof expandedPanel>) => {
     const opening = expandedPanel !== p
     setExpandedPanel(opening ? p : null)
-    if (opening && !hideActiveList) setTimeout(centerCard, 60)
+    if (opening) setTimeout(centerCard, 60)
   }
+  // PC 목록: 펼친 카드를 그 칸의 보이는 높이에 꽉 차게(위아래 여백 16px씩). 창 크기가 바뀌면 다시 맞춘다
+  useEffect(() => {
+    if (!expandedPanel || !hideActiveList) { setFitHeight(null); return }
+    const fit = () => {
+      const a = visibleArea()
+      if (a) setFitHeight(Math.max(320, Math.round(a.bottom - a.top - 32)))
+    }
+    fit()
+    const t = setTimeout(centerCard, 60)
+    window.addEventListener('resize', fit)
+    return () => { clearTimeout(t); window.removeEventListener('resize', fit) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expandedPanel, hideActiveList])
   const [stats, setStats] = useState<ProjectStats | null>(null)
   const [snapshots, setSnapshots] = useState<StatSnapshot[]>([])
   const [executions, setExecutions] = useState<TaskExecution[]>([])
@@ -477,7 +499,7 @@ export default function ProjectCard({ project, onSelect, selected, hideActiveLis
     <div
       ref={cardRef}
       className={`bg-ive-bg-card rounded-lg border overflow-hidden transition-colors duration-200 flex flex-col ${expandedPanel ? 'border-ive-cyan/30 h-[calc(100vh-160px)]' : selected ? 'border-ive-cyan/60' : 'border-ive-border-subtle hover:border-ive-green/30'}`}
-      style={{ background: `linear-gradient(135deg, ${project.color || '#4ade80'}08 0%, transparent 40%), var(--color-ive-bg-card, #121e14)` }}
+      style={{ background: `linear-gradient(135deg, ${project.color || '#4ade80'}08 0%, transparent 40%), var(--color-ive-bg-card, #121e14)`, ...(expandedPanel && fitHeight ? { height: fitHeight } : {}) }}
     >
       <Link
         href={`/projects/${project.id}`}
