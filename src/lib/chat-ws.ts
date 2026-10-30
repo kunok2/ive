@@ -1,8 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import { WebSocket } from 'ws'
-import { getProject, getChatSession, saveChatMessage, getAgent, updateChatSessionActivity, getProjectAccess } from './db'
-import { decrypt } from './crypto'
+import { getProject, getChatSession, saveChatMessage, getAgent, updateChatSessionActivity, getProjectAccess, getProjectAuthToken } from './db'
 import { runChatAgentWithCallback, isChatAgentRunning } from './chat-agent'
 import { fetchSingleIssue, downloadProjectUpload } from './provider'
 
@@ -130,7 +129,7 @@ async function handleSend(
     return
   }
 
-  const decryptedToken = decrypt(project.accessToken)
+  const decryptedToken = getProjectAuthToken(project.id)
 
   // 첨부 이미지: 프론트가 /uploads 로 올린 url 을 토큰으로 다시 다운로드해
   // 워크스페이스 하위에 저장하고, 그 경로를 에이전트에 넘긴다(Slack 과 동일 패턴).

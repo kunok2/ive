@@ -3,10 +3,9 @@ import { maskSecrets } from './secret-mask'
 import fs from 'fs'
 import path from 'path'
 import { promisify } from 'util'
-import { getSystemSetting, getProject, getAvailableAgentsByUser, countActiveExecutionsByAgent, updateChatSessionCliId, getStaleActiveChatSessions, getChatSession, endChatSession, updateExecutionStatus, updateAgentStatus, addExecutionUsage } from './db'
+import { getSystemSetting, getProject, getAvailableAgentsByUser, countActiveExecutionsByAgent, updateChatSessionCliId, getStaleActiveChatSessions, getChatSession, endChatSession, updateExecutionStatus, updateAgentStatus, addExecutionUsage, getProjectAuthToken } from './db'
 import { accumulateCliUsage, emptyCliUsage, type CliUsage } from './cli-usage'
 import { calcCostFromDb } from './token-pricing'
-import { decrypt } from './crypto'
 import { defaultLocale } from '@/i18n/config'
 import { Agent, Project } from '@/types'
 import { resolveCliPath, buildCliInvocation } from './cli-invocation'
@@ -101,7 +100,7 @@ export function pickAgentForChat(projectId: string, requesterUserId: string): { 
   if (!project) return null
   const userAgents = getAvailableAgentsByUser(requesterUserId) // 사용중지 에이전트 제외
   if (userAgents.length === 0) return null
-  const decryptedToken = decrypt(project.accessToken)
+  const decryptedToken = getProjectAuthToken(projectId) // OAuth 연결 프로젝트면 연결 토큰
 
   for (const a of userAgents) {
     const activeCount = countActiveExecutionsByAgent(a.id)
