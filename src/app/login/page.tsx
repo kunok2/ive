@@ -54,9 +54,6 @@ export default function LoginPage() {
     const handler = (e: Event) => { e.preventDefault(); setInstallPrompt(e) }
     window.addEventListener('beforeinstallprompt', handler)
 
-    if (!localStorage.getItem('ive-intro-seen')) {
-      setShowIntro(true)
-    }
     // 세션 만료로 리다이렉트된 경우 메시지 표시
     if (typeof window !== 'undefined' && sessionStorage.getItem('ive-session-expired')) {
       setSessionExpired(true)
@@ -281,7 +278,7 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {showIntro && <IntroSlides onComplete={() => { setShowIntro(false); localStorage.setItem('ive-intro-seen', '1') }} />}
+      {showIntro && <IntroSlides onComplete={() => setShowIntro(false)} />}
     </div>
     </div>
     </div>

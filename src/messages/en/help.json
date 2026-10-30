@@ -4,7 +4,7 @@
   "currentVersion": "Current",
   "releaseNotesLoading": "Loading…",
   "releaseNotesFailed": "Could not load release notes",
-  "showIntro": "Show intro again",
+  "showIntro": "Show intro",
   "basedOn": "This help is written for IVE v{version}.",
   "basedOnNewer": "You are running v{current}. See the release notes for what changed since.",
 
