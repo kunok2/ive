@@ -8,6 +8,10 @@ Springware IVE의 굵직한 변경 이력입니다.
 
 ## [Unreleased]
 
+### Changed
+
+- 운영 서버를 오라클 서버에서 스프링웨어 서버로 옮기고, 접속 주소를 `https://ive.springware.kr` 로 바꿨다. 컨테이너는 호스트 nginx 뒤에서 `127.0.0.1:3100` 으로만 열린다.
+
 ## [1.26.0] - 2026-10-30
 
 ### Added

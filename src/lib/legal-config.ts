@@ -19,7 +19,7 @@ export const LEGAL_DEFAULTS: Omit<LegalConfig, 'enabled'> = {
   companyAddress: '서울특별시 관악구 남부순환로247 나길 35, 301호',
   officerName: '개인정보 보호책임자',
   officerEmail: 'privacy@dazzleat.link',
-  serviceUrl: 'https://ive.dazzleat.link',
+  serviceUrl: 'https://ive.springware.kr',
   effectiveDate: '2026-06-05',
 }
 

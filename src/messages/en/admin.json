@@ -159,7 +159,7 @@
     "howTo": "How to register (please read if this is your first time)",
     "howToIntro": "For each provider (GitLab/GitHub/Slack), create an app to get a Client ID/Secret, then register IVE's Redirect URL in that app to wire up login. Follow \"GitLab/GitHub setup order\" below for git, and \"Slack setup order\" for Slack (Slack needs extra setup for its bot).",
     "redirectBaseBoxTitle": "Redirect Base URL (required setup)",
-    "redirectBaseDesc": "When you run behind a reverse proxy or on an external domain, the server cannot automatically know the public origin of the callback URL. Save your service's public address (e.g., https://ive.dazzleat.link) under Admin → System Settings → OAuth Callback → Redirect Base URL first. If left empty, it will try to auto-detect via X-Forwarded-* headers, which may fail depending on your proxy setup.",
+    "redirectBaseDesc": "When you run behind a reverse proxy or on an external domain, the server cannot automatically know the public origin of the callback URL. Save your service's public address (e.g., https://ive.springware.kr) under Admin → System Settings → OAuth Callback → Redirect Base URL first. If left empty, it will try to auto-detect via X-Forwarded-* headers, which may fail depending on your proxy setup.",
     "redirectBaseCurrent": "Current value: {value}",
     "redirectBaseMissing": "Not set — the callback URL below falls back to the browser address ({value}).",
     "recommendedOrder": "GitLab / GitHub setup order",

@@ -8,11 +8,12 @@ services:
     # PID 1 이 npm start 면 에이전트 빌드가 남긴 고아(esbuild·headless_shell)를 회수하지 못해
     # 좀비가 쌓인다(2026-10-04 301개). tini 를 PID 1 로 둔다.
     init: true
-    # 같은 장비에 운영 앱(product-factory-*)이 함께 돈다. 에이전트 여럿이 동시에 vite build·vue-tsc 를
-    # 돌리면 코어 4개를 다 먹어 운영이 밀린다(2026-10-04 load 9.5). 코어 2개로 묶는다.
+    # 같은 장비에 다른 앱(springware-app·pf-dev-*)이 함께 돈다. 에이전트 여럿이 동시에 vite build·vue-tsc 를
+    # 돌리면 코어 4개를 다 먹어 옆 앱이 밀린다(2026-10-04 load 9.5). 코어 2개로 묶는다.
     cpus: "2"
+    # TLS 는 호스트 nginx(ive.springware.kr)가 받아 127.0.0.1:3100 으로 넘긴다 — 바깥에 3100 을 열지 않는다.
     ports:
-      - "3100:3000"
+      - "127.0.0.1:3100:3000"
     environment:
       - NODE_ENV=production
       - PORT=3000

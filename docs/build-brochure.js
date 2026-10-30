@@ -421,7 +421,7 @@ function slideScreens(){
 <svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
   <defs><radialGradient id="vign3" cx="50%" cy="40%" r="85%"><stop offset="0%" stop-color="#16161b"/><stop offset="100%" stop-color="${BG}"/></radialGradient></defs>
   <rect width="1280" height="720" fill="url(#vign3)"/>
-  ${header('실제 운영 화면','운영계(ive.dazzleat.link) 실측 캡처 — 2026-08-10~16 주간 기준, 도식이 아닌 지금 동작 중인 제품')}
+  ${header('실제 운영 화면','운영계(ive.springware.kr) 실측 캡처 — 2026-08-10~16 주간 기준, 도식이 아닌 지금 동작 중인 제품')}
   ${SCREENS.map((sc,i)=>{const x=64+i*(W+gap);return `
     ${phone(x,y,W,sc.img,'ph'+i)}
     ${text(x+W/2,y+H+26,sc.t,{size:15,fill:TXT})}
@@ -449,15 +449,15 @@ function slideCover(){
   ${text(1216,70,'PRODUCT BRIEF · 2026',{anchor:'end',size:11,fill:DIM,weight:700,ls:1.5})}
 
   <circle cx="640" cy="196" r="118" fill="${CYAN}" opacity="0.08" filter="url(#cglow)"/>
-  <a href="https://ive.dazzleat.link" target="_blank" rel="noopener">
+  <a href="https://ive.springware.kr" target="_blank" rel="noopener">
     <rect x="556" y="116" width="168" height="168" rx="34" fill="#101016" stroke="${CYAN}" stroke-width="2.5"/>
     <rect x="567" y="127" width="146" height="146" rx="26" fill="none" stroke="#23232a" stroke-width="2"/>
     ${text(640,210,'IVE',{size:62,fill:CYAN,weight:800,ls:2})}
     <text x="640" y="248" font-size="22" font-weight="700" text-anchor="middle" font-family="system-ui"><tspan fill="${SPRING}">Spring</tspan><tspan fill="${AMBER}">ware</tspan></text>
   </a>
-  <a href="https://ive.dazzleat.link" target="_blank" rel="noopener">
+  <a href="https://ive.springware.kr" target="_blank" rel="noopener">
     <rect x="528" y="290" width="224" height="26" rx="13" fill="none" stroke="${CYAN}" stroke-width="1.2"/>
-    ${text(640,307,'ive.dazzleat.link  ↗',{size:12.5,fill:CYAN,weight:700})}
+    ${text(640,307,'ive.springware.kr  ↗',{size:12.5,fill:CYAN,weight:700})}
   </a>
 
   ${text(640,368,'이슈에서 배포까지, 그리고 원가까지',{size:44,fill:TXT,weight:800})}
@@ -513,9 +513,9 @@ function slidePOC(){
   ${card(64,524,1152,150,{stroke:CYAN,fill:'#0f1f24'})}
   ${text(640,566,'회원가입 또는 GitHub·GitLab 계정 연동으로 지금 바로 테스트하세요.',{size:22,fill:TXT,weight:800})}
   ${text(640,596,'운영 중인 서비스에서 즉시 체험 → 필요하면 2주 POC로 확장합니다.',{size:13.5,fill:'#b4b4bc',weight:600})}
-  <a href="https://ive.dazzleat.link" target="_blank" rel="noopener">
+  <a href="https://ive.springware.kr" target="_blank" rel="noopener">
     <rect x="297" y="620" width="330" height="38" rx="19" fill="${CYAN}"/>
-    ${text(462,644,'지금 가입·연동하고 체험   ive.dazzleat.link',{size:13,fill:'#06262e',weight:800})}
+    ${text(462,644,'지금 가입·연동하고 체험   ive.springware.kr',{size:13,fill:'#06262e',weight:800})}
   </a>
   <a href="mailto:springware.koj@gmail.com">
     <rect x="643" y="620" width="340" height="38" rx="19" fill="${BG}" stroke="${CYAN}" stroke-width="1.4"/>
