@@ -90,7 +90,7 @@ export default function AgentPickerDropdown({
         <i className="fa-solid fa-chevron-down text-[10px] text-ive-text-dim ml-0.5" />
       </button>
       {open && (
-        <div className="absolute z-50 bottom-full right-0 mb-1 bg-ive-bg-deep border border-ive-border-subtle rounded-lg overflow-hidden shadow-lg shadow-black/30 min-w-[200px] max-h-72 overflow-y-auto">
+        <div className="absolute z-50 bottom-full right-0 mb-1 bg-ive-bg-deep border border-ive-border-subtle rounded-lg overflow-hidden shadow-lg shadow-black/30 w-80 max-w-[calc(100vw-2rem)] max-h-72 overflow-y-auto">
           <div className="sticky top-0 z-10 bg-ive-bg-deep p-1.5 border-b border-ive-border-subtle">
             <input
               type="text"
