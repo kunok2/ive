@@ -104,9 +104,9 @@ export default function LoginPage() {
   return (
     <div className="h-full flex justify-center overflow-hidden">
       <div className="w-full max-w-lg overflow-y-auto px-4">
-        <div className="min-h-full flex items-center justify-center py-8">
+        <div className="min-h-full flex items-center justify-center py-8 lg:py-4">
       <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
+        <div className="text-center mb-8 lg:mb-6">
           <h1 className="text-3xl font-bold mb-1"><span className="text-[#22c55e]">Spring</span><span className="text-ive-amber">ware</span> <span className="text-ive-cyan">IVE</span></h1>
           <p className="text-base text-ive-text-muted">Integrated Value Environment</p>
         </div>
@@ -216,8 +216,10 @@ export default function LoginPage() {
           <LanguageSwitcher />
         </div>
 
+        {/* 넓은 화면에서는 부가 요소(설치·약관 / 배지)를 아래 양옆 모서리로 빼서 로그인 창이 세로 스크롤 없이 한 화면에 들어오게 한다 */}
+        <div className="lg:fixed lg:bottom-6 lg:left-6">
         {!isStandalone && (
-          <div className="mt-6 flex flex-col items-center gap-2">
+          <div className="mt-6 lg:mt-0 flex flex-col items-center lg:items-start gap-2">
             <button
               onClick={async () => {
                 if (installPrompt) {
@@ -233,7 +235,7 @@ export default function LoginPage() {
               <i className="fa-solid fa-download" />{tAuth('installApp')}
             </button>
             {showGuide && !installPrompt && (
-              <p className="text-xs text-ive-text-muted text-center">
+              <p className="text-xs text-ive-text-muted text-center lg:text-left lg:max-w-xs">
                 {isIos
                   ? isSafari
                     ? tAuth('installSafariIosGuide')
@@ -252,14 +254,17 @@ export default function LoginPage() {
         )}
 
         {legalEnabled && (
-          <div className="mt-6 flex justify-center gap-4 text-xs font-bold text-ive-text-dim">
+          <div className="mt-6 lg:mt-3 flex justify-center lg:justify-start gap-4 text-xs font-bold text-ive-text-dim">
             <Link href="/legal/terms" className="hover:text-ive-green transition-colors">{tLegal('ui.termsLink')}</Link>
             <Link href="/legal/privacy" className="hover:text-ive-green transition-colors">{tLegal('ui.privacyLink')}</Link>
             <Link href="/legal/licenses" className="hover:text-ive-green transition-colors">{tLegal('ui.licensesLink')}</Link>
           </div>
         )}
 
-        <div className="mt-6 flex justify-center">
+        </div>
+
+        <div className="lg:fixed lg:bottom-6 lg:right-6">
+        <div className="mt-6 lg:mt-0 flex justify-center lg:justify-end">
           <iframe
             title="Springware IVE on Disquiet"
             frameBorder="0"
@@ -271,10 +276,11 @@ export default function LoginPage() {
           />
         </div>
 
-        <div className="mt-3 flex justify-center">
+        <div className="mt-3 flex justify-center lg:justify-end">
           <a href="https://www.producthunt.com/products/spring-ive?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-spring-ive" target="_blank" rel="noopener noreferrer">
             <img alt="Springware IVE on Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1107541&theme=dark&t=1774503857741" />
           </a>
+        </div>
         </div>
       </div>
 
