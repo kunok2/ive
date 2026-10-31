@@ -17,7 +17,7 @@ interface HelpModalProps {
  * 이 도움말 내용이 기준으로 삼은 판 — 도움말을 고쳐 쓸 때 함께 올린다.
  * 지금 판(APP_VERSION)을 그대로 쓰면 도움말이 낡아도 늘 「최신 기준」처럼 보이므로 따로 둔다.
  */
-const HELP_BASED_ON = '1.26.1'
+const HELP_BASED_ON = '1.27.0'
 
 /** a 가 b 보다 새 판인가 (x.y.z) */
 function isNewerVersion(a: string, b: string): boolean {

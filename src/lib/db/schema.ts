@@ -580,6 +580,7 @@ export function initSchema(db: Database.Database) {
   `)
   try { db.exec(`ALTER TABLE issue_stages ADD COLUMN fail_reason TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
   // IVE 를 쓰지 않는 담당자에게 단계 진행 안내 노트를 이미 단 기록 — (이슈, 단계, 사람)마다 한 번만 단다
+  const guideTableExisted = !!db.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'guest_stage_guides'`).get()
   db.exec(`
     CREATE TABLE IF NOT EXISTS guest_stage_guides (
       project_id TEXT NOT NULL,
@@ -591,6 +592,18 @@ export function initSchema(db: Database.Database) {
       FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
     )
   `)
+  // 이 기능이 생기기 전부터 진행 중이던 검증·확인 건에는 안내를 달지 않는다 — 테이블을 처음 만들 때 지금 상태를 «이미 안내함»으로 채운다.
+  // (이 뒤로는 «단계 + 담당자» 조합이 새로 생길 때만 안내가 나간다)
+  if (!guideTableExisted) {
+    try {
+      db.exec(`
+        INSERT OR IGNORE INTO guest_stage_guides (project_id, issue_iid, stage, person_key)
+        SELECT project_id, issue_iid, cached_stage, COALESCE(NULLIF(assignee_git_user_id, ''), assignee_username)
+        FROM issue_stages
+        WHERE cached_stage IN ('verifying', 'confirming') AND COALESCE(NULLIF(assignee_git_user_id, ''), assignee_username) IS NOT NULL
+      `)
+    } catch { /* issue_stages 열이 아직 없으면 건너뜀 — 새 설치 */ }
+  }
   try { db.exec(`ALTER TABLE issue_stages ADD COLUMN preferred_agent_id TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
   try { db.exec(`ALTER TABLE issue_stages ADD COLUMN scheduled_at TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
   try {
