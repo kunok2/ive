@@ -11,6 +11,14 @@ export function countActiveExecutionsByProject(projectId: string): number {
   return r.cnt
 }
 
+/** 프로젝트 실행 기록에서 가장 늦은 시작·종료 시각(UTC 'YYYY-MM-DD HH:MM:SS'). 기록이 없으면 null */
+export function getLastExecutionActivityAt(projectId: string): string | null {
+  const r = getDb().prepare(
+    'SELECT MAX(MAX(datetime(started_at), COALESCE(datetime(ended_at), \'\'))) AS at FROM task_executions WHERE project_id = ?'
+  ).get(projectId) as { at: string | null } | undefined
+  return r?.at || null
+}
+
 export function countActiveExecutionsByAgent(agentId: string): number {
   const r = getDb().prepare(
     "SELECT COUNT(*) as cnt FROM task_executions WHERE agent_id = ? AND status = 'running'"

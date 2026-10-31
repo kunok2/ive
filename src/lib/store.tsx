@@ -109,12 +109,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const data = await res.json()
       // 카드 정렬의 단일 출처. 서버는 [...소유, ...공유]를 순서 보장 없이 내려주고
       // 여기서 한 번만 정렬한다.
-      // 1순위: 현재 실행 중인 프로젝트를 최상단으로.
-      // 2순위: 나머지는 소유/공유 구분 없이 last_activity_at(마지막 작업 시각) 최신순.
+      // 소유/공유 구분 없이 마지막 변경 시각(lastActivityAt) 최신순. 실행 중이라고 위로 올리지 않는다
+      // (사람이 맡은 검증·확인은 며칠씩 열려 있어, 변경 없는 프로젝트가 계속 맨 위에 남았다).
       const sorted = [...data].sort((a: any, b: any) => {
-        const aRunning = (a.runningCount ?? 0) > 0
-        const bRunning = (b.runningCount ?? 0) > 0
-        if (aRunning !== bRunning) return aRunning ? -1 : 1
         const at = a.lastActivityAt ? Date.parse(a.lastActivityAt) : 0
         const bt = b.lastActivityAt ? Date.parse(b.lastActivityAt) : 0
         return bt - at
