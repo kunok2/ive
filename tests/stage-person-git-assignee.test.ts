@@ -26,6 +26,16 @@ describe('Git 담당자를 검증자·확인자로', () => {
     expect(stagePersonFromGit('gitlab', null)).toBeNull()
   })
 
+  it('봇 계정은 검증자·확인자가 될 수 없다 — IVE #603 에서 담당자가 봇이라 «검증자: IVE» 로 기록됐다', () => {
+    const bot = { id: 777, username: 'project_80165244_bot_7e8cfe4c1649e6268719098749ff838a', name: 'IVE' }
+    expect(stagePersonFromGit('gitlab', bot)).toBeNull()
+    expect(stagePersonFromGit('github', { id: 1, login: 'ive-app[bot]' })).toBeNull()
+    // 열린 검증 기록이 있어도 Git 담당자가 봇이면 따라가지 않는다
+    openStageExecution(PROJ, IID, 'verify', { userId: 'user-kunok2', userName: 'kunok2' })
+    expect(followGitAssignee('gitlab', PROJ, IID, 'verifying', [bot])).toBe(false)
+    expect(getActualRoleAssignees(PROJ, IID).verifier?.name).toBe('kunok2')
+  })
+
   it('검증 중에 Git 담당자를 바꾸면 검증 기록·화면의 검증자가 그 사람으로 옮겨간다', () => {
     openStageExecution(PROJ, IID, 'verify', { userId: 'user-kunok2', userName: 'kunok2' })
     expect(getActualRoleAssignees(PROJ, IID).verifier?.name).toBe('kunok2')

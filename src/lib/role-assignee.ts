@@ -17,6 +17,7 @@ import { updateIssue, fetchSingleIssue, addIssueComment } from './provider'
 import { runAutoAssign } from './scanner/auto-assign'
 import type { PresetRoleInfo } from './db/issues'
 import { getActualRoleAssignees, getAgent } from './db'
+import { isGitBotUser } from './git-bot'
 
 export interface RoleAssignResult {
   success: boolean
@@ -118,7 +119,8 @@ export async function applyRoleAssignee(
   try {
     const issue = await fetchSingleIssue(project, iid, token)
     const author = issue?.author
-    if (!author?.id) {
+    // 작성자가 봇(IVE 접수·에이전트 계정)이면 담당자로 삼지 않는다 — 검증·확인을 시작하는 사람이 맡는다
+    if (!author?.id || isGitBotUser(author)) {
       return { success: false, mode: 'creator', username: null, userId: null }
     }
     const authorUsername: string | null = author.username || (author as any).login || null

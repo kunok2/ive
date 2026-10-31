@@ -9,7 +9,7 @@ import { notifyStageTransition } from '@/lib/slack-notify';
 import { notifyConfirmerOnApprove } from '@/lib/merge-watcher';
 import type { TaskExecution } from '@/types';
 import { getCurrentUser } from '@/lib/auth';
-import { reopenIssue, fetchSingleIssue, addIssueLabels, removeIssueLabels, addIssueComment, createBranch, getDefaultBranch, swapIssueLabels, fetchMRByBranch, addMRReviewer } from '@/lib/provider';
+import { reopenIssue, fetchSingleIssue, addIssueLabels, removeIssueLabels, addIssueComment, createBranch, getDefaultBranch, swapIssueLabels, fetchMRByBranch, addMRReviewer, updateIssue } from '@/lib/provider';
 import { logActivity } from '@/lib/activity';
 import { TRANSITIONS, staleStageLabelsToRemove } from '@/lib/stage-transitions';
 import fs from 'fs';
@@ -240,6 +240,15 @@ export async function POST(
     // IVE 를 쓰지 않는 사람도 Git 담당자로 지정되면 그 사람이 검증자·확인자다.
     let verifier: StagePerson | null = null;
     let confirmer: StagePerson | null = null;
+    // Git 담당자가 봇이거나 비어 있어 사람 담당자를 못 찾았으면, 단계를 시작한 사람이 맡는다 — Git 담당자도 그 사람으로 맞춘다
+    const assignActingUserIfNoPerson = async (person: StagePerson | null) => {
+      if (person || !user.oauthUserId) return;
+      try {
+        await updateIssue(project, Number(iid), token, { assigneeIds: [Number(user.oauthUserId)] });
+      } catch (e) {
+        console.warn(`[Stage] Failed to set assignee to acting user for #${iid}:`, e);
+      }
+    };
     if (action === 'start_verification') {
       // 1. 아직 실행 중인 dev/기타 작업을 먼저 success로 닫음 (ended_at 찍힘)
       //    — 이 순서가 핵심: 방금 닫힌 execs도 아래 markIssueVerifyStarted 대상에 포함되어야 함
@@ -285,6 +294,7 @@ export async function POST(
         };
         const created = assignIssueAtomically(projectId, Number(iid), 'verifying', verifyExecution, { ignoreChat: true });
         console.log(`[Stage] Verify execution created for #${iid}: ${created}, executionId: ${executionId}`);
+        await assignActingUserIfNoPerson(verifier);
         if (!created) {
           console.warn(`[Stage] Failed to create verify execution for #${iid}: race condition detected`);
         }
@@ -394,6 +404,7 @@ export async function POST(
         };
         const created = assignIssueAtomically(projectId, Number(iid), 'confirming', confirmExecution, { ignoreChat: true });
         console.log(`[Stage] Confirm execution created for #${iid}: ${created}, executionId: ${executionId}`);
+        await assignActingUserIfNoPerson(confirmer);
       } catch (e) {
         console.warn(`[Stage] Failed to create confirm execution for #${iid}:`, e);
       }

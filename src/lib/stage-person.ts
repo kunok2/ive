@@ -5,6 +5,7 @@
  * IVE 계정과 연결돼 있으면 그 계정(id·이름·아바타)으로, 아니면 Git 신원 그대로(userId = Git 사용자 id) 기록한다.
  */
 import { getDb, getUserByOAuthId, getUserByGitUsername } from '@/lib/db'
+import { isGitBotUser } from '@/lib/git-bot'
 
 export interface StagePerson {
   userId: string
@@ -19,7 +20,8 @@ export function stagePersonFromGit(
   provider: 'github' | 'gitlab',
   p: { id?: number | string | null; username?: string | null; login?: string | null; name?: string | null; avatar_url?: string | null; avatarUrl?: string | null } | null | undefined,
 ): StagePerson | null {
-  if (!p) return null
+  // 봇 계정(IVE 접수·에이전트 계정)은 검증·확인을 맡는 사람이 아니다 — 호출 측이 누른 사람으로 대신한다
+  if (!p || isGitBotUser(p)) return null
   const gitUserId = p.id != null && String(p.id) !== '' ? String(p.id) : null
   const username = p.username || p.login || null
   if (!gitUserId && !username) return null
