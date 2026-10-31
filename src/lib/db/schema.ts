@@ -579,6 +579,18 @@ export function initSchema(db: Database.Database) {
     )
   `)
   try { db.exec(`ALTER TABLE issue_stages ADD COLUMN fail_reason TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
+  // IVE 를 쓰지 않는 담당자에게 단계 진행 안내 노트를 이미 단 기록 — (이슈, 단계, 사람)마다 한 번만 단다
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS guest_stage_guides (
+      project_id TEXT NOT NULL,
+      issue_iid INTEGER NOT NULL,
+      stage TEXT NOT NULL,
+      person_key TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (project_id, issue_iid, stage, person_key),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    )
+  `)
   try { db.exec(`ALTER TABLE issue_stages ADD COLUMN preferred_agent_id TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
   try { db.exec(`ALTER TABLE issue_stages ADD COLUMN scheduled_at TEXT DEFAULT NULL`) } catch { /* 이미 존재 */ }
   try {

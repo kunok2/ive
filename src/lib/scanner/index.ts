@@ -84,6 +84,7 @@ import { isAgentEligibleForProject } from "../project-permissions";
 import { executeTask } from "./execute";
 import { DEFAULT_LABELS } from "@/lib/labels";
 import { followGitAssignee } from "@/lib/stage-person";
+import { postGuestGuideIfNeeded } from "@/lib/guest-stage-guide";
 
 // Re-export for external consumers
 export { executeTask } from "./execute";
@@ -595,6 +596,13 @@ async function scanProject(project: Project, force: boolean = false) {
         }
       } catch (e) {
         slog.warn(`followGitAssignee failed (#${iid}):`, (e as Error).message);
+      }
+
+      // IVE 를 쓰지 않는 담당자가 검증·확인을 맡았으면, 라벨로 단계를 옮기는 방법을 이슈 코멘트로 한 번 알린다 (상태는 건드리지 않는다)
+      try {
+        await postGuestGuideIfNeeded(project, decryptedToken, iid, stage, issue.assignees);
+      } catch (e) {
+        slog.warn(`postGuestGuideIfNeeded failed (#${iid}):`, (e as Error).message);
       }
 
       // 사건 로그 — 후속 이슈 연결. ive-meta 의 `fixes: #N` 은 "이 작업이 이전 이슈 #N 을 고친다"는 뜻이다
